@@ -1,0 +1,16 @@
+# Default configuration for odor_plume_nav
+# This file contains all configuration parameters currently used by the codebase.
+# Users should NOT modify this file directly. Instead, create a custom config file
+# that overrides only the specific values you want to change.
+
+# Video plume settings
+video_plume:
+  flip: false       # Whether to flip video frames
+  kernel_size: 0    # Gaussian kernel size for smoothing (0 = no smoothing)
+  kernel_sigma: 1.0 # Gaussian kernel sigma for smoothing
+  
+# Navigator settings
+navigator:
+  orientation: 0.0  # Initial orientation in degrees (0 = right, 90 = up)
+  speed: 0.0        # Initial speed in units per time
+  max_speed: 1.0    # Maximum allowed speed

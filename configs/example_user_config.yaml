@@ -1,0 +1,16 @@
+# Example user configuration for odor_plume_nav
+# Copy this file to create your own custom configuration
+
+# This file demonstrates how to override specific settings
+# You only need to include the settings you want to change
+
+# Override video plume settings
+video_plume:
+  flip: true         # Override default (false) to flip frames
+  kernel_size: 3     # Add some smoothing (default is 0)
+
+# Override navigator settings  
+navigator:
+  orientation: 90.0  # Start facing up (default is 0.0)
+  speed: 0.5         # Start with non-zero speed (default is 0.0)
+  # max_speed not included, will use default value (1.0)
