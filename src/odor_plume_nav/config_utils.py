@@ -33,6 +33,10 @@ def deep_update(original: Dict, update: Dict) -> Dict:
     return result
 
 
+# Alias for deep_update for API consistency
+update_config = deep_update
+
+
 def get_config_dir() -> Path:
     """
     Get the path to the configuration directory.
@@ -115,3 +119,24 @@ def load_config(
         validate_config(config, required_sections=validate_sections)
         
     return config
+
+
+def save_config(config: Dict, config_path: Union[str, Path]) -> None:
+    """
+    Save a configuration to a YAML file.
+    
+    Args:
+        config: Dictionary containing the configuration
+        config_path: Path to save the configuration to
+        
+    Raises:
+        PermissionError: If the file cannot be written
+        yaml.YAMLError: If the dictionary cannot be serialized to YAML
+    """
+    config_path = Path(config_path)
+    
+    # Create parent directories if they don't exist
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)

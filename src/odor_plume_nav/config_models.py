@@ -118,3 +118,31 @@ class NavigatorConfig(BaseModel):
     def dict(self, **kwargs):
         """Override dict method to return the nested config dict."""
         return self.config.dict(**kwargs)
+
+
+class VideoPlumeConfig(BaseModel):
+    """Configuration model for VideoPlume class."""
+    video_path: str
+    frame_rate: Optional[float] = None
+    start_frame: Optional[int] = None
+    end_frame: Optional[int] = None
+    scale_factor: Optional[float] = 1.0
+    flip: Optional[bool] = False
+    kernel_size: Optional[int] = None
+    threshold: Optional[float] = None
+    odor_ceiling: Optional[float] = 1.0
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    @field_validator('kernel_size')
+    @classmethod
+    def validate_kernel_size(cls, v):
+        """Validate kernel size is odd and positive."""
+        if v is not None:
+            if not isinstance(v, int):
+                raise ValueError("kernel_size must be an integer")
+            if v <= 0:
+                raise ValueError("kernel_size must be positive")
+            if v % 2 == 0:
+                raise ValueError("kernel_size must be odd")
+        return v
