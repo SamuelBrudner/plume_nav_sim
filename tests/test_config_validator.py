@@ -1,7 +1,7 @@
 """Tests for the configuration validation module."""
 
 import pytest
-from odor_plume_nav.config_validator import (
+from odor_plume_nav.config.validator import (
     validate_config, 
     validate_video_plume_config, 
     validate_navigator_config,

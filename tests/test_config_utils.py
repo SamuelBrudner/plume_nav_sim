@@ -7,31 +7,31 @@ import os
 from unittest.mock import patch
 import tempfile
 
-from odor_plume_nav.config_utils import (
-    deep_update,
+from odor_plume_nav.config.utils import (
+    update_config,
     get_config_dir,
     load_yaml_config,
     load_config
 )
-from odor_plume_nav.config_validator import ConfigValidationError
+from odor_plume_nav.config.validator import ConfigValidationError
 
 
-def test_deep_update_basic():
-    """Test that deep_update correctly updates flat dictionaries."""
+def test_update_config_basic():
+    """Test that update_config correctly updates flat dictionaries."""
     original = {"a": 1, "b": 2}
     update = {"b": 3, "c": 4}
-    result = deep_update(original, update)
+    result = update_config(original, update)
     
     assert result == {"a": 1, "b": 3, "c": 4}
     # Original should be unchanged
     assert original == {"a": 1, "b": 2}
 
 
-def test_deep_update_nested():
-    """Test that deep_update correctly updates nested dictionaries."""
+def test_update_config_nested():
+    """Test that update_config correctly updates nested dictionaries."""
     original = {"a": 1, "b": {"x": 10, "y": 20}}
     update = {"b": {"y": 30, "z": 40}}
-    result = deep_update(original, update)
+    result = update_config(original, update)
     
     assert result == {"a": 1, "b": {"x": 10, "y": 30, "z": 40}}
     # Original should be unchanged
@@ -115,7 +115,7 @@ def mock_config_files(tmp_path):
 
 def test_load_config_default_only(mock_config_files):
     """Test loading only the default configuration."""
-    with patch('odor_plume_nav.config_utils.get_config_dir', 
+    with patch('odor_plume_nav.config.utils.get_config_dir', 
                return_value=mock_config_files["config_dir"]):
         config = load_config()
         assert config == mock_config_files["default_config"]
@@ -123,7 +123,7 @@ def test_load_config_default_only(mock_config_files):
 
 def test_load_config_with_user_override(mock_config_files):
     """Test loading and merging default and user configurations."""
-    with patch('odor_plume_nav.config_utils.get_config_dir',
+    with patch('odor_plume_nav.config.utils.get_config_dir',
                return_value=mock_config_files["config_dir"]):
         config = load_config(user_config_path=mock_config_files["user_path"])
         
@@ -277,7 +277,7 @@ class TestConfigValidationIntegration:
     
     def test_load_config_validate_valid(self, valid_config_files):
         """Test that loading a valid config with validation works."""
-        with patch('odor_plume_nav.config_utils.get_config_dir', 
+        with patch('odor_plume_nav.config.utils.get_config_dir', 
                   return_value=valid_config_files["config_dir"]):
             # This should not raise any exceptions
             try:
@@ -294,7 +294,7 @@ class TestConfigValidationIntegration:
     
     def test_load_config_validate_missing_field(self, invalid_config_files):
         """Test that validation catches missing required fields."""
-        with patch('odor_plume_nav.config_utils.get_config_dir', 
+        with patch('odor_plume_nav.config.utils.get_config_dir', 
                   return_value=invalid_config_files["config_dir"]):
             # Try to load config with missing required field
             with pytest.raises(ConfigValidationError) as excinfo:
@@ -308,7 +308,7 @@ class TestConfigValidationIntegration:
     
     def test_load_config_validate_invalid_kernel_size(self, invalid_config_files):
         """Test that validation catches invalid kernel_size."""
-        with patch('odor_plume_nav.config_utils.get_config_dir', 
+        with patch('odor_plume_nav.config.utils.get_config_dir', 
                   return_value=invalid_config_files["config_dir"]):
             # Try to load config with invalid kernel_size
             with pytest.raises(ConfigValidationError) as excinfo:
@@ -322,9 +322,9 @@ class TestConfigValidationIntegration:
     def test_load_config_validate_invalid_speed(self, invalid_config_files):
         """Test that validation catches speed exceeding max_speed."""
         # Use the complete default config for this test
-        with patch('odor_plume_nav.config_utils.get_config_dir', 
+        with patch('odor_plume_nav.config.utils.get_config_dir', 
                   return_value=invalid_config_files["config_dir"]), \
-             patch('odor_plume_nav.config_utils.load_yaml_config', side_effect=[
+             patch('odor_plume_nav.config.utils.load_yaml_config', side_effect=[
                   # Load the speed_test_default config with complete video_plume settings 
                   # when the default config is requested
                   load_yaml_config(invalid_config_files["speed_test_default_path"]),
@@ -343,7 +343,7 @@ class TestConfigValidationIntegration:
     
     def test_load_config_validate_disabled(self, invalid_config_files):
         """Test that validation can be disabled."""
-        with patch('odor_plume_nav.config_utils.get_config_dir', 
+        with patch('odor_plume_nav.config.utils.get_config_dir', 
                   return_value=invalid_config_files["config_dir"]):
             try:
                 # This should not raise validation errors when validate=False

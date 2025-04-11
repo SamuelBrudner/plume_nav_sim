@@ -12,7 +12,7 @@ from contextlib import suppress
 from loguru import logger
 
 # Import the module to test
-from odor_plume_nav.logging_setup import (
+from odor_plume_nav.utils.logging_setup import (
     setup_logger,
     get_module_logger,
     DEFAULT_FORMAT,

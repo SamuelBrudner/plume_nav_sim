@@ -9,7 +9,7 @@ from contextlib import suppress
 from typing import Dict, Union, Optional
 
 from odor_plume_nav.video_plume_config import VideoPlumeConfig
-from odor_plume_nav.config_utils import load_config
+from odor_plume_nav.config.utils import load_config
 
 class VideoPlume:
     """Minimal VideoPlume for testing purposes."""

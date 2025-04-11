@@ -42,7 +42,7 @@ pip install -e ".[dev]"
 
 ```python
 import numpy as np
-from odor_plume_nav.navigator import Navigator
+from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.video_plume import VideoPlume
 
 # Create a navigator with a single agent
@@ -89,11 +89,15 @@ agent_simulation/
 ├── examples/         # Example scripts and notebooks
 ├── src/              # Source code
 │   └── odor_plume_nav/
-│       ├── navigator.py           # Unified navigation system
-│       ├── video_plume.py         # Video-based plume environment
-│       ├── config_models.py       # Configuration validation models
-│       ├── config_utils.py        # Configuration utility functions
-│       ├── visualization.py       # Data visualization tools
+│       ├── core/                   # Core components
+│       │   ├── navigator.py        # Unified navigation system
+│       │   └── ...                 # Other core modules
+│       ├── video_plume.py          # Video-based plume environment
+│       ├── config/                 # Configuration-related modules
+│       │   ├── config_models.py    # Configuration validation models
+│       │   ├── utils.py            # Configuration utility functions
+│       │   └── ...                 # Other config modules
+│       ├── visualization.py        # Data visualization tools
 │       └── ...
 ├── tests/            # Test suite
 ├── pyproject.toml    # Project metadata and dependencies
@@ -144,7 +148,8 @@ The `Navigator` class provides a unified interface for both single and multi-age
 
 - Configuration-based initialization with validation
 - Vectorized operations for efficient multi-agent simulations
-- Backward compatibility with legacy `SimpleNavigator` and `VectorizedNavigator` classes
+- Support for both single and multi-agent simulations with a consistent API
+- Structured in a modular architecture for better maintainability
 
 ### Video Plume Environment
 

@@ -6,8 +6,8 @@ import yaml
 from pathlib import Path
 from unittest.mock import patch
 
-from odor_plume_nav.config_utils import load_config, deep_update
-from odor_plume_nav.config_validator import ConfigValidationError, validate_config
+from odor_plume_nav.config.utils import load_config, update_config
+from odor_plume_nav.config.validator import ConfigValidationError, validate_config
 
 
 def validate_loaded_config(config, validate=True, validate_sections=None):

@@ -30,10 +30,18 @@ from odor_plume_nav.config import (
     save_config,
 )
 from odor_plume_nav.utils import (
+    # IO utilities
     load_yaml,
     save_yaml,
     load_json, 
     save_json,
     load_numpy,
     save_numpy,
+    
+    # Logging utilities
+    setup_logger,
+    get_module_logger,
+    DEFAULT_FORMAT,
+    MODULE_FORMAT,
+    LOG_LEVELS,
 )

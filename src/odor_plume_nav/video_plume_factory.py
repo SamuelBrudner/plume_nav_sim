@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional, Union, Any
 
 from odor_plume_nav.video_plume import VideoPlume
-from odor_plume_nav.config_utils import load_config
+from odor_plume_nav.config.utils import load_config
 
 
 def create_video_plume_from_config(

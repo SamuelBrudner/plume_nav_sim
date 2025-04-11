@@ -17,7 +17,7 @@ script_dir = Path(__file__).resolve().parent
 src_dir = script_dir.parent / "src"
 sys.path.append(str(src_dir))
 
-from odor_plume_nav.navigator import SimpleNavigator
+from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.visualization import SimulationVisualization
 
 
@@ -65,7 +65,7 @@ def demo_simple_movement():
     odor_field = create_gaussian_odor_field(width, height)
     
     # Create a navigator starting at the bottom left corner
-    navigator = SimpleNavigator(
+    navigator = Navigator(
         position=(5, 5),
         orientation=45,  # 45 degrees = diagonally up and right
         speed=0.5,
@@ -132,7 +132,7 @@ def demo_odor_following():
     odor_field = create_gaussian_odor_field(width, height)
     
     # Create a navigator starting at the bottom left corner
-    navigator = SimpleNavigator(
+    navigator = Navigator(
         position=(5, 5),
         orientation=0,
         speed=0.0,  # Start with zero speed
@@ -183,7 +183,7 @@ def demo_odor_following():
             test_y = current_pos[1] + np.sin(test_radians) * 2
             
             # Create a temporary navigator to read the odor at this position
-            test_navigator = SimpleNavigator(position=(test_x, test_y))
+            test_navigator = Navigator(position=(test_x, test_y))
             test_odor = test_navigator.read_single_antenna_odor(odor_field)
             
             # Update best direction if this is better

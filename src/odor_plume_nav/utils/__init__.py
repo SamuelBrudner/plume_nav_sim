@@ -15,11 +15,28 @@ from odor_plume_nav.utils.io import (
     save_numpy,
 )
 
+# Export logging utilities from this module
+from odor_plume_nav.utils.logging_setup import (
+    setup_logger,
+    get_module_logger,
+    DEFAULT_FORMAT,
+    MODULE_FORMAT,
+    LOG_LEVELS,
+)
+
 __all__ = [
+    # IO utilities
     "load_yaml",
     "save_yaml",
     "load_json",
     "save_json",
     "load_numpy",
     "save_numpy",
+    
+    # Logging utilities
+    "setup_logger",
+    "get_module_logger",
+    "DEFAULT_FORMAT",
+    "MODULE_FORMAT",
+    "LOG_LEVELS",
 ]

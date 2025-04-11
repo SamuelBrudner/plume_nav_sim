@@ -75,3 +75,6 @@ venv.bak/
 # helper files
 agent_simulation.txt
 .windsurfrule
+test.txt
+src.txt
+config.txt

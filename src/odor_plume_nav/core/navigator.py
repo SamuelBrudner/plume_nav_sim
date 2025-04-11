@@ -8,7 +8,7 @@ from typing import Tuple, Union, Any, Optional, List, Dict
 import math
 import numpy as np
 
-from odor_plume_nav.config_models import NavigatorConfig
+from odor_plume_nav.config.models import NavigatorConfig
 
 
 class Navigator:
@@ -138,9 +138,7 @@ class Navigator:
     @property
     def orientation(self):
         """Get the orientation in degrees (single-agent mode only)."""
-        if self._single_agent:
-            return self.orientations[0]
-        return None
+        return self.orientations[0] if self._single_agent else None
     
     @orientation.setter
     def orientation(self, value):
@@ -152,9 +150,7 @@ class Navigator:
     @property
     def speed(self):
         """Get the speed (single-agent mode only)."""
-        if self._single_agent:
-            return self.speeds[0]
-        return None
+        return self.speeds[0] if self._single_agent else None
     
     @speed.setter
     def speed(self, value):
@@ -166,9 +162,7 @@ class Navigator:
     @property
     def max_speed(self):
         """Get the maximum speed (single-agent mode only)."""
-        if self._single_agent:
-            return self.max_speeds[0]
-        return None
+        return self.max_speeds[0] if self._single_agent else None
     
     @max_speed.setter
     def max_speed(self, value):
@@ -180,9 +174,7 @@ class Navigator:
     @property
     def angular_velocity(self):
         """Get the angular velocity (single-agent mode only)."""
-        if self._single_agent:
-            return self.angular_velocities[0]
-        return None
+        return self.angular_velocities[0] if self._single_agent else None
     
     @property
     def orientations(self):
