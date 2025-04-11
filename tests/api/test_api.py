@@ -14,6 +14,18 @@ from odor_plume_nav.api import (
 )
 
 
+def test_create_navigator_default():
+    """Test creating a navigator with default parameters."""
+    navigator = create_navigator()
+    
+    # Should create a default Navigator instance
+    assert navigator._single_agent is True
+    # Check default values from Navigator class
+    assert navigator.orientation == 0.0
+    assert navigator.speed == 0.0
+    assert navigator.max_speed == 1.0
+
+
 def test_create_navigator_single_agent():
     """Test creating a navigator with single agent parameters."""
     # Create a navigator with single agent parameters
@@ -62,6 +74,18 @@ def test_create_navigator_multi_agent():
     assert navigator._single_agent is False
 
 
+def test_create_navigator_numpy_array_positions():
+    """Test creating a navigator with numpy array positions."""
+    # Test with numpy array position data
+    positions = np.array([[10, 20], [30, 40], [50, 60]])
+    
+    navigator = create_navigator(positions=positions)
+    
+    assert navigator._single_agent is False
+    assert navigator.num_agents == 3
+    assert np.allclose(navigator.positions, positions)
+
+
 @pytest.fixture
 def mock_config_load():
     """Mock the config loading function."""
@@ -99,6 +123,28 @@ def test_create_navigator_from_config(mock_config_load):
     assert navigator.orientation == 45
     assert navigator.speed == 0.5
     assert np.allclose(navigator.positions[0], [10, 20])
+
+
+def test_create_navigator_from_config_single_agent(mock_config_load):
+    """Test creating a single-agent navigator from config."""
+    # Modify the mock to return a single agent config
+    mock_config_load.return_value = {
+        "position": (5, 10),
+        "orientation": 30,
+        "speed": 0.8,
+        "max_speed": 2.0,
+        "video_plume": {
+            "flip": False
+        }
+    }
+    
+    navigator = create_navigator(config_path="single_agent_config.yaml")
+    
+    # Verify single agent mode
+    assert navigator._single_agent is True
+    assert navigator.get_position() == (5, 10)
+    assert navigator.orientation == 30
+    assert navigator.speed == 0.8
 
 
 @pytest.fixture

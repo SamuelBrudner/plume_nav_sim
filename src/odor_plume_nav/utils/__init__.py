@@ -24,6 +24,12 @@ from odor_plume_nav.utils.logging_setup import (
     LOG_LEVELS,
 )
 
+# Export navigator utilities from this module
+from odor_plume_nav.utils.navigator_utils import (
+    normalize_array_parameter,
+    create_navigator_from_params,
+)
+
 __all__ = [
     # IO utilities
     "load_yaml",
@@ -39,4 +45,8 @@ __all__ = [
     "DEFAULT_FORMAT",
     "MODULE_FORMAT",
     "LOG_LEVELS",
+    
+    # Navigator utilities
+    "normalize_array_parameter",
+    "create_navigator_from_params",
 ]

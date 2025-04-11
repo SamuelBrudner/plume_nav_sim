@@ -13,13 +13,16 @@ from odor_plume_nav.core.navigator import Navigator, SimpleNavigator, Vectorized
 from odor_plume_nav.navigator_factory import create_navigator_from_config
 from odor_plume_nav.environments.video_plume import VideoPlume
 from odor_plume_nav.simulation import run_simulation
+from odor_plume_nav.utils import normalize_array_parameter, create_navigator_from_params
 
 
-def create_navigator(positions: Optional[Union[Tuple[float, float], List[Tuple[float, float]], np.ndarray]] = None,
-                    orientations: Optional[Union[float, List[float], np.ndarray]] = None,
-                    speeds: Optional[Union[float, List[float], np.ndarray]] = None,
-                    max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
-                    config_path: Optional[Union[str, pathlib.Path]] = None) -> Union[Navigator, VectorizedNavigator]:
+def create_navigator(
+    positions: Optional[Union[Tuple[float, float], List[Tuple[float, float]], np.ndarray]] = None,
+    orientations: Optional[Union[float, List[float], np.ndarray]] = None,
+    speeds: Optional[Union[float, List[float], np.ndarray]] = None,
+    max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
+    config_path: Optional[Union[str, pathlib.Path]] = None
+) -> Union[Navigator, VectorizedNavigator]:
     """
     Create a Navigator instance based on provided parameters or configuration.
     
@@ -35,74 +38,39 @@ def create_navigator(positions: Optional[Union[Tuple[float, float], List[Tuple[f
     Returns:
         A Navigator or VectorizedNavigator instance.
     """
-    # Check if a config file is provided
+    # Configuration-based creation has priority
     if config_path is not None:
-        # Get the configuration from a file
-        from odor_plume_nav.config.utils import load_config
-        config = load_config(config_path)
-        
-        # Filter out keys that aren't relevant for Navigator initialization
-        navigator_keys = ["position", "orientation", "speed", "max_speed", 
-                        "positions", "orientations", "speeds", "max_speeds",
-                        "angular_velocity", "angular_velocities", "num_agents"]
-        filtered_config = {k: v for k, v in config.items() if k in navigator_keys}
-        
-        # Check if positions is in array format for multi-agent
-        if "positions" in filtered_config and isinstance(filtered_config["positions"], np.ndarray) and len(filtered_config["positions"]) > 1:
-            return VectorizedNavigator(**filtered_config)
-        else:
-            return Navigator(**filtered_config)
-    
-    # Determine if we're creating a single-agent or multi-agent navigator
-    if positions is not None and isinstance(positions, (list, np.ndarray)) and len(positions) > 1:
-        # Multi-agent case
-        # Convert positions to numpy array if it's a list
-        if isinstance(positions, list):
-            positions = np.array(positions)
-            
-        # Handle orientations
-        if orientations is not None:
-            if isinstance(orientations, (int, float)):
-                orientations = np.full(len(positions), orientations)
-            elif isinstance(orientations, list):
-                orientations = np.array(orientations)
-                
-        # Handle speeds
-        if speeds is not None:
-            if isinstance(speeds, (int, float)):
-                speeds = np.full(len(positions), speeds)
-            elif isinstance(speeds, list):
-                speeds = np.array(speeds)
-                
-        # Handle max_speeds
-        if max_speeds is not None:
-            if isinstance(max_speeds, (int, float)):
-                max_speeds = np.full(len(positions), max_speeds)
-            elif isinstance(max_speeds, list):
-                max_speeds = np.array(max_speeds)
-        
-        # Create a VectorizedNavigator with multi-agent parameters
-        return VectorizedNavigator(
-            positions=positions,
-            orientations=orientations,
-            speeds=speeds,
-            max_speeds=max_speeds,
-            num_agents=len(positions)
-        )
-    
-    # Single-agent case
-    # Extract scalar values if we have lists with only one element
-    position = positions[0] if isinstance(positions, (list, np.ndarray)) and len(positions) == 1 else positions
-    orientation = orientations[0] if isinstance(orientations, (list, np.ndarray)) and len(orientations) == 1 else orientations
-    speed = speeds[0] if isinstance(speeds, (list, np.ndarray)) and len(speeds) == 1 else speeds
-    max_speed = max_speeds[0] if isinstance(max_speeds, (list, np.ndarray)) and len(max_speeds) == 1 else max_speeds
-    
-    # Create a Navigator with single-agent parameters
-    return Navigator(
-        position=position,
-        orientation=orientation,
-        speed=speed,
-        max_speed=max_speed
+        return _extracted_from_create_navigator_25(config_path)
+    # Parameter-based creation
+    if positions is not None:
+        return create_navigator_from_params(positions, orientations, speeds, max_speeds)
+
+    # Default case: create a navigator with default parameters
+    return Navigator()
+
+
+# TODO Rename this here and in `create_navigator`
+def _extracted_from_create_navigator_25(config_path):
+    from odor_plume_nav.config.utils import load_config
+    config = load_config(config_path)
+
+    # Filter out keys that aren't relevant for Navigator initialization
+    navigator_keys = [
+        "position", "orientation", "speed", "max_speed", 
+        "positions", "orientations", "speeds", "max_speeds",
+        "angular_velocity", "angular_velocities", "num_agents"
+    ]
+    filtered_config = {k: v for k, v in config.items() if k in navigator_keys}
+
+    # Create appropriate navigator based on whether it's multi-agent
+    is_multi_agent = "positions" in filtered_config and isinstance(
+        filtered_config["positions"], (list, np.ndarray)
+    ) and len(filtered_config["positions"]) > 1
+
+    return (
+        VectorizedNavigator(**filtered_config)
+        if is_multi_agent
+        else Navigator(**filtered_config)
     )
 
 
