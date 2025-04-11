@@ -3,9 +3,20 @@
 import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import pytest
 
 # Import from the new core module
 from odor_plume_nav.core import Navigator, SimpleNavigator
+
+# Import the validation helpers
+from tests.helpers.import_validator import assert_imported_from
+
+
+# Validate imports - this will fail until the migration is complete
+def test_proper_imports():
+    """Test that Navigator and SimpleNavigator are imported from the correct module."""
+    assert_imported_from(Navigator, "odor_plume_nav.core.navigator")
+    assert_imported_from(SimpleNavigator, "odor_plume_nav.core.navigator")
 
 
 def test_simple_navigator_initialization():
