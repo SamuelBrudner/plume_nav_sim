@@ -5,7 +5,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from unittest.mock import MagicMock
 
-from odor_plume_nav.navigator import SimpleNavigator
+from odor_plume_nav.core.navigator import SimpleNavigator
 
 
 class TestSingleAntennaSensing:

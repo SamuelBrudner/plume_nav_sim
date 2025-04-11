@@ -4,8 +4,8 @@ import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# The module doesn't exist yet - we're following TDD by writing the test first
-from odor_plume_nav.navigator import SimpleNavigator
+# Import from the core module instead
+from odor_plume_nav.core.navigator import SimpleNavigator
 
 
 def test_simple_navigator_initialization():

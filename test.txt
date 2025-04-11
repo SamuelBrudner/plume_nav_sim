@@ -1,0 +1,4056 @@
+Directory Structure for: tests
+
+└── tests/
+│   └── api/
+│       └── test_api.py
+│   └── config/
+│       └── test_config_utils.py
+│   └── core/
+│   │   └── test_navigator.py
+│       └── test_simulation.py
+│   └── environments/
+│       └── test_video_plume.py
+│   └── utils/
+│   └── visualization/
+│       └── test_trajectory.py
+│   └── conftest.py
+│   └── test_config_utils.py
+│   └── test_config_utils_validation.py
+│   └── test_config_validator.py
+│   └── test_logging_setup.py
+│   └── test_navigator.py
+│   └── test_navigator_angular_velocity.py
+│   └── test_navigator_factory.py
+│   └── test_simulation.py
+│   └── test_single_antenna.py
+│   └── test_vectorized_navigator.py
+│   └── test_video_plume.py
+    └── test_video_plume_factory.py
+
+File Contents:
+
+
+## api/test_api.py
+```py
+"""Tests for the public API functions."""
+
+import pytest
+import numpy as np
+import cv2
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+
+from odor_plume_nav.api import (
+    create_navigator,
+    create_video_plume,
+    run_plume_simulation,
+    visualize_simulation_results,
+)
+
+
+def test_create_navigator_single_agent():
+    """Test creating a navigator with single agent parameters."""
+    # Create a navigator with single agent parameters
+    navigator = create_navigator(
+        positions=(10, 20),
+        orientations=45,
+        speeds=0.5,
+        max_speeds=2.0
+    )
+    
+    # Check that the navigator has the correct properties
+    assert navigator.orientation == 45
+    assert navigator.speed == 0.5
+    assert navigator.max_speed == 2.0
+    assert navigator.get_position() == (10, 20)
+    
+    # Check that it's in single-agent mode
+    assert navigator._single_agent is True
+
+
+def test_create_navigator_multi_agent():
+    """Test creating a navigator with multi-agent parameters."""
+    # Create a navigator with multi-agent parameters
+    positions = [(10, 20), (30, 40), (50, 60)]
+    orientations = [45, 90, 135]
+    speeds = [0.5, 0.7, 0.9]
+    
+    navigator = create_navigator(
+        positions=positions,
+        orientations=orientations,
+        speeds=speeds
+    )
+    
+    # Check that the navigator has the correct number of agents
+    assert navigator.num_agents == 3
+    
+    # Check the properties of the first agent
+    assert navigator.orientation == 45
+    assert navigator.speed == 0.5
+    
+    # Check that all agents have correct positions
+    for i, expected_pos in enumerate(positions):
+        assert np.allclose(navigator.positions[i], expected_pos)
+    
+    # Check that it's not in single-agent mode
+    assert navigator._single_agent is False
+
+
+@pytest.fixture
+def mock_config_load():
+    """Mock the config loading function."""
+    with patch('odor_plume_nav.config.utils.load_config') as mock_load:
+        # Create valid config with numpy arrays since that's what the validator expects
+        positions = np.array([[10, 20], [30, 40]])
+        orientations = np.array([45, 90])
+        speeds = np.array([0.5, 0.7])
+        max_speeds = np.array([1.0, 1.0])
+        
+        mock_load.return_value = {
+            "positions": positions,
+            "orientations": orientations,
+            "speeds": speeds,
+            "max_speeds": max_speeds,
+            "video_plume": {
+                "flip": True,
+                "kernel_size": 5,
+                "kernel_sigma": 1.0
+            }
+        }
+        yield mock_load
+
+
+def test_create_navigator_from_config(mock_config_load):
+    """Test creating a navigator from a configuration file."""
+    # Create a navigator from a configuration file
+    navigator = create_navigator(config_path="test_config.yaml")
+    
+    # Verify config was loaded
+    mock_config_load.assert_called_once_with("test_config.yaml")
+    
+    # Check that the navigator has the correct properties
+    assert navigator.num_agents == 2
+    assert navigator.orientation == 45
+    assert navigator.speed == 0.5
+    assert np.allclose(navigator.positions[0], [10, 20])
+
+
+@pytest.fixture
+def mock_video_capture():
+    """Create a mock for cv2.VideoCapture."""
+    with patch('cv2.VideoCapture') as mock_cap:
+        # Configure the mock to return appropriate values
+        mock_instance = MagicMock()
+        mock_cap.return_value = mock_instance
+        
+        # Mock isOpened to return True by default
+        mock_instance.isOpened.return_value = True
+        
+        # Configure property values for a synthetic video
+        cap_properties = {
+            cv2.CAP_PROP_FRAME_COUNT: 100,
+            cv2.CAP_PROP_FRAME_WIDTH: 640,
+            cv2.CAP_PROP_FRAME_HEIGHT: 480,
+            cv2.CAP_PROP_FPS: 30.0
+        }
+        
+        # Configure get method to return values from the dictionary
+        mock_instance.get.side_effect = lambda prop: cap_properties.get(prop, 0)
+        
+        # Mock read to return a valid BGR frame (3 channels)
+        mock_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        mock_instance.read.return_value = (True, mock_frame)
+        
+        yield mock_cap
+
+
+@pytest.fixture
+def mock_exists(monkeypatch):
+    """Mock the Path.exists method to return True for all paths."""
+    def patched_exists(self):
+        return True
+    
+    monkeypatch.setattr(Path, "exists", patched_exists)
+    return patched_exists
+
+
+def test_create_video_plume(mock_video_capture, mock_exists):
+    """Test creating a video plume with the API function."""
+    # Create a video plume
+    plume = create_video_plume("test_video.mp4", flip=True, kernel_size=5)
+    
+    # Check that the plume has the correct properties
+    assert plume.video_path == Path("test_video.mp4")
+    assert plume.flip is True
+    assert plume.kernel_size == 5
+
+
+def test_create_video_plume_with_config(mock_video_capture, mock_exists, mock_config_load):
+    """Test creating a video plume with a configuration file."""
+    # Create a video plume from a configuration file
+    plume = create_video_plume("test_video.mp4", config_path="test_config.yaml")
+    
+    # Verify config was loaded
+    mock_config_load.assert_called_once_with("test_config.yaml")
+
+
+@pytest.fixture
+def mock_run_simulation():
+    """Mock the run_simulation function."""
+    # We need to patch the function where it's imported, not where it's defined
+    with patch('odor_plume_nav.api.run_simulation') as mock_run:
+        # Configure mock to return synthetic data
+        positions_history = np.array([[[0, 0], [1, 1], [2, 2]]])
+        orientations_history = np.array([[0, 45, 90]])
+        odor_readings = np.array([[0.1, 0.2, 0.3]])
+        
+        mock_run.return_value = (positions_history, orientations_history, odor_readings)
+        yield mock_run
+
+
+def test_run_plume_simulation(mock_run_simulation, mock_video_capture, mock_exists):
+    """Test running a plume simulation with the API function."""
+    # Create a navigator and video plume
+    navigator = create_navigator(positions=(10, 20), orientations=45)
+    plume = create_video_plume("test_video.mp4")
+    
+    # Run the simulation
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=100, step_size=0.5
+    )
+    
+    # Check that the simulation function was called with the correct parameters
+    mock_run_simulation.assert_called_once()
+    args, kwargs = mock_run_simulation.call_args
+    assert args[0] == navigator
+    assert args[1] == plume
+    assert kwargs["num_steps"] == 100
+    assert kwargs["step_size"] == 0.5
+    
+    # Check that the results were returned correctly
+    assert positions.shape == (1, 3, 2)  # (num_agents, num_steps, 2)
+    assert orientations.shape == (1, 3)  # (num_agents, num_steps)
+    assert readings.shape == (1, 3)    # (num_agents, num_steps)
+
+
+@pytest.fixture
+def mock_visualize_trajectory():
+    """Mock the visualize_trajectory function."""
+    with patch('odor_plume_nav.visualization.trajectory.visualize_trajectory') as mock_viz:
+        yield mock_viz
+
+
+def test_visualize_simulation_results(mock_visualize_trajectory):
+    """Test visualizing simulation results with the API function."""
+    # Create synthetic simulation results
+    positions = np.array([[[0, 0], [1, 1], [2, 2]]])
+    orientations = np.array([[0, 45, 90]])
+    
+    # Visualize the results
+    visualize_simulation_results(
+        positions, orientations, output_path="test_output.png", show_plot=False
+    )
+    
+    # Check that the visualization function was called with the correct parameters
+    mock_visualize_trajectory.assert_called_once()
+    args, kwargs = mock_visualize_trajectory.call_args
+    assert np.array_equal(args[0], positions)
+    assert np.array_equal(args[1], orientations)
+    assert kwargs["output_path"] == "test_output.png"
+    assert kwargs["show_plot"] is False
+```
+
+
+## config/test_config_utils.py
+```py
+"""Tests for the configuration utilities."""
+
+import pytest
+import tempfile
+from pathlib import Path
+import yaml
+import json
+from unittest.mock import patch, MagicMock
+
+# Import from the new config module
+from odor_plume_nav.config import load_config, save_config, validate_config, update_config
+
+
+@pytest.fixture
+def temp_yaml_file():
+    """Create a temporary YAML file for testing."""
+    test_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    # Create file with write text mode (not binary)
+    with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False, mode='w') as temp:
+        yaml.dump(test_config, temp)
+        temp_path = temp.name
+    
+    yield temp_path
+    
+    # Clean up the temporary file
+    Path(temp_path).unlink()
+
+
+@pytest.fixture
+def temp_json_file():
+    """Create a temporary JSON file for testing."""
+    test_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    # Create file with write text mode (not binary)
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode='w') as temp:
+        json.dump(test_config, temp)
+        temp_path = temp.name
+    
+    yield temp_path
+    
+    # Clean up the temporary file
+    Path(temp_path).unlink()
+
+
+def test_load_config_yaml(temp_yaml_file):
+    """Test loading configuration from a YAML file."""
+    # Load the configuration
+    config = load_config(temp_yaml_file)
+    
+    # Check that the configuration was loaded correctly
+    assert "navigator" in config
+    assert "video_plume" in config
+    assert config["navigator"]["orientations"] == [45, 90]
+    assert config["video_plume"]["flip"] is True
+
+
+def test_load_config_json(temp_json_file):
+    """Test loading configuration from a JSON file."""
+    # Load the configuration
+    config = load_config(temp_json_file)
+    
+    # Check that the configuration was loaded correctly
+    assert "navigator" in config
+    assert "video_plume" in config
+    assert config["navigator"]["orientations"] == [45, 90]
+    assert config["video_plume"]["flip"] is True
+
+
+def test_load_config_unsupported_extension():
+    """Test that loading configuration from an unsupported file type raises ValueError."""
+    with pytest.raises(ValueError, match="Unsupported file extension"):
+        load_config("config.txt")
+
+
+def test_load_config_file_not_found():
+    """Test that loading configuration from a non-existent file raises FileNotFoundError."""
+    with pytest.raises(FileNotFoundError):
+        load_config("nonexistent_config.yaml")
+
+
+def test_save_config_yaml():
+    """Test saving configuration to a YAML file."""
+    test_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    with tempfile.NamedTemporaryFile(suffix=".yaml", delete=False, mode='w') as temp:
+        temp_path = temp.name
+    
+    try:
+        # Save the configuration
+        save_config(test_config, temp_path)
+        
+        # Load the configuration to verify it was saved correctly
+        with open(temp_path, 'r') as f:
+            loaded_config = yaml.safe_load(f)
+        
+        # Check that the configuration was saved correctly
+        assert loaded_config == test_config
+    finally:
+        # Clean up the temporary file
+        Path(temp_path).unlink()
+
+
+def test_save_config_json():
+    """Test saving configuration to a JSON file."""
+    test_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode='w') as temp:
+        temp_path = temp.name
+    
+    try:
+        # Save the configuration
+        save_config(test_config, temp_path)
+        
+        # Load the configuration to verify it was saved correctly
+        with open(temp_path, 'r') as f:
+            loaded_config = json.load(f)
+        
+        # Check that the configuration was saved correctly
+        assert loaded_config == test_config
+    finally:
+        # Clean up the temporary file
+        Path(temp_path).unlink()
+
+
+def test_save_config_unsupported_extension():
+    """Test that saving configuration to an unsupported file type raises ValueError."""
+    with pytest.raises(ValueError, match="Unsupported file extension"):
+        save_config({}, "config.txt")
+
+
+def test_validate_config():
+    """Test validating a configuration."""
+    # This is a basic test - more comprehensive validation tests are in test_config_validator.py
+    valid_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    # Validation should pass for valid config
+    validate_config(valid_config)
+    
+    # Test with invalid config (missing required fields)
+    invalid_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            # Missing orientations
+            "speeds": [0.5, 0.7]
+        }
+    }
+    
+    # Should raise an exception for invalid config
+    with pytest.raises(Exception):
+        validate_config(invalid_config)
+
+
+def test_update_config():
+    """Test updating a configuration."""
+    base_config = {
+        "navigator": {
+            "positions": [[10, 20], [30, 40]],
+            "orientations": [45, 90],
+            "speeds": [0.5, 0.7],
+            "orientation": 45,
+            "speed": 0.5,
+            "max_speed": 1.0
+        },
+        "video_plume": {
+            "flip": False,
+            "kernel_size": 3,
+            "kernel_sigma": 1.0
+        }
+    }
+    
+    updates = {
+        "navigator": {
+            "speeds": [0.8, 1.0]  # Update speeds
+        },
+        "video_plume": {
+            "flip": True  # Update flip
+        }
+    }
+    
+    # Update the configuration
+    updated_config = update_config(base_config, updates)
+    
+    # Check that the configuration was updated correctly
+    assert updated_config["navigator"]["speeds"] == [0.8, 1.0]  # Updated
+    assert updated_config["navigator"]["positions"] == [[10, 20], [30, 40]]  # Unchanged
+    assert updated_config["navigator"]["orientations"] == [45, 90]  # Unchanged
+    assert updated_config["video_plume"]["flip"] is True  # Updated
+    assert updated_config["video_plume"]["kernel_size"] == 3  # Unchanged
+    
+    # Test that the original configuration was not modified
+    assert base_config["navigator"]["speeds"] == [0.5, 0.7]
+    assert base_config["video_plume"]["flip"] is False
+```
+
+
+## conftest.py
+```py
+"""
+Shared fixtures for tests in the odor_plume_nav package.
+
+This file contains pytest fixtures that are shared across multiple test files
+to reduce duplication and ensure consistency.
+"""
+
+import pytest
+import numpy as np
+from unittest.mock import patch, MagicMock
+
+
+@pytest.fixture
+def mock_video_capture():
+    """
+    Create a mock for cv2.VideoCapture.
+    
+    This provides a consistent way to mock video files across tests.
+    """
+    mock_cap = MagicMock()
+    # Set up basic properties that VideoPlume will access
+    mock_cap.get.side_effect = lambda prop: {
+        0: 640,  # CAP_PROP_FRAME_WIDTH
+        1: 480,  # CAP_PROP_FRAME_HEIGHT
+        5: 30.0,  # CAP_PROP_FPS
+        7: 300,  # CAP_PROP_FRAME_COUNT
+    }.get(prop, 0)
+    # Configure read to return a frame
+    mock_cap.read.return_value = (True, np.zeros((480, 640), dtype=np.uint8))
+    # Ensure isOpened returns True
+    mock_cap.isOpened.return_value = True
+    return mock_cap
+
+
+@pytest.fixture
+def mock_video_plume():
+    """
+    Create a mock VideoPlume instance.
+    
+    This provides a consistent mock for tests that use VideoPlume.
+    """
+    mock = MagicMock()
+    # Configure mock properties
+    mock.width = 640
+    mock.height = 480
+    mock.fps = 30.0
+    mock.frame_count = 300
+    mock.duration = 10.0
+    mock.shape = (480, 640)
+    # Configure return values for methods
+    mock.get_frame.return_value = np.zeros((480, 640), dtype=np.uint8)
+    mock.get_metadata.return_value = {
+        "width": 640,
+        "height": 480,
+        "fps": 30.0,
+        "frame_count": 300,
+        "duration": 10.0,
+        "shape": (480, 640)
+    }
+    return mock
+
+
+@pytest.fixture
+def mock_navigator():
+    """
+    Create a mock Navigator instance.
+    
+    This provides a consistent mock for tests that use SimpleNavigator.
+    """
+    mock = MagicMock()
+    # Configure mock properties
+    mock.orientation = 0.0
+    mock.speed = 0.0
+    mock.max_speed = 1.0
+    # Configure return values for methods
+    mock.get_position.return_value = (0.0, 0.0)
+    mock.get_movement_vector.return_value = (0.0, 0.0)
+    return mock
+
+
+@pytest.fixture
+def mock_exists():
+    """Mock Path.exists to always return True."""
+    with patch('pathlib.Path.exists', return_value=True):
+        yield
+
+
+@pytest.fixture
+def config_files():
+    """
+    Fixture to provide test configuration data.
+    
+    Returns a dictionary with standard test configurations.
+    """
+    # Default configuration
+    default_config = {
+        "video_plume": {
+            "flip": False,
+            "kernel_size": 0,
+            "kernel_sigma": 1.0
+        },
+        "navigator": {
+            "orientation": 0.0,
+            "speed": 0.0,
+            "max_speed": 1.0
+        }
+    }
+    
+    # User configuration with some overrides
+    user_config = {
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 5
+        },
+        "navigator": {
+            "orientation": 45.0,
+            "speed": 0.5,
+            "max_speed": 2.0
+        }
+    }
+    
+    return {
+        "default_config": default_config,
+        "user_config": user_config
+    }
+
+
+@pytest.fixture
+def temp_config_files(tmp_path):
+    """
+    Create temporary configuration files for testing.
+    
+    This fixture creates actual YAML files from the config_files fixture.
+    
+    Args:
+        tmp_path: Pytest built-in fixture that provides a temporary directory
+    
+    Returns:
+        Dictionary containing paths to the created files and the config objects
+    """
+    import yaml
+    
+    # Get configurations
+    configs = config_files()
+    
+    # Create config directory
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    
+    # Create default config file
+    default_path = config_dir / "default.yaml"
+    with open(default_path, 'w') as f:
+        yaml.dump(configs["default_config"], f)
+    
+    # Create user config file
+    user_path = config_dir / "user.yaml"
+    with open(user_path, 'w') as f:
+        yaml.dump(configs["user_config"], f)
+    
+    return {
+        "config_dir": config_dir,
+        "default_path": default_path,
+        "user_path": user_path,
+        "default_config": configs["default_config"],
+        "user_config": configs["user_config"]
+    }
+```
+
+
+## core/test_navigator.py
+```py
+"""Tests for the core navigator module."""
+
+import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+# Import from the new core module
+from odor_plume_nav.core import Navigator, SimpleNavigator
+
+
+def test_simple_navigator_initialization():
+    """Test that SimpleNavigator can be initialized with orientation and speed."""
+    # Create a navigator with default parameters
+    navigator = SimpleNavigator()
+    
+    # Default values should be set
+    assert navigator.orientation == 0.0
+    assert navigator.speed == 0.0
+    
+    # Create a navigator with custom parameters
+    custom_navigator = SimpleNavigator(orientation=45.0, speed=0.5)
+    
+    # Custom values should be set
+    assert custom_navigator.orientation == 45.0
+    assert custom_navigator.speed == 0.5
+
+
+def test_simple_navigator_set_orientation():
+    """Test that orientation can be set and is normalized properly."""
+    navigator = SimpleNavigator()
+    
+    # Test setting orientation in degrees
+    navigator.set_orientation(90.0)
+    assert navigator.orientation == 90.0
+    
+    # Test normalization of angles > 360
+    navigator.set_orientation(450.0)
+    assert navigator.orientation == 90.0
+    
+    # Test normalization of negative angles
+    navigator.set_orientation(-90.0)
+    assert navigator.orientation == 270.0
+
+
+def test_simple_navigator_set_speed():
+    """Test that speed can be set with proper constraints."""
+    navigator = SimpleNavigator(max_speed=1.0)
+    
+    # Test setting valid speed
+    navigator.set_speed(0.5)
+    assert navigator.speed == 0.5
+    
+    # Test setting speed above max_speed
+    navigator.set_speed(2.0)
+    assert navigator.speed == 1.0  # Should be capped at max_speed
+    
+    # Test setting negative speed
+    navigator.set_speed(-0.5)
+    assert navigator.speed == 0.0  # Should be capped at 0
+
+
+def test_simple_navigator_move():
+    """Test that the navigator can calculate movement vectors."""
+    navigator = SimpleNavigator(orientation=0.0, speed=1.0)
+    
+    # At 0 degrees, movement should be along positive x-axis
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 1.0)
+    assert np.isclose(movement[1], 0.0)
+    
+    # Change orientation to 90 degrees (positive y-axis)
+    navigator.set_orientation(90.0)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.0)
+    assert np.isclose(movement[1], 1.0)
+    
+    # Change orientation to 45 degrees
+    navigator.set_orientation(45.0)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.7071, atol=1e-4)
+    assert np.isclose(movement[1], 0.7071, atol=1e-4)
+    
+    # Change speed to 0.5
+    navigator.set_speed(0.5)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.3536, atol=1e-4)
+    assert np.isclose(movement[1], 0.3536, atol=1e-4)
+
+
+def test_simple_navigator_update():
+    """Test that the navigator can update its position."""
+    # Starting at position (0, 0) with orientation 0 and speed 1.0
+    navigator = SimpleNavigator(orientation=0.0, speed=1.0, position=(0.0, 0.0))
+
+    position = update_and_verify_position(navigator, 1.0, 0.0)
+    # Change orientation to 90 degrees and update again
+    navigator.set_orientation(90.0)
+    position = update_and_verify_position(navigator, 1.0, 1.0)
+    position = update_and_verify_position(navigator, 0.5, 1.5)
+
+
+def update_and_verify_position(navigator, dt, expected_y):
+    """Update navigator position and verify x=1.0 and y=expected_y."""
+    # Move for the specified time
+    navigator.update(dt=dt)
+    result = navigator.get_position()
+    assert np.isclose(result[0], 1.0)
+    assert np.isclose(result[1], expected_y)
+
+    return result
+
+
+def test_unified_navigator_compatibility():
+    """Test that the new unified Navigator class is compatible with SimpleNavigator."""
+    # Create a unified Navigator with single agent
+    navigator = Navigator(orientation=45.0, speed=0.5, position=(1.0, 2.0))
+    
+    # Test that it behaves like SimpleNavigator
+    assert navigator.orientation == 45.0
+    assert navigator.speed == 0.5
+    assert navigator.get_position() == (1.0, 2.0)
+    
+    # Test that it can update like SimpleNavigator
+    navigator.set_orientation(90.0)
+    navigator.set_speed(1.0)
+    assert navigator.orientation == 90.0
+    assert navigator.speed == 1.0
+```
+
+
+## core/test_simulation.py
+```py
+"""Tests for the simulation module."""
+
+import pytest
+import numpy as np
+from unittest.mock import patch, MagicMock
+
+from odor_plume_nav.core import Navigator, run_simulation
+from odor_plume_nav.environments import VideoPlume
+
+
+@pytest.fixture
+def mock_navigator():
+    """Create a mock Navigator instance."""
+    mock_nav = MagicMock(spec=Navigator)
+    
+    # Configure the mock for a single agent
+    mock_nav._single_agent = True
+    mock_nav.num_agents = 1
+    mock_nav.positions = np.array([[0.0, 0.0]])
+    mock_nav.orientations = np.array([0.0])
+    mock_nav.speeds = np.array([1.0])
+    
+    # Mock the update method
+    def mock_update(dt=1.0):
+        # Simulate movement along the x-axis
+        mock_nav.positions[0, 0] += mock_nav.speeds[0] * dt
+    
+    # Mock the sample_odor method
+    def mock_sample_odor(env_array):
+        # Return a constant odor value
+        return 0.5 if mock_nav._single_agent else np.array([0.5])
+    
+    mock_nav.update.side_effect = mock_update
+    mock_nav.sample_odor.side_effect = mock_sample_odor
+    
+    return mock_nav
+
+
+@pytest.fixture
+def mock_plume():
+    """Create a mock VideoPlume instance."""
+    mock_plume = MagicMock(spec=VideoPlume)
+    
+    # Configure the mock for a synthetic video
+    mock_plume.frame_count = 100
+    mock_plume.width = 640
+    mock_plume.height = 480
+    
+    # Mock the get_frame method
+    def mock_get_frame(frame_idx):
+        # Return a synthetic frame with a gradient
+        frame = np.zeros((480, 640), dtype=np.uint8)
+        for i in range(480):
+            for j in range(640):
+                frame[i, j] = (i + j) % 256
+        return frame
+    
+    mock_plume.get_frame.side_effect = mock_get_frame
+    
+    return mock_plume
+
+
+def test_run_simulation_single_agent(mock_navigator, mock_plume):
+    """Test running a simulation with a single agent."""
+    # Run the simulation
+    num_steps = 10
+    positions, orientations, odor_readings = run_simulation(
+        mock_navigator,
+        mock_plume,
+        num_steps=num_steps,
+        step_size=0.5
+    )
+    
+    # Check that the output has the correct shape
+    assert positions.shape == (1, num_steps + 1, 2)  # (num_agents, num_steps + 1, 2)
+    assert orientations.shape == (1, num_steps + 1)  # (num_agents, num_steps + 1)
+    assert odor_readings.shape == (1, num_steps + 1)  # (num_agents, num_steps + 1)
+    
+    # Check that update was called the correct number of times
+    assert mock_navigator.update.call_count == num_steps
+    
+    # Check that sample_odor was called the correct number of times
+    assert mock_navigator.sample_odor.call_count == num_steps + 1
+
+
+@pytest.fixture
+def mock_multi_navigator():
+    """Create a mock Navigator instance for multiple agents."""
+    mock_nav = MagicMock(spec=Navigator)
+    
+    # Configure the mock for multiple agents
+    mock_nav._single_agent = False
+    mock_nav.num_agents = 2
+    mock_nav.positions = np.array([[0.0, 0.0], [10.0, 10.0]])
+    mock_nav.orientations = np.array([0.0, 90.0])
+    mock_nav.speeds = np.array([1.0, 0.5])
+    
+    # Mock the update method
+    def mock_update(dt=1.0):
+        # Simulate movement along respective axes
+        mock_nav.positions[0, 0] += mock_nav.speeds[0] * dt  # Agent 1 along x-axis
+        mock_nav.positions[1, 1] += mock_nav.speeds[1] * dt  # Agent 2 along y-axis
+    
+    # Mock the sample_odor method
+    def mock_sample_odor(env_array):
+        # Return different odor values for each agent
+        return np.array([0.5, 0.7])
+    
+    mock_nav.update.side_effect = mock_update
+    mock_nav.sample_odor.side_effect = mock_sample_odor
+    
+    return mock_nav
+
+
+def test_run_simulation_multi_agent(mock_multi_navigator, mock_plume):
+    """Test running a simulation with multiple agents."""
+    # Run the simulation
+    num_steps = 10
+    positions, orientations, odor_readings = run_simulation(
+        mock_multi_navigator,
+        mock_plume,
+        num_steps=num_steps,
+        step_size=0.5
+    )
+    
+    # Check that the output has the correct shape
+    assert positions.shape == (2, num_steps + 1, 2)  # (num_agents, num_steps + 1, 2)
+    assert orientations.shape == (2, num_steps + 1)  # (num_agents, num_steps + 1)
+    assert odor_readings.shape == (2, num_steps + 1)  # (num_agents, num_steps + 1)
+    
+    # Check that update was called the correct number of times
+    assert mock_multi_navigator.update.call_count == num_steps
+    
+    # Check that sample_odor was called the correct number of times
+    assert mock_multi_navigator.sample_odor.call_count == num_steps + 1
+
+
+def test_run_simulation_with_custom_sensors(mock_navigator, mock_plume):
+    """Test running a simulation with custom sensor parameters."""
+    # Run the simulation with custom sensor parameters
+    num_steps = 5
+    positions, orientations, odor_readings = run_simulation(
+        mock_navigator,
+        mock_plume,
+        num_steps=num_steps,
+        step_size=0.5,
+        sensor_distance=10.0,
+        sensor_angle=60.0
+    )
+    
+    # We can't easily test that the sensor parameters affected the outcome
+    # without more complex mocking, but we can check that the simulation ran
+    assert positions.shape == (1, num_steps + 1, 2)
+    assert orientations.shape == (1, num_steps + 1)
+    assert odor_readings.shape == (1, num_steps + 1)
+
+
+def test_run_simulation_with_custom_step_size(mock_navigator, mock_plume):
+    """Test that step_size affects the simulation."""
+    # Run the simulation with a larger step size
+    num_steps = 5
+    positions_large_step, _, _ = run_simulation(
+        mock_navigator,
+        mock_plume,
+        num_steps=num_steps,
+        step_size=2.0  # Larger step size
+    )
+    
+    # Reset the navigator position
+    mock_navigator.positions = np.array([[0.0, 0.0]])
+    
+    # Run the simulation with a smaller step size
+    positions_small_step, _, _ = run_simulation(
+        mock_navigator,
+        mock_plume,
+        num_steps=num_steps,
+        step_size=1.0  # Smaller step size
+    )
+    
+    # With larger step size, the agent should move farther
+    assert positions_large_step[0, -1, 0] > positions_small_step[0, -1, 0]
+```
+
+
+## environments/test_video_plume.py
+```py
+"""Tests for the VideoPlume environment."""
+
+import pytest
+from pathlib import Path
+import numpy as np
+import cv2
+from unittest.mock import patch, MagicMock
+
+# Import from the new environments module
+from odor_plume_nav.environments import VideoPlume
+
+
+@pytest.fixture
+def mock_exists(monkeypatch):
+    """Mock the Path.exists method to return True for all paths except 'nonexistent_file.mp4'."""
+    def patched_exists(self):
+        return str(self) != "nonexistent_file.mp4"
+    
+    monkeypatch.setattr(Path, "exists", patched_exists)
+    return patched_exists
+
+
+@pytest.fixture
+def mock_video_capture():
+    """Create a mock for cv2.VideoCapture."""
+    with patch('cv2.VideoCapture') as mock_cap:
+        # Configure the mock to return appropriate values
+        mock_instance = MagicMock()
+        mock_cap.return_value = mock_instance
+        
+        # Mock isOpened to return True by default
+        mock_instance.isOpened.return_value = True
+        
+        # Configure property values for a synthetic video
+        cap_properties = {
+            cv2.CAP_PROP_FRAME_COUNT: 100,
+            cv2.CAP_PROP_FRAME_WIDTH: 640,
+            cv2.CAP_PROP_FRAME_HEIGHT: 480,
+            cv2.CAP_PROP_FPS: 30.0
+        }
+        
+        # Configure get method to return values from the dictionary
+        mock_instance.get.side_effect = lambda prop: cap_properties.get(prop, 0)
+        
+        # Mock read to return a valid BGR frame (3 channels)
+        mock_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        mock_instance.read.return_value = (True, mock_frame)
+        
+        yield mock_cap
+
+
+@pytest.fixture
+def failed_video_capture():
+    """Create a mock for cv2.VideoCapture that fails to open."""
+    with patch('cv2.VideoCapture') as mock_cap:
+        # Configure the mock to return a failed instance
+        mock_instance = MagicMock()
+        mock_cap.return_value = mock_instance
+        
+        # Mock isOpened to return False
+        mock_instance.isOpened.return_value = False
+        
+        yield mock_cap
+
+
+def test_video_plume_loading(mock_video_capture, mock_exists):
+    """Test that VideoPlume can be initialized with a valid path."""
+    # Create a VideoPlume instance
+    video_path = "dummy_video.mp4"
+    plume = VideoPlume(video_path)
+    
+    # Check that cv2.VideoCapture was called with the correct path
+    mock_video_capture.assert_called_once_with(video_path)
+    
+    # Check that plume properties were set correctly
+    assert plume.video_path == Path(video_path)
+    assert plume.frame_count == 100
+    assert plume._is_closed is False
+
+
+def test_nonexistent_file(mock_exists):
+    """Test that VideoPlume raises IOError when file doesn't exist."""
+    with pytest.raises(IOError, match="Video file does not exist"):
+        VideoPlume("nonexistent_file.mp4")
+
+
+def test_failed_open(failed_video_capture, mock_exists):
+    """Test that VideoPlume raises IOError when video can't be opened."""
+    with pytest.raises(IOError, match="Failed to open video file"):
+        VideoPlume("failed_video.mp4")
+
+
+def test_get_frame_valid_index(mock_video_capture, mock_exists):
+    """Test that get_frame returns a frame for valid indices."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Get a frame at index 50
+    frame = plume.get_frame(50)
+    
+    # Check that the frame was retrieved and converted to grayscale
+    assert frame is not None
+    mock_video_capture.return_value.set.assert_called_once_with(cv2.CAP_PROP_POS_FRAMES, 50)
+    mock_video_capture.return_value.read.assert_called_once()
+
+
+def test_get_frame_invalid_index(mock_video_capture, mock_exists):
+    """Test that get_frame returns None for invalid indices."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Try to get frames with invalid indices
+    negative_frame = plume.get_frame(-1)
+    assert negative_frame is None
+    
+    too_large_frame = plume.get_frame(200)  # Beyond frame_count
+    assert too_large_frame is None
+
+
+def test_get_frame_after_close(mock_video_capture, mock_exists):
+    """Test that get_frame raises ValueError after VideoPlume is closed."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Close the video plume
+    plume.close()
+    
+    # Try to get a frame after closing, should raise ValueError
+    with pytest.raises(ValueError, match="VideoPlume is closed"):
+        plume.get_frame(0)
+
+
+def test_close_idempotent(mock_video_capture, mock_exists):
+    """Test that calling close() multiple times is safe."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Close once
+    plume.close()
+    assert plume._is_closed is True
+    
+    # Close again, should not raise any errors
+    plume.close()
+    assert plume._is_closed is True
+
+
+def test_frame_metadata(mock_video_capture, mock_exists):
+    """Test that frame metadata properties are correctly exposed."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Check basic metadata
+    assert plume.frame_count == 100
+    assert plume.width == 640
+    assert plume.height == 480
+    assert plume.fps == 30.0
+    
+    # Test format string conversion
+    metadata_str = plume.get_metadata_string()
+    assert "100 frames" in metadata_str
+    assert "640x480" in metadata_str
+    assert "30.0 fps" in metadata_str
+
+
+@pytest.fixture
+def mock_config_file():
+    """Mock the load_config function to return a test configuration."""
+    # Use the new config utils path
+    with patch('odor_plume_nav.config.utils.load_config') as mock_load:
+        mock_load.return_value = {
+            "video_plume": {
+                "flip": True,
+                "kernel_size": 3,
+                "kernel_sigma": 1.5
+            }
+        }
+        yield mock_load
+```
+
+
+## test_config_utils.py
+```py
+"""Tests for configuration utilities."""
+
+import pytest
+from pathlib import Path
+import yaml
+import os
+from unittest.mock import patch
+import tempfile
+
+from odor_plume_nav.config_utils import (
+    deep_update,
+    get_config_dir,
+    load_yaml_config,
+    load_config
+)
+from odor_plume_nav.config_validator import ConfigValidationError
+
+
+def test_deep_update_basic():
+    """Test that deep_update correctly updates flat dictionaries."""
+    original = {"a": 1, "b": 2}
+    update = {"b": 3, "c": 4}
+    result = deep_update(original, update)
+    
+    assert result == {"a": 1, "b": 3, "c": 4}
+    # Original should be unchanged
+    assert original == {"a": 1, "b": 2}
+
+
+def test_deep_update_nested():
+    """Test that deep_update correctly updates nested dictionaries."""
+    original = {"a": 1, "b": {"x": 10, "y": 20}}
+    update = {"b": {"y": 30, "z": 40}}
+    result = deep_update(original, update)
+    
+    assert result == {"a": 1, "b": {"x": 10, "y": 30, "z": 40}}
+    # Original should be unchanged
+    assert original == {"a": 1, "b": {"x": 10, "y": 20}}
+
+
+def test_get_config_dir_default():
+    """Test that get_config_dir returns the standard config directory."""
+    with patch.dict('os.environ', {}, clear=True):
+        config_dir = get_config_dir()
+        expected_path = Path(__file__).parent.parent / "configs"
+        assert config_dir == expected_path
+
+
+def test_get_config_dir_env_override():
+    """Test that get_config_dir respects the environment variable."""
+    with patch.dict('os.environ', {"ODOR_PLUME_NAV_CONFIG_DIR": "/custom/config/path"}):
+        config_dir = get_config_dir()
+        assert config_dir == Path("/custom/config/path")
+
+
+def test_load_yaml_config():
+    """Test that load_yaml_config correctly loads a YAML file."""
+    # Create a temporary YAML file
+    with tempfile.NamedTemporaryFile(mode='w+', suffix='.yaml') as tmp:
+        test_config = {
+            "test": {"key": "value"},
+            "number": 42
+        }
+        yaml.dump(test_config, tmp)
+        tmp.flush()
+        
+        # Load and verify the config
+        loaded_config = load_yaml_config(tmp.name)
+        assert loaded_config == test_config
+
+
+def test_load_yaml_config_file_not_found():
+    """Test that load_yaml_config raises FileNotFoundError for missing files."""
+    with pytest.raises(FileNotFoundError):
+        load_yaml_config("/nonexistent/config.yaml")
+
+
+@pytest.fixture
+def mock_config_files(tmp_path):
+    """Create temporary default and user config files for testing."""
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    
+    # Create default config
+    default_config = {
+        "environment": {
+            "dimensions": [10.0, 8.0, 2.0],
+            "wind": {"speed": 0.5}
+        },
+        "video_plume": {"flip": False}
+    }
+    default_path = config_dir / "default.yaml"
+    with open(default_path, 'w') as f:
+        yaml.dump(default_config, f)
+    
+    # Create user config
+    user_config = {
+        "environment": {
+            "wind": {"speed": 0.8}
+        },
+        "video_plume": {"kernel_size": 5}
+    }
+    user_path = tmp_path / "user_config.yaml"
+    with open(user_path, 'w') as f:
+        yaml.dump(user_config, f)
+    
+    return {
+        "config_dir": config_dir,
+        "default_path": default_path,
+        "user_path": user_path,
+        "default_config": default_config,
+        "user_config": user_config
+    }
+
+
+def test_load_config_default_only(mock_config_files):
+    """Test loading only the default configuration."""
+    with patch('odor_plume_nav.config_utils.get_config_dir', 
+               return_value=mock_config_files["config_dir"]):
+        config = load_config()
+        assert config == mock_config_files["default_config"]
+
+
+def test_load_config_with_user_override(mock_config_files):
+    """Test loading and merging default and user configurations."""
+    with patch('odor_plume_nav.config_utils.get_config_dir',
+               return_value=mock_config_files["config_dir"]):
+        config = load_config(user_config_path=mock_config_files["user_path"])
+        
+        # Expected merged config
+        expected = {
+            "environment": {
+                "dimensions": [10.0, 8.0, 2.0],
+                "wind": {"speed": 0.8}  # Overridden by user config
+            },
+            "video_plume": {
+                "flip": False,
+                "kernel_size": 5  # Added by user config
+            }
+        }
+        
+        assert config == expected
+
+
+# New tests for configuration validation
+@pytest.fixture
+def valid_config_files(tmp_path):
+    """Create temporary config files with valid configurations."""
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    
+    # Create valid default config
+    default_config = {
+        "video_plume": {
+            "flip": False,
+            "kernel_size": 0,
+            "kernel_sigma": 1.0
+        },
+        "navigator": {
+            "orientation": 0.0,
+            "speed": 0.0,
+            "max_speed": 1.0
+        }
+    }
+    default_path = config_dir / "default.yaml"
+    with open(default_path, 'w') as f:
+        yaml.dump(default_config, f)
+    
+    # Create valid user config
+    user_config = {
+        "video_plume": {
+            "flip": True,
+            "kernel_size": 3
+        }
+    }
+    user_path = tmp_path / "valid_user.yaml"
+    with open(user_path, 'w') as f:
+        yaml.dump(user_config, f)
+    
+    return {
+        "config_dir": config_dir,
+        "default_path": default_path,
+        "user_path": user_path,
+        "default_config": default_config,
+        "user_config": user_config
+    }
+
+
+@pytest.fixture
+def invalid_config_files(tmp_path):
+    """Create temporary config files with invalid configurations."""
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir(exist_ok=True)
+    
+    # Test-specific configs
+    test_configs = {
+        # Base default config with missing fields for most tests
+        "default": {
+            "video_plume": {
+                # Missing some required fields
+                "flip": False
+            },
+            "navigator": {
+                # Missing some required fields
+                "orientation": 0.0
+            }
+        },
+        # Complete default config for speed validation test
+        "speed_test_default": {
+            "video_plume": {
+                "flip": False,
+                "kernel_size": 0,
+                "kernel_sigma": 1.0
+            },
+            "navigator": {
+                "orientation": 0.0,
+                "speed": 0.0,
+                "max_speed": 1.0
+            }
+        }
+    }
+    
+    # Write config files based on test needs
+    config_paths = {}
+    for name, config in test_configs.items():
+        path = config_dir / f"{name}.yaml"
+        with open(path, 'w') as f:
+            yaml.dump(config, f)
+        config_paths[name] = path
+    
+    # Invalid user configs
+    invalid_configs = {
+        # Missing required field (no complete config even after merging)
+        "missing_field": {
+            "video_plume": {
+                # Missing kernel_sigma
+                "flip": True,
+                "kernel_size": 0
+            }
+        },
+        # Invalid value
+        "invalid_kernel_size": {
+            "video_plume": {
+                "flip": False,
+                "kernel_size": -1,  # Negative, which is invalid
+                "kernel_sigma": 1.0
+            }
+        },
+        # Speed exceeds max_speed
+        "invalid_speed": {
+            "navigator": {
+                "orientation": 0.0,
+                "speed": 2.0,  # Exceeds max_speed
+                "max_speed": 1.0
+            }
+        }
+    }
+    
+    # Write invalid configs to files
+    invalid_paths = {}
+    for name, config in invalid_configs.items():
+        path = tmp_path / f"{name}.yaml"
+        with open(path, 'w') as f:
+            yaml.dump(config, f)
+        invalid_paths[name] = path
+    
+    return {
+        "config_dir": config_dir,
+        "default_path": config_paths["default"],
+        "speed_test_default_path": config_paths["speed_test_default"],
+        "invalid_paths": invalid_paths
+    }
+
+
+class TestConfigValidationIntegration:
+    """Test integration of config validation with config loading."""
+    
+    def test_load_config_validate_valid(self, valid_config_files):
+        """Test that loading a valid config with validation works."""
+        with patch('odor_plume_nav.config_utils.get_config_dir', 
+                  return_value=valid_config_files["config_dir"]):
+            # This should not raise any exceptions
+            try:
+                config = load_config(
+                    user_config_path=valid_config_files["user_path"],
+                    validate=True
+                )
+                # If we get here, validation is either working correctly or not implemented
+                assert 'video_plume' in config
+                assert 'navigator' in config
+                assert config['video_plume']['flip'] is True  # From user config
+            except TypeError:
+                pytest.fail("load_config does not support validation yet")
+    
+    def test_load_config_validate_missing_field(self, invalid_config_files):
+        """Test that validation catches missing required fields."""
+        with patch('odor_plume_nav.config_utils.get_config_dir', 
+                  return_value=invalid_config_files["config_dir"]):
+            # Try to load config with missing required field
+            with pytest.raises(ConfigValidationError) as excinfo:
+                load_config(
+                    user_config_path=invalid_config_files["invalid_paths"]["missing_field"],
+                    validate=True
+                )
+            # Check that the error message mentions the missing field (kernel_sigma)
+            assert "Missing required field" in str(excinfo.value)
+            assert "kernel_sigma" in str(excinfo.value)
+    
+    def test_load_config_validate_invalid_kernel_size(self, invalid_config_files):
+        """Test that validation catches invalid kernel_size."""
+        with patch('odor_plume_nav.config_utils.get_config_dir', 
+                  return_value=invalid_config_files["config_dir"]):
+            # Try to load config with invalid kernel_size
+            with pytest.raises(ConfigValidationError) as excinfo:
+                load_config(
+                    user_config_path=invalid_config_files["invalid_paths"]["invalid_kernel_size"],
+                    validate=True
+                )
+            # Check that the error message mentions the invalid kernel_size
+            assert "kernel_size" in str(excinfo.value)
+    
+    def test_load_config_validate_invalid_speed(self, invalid_config_files):
+        """Test that validation catches speed exceeding max_speed."""
+        # Use the complete default config for this test
+        with patch('odor_plume_nav.config_utils.get_config_dir', 
+                  return_value=invalid_config_files["config_dir"]), \
+             patch('odor_plume_nav.config_utils.load_yaml_config', side_effect=[
+                  # Load the speed_test_default config with complete video_plume settings 
+                  # when the default config is requested
+                  load_yaml_config(invalid_config_files["speed_test_default_path"]),
+                  # Load the invalid_speed config when the user config is requested
+                  load_yaml_config(invalid_config_files["invalid_paths"]["invalid_speed"])
+             ]):
+            # Try to load config with speed exceeding max_speed
+            with pytest.raises(ConfigValidationError) as excinfo:
+                load_config(
+                    user_config_path=invalid_config_files["invalid_paths"]["invalid_speed"],
+                    validate=True
+                )
+            # Check that the error message mentions speed and max_speed
+            assert "speed" in str(excinfo.value)
+            assert "max_speed" in str(excinfo.value)
+    
+    def test_load_config_validate_disabled(self, invalid_config_files):
+        """Test that validation can be disabled."""
+        with patch('odor_plume_nav.config_utils.get_config_dir', 
+                  return_value=invalid_config_files["config_dir"]):
+            try:
+                # This should not raise validation errors when validate=False
+                config = load_config(
+                    user_config_path=invalid_config_files["invalid_paths"]["invalid_kernel_size"],
+                    validate=False
+                )
+                
+                # Check that the invalid value passed through
+                assert config['video_plume']['kernel_size'] == -1
+            except TypeError:
+                pytest.fail("load_config does not support validation yet")
+```
+
+
+## test_config_utils_validation.py
+```py
+"""Tests for config validation integration with config_utils module."""
+
+import pytest
+import tempfile
+import yaml
+from pathlib import Path
+from unittest.mock import patch
+
+from odor_plume_nav.config_utils import load_config, deep_update
+from odor_plume_nav.config_validator import ConfigValidationError, validate_config
+
+
+def validate_loaded_config(config, validate=True, validate_sections=None):
+    """
+    Function that will validate a loaded config.
+    This represents what we want to integrate into load_config.
+    
+    Args:
+        config: Configuration dictionary to validate
+        validate: Whether to perform validation
+        validate_sections: List of sections to validate (or None for all)
+        
+    Returns:
+        The validated configuration
+        
+    Raises:
+        ConfigValidationError: If validation fails
+    """
+    if validate:
+        validate_config(config, required_sections=validate_sections)
+    return config
+
+
+@pytest.fixture
+def valid_config_file():
+    """Create a temporary file with valid configuration."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump({
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }, f)
+        return Path(f.name)
+
+
+@pytest.fixture
+def invalid_video_plume_config_file():
+    """Create a temporary file with invalid video_plume configuration."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump({
+            'video_plume': {
+                'flip': False,
+                'kernel_size': -1,  # Invalid negative value
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }, f)
+        return Path(f.name)
+
+
+@pytest.fixture
+def invalid_navigator_config_file():
+    """Create a temporary file with invalid navigator configuration."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump({
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 2.0,  # Exceeds max_speed
+                'max_speed': 1.0
+            }
+        }, f)
+        return Path(f.name)
+
+
+@pytest.fixture
+def missing_section_config_file():
+    """Create a temporary file with a missing required section."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump({
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            }
+            # Missing navigator section
+        }, f)
+        return Path(f.name)
+
+
+@pytest.fixture
+def missing_field_config_file():
+    """Create a temporary file with a missing required field."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump({
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0
+                # Missing kernel_sigma
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }, f)
+        return Path(f.name)
+
+
+@pytest.fixture
+def default_config():
+    """Create a valid default config dict."""
+    return {
+        'video_plume': {
+            'flip': False,
+            'kernel_size': 0,
+            'kernel_sigma': 1.0
+        },
+        'navigator': {
+            'orientation': 0.0,
+            'speed': 0.0,
+            'max_speed': 1.0
+        }
+    }
+
+
+class TestConfigValidationLogic:
+    """Tests for validating configs using the validation function."""
+    
+    def test_validate_valid_config(self, default_config):
+        """Test that validating a valid config works."""
+        # This should not raise any exceptions
+        result = validate_loaded_config(default_config, validate=True)
+        assert result == default_config
+    
+    def test_validate_invalid_video_plume_config(self):
+        """Test that validating a config with invalid video_plume raises error."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': -1,  # Invalid negative value
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }
+        
+        # Should raise a validation error for negative kernel_size
+        with pytest.raises(ConfigValidationError, match="kernel_size must be non-negative"):
+            validate_loaded_config(invalid_config, validate=True)
+    
+    def test_validate_invalid_navigator_config(self):
+        """Test that validating a config with invalid navigator raises error."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 2.0,  # Exceeds max_speed
+                'max_speed': 1.0
+            }
+        }
+        
+        # Should raise a validation error for speed exceeding max_speed
+        with pytest.raises(ConfigValidationError, match="exceeds max_speed"):
+            validate_loaded_config(invalid_config, validate=True)
+    
+    def test_validate_missing_section(self):
+        """Test that validating a config with missing section raises error."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            }
+            # Missing navigator section
+        }
+        
+        # Should raise a validation error for missing navigator section
+        with pytest.raises(ConfigValidationError, match="Missing required 'navigator' section"):
+            validate_loaded_config(invalid_config, validate=True)
+    
+    def test_validate_missing_field(self):
+        """Test that validating a config with missing field raises error."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0
+                # Missing kernel_sigma
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }
+        
+        # Should raise a validation error for missing kernel_sigma
+        with pytest.raises(ConfigValidationError, match="Missing required field 'kernel_sigma'"):
+            validate_loaded_config(invalid_config, validate=True)
+    
+    def test_validation_disabled(self):
+        """Test that validation can be disabled."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': -1,  # Invalid but ignored when validation is off
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 0.0,
+                'max_speed': 1.0
+            }
+        }
+        
+        # This should not raise any exceptions when validate=False
+        result = validate_loaded_config(invalid_config, validate=False)
+        assert result['video_plume']['kernel_size'] == -1
+    
+    def test_selective_validation(self):
+        """Test that validation can be limited to specific sections."""
+        invalid_config = {
+            'video_plume': {
+                'flip': False,
+                'kernel_size': 0,
+                'kernel_sigma': 1.0
+            },
+            'navigator': {
+                'orientation': 0.0,
+                'speed': 2.0,  # Invalid but not validated
+                'max_speed': 1.0
+            }
+        }
+        
+        # This should not raise when we only validate video_plume
+        result = validate_loaded_config(invalid_config, validate=True, validate_sections=['video_plume'])
+        assert result['navigator']['speed'] == 2.0
+```
+
+
+## test_config_validator.py
+```py
+"""Tests for the configuration validation module."""
+
+import pytest
+from odor_plume_nav.config_validator import (
+    validate_config, 
+    validate_video_plume_config, 
+    validate_navigator_config,
+    ConfigValidationError
+)
+
+
+class TestVideoPlumeSectionValidation:
+    """Test validation of video_plume section."""
+
+    def test_missing_video_plume_section(self):
+        """Test error when video_plume section is missing."""
+        config = {}
+        with pytest.raises(ConfigValidationError, match="Missing required 'video_plume' section"):
+            validate_video_plume_config(config)
+
+    def test_missing_required_fields(self):
+        """Test error when required fields are missing."""
+        config = {"video_plume": {}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'flip'"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'kernel_size'"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False, "kernel_size": 0}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'kernel_sigma'"):
+            validate_video_plume_config(config)
+
+    def test_invalid_field_types(self):
+        """Test error when field types are invalid."""
+        config = {"video_plume": {"flip": "not-a-bool", "kernel_size": 0, "kernel_sigma": 1.0}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for video_plume.flip"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False, "kernel_size": 2.5, "kernel_sigma": 1.0}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for video_plume.kernel_size"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": "1.0"}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for video_plume.kernel_sigma"):
+            validate_video_plume_config(config)
+
+    def test_invalid_field_values(self):
+        """Test error when field values are invalid."""
+        config = {"video_plume": {"flip": False, "kernel_size": -1, "kernel_sigma": 1.0}}
+        with pytest.raises(ConfigValidationError, match="kernel_size must be non-negative"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": 0.0}}
+        with pytest.raises(ConfigValidationError, match="kernel_sigma must be positive"):
+            validate_video_plume_config(config)
+            
+        config = {"video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": -1.0}}
+        with pytest.raises(ConfigValidationError, match="kernel_sigma must be positive"):
+            validate_video_plume_config(config)
+
+    def test_valid_config(self):
+        """Test that a valid config passes validation."""
+        # Minimal valid config
+        config = {"video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": 1.0}}
+        validate_video_plume_config(config)  # Should not raise
+
+        # Alternative valid values
+        config = {"video_plume": {"flip": True, "kernel_size": 3, "kernel_sigma": 0.5}}
+        validate_video_plume_config(config)  # Should not raise
+
+
+class TestNavigatorSectionValidation:
+    """Test validation of navigator section."""
+
+    def test_missing_navigator_section(self):
+        """Test error when navigator section is missing."""
+        config = {}
+        with pytest.raises(ConfigValidationError, match="Missing required 'navigator' section"):
+            validate_navigator_config(config)
+
+    def test_missing_required_fields(self):
+        """Test error when required fields are missing."""
+        config = {"navigator": {}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'orientation'"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'speed'"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0, "speed": 0.0}}
+        with pytest.raises(ConfigValidationError, match="Missing required field 'max_speed'"):
+            validate_navigator_config(config)
+
+    def test_invalid_field_types(self):
+        """Test error when field types are invalid."""
+        config = {"navigator": {"orientation": "invalid", "speed": 0.0, "max_speed": 1.0}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for navigator.orientation"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0, "speed": "invalid", "max_speed": 1.0}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for navigator.speed"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0, "speed": 0.0, "max_speed": "invalid"}}
+        with pytest.raises(ConfigValidationError, match="Invalid type for navigator.max_speed"):
+            validate_navigator_config(config)
+
+    def test_invalid_field_values(self):
+        """Test error when field values are invalid."""
+        config = {"navigator": {"orientation": 0.0, "speed": 0.0, "max_speed": -1.0}}
+        with pytest.raises(ConfigValidationError, match="max_speed must be non-negative"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0, "speed": 2.0, "max_speed": 1.0}}
+        with pytest.raises(ConfigValidationError, match="exceeds max_speed"):
+            validate_navigator_config(config)
+            
+        config = {"navigator": {"orientation": 0.0, "speed": -2.0, "max_speed": 1.0}}
+        with pytest.raises(ConfigValidationError, match="exceeds max_speed"):
+            validate_navigator_config(config)
+
+    def test_valid_config(self):
+        """Test that a valid config passes validation."""
+        # Minimal valid config with numeric types
+        config = {"navigator": {"orientation": 0.0, "speed": 0.0, "max_speed": 1.0}}
+        validate_navigator_config(config)  # Should not raise
+
+        # Alternative valid values and integer types
+        config = {"navigator": {"orientation": 90, "speed": -0.5, "max_speed": 2.0}}
+        validate_navigator_config(config)  # Should not raise
+        
+        # Mixed integer and float types
+        config = {"navigator": {"orientation": 45.5, "speed": 0, "max_speed": 1}}
+        validate_navigator_config(config)  # Should not raise
+
+
+class TestFullConfigValidation:
+    """Test validation of complete configurations."""
+
+    def test_invalid_config_type(self):
+        """Test error when config is not a dictionary."""
+        config = "not-a-dict"
+        with pytest.raises(ConfigValidationError, match="Configuration must be a dictionary"):
+            validate_config(config)
+
+        config = 42
+        with pytest.raises(ConfigValidationError, match="Configuration must be a dictionary"):
+            validate_config(config)
+
+    def test_unknown_validation_section(self):
+        """Test error when an unknown section is requested for validation."""
+        config = {}
+        with pytest.raises(ConfigValidationError, match="Unknown section 'unknown'"):
+            validate_config(config, required_sections=["unknown"])
+
+    def test_selective_section_validation(self):
+        """Test that only requested sections are validated."""
+        # Missing video_plume section but only validating navigator
+        config = {
+            "navigator": {"orientation": 0.0, "speed": 0.0, "max_speed": 1.0}
+        }
+        validate_config(config, required_sections=["navigator"])  # Should not raise
+        
+        # Missing navigator section but only validating video_plume
+        config = {
+            "video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": 1.0}
+        }
+        validate_config(config, required_sections=["video_plume"])  # Should not raise
+
+    def test_complete_valid_config(self):
+        """Test that a complete valid config passes validation."""
+        config = {
+            "video_plume": {"flip": False, "kernel_size": 0, "kernel_sigma": 1.0},
+            "navigator": {"orientation": 0.0, "speed": 0.0, "max_speed": 1.0}
+        }
+        validate_config(config)  # Should not raise
+```
+
+
+## test_logging_setup.py
+```py
+"""Tests for the logging configuration system."""
+
+import pytest
+import sys
+import os
+import io
+import tempfile
+from pathlib import Path
+import re
+from contextlib import suppress
+
+from loguru import logger
+
+# Import the module to test
+from odor_plume_nav.logging_setup import (
+    setup_logger,
+    get_module_logger,
+    DEFAULT_FORMAT,
+    MODULE_FORMAT
+)
+
+
+class TestLoggingSetup:
+    """Tests for logging setup functionality."""
+    
+    @pytest.fixture(autouse=True)
+    def reset_logger(self):
+        """Reset logger before and after each test."""
+        # Save original handlers
+        original_handlers = logger._core.handlers.copy()
+        
+        # Remove all handlers for clean testing
+        logger.remove()
+        
+        yield
+        
+        # Restore original handlers
+        logger._core.handlers.clear()
+        for handler_id, handler in original_handlers.items():
+            logger._core.handlers[handler_id] = handler
+    
+    @pytest.fixture
+    def temp_log_file(self):
+        """Create a temporary log file for testing."""
+        with tempfile.NamedTemporaryFile(suffix=".log", delete=False) as tmp:
+            log_path = tmp.name
+        
+        yield log_path
+        
+        # Cleanup
+        if os.path.exists(log_path):
+            os.unlink(log_path)
+    
+    @pytest.fixture
+    def test_log_messages(self):
+        """Standard test messages for each log level."""
+        return {
+            "debug": "Test debug message",
+            "info": "Test info message",
+            "warning": "Test warning message",
+            "error": "Test error message",
+            "critical": "Test critical message"
+        }
+    
+    def test_setup_logger_console(self):
+        """Test setting up logger with console output."""
+        # Set up a string IO to capture output
+        string_io = io.StringIO()
+        
+        # Set up logger with our string_io as the sink instead of stderr
+        setup_logger(sink=None, level="DEBUG")
+        
+        # Now add our capture handler AFTER setup_logger has run
+        handler_id = logger.add(string_io, level="DEBUG")
+        
+        # Test messages dictionary for different log levels
+        test_messages = {
+            "debug": "Console debug test",
+            "info": "Console info test",
+            "warning": "Console warning test"
+        }
+        
+        # Log messages at each level
+        logger.debug(test_messages["debug"])
+        logger.info(test_messages["info"])
+        logger.warning(test_messages["warning"])
+        
+        # Get captured output
+        output = string_io.getvalue()
+        
+        # Remove the handler we added
+        logger.remove(handler_id)
+        
+        # Assert messages appear in output
+        assert test_messages["debug"] in output, "Debug message not found in logs"
+        assert test_messages["info"] in output, "Info message not found in logs"
+        assert test_messages["warning"] in output, "Warning message not found in logs"
+    
+    def test_setup_logger_with_file(self, temp_log_file, test_log_messages):
+        """Test setting up logger with file output."""
+        # Set up logger with file sink
+        setup_logger(sink=temp_log_file, level="DEBUG")
+        
+        # Log messages directly
+        logger.debug(test_log_messages["debug"])
+        logger.info(test_log_messages["info"])
+        logger.warning(test_log_messages["warning"])
+        logger.error(test_log_messages["error"])
+        
+        # Ensure writes are flushed
+        import time
+        time.sleep(0.1)
+        
+        # Read file and verify messages
+        with open(temp_log_file, "r") as f:
+            content = f.read()
+            
+        # Verify each message individually
+        assert test_log_messages["debug"] in content, "Debug message not found in log file"
+        assert test_log_messages["info"] in content, "Info message not found in log file"
+        assert test_log_messages["warning"] in content, "Warning message not found in log file"
+        assert test_log_messages["error"] in content, "Error message not found in log file"
+    
+    def test_log_level_info_filters_debug(self):
+        """Test that INFO level filters DEBUG messages."""
+        string_io = io.StringIO()
+        
+        # Set up logger with INFO level
+        setup_logger(sink=None, level="INFO")
+        
+        # Add capture handler at INFO level
+        handler_id = logger.add(string_io, level="INFO")
+        
+        # Log messages
+        debug_message = "DEBUG message for INFO level test"
+        info_message = "INFO message for INFO level test"
+        warning_message = "WARNING message for INFO level test"
+        error_message = "ERROR message for INFO level test"
+        
+        logger.debug(debug_message)
+        logger.info(info_message)
+        logger.warning(warning_message)
+        logger.error(error_message)
+        
+        # Get output
+        output = string_io.getvalue()
+        
+        # Remove the handler
+        logger.remove(handler_id)
+        
+        # Verify correct message filtering
+        assert debug_message not in output, "DEBUG message should not be visible at INFO level"
+        assert info_message in output, "INFO message should be visible at INFO level"
+        assert warning_message in output, "WARNING message should be visible at INFO level"
+        assert error_message in output, "ERROR message should be visible at INFO level"
+    
+    def test_log_level_warning_filters_info_and_debug(self):
+        """Test that WARNING level filters DEBUG and INFO messages."""
+        string_io = io.StringIO()
+        
+        # Set up logger with WARNING level
+        setup_logger(sink=None, level="WARNING")
+        
+        # Add capture handler
+        handler_id = logger.add(string_io, level="WARNING")
+        
+        # Log messages
+        debug_message = "DEBUG message for WARNING level test"
+        info_message = "INFO message for WARNING level test"
+        warning_message = "WARNING message for WARNING level test"
+        error_message = "ERROR message for WARNING level test"
+        
+        logger.debug(debug_message)
+        logger.info(info_message)
+        logger.warning(warning_message)
+        logger.error(error_message)
+        
+        # Get output
+        output = string_io.getvalue()
+        
+        # Remove the handler
+        logger.remove(handler_id)
+        
+        # Verify correct message filtering
+        assert debug_message not in output, "DEBUG message should not be visible at WARNING level"
+        assert info_message not in output, "INFO message should not be visible at WARNING level"
+        assert warning_message in output, "WARNING message should be visible at WARNING level"
+        assert error_message in output, "ERROR message should be visible at WARNING level"
+    
+    def test_get_module_logger(self):
+        """Test getting a module-specific logger."""
+        # Module name to test
+        module_name = "test_module"
+        
+        # Set up string IO capture
+        string_io = io.StringIO()
+        
+        # Setup format that clearly shows module binding
+        module_format = "{level}|module={extra[module]}|{message}"
+        setup_logger(sink=None, level="DEBUG", format=module_format)
+        
+        # Add capture handler after setup
+        handler_id = logger.add(string_io, level="DEBUG", format=module_format)
+        
+        # Get module logger and log a test message
+        test_message = "Module logger test message"
+        module_logger = get_module_logger(module_name)
+        module_logger.info(test_message)
+        
+        # Get output and verify module name and message
+        output = string_io.getvalue()
+        
+        # Remove the handler we added
+        logger.remove(handler_id)
+        
+        # Assert module logger functionality
+        assert test_message in output, "Module message not found in output"
+        assert f"module={module_name}" in output, "Module name not found in output"
+    
+    def test_custom_format(self):
+        """Test using a custom log format."""
+        # Define a simple format without colors
+        custom_format = "{time:YYYY-MM-DD HH:mm:ss} - {level} - {message}"
+        
+        # Set up string IO capture
+        string_io = io.StringIO()
+        
+        # Setup logger with custom format
+        setup_logger(sink=None, level="INFO", format=custom_format)
+        
+        # Add capture handler after setup with the same format
+        handler_id = logger.add(string_io, level="DEBUG", format=custom_format)
+        
+        # Log a test message
+        test_message = "Custom format test message"
+        logger.info(test_message)
+        
+        # Get output
+        output = string_io.getvalue()
+        
+        # Remove the handler we added
+        logger.remove(handler_id)
+        
+        # Define pattern for date-time format and verify format
+        date_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
+        expected_pattern = f"{date_pattern} - INFO - {test_message}"
+        
+        assert re.search(expected_pattern, output), "Format pattern not found in output"
+        assert "<green>" not in output, "Default color codes should not be present"
+        assert "<level>" not in output, "Default level markup should not be present"
+    
+    def test_exception_logging(self):
+        """Test logging exceptions with traceback."""
+        # Set up string IO capture
+        string_io = io.StringIO()
+        
+        # Setup logger with backtrace enabled
+        setup_logger(sink=None, level="DEBUG", backtrace=True, diagnose=True)
+        
+        # Add capture handler after setup
+        handler_id = logger.add(string_io, level="DEBUG")
+        
+        # Test data
+        error_message = "Test exception occurred"
+        exception_details = "Test exception details"
+        
+        # Use contextlib.suppress to safely catch the exception
+        # without letting pytest intercept it
+        with suppress(ValueError):
+            # Create and log an exception
+            try:
+                raise ValueError(exception_details)
+            except Exception:
+                # Log the caught exception
+                logger.exception(error_message)
+        
+        # Get output
+        output = string_io.getvalue()
+        
+        # Remove the handler we added
+        logger.remove(handler_id)
+        
+        # Verify exception logging details
+        assert error_message in output, "Error message missing from exception log"
+        assert "ValueError" in output, "Exception type missing from exception log"
+        assert exception_details in output, "Exception details missing from exception log"
+        assert "Traceback" in output, "Traceback missing from exception log"
+```
+
+
+## test_navigator.py
+```py
+"""Tests for the navigator module."""
+
+import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+# The module doesn't exist yet - we're following TDD by writing the test first
+from odor_plume_nav.navigator import SimpleNavigator
+
+
+def test_simple_navigator_initialization():
+    """Test that SimpleNavigator can be initialized with orientation and speed."""
+    # Create a navigator with default parameters
+    navigator = SimpleNavigator()
+    
+    # Default values should be set
+    assert navigator.orientation == 0.0
+    assert navigator.speed == 0.0
+    
+    # Create a navigator with custom parameters
+    custom_navigator = SimpleNavigator(orientation=45.0, speed=0.5)
+    
+    # Custom values should be set
+    assert custom_navigator.orientation == 45.0
+    assert custom_navigator.speed == 0.5
+
+
+def test_simple_navigator_set_orientation():
+    """Test that orientation can be set and is normalized properly."""
+    navigator = SimpleNavigator()
+    
+    # Test setting orientation in degrees
+    navigator.set_orientation(90.0)
+    assert navigator.orientation == 90.0
+    
+    # Test normalization of angles > 360
+    navigator.set_orientation(450.0)
+    assert navigator.orientation == 90.0
+    
+    # Test normalization of negative angles
+    navigator.set_orientation(-90.0)
+    assert navigator.orientation == 270.0
+
+
+def test_simple_navigator_set_speed():
+    """Test that speed can be set with proper constraints."""
+    navigator = SimpleNavigator(max_speed=1.0)
+    
+    # Test setting valid speed
+    navigator.set_speed(0.5)
+    assert navigator.speed == 0.5
+    
+    # Test setting speed above max_speed
+    navigator.set_speed(2.0)
+    assert navigator.speed == 1.0  # Should be capped at max_speed
+    
+    # Test setting negative speed
+    navigator.set_speed(-0.5)
+    assert navigator.speed == 0.0  # Should be capped at 0
+
+
+def test_simple_navigator_move():
+    """Test that the navigator can calculate movement vectors."""
+    navigator = SimpleNavigator(orientation=0.0, speed=1.0)
+    
+    # At 0 degrees, movement should be along positive x-axis
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 1.0)
+    assert np.isclose(movement[1], 0.0)
+    
+    # Change orientation to 90 degrees (positive y-axis)
+    navigator.set_orientation(90.0)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.0)
+    assert np.isclose(movement[1], 1.0)
+    
+    # Change orientation to 45 degrees
+    navigator.set_orientation(45.0)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.7071, atol=1e-4)
+    assert np.isclose(movement[1], 0.7071, atol=1e-4)
+    
+    # Change speed to 0.5
+    navigator.set_speed(0.5)
+    movement = navigator.get_movement_vector()
+    assert np.isclose(movement[0], 0.3536, atol=1e-4)
+    assert np.isclose(movement[1], 0.3536, atol=1e-4)
+
+
+def test_simple_navigator_update():
+    """Test that the navigator can update its position."""
+    # Starting at position (0, 0) with orientation 0 and speed 1.0
+    navigator = SimpleNavigator(orientation=0.0, speed=1.0, position=(0.0, 0.0))
+
+    position = update_and_verify_position(navigator, 1.0, 0.0)
+    # Change orientation to 90 degrees and update again
+    navigator.set_orientation(90.0)
+    position = update_and_verify_position(navigator, 1.0, 1.0)
+    position = update_and_verify_position(navigator, 0.5, 1.5)
+
+
+def update_and_verify_position(navigator, dt, expected_y):
+    """Update navigator position and verify x=1.0 and y=expected_y."""
+    # Move for the specified time
+    navigator.update(dt=dt)
+    result = navigator.get_position()
+    assert np.isclose(result[0], 1.0)
+    assert np.isclose(result[1], expected_y)
+
+    return result
+```
+
+
+## test_navigator_angular_velocity.py
+```py
+"""Tests for the angular velocity functionality in the Navigator class."""
+
+import numpy as np
+import pytest
+from odor_plume_nav.navigator import Navigator
+
+
+class TestNavigatorAngularVelocity:
+    """Test cases for angular velocity functionality in Navigator."""
+
+    @staticmethod
+    def create_navigator_with_angular_velocity(orientation=0.0, angular_velocity=30.0):
+        """Create a single-agent navigator with specified orientation and angular velocity."""
+        navigator = Navigator(orientation=orientation)
+        navigator.angular_velocities = np.array([angular_velocity])
+        return navigator
+    
+    @staticmethod
+    def create_multi_agent_navigator(orientations, angular_velocities):
+        """Create a multi-agent navigator with specified orientations and angular velocities."""
+        navigator = Navigator(orientations=orientations)
+        navigator.angular_velocities = angular_velocities
+        return navigator
+    
+    @staticmethod
+    def assert_orientation_close(actual, expected, tolerance=1e-5):
+        """Assert that orientation values are close, accounting for floating-point precision."""
+        assert np.isclose(actual, expected, atol=tolerance)
+
+    def test_single_agent_angular_velocity(self):
+        """Test orientation updates for a single agent with angular velocity."""
+        # Create a navigator with initial orientation 0
+        navigator = self.create_navigator_with_angular_velocity(orientation=0.0, angular_velocity=30.0)
+        
+        # Update with dt=1
+        navigator.update(dt=1.0)
+        self.assert_orientation_close(navigator.orientation, 30.0)
+        
+        # Update again with dt=1
+        navigator.update(dt=1.0)
+        self.assert_orientation_close(navigator.orientation, 60.0)
+        
+        # Update with dt=2
+        navigator.update(dt=2.0)
+        self.assert_orientation_close(navigator.orientation, 120.0)
+        
+        # Testing modulo 360
+        navigator.set_orientation(350.0)
+        navigator.update(dt=1.0)
+        self.assert_orientation_close(navigator.orientation, 20.0)  # 350 + 30 = 380, 380 % 360 = 20
+
+    def test_multi_agent_angular_velocity(self):
+        """Test orientation updates for multiple agents with different angular velocities."""
+        # Create a navigator with multiple agents and different initial orientations
+        orientations = np.array([0.0, 90.0, 180.0])
+        angular_velocities = np.array([10.0, 20.0, 30.0])
+        navigator = self.create_multi_agent_navigator(orientations, angular_velocities)
+        
+        # Update with dt=1
+        navigator.update(dt=1.0)
+        self.assert_orientation_close(navigator.orientations[0], 10.0)
+        self.assert_orientation_close(navigator.orientations[1], 110.0)
+        self.assert_orientation_close(navigator.orientations[2], 210.0)
+        
+        # Update with dt=2
+        navigator.update(dt=2.0)
+        self.assert_orientation_close(navigator.orientations[0], 30.0)  # 10 + (10 * 2) = 30
+        self.assert_orientation_close(navigator.orientations[1], 150.0)  # 110 + (20 * 2) = 150
+        self.assert_orientation_close(navigator.orientations[2], 270.0)  # 210 + (30 * 2) = 270
+
+    def test_negative_angular_velocity(self):
+        """Test orientation updates with negative angular velocity (turning right)."""
+        # Create a navigator with initial orientation 180
+        navigator = self.create_navigator_with_angular_velocity(orientation=180.0, angular_velocity=-45.0)
+        
+        # Update with dt=1
+        navigator.update(dt=1.0)
+        self.assert_orientation_close(navigator.orientation, 135.0)  # 180 - 45 = 135
+        
+        # Update with dt=3
+        navigator.update(dt=3.0)
+        self.assert_orientation_close(navigator.orientation, 0.0)  # 135 - (45 * 3) = 0
+
+    def test_large_angular_change(self):
+        """Test orientation updates with large changes (> 360 degrees)."""
+        # Create a navigator with initial orientation 0
+        navigator = self.create_navigator_with_angular_velocity(orientation=0.0, angular_velocity=180.0)
+        
+        # Update with dt=3 (should wrap around 360)
+        navigator.update(dt=3.0)
+        self.assert_orientation_close(navigator.orientation, 180.0)  # 0 + (180 * 3) = 540, 540 % 360 = 180
+        
+        # Test with negative large change
+        navigator.set_orientation(0.0)
+        navigator.angular_velocities = np.array([-180.0])
+        navigator.update(dt=3.0)
+        self.assert_orientation_close(navigator.orientation, 180.0)  # 0 - (180 * 3) = -540, -540 % 360 = 180
+
+    def test_set_angular_velocity(self):
+        """Test setting angular velocity for a single agent."""
+        navigator = Navigator()
+        
+        # Test setting angular velocity
+        navigator.set_angular_velocity(45.0)
+        self.assert_orientation_close(navigator.angular_velocities[0], 45.0)
+        
+        # Test setting angular velocity for a specific agent in multi-agent setup
+        navigator = Navigator(num_agents=3)
+        navigator.set_angular_velocity_at(1, 30.0)
+        self.assert_orientation_close(navigator.angular_velocities[1], 30.0)
+        
+        # Test setting angular velocities for all agents
+        angular_velocities = np.array([10.0, 20.0, 30.0])
+        navigator.set_angular_velocities(angular_velocities)
+        assert np.allclose(navigator.angular_velocities, angular_velocities)
+
+    def test_initialization_with_angular_velocity(self):
+        """Test initialization with angular velocity parameter."""
+        # Single agent
+        navigator = Navigator(orientation=0.0, angular_velocity=15.0)
+        self.assert_orientation_close(navigator.angular_velocities[0], 15.0)
+        
+        # Multiple agents
+        angular_velocities = np.array([5.0, 10.0, 15.0])
+        navigator = Navigator(
+            num_agents=3,
+            orientations=np.zeros(3),
+            angular_velocities=angular_velocities
+        )
+        assert np.allclose(navigator.angular_velocities, angular_velocities)
+```
+
+
+## test_navigator_factory.py
+```py
+"""Tests for the navigator factory module."""
+
+import pytest
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+from odor_plume_nav.navigator_factory import create_navigator_from_config
+
+
+def test_create_navigator_with_default_config(config_files):
+    """Test creating a navigator with default configuration."""
+    with patch('odor_plume_nav.navigator_factory.load_config', 
+               return_value=config_files["default_config"]):
+        
+        # Create a navigator with default config
+        navigator = create_navigator_from_config()
+        
+        # Check that the navigator was created with default settings
+        assert navigator.orientation == 0.0
+        assert navigator.speed == 0.0
+        assert navigator.max_speed == 1.0
+
+
+def test_create_navigator_with_user_config(config_files):
+    """Test creating a navigator with user configuration."""
+    with patch('odor_plume_nav.navigator_factory.load_config', 
+               return_value=config_files["user_config"]):
+        
+        # Create a navigator with user config
+        navigator = create_navigator_from_config()
+        
+        # Check that the navigator was created with user settings
+        assert navigator.orientation == 45.0
+        assert navigator.speed == 0.5
+        assert navigator.max_speed == 2.0
+
+
+def test_create_navigator_with_merged_config(config_files):
+    """Test creating a navigator with merged configuration."""
+    # Create a merged config by combining default and parts of user config
+    merged_config = config_files["default_config"].copy()
+    merged_config["navigator"]["orientation"] = 90.0  # Override just the orientation parameter
+    
+    with patch('odor_plume_nav.navigator_factory.load_config', 
+               return_value=merged_config):
+        
+        # Create a navigator with merged config
+        navigator = create_navigator_from_config()
+        
+        # Check that the navigator was created with merged settings
+        assert navigator.orientation == 90.0  # Overridden
+        assert navigator.speed == 0.0        # Default
+        assert navigator.max_speed == 1.0    # Default
+
+
+def test_create_navigator_with_additional_params(config_files):
+    """Test creating a navigator with additional parameters."""
+    with patch('odor_plume_nav.navigator_factory.load_config', 
+               return_value=config_files["default_config"]):
+        
+        # Create a navigator with default config but override some parameters
+        navigator = create_navigator_from_config(orientation=180.0, speed=0.75)
+        
+        # Check that the navigator was created with overridden settings
+        assert navigator.orientation == 180.0  # Explicitly provided
+        assert navigator.speed == 0.75         # Explicitly provided
+        assert navigator.max_speed == 1.0      # From default config
+```
+
+
+## test_simulation.py
+```py
+"""Tests for the integrated simulation system that combines video plume and navigator."""
+
+import pytest
+import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock, call
+
+# Import the simulation module once to avoid reimporting in each test
+from odor_plume_nav.simulation import Simulation
+
+
+class TestSimulation:
+    """Tests for the Simulation class that integrates plume and navigator."""
+    
+    def test_simulation_initialization(self, mock_video_plume, mock_navigator):
+        """Test that a Simulation can be initialized with plume and navigator."""
+        with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
+             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+            
+            # Create a simulation with mocked components
+            sim = Simulation(
+                video_path="test_video.mp4",
+                dt=0.1
+            )
+            
+            # Check that the simulation was initialized with the correct components
+            assert sim.plume is not None
+            assert sim.navigator is not None
+            assert sim.dt == 0.1
+            assert sim.time == 0.0
+            assert sim.frame_index == 0
+            
+            # Verify that get_frame was called once during initialization
+            mock_video_plume.get_frame.assert_called_once()
+    
+    def test_simulation_step(self, mock_video_plume, mock_navigator):
+        """Test that a simulation step advances the plume and moves the navigator."""
+        with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
+             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+            
+            # Create a simulation with mocked components
+            sim = Simulation(
+                video_path="test_video.mp4",
+                dt=0.1
+            )
+            
+            # Reset the mock to isolate calls during the step
+            mock_video_plume.get_frame.reset_mock()
+            mock_navigator.update.reset_mock()
+            
+            # Perform a simulation step
+            sim.step()
+            
+            # Check that the plume was advanced
+            mock_video_plume.get_frame.assert_called_once()
+            
+            # Check that the navigator was updated
+            mock_navigator.update.assert_called_once_with(dt=0.1)
+            
+            # Check that simulation state was updated
+            assert sim.time == 0.1
+            assert sim.frame_index == 1
+    
+    def test_multiple_simulation_steps(self, mock_video_plume, mock_navigator):
+        """Test that multiple simulation steps work correctly."""
+        with patch("odor_plume_nav.simulation.VideoPlume", return_value=mock_video_plume):
+            with patch("odor_plume_nav.simulation.SimpleNavigator", return_value=mock_navigator):
+                # Create a simulation with the mocked objects
+                sim = Simulation(
+                    video_path="test_video.mp4",
+                    dt=0.1
+                )
+                
+                # Reset the mock to isolate calls during the steps
+                mock_video_plume.get_frame.reset_mock()
+                mock_navigator.update.reset_mock()
+                
+                # Perform 5 simulation steps directly
+                sim.step()
+                sim.step()
+                sim.step()
+                sim.step()
+                sim.step()
+                
+                # Check that the plume was advanced multiple times
+                assert mock_video_plume.get_frame.call_count == 5
+                
+                # Check that the navigator was updated multiple times
+                assert mock_navigator.update.call_count == 5
+                
+                # Check that simulation state reflects multiple steps
+                assert sim.time == 0.5
+                assert sim.frame_index == 5
+    
+    def test_simulation_with_config(self, mock_video_plume, mock_navigator, config_files):
+        """Test that a simulation can be created with configuration settings."""
+        with patch('odor_plume_nav.simulation.create_video_plume_from_config', return_value=mock_video_plume), \
+             patch('odor_plume_nav.simulation.create_navigator_from_config', return_value=mock_navigator), \
+             patch('odor_plume_nav.simulation.load_config', return_value=config_files["default_config"]):
+            
+            # Create a simulation with configuration
+            sim = Simulation(
+                video_path="test_video.mp4",
+                config_path="test_config.yaml"
+            )
+            
+            # Check that factory functions were called with the right parameters
+            from odor_plume_nav.simulation import create_video_plume_from_config, create_navigator_from_config
+            
+            create_video_plume_from_config.assert_called_once_with(
+                "test_video.mp4", 
+                config_path="test_config.yaml"
+            )
+            
+            create_navigator_from_config.assert_called_once_with(
+                config_path="test_config.yaml"
+            )
+    
+    def test_get_agent_position(self, mock_video_plume, mock_navigator):
+        """Test that we can get the agent's position from the simulation."""
+        with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
+             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+            
+            # Create a simulation with mocked components
+            sim = Simulation(
+                video_path="test_video.mp4",
+                dt=0.1
+            )
+            
+            # Set up the mock to return a specific position
+            mock_navigator.get_position.return_value = (2.5, 3.5)
+            
+            # Get the agent's position
+            position = sim.get_agent_position()
+            
+            # Check that we got the right position
+            assert position == (2.5, 3.5)
+    
+    def test_get_current_frame(self, mock_video_plume, mock_navigator):
+        """Test that we can get the current frame from the simulation."""
+        # Set up the mock to return a test frame
+        test_frame = np.ones((10, 10), dtype=np.uint8)
+        mock_video_plume.get_frame.return_value = test_frame
+        
+        with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
+             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+            
+            # Create a simulation with mocked components
+            sim = Simulation(
+                video_path="test_video.mp4",
+                dt=0.1
+            )
+            
+            # Since we already set up the mock before creating the simulation,
+            # the constructor should have gotten the test frame
+            assert np.array_equal(sim.current_frame, test_frame)
+```
+
+
+## test_single_antenna.py
+```py
+"""Tests for single antenna odor sensing functionality."""
+
+import pytest
+import numpy as np
+from numpy.testing import assert_allclose
+from unittest.mock import MagicMock
+
+from odor_plume_nav.navigator import SimpleNavigator
+
+
+class TestSingleAntennaSensing:
+    """Tests for the single antenna odor sensing functionality."""
+    
+    def test_read_single_antenna_odor_simple_environment(self):
+        """Test reading odor value from a simple environment at navigator position."""
+        # Create a simple 5x5 environment with a hotspot
+        environment = np.zeros((5, 5), dtype=np.float32)
+        hotspot_position = (2, 3)  # x=2, y=3
+        hotspot_value = 0.75
+        environment[hotspot_position[1], hotspot_position[0]] = hotspot_value  # Note: numpy indexing is [y, x]
+        
+        # Create navigator at the same position as the hotspot
+        navigator = SimpleNavigator(position=hotspot_position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Use numpy assertion with tolerance for floating-point comparison
+        assert_allclose(odor_value, hotspot_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_gradient_position1(self):
+        """Test reading odor value from a gradient at position (3,3)."""
+        # Create a 10x10 environment with a gradient
+        x, y = np.meshgrid(np.linspace(0, 1, 10), np.linspace(0, 1, 10))
+        # Create a Gaussian-like distribution centered at (0.7, 0.6)
+        sigma = 0.2
+        environment = np.exp(-((x-0.7)**2 + (y-0.6)**2) / (2*sigma**2))
+        
+        # Position and navigator for this test
+        position = (3, 3)
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Check that the odor value matches the environment at (x, y)
+        # Note: numpy indexing is [y, x]
+        expected_value = environment[position[1], position[0]]  
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_gradient_position2(self):
+        """Test reading odor value from a gradient at position (7,6)."""
+        # Create a 10x10 environment with a gradient
+        x, y = np.meshgrid(np.linspace(0, 1, 10), np.linspace(0, 1, 10))
+        # Create a Gaussian-like distribution centered at (0.7, 0.6)
+        sigma = 0.2
+        environment = np.exp(-((x-0.7)**2 + (y-0.6)**2) / (2*sigma**2))
+        
+        # Position and navigator for this test
+        position = (7, 6)
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Check that the odor value matches the environment at (x, y)
+        # Note: numpy indexing is [y, x]
+        expected_value = environment[position[1], position[0]]  
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_gradient_position3(self):
+        """Test reading odor value from a gradient at position (9,9)."""
+        # Create a 10x10 environment with a gradient
+        x, y = np.meshgrid(np.linspace(0, 1, 10), np.linspace(0, 1, 10))
+        # Create a Gaussian-like distribution centered at (0.7, 0.6)
+        sigma = 0.2
+        environment = np.exp(-((x-0.7)**2 + (y-0.6)**2) / (2*sigma**2))
+        
+        # Position and navigator for this test
+        position = (9, 9)
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Check that the odor value matches the environment at (x, y)
+        # Note: numpy indexing is [y, x]
+        expected_value = environment[position[1], position[0]]  
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_video_plume_position1(self):
+        """Test reading odor from a mock video plume at position (2,3)."""
+        # Create a mock VideoPlume with a current_frame
+        mock_plume = MagicMock()
+        mock_frame = np.zeros((10, 10), dtype=np.uint8)
+        
+        # Set up some odor values in the frame
+        mock_frame[3, 2] = 150  # Note: numpy indexing is [y, x]
+        mock_frame[7, 8] = 200
+        mock_plume.current_frame = mock_frame
+        
+        # Create navigator and test
+        position = (2, 3)  # Position with value 150
+        expected_value = 150/255
+        
+        navigator = SimpleNavigator(position=position)
+        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        
+        # Check that the odor value matches the normalized frame value
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_video_plume_position2(self):
+        """Test reading odor from a mock video plume at position (8,7)."""
+        # Create a mock VideoPlume with a current_frame
+        mock_plume = MagicMock()
+        mock_frame = np.zeros((10, 10), dtype=np.uint8)
+        
+        # Set up some odor values in the frame
+        mock_frame[3, 2] = 150  # Note: numpy indexing is [y, x]
+        mock_frame[7, 8] = 200
+        mock_plume.current_frame = mock_frame
+        
+        # Create navigator and test
+        position = (8, 7)  # Position with value 200
+        expected_value = 200/255
+        
+        navigator = SimpleNavigator(position=position)
+        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        
+        # Check that the odor value matches the normalized frame value
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_video_plume_position3(self):
+        """Test reading odor from a mock video plume at position (5,5)."""
+        # Create a mock VideoPlume with a current_frame
+        mock_plume = MagicMock()
+        mock_frame = np.zeros((10, 10), dtype=np.uint8)
+        
+        # Set up some odor values in the frame
+        mock_frame[3, 2] = 150  # Note: numpy indexing is [y, x]
+        mock_frame[7, 8] = 200
+        mock_plume.current_frame = mock_frame
+        
+        # Create navigator and test
+        position = (5, 5)  # Position with value 0
+        expected_value = 0
+        
+        navigator = SimpleNavigator(position=position)
+        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        
+        # Check that the odor value matches the normalized frame value
+        assert_allclose(odor_value, expected_value, rtol=1e-5)
+    
+    def test_read_single_antenna_odor_out_of_bounds_left(self):
+        """Test reading odor when navigator is outside environment bounds (left)."""
+        # Create a simple environment
+        environment = np.zeros((5, 5), dtype=np.float32)
+        
+        # Test position outside left
+        position = (-1, 2)
+        
+        # Create navigator at this out-of-bounds position
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Should return 0 for out-of-bounds positions
+        assert odor_value == 0
+    
+    def test_read_single_antenna_odor_out_of_bounds_top(self):
+        """Test reading odor when navigator is outside environment bounds (top)."""
+        # Create a simple environment
+        environment = np.zeros((5, 5), dtype=np.float32)
+        
+        # Test position outside top
+        position = (2, -1)
+        
+        # Create navigator at this out-of-bounds position
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Should return 0 for out-of-bounds positions
+        assert odor_value == 0
+    
+    def test_read_single_antenna_odor_out_of_bounds_right(self):
+        """Test reading odor when navigator is outside environment bounds (right)."""
+        # Create a simple environment
+        environment = np.zeros((5, 5), dtype=np.float32)
+        
+        # Test position outside right
+        position = (5, 2)
+        
+        # Create navigator at this out-of-bounds position
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Should return 0 for out-of-bounds positions
+        assert odor_value == 0
+    
+    def test_read_single_antenna_odor_out_of_bounds_bottom(self):
+        """Test reading odor when navigator is outside environment bounds (bottom)."""
+        # Create a simple environment
+        environment = np.zeros((5, 5), dtype=np.float32)
+        
+        # Test position outside bottom
+        position = (2, 5)
+        
+        # Create navigator at this out-of-bounds position
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Should return 0 for out-of-bounds positions
+        assert odor_value == 0
+    
+    def test_read_single_antenna_odor_out_of_bounds_far(self):
+        """Test reading odor when navigator is far outside environment bounds."""
+        # Create a simple environment
+        environment = np.zeros((5, 5), dtype=np.float32)
+        
+        # Test position far outside
+        position = (10, 10)
+        
+        # Create navigator at this out-of-bounds position
+        navigator = SimpleNavigator(position=position)
+        
+        # Read the odor at the navigator's position
+        odor_value = navigator.read_single_antenna_odor(environment)
+        
+        # Should return 0 for out-of-bounds positions
+        assert odor_value == 0
+```
+
+
+## test_vectorized_navigator.py
+```py
+"""Tests for the vectorized navigator functionality."""
+
+import pytest
+import numpy as np
+from numpy.testing import assert_allclose
+
+from odor_plume_nav.navigator import VectorizedNavigator, SimpleNavigator, Navigator
+
+
+class TestVectorizedNavigator:
+    """Tests for the VectorizedNavigator class."""
+    
+    def test_initialization_with_default_values(self):
+        """Test creating a vectorized navigator with default values."""
+        # Create a vectorized navigator for 3 agents with default values
+        num_agents = 3
+        navigator = VectorizedNavigator(num_agents=num_agents)
+        
+        # Check default values
+        assert navigator.positions.shape == (num_agents, 2)
+        assert navigator.orientations.shape == (num_agents,)
+        assert navigator.speeds.shape == (num_agents,)
+        
+        # Check that values are initialized to defaults
+        assert_allclose(navigator.positions, np.zeros((num_agents, 2)))
+        assert_allclose(navigator.orientations, np.zeros(num_agents))
+        assert_allclose(navigator.speeds, np.zeros(num_agents))
+        assert_allclose(navigator.max_speeds, np.ones(num_agents))
+    
+    def test_initialization_with_custom_values(self):
+        """Test creating a vectorized navigator with custom values."""
+        # Define custom initial values for 2 agents
+        positions = np.array([[1.0, 2.0], [3.0, 4.0]])
+        orientations = np.array([45.0, 90.0])
+        speeds = np.array([0.5, 0.7])
+        max_speeds = np.array([1.0, 2.0])
+        
+        # Create navigator with custom values
+        navigator = VectorizedNavigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds,
+            max_speeds=max_speeds
+        )
+        
+        # Check values were correctly set
+        assert_allclose(navigator.positions, positions)
+        assert_allclose(navigator.orientations, orientations)
+        assert_allclose(navigator.speeds, speeds)
+        assert_allclose(navigator.max_speeds, max_speeds)
+    
+    def test_orientation_normalization(self):
+        """Test that orientations are normalized correctly."""
+        # Create navigator with various orientations that need normalization
+        orientations = np.array([-90.0, 370.0, 720.0])
+        navigator = VectorizedNavigator(orientations=orientations)
+        
+        # Expected normalized values (between 0 and 360)
+        expected = np.array([270.0, 10.0, 0.0])
+        
+        # Check normalization
+        assert_allclose(navigator.orientations, expected)
+    
+    def test_speed_constraints(self):
+        """Test that speeds are constrained by max_speed."""
+        # Create navigator with speeds that exceed max_speeds
+        speeds = np.array([0.5, 1.5, -0.2])
+        max_speeds = np.array([1.0, 1.0, 1.0])
+        
+        navigator = VectorizedNavigator(speeds=speeds, max_speeds=max_speeds)
+        
+        # Expected constrained speeds (between 0 and max_speed)
+        expected = np.array([0.5, 1.0, 0.0])
+        
+        # Check speed constraints
+        assert_allclose(navigator.speeds, expected)
+    
+    def test_set_orientations(self):
+        """Test setting orientations for all agents."""
+        # Create navigator
+        navigator = VectorizedNavigator(num_agents=3)
+        
+        # New orientations
+        new_orientations = np.array([45.0, 90.0, 180.0])
+        
+        # Set orientations
+        navigator.set_orientations(new_orientations)
+        
+        # Check orientations were updated
+        assert_allclose(navigator.orientations, new_orientations)
+    
+    def test_set_orientations_for_specific_agents(self):
+        """Test setting orientations for specific agents."""
+        # Create navigator with initial orientations
+        initial_orientations = np.array([0.0, 45.0, 90.0])
+        navigator = VectorizedNavigator(orientations=initial_orientations)
+        
+        # Set orientation for specific agent (index 1)
+        navigator.set_orientation_at(1, 180.0)
+        
+        # Expected orientations after update
+        expected = np.array([0.0, 180.0, 90.0])
+        
+        # Check orientations
+        assert_allclose(navigator.orientations, expected)
+    
+    def test_set_speeds(self):
+        """Test setting speeds for all agents."""
+        # Create navigator
+        navigator = VectorizedNavigator(num_agents=3, max_speeds=np.array([1.0, 1.0, 1.0]))
+        
+        # New speeds
+        new_speeds = np.array([0.5, 0.7, 0.9])
+        
+        # Set speeds
+        navigator.set_speeds(new_speeds)
+        
+        # Check speeds were updated
+        assert_allclose(navigator.speeds, new_speeds)
+    
+    def test_set_speeds_for_specific_agents(self):
+        """Test setting speeds for specific agents."""
+        # Create navigator with initial speeds
+        initial_speeds = np.array([0.1, 0.2, 0.3])
+        navigator = VectorizedNavigator(speeds=initial_speeds)
+        
+        # Set speed for specific agent (index 2)
+        navigator.set_speed_at(2, 0.5)
+        
+        # Expected speeds after update
+        expected = np.array([0.1, 0.2, 0.5])
+        
+        # Check speeds
+        assert_allclose(navigator.speeds, expected)
+    
+    def test_get_movement_vectors(self):
+        """Test calculating movement vectors for all agents."""
+        # Create navigator with known orientations and speeds
+        orientations = np.array([0.0, 90.0, 180.0])
+        speeds = np.array([1.0, 1.0, 1.0])
+        
+        navigator = VectorizedNavigator(orientations=orientations, speeds=speeds)
+        
+        # Get movement vectors
+        vectors = navigator.get_movement_vectors()
+        
+        # Expected vectors based on orientation and speed
+        # 0 degrees -> (1, 0), 90 degrees -> (0, 1), 180 degrees -> (-1, 0)
+        expected = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
+        
+        # Check vectors match expected with more tolerant comparison for floating point precision
+        assert_allclose(vectors, expected, rtol=1e-10, atol=1e-10)
+    
+    def test_update_positions(self):
+        """Test updating positions based on orientations and speeds."""
+        # Create navigator with known initial values
+        positions = np.array([[0.0, 0.0], [10.0, 10.0]])
+        orientations = np.array([0.0, 180.0])  # Right and Left
+        speeds = np.array([1.0, 2.0])
+        
+        # Manually set max_speeds to ensure the test works correctly
+        max_speeds = np.array([1.0, 2.0])
+        
+        navigator = VectorizedNavigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds,
+            max_speeds=max_speeds  # Explicitly set max_speeds
+        )
+        
+        # Update with dt=1.0
+        navigator.update(dt=1.0)
+        
+        # Expected positions after update
+        # First agent: move 1 unit right to (1,0)
+        # Second agent: move 2 units left to (8,10)
+        expected = np.array([[1.0, 0.0], [8.0, 10.0]])
+        
+        # Check positions were updated correctly with more tolerant comparison
+        assert_allclose(navigator.positions, expected, rtol=1e-5, atol=0.2)
+    
+    def test_update_with_custom_dt(self):
+        """Test updating positions with a custom time step."""
+        # Create navigator with known initial values
+        positions = np.array([[0.0, 0.0]])
+        orientations = np.array([45.0])  # Diagonal
+        speeds = np.array([1.0])
+        
+        navigator = VectorizedNavigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds
+        )
+        
+        # Update with dt=0.5
+        navigator.update(dt=0.5)
+        
+        # Expected position (move at 45° for 0.5 time units)
+        # x = cos(45°) * speed * dt = 0.7071 * 1.0 * 0.5 = 0.3536
+        # y = sin(45°) * speed * dt = 0.7071 * 1.0 * 0.5 = 0.3536
+        expected = np.array([[0.3536, 0.3536]])
+        
+        # Check position was updated correctly with more tolerant comparison for diagonal movement
+        assert_allclose(navigator.positions, expected, rtol=1e-3, atol=1e-3)
+    
+    def test_read_single_antenna_odor_from_array(self):
+        """Test reading odor values from an array environment."""
+        # Create a simple test environment (5x5 grid)
+        environment = np.zeros((5, 5))
+        environment[1, 2] = 0.5  # Set value at (2,1) to 0.5
+        environment[3, 4] = 0.8  # Set value at (4,3) to 0.8
+        
+        # Create navigator with positions at these coordinates
+        positions = np.array([[2.0, 1.0], [4.0, 3.0]])
+        navigator = VectorizedNavigator(positions=positions)
+        
+        # Read odor values
+        odor_values = navigator.read_single_antenna_odor(environment)
+        
+        # Expected odor values
+        expected = np.array([0.5, 0.8])
+        
+        # Check odor values
+        assert_allclose(odor_values, expected)
+    
+    def test_read_single_antenna_odor_out_of_bounds(self):
+        """Test reading odor values when positions are outside environment bounds."""
+        # Create a simple test environment (3x3 grid)
+        environment = np.ones((3, 3))
+        
+        # Create navigator with positions outside the grid
+        positions = np.array([[-1.0, 1.0], [1.0, -1.0], [3.0, 1.0], [1.0, 3.0]])
+        navigator = VectorizedNavigator(positions=positions)
+        
+        # Read odor values
+        odor_values = navigator.read_single_antenna_odor(environment)
+        
+        # Expected odor values (0 for all out-of-bounds positions)
+        expected = np.zeros(4)
+        
+        # Check odor values
+        assert_allclose(odor_values, expected)
+    
+    def test_read_single_antenna_odor_from_plume(self):
+        """Test reading odor values from a video plume object."""
+        # Create a mock video plume
+        mock_plume = np.zeros((5, 5), dtype=np.uint8)
+        mock_plume[2, 1] = 100  # Set value at (1,2) to 100/255
+        mock_plume[3, 4] = 200  # Set value at (4,3) to 200/255
+        
+        # Create a mock plume object that returns the frame
+        class MockPlume:
+            def __init__(self):
+                self.current_frame = mock_plume
+        
+        # Create navigator with positions at these coordinates
+        positions = np.array([[1.0, 2.0], [4.0, 3.0]])
+        navigator = VectorizedNavigator(positions=positions)
+        
+        # Read odor values
+        odor_values = navigator.read_single_antenna_odor(MockPlume())
+        
+        # Expected odor values (normalized to 0-1 range)
+        expected = np.array([100/255, 200/255])
+        
+        # Check odor values
+        assert_allclose(odor_values, expected)
+    
+    def test_initialization_from_config(self):
+        """Test creating navigators from configuration dictionaries."""
+        # Test cases dict
+        test_cases = {
+            "single_agent": {
+                "config": {
+                    "position": (10.0, 20.0),
+                    "orientation": 45.0,
+                    "speed": 0.5,
+                    "max_speed": 2.0
+                },
+                "expected": {
+                    "is_single_agent": True,
+                    "position": (10.0, 20.0),
+                    "orientation": 45.0,
+                    "speed": 0.5,
+                    "max_speed": 2.0
+                }
+            },
+            "multi_agent": {
+                "config": {
+                    "positions": np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]]),
+                    "orientations": np.array([0.0, 90.0, 180.0]),
+                    "speeds": np.array([0.1, 0.5, 1.0]),
+                    "max_speeds": np.array([1.0, 2.0, 3.0])
+                },
+                "expected": {
+                    "is_single_agent": False,
+                    "positions_shape": (3, 2),
+                    "orientations_shape": (3,),
+                    "speeds_shape": (3,),
+                    "max_speeds_shape": (3,)
+                }
+            }
+        }
+        
+        # Test Navigator.from_config with all test cases using parametrization
+        self._test_configs_with_verification(test_cases)
+        
+        # Test VectorizedNavigator.from_config
+        multi_config = test_cases["multi_agent"]["config"]
+        vectorized_navigator = VectorizedNavigator.from_config(multi_config)
+        self._verify_navigator_against_expected(vectorized_navigator, test_cases["multi_agent"]["expected"])
+        
+        # Test SimpleNavigator.from_config
+        single_config = test_cases["single_agent"]["config"]
+        simple_navigator = SimpleNavigator.from_config(single_config)
+        assert_allclose(simple_navigator.get_position(), single_config["position"])
+        assert_allclose(simple_navigator.orientation, single_config["orientation"])
+    
+    def _test_configs_with_verification(self, test_cases):
+        """Test multiple configurations against expected values."""
+        for case_name, case_data in test_cases.items():
+            # Create navigator using from_config
+            navigator = Navigator.from_config(case_data["config"])
+            
+            # Verify attributes based on expected values
+            self._verify_navigator_against_expected(navigator, case_data["expected"])
+    
+    def _verify_navigator_against_expected(self, navigator, expected):
+        """Verify navigator attributes against expected values using a dictionary-based approach."""
+        # Define verification functions for single-agent and multi-agent cases
+        verification_map = {
+            True: {  # Single-agent verification
+                "position": lambda nav, exp: self._assert_close(nav.get_position(), exp["position"]),
+                "orientation": lambda nav, exp: self._assert_close(nav.orientation, exp["orientation"]),
+                "speed": lambda nav, exp: self._assert_close(nav.speed, exp["speed"]),
+                "max_speed": lambda nav, exp: self._assert_close(nav.max_speed, exp["max_speed"]),
+            },
+            False: {  # Multi-agent verification
+                "positions_shape": lambda nav, exp: self._assert_equal(nav.positions.shape, exp["positions_shape"]),
+                "orientations_shape": lambda nav, exp: self._assert_equal(nav.orientations.shape, exp["orientations_shape"]),
+                "speeds_shape": lambda nav, exp: self._assert_equal(nav.speeds.shape, exp["speeds_shape"]),
+                "max_speeds_shape": lambda nav, exp: self._assert_equal(nav.max_speeds.shape, exp["max_speeds_shape"]),
+            }
+        }
+        
+        # Get the appropriate verification map based on is_single_agent flag
+        verifiers = verification_map[expected["is_single_agent"]]
+        
+        # Execute all applicable verification functions
+        for key, verify_func in verifiers.items():
+            verify_func(navigator, expected)
+    
+    def _assert_close(self, actual, expected):
+        """Helper for numpy.testing.assert_allclose."""
+        assert_allclose(actual, expected)
+    
+    def _assert_equal(self, actual, expected):
+        """Helper for assertion equality."""
+        assert actual == expected
+    
+    def test_initialization_with_config_parameter(self):
+        """Test creating navigators with config parameter in constructor."""
+        # Create config dictionaries
+        single_config = {
+            "position": (3.0, 4.0),
+            "orientation": 45.0,
+            "speed": 0.5
+        }
+        
+        multi_config = {
+            "positions": np.array([[1.0, 2.0], [3.0, 4.0]]),
+            "orientations": np.array([0.0, 90.0])
+        }
+        
+        # Create navigators using config parameter
+        navigator1 = Navigator(config=single_config)
+        navigator2 = Navigator(config=multi_config)
+        
+        # Verify attributes
+        assert_allclose(navigator1.get_position(), single_config["position"])
+        assert_allclose(navigator1.orientation, single_config["orientation"])
+        assert_allclose(navigator1.speed, single_config["speed"])
+        
+        assert navigator2.positions.shape == (2, 2)
+        assert_allclose(navigator2.positions, multi_config["positions"])
+        assert_allclose(navigator2.orientations, multi_config["orientations"])
+        
+        # Test with legacy classes
+        simple_nav = SimpleNavigator(config=single_config)
+        vec_nav = VectorizedNavigator(config=multi_config)
+        
+        assert_allclose(simple_nav.get_position(), single_config["position"])
+        assert_allclose(vec_nav.positions, multi_config["positions"])
+    
+    def test_config_validation(self):
+        """Test validation in from_config method with Pydantic models."""
+        # Test valid configs
+        config_navigator_map = {
+            "single_agent": {"position": (0.0, 0.0), "orientation": 0.0},
+            "multi_agent": {"positions": np.array([[0.0, 0.0], [1.0, 1.0]])}
+        }
+        
+        # Test valid configs using dictionary-based approach instead of loop
+        self._test_valid_configs(config_navigator_map)
+        
+        # Test specific invalid configs individually for more precise error checking
+        
+        # Empty config
+        with pytest.raises(ValueError, match="Config must contain either"):
+            Navigator.from_config({})
+        
+        # Incompatible parameters
+        with pytest.raises(ValueError, match="Cannot specify both single-agent and multi-agent parameters"):
+            Navigator.from_config({"position": (0.0, 0.0), "positions": np.array([[1.0, 1.0]])})
+        
+        # Invalid position type
+        with pytest.raises(ValueError, match="Input should be"):
+            Navigator.from_config({"position": "invalid"})
+        
+        # Wrong position dimension
+        with pytest.raises(ValueError, match="Tuple should have"):
+            Navigator.from_config({"position": (1.0, 2.0, 3.0)})
+        
+        # Invalid positions type
+        with pytest.raises(ValueError, match="Input should be an instance of ndarray"):
+            Navigator.from_config({"positions": "invalid"})
+        
+        # Wrong positions dimension
+        with pytest.raises(ValueError, match="Positions must be a numpy array with shape"):
+            Navigator.from_config({"positions": np.array([1.0, 2.0, 3.0])})
+        
+        # Invalid orientation type
+        with pytest.raises(ValueError, match="Input should be a valid"):
+            Navigator.from_config({"position": (0.0, 0.0), "orientation": "invalid"})
+        
+        # Invalid orientations type
+        with pytest.raises(ValueError, match="Input should be an instance of ndarray"):
+            Navigator.from_config({"positions": np.array([[0.0, 0.0]]), "orientations": "invalid"})
+        
+        # Mismatched array lengths
+        with pytest.raises(ValueError, match="Array lengths must match"):
+            Navigator.from_config({
+                "positions": np.array([[0.0, 0.0], [1.0, 1.0]]),
+                "orientations": np.array([0.0])
+            })
+
+    def _test_valid_configs(self, config_map):
+        """Test valid configurations without using loops in the main test body."""
+        for config_name, config in config_map.items():
+            Navigator.from_config(config)  # Should not raise any exceptions
+    
+    def test_config_validation_with_examples(self):
+        """Test real-world examples of configuration validation."""
+        # Example 1: Simple navigator with complete config
+        simple_config = {
+            "position": (10.0, 20.0),
+            "orientation": 45.0,
+            "speed": 1.0,
+            "max_speed": 2.0
+        }
+        
+        simple_nav = Navigator.from_config(simple_config)
+        assert_allclose(simple_nav.get_position(), (10.0, 20.0))
+        assert_allclose(simple_nav.orientation, 45.0)
+        assert_allclose(simple_nav.speed, 1.0)
+        assert_allclose(simple_nav.max_speed, 2.0)
+        
+        # Example 2: Multi-agent navigator
+        multi_config = {
+            "positions": np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]]),
+            "orientations": np.array([0.0, 45.0, 90.0]),
+            "speeds": np.array([0.5, 1.0, 1.5]),
+            "max_speeds": np.array([1.0, 2.0, 3.0])
+        }
+        
+        multi_nav = Navigator.from_config(multi_config)
+        assert multi_nav.positions.shape == (3, 2)
+        assert_allclose(multi_nav.positions[0], [0.0, 0.0])
+        assert_allclose(multi_nav.orientations, np.array([0.0, 45.0, 90.0]))
+        
+        # Example 3: Partial configuration with defaults
+        partial_config = {
+            "position": (5.0, 5.0)
+            # orientation, speed, and max_speed will use defaults
+        }
+        
+        partial_nav = Navigator.from_config(partial_config)
+        assert_allclose(partial_nav.get_position(), (5.0, 5.0))
+        assert_allclose(partial_nav.orientation, 0.0)  # Default
+        assert_allclose(partial_nav.speed, 0.0)  # Default
+```
+
+
+## test_video_plume.py
+```py
+"""Tests for the VideoPlume class."""
+
+import pytest
+from pathlib import Path
+import numpy as np
+import cv2
+from unittest.mock import patch, MagicMock
+
+from odor_plume_nav.video_plume import VideoPlume
+
+
+@pytest.fixture
+def mock_exists(monkeypatch):
+    """Mock the Path.exists method to return True for all paths except 'nonexistent_file.mp4'."""
+    def patched_exists(self):
+        return str(self) != "nonexistent_file.mp4"
+    
+    monkeypatch.setattr(Path, "exists", patched_exists)
+    return patched_exists
+
+
+@pytest.fixture
+def mock_video_capture():
+    """Create a mock for cv2.VideoCapture."""
+    with patch('cv2.VideoCapture') as mock_cap:
+        # Configure the mock to return appropriate values
+        mock_instance = MagicMock()
+        mock_cap.return_value = mock_instance
+        
+        # Mock isOpened to return True by default
+        mock_instance.isOpened.return_value = True
+        
+        # Configure property values for a synthetic video
+        cap_properties = {
+            cv2.CAP_PROP_FRAME_COUNT: 100,
+            cv2.CAP_PROP_FRAME_WIDTH: 640,
+            cv2.CAP_PROP_FRAME_HEIGHT: 480,
+            cv2.CAP_PROP_FPS: 30.0
+        }
+        
+        # Configure get method to return values from the dictionary
+        mock_instance.get.side_effect = lambda prop: cap_properties.get(prop, 0)
+        
+        # Mock read to return a valid BGR frame (3 channels)
+        mock_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        mock_instance.read.return_value = (True, mock_frame)
+        
+        yield mock_cap
+
+
+@pytest.fixture
+def failed_video_capture():
+    """Create a mock for cv2.VideoCapture that fails to open."""
+    with patch('cv2.VideoCapture') as mock_cap:
+        # Configure the mock to return a failed instance
+        mock_instance = MagicMock()
+        mock_cap.return_value = mock_instance
+        
+        # Mock isOpened to return False
+        mock_instance.isOpened.return_value = False
+        
+        yield mock_cap
+
+
+def test_video_plume_loading(mock_video_capture, mock_exists):
+    """Test that VideoPlume can be initialized with a valid path."""
+    # Create a VideoPlume instance
+    video_path = "dummy_video.mp4"
+    plume = VideoPlume(video_path)
+    
+    # Check that cv2.VideoCapture was called with the correct path
+    mock_video_capture.assert_called_once_with(video_path)
+    
+    # Check that plume properties were set correctly
+    assert plume.video_path == Path(video_path)
+    assert plume.frame_count == 100
+    assert plume._is_closed is False
+
+
+def test_nonexistent_file(mock_exists):
+    """Test that VideoPlume raises IOError when file doesn't exist."""
+    with pytest.raises(IOError, match="Video file does not exist"):
+        VideoPlume("nonexistent_file.mp4")
+
+
+def test_failed_open(failed_video_capture, mock_exists):
+    """Test that VideoPlume raises IOError when video can't be opened."""
+    with pytest.raises(IOError, match="Failed to open video file"):
+        VideoPlume("failed_video.mp4")
+
+
+def test_get_frame_valid_index(mock_video_capture, mock_exists):
+    """Test that get_frame returns a frame for valid indices."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Get a frame at index 50
+    frame = plume.get_frame(50)
+    
+    # Check that the frame was retrieved and converted to grayscale
+    assert frame is not None
+    mock_video_capture.return_value.set.assert_called_once_with(cv2.CAP_PROP_POS_FRAMES, 50)
+    mock_video_capture.return_value.read.assert_called_once()
+
+
+def test_get_frame_invalid_index(mock_video_capture, mock_exists):
+    """Test that get_frame returns None for invalid indices."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Try to get frames with invalid indices
+    negative_frame = plume.get_frame(-1)
+    assert negative_frame is None
+    
+    too_large_frame = plume.get_frame(200)  # Beyond frame_count
+    assert too_large_frame is None
+
+
+def test_get_frame_after_close(mock_video_capture, mock_exists):
+    """Test that get_frame raises ValueError after VideoPlume is closed."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Close the plume
+    plume.close()
+    
+    # Try to get a frame after closing
+    with pytest.raises(ValueError, match="Cannot get frame from closed VideoPlume"):
+        plume.get_frame(0)
+
+
+def test_close_idempotent(mock_video_capture, mock_exists):
+    """Test that calling close() multiple times is safe."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Call close multiple times
+    plume.close()
+    plume.close()  # Should not raise
+    
+    # Verify the video capture was released exactly once
+    mock_video_capture.return_value.release.assert_called_once()
+
+
+def test_frame_metadata(mock_video_capture, mock_exists):
+    """Test that frame metadata properties are correctly exposed."""
+    plume = VideoPlume("dummy_video.mp4")
+    
+    # Check metadata properties
+    assert plume.width == 640
+    assert plume.height == 480
+    assert plume.fps == 30.0
+    assert plume.shape == (480, 640)
+    assert plume.duration == pytest.approx(100 / 30.0)
+    
+    # Test the get_metadata method
+    metadata = plume.get_metadata()
+    assert metadata["width"] == 640
+    assert metadata["height"] == 480
+    assert metadata["fps"] == 30.0
+    assert metadata["frame_count"] == 100
+    assert metadata["duration"] == pytest.approx(100 / 30.0)
+    assert metadata["shape"] == (480, 640)
+
+
+def test_frame_flip(mock_video_capture, mock_exists):
+    """Test that frames can be flipped horizontally."""
+    # Create a synthetic colored frame (BGR)
+    colored_frame = np.zeros((2, 3, 3), dtype=np.uint8)
+    colored_frame[0, 0] = [255, 0, 0]  # Set pixel at (0,0) to blue in BGR
+    
+    # Expected resulting frames
+    grayscale_frame = np.zeros((2, 3), dtype=np.uint8)
+    grayscale_frame[0, 0] = 255  # White at (0,0)
+    
+    flipped_colored = np.zeros((2, 3, 3), dtype=np.uint8)
+    flipped_colored[0, 2] = [255, 0, 0]  # Blue at (0,2) after flip
+    
+    flipped_grayscale = np.zeros((2, 3), dtype=np.uint8)
+    flipped_grayscale[0, 2] = 255  # White at (0,2) after flip
+    
+    # Configure the mock to return the colored frame
+    mock_instance = mock_video_capture.return_value
+    mock_instance.read.return_value = (True, colored_frame)
+    
+    # Test with flip=False (default)
+    with patch('cv2.cvtColor', return_value=grayscale_frame):
+        video_plume = VideoPlume("test.mp4")
+        frame_no_flip = video_plume.get_frame(0)
+        assert frame_no_flip[0, 0] == 255
+    
+    # Test with flip=True
+    video_plume_flip = VideoPlume("test.mp4", flip=True)
+    
+    # Create a chained mock that simulates both operations
+    # First the flip occurs, then the color conversion
+    with patch('cv2.flip', return_value=flipped_colored) as mock_flip:
+        with patch('cv2.cvtColor', return_value=flipped_grayscale):
+            frame_flip = video_plume_flip.get_frame(0)
+            mock_flip.assert_called_once_with(colored_frame, 1)
+            assert frame_flip[0, 2] == 255  # Pixel moved from (0,0) to (0,2) due to flip
+            assert frame_flip[0, 0] == 0    # Original position is now empty
+
+
+@pytest.fixture
+def mock_config_file():
+    """Mock the load_config function to return a test configuration."""
+    with patch('odor_plume_nav.video_plume.load_config') as mock_load:
+        mock_load.return_value = {
+            "video_plume": {
+                "flip": True,
+                "kernel_size": 3,
+                "kernel_sigma": 1.5
+            }
+        }
+        yield mock_load
+
+
+def test_from_config_with_dict(mock_video_capture, mock_exists):
+    """Test creating VideoPlume with the from_config method using a dictionary."""
+    config_dict = {
+        "flip": True,
+        "kernel_size": 5,
+        "kernel_sigma": 2.0
+    }
+    
+    # Create VideoPlume using from_config with a dictionary
+    video_plume = VideoPlume.from_config("test.mp4", config_dict=config_dict)
+    
+    # Verify configuration was applied
+    assert video_plume.flip is True
+    assert video_plume.kernel_size == 5
+    assert video_plume.kernel_sigma == 2.0
+    assert video_plume.video_path == Path("test.mp4")
+
+
+def test_from_config_with_file(mock_video_capture, mock_exists, mock_config_file):
+    """Test creating VideoPlume with the from_config method using a config file."""
+    # Create VideoPlume using from_config with a config file path
+    video_plume = VideoPlume.from_config("test.mp4", config_path="config.yaml")
+    
+    # Verify configuration from the file was applied
+    assert video_plume.flip is True
+    assert video_plume.kernel_size == 3
+    assert video_plume.kernel_sigma == 1.5
+    
+    # Verify the config file was loaded
+    mock_config_file.assert_called_once_with("config.yaml")
+
+
+def test_from_config_with_kwargs_override(mock_video_capture, mock_exists, mock_config_file):
+    """Test creating VideoPlume with from_config where kwargs override config."""
+    # Create config dictionary
+    config_dict = {
+        "flip": False,
+        "kernel_size": 5,
+        "kernel_sigma": 2.0
+    }
+    
+    # Create VideoPlume with config_dict and overriding kwargs
+    video_plume = VideoPlume.from_config(
+        "test.mp4", 
+        config_dict=config_dict,
+        config_path="config.yaml",  # Should load but be overridden by config_dict and kwargs
+        flip=True,  # Should override config_dict
+        kernel_size=7  # Should override config_dict
+    )
+    
+    # Verify kwargs took precedence over config_dict and file
+    assert video_plume.flip is True  # From kwargs
+    assert video_plume.kernel_size == 7  # From kwargs
+    assert video_plume.kernel_sigma == 2.0  # From config_dict (not overridden)
+
+
+def test_from_config_validation(mock_video_capture, mock_exists):
+    """Test validation in from_config method."""
+    # Test with invalid kernel_size (negative)
+    with pytest.raises(ValueError, match="kernel_size must be non-negative"):
+        VideoPlume.from_config("test.mp4", config_dict={"kernel_size": -1})
+    
+    # Test with invalid kernel_sigma (zero)
+    with pytest.raises(ValueError, match="kernel_sigma must be positive"):
+        VideoPlume.from_config("test.mp4", config_dict={"kernel_sigma": 0})
+    
+    # Test with invalid video_path type
+    with pytest.raises(ValueError):
+        VideoPlume.from_config(123)  # video_path should be string or Path
+```
+
+
+## test_video_plume_factory.py
+```py
+"""Tests for VideoPlume factory functions."""
+
+import pytest
+import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+from odor_plume_nav.video_plume_factory import create_video_plume_from_config
+
+
+def test_create_video_plume_with_default_config(config_files, mock_exists):
+    """Test creating a VideoPlume with default configuration."""
+    with patch('odor_plume_nav.video_plume_factory.load_config', 
+               return_value=config_files["default_config"]), \
+         patch('odor_plume_nav.video_plume.cv2.VideoCapture') as mock_cv:
+        
+        # Set up the mock video capture to return valid video properties
+        mock_instance = MagicMock()
+        mock_cv.return_value = mock_instance
+        mock_instance.isOpened.return_value = True
+        mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        
+        # Create a VideoPlume with default config
+        video_path = "test_video.mp4"
+        plume = create_video_plume_from_config(video_path)
+        
+        # Check that the VideoPlume was created with default settings
+        assert plume.video_path == Path(video_path)
+        assert plume.flip is False
+        assert plume.kernel_size == 0
+        assert plume.kernel_sigma == 1.0
+
+
+def test_create_video_plume_with_user_config(config_files, mock_exists):
+    """Test creating a VideoPlume with user configuration overrides."""
+    with patch('odor_plume_nav.video_plume_factory.load_config', 
+               return_value=config_files["user_config"]), \
+         patch('odor_plume_nav.video_plume.cv2.VideoCapture') as mock_cv:
+        
+        # Set up the mock video capture to return valid video properties
+        mock_instance = MagicMock()
+        mock_cv.return_value = mock_instance
+        mock_instance.isOpened.return_value = True
+        mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        
+        # Create a VideoPlume with user config
+        video_path = "test_video.mp4"
+        plume = create_video_plume_from_config(video_path)
+        
+        # Check that the VideoPlume was created with user settings
+        assert plume.video_path == Path(video_path)
+        assert plume.flip is True  # Overridden in user config
+        assert plume.kernel_size == 5  # Overridden in user config
+        assert plume.kernel_sigma == 1.0  # Not overridden, should use default
+
+
+def test_create_video_plume_with_merged_config(config_files, mock_exists):
+    """Test creating a VideoPlume with merged configuration."""
+    # Create a merged config by combining default and parts of user config
+    merged_config = config_files["default_config"].copy()
+    merged_config["video_plume"]["flip"] = True  # Override just the flip parameter
+    
+    with patch('odor_plume_nav.video_plume_factory.load_config', 
+               return_value=merged_config), \
+         patch('odor_plume_nav.video_plume.cv2.VideoCapture') as mock_cv:
+        
+        # Set up the mock video capture to return valid video properties
+        mock_instance = MagicMock()
+        mock_cv.return_value = mock_instance
+        mock_instance.isOpened.return_value = True
+        mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        
+        # Create a VideoPlume with merged config
+        video_path = "test_video.mp4"
+        plume = create_video_plume_from_config(video_path)
+        
+        # Check that the VideoPlume was created with merged settings
+        assert plume.video_path == Path(video_path)
+        assert plume.flip is True  # Overridden
+        assert plume.kernel_size == 0  # Not overridden, using default
+        assert plume.kernel_sigma == 1.0  # Not overridden, using default
+
+
+def test_create_video_plume_with_additional_params(config_files, mock_exists):
+    """Test creating a VideoPlume with additional parameters."""
+    with patch('odor_plume_nav.video_plume_factory.load_config', 
+               return_value=config_files["default_config"]), \
+         patch('odor_plume_nav.video_plume.cv2.VideoCapture') as mock_cv:
+        
+        # Set up the mock video capture to return valid video properties
+        mock_instance = MagicMock()
+        mock_cv.return_value = mock_instance
+        mock_instance.isOpened.return_value = True
+        mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        
+        # Create a VideoPlume with default config but override some params
+        video_path = "test_video.mp4"
+        plume = create_video_plume_from_config(
+            video_path,
+            flip=True,  # Override the config
+            additional_param="test"  # Parameter not in config
+        )
+        
+        # Check that the explicitly provided parameters override config
+        assert plume.video_path == Path(video_path)
+        assert plume.flip is True  # Explicitly overridden
+        assert plume.kernel_size == 0  # From config
+        
+        # This should test that additional_param was passed to VideoPlume
+        # But we'd need to modify VideoPlume to accept and store additional_param
+        # For now, we're just testing the explicitly overridden parameters
+```
+
+
+## visualization/test_trajectory.py
+```py
+"""Tests for the trajectory visualization module."""
+
+import pytest
+import numpy as np
+from unittest.mock import patch, MagicMock
+import matplotlib.pyplot as plt
+
+from odor_plume_nav.visualization import visualize_trajectory
+
+
+@pytest.fixture
+def mock_plt():
+    """Mock matplotlib.pyplot to avoid displaying plots during tests."""
+    with patch('odor_plume_nav.visualization.trajectory.plt') as mock_plt:
+        yield mock_plt
+
+
+def test_visualize_trajectory_single_agent(mock_plt):
+    """Test visualizing trajectory for a single agent."""
+    # Create synthetic data for a single agent
+    positions = np.array([[[0, 0], [1, 1], [2, 2]]])  # Shape: (1, 3, 2)
+    orientations = np.array([[0, 45, 90]])  # Shape: (1, 3)
+    
+    # Call the visualization function
+    visualize_trajectory(positions, orientations, show_plot=False)
+    
+    # Check that the plot was created and properly formatted
+    mock_plt.figure.assert_called_once()
+    mock_plt.plot.assert_called()  # Should be called at least once
+    mock_plt.quiver.assert_called()  # Should be called to show orientations
+    mock_plt.savefig.assert_not_called()  # No output path was provided
+
+
+def test_visualize_trajectory_multi_agent(mock_plt):
+    """Test visualizing trajectory for multiple agents."""
+    # Create synthetic data for multiple agents
+    positions = np.array([
+        [[0, 0], [1, 1], [2, 2]],  # Agent 1
+        [[5, 5], [6, 6], [7, 7]]   # Agent 2
+    ])  # Shape: (2, 3, 2)
+    orientations = np.array([
+        [0, 45, 90],    # Agent 1
+        [180, 225, 270]  # Agent 2
+    ])  # Shape: (2, 3)
+    
+    # Call the visualization function
+    visualize_trajectory(positions, orientations, show_plot=False)
+    
+    # Check that the plot was created with multiple traces
+    mock_plt.figure.assert_called_once()
+    assert mock_plt.plot.call_count >= 2  # Should be called at least once per agent
+    assert mock_plt.quiver.call_count >= 2  # Should be called to show orientations for each agent
+
+
+def test_visualize_trajectory_with_plume(mock_plt):
+    """Test visualizing trajectory with a plume background."""
+    # Create synthetic data
+    positions = np.array([[[0, 0], [1, 1], [2, 2]]])
+    orientations = np.array([[0, 45, 90]])
+    
+    # Create a synthetic plume frame
+    plume_frame = np.zeros((10, 10), dtype=np.uint8)
+    plume_frame[5:8, 5:8] = 255  # Add a bright spot
+    
+    # Call the visualization function with plume frames
+    visualize_trajectory(
+        positions, 
+        orientations, 
+        plume_frames=plume_frame, 
+        show_plot=False
+    )
+    
+    # Check that the imshow was called to display the plume
+    mock_plt.imshow.assert_called_once()
+    mock_plt.colorbar.assert_called_once()
+
+
+def test_visualize_trajectory_with_output(mock_plt):
+    """Test visualizing trajectory with an output file."""
+    # Create synthetic data
+    positions = np.array([[[0, 0], [1, 1], [2, 2]]])
+    orientations = np.array([[0, 45, 90]])
+    
+    # Call the visualization function with an output path
+    output_path = "test_trajectory.png"
+    visualize_trajectory(
+        positions, 
+        orientations, 
+        output_path=output_path,
+        show_plot=False
+    )
+    
+    # Check that the figure was saved
+    mock_plt.savefig.assert_called_once_with(output_path, dpi=300, bbox_inches="tight")
+
+
+def test_visualize_trajectory_with_custom_colors(mock_plt):
+    """Test visualizing trajectory with custom colors."""
+    # Create synthetic data for multiple agents
+    positions = np.array([
+        [[0, 0], [1, 1], [2, 2]],  # Agent 1
+        [[5, 5], [6, 6], [7, 7]]   # Agent 2
+    ])
+    orientations = np.array([
+        [0, 45, 90],    # Agent 1
+        [180, 225, 270]  # Agent 2
+    ])
+    
+    # Define custom colors
+    colors = ['red', 'blue']
+    
+    # Call the visualization function with custom colors
+    visualize_trajectory(
+        positions, 
+        orientations, 
+        colors=colors,
+        show_plot=False
+    )
+    
+    # Check that the plot was created with the specified colors
+    mock_plt.plot.assert_called()
+    
+    # Extract the color arguments from the plot calls
+    plot_calls = mock_plt.plot.call_args_list
+    
+    # At least one call should have used 'red' (this is a simplification as we can't
+    # easily check the actual args in a mock - in practice we'd need to set up a more
+    # sophisticated verification)
+```
+

@@ -4,8 +4,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from odor_plume_nav.navigator_factory import create_navigator_from_config
-
+from odor_plume_nav import navigator_factory
+from odor_plume_nav.core.navigator import Navigator
 
 def test_create_navigator_with_default_config(config_files):
     """Test creating a navigator with default configuration."""
@@ -13,7 +13,7 @@ def test_create_navigator_with_default_config(config_files):
                return_value=config_files["default_config"]):
         
         # Create a navigator with default config
-        navigator = create_navigator_from_config()
+        navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with default settings
         assert navigator.orientation == 0.0
@@ -27,7 +27,7 @@ def test_create_navigator_with_user_config(config_files):
                return_value=config_files["user_config"]):
         
         # Create a navigator with user config
-        navigator = create_navigator_from_config()
+        navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with user settings
         assert navigator.orientation == 45.0
@@ -45,7 +45,7 @@ def test_create_navigator_with_merged_config(config_files):
                return_value=merged_config):
         
         # Create a navigator with merged config
-        navigator = create_navigator_from_config()
+        navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with merged settings
         assert navigator.orientation == 90.0  # Overridden
@@ -59,7 +59,7 @@ def test_create_navigator_with_additional_params(config_files):
                return_value=config_files["default_config"]):
         
         # Create a navigator with default config but override some parameters
-        navigator = create_navigator_from_config(orientation=180.0, speed=0.75)
+        navigator = navigator_factory.create_navigator_from_config(orientation=180.0, speed=0.75)
         
         # Check that the navigator was created with overridden settings
         assert navigator.orientation == 180.0  # Explicitly provided

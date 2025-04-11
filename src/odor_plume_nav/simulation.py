@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from odor_plume_nav.video_plume import VideoPlume
-from odor_plume_nav.navigator import SimpleNavigator, Navigator
+from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.video_plume_factory import create_video_plume_from_config
 from odor_plume_nav.navigator_factory import create_navigator_from_config
 from odor_plume_nav.config_utils import load_config
@@ -50,7 +50,7 @@ class Simulation:
         else:
             # Otherwise, create with default settings
             self.plume = VideoPlume(video_path)
-            self.navigator = SimpleNavigator()
+            self.navigator = Navigator()
         
         # Store the initial frame
         self.current_frame = self.plume.get_frame()

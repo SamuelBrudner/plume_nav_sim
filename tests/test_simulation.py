@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock, call
 
 # Import the simulation module once to avoid reimporting in each test
 from odor_plume_nav.simulation import Simulation
+from odor_plume_nav.core.navigator import Navigator
 
 
 class TestSimulation:
@@ -15,7 +16,7 @@ class TestSimulation:
     def test_simulation_initialization(self, mock_video_plume, mock_navigator):
         """Test that a Simulation can be initialized with plume and navigator."""
         with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
-             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+             patch('odor_plume_nav.simulation.Navigator', return_value=mock_navigator):
             
             # Create a simulation with mocked components
             sim = Simulation(
@@ -36,7 +37,7 @@ class TestSimulation:
     def test_simulation_step(self, mock_video_plume, mock_navigator):
         """Test that a simulation step advances the plume and moves the navigator."""
         with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
-             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+             patch('odor_plume_nav.simulation.Navigator', return_value=mock_navigator):
             
             # Create a simulation with mocked components
             sim = Simulation(
@@ -63,34 +64,34 @@ class TestSimulation:
     
     def test_multiple_simulation_steps(self, mock_video_plume, mock_navigator):
         """Test that multiple simulation steps work correctly."""
-        with patch("odor_plume_nav.simulation.VideoPlume", return_value=mock_video_plume):
-            with patch("odor_plume_nav.simulation.SimpleNavigator", return_value=mock_navigator):
-                # Create a simulation with the mocked objects
-                sim = Simulation(
-                    video_path="test_video.mp4",
-                    dt=0.1
-                )
-                
-                # Reset the mock to isolate calls during the steps
-                mock_video_plume.get_frame.reset_mock()
-                mock_navigator.update.reset_mock()
-                
-                # Perform 5 simulation steps directly
-                sim.step()
-                sim.step()
-                sim.step()
-                sim.step()
-                sim.step()
-                
-                # Check that the plume was advanced multiple times
-                assert mock_video_plume.get_frame.call_count == 5
-                
-                # Check that the navigator was updated multiple times
-                assert mock_navigator.update.call_count == 5
-                
-                # Check that simulation state reflects multiple steps
-                assert sim.time == 0.5
-                assert sim.frame_index == 5
+        with patch("odor_plume_nav.simulation.VideoPlume", return_value=mock_video_plume), \
+             patch("odor_plume_nav.simulation.Navigator", return_value=mock_navigator):
+            # Create a simulation with the mocked objects
+            sim = Simulation(
+                video_path="test_video.mp4",
+                dt=0.1
+            )
+            
+            # Reset the mock to isolate calls during the steps
+            mock_video_plume.get_frame.reset_mock()
+            mock_navigator.update.reset_mock()
+            
+            # Perform 5 simulation steps directly
+            sim.step()
+            sim.step()
+            sim.step()
+            sim.step()
+            sim.step()
+            
+            # Check that the plume was advanced multiple times
+            assert mock_video_plume.get_frame.call_count == 5
+            
+            # Check that the navigator was updated multiple times
+            assert mock_navigator.update.call_count == 5
+            
+            # Check that simulation state reflects multiple steps
+            assert sim.time == 0.5
+            assert sim.frame_index == 5
     
     def test_simulation_with_config(self, mock_video_plume, mock_navigator, config_files):
         """Test that a simulation can be created with configuration settings."""
@@ -119,7 +120,7 @@ class TestSimulation:
     def test_get_agent_position(self, mock_video_plume, mock_navigator):
         """Test that we can get the agent's position from the simulation."""
         with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
-             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+             patch('odor_plume_nav.simulation.Navigator', return_value=mock_navigator):
             
             # Create a simulation with mocked components
             sim = Simulation(
@@ -143,7 +144,7 @@ class TestSimulation:
         mock_video_plume.get_frame.return_value = test_frame
         
         with patch('odor_plume_nav.simulation.VideoPlume', return_value=mock_video_plume), \
-             patch('odor_plume_nav.simulation.SimpleNavigator', return_value=mock_navigator):
+             patch('odor_plume_nav.simulation.Navigator', return_value=mock_navigator):
             
             # Create a simulation with mocked components
             sim = Simulation(

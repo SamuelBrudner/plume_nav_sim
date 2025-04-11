@@ -6,103 +6,104 @@ the odor plume navigation package.
 """
 
 from typing import Dict, List, Optional, Tuple, Union
-import numpy as np
 import pathlib
+import numpy as np
 
-# Update imports to use the new module structure
-from odor_plume_nav.core.navigator import Navigator
+from odor_plume_nav.core.navigator import Navigator, SimpleNavigator, VectorizedNavigator
+from odor_plume_nav.navigator_factory import create_navigator_from_config
 from odor_plume_nav.environments.video_plume import VideoPlume
-from odor_plume_nav.core.simulation import run_simulation
+from odor_plume_nav.simulation import run_simulation
 
 
-def create_navigator(
-    positions: Optional[Union[Tuple[float, float], List[Tuple[float, float]], np.ndarray]] = None,
-    orientations: Optional[Union[float, List[float], np.ndarray]] = None,
-    speeds: Optional[Union[float, List[float], np.ndarray]] = None,
-    max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
-    config_path: Optional[Union[str, pathlib.Path]] = None,
-    config_dict: Optional[Dict] = None,
-) -> Navigator:
+def create_navigator(positions: Optional[Union[Tuple[float, float], List[Tuple[float, float]], np.ndarray]] = None,
+                    orientations: Optional[Union[float, List[float], np.ndarray]] = None,
+                    speeds: Optional[Union[float, List[float], np.ndarray]] = None,
+                    max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
+                    config_path: Optional[Union[str, pathlib.Path]] = None) -> Union[Navigator, VectorizedNavigator]:
     """
-    Create a Navigator instance with simplified interface.
-    
-    This function provides a simplified way to create a Navigator instance
-    handling both single and multi-agent cases with a consistent interface.
+    Create a Navigator instance based on provided parameters or configuration.
     
     Args:
-        positions: Agent position(s) as a tuple (x, y) for single agent or a list/array of positions
-        orientations: Initial orientation(s) in degrees
-        speeds: Initial movement speed(s)
-        max_speeds: Maximum allowed movement speed(s)
-        config_path: Path to a configuration file
-        config_dict: Configuration dictionary
-        
+        positions: Initial position(s) of the navigator(s). If a list of positions is provided,
+                  a multi-agent navigator will be created.
+        orientations: Initial orientation(s) of the navigator(s) in degrees.
+        speeds: Initial speed(s) of the navigator(s).
+        max_speeds: Maximum speed(s) of the navigator(s).
+        config_path: Path to a configuration file. If provided, other parameters will
+                    be ignored and the configuration file will be used.
+                    
     Returns:
-        Configured Navigator instance
-        
-    Examples:
-        >>> # Create a single navigator
-        >>> nav = create_navigator(positions=(10, 20), orientations=45, speeds=0.5)
-        >>> 
-        >>> # Create multiple navigators
-        >>> positions = [(10, 20), (30, 40), (50, 60)]
-        >>> orientations = [45, 90, 135]
-        >>> nav = create_navigator(positions=positions, orientations=orientations)
-        >>>
-        >>> # Create from config
-        >>> nav = create_navigator(config_path="path/to/config.yaml")
+        A Navigator or VectorizedNavigator instance.
     """
-    # Handle configuration from file if provided
-    if config_dict is None and config_path is not None:
+    # Check if a config file is provided
+    if config_path is not None:
+        # Get the configuration from a file
         from odor_plume_nav.config.utils import load_config
-        config_dict = load_config(config_path)
+        config = load_config(config_path)
+        
+        # Filter out keys that aren't relevant for Navigator initialization
+        navigator_keys = ["position", "orientation", "speed", "max_speed", 
+                        "positions", "orientations", "speeds", "max_speeds",
+                        "angular_velocity", "angular_velocities", "num_agents"]
+        filtered_config = {k: v for k, v in config.items() if k in navigator_keys}
+        
+        # Check if positions is in array format for multi-agent
+        if "positions" in filtered_config and isinstance(filtered_config["positions"], np.ndarray) and len(filtered_config["positions"]) > 1:
+            return VectorizedNavigator(**filtered_config)
+        else:
+            return Navigator(**filtered_config)
     
-    # If config_dict is provided, create navigator from it
-    if config_dict is not None:
-        return Navigator.from_config(config_dict)
-    
-    # Otherwise, prepare parameters for the navigator
-    params = {}
-    
-    # Handle single agent case
-    if positions is not None and isinstance(positions, tuple) and len(positions) == 2:
-        params["position"] = positions
-        if orientations is not None:
-            params["orientation"] = orientations if isinstance(orientations, (int, float)) else orientations[0]
-        if speeds is not None:
-            params["speed"] = speeds if isinstance(speeds, (int, float)) else speeds[0]
-        if max_speeds is not None:
-            params["max_speed"] = max_speeds if isinstance(max_speeds, (int, float)) else max_speeds[0]
-            
-    # Handle multi-agent case
-    elif positions is not None and isinstance(positions, (list, np.ndarray)):
-        # Convert to numpy arrays as needed
+    # Determine if we're creating a single-agent or multi-agent navigator
+    if positions is not None and isinstance(positions, (list, np.ndarray)) and len(positions) > 1:
+        # Multi-agent case
+        # Convert positions to numpy array if it's a list
         if isinstance(positions, list):
             positions = np.array(positions)
-        params["positions"] = positions
-        
+            
+        # Handle orientations
         if orientations is not None:
             if isinstance(orientations, (int, float)):
                 orientations = np.full(len(positions), orientations)
             elif isinstance(orientations, list):
                 orientations = np.array(orientations)
-            params["orientations"] = orientations
-            
+                
+        # Handle speeds
         if speeds is not None:
             if isinstance(speeds, (int, float)):
                 speeds = np.full(len(positions), speeds)
             elif isinstance(speeds, list):
                 speeds = np.array(speeds)
-            params["speeds"] = speeds
-            
+                
+        # Handle max_speeds
         if max_speeds is not None:
             if isinstance(max_speeds, (int, float)):
                 max_speeds = np.full(len(positions), max_speeds)
             elif isinstance(max_speeds, list):
                 max_speeds = np.array(max_speeds)
-            params["max_speeds"] = max_speeds
+        
+        # Create a VectorizedNavigator with multi-agent parameters
+        return VectorizedNavigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds,
+            max_speeds=max_speeds,
+            num_agents=len(positions)
+        )
     
-    return Navigator(**params)
+    # Single-agent case
+    # Extract scalar values if we have lists with only one element
+    position = positions[0] if isinstance(positions, (list, np.ndarray)) and len(positions) == 1 else positions
+    orientation = orientations[0] if isinstance(orientations, (list, np.ndarray)) and len(orientations) == 1 else orientations
+    speed = speeds[0] if isinstance(speeds, (list, np.ndarray)) and len(speeds) == 1 else speeds
+    max_speed = max_speeds[0] if isinstance(max_speeds, (list, np.ndarray)) and len(max_speeds) == 1 else max_speeds
+    
+    # Create a Navigator with single-agent parameters
+    return Navigator(
+        position=position,
+        orientation=orientation,
+        speed=speed,
+        max_speed=max_speed
+    )
 
 
 def create_video_plume(

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from odor_plume_nav.navigator import Navigator
+from odor_plume_nav.core.navigator import Navigator
 
 
 class TestNavigatorAngularVelocity:

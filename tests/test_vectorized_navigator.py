@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 from numpy.testing import assert_allclose
 
-from odor_plume_nav.navigator import VectorizedNavigator, SimpleNavigator, Navigator
+from odor_plume_nav.core.navigator import VectorizedNavigator, SimpleNavigator, Navigator
 
 
 class TestVectorizedNavigator:
@@ -302,7 +302,7 @@ class TestVectorizedNavigator:
             }
         }
         
-        # Test Navigator.from_config with all test cases using parametrization
+        # Test VectorizedNavigator.from_config with all test cases using parametrization
         self._test_configs_with_verification(test_cases)
         
         # Test VectorizedNavigator.from_config
@@ -320,7 +320,7 @@ class TestVectorizedNavigator:
         """Test multiple configurations against expected values."""
         for case_name, case_data in test_cases.items():
             # Create navigator using from_config
-            navigator = Navigator.from_config(case_data["config"])
+            navigator = VectorizedNavigator.from_config(case_data["config"])
             
             # Verify attributes based on expected values
             self._verify_navigator_against_expected(navigator, case_data["expected"])
@@ -373,8 +373,8 @@ class TestVectorizedNavigator:
         }
         
         # Create navigators using config parameter
-        navigator1 = Navigator(config=single_config)
-        navigator2 = Navigator(config=multi_config)
+        navigator1 = VectorizedNavigator(config=single_config)
+        navigator2 = VectorizedNavigator(config=multi_config)
         
         # Verify attributes
         assert_allclose(navigator1.get_position(), single_config["position"])
@@ -407,39 +407,39 @@ class TestVectorizedNavigator:
         
         # Empty config
         with pytest.raises(ValueError, match="Config must contain either"):
-            Navigator.from_config({})
+            VectorizedNavigator.from_config({})
         
         # Incompatible parameters
         with pytest.raises(ValueError, match="Cannot specify both single-agent and multi-agent parameters"):
-            Navigator.from_config({"position": (0.0, 0.0), "positions": np.array([[1.0, 1.0]])})
+            VectorizedNavigator.from_config({"position": (0.0, 0.0), "positions": np.array([[1.0, 1.0]])})
         
         # Invalid position type
         with pytest.raises(ValueError, match="Input should be"):
-            Navigator.from_config({"position": "invalid"})
+            VectorizedNavigator.from_config({"position": "invalid"})
         
         # Wrong position dimension
         with pytest.raises(ValueError, match="Tuple should have"):
-            Navigator.from_config({"position": (1.0, 2.0, 3.0)})
+            VectorizedNavigator.from_config({"position": (1.0, 2.0, 3.0)})
         
         # Invalid positions type
         with pytest.raises(ValueError, match="Input should be an instance of ndarray"):
-            Navigator.from_config({"positions": "invalid"})
+            VectorizedNavigator.from_config({"positions": "invalid"})
         
         # Wrong positions dimension
         with pytest.raises(ValueError, match="Positions must be a numpy array with shape"):
-            Navigator.from_config({"positions": np.array([1.0, 2.0, 3.0])})
+            VectorizedNavigator.from_config({"positions": np.array([1.0, 2.0, 3.0])})
         
         # Invalid orientation type
         with pytest.raises(ValueError, match="Input should be a valid"):
-            Navigator.from_config({"position": (0.0, 0.0), "orientation": "invalid"})
+            VectorizedNavigator.from_config({"position": (0.0, 0.0), "orientation": "invalid"})
         
         # Invalid orientations type
         with pytest.raises(ValueError, match="Input should be an instance of ndarray"):
-            Navigator.from_config({"positions": np.array([[0.0, 0.0]]), "orientations": "invalid"})
+            VectorizedNavigator.from_config({"positions": np.array([[0.0, 0.0]]), "orientations": "invalid"})
         
         # Mismatched array lengths
         with pytest.raises(ValueError, match="Array lengths must match"):
-            Navigator.from_config({
+            VectorizedNavigator.from_config({
                 "positions": np.array([[0.0, 0.0], [1.0, 1.0]]),
                 "orientations": np.array([0.0])
             })
@@ -447,7 +447,7 @@ class TestVectorizedNavigator:
     def _test_valid_configs(self, config_map):
         """Test valid configurations without using loops in the main test body."""
         for config_name, config in config_map.items():
-            Navigator.from_config(config)  # Should not raise any exceptions
+            VectorizedNavigator.from_config(config)  # Should not raise any exceptions
     
     def test_config_validation_with_examples(self):
         """Test real-world examples of configuration validation."""
@@ -459,7 +459,7 @@ class TestVectorizedNavigator:
             "max_speed": 2.0
         }
         
-        simple_nav = Navigator.from_config(simple_config)
+        simple_nav = VectorizedNavigator.from_config(simple_config)
         assert_allclose(simple_nav.get_position(), (10.0, 20.0))
         assert_allclose(simple_nav.orientation, 45.0)
         assert_allclose(simple_nav.speed, 1.0)
@@ -473,7 +473,7 @@ class TestVectorizedNavigator:
             "max_speeds": np.array([1.0, 2.0, 3.0])
         }
         
-        multi_nav = Navigator.from_config(multi_config)
+        multi_nav = VectorizedNavigator.from_config(multi_config)
         assert multi_nav.positions.shape == (3, 2)
         assert_allclose(multi_nav.positions[0], [0.0, 0.0])
         assert_allclose(multi_nav.orientations, np.array([0.0, 45.0, 90.0]))
@@ -484,7 +484,7 @@ class TestVectorizedNavigator:
             # orientation, speed, and max_speed will use defaults
         }
         
-        partial_nav = Navigator.from_config(partial_config)
+        partial_nav = VectorizedNavigator.from_config(partial_config)
         assert_allclose(partial_nav.get_position(), (5.0, 5.0))
         assert_allclose(partial_nav.orientation, 0.0)  # Default
         assert_allclose(partial_nav.speed, 0.0)  # Default
