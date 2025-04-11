@@ -78,3 +78,6 @@ agent_simulation.txt
 test.txt
 src.txt
 config.txt
+
+# Credentials
+configs/local/credentials.yml
