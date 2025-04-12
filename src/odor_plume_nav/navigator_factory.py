@@ -25,16 +25,16 @@ def create_navigator_from_config(config_path: Optional[Union[str, Path]] = None,
     """
     # Load configuration
     config = load_config(config_path)
-    
+
     # Extract navigator configuration section
     navigator_config = config.get("navigator", {})
-    
+
     # Check if we need to create a multi-agent navigator
     is_multi_agent = "positions" in navigator_config
-    
+
     # Set parameters from configuration with defaults
     params: Dict[str, Any] = {}
-    
+
     if is_multi_agent:
         # Multi-agent parameters
         params["positions"] = navigator_config.get("positions", None)
@@ -50,12 +50,9 @@ def create_navigator_from_config(config_path: Optional[Union[str, Path]] = None,
         params["speed"] = navigator_config.get("speed", 0.0)
         params["max_speed"] = navigator_config.get("max_speed", 1.0)
         params["angular_velocity"] = navigator_config.get("angular_velocity", 0.0)
-    
+
     # Override with any explicitly provided parameters
-    params.update(kwargs)
-    
+    params |= kwargs
+
     # Create and return the navigator
-    if is_multi_agent:
-        return VectorizedNavigator(**params)
-    else:
-        return Navigator(**params)
+    return VectorizedNavigator(**params) if is_multi_agent else Navigator(**params)

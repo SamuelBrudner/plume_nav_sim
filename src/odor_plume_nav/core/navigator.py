@@ -285,7 +285,12 @@ class Navigator:
         """Determine the number of agents from array shapes or num_agents parameter."""
         # Try to infer from array shapes
         if params.get('positions') is not None:
-            return params['positions'].shape[0]
+            positions = params['positions']
+            # Handle both NumPy arrays and lists
+            if hasattr(positions, 'shape'):
+                return positions.shape[0]
+            elif isinstance(positions, list):
+                return len(positions)
         elif params.get('orientations') is not None:
             return len(params['orientations'])
         elif params.get('speeds') is not None:
@@ -334,6 +339,10 @@ class Navigator:
     
     def _initialize_attributes(self, params):
         """Initialize object attributes from prepared parameters."""
+        # Convert positions to NumPy arrays if they're lists
+        if isinstance(params['positions'], list):
+            params['positions'] = np.array(params['positions'], dtype=float)
+        
         # Store vectorized parameters as attributes
         self.positions = params['positions']
         self._orientations = params['orientations']
@@ -581,7 +590,7 @@ class Navigator:
                     pass
         
         # Return a single float if in single-agent mode, otherwise return the array
-        return float(odor_values[0]) if self._single_agent else odor_values
+        return odor_values[0] if self._single_agent else odor_values
     
     def sample_odor(self, env_array: np.ndarray) -> Union[float, np.ndarray]:
         """
@@ -596,6 +605,39 @@ class Navigator:
         """
         # Use the implementation of odor reading
         return self.read_single_antenna_odor(env_array)
+        
+    def sample_multiple_sensors(
+        self, 
+        env_array: np.ndarray, 
+        sensor_distance: float = 5.0,
+        sensor_angle: float = 45.0,
+        num_sensors: int = 2
+    ) -> Union[np.ndarray, List[float]]:
+        """
+        Sample odor values from multiple sensors for all navigators.
+        
+        This method places sensors at specified distances and angles around each
+        navigator and samples the odor values at those positions.
+        
+        Args:
+            env_array: 2D array representing the environment (e.g., video frame)
+            sensor_distance: Distance of sensors from navigator position
+            sensor_angle: Angle between sensors in degrees
+            num_sensors: Number of sensors per navigator
+            
+        Returns:
+            For single agent: list of odor values for each sensor
+            For multiple agents: array of shape (num_agents, num_sensors) with odor values
+        """
+        from odor_plume_nav.utils import sample_odor_at_sensors
+        
+        # Use the utility function to sample odors at sensor positions
+        odor_values = sample_odor_at_sensors(
+            self, env_array, sensor_distance, sensor_angle, num_sensors
+        )
+        
+        # Return appropriate type based on agent mode
+        return odor_values[0].tolist() if self._single_agent else odor_values
 
 class VectorizedNavigator(Navigator):
     """Legacy class for backward compatibility. Use Navigator instead."""

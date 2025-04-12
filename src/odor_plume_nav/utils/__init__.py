@@ -15,6 +15,14 @@ from odor_plume_nav.utils.io import (
     save_numpy,
 )
 
+# Export navigator utilities from this module
+from odor_plume_nav.utils.navigator_utils import (
+    normalize_array_parameter,
+    create_navigator_from_params,
+    calculate_sensor_positions,
+    sample_odor_at_sensors,
+)
+
 # Export logging utilities from this module
 from odor_plume_nav.utils.logging_setup import (
     setup_logger,
@@ -22,12 +30,6 @@ from odor_plume_nav.utils.logging_setup import (
     DEFAULT_FORMAT,
     MODULE_FORMAT,
     LOG_LEVELS,
-)
-
-# Export navigator utilities from this module
-from odor_plume_nav.utils.navigator_utils import (
-    normalize_array_parameter,
-    create_navigator_from_params,
 )
 
 __all__ = [
@@ -39,14 +41,16 @@ __all__ = [
     "load_numpy",
     "save_numpy",
     
+    # Navigator utilities
+    "normalize_array_parameter",
+    "create_navigator_from_params",
+    "calculate_sensor_positions",
+    "sample_odor_at_sensors",
+    
     # Logging utilities
     "setup_logger",
     "get_module_logger",
     "DEFAULT_FORMAT",
     "MODULE_FORMAT",
     "LOG_LEVELS",
-    
-    # Navigator utilities
-    "normalize_array_parameter",
-    "create_navigator_from_params",
 ]
