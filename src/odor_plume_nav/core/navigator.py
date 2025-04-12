@@ -4,6 +4,8 @@ Navigator module for odor plume navigation.
 This module provides the core Navigator class for navigating in odor plume environments.
 """
 
+
+import contextlib
 from typing import Tuple, Union, Any, Optional, List, Dict
 import math
 import numpy as np
@@ -541,7 +543,7 @@ class Navigator:
         # Check if this is a mock plume object (for testing)
         if hasattr(env_array, 'current_frame'):
             env_array = env_array.current_frame
-            
+
         # Get dimensions of environment array or handle mock objects
         if hasattr(env_array, 'shape') and env_array.shape:
             # Regular NumPy array with valid shape
@@ -549,47 +551,32 @@ class Navigator:
         else:
             # For mock objects in tests or arrays without shape
             # Return zero for single agent or zeros for multiple agents
-            if self._single_agent:
-                return 0.0
-            else:
-                return np.zeros(self.num_agents)
-        
+            return 0.0 if self._single_agent else np.zeros(self.num_agents)
         # Initialize odor values
         odor_values = np.zeros(self.num_agents)
-        
+
         # Convert positions to integer coordinates
         try:
             x_pos = np.array(self.positions[:, 0], dtype=int)
             y_pos = np.array(self.positions[:, 1], dtype=int)
         except (IndexError, TypeError):
             # Handle edge cases where positions might be empty
-            if self._single_agent:
-                return 0.0
-            else:
-                return np.zeros(self.num_agents)
-        
+            return 0.0 if self._single_agent else np.zeros(self.num_agents)
         # Check which positions are within bounds
         x_within_bounds = (x_pos >= 0) & (x_pos < width)
         y_within_bounds = (y_pos >= 0) & (y_pos < height)
         within_bounds = x_within_bounds & y_within_bounds
-        
+
         # For positions within bounds, get odor values
         for i in range(self.num_agents):
             if i < len(within_bounds) and within_bounds[i]:
                 # Note: NumPy indexing is [y, x]
-                try:
-                    odor_value = env_array[y_pos[i], x_pos[i]]
+                odor_values[i] = env_array[y_pos[i], x_pos[i]]
+
+                # Normalize if uint8 array (likely from video frame)
+                if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
+                    odor_values[i] /= 255.0
                     
-                    # Normalize if uint8 array (likely from video frame)
-                    if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
-                        odor_values[i] = odor_value / 255.0
-                    else:
-                        odor_values[i] = odor_value
-                except (IndexError, TypeError):
-                    # If we get any errors accessing the array, just leave as zero
-                    pass
-        
-        # Return a single float if in single-agent mode, otherwise return the array
         return odor_values[0] if self._single_agent else odor_values
     
     def sample_odor(self, env_array: np.ndarray) -> Union[float, np.ndarray]:
@@ -611,33 +598,41 @@ class Navigator:
         env_array: np.ndarray, 
         sensor_distance: float = 5.0,
         sensor_angle: float = 45.0,
-        num_sensors: int = 2
-    ) -> Union[np.ndarray, List[float]]:
+        num_sensors: int = 2,
+        layout_name: Optional[str] = None
+    ) -> Union[np.ndarray, np.ndarray]:
         """
-        Sample odor values from multiple sensors for all navigators.
+        Sample odor concentrations at multiple sensor positions for each navigator.
         
         This method places sensors at specified distances and angles around each
         navigator and samples the odor values at those positions.
         
         Args:
-            env_array: 2D array representing the environment (e.g., video frame)
-            sensor_distance: Distance of sensors from navigator position
-            sensor_angle: Angle between sensors in degrees
+            env_array: Environment array (e.g., odor plume frame)
+            sensor_distance: Distance from navigator position to each sensor
+            sensor_angle: Angular separation between sensors in degrees
             num_sensors: Number of sensors per navigator
+            layout_name: If provided, use a predefined sensor layout instead of
+                        creating one with the angle/distance parameters
             
         Returns:
-            For single agent: list of odor values for each sensor
-            For multiple agents: array of shape (num_agents, num_sensors) with odor values
+            For single navigators: numpy array with shape (num_sensors,)
+            For multiple navigators: numpy array with shape (num_agents, num_sensors)
         """
-        from odor_plume_nav.utils import sample_odor_at_sensors
+        from odor_plume_nav.utils.navigator_utils import sample_odor_at_sensors
         
         # Use the utility function to sample odors at sensor positions
         odor_values = sample_odor_at_sensors(
-            self, env_array, sensor_distance, sensor_angle, num_sensors
+            self, 
+            env_array, 
+            sensor_distance=sensor_distance,
+            sensor_angle=sensor_angle, 
+            num_sensors=num_sensors,
+            layout_name=layout_name
         )
-        
-        # Return appropriate type based on agent mode
-        return odor_values[0].tolist() if self._single_agent else odor_values
+
+        # Return appropriate shape based on number of agents
+        return odor_values[0] if self.num_agents == 1 else odor_values
 
 class VectorizedNavigator(Navigator):
     """Legacy class for backward compatibility. Use Navigator instead."""

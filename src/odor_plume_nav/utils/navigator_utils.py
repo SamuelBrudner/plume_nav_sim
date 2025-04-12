@@ -13,6 +13,26 @@ import numpy as np
 from odor_plume_nav.core.navigator import Navigator, VectorizedNavigator
 
 
+# A dictionary of *base* local sensor offsets (in arbitrary units).
+# Each row is [x_offset, y_offset] in the agent's local frame:
+#   - The agent faces +x
+#   - +y is "left" of the agent (using standard math orientation)
+PREDEFINED_SENSOR_LAYOUTS: Dict[str, np.ndarray] = {
+    "SINGLE": np.array([[0.0, 0.0]]),
+    # Left–Right: one sensor at +y, the other at –y
+    "LEFT_RIGHT": np.array([
+        [0.0,  1.0],
+        [0.0, -1.0],
+    ]),
+    # Example: place one sensor forward, plus left and right.
+    "FRONT_SIDES": np.array([
+        [1.0,  0.0],
+        [0.0,  1.0],
+        [0.0, -1.0],
+    ]),
+}
+
+
 def normalize_array_parameter(param: Any, num_agents: int) -> Optional[np.ndarray]:
     """
     Normalize a parameter to a numpy array of the appropriate length.
@@ -96,6 +116,39 @@ def create_navigator_from_params(
             max_speed=max_speeds,
             angular_velocity=angular_velocities
         )
+
+
+def get_predefined_sensor_layout(
+    layout_name: str,
+    distance: float = 5.0
+) -> np.ndarray:
+    """
+    Return a predefined set of sensor offsets (in the agent's local frame),
+    scaled by the given distance.
+
+    Parameters
+    ----------
+    layout_name : str
+        Name of the layout; must be a key of PREDEFINED_SENSOR_LAYOUTS.
+    distance : float
+        Factor to scale the base offsets (e.g. "how far" each sensor is).
+
+    Returns
+    -------
+    offsets : np.ndarray
+        Shape (num_sensors, 2). The local (x, y) offsets for each sensor.
+    """
+    base_offsets = PREDEFINED_SENSOR_LAYOUTS.get(layout_name.upper())
+    if base_offsets is None:
+        valid = ", ".join(list(PREDEFINED_SENSOR_LAYOUTS.keys()))
+        raise ValueError(
+            f"Unknown sensor layout '{layout_name}'. "
+            f"Valid options are: {valid}"
+        )
+    # Multiply each offset by distance. If base_offsets has dimensionless entries
+    # that set geometry, we can scale them to place the sensors "distance" away
+    # from the agent center.
+    return base_offsets * distance
 
 
 def define_sensor_offsets(
@@ -182,7 +235,8 @@ def calculate_sensor_positions(
     navigator: Union[Navigator, VectorizedNavigator],
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
-    num_sensors: int = 2
+    num_sensors: int = 2,
+    layout_name: Optional[str] = None
 ) -> np.ndarray:
     """
     Calculate sensor positions given a local sensor geometry and each agent's
@@ -198,6 +252,9 @@ def calculate_sensor_positions(
         Angular increment between sensors in degrees.
     num_sensors : int
         Number of sensors per agent.
+    layout_name : Optional[str]
+        If provided, use this predefined sensor layout instead of 
+        creating one based on num_sensors and sensor_angle.
 
     Returns
     -------
@@ -205,7 +262,13 @@ def calculate_sensor_positions(
         Shape (num_agents, num_sensors, 2). The global (x, y) for each sensor.
     """
     # 1. Define the sensor geometry once in local coordinates
-    local_offsets = define_sensor_offsets(num_sensors, sensor_distance, sensor_angle)
+    if layout_name is not None:
+        # Use a predefined layout
+        local_offsets = get_predefined_sensor_layout(layout_name, distance=sensor_distance)
+        num_sensors = local_offsets.shape[0]  # Update num_sensors based on layout
+    else:
+        # Create a layout based on parameters
+        local_offsets = define_sensor_offsets(num_sensors, sensor_distance, sensor_angle)
     
     # 2. Prepare arrays
     num_agents = navigator.num_agents
@@ -222,12 +285,70 @@ def calculate_sensor_positions(
     return sensor_positions
 
 
+def compute_sensor_positions(
+    agent_positions: np.ndarray,
+    agent_orientations: np.ndarray,
+    layout_name: str = None,
+    distance: float = 5.0,
+    angle: float = 45.0,
+    num_sensors: int = 2
+) -> np.ndarray:
+    """
+    Compute sensor positions in global coordinates, given each agent's position
+    and orientation, and either a named sensor layout or parameters to create one.
+
+    Parameters
+    ----------
+    agent_positions : np.ndarray
+        Shape (num_agents, 2). Each row is [x, y].
+    agent_orientations : np.ndarray
+        Shape (num_agents,). Each entry is orientation in degrees.
+    layout_name : str, optional
+        Name of the predefined sensor layout, e.g. "SINGLE", "LEFT_RIGHT".
+        If None, a layout will be created based on num_sensors and angle.
+    distance : float
+        Scale factor to apply to the base layout offsets.
+    angle : float
+        Angular increment between sensors in degrees.
+    num_sensors : int
+        Number of sensors per agent, used only if layout_name is None.
+
+    Returns
+    -------
+    sensor_positions : np.ndarray
+        Shape (num_agents, num_sensors, 2). The global positions of each sensor.
+    """
+    # 1. Get the local offsets
+    if layout_name is not None:
+        local_offsets = get_predefined_sensor_layout(layout_name, distance=distance)
+        num_sensors = local_offsets.shape[0]  # Update num_sensors based on layout
+    else:
+        local_offsets = define_sensor_offsets(num_sensors, distance, angle)
+
+    num_agents = agent_positions.shape[0]
+    sensor_positions = np.zeros((num_agents, num_sensors, 2), dtype=float)
+    
+    # 2. For each agent, rotate each offset by orientation & add the agent's position
+    for agent_idx in range(num_agents):
+        # Current agent's global position and heading
+        agent_pos = agent_positions[agent_idx]
+        agent_orientation = agent_orientations[agent_idx]
+        
+        for sensor_idx in range(num_sensors):
+            local_offset = local_offsets[sensor_idx]
+            rotated = rotate_offset(local_offset, agent_orientation)
+            sensor_positions[agent_idx, sensor_idx] = agent_pos + rotated
+
+    return sensor_positions
+
+
 def sample_odor_at_sensors(
     navigator: Union[Navigator, VectorizedNavigator],
     env_array: np.ndarray,
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
-    num_sensors: int = 2
+    num_sensors: int = 2,
+    layout_name: Optional[str] = None
 ) -> np.ndarray:
     """
     Sample odor values at sensor positions for all navigators.
@@ -238,13 +359,15 @@ def sample_odor_at_sensors(
         sensor_distance: Distance of sensors from navigator position
         sensor_angle: Angle between sensors in degrees
         num_sensors: Number of sensors per navigator
+        layout_name: If provided, use this predefined sensor layout instead of 
+                    creating one based on num_sensors and sensor_angle
         
     Returns:
         Array of odor readings with shape (num_agents, num_sensors)
     """
     # Calculate sensor positions
     sensor_positions = calculate_sensor_positions(
-        navigator, sensor_distance, sensor_angle, num_sensors
+        navigator, sensor_distance, sensor_angle, num_sensors, layout_name
     )
     
     # Check if this is a mock plume object (for testing)
@@ -258,10 +381,11 @@ def sample_odor_at_sensors(
     else:
         # For mock objects in tests or arrays without shape
         # Return zeros for all sensors and agents
-        return np.zeros((navigator.num_agents, num_sensors))
+        return np.zeros((navigator.num_agents, sensor_positions.shape[1]))
     
     # Initialize odor values
     num_agents = navigator.num_agents
+    num_sensors = sensor_positions.shape[1]
     odor_values = np.zeros((num_agents, num_sensors))
     
     # Sample odor at each sensor position using itertools.product
