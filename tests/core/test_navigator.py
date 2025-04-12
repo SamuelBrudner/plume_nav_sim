@@ -7,17 +7,15 @@ import pytest
 
 # Import from the new core module
 from odor_plume_nav.core import Navigator
-from odor_plume_nav.core import LegacyNavigator
 
 # Import the validation helpers
 from tests.helpers.import_validator import assert_imported_from
 
 
-# Validate imports - this will fail until the migration is complete
+# Validate imports for protocol-based Navigator
 def test_proper_imports():
     """Test that Navigator is imported from the correct module."""
     assert_imported_from(Navigator, "odor_plume_nav.core.navigator")
-    assert_imported_from(LegacyNavigator, "odor_plume_nav.core.legacy_navigator")
 
 
 def test_single_agent_initialization():

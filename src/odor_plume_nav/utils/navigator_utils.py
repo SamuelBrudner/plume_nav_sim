@@ -11,7 +11,6 @@ import itertools
 import numpy as np
 
 from odor_plume_nav.core.navigator import Navigator
-from odor_plume_nav.core.legacy_navigator import Navigator as LegacyNavigator, VectorizedNavigator
 from odor_plume_nav.core.protocols import NavigatorProtocol
 
 

@@ -17,11 +17,12 @@ from odor_plume_nav.api import (
     visualize_simulation_results,
 )
 
-# Import using the renamed legacy navigator to avoid conflicts with new implementation
-# Import the new protocol-based navigators in the refactor branch
+# Import the protocol-based navigator implementation
 from odor_plume_nav.core import (
-    LegacyNavigator as Navigator, 
-    VectorizedNavigator, 
+    Navigator,
+    SingleAgentController,
+    MultiAgentController,
+    NavigatorProtocol,
     run_simulation
 )
 from odor_plume_nav.environments import VideoPlume
