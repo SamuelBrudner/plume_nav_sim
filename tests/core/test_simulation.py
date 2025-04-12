@@ -14,23 +14,23 @@ def mock_navigator():
     mock_nav = MagicMock(spec=Navigator)
     
     # Configure the mock for a single agent
-    mock_nav._single_agent = True
+    mock_nav.is_single_agent = True
     mock_nav.num_agents = 1
     mock_nav.positions = np.array([[0.0, 0.0]])
     mock_nav.orientations = np.array([0.0])
     mock_nav.speeds = np.array([1.0])
     
-    # Mock the update method
-    def mock_update(dt=1.0):
+    # Mock the step method
+    def mock_step(env_array):
         # Simulate movement along the x-axis
-        mock_nav.positions[0, 0] += mock_nav.speeds[0] * dt
+        mock_nav.positions[0, 0] += mock_nav.speeds[0]
     
     # Mock the sample_odor method
     def mock_sample_odor(env_array):
         # Return a constant odor value
-        return 0.5 if mock_nav._single_agent else np.array([0.5])
+        return np.array([0.5])  # Return as array for consistent API
     
-    mock_nav.update.side_effect = mock_update
+    mock_nav.step.side_effect = mock_step
     mock_nav.sample_odor.side_effect = mock_sample_odor
     
     return mock_nav
@@ -76,8 +76,8 @@ def test_run_simulation_single_agent(mock_navigator, mock_plume):
     assert orientations.shape == (1, num_steps + 1)  # (num_agents, num_steps + 1)
     assert odor_readings.shape == (1, num_steps + 1)  # (num_agents, num_steps + 1)
     
-    # Check that update was called the correct number of times
-    assert mock_navigator.update.call_count == num_steps
+    # Check that step was called the correct number of times
+    assert mock_navigator.step.call_count == num_steps
     
     # Check that sample_odor was called the correct number of times
     assert mock_navigator.sample_odor.call_count == num_steps + 1
@@ -89,24 +89,24 @@ def mock_multi_navigator():
     mock_nav = MagicMock(spec=Navigator)
     
     # Configure the mock for multiple agents
-    mock_nav._single_agent = False
+    mock_nav.is_single_agent = False
     mock_nav.num_agents = 2
     mock_nav.positions = np.array([[0.0, 0.0], [10.0, 10.0]])
     mock_nav.orientations = np.array([0.0, 90.0])
     mock_nav.speeds = np.array([1.0, 0.5])
     
-    # Mock the update method
-    def mock_update(dt=1.0):
+    # Mock the step method
+    def mock_step(env_array):
         # Simulate movement along respective axes
-        mock_nav.positions[0, 0] += mock_nav.speeds[0] * dt  # Agent 1 along x-axis
-        mock_nav.positions[1, 1] += mock_nav.speeds[1] * dt  # Agent 2 along y-axis
+        mock_nav.positions[0, 0] += mock_nav.speeds[0]  # Agent 1 along x-axis
+        mock_nav.positions[1, 1] += mock_nav.speeds[1]  # Agent 2 along y-axis
     
     # Mock the sample_odor method
     def mock_sample_odor(env_array):
-        # Return different odor values for each agent
+        # Return different odor values for each agent as numpy array
         return np.array([0.5, 0.7])
     
-    mock_nav.update.side_effect = mock_update
+    mock_nav.step.side_effect = mock_step
     mock_nav.sample_odor.side_effect = mock_sample_odor
     
     return mock_nav
@@ -128,8 +128,8 @@ def test_run_simulation_multi_agent(mock_multi_navigator, mock_plume):
     assert orientations.shape == (2, num_steps + 1)  # (num_agents, num_steps + 1)
     assert odor_readings.shape == (2, num_steps + 1)  # (num_agents, num_steps + 1)
     
-    # Check that update was called the correct number of times
-    assert mock_multi_navigator.update.call_count == num_steps
+    # Check that step was called the correct number of times
+    assert mock_multi_navigator.step.call_count == num_steps
     
     # Check that sample_odor was called the correct number of times
     assert mock_multi_navigator.sample_odor.call_count == num_steps + 1
@@ -156,26 +156,27 @@ def test_run_simulation_with_custom_sensors(mock_navigator, mock_plume):
 
 
 def test_run_simulation_with_custom_step_size(mock_navigator, mock_plume):
-    """Test that step_size affects the simulation."""
-    # Run the simulation with a larger step size
-    num_steps = 5
-    positions_large_step, _, _ = run_simulation(
-        mock_navigator,
-        mock_plume,
-        num_steps=num_steps,
-        step_size=2.0  # Larger step size
+    """Test simulation with different step configurations."""
+    positions_few_steps = (
+        _extracted_from_test_run_simulation_with_custom_step_size_(
+            mock_navigator, 3, mock_plume
+        )
     )
-    
-    # Reset the navigator position
+    positions_many_steps = (
+        _extracted_from_test_run_simulation_with_custom_step_size_(
+            mock_navigator, 6, mock_plume
+        )
+    )
+    # With more steps, the agent should move farther
+    assert positions_many_steps[0, -1, 0] > positions_few_steps[0, -1, 0]
+
+
+# TODO Rename this here and in `test_run_simulation_with_custom_step_size`
+def _extracted_from_test_run_simulation_with_custom_step_size_(mock_navigator, arg1, mock_plume):
     mock_navigator.positions = np.array([[0.0, 0.0]])
-    
-    # Run the simulation with a smaller step size
-    positions_small_step, _, _ = run_simulation(
-        mock_navigator,
-        mock_plume,
-        num_steps=num_steps,
-        step_size=1.0  # Smaller step size
+    num_steps_few = arg1
+    result, _, _ = run_simulation(
+        mock_navigator, mock_plume, num_steps=num_steps_few
     )
-    
-    # With larger step size, the agent should move farther
-    assert positions_large_step[0, -1, 0] > positions_small_step[0, -1, 0]
+
+    return result

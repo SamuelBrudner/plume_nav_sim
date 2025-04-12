@@ -18,12 +18,16 @@ def test_create_navigator_default():
     """Test creating a navigator with default parameters."""
     navigator = create_navigator()
     
-    # Should create a default Navigator instance
-    assert navigator._single_agent is True
-    # Check default values from Navigator class
-    assert navigator.orientation == 0.0
-    assert navigator.speed == 0.0
-    assert navigator.max_speed == 1.0
+    # Should create a default Navigator instance (single agent)
+    # Check default values aligned with the protocol-based Navigator
+    assert navigator.positions.shape == (1, 2)  # Single agent with 2D position
+    assert navigator.orientations.shape == (1,)  # Single agent orientation
+    assert navigator.speeds.shape == (1,)  # Single agent speed
+    
+    # Check default values
+    assert navigator.orientations[0] == 0.0
+    assert navigator.speeds[0] == 0.0
+    assert navigator.max_speeds[0] == 1.0
 
 
 def test_create_navigator_single_agent():
@@ -37,13 +41,16 @@ def test_create_navigator_single_agent():
     )
     
     # Check that the navigator has the correct properties
-    assert navigator.orientation == 45
-    assert navigator.speed == 0.5
-    assert navigator.max_speed == 2.0
-    assert navigator.get_position() == (10, 20)
+    # In the protocol-based architecture, properties are array-based
+    assert navigator.orientations[0] == 45
+    assert navigator.speeds[0] == 0.5
+    assert navigator.max_speeds[0] == 2.0
+    assert np.allclose(navigator.positions[0], [10, 20])
     
-    # Check that it's in single-agent mode
-    assert navigator._single_agent is True
+    # Check that it's a single-agent navigator by verifying array lengths
+    assert len(navigator.positions) == 1
+    assert len(navigator.orientations) == 1
+    assert len(navigator.speeds) == 1
 
 
 def test_create_navigator_multi_agent():
@@ -60,18 +67,19 @@ def test_create_navigator_multi_agent():
     )
     
     # Check that the navigator has the correct number of agents
-    assert navigator.num_agents == 3
+    assert len(navigator.positions) == 3
     
-    # Check the properties of the first agent
-    assert navigator.orientation == 45
-    assert navigator.speed == 0.5
+    # Check the properties of the first agent using array indexing
+    assert navigator.orientations[0] == 45
+    assert navigator.speeds[0] == 0.5
     
     # Check that all agents have correct positions
     for i, expected_pos in enumerate(positions):
         assert np.allclose(navigator.positions[i], expected_pos)
     
-    # Check that it's not in single-agent mode
-    assert navigator._single_agent is False
+    # Verify each agent has correct orientation and speed
+    assert np.allclose(navigator.orientations, orientations)
+    assert np.allclose(navigator.speeds, speeds)
 
 
 def test_create_navigator_numpy_array_positions():
@@ -81,9 +89,15 @@ def test_create_navigator_numpy_array_positions():
     
     navigator = create_navigator(positions=positions)
     
-    assert navigator._single_agent is False
-    assert navigator.num_agents == 3
+    # Check it's a multi-agent navigator with the right number of agents
+    assert len(navigator.positions) == 3
+    
+    # Verify positions were set correctly
     assert np.allclose(navigator.positions, positions)
+    
+    # Check default values for other properties
+    assert np.allclose(navigator.orientations, np.zeros(3))
+    assert np.allclose(navigator.speeds, np.zeros(3))
 
 
 @pytest.fixture
@@ -118,33 +132,40 @@ def test_create_navigator_from_config(mock_config_load):
     # Verify config was loaded
     mock_config_load.assert_called_once_with("test_config.yaml")
     
-    # Check that the navigator has the correct properties
-    assert navigator.num_agents == 2
-    assert navigator.orientation == 45
-    assert navigator.speed == 0.5
-    assert np.allclose(navigator.positions[0], [10, 20])
+    # Check that the navigator has the correct properties with multi-agent protocol
+    assert len(navigator.positions) == 2  # Two agents from config
+    assert navigator.orientations[0] == 45  # First agent's orientation
+    assert navigator.speeds[0] == 0.5  # First agent's speed
+    assert np.allclose(navigator.positions[0], [10, 20])  # First agent's position
 
 
 def test_create_navigator_from_config_single_agent(mock_config_load):
     """Test creating a single-agent navigator from config."""
-    # Modify the mock to return a single agent config
+    # Override the mock to return a single-agent config
     mock_config_load.return_value = {
-        "position": (5, 10),
-        "orientation": 30,
-        "speed": 0.8,
-        "max_speed": 2.0,
+        "position": (10, 20),
+        "orientation": 45,
+        "speed": 0.5,
+        "max_speed": 1.0,
         "video_plume": {
-            "flip": False
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.0
         }
     }
     
+    # Create a navigator from the single-agent config
     navigator = create_navigator(config_path="single_agent_config.yaml")
     
-    # Verify single agent mode
-    assert navigator._single_agent is True
-    assert navigator.get_position() == (5, 10)
-    assert navigator.orientation == 30
-    assert navigator.speed == 0.8
+    # Verify config was loaded
+    mock_config_load.assert_called_once_with("single_agent_config.yaml")
+    
+    # Check that the navigator has the correct properties with single-agent protocol
+    assert len(navigator.positions) == 1  # Single agent
+    assert navigator.orientations[0] == 45
+    assert navigator.speeds[0] == 0.5
+    assert navigator.max_speeds[0] == 1.0
+    assert np.allclose(navigator.positions[0], [10, 20])
 
 
 @pytest.fixture

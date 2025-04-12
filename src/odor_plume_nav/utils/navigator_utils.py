@@ -10,7 +10,9 @@ from contextlib import suppress
 import itertools
 import numpy as np
 
-from odor_plume_nav.core.navigator import Navigator, VectorizedNavigator
+from odor_plume_nav.core.navigator import Navigator
+from odor_plume_nav.core.legacy_navigator import Navigator as LegacyNavigator, VectorizedNavigator
+from odor_plume_nav.core.protocols import NavigatorProtocol
 
 
 # A dictionary of *base* local sensor offsets (in arbitrary units).
@@ -64,7 +66,7 @@ def create_navigator_from_params(
     speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     angular_velocities: Optional[Union[float, List[float], np.ndarray]] = None,
-) -> Union[Navigator, VectorizedNavigator]:
+) -> Navigator:
     """
     Create a navigator from parameter values.
     
@@ -76,7 +78,7 @@ def create_navigator_from_params(
         angular_velocities: Initial angular velocities of the agents (in degrees per second)
         
     Returns:
-        A Navigator instance (for single agent) or VectorizedNavigator instance (for multiple agents)
+        A Navigator instance that automatically handles single or multi-agent scenarios
     """
     # Detect if we're creating a single or multi-agent navigator
     is_multi_agent = False
@@ -98,10 +100,9 @@ def create_navigator_from_params(
         speeds = normalize_array_parameter(speeds, num_agents)
         max_speeds = normalize_array_parameter(max_speeds, num_agents)
         angular_velocities = normalize_array_parameter(angular_velocities, num_agents)
-    
-    # Create the appropriate navigator type
-    if is_multi_agent:
-        return VectorizedNavigator(
+        
+        # Create a multi-agent navigator
+        return Navigator(
             positions=positions,
             orientations=orientations,
             speeds=speeds,
@@ -109,6 +110,7 @@ def create_navigator_from_params(
             angular_velocities=angular_velocities
         )
     else:
+        # Create a single-agent navigator
         return Navigator(
             position=positions,
             orientation=orientations,
@@ -130,25 +132,25 @@ def get_predefined_sensor_layout(
     ----------
     layout_name : str
         Name of the layout; must be a key of PREDEFINED_SENSOR_LAYOUTS.
-    distance : float
-        Factor to scale the base offsets (e.g. "how far" each sensor is).
+    distance : float, default=5.0
+        Scaling distance.
 
     Returns
     -------
     offsets : np.ndarray
         Shape (num_sensors, 2). The local (x, y) offsets for each sensor.
     """
-    base_offsets = PREDEFINED_SENSOR_LAYOUTS.get(layout_name.upper())
-    if base_offsets is None:
-        valid = ", ".join(list(PREDEFINED_SENSOR_LAYOUTS.keys()))
+    # Get the base layout
+    try:
+        layout = PREDEFINED_SENSOR_LAYOUTS[layout_name]
+    except KeyError as e:
         raise ValueError(
-            f"Unknown sensor layout '{layout_name}'. "
-            f"Valid options are: {valid}"
-        )
-    # Multiply each offset by distance. If base_offsets has dimensionless entries
-    # that set geometry, we can scale them to place the sensors "distance" away
-    # from the agent center.
-    return base_offsets * distance
+            f"Unknown sensor layout: {layout_name}. "
+            f"Available layouts: {list(PREDEFINED_SENSOR_LAYOUTS.keys())}"
+        ) from e
+
+    # Scale by the requested distance
+    return layout * distance
 
 
 def define_sensor_offsets(
@@ -161,16 +163,18 @@ def define_sensor_offsets(
     where the agent's heading is [1, 0].
     
     Angles are distributed symmetrically around 0 degrees for even counts,
-    and around 0 degrees plus a center sensor for odd counts.
+    or from -angle_range/2 to +angle_range/2 for odd counts.
     
     Parameters
     ----------
     num_sensors : int
-        Number of sensors per agent.
+        Number of sensors to create.
     distance : float
-        Radial distance from the agent's center to each sensor.
+        Distance from agent center to sensors.
     angle : float
-        Angular increment between adjacent sensors in degrees.
+        Angular increment between sensors, in degrees.
+        If there are n sensors, the total angular range will be:
+        (n-1) * angle.
         
     Returns
     -------
@@ -178,33 +182,26 @@ def define_sensor_offsets(
         Shape (num_sensors, 2). Each row is the (x, y) offset
         in the agent's local coordinates.
     """
-    offsets = []
-    # Example: for 2 sensors and angle=45, we want +22.5 and -22.5 around heading
-    # For 3 sensors, angles might be -45, 0, +45, etc.
-    if num_sensors % 2 == 1:
-        # Odd number of sensors; center sensor has offset=0
-        mid = num_sensors // 2
-        for i in range(num_sensors):
-            offset_i = i - mid
-            theta_deg = offset_i * angle
-            theta_rad = np.radians(theta_deg)
-            offsets.append([
-                distance * np.cos(theta_rad),
-                distance * np.sin(theta_rad)
-            ])
-    else:
-        # Even number of sensors; distribute symmetrically around 0
-        # e.g., for 2 sensors at +/- angle/2, 4 sensors at +/- angle, etc.
-        half = (num_sensors - 1) / 2
-        for i in range(num_sensors):
-            offset_i = i - half
-            theta_deg = offset_i * angle
-            theta_rad = np.radians(theta_deg)
-            offsets.append([
-                distance * np.cos(theta_rad),
-                distance * np.sin(theta_rad)
-            ])
-    return np.array(offsets, dtype=float)
+    # Calculate start angle
+    total_angle_range = (num_sensors - 1) * angle
+    start_angle = -total_angle_range / 2
+    
+    # Create array to store offsets
+    offsets = np.zeros((num_sensors, 2))
+    
+    # Calculate offset for each sensor
+    for i in range(num_sensors):
+        # Current angle in degrees, starting from -total_range/2
+        current_angle = start_angle + i * angle
+        
+        # Convert to radians
+        current_angle_rad = np.deg2rad(current_angle)
+        
+        # Calculate offset using polar coordinates
+        offsets[i, 0] = distance * np.cos(current_angle_rad)  # x
+        offsets[i, 1] = distance * np.sin(current_angle_rad)  # y
+        
+    return offsets
 
 
 def rotate_offset(local_offset: np.ndarray, orientation_deg: float) -> np.ndarray:
@@ -223,16 +220,21 @@ def rotate_offset(local_offset: np.ndarray, orientation_deg: float) -> np.ndarra
     global_offset : np.ndarray
         (2,) array representing the offset in global coordinates.
     """
-    theta_rad = np.radians(orientation_deg)
-    c, s = np.cos(theta_rad), np.sin(theta_rad)
-    # 2D rotation matrix
-    R = np.array([[c, -s],
-                  [s,  c]])
-    return R @ local_offset
+    # Convert to radians
+    orientation_rad = np.deg2rad(orientation_deg)
+    
+    # Create rotation matrix
+    rotation_matrix = np.array([
+        [np.cos(orientation_rad), -np.sin(orientation_rad)],
+        [np.sin(orientation_rad),  np.cos(orientation_rad)]
+    ])
+    
+    # Apply rotation
+    return rotation_matrix @ local_offset
 
 
 def calculate_sensor_positions(
-    navigator: Union[Navigator, VectorizedNavigator],
+    navigator: NavigatorProtocol,
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
     num_sensors: int = 2,
@@ -244,45 +246,31 @@ def calculate_sensor_positions(
 
     Parameters
     ----------
-    navigator : Navigator or VectorizedNavigator
-        The agent(s) whose sensor positions we want to compute.
+    navigator : NavigatorProtocol
+        Navigator with position and orientation information
     sensor_distance : float
-        Radial distance from the agent center to each sensor.
+        Distance from agent center to each sensor
     sensor_angle : float
-        Angular increment between sensors in degrees.
+        Angle between adjacent sensors in degrees
     num_sensors : int
-        Number of sensors per agent.
-    layout_name : Optional[str]
-        If provided, use this predefined sensor layout instead of 
-        creating one based on num_sensors and sensor_angle.
+        Number of sensors per agent
+    layout_name : str, optional
+        Name of a predefined sensor layout. If provided, sensor_angle is ignored.
 
     Returns
     -------
     sensor_positions : np.ndarray
-        Shape (num_agents, num_sensors, 2). The global (x, y) for each sensor.
+        Shape (num_agents, num_sensors, 2). Each row is the (x, y)
+        position of a sensor in global coordinates.
     """
-    # 1. Define the sensor geometry once in local coordinates
-    if layout_name is not None:
-        # Use a predefined layout
-        local_offsets = get_predefined_sensor_layout(layout_name, distance=sensor_distance)
-        num_sensors = local_offsets.shape[0]  # Update num_sensors based on layout
-    else:
-        # Create a layout based on parameters
-        local_offsets = define_sensor_offsets(num_sensors, sensor_distance, sensor_angle)
-    
-    # 2. Prepare arrays
-    num_agents = navigator.num_agents
-    sensor_positions = np.zeros((num_agents, num_sensors, 2))
-    
-    # 3. For each agent, rotate each local offset by orientation and add agent's position
-    for agent_idx in range(num_agents):
-        agent_pos = navigator.positions[agent_idx]
-        agent_angle = navigator.orientations[agent_idx]
-        for sensor_idx in range(num_sensors):
-            rotated = rotate_offset(local_offsets[sensor_idx], agent_angle)
-            sensor_positions[agent_idx, sensor_idx] = agent_pos + rotated
-
-    return sensor_positions
+    return compute_sensor_positions(
+        navigator.positions,
+        navigator.orientations,
+        layout_name=layout_name,
+        distance=sensor_distance,
+        angle=sensor_angle,
+        num_sensors=num_sensors
+    )
 
 
 def compute_sensor_positions(
@@ -300,14 +288,14 @@ def compute_sensor_positions(
     Parameters
     ----------
     agent_positions : np.ndarray
-        Shape (num_agents, 2). Each row is [x, y].
+        Shape (num_agents, 2). The (x, y) positions of each agent.
     agent_orientations : np.ndarray
-        Shape (num_agents,). Each entry is orientation in degrees.
+        Shape (num_agents,). The orientation in degrees of each agent.
     layout_name : str, optional
-        Name of the predefined sensor layout, e.g. "SINGLE", "LEFT_RIGHT".
-        If None, a layout will be created based on num_sensors and angle.
+        Name of a predefined sensor layout. If provided, `angle` and 
+        `num_sensors` will be ignored.
     distance : float
-        Scale factor to apply to the base layout offsets.
+        Distance from agent center to each sensor.
     angle : float
         Angular increment between sensors in degrees.
     num_sensors : int
@@ -343,7 +331,7 @@ def compute_sensor_positions(
 
 
 def sample_odor_at_sensors(
-    navigator: Union[Navigator, VectorizedNavigator],
+    navigator: NavigatorProtocol,
     env_array: np.ndarray,
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
@@ -354,7 +342,7 @@ def sample_odor_at_sensors(
     Sample odor values at sensor positions for all navigators.
     
     Args:
-        navigator: Navigator or VectorizedNavigator instance
+        navigator: Navigator instance
         env_array: 2D array representing the environment (e.g., video frame)
         sensor_distance: Distance of sensors from navigator position
         sensor_angle: Angle between sensors in degrees

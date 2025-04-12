@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 from odor_plume_nav import navigator_factory
 from odor_plume_nav.core.navigator import Navigator
 
+
 def test_create_navigator_with_default_config(config_files):
     """Test creating a navigator with default configuration."""
     with patch('odor_plume_nav.navigator_factory.load_config', 
@@ -16,9 +17,9 @@ def test_create_navigator_with_default_config(config_files):
         navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with default settings
-        assert navigator.orientation == 0.0
-        assert navigator.speed == 0.0
-        assert navigator.max_speed == 1.0
+        assert navigator.orientations[0] == 0.0
+        assert navigator.speeds[0] == 0.0
+        assert navigator.max_speeds[0] == 1.0
 
 
 def test_create_navigator_with_user_config(config_files):
@@ -30,9 +31,9 @@ def test_create_navigator_with_user_config(config_files):
         navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with user settings
-        assert navigator.orientation == 45.0
-        assert navigator.speed == 0.5
-        assert navigator.max_speed == 2.0
+        assert navigator.orientations[0] == 45.0
+        assert navigator.speeds[0] == 0.5
+        assert navigator.max_speeds[0] == 2.0
 
 
 def test_create_navigator_with_merged_config(config_files):
@@ -48,9 +49,9 @@ def test_create_navigator_with_merged_config(config_files):
         navigator = navigator_factory.create_navigator_from_config()
         
         # Check that the navigator was created with merged settings
-        assert navigator.orientation == 90.0  # Overridden
-        assert navigator.speed == 0.0        # Default
-        assert navigator.max_speed == 1.0    # Default
+        assert navigator.orientations[0] == 90.0  # Overridden
+        assert navigator.speeds[0] == 0.0        # Default
+        assert navigator.max_speeds[0] == 1.0    # Default
 
 
 def test_create_navigator_with_additional_params(config_files):
@@ -62,6 +63,6 @@ def test_create_navigator_with_additional_params(config_files):
         navigator = navigator_factory.create_navigator_from_config(orientation=180.0, speed=0.75)
         
         # Check that the navigator was created with overridden settings
-        assert navigator.orientation == 180.0  # Explicitly provided
-        assert navigator.speed == 0.75         # Explicitly provided
-        assert navigator.max_speed == 1.0      # From default config
+        assert navigator.orientations[0] == 180.0  # Explicitly provided
+        assert navigator.speeds[0] == 0.75         # Explicitly provided
+        assert navigator.max_speeds[0] == 1.0      # From default config

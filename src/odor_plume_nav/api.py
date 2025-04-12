@@ -9,11 +9,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import pathlib
 import numpy as np
 
-from odor_plume_nav.core.navigator import Navigator, SimpleNavigator, VectorizedNavigator
-from odor_plume_nav.navigator_factory import create_navigator_from_config
+from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.environments.video_plume import VideoPlume
-from odor_plume_nav.simulation import run_simulation
-from odor_plume_nav.utils import normalize_array_parameter, create_navigator_from_params
+from odor_plume_nav.core.simulation import run_simulation
+from odor_plume_nav.utils.navigator_utils import create_navigator_from_params
 
 
 def create_navigator(
@@ -22,7 +21,7 @@ def create_navigator(
     speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     config_path: Optional[Union[str, pathlib.Path]] = None
-) -> Union[Navigator, VectorizedNavigator]:
+) -> Navigator:
     """
     Create a Navigator instance based on provided parameters or configuration.
     
@@ -36,42 +35,60 @@ def create_navigator(
                     be ignored and the configuration file will be used.
                     
     Returns:
-        A Navigator or VectorizedNavigator instance.
+        A Navigator instance.
     """
     # Configuration-based creation has priority
     if config_path is not None:
-        return _extracted_from_create_navigator_25(config_path)
+        return _load_navigator_from_config(config_path)
+    
     # Parameter-based creation
     if positions is not None:
-        return create_navigator_from_params(positions, orientations, speeds, max_speeds)
+        # Check if positions is a list of positions or a single position
+        if (isinstance(positions, (list, np.ndarray)) and 
+            len(positions) > 0 and 
+            isinstance(positions[0], (list, tuple, np.ndarray))):
+            # Multi-agent case
+            return Navigator.multi(
+                positions=positions, 
+                orientations=orientations, 
+                speeds=speeds, 
+                max_speeds=max_speeds
+            )
+        else:
+            # Single-agent case
+            return Navigator.single(
+                position=positions, 
+                orientation=orientations, 
+                speed=speeds, 
+                max_speed=max_speeds
+            )
 
-    # Default case: create a navigator with default parameters
-    return Navigator()
+    # Default case: create a single agent navigator with default parameters
+    return Navigator.single()
 
 
-# TODO Rename this here and in `create_navigator`
-def _extracted_from_create_navigator_25(config_path):
+def _load_navigator_from_config(config_path):
+    """Load a navigator from a configuration file."""
     from odor_plume_nav.config.utils import load_config
     config = load_config(config_path)
 
-    # Filter out keys that aren't relevant for Navigator initialization
-    navigator_keys = [
-        "position", "orientation", "speed", "max_speed", 
-        "positions", "orientations", "speeds", "max_speeds",
-        "angular_velocity", "angular_velocities", "num_agents"
-    ]
-    filtered_config = {k: v for k, v in config.items() if k in navigator_keys}
-
-    # Create appropriate navigator based on whether it's multi-agent
-    is_multi_agent = "positions" in filtered_config and isinstance(
-        filtered_config["positions"], (list, np.ndarray)
-    ) and len(filtered_config["positions"]) > 1
-
-    return (
-        VectorizedNavigator(**filtered_config)
-        if is_multi_agent
-        else Navigator(**filtered_config)
-    )
+    # Determine if it's a single-agent or multi-agent configuration
+    if any(k in config for k in ["positions", "orientations", "speeds", "max_speeds", "angular_velocities"]) and "positions" in config:
+        # Multi-agent case
+        multi_agent_keys = [
+            "positions", "orientations", "speeds", "max_speeds",
+            "angular_velocities"
+        ]
+        filtered_config = {k: v for k, v in config.items() if k in multi_agent_keys}
+        return Navigator.multi(**filtered_config)
+    else:
+        # Single-agent case
+        single_agent_keys = [
+            "position", "orientation", "speed", "max_speed",
+            "angular_velocity"
+        ]
+        filtered_config = {k: v for k, v in config.items() if k in single_agent_keys}
+        return Navigator.single(**filtered_config)
 
 
 def create_video_plume(

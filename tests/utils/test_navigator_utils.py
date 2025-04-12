@@ -62,11 +62,11 @@ def test_create_navigator_from_params_single_agent():
         max_speeds=3.0
     )
     
-    assert navigator._single_agent is True
-    assert navigator.get_position() == (5, 10)
-    assert navigator.orientation == 30
-    assert navigator.speed == 1.5
-    assert navigator.max_speed == 3.0
+    assert navigator.is_single_agent is True
+    assert np.allclose(navigator.positions[0], (5, 10))
+    assert navigator.orientations[0] == 30
+    assert navigator.speeds[0] == 1.5
+    assert navigator.max_speeds[0] == 3.0
 
 
 def test_create_navigator_from_params_multi_agent():
@@ -84,7 +84,7 @@ def test_create_navigator_from_params_multi_agent():
         max_speeds=max_speeds
     )
     
-    assert navigator._single_agent is False
+    assert navigator.is_single_agent is False
     assert navigator.num_agents == 3
     assert np.allclose(navigator.positions[0], (1, 2))
     assert np.allclose(navigator.positions[1], (3, 4))
@@ -106,7 +106,7 @@ def test_create_navigator_from_params_mixed_types():
         max_speeds=np.array([1.0, 2.0, 3.0])  # numpy array
     )
     
-    assert navigator._single_agent is False
+    assert navigator.is_single_agent is False
     assert navigator.num_agents == 3
     assert np.array_equal(navigator.orientations, np.array([45, 45, 45]))
     assert np.array_equal(navigator.speeds, np.array([0.1, 0.2, 0.3]))

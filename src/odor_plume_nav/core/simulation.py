@@ -28,7 +28,7 @@ def run_simulation(
         navigator: Navigator instance controlling agent(s)
         video_plume: VideoPlume instance providing the environment
         num_steps: Number of simulation steps to run
-        step_size: Size of each simulation step
+        step_size: Size of each simulation step (no longer used with the new architecture)
         sensor_distance: Distance of the sensors from the agent
         sensor_angle: Angle of the sensors relative to the agent's orientation
         **kwargs: Additional parameters for the simulation
@@ -54,12 +54,12 @@ def run_simulation(
     
     # Run simulation steps
     for step in range(num_steps):
-        # Update the navigator position
-        navigator.update(dt=step_size)
-        
         # Get the next frame
         frame_idx = min(step + 1, video_plume.frame_count - 1)
         current_frame = video_plume.get_frame(frame_idx)
+        
+        # Update the navigator position using the new step method
+        navigator.step(current_frame)
         
         # Store the current state
         positions_history[:, step + 1] = navigator.positions

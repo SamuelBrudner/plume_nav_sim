@@ -7,7 +7,7 @@ This module provides functions to create navigator instances based on configurat
 from typing import Optional, Union, Dict, Any
 from pathlib import Path
 
-from odor_plume_nav.core.navigator import Navigator, VectorizedNavigator
+from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.config.utils import load_config
 
 
@@ -54,5 +54,5 @@ def create_navigator_from_config(config_path: Optional[Union[str, Path]] = None,
     # Override with any explicitly provided parameters
     params |= kwargs
 
-    # Create and return the navigator
-    return VectorizedNavigator(**params) if is_multi_agent else Navigator(**params)
+    # Create and return the navigator using the appropriate factory method
+    return Navigator.from_config(params)

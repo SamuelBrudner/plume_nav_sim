@@ -5,7 +5,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from unittest.mock import MagicMock
 
-from odor_plume_nav.core.navigator import SimpleNavigator
+from odor_plume_nav.core.navigator import Navigator
 
 
 class TestSingleAntennaSensing:
@@ -20,7 +20,7 @@ class TestSingleAntennaSensing:
         environment[hotspot_position[1], hotspot_position[0]] = hotspot_value  # Note: numpy indexing is [y, x]
         
         # Create navigator at the same position as the hotspot
-        navigator = SimpleNavigator(position=hotspot_position)
+        navigator = Navigator.single(position=hotspot_position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -38,7 +38,7 @@ class TestSingleAntennaSensing:
         
         # Position and navigator for this test
         position = (3, 3)
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -58,7 +58,7 @@ class TestSingleAntennaSensing:
         
         # Position and navigator for this test
         position = (7, 6)
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -78,7 +78,7 @@ class TestSingleAntennaSensing:
         
         # Position and navigator for this test
         position = (9, 9)
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -101,10 +101,11 @@ class TestSingleAntennaSensing:
         
         # Create navigator and test
         position = (2, 3)  # Position with value 150
-        expected_value = 150/255
+        expected_value = 150 / 255.0  # Normalized to [0, 1]
         
-        navigator = SimpleNavigator(position=position)
-        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        navigator = Navigator.single(position=position)
+        # Pass the frame directly instead of the mock object
+        odor_value = navigator.read_single_antenna_odor(mock_frame)
         
         # Check that the odor value matches the normalized frame value
         assert_allclose(odor_value, expected_value, rtol=1e-5)
@@ -122,10 +123,11 @@ class TestSingleAntennaSensing:
         
         # Create navigator and test
         position = (8, 7)  # Position with value 200
-        expected_value = 200/255
+        expected_value = 200 / 255.0  # Normalized to [0, 1]
         
-        navigator = SimpleNavigator(position=position)
-        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        navigator = Navigator.single(position=position)
+        # Pass the frame directly instead of the mock object
+        odor_value = navigator.read_single_antenna_odor(mock_frame)
         
         # Check that the odor value matches the normalized frame value
         assert_allclose(odor_value, expected_value, rtol=1e-5)
@@ -145,8 +147,9 @@ class TestSingleAntennaSensing:
         position = (5, 5)  # Position with value 0
         expected_value = 0
         
-        navigator = SimpleNavigator(position=position)
-        odor_value = navigator.read_single_antenna_odor(mock_plume)
+        navigator = Navigator.single(position=position)
+        # Pass the frame directly instead of the mock object
+        odor_value = navigator.read_single_antenna_odor(mock_frame)
         
         # Check that the odor value matches the normalized frame value
         assert_allclose(odor_value, expected_value, rtol=1e-5)
@@ -160,7 +163,7 @@ class TestSingleAntennaSensing:
         position = (-1, 2)
         
         # Create navigator at this out-of-bounds position
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -177,7 +180,7 @@ class TestSingleAntennaSensing:
         position = (2, -1)
         
         # Create navigator at this out-of-bounds position
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -194,7 +197,7 @@ class TestSingleAntennaSensing:
         position = (5, 2)
         
         # Create navigator at this out-of-bounds position
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -211,7 +214,7 @@ class TestSingleAntennaSensing:
         position = (2, 5)
         
         # Create navigator at this out-of-bounds position
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)
@@ -228,7 +231,7 @@ class TestSingleAntennaSensing:
         position = (10, 10)
         
         # Create navigator at this out-of-bounds position
-        navigator = SimpleNavigator(position=position)
+        navigator = Navigator.single(position=position)
         
         # Read the odor at the navigator's position
         odor_value = navigator.read_single_antenna_odor(environment)

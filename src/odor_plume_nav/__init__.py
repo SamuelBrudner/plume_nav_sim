@@ -17,8 +17,13 @@ from odor_plume_nav.api import (
     visualize_simulation_results,
 )
 
-# Submodule exports for better organization
-from odor_plume_nav.core import Navigator, SimpleNavigator, VectorizedNavigator, run_simulation
+# Import using the renamed legacy navigator to avoid conflicts with new implementation
+# Import the new protocol-based navigators in the refactor branch
+from odor_plume_nav.core import (
+    LegacyNavigator as Navigator, 
+    VectorizedNavigator, 
+    run_simulation
+)
 from odor_plume_nav.environments import VideoPlume
 from odor_plume_nav.visualization import visualize_trajectory
 from odor_plume_nav.config import (
