@@ -5,13 +5,12 @@ This module provides helper functions for creating and manipulating
 navigator instances.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable, Type
 from contextlib import suppress
 import itertools
 import numpy as np
 from dataclasses import dataclass, field
 
-from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.core.protocols import NavigatorProtocol
 
 
@@ -66,7 +65,7 @@ def create_navigator_from_params(
     speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     angular_velocities: Optional[Union[float, List[float], np.ndarray]] = None,
-) -> Navigator:
+) -> NavigatorProtocol:
     """
     Create a navigator from parameter values.
     
@@ -83,7 +82,7 @@ def create_navigator_from_params(
     # Detect if we're creating a single or multi-agent navigator
     is_multi_agent = False
     num_agents = 1
-    
+
     # If positions is provided and is not a simple (x, y) tuple, it's multi-agent
     if positions is not None:
         if isinstance(positions, np.ndarray) and positions.ndim > 1:
@@ -92,7 +91,9 @@ def create_navigator_from_params(
         elif isinstance(positions, list) and positions and isinstance(positions[0], (list, tuple)):
             is_multi_agent = True
             num_agents = len(positions)
-    
+
+    # Create a multi-agent navigator
+    from odor_plume_nav.core.navigator import Navigator
     # For multi-agent mode, normalize parameters to ensure they're arrays of correct length
     if is_multi_agent:
         # Convert orientations, speeds, etc. to arrays if they're scalar values
@@ -100,8 +101,7 @@ def create_navigator_from_params(
         speeds = normalize_array_parameter(speeds, num_agents)
         max_speeds = normalize_array_parameter(max_speeds, num_agents)
         angular_velocities = normalize_array_parameter(angular_velocities, num_agents)
-        
-        # Create a multi-agent navigator
+
         return Navigator(
             positions=positions,
             orientations=orientations,
@@ -110,7 +110,6 @@ def create_navigator_from_params(
             angular_velocities=angular_velocities
         )
     else:
-        # Create a single-agent navigator
         return Navigator(
             position=positions,
             orientation=orientations,
@@ -752,3 +751,55 @@ def set_property_value(
         value = np.array([value])
     
     setattr(controller, attr_name, value)
+
+
+def create_single_agent_navigator(
+    navigator_class: Type, 
+    params: SingleAgentParams
+) -> Any:
+    """
+    Create a single-agent navigator using type-safe parameter object.
+    
+    Parameters
+    ----------
+    navigator_class : Type
+        The Navigator class to instantiate
+    params : SingleAgentParams
+        Parameters for creating the navigator
+        
+    Returns
+    -------
+    Any
+        A navigator instance with a single agent
+    """
+    # Convert dataclass to dictionary, preserving only non-None values
+    kwargs = {k: v for k, v in params.__dict__.items() if v is not None}
+    
+    # Create navigator instance
+    return navigator_class(**kwargs)
+
+
+def create_multi_agent_navigator(
+    navigator_class: Type, 
+    params: MultiAgentParams
+) -> Any:
+    """
+    Create a multi-agent navigator using type-safe parameter object.
+    
+    Parameters
+    ----------
+    navigator_class : Type
+        The Navigator class to instantiate
+    params : MultiAgentParams
+        Parameters for creating the navigator
+        
+    Returns
+    -------
+    Any
+        A navigator instance with multiple agents
+    """
+    # Convert dataclass to dictionary, preserving only non-None values
+    kwargs = {k: v for k, v in params.__dict__.items() if v is not None}
+    
+    # Create navigator instance
+    return navigator_class(**kwargs)

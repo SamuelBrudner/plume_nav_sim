@@ -147,6 +147,10 @@ class Navigator:
         -------
         Navigator
             A Navigator instance with a single agent
+            
+        Notes
+        -----
+        For stricter type checking, you can use the single_from_params method with SingleAgentParams.
         """
         return cls(
             position=position,
@@ -155,6 +159,31 @@ class Navigator:
             max_speed=max_speed,
             angular_velocity=angular_velocity
         )
+    
+    @classmethod
+    def single_from_params(cls, params: 'SingleAgentParams') -> 'Navigator':
+        """Create a single-agent navigator using type-safe parameter object.
+        
+        This method provides stronger type checking than the positional parameter approach.
+        
+        Parameters
+        ----------
+        params : SingleAgentParams
+            Parameters for creating the navigator
+            
+        Returns
+        -------
+        Navigator
+            A Navigator instance with a single agent
+            
+        Examples
+        --------
+        >>> from odor_plume_nav.utils.navigator_utils import SingleAgentParams
+        >>> params = SingleAgentParams(position=(10, 20), speed=1.5)
+        >>> navigator = Navigator.single_from_params(params)
+        """
+        from odor_plume_nav.utils.navigator_utils import create_single_agent_navigator, SingleAgentParams
+        return create_single_agent_navigator(cls, params)
     
     @classmethod
     def multi(
@@ -184,6 +213,10 @@ class Navigator:
         -------
         Navigator
             A Navigator instance with multiple agents
+            
+        Notes
+        -----
+        For stricter type checking, you can use the multi_from_params method with MultiAgentParams.
         """
         return cls(
             positions=positions,
@@ -192,6 +225,37 @@ class Navigator:
             max_speeds=max_speeds,
             angular_velocities=angular_velocities
         )
+    
+    @classmethod
+    def multi_from_params(cls, params: 'MultiAgentParams') -> 'Navigator':
+        """Create a multi-agent navigator using type-safe parameter object.
+        
+        This method provides stronger type checking than the positional parameter approach.
+        
+        Parameters
+        ----------
+        params : MultiAgentParams
+            Parameters for creating the navigator
+            
+        Returns
+        -------
+        Navigator
+            A Navigator instance with multiple agents
+            
+        Examples
+        --------
+        >>> from odor_plume_nav.utils.navigator_utils import MultiAgentParams
+        >>> import numpy as np
+        >>> params = MultiAgentParams(
+        ...     positions=np.array([[10, 20], [30, 40]]),
+        ...     speeds=np.array([1.5, 2.0])
+        ... )
+        >>> navigator = Navigator.multi_from_params(params)
+        """
+        from odor_plume_nav.utils.navigator_utils import create_multi_agent_navigator, MultiAgentParams
+        return create_multi_agent_navigator(cls, params)
+    
+    # Factory methods for clear instantiation
     
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> 'Navigator':
