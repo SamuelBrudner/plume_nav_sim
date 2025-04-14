@@ -8,7 +8,6 @@ import contextlib
 from typing import Optional, Union, Any, Tuple, List
 import numpy as np
 
-
 class SingleAgentController:
     """Controller for single agent navigation.
     
@@ -83,17 +82,27 @@ class SingleAgentController:
         **kwargs
             Optional parameters to override initial settings
         """
-        # Reset logic for a single agent
-        if 'position' in kwargs:
-            self._position = np.array([kwargs['position']])
-        if 'orientation' in kwargs:
-            self._orientation = np.array([kwargs['orientation']])
-        if 'speed' in kwargs:
-            self._speed = np.array([kwargs['speed']])
-        if 'max_speed' in kwargs:
-            self._max_speed = np.array([kwargs['max_speed']])
-        if 'angular_velocity' in kwargs:
-            self._angular_velocity = np.array([kwargs['angular_velocity']])
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import reset_navigator_state
+        
+        # Create a dictionary of current state
+        controller_state = {
+            '_position': self._position,
+            '_orientation': self._orientation,
+            '_speed': self._speed,
+            '_max_speed': self._max_speed,
+            '_angular_velocity': self._angular_velocity
+        }
+        
+        # Use the utility function to reset state
+        reset_navigator_state(controller_state, is_single_agent=True, **kwargs)
+        
+        # Update instance attributes
+        self._position = controller_state['_position']
+        self._orientation = controller_state['_orientation']
+        self._speed = controller_state['_speed']
+        self._max_speed = controller_state['_max_speed']
+        self._angular_velocity = controller_state['_angular_velocity']
     
     def step(self, env_array: np.ndarray) -> None:
         """Take a simulation step to update agent position and orientation.
@@ -103,15 +112,16 @@ class SingleAgentController:
         env_array : np.ndarray
             The environment array (e.g., odor concentration grid)
         """
-        # Movement logic for a single agent
-        rad_orientation = np.radians(self._orientation[0])
-        dx = self._speed[0] * np.cos(rad_orientation)
-        dy = self._speed[0] * np.sin(rad_orientation)
-        self._position[0] += np.array([dx, dy])
-        self._orientation[0] += self._angular_velocity[0]
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import update_positions_and_orientations
         
-        # Wrap orientation to [0, 360)
-        self._orientation[0] = self._orientation[0] % 360.0
+        # Use the utility function to update position and orientation
+        update_positions_and_orientations(
+            self._position, 
+            self._orientation, 
+            self._speed, 
+            self._angular_velocity
+        )
     
     def sample_odor(self, env_array: np.ndarray) -> float:
         """Sample odor at the current agent position.
@@ -141,18 +151,12 @@ class SingleAgentController:
         float
             Odor value at the agent's position
         """
-        # Simplified odor sampling at current position
-        x, y = int(self._position[0, 0]), int(self._position[0, 1])
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import read_odor_values
         
-        # Check bounds
-        height, width = env_array.shape[:2]
-        if 0 <= x < width and 0 <= y < height:
-            odor_value = env_array[y, x]
-            # Normalize if uint8
-            if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
-                return float(odor_value) / 255.0
-            return float(odor_value)
-        return 0.0
+        # Use the utility function to read odor value
+        odor_values = read_odor_values(env_array, self._position)
+        return float(odor_values[0])
     
     def sample_multiple_sensors(
         self, 
@@ -233,29 +237,14 @@ class MultiAgentController:
             self._positions = np.array([[0.0, 0.0]])
         else:
             self._positions = np.array(positions)
-        
+
         num_agents = self._positions.shape[0]
-        
+
         # Set defaults for other parameters if not provided
-        if orientations is None:
-            self._orientations = np.zeros(num_agents)
-        else:
-            self._orientations = np.array(orientations)
-            
-        if speeds is None:
-            self._speeds = np.zeros(num_agents)
-        else:
-            self._speeds = np.array(speeds)
-            
-        if max_speeds is None:
-            self._max_speeds = np.ones(num_agents)
-        else:
-            self._max_speeds = np.array(max_speeds)
-            
-        if angular_velocities is None:
-            self._angular_velocities = np.zeros(num_agents)
-        else:
-            self._angular_velocities = np.array(angular_velocities)
+        self._orientations = np.zeros(num_agents) if orientations is None else np.array(orientations)
+        self._speeds = np.zeros(num_agents) if speeds is None else np.array(speeds)
+        self._max_speeds = np.ones(num_agents) if max_speeds is None else np.array(max_speeds)
+        self._angular_velocities = np.zeros(num_agents) if angular_velocities is None else np.array(angular_velocities)
     
     @property
     def positions(self) -> np.ndarray:
@@ -288,37 +277,34 @@ class MultiAgentController:
         return self._positions.shape[0]
     
     def reset(self, **kwargs: Any) -> None:
-        """Reset all agents to initial state.
+        """Reset all agents to initial state or update with new settings.
         
         Parameters
         ----------
         **kwargs
             Optional parameters to override initial settings
         """
-        # Reset logic for multiple agents
-        if 'positions' in kwargs:
-            self._positions = np.array(kwargs['positions'])
-            num_agents = self._positions.shape[0]
-            
-            # Resize other arrays if needed
-            if self._orientations.shape[0] != num_agents:
-                self._orientations = np.zeros(num_agents)
-            if self._speeds.shape[0] != num_agents:
-                self._speeds = np.zeros(num_agents)
-            if self._max_speeds.shape[0] != num_agents:
-                self._max_speeds = np.ones(num_agents)
-            if self._angular_velocities.shape[0] != num_agents:
-                self._angular_velocities = np.zeros(num_agents)
-                
-        # Update other arrays if provided
-        if 'orientations' in kwargs:
-            self._orientations = np.array(kwargs['orientations'])
-        if 'speeds' in kwargs:
-            self._speeds = np.array(kwargs['speeds'])
-        if 'max_speeds' in kwargs:
-            self._max_speeds = np.array(kwargs['max_speeds'])
-        if 'angular_velocities' in kwargs:
-            self._angular_velocities = np.array(kwargs['angular_velocities'])
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import reset_navigator_state
+        
+        # Create a dictionary of current state
+        controller_state = {
+            '_positions': self._positions,
+            '_orientations': self._orientations,
+            '_speeds': self._speeds,
+            '_max_speeds': self._max_speeds,
+            '_angular_velocities': self._angular_velocities
+        }
+        
+        # Use the utility function to reset state
+        reset_navigator_state(controller_state, is_single_agent=False, **kwargs)
+        
+        # Update instance attributes
+        self._positions = controller_state['_positions']
+        self._orientations = controller_state['_orientations']
+        self._speeds = controller_state['_speeds']
+        self._max_speeds = controller_state['_max_speeds']
+        self._angular_velocities = controller_state['_angular_velocities']
     
     def step(self, env_array: np.ndarray) -> None:
         """Take a simulation step to update all agent positions and orientations.
@@ -328,18 +314,16 @@ class MultiAgentController:
         env_array : np.ndarray
             The environment array (e.g., odor concentration grid)
         """
-        # Movement logic for multiple agents
-        # Vectorized computation for efficiency
-        rad_orientations = np.radians(self._orientations)
-        dx = self._speeds * np.cos(rad_orientations)
-        dy = self._speeds * np.sin(rad_orientations)
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import update_positions_and_orientations
         
-        # Update positions using broadcasting
-        self._positions += np.column_stack((dx, dy))
-        self._orientations += self._angular_velocities
-        
-        # Wrap orientations to [0, 360)
-        self._orientations = self._orientations % 360.0
+        # Use the utility function to update positions and orientations
+        update_positions_and_orientations(
+            self._positions, 
+            self._orientations, 
+            self._speeds, 
+            self._angular_velocities
+        )
     
     def sample_odor(self, env_array: np.ndarray) -> np.ndarray:
         """Sample odor at all agent positions.
@@ -369,30 +353,11 @@ class MultiAgentController:
         np.ndarray
             Odor values at each agent's position, shape (num_agents,)
         """
-        # Get dimensions
-        height, width = env_array.shape[:2]
-        num_agents = self.num_agents
-        odor_values = np.zeros(num_agents)
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import read_odor_values
         
-        # Convert positions to integers for indexing
-        x_pos = np.floor(self._positions[:, 0]).astype(int)
-        y_pos = np.floor(self._positions[:, 1]).astype(int)
-        
-        # Check bounds and sample odor for each agent
-        within_bounds = (
-            (0 <= x_pos) & (x_pos < width) & 
-            (0 <= y_pos) & (y_pos < height)
-        )
-        
-        for i in range(num_agents):
-            if within_bounds[i]:
-                odor_values[i] = env_array[y_pos[i], x_pos[i]]
-                
-                # Normalize if uint8
-                if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
-                    odor_values[i] /= 255.0
-                    
-        return odor_values
+        # Use the utility function to read odor values
+        return read_odor_values(env_array, self._positions)
     
     def sample_multiple_sensors(
         self, 

@@ -13,8 +13,8 @@ def mock_navigator():
     """Create a mock Navigator instance."""
     mock_nav = MagicMock(spec=Navigator)
     
-    # Configure the mock for a single agent
-    mock_nav.is_single_agent = True
+    # Configure the mock for a single agent using observable properties
+    # rather than internal implementation details
     mock_nav.num_agents = 1
     mock_nav.positions = np.array([[0.0, 0.0]])
     mock_nav.orientations = np.array([0.0])
@@ -88,8 +88,8 @@ def mock_multi_navigator():
     """Create a mock Navigator instance for multiple agents."""
     mock_nav = MagicMock(spec=Navigator)
     
-    # Configure the mock for multiple agents
-    mock_nav.is_single_agent = False
+    # Configure the mock for multiple agents using observable properties
+    # rather than internal implementation details
     mock_nav.num_agents = 2
     mock_nav.positions = np.array([[0.0, 0.0], [10.0, 10.0]])
     mock_nav.orientations = np.array([0.0, 90.0])

@@ -74,7 +74,10 @@ def test_video_plume_loading(mock_video_capture, mock_exists):
     # Check that plume properties were set correctly
     assert plume.video_path == Path(video_path)
     assert plume.frame_count == 100
-    assert plume._is_closed is False
+    
+    # Check observable behavior instead of implementation detail
+    # A newly created plume should be able to get frames
+    assert plume.get_frame(0) is not None
 
 
 def test_nonexistent_file(mock_exists):
@@ -132,10 +135,17 @@ def test_close_idempotent(mock_video_capture, mock_exists):
     
     # Call close multiple times
     plume.close()
-    plume.close()  # Should not raise
     
-    # Verify the video capture was released exactly once
-    mock_video_capture.return_value.release.assert_called_once()
+    # Verify closed state through behavior instead of internal state
+    with pytest.raises(ValueError, match="Cannot get frame from closed VideoPlume"):
+        plume.get_frame(0)
+    
+    # Second close should not raise any errors
+    plume.close()  
+    
+    # Still closed after second close
+    with pytest.raises(ValueError, match="Cannot get frame from closed VideoPlume"):
+        plume.get_frame(0)
 
 
 def test_frame_metadata(mock_video_capture, mock_exists):

@@ -62,7 +62,13 @@ def test_create_navigator_from_params_single_agent():
         max_speeds=3.0
     )
     
-    assert navigator.is_single_agent is True
+    # Check behavior rather than implementation details
+    # Single agent should have arrays of length 1
+    assert len(navigator.positions) == 1
+    assert len(navigator.orientations) == 1
+    assert len(navigator.speeds) == 1
+    
+    # Check the expected values
     assert np.allclose(navigator.positions[0], (5, 10))
     assert navigator.orientations[0] == 30
     assert navigator.speeds[0] == 1.5
@@ -84,8 +90,14 @@ def test_create_navigator_from_params_multi_agent():
         max_speeds=max_speeds
     )
     
-    assert navigator.is_single_agent is False
+    # Check behavior rather than implementation details
+    # Multi-agent should have arrays matching the number of agents
     assert navigator.num_agents == 3
+    assert len(navigator.positions) == 3
+    assert len(navigator.orientations) == 3
+    assert len(navigator.speeds) == 3
+    
+    # Check expected values for each agent
     assert np.allclose(navigator.positions[0], (1, 2))
     assert np.allclose(navigator.positions[1], (3, 4))
     assert np.allclose(navigator.positions[2], (5, 6))
@@ -106,8 +118,14 @@ def test_create_navigator_from_params_mixed_types():
         max_speeds=np.array([1.0, 2.0, 3.0])  # numpy array
     )
     
-    assert navigator.is_single_agent is False
+    # Check behavior rather than implementation details
+    # Should have created a multi-agent navigator with 3 agents
     assert navigator.num_agents == 3
+    assert len(navigator.positions) == 3
+    assert len(navigator.orientations) == 3
+    assert len(navigator.speeds) == 3
+    
+    # Check that scalar values were properly broadcast
     assert np.array_equal(navigator.orientations, np.array([45, 45, 45]))
     assert np.array_equal(navigator.speeds, np.array([0.1, 0.2, 0.3]))
     assert np.array_equal(navigator.max_speeds, np.array([1.0, 2.0, 3.0]))

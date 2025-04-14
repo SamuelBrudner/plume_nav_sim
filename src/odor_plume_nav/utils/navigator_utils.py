@@ -5,7 +5,7 @@ This module provides helper functions for creating and manipulating
 navigator instances.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 from contextlib import suppress
 import itertools
 import numpy as np
@@ -329,6 +329,218 @@ def compute_sensor_positions(
     return sensor_positions
 
 
+def read_odor_values(
+    env_array: np.ndarray, 
+    positions: np.ndarray
+) -> np.ndarray:
+    """
+    Read odor values from an environment array at specific positions.
+    
+    This function handles bounds checking, pixel coordinate conversion,
+    and normalization of uint8 arrays.
+    
+    Parameters
+    ----------
+    env_array : np.ndarray
+        Environment array (e.g., odor concentration grid)
+    positions : np.ndarray
+        Array of positions with shape (N, 2) where each row is (x, y)
+        
+    Returns
+    -------
+    np.ndarray
+        Array of odor values with shape (N,)
+    """
+    # Check if this is a mock plume object (for testing)
+    if hasattr(env_array, 'current_frame'):
+        env_array = env_array.current_frame
+
+    # Get dimensions of environment array
+    if not hasattr(env_array, 'shape') or len(env_array.shape) < 2:
+        # For mock objects in tests or arrays without shape
+        return np.zeros(len(positions))
+
+    height, width = env_array.shape[:2]
+    num_positions = positions.shape[0]
+    odor_values = np.zeros(num_positions)
+
+    # Convert positions to integers for indexing
+    x_pos = np.floor(positions[:, 0]).astype(int)
+    y_pos = np.floor(positions[:, 1]).astype(int)
+
+    # Create a mask for positions that are within bounds
+    within_bounds = (
+        (x_pos >= 0) & (x_pos < width) & (y_pos >= 0) & (y_pos < height)
+    )
+
+    # Read values for positions within bounds
+    for i in range(num_positions):
+        if within_bounds[i]:
+            odor_values[i] = env_array[y_pos[i], x_pos[i]]
+
+            # Normalize if uint8
+            if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
+                odor_values[i] /= 255.0
+
+    return odor_values
+
+
+def update_positions_and_orientations(
+    positions: np.ndarray, 
+    orientations: np.ndarray, 
+    speeds: np.ndarray, 
+    angular_velocities: np.ndarray
+) -> None:
+    """
+    Update positions and orientations based on speeds and angular velocities.
+    
+    This function handles the vectorized movement calculation for single or multiple agents.
+    It modifies the input arrays in-place.
+    
+    Parameters
+    ----------
+    positions : np.ndarray
+        Array of shape (N, 2) with agent positions
+    orientations : np.ndarray
+        Array of shape (N,) with agent orientations in degrees
+    speeds : np.ndarray
+        Array of shape (N,) with agent speeds
+    angular_velocities : np.ndarray
+        Array of shape (N,) with agent angular velocities in degrees/second
+    
+    Returns
+    -------
+    None
+        The function modifies the input arrays in-place
+    """
+    # Convert orientations to radians
+    rad_orientations = np.radians(orientations)
+    
+    # Calculate movement deltas
+    dx = speeds * np.cos(rad_orientations)
+    dy = speeds * np.sin(rad_orientations)
+    
+    # Update positions (vectorized for all agents)
+    if positions.ndim == 2:
+        # For multiple agents: positions has shape (N, 2)
+        positions += np.column_stack((dx, dy))
+    else:
+        # Handle single agent case with different indexing
+        for i in range(len(positions)):
+            positions[i] += np.array([dx[i], dy[i]])
+    
+    # Update orientations with angular velocities
+    orientations += angular_velocities
+    
+    # Wrap orientations to [0, 360) degrees
+    orientations %= 360.0
+
+
+def reset_navigator_state(
+    controller_state: Dict[str, np.ndarray],
+    is_single_agent: bool,
+    **kwargs: Any
+) -> None:
+    """
+    Reset navigator controller state based on provided parameters.
+    
+    This function handles updating controller state arrays from kwargs,
+    ensuring proper array shapes and consistent array sizes.
+    
+    Parameters
+    ----------
+    controller_state : Dict[str, np.ndarray]
+        Dictionary of current controller state arrays, where keys are:
+        - 'positions'/'position': Array of shape (N, 2) or (1, 2)
+        - 'orientations'/'orientation': Array of shape (N,) or (1,)
+        - 'speeds'/'speed': Array of shape (N,) or (1,)
+        - 'max_speeds'/'max_speed': Array of shape (N,) or (1,)
+        - 'angular_velocities'/'angular_velocity': Array of shape (N,) or (1,)
+    is_single_agent : bool
+        Whether this is a single agent controller
+    **kwargs
+        Parameters to update, which may include:
+        - 'position' or 'positions'
+        - 'orientation' or 'orientations'
+        - 'speed' or 'speeds'
+        - 'max_speed' or 'max_speeds'
+        - 'angular_velocity' or 'angular_velocities'
+    
+    Returns
+    -------
+    None
+        The function modifies the input state dictionary in-place
+    """
+    # Define mappings between single and multi-agent parameter names
+    if is_single_agent:
+        position_key = 'position'
+        orientation_key = 'orientation'
+        speed_key = 'speed'
+        max_speed_key = 'max_speed'
+        angular_velocity_key = 'angular_velocity'
+        
+        # Map state dictionary keys to internal attribute names
+        positions_attr = '_position'
+        orientations_attr = '_orientation'
+        speeds_attr = '_speed'
+        max_speeds_attr = '_max_speed'
+        angular_velocities_attr = '_angular_velocity'
+    else:
+        position_key = 'positions'
+        orientation_key = 'orientations'
+        speed_key = 'speeds'
+        max_speed_key = 'max_speeds'
+        angular_velocity_key = 'angular_velocities'
+        
+        # Map state dictionary keys to internal attribute names
+        positions_attr = '_positions'
+        orientations_attr = '_orientations'
+        speeds_attr = '_speeds'
+        max_speeds_attr = '_max_speeds'
+        angular_velocities_attr = '_angular_velocities'
+    
+    # Handle position update (which may require resizing other arrays)
+    if position_key in kwargs:
+        value = kwargs[position_key]
+        if is_single_agent:
+            # Single agent case: wrap in array
+            controller_state[positions_attr] = np.array([value])
+        else:
+            # Multi agent case: convert to array
+            controller_state[positions_attr] = np.array(value)
+            
+            # For multi-agent, we may need to resize other arrays
+            num_agents = controller_state[positions_attr].shape[0]
+            
+            # Resize other arrays if needed
+            arrays_to_check = [
+                (orientations_attr, np.zeros, num_agents),
+                (speeds_attr, np.zeros, num_agents),
+                (max_speeds_attr, np.ones, num_agents),
+                (angular_velocities_attr, np.zeros, num_agents)
+            ]
+            
+            for attr_name, default_fn, size in arrays_to_check:
+                if attr_name in controller_state and controller_state[attr_name].shape[0] != num_agents:
+                    controller_state[attr_name] = default_fn(size)
+    
+    # Update other values if provided
+    param_mapping = [
+        (orientation_key, orientations_attr),
+        (speed_key, speeds_attr),
+        (max_speed_key, max_speeds_attr),
+        (angular_velocity_key, angular_velocities_attr)
+    ]
+    
+    for kwarg_key, attr_key in param_mapping:
+        if kwarg_key in kwargs:
+            value = kwargs[kwarg_key]
+            if is_single_agent:
+                controller_state[attr_key] = np.array([value])
+            else:
+                controller_state[attr_key] = np.array(value)
+
+
 def sample_odor_at_sensors(
     navigator: NavigatorProtocol,
     env_array: np.ndarray,
@@ -357,40 +569,91 @@ def sample_odor_at_sensors(
         navigator, sensor_distance, sensor_angle, num_sensors, layout_name
     )
     
-    # Check if this is a mock plume object (for testing)
-    if hasattr(env_array, 'current_frame'):
-        env_array = env_array.current_frame
+    # Read odor values at sensor positions
+    odor_values = read_odor_values(env_array, sensor_positions.reshape(-1, 2))
     
-    # Get dimensions of environment array or handle mock objects
-    if hasattr(env_array, 'shape') and len(env_array.shape) >= 2:
-        # Regular NumPy array with valid shape
-        height, width = env_array.shape[:2]
-    else:
-        # For mock objects in tests or arrays without shape
-        # Return zeros for all sensors and agents
-        return np.zeros((navigator.num_agents, sensor_positions.shape[1]))
-    
-    # Initialize odor values
+    # Reshape to (num_agents, num_sensors)
     num_agents = navigator.num_agents
     num_sensors = sensor_positions.shape[1]
-    odor_values = np.zeros((num_agents, num_sensors))
-    
-    # Sample odor at each sensor position using itertools.product
-    for agent_idx, sensor_idx in itertools.product(range(num_agents), range(num_sensors)):
-        # Get sensor position
-        x_pos = int(sensor_positions[agent_idx, sensor_idx, 0])
-        y_pos = int(sensor_positions[agent_idx, sensor_idx, 1])
-        
-        # Check if position is within bounds
-        if 0 <= x_pos < width and 0 <= y_pos < height:
-            with suppress(IndexError, TypeError):
-                # Note: NumPy indexing is [y, x]
-                odor_value = env_array[y_pos, x_pos]
-                
-                # Normalize if uint8 array (likely from video frame)
-                odor_values[agent_idx, sensor_idx] = (
-                    odor_value / 255.0 if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8
-                    else odor_value
-                )
+    odor_values = odor_values.reshape(num_agents, num_sensors)
     
     return odor_values
+
+
+def get_property_name(is_single_agent: bool, property_name: str) -> str:
+    """
+    Get the correct attribute name for a property based on controller type.
+    
+    Parameters
+    ----------
+    is_single_agent : bool
+        Whether this is a single agent controller
+    property_name : str
+        Base property name (e.g., 'position', 'orientation')
+    
+    Returns
+    -------
+    str
+        The correct attribute name for the property ('_position' or '_positions')
+    """
+    suffix = "" if is_single_agent else "s"
+    return f"_{property_name}{suffix}"
+
+
+def get_property_value(controller: Any, property_name: str) -> Union[float, np.ndarray]:
+    """
+    Get a property value from a controller, handling single vs multi-agent cases.
+    
+    For single agent controllers, returns a scalar value instead of an array.
+    
+    Parameters
+    ----------
+    controller : Any
+        The controller instance (SingleAgentController or MultiAgentController)
+    property_name : str
+        Property name without underscore prefix (e.g., 'position', 'orientation')
+    
+    Returns
+    -------
+    Union[float, np.ndarray]
+        Property value, as scalar for single agent and array for multi-agent
+    """
+    is_single_agent = hasattr(controller, '_position')
+    attr_name = get_property_name(is_single_agent, property_name)
+    
+    value = getattr(controller, attr_name)
+    
+    # Return scalar for single agent with size 1 array, otherwise return the array
+    return value[0] if is_single_agent and value.size == 1 else value
+
+
+def set_property_value(
+    controller: Any, 
+    property_name: str, 
+    value: Union[float, np.ndarray]
+) -> None:
+    """
+    Set a property value on a controller, handling single vs multi-agent cases.
+    
+    Parameters
+    ----------
+    controller : Any
+        The controller instance (SingleAgentController or MultiAgentController)
+    property_name : str
+        Property name without underscore prefix (e.g., 'position', 'orientation')
+    value : Union[float, np.ndarray]
+        Value to set, can be scalar or array
+    
+    Returns
+    -------
+    None
+        The function modifies the controller in-place
+    """
+    is_single_agent = hasattr(controller, '_position')
+    attr_name = get_property_name(is_single_agent, property_name)
+    
+    # For single agent, wrap scalar in array
+    if is_single_agent and not isinstance(value, np.ndarray):
+        value = np.array([value])
+    
+    setattr(controller, attr_name, value)

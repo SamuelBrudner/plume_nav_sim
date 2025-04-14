@@ -222,9 +222,10 @@ class TestNavigator:
         """Test initializing a single-agent navigator."""
         # Test with default parameters
         nav = Navigator()
-        assert nav.is_single_agent
         assert nav.num_agents == 1
         assert nav.positions.shape == (1, 2)
+        assert nav.orientations.shape == (1,)
+        assert nav.speeds.shape == (1,)
         
         # Test with custom parameters
         nav = Navigator(position=(10.0, 20.0), orientation=45.0)
@@ -244,7 +245,9 @@ class TestNavigator:
         """Test the factory methods for creating navigators."""
         # Test single-agent factory
         nav = Navigator.single(position=(10.0, 20.0), orientation=45.0)
-        assert nav.is_single_agent
+        assert nav.num_agents == 1
+        assert nav.positions.shape == (1, 2)
+        assert nav.orientations.shape == (1,)
         assert nav.positions[0, 0] == 10.0
         assert nav.positions[0, 1] == 20.0
         assert nav.orientations[0] == 45.0
@@ -258,8 +261,9 @@ class TestNavigator:
 
     # TODO Rename this here and in `test_multi_agent_initialization` and `test_factory_methods`
     def _extracted_from_test_factory_methods_7(self, nav, positions, orientations):
-        assert not nav.is_single_agent
         assert nav.num_agents == 2
+        assert nav.positions.shape == (2, 2)
+        assert nav.orientations.shape == (2,)
         assert np.array_equal(nav.positions, positions)
         assert np.array_equal(nav.orientations, orientations)
     
@@ -270,22 +274,27 @@ class TestNavigator:
             'position': (10.0, 20.0),
             'orientation': 45.0
         }
-        
-        nav = Navigator.from_config(config)
-        assert nav.is_single_agent
+
+        nav = self._extracted_from_test_from_config_9(config, 1)
         assert nav.positions[0, 0] == 10.0
         assert nav.positions[0, 1] == 20.0
         assert nav.orientations[0] == 45.0
-        
+
         # Test multi-agent config
         config = {
             'positions': np.array([[10.0, 20.0], [30.0, 40.0]]),
             'orientations': np.array([0.0, 90.0])
         }
-        
-        nav = Navigator.from_config(config)
-        assert not nav.is_single_agent
-        assert nav.num_agents == 2
+
+        nav = self._extracted_from_test_from_config_9(config, 2)
+
+    # TODO Rename this here and in `test_from_config`
+    def _extracted_from_test_from_config_9(self, config, arg1):
+        result = Navigator.from_config(config)
+        assert result.num_agents == arg1
+        assert result.positions.shape == (arg1, 2)
+        assert result.orientations.shape == (arg1, )
+        return result
     
     def test_step(self) -> None:
         """Test the step method delegates correctly."""
