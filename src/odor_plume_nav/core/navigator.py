@@ -291,15 +291,23 @@ class Navigator:
         """
         self._controller.reset(**kwargs)
     
-    def step(self, env_array: np.ndarray) -> None:
+    def step(self, env_array: np.ndarray, dt: float = 1.0) -> None:
         """Take a simulation step.
         
         Parameters
         ----------
         env_array : np.ndarray
             Environment array (e.g., odor plume frame)
+        dt : float, optional
+            Time step size in seconds, by default 1.0
+            
+        Notes
+        -----
+        The time step (dt) is used to scale position updates (velocity * dt) and
+        orientation updates (angular_velocity * dt). When dt=1.0 (default), the
+        behavior is equivalent to the original implementation without time scaling.
         """
-        self._controller.step(env_array)
+        self._controller.step(env_array, dt=dt)
     
     def sample_odor(self, env_array: np.ndarray) -> Union[float, np.ndarray]:
         """Sample odor at the current agent position(s).

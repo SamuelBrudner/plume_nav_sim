@@ -389,12 +389,16 @@ def update_positions_and_orientations(
     positions: np.ndarray, 
     orientations: np.ndarray, 
     speeds: np.ndarray, 
-    angular_velocities: np.ndarray
+    angular_velocities: np.ndarray,
+    dt: float = 1.0
 ) -> None:
     """
     Update positions and orientations based on speeds and angular velocities.
     
-    This function handles the vectorized movement calculation for single or multiple agents.
+    This function handles the vectorized movement calculation for single or multiple agents,
+    with proper time step scaling. Position updates are scaled by speed * dt, and 
+    orientation updates are scaled by angular_velocity * dt.
+    
     It modifies the input arrays in-place.
     
     Parameters
@@ -404,21 +408,29 @@ def update_positions_and_orientations(
     orientations : np.ndarray
         Array of shape (N,) with agent orientations in degrees
     speeds : np.ndarray
-        Array of shape (N,) with agent speeds
+        Array of shape (N,) with agent speeds (units/second)
     angular_velocities : np.ndarray
         Array of shape (N,) with agent angular velocities in degrees/second
-    
+    dt : float, optional
+        Time step size in seconds, by default 1.0
+        
     Returns
     -------
     None
         The function modifies the input arrays in-place
+        
+    Notes
+    -----
+    The default dt=1.0 maintains backward compatibility with existing code
+    that doesn't explicitly handle time steps. To properly incorporate physics
+    time steps, pass the actual dt value from your simulation.
     """
     # Convert orientations to radians
     rad_orientations = np.radians(orientations)
     
-    # Calculate movement deltas
-    dx = speeds * np.cos(rad_orientations)
-    dy = speeds * np.sin(rad_orientations)
+    # Calculate movement deltas, scaled by dt
+    dx = speeds * np.cos(rad_orientations) * dt
+    dy = speeds * np.sin(rad_orientations) * dt
     
     # Update positions (vectorized for all agents)
     if positions.ndim == 2:
@@ -429,8 +441,8 @@ def update_positions_and_orientations(
         for i in range(len(positions)):
             positions[i] += np.array([dx[i], dy[i]])
     
-    # Update orientations with angular velocities
-    orientations += angular_velocities
+    # Update orientations with angular velocities, scaled by dt
+    orientations += angular_velocities * dt
     
     # Wrap orientations to [0, 360) degrees
     orientations %= 360.0

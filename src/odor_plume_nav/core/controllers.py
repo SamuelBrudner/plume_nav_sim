@@ -153,13 +153,15 @@ class SingleAgentController:
         self._max_speed = controller_state['_max_speed']
         self._angular_velocity = controller_state['_angular_velocity']
     
-    def step(self, env_array: np.ndarray) -> None:
+    def step(self, env_array: np.ndarray, dt: float = 1.0) -> None:
         """Take a simulation step to update agent position and orientation.
         
         Parameters
         ----------
         env_array : np.ndarray
             The environment array (e.g., odor concentration grid)
+        dt : float, optional
+            Time step size in seconds, by default 1.0
         """
         # Import at function level to avoid circular import
         from odor_plume_nav.utils.navigator_utils import update_positions_and_orientations
@@ -169,7 +171,8 @@ class SingleAgentController:
             self._position, 
             self._orientation, 
             self._speed, 
-            self._angular_velocity
+            self._angular_velocity,
+            dt=dt
         )
     
     def sample_odor(self, env_array: np.ndarray) -> float:
@@ -408,13 +411,15 @@ class MultiAgentController:
         self._max_speeds = controller_state['_max_speeds']
         self._angular_velocities = controller_state['_angular_velocities']
     
-    def step(self, env_array: np.ndarray) -> None:
+    def step(self, env_array: np.ndarray, dt: float = 1.0) -> None:
         """Take a simulation step to update all agent positions and orientations.
         
         Parameters
         ----------
         env_array : np.ndarray
             The environment array (e.g., odor concentration grid)
+        dt : float, optional
+            Time step size in seconds, by default 1.0
         """
         # Import at function level to avoid circular import
         from odor_plume_nav.utils.navigator_utils import update_positions_and_orientations
@@ -424,7 +429,8 @@ class MultiAgentController:
             self._positions, 
             self._orientations, 
             self._speeds, 
-            self._angular_velocities
+            self._angular_velocities,
+            dt=dt
         )
     
     def sample_odor(self, env_array: np.ndarray) -> np.ndarray:
