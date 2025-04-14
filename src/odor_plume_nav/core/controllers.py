@@ -80,7 +80,24 @@ class SingleAgentController:
         Parameters
         ----------
         **kwargs
-            Optional parameters to override initial settings
+            Optional parameters to override initial settings.
+            Valid keys are:
+            - position: Tuple[float, float] or array-like
+            - orientation: float
+            - speed: float
+            - max_speed: float
+            - angular_velocity: float
+        
+        Notes
+        -----
+        For stricter type checking, you can use the SingleAgentParams dataclass:
+        
+        ```python
+        from odor_plume_nav.utils.navigator_utils import SingleAgentParams
+        
+        params = SingleAgentParams(position=(10, 20), speed=1.5)
+        navigator.reset_with_params(params)
+        ```
         """
         # Import at function level to avoid circular import
         from odor_plume_nav.utils.navigator_utils import reset_navigator_state
@@ -96,6 +113,38 @@ class SingleAgentController:
         
         # Use the utility function to reset state
         reset_navigator_state(controller_state, is_single_agent=True, **kwargs)
+        
+        # Update instance attributes
+        self._position = controller_state['_position']
+        self._orientation = controller_state['_orientation']
+        self._speed = controller_state['_speed']
+        self._max_speed = controller_state['_max_speed']
+        self._angular_velocity = controller_state['_angular_velocity']
+    
+    def reset_with_params(self, params: 'SingleAgentParams') -> None:
+        """Reset the agent to initial state using a type-safe parameter object.
+        
+        This method provides stronger type checking than the kwargs-based reset method.
+        
+        Parameters
+        ----------
+        params : SingleAgentParams
+            Parameters to update, as a dataclass instance
+        """
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import reset_navigator_state_with_params, SingleAgentParams
+        
+        # Create a dictionary of current state
+        controller_state = {
+            '_position': self._position,
+            '_orientation': self._orientation,
+            '_speed': self._speed,
+            '_max_speed': self._max_speed,
+            '_angular_velocity': self._angular_velocity
+        }
+        
+        # Use the utility function to reset state
+        reset_navigator_state_with_params(controller_state, is_single_agent=True, params=params)
         
         # Update instance attributes
         self._position = controller_state['_position']
@@ -282,7 +331,28 @@ class MultiAgentController:
         Parameters
         ----------
         **kwargs
-            Optional parameters to override initial settings
+            Optional parameters to override initial settings.
+            Valid keys are:
+            - positions: np.ndarray of shape (N, 2)
+            - orientations: np.ndarray of shape (N,)
+            - speeds: np.ndarray of shape (N,)
+            - max_speeds: np.ndarray of shape (N,)
+            - angular_velocities: np.ndarray of shape (N,)
+            
+        Notes
+        -----
+        For stricter type checking, you can use the MultiAgentParams dataclass:
+        
+        ```python
+        from odor_plume_nav.utils.navigator_utils import MultiAgentParams
+        import numpy as np
+        
+        params = MultiAgentParams(
+            positions=np.array([[10, 20], [30, 40]]),
+            speeds=np.array([1.5, 2.0])
+        )
+        navigator.reset_with_params(params)
+        ```
         """
         # Import at function level to avoid circular import
         from odor_plume_nav.utils.navigator_utils import reset_navigator_state
@@ -298,6 +368,38 @@ class MultiAgentController:
         
         # Use the utility function to reset state
         reset_navigator_state(controller_state, is_single_agent=False, **kwargs)
+        
+        # Update instance attributes
+        self._positions = controller_state['_positions']
+        self._orientations = controller_state['_orientations']
+        self._speeds = controller_state['_speeds']
+        self._max_speeds = controller_state['_max_speeds']
+        self._angular_velocities = controller_state['_angular_velocities']
+    
+    def reset_with_params(self, params: 'MultiAgentParams') -> None:
+        """Reset all agents to initial state using a type-safe parameter object.
+        
+        This method provides stronger type checking than the kwargs-based reset method.
+        
+        Parameters
+        ----------
+        params : MultiAgentParams
+            Parameters to update, as a dataclass instance
+        """
+        # Import at function level to avoid circular import
+        from odor_plume_nav.utils.navigator_utils import reset_navigator_state_with_params, MultiAgentParams
+        
+        # Create a dictionary of current state
+        controller_state = {
+            '_positions': self._positions,
+            '_orientations': self._orientations,
+            '_speeds': self._speeds,
+            '_max_speeds': self._max_speeds,
+            '_angular_velocities': self._angular_velocities
+        }
+        
+        # Use the utility function to reset state
+        reset_navigator_state_with_params(controller_state, is_single_agent=False, params=params)
         
         # Update instance attributes
         self._positions = controller_state['_positions']

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 from contextlib import suppress
 import itertools
 import numpy as np
+from dataclasses import dataclass, field
 
 from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.core.protocols import NavigatorProtocol
@@ -436,6 +437,26 @@ def update_positions_and_orientations(
     orientations %= 360.0
 
 
+@dataclass
+class SingleAgentParams:
+    """Parameters for resetting a single agent navigator."""
+    position: Optional[Tuple[float, float]] = None
+    orientation: Optional[float] = None
+    speed: Optional[float] = None
+    max_speed: Optional[float] = None
+    angular_velocity: Optional[float] = None
+
+
+@dataclass
+class MultiAgentParams:
+    """Parameters for resetting a multi-agent navigator."""
+    positions: Optional[np.ndarray] = None
+    orientations: Optional[np.ndarray] = None
+    speeds: Optional[np.ndarray] = None
+    max_speeds: Optional[np.ndarray] = None
+    angular_velocities: Optional[np.ndarray] = None
+
+
 def reset_navigator_state(
     controller_state: Dict[str, np.ndarray],
     is_single_agent: bool,
@@ -451,34 +472,56 @@ def reset_navigator_state(
     ----------
     controller_state : Dict[str, np.ndarray]
         Dictionary of current controller state arrays, where keys are:
-        - 'positions'/'position': Array of shape (N, 2) or (1, 2)
-        - 'orientations'/'orientation': Array of shape (N,) or (1,)
-        - 'speeds'/'speed': Array of shape (N,) or (1,)
-        - 'max_speeds'/'max_speed': Array of shape (N,) or (1,)
-        - 'angular_velocities'/'angular_velocity': Array of shape (N,) or (1,)
+        - '_position'/'_positions': Array of shape (N, 2) or (1, 2)
+        - '_orientation'/'_orientations': Array of shape (N,) or (1,)
+        - '_speed'/'_speeds': Array of shape (N,) or (1,)
+        - '_max_speed'/'_max_speeds': Array of shape (N,) or (1,)
+        - '_angular_velocity'/'_angular_velocities': Array of shape (N,) or (1,)
     is_single_agent : bool
         Whether this is a single agent controller
     **kwargs
-        Parameters to update, which may include:
-        - 'position' or 'positions'
-        - 'orientation' or 'orientations'
-        - 'speed' or 'speeds'
-        - 'max_speed' or 'max_speeds'
-        - 'angular_velocity' or 'angular_velocities'
+        Parameters to update. 
+        Valid keys for single-agent controllers:
+            - 'position': Tuple[float, float] or array-like
+            - 'orientation': float
+            - 'speed': float
+            - 'max_speed': float
+            - 'angular_velocity': float
+        Valid keys for multi-agent controllers:
+            - 'positions': np.ndarray of shape (N, 2)
+            - 'orientations': np.ndarray of shape (N,)
+            - 'speeds': np.ndarray of shape (N,)
+            - 'max_speeds': np.ndarray of shape (N,)
+            - 'angular_velocities': np.ndarray of shape (N,)
     
     Returns
     -------
     None
         The function modifies the input state dictionary in-place
+    
+    Raises
+    ------
+    ValueError
+        If invalid parameter keys are provided
+    
+    Notes
+    -----
+    For stronger type safety, consider using the SingleAgentParams or MultiAgentParams
+    dataclasses instead of kwargs. Example:
+    
+    ```python
+    params = SingleAgentParams(position=(10, 20), speed=1.5)
+    reset_navigator_state_with_params(controller_state, is_single_agent=True, params=params)
+    ```
     """
-    # Define mappings between single and multi-agent parameter names
+    # Define valid keys and attribute mappings based on controller type
     if is_single_agent:
         position_key = 'position'
         orientation_key = 'orientation'
         speed_key = 'speed'
         max_speed_key = 'max_speed'
         angular_velocity_key = 'angular_velocity'
-        
+
         # Map state dictionary keys to internal attribute names
         positions_attr = '_position'
         orientations_attr = '_orientation'
@@ -491,27 +534,39 @@ def reset_navigator_state(
         speed_key = 'speeds'
         max_speed_key = 'max_speeds'
         angular_velocity_key = 'angular_velocities'
-        
+
         # Map state dictionary keys to internal attribute names
         positions_attr = '_positions'
         orientations_attr = '_orientations'
         speeds_attr = '_speeds'
         max_speeds_attr = '_max_speeds'
         angular_velocities_attr = '_angular_velocities'
-    
+
+    # Define common valid keys and param mapping for both controller types
+    valid_keys = {position_key, orientation_key, speed_key, max_speed_key, angular_velocity_key}
+    param_mapping = [
+        (position_key, positions_attr),
+        (orientation_key, orientations_attr),
+        (speed_key, speeds_attr),
+        (max_speed_key, max_speeds_attr),
+        (angular_velocity_key, angular_velocities_attr)
+    ]
+
+    if invalid_keys := set(kwargs.keys()) - valid_keys:
+        raise ValueError(f"Invalid parameters: {invalid_keys}. Valid keys are: {valid_keys}")
+
     # Handle position update (which may require resizing other arrays)
-    if position_key in kwargs:
-        value = kwargs[position_key]
+    if (position_value := kwargs.get(position_key)) is not None:
         if is_single_agent:
             # Single agent case: wrap in array
-            controller_state[positions_attr] = np.array([value])
+            controller_state[positions_attr] = np.array([position_value])
         else:
             # Multi agent case: convert to array
-            controller_state[positions_attr] = np.array(value)
-            
+            controller_state[positions_attr] = np.array(position_value)
+
             # For multi-agent, we may need to resize other arrays
             num_agents = controller_state[positions_attr].shape[0]
-            
+
             # Resize other arrays if needed
             arrays_to_check = [
                 (orientations_attr, np.zeros, num_agents),
@@ -519,26 +574,66 @@ def reset_navigator_state(
                 (max_speeds_attr, np.ones, num_agents),
                 (angular_velocities_attr, np.zeros, num_agents)
             ]
-            
+
             for attr_name, default_fn, size in arrays_to_check:
                 if attr_name in controller_state and controller_state[attr_name].shape[0] != num_agents:
                     controller_state[attr_name] = default_fn(size)
-    
+
     # Update other values if provided
-    param_mapping = [
-        (orientation_key, orientations_attr),
-        (speed_key, speeds_attr),
-        (max_speed_key, max_speeds_attr),
-        (angular_velocity_key, angular_velocities_attr)
-    ]
-    
-    for kwarg_key, attr_key in param_mapping:
+    for kwarg_key, attr_key in param_mapping[1:]:  # Skip position which was handled above
         if kwarg_key in kwargs:
             value = kwargs[kwarg_key]
             if is_single_agent:
                 controller_state[attr_key] = np.array([value])
             else:
                 controller_state[attr_key] = np.array(value)
+
+
+def reset_navigator_state_with_params(
+    controller_state: Dict[str, np.ndarray],
+    is_single_agent: bool,
+    params: Union[SingleAgentParams, MultiAgentParams]
+) -> None:
+    """
+    Reset navigator controller state using type-safe parameter objects.
+    
+    This is a type-safe alternative to reset_navigator_state that uses dataclasses
+    instead of kwargs for stronger type safety.
+    
+    Parameters
+    ----------
+    controller_state : Dict[str, np.ndarray]
+        Dictionary of current controller state arrays
+    is_single_agent : bool
+        Whether this is a single agent controller
+    params : Union[SingleAgentParams, MultiAgentParams]
+        Parameters to update, as a dataclass instance
+    
+    Returns
+    -------
+    None
+        The function modifies the input state dictionary in-place
+    
+    Raises
+    ------
+    TypeError
+        If params is not the correct type for the controller
+    """
+    # Validate parameter type
+    if is_single_agent and not isinstance(params, SingleAgentParams):
+        raise TypeError(
+            f"Expected SingleAgentParams for single agent controller, got {type(params)}"
+        )
+    if not is_single_agent and not isinstance(params, MultiAgentParams):
+        raise TypeError(
+            f"Expected MultiAgentParams for multi-agent controller, got {type(params)}"
+        )
+    
+    # Convert dataclass to dictionary for the existing function
+    kwargs = {k: v for k, v in params.__dict__.items() if v is not None}
+    
+    # Delegate to the existing function
+    reset_navigator_state(controller_state, is_single_agent, **kwargs)
 
 
 def sample_odor_at_sensors(
