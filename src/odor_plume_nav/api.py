@@ -5,7 +5,7 @@ This module provides a clean, stable API for common use cases when working with
 the odor plume navigation package.
 """
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 import pathlib
 import numpy as np
 
@@ -15,8 +15,6 @@ from odor_plume_nav.core.simulation import run_simulation
 from odor_plume_nav.api_utils import merge_config_with_args
 from odor_plume_nav.utils.navigator_utils import (
     validate_positions,
-    create_navigator_from_params,
-    load_navigator_from_config,
 )
 from odor_plume_nav.config.utils import load_config
 from odor_plume_nav.visualization import visualize_trajectory
