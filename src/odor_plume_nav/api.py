@@ -12,36 +12,14 @@ import numpy as np
 from odor_plume_nav.core.navigator import Navigator
 from odor_plume_nav.environments.video_plume import VideoPlume
 from odor_plume_nav.core.simulation import run_simulation
-from odor_plume_nav.utils.navigator_utils import create_navigator_from_params
-
-
-def _merge_config_with_args(config: dict, **kwargs) -> dict:
-    """Merge config dict with direct arguments, giving precedence to non-None kwargs."""
-    merged = dict(config)
-    for k, v in kwargs.items():
-        if v is not None:
-            merged[k] = v
-    return merged
-
-
-def _validate_positions(positions):
-    """Ensure positions/position is either a single (x, y) or a sequence of (x, y) pairs (shape (2,) or (N, 2))."""
-    import numpy as np
-    if positions is None:
-        return
-    arr = np.asarray(positions)
-    if arr.ndim == 1 and arr.shape[0] == 2:
-        # Single agent (x, y)
-        if not np.issubdtype(arr.dtype, np.number):
-            raise ValueError("positions must be numeric.")
-        return
-    if arr.ndim == 2 and arr.shape[1] == 2:
-        # Multi-agent
-        if not np.issubdtype(arr.dtype, np.number):
-            raise ValueError("positions must be numeric.")
-        return
-    raise ValueError(f"positions must be a single (x, y) or a sequence of (x, y) pairs (shape (2,) or (N, 2)), got shape {arr.shape}.")
-
+from odor_plume_nav.api_utils import merge_config_with_args
+from odor_plume_nav.utils.navigator_utils import (
+    validate_positions,
+    create_navigator_from_params,
+    load_navigator_from_config,
+)
+from odor_plume_nav.config.utils import load_config
+from odor_plume_nav.visualization import visualize_trajectory
 
 def create_navigator(
     positions: Optional[Union[Tuple[float, float], List[Tuple[float, float]], np.ndarray]] = None,
@@ -50,31 +28,45 @@ def create_navigator(
     max_speeds: Optional[Union[float, List[float], np.ndarray]] = None,
     config_path: Optional[Union[str, pathlib.Path]] = None,
     position: Optional[Union[Tuple[float, float], List[float], np.ndarray]] = None
-) -> "Navigator":
+) -> Navigator:
     """
     Create a Navigator instance based on provided parameters or configuration.
 
-    Args:
-        positions: Initial position(s) of the navigator(s). If a list of positions is provided,
-            a multi-agent navigator is created. Each position must be a (x, y) pair.
-        position: Initial position for a single agent (alternative to positions).
-        orientations: Initial orientation(s) in degrees.
-        speeds: Initial speed(s).
-        max_speeds: Maximum speed(s).
-        config_path: Optional path to a configuration file. If provided, values from the config
-            are loaded and overridden by any direct arguments provided.
-    Returns:
-        Navigator: Configured navigator instance.
-    Raises:
-        ValueError: If positions are not valid (see above).
-    """
-    import numpy as np
-    from odor_plume_nav.config.utils import load_config
-    from odor_plume_nav.core.navigator import Navigator
+    Parameters
+    ----------
+    positions : tuple, list, np.ndarray, optional
+        Initial position(s) of the navigator(s). If a list of positions is provided,
+        a multi-agent navigator is created. Each position must be a (x, y) pair.
+    position : tuple, list, np.ndarray, optional
+        Initial position for a single agent (alternative to positions).
+    orientations : float, list, np.ndarray, optional
+        Initial orientation(s) in degrees.
+    speeds : float, list, np.ndarray, optional
+        Initial speed(s).
+    max_speeds : float, list, np.ndarray, optional
+        Maximum speed(s).
+    config_path : str or Path, optional
+        Optional path to a configuration file. If provided, values from the config
+        are loaded and overridden by any direct arguments provided.
 
+    Returns
+    -------
+    Navigator
+        Configured navigator instance.
+
+    Raises
+    ------
+    ValueError
+        If positions are not valid (see above).
+
+    See Also
+    --------
+    create_video_plume : For generating video plumes for simulation environments.
+    run_plume_simulation : For running a full plume navigation simulation pipeline.
+    """
     if config_path is not None:
         config = load_config(config_path)
-        params = _merge_config_with_args(
+        params = merge_config_with_args(
             config,
             positions=positions,
             position=position,
@@ -91,7 +83,7 @@ def create_navigator(
         params = dict(positions=positions, position=position, orientations=orientations, speeds=speeds, max_speeds=max_speeds)
 
     if position is not None:
-        _validate_positions(position)
+        validate_positions(position)
         # For single-agent, prefer singular keys if present
         orientation = params.get("orientation", orientations)
         speed = params.get("speed", speeds)
@@ -102,7 +94,7 @@ def create_navigator(
             speed=speed,
             max_speed=max_speed
         )
-    _validate_positions(positions)
+    validate_positions(positions)
     if positions is not None:
         arr = np.asarray(positions)
         if arr.ndim == 2 and arr.shape[0] > 1:
@@ -122,54 +114,42 @@ def create_navigator(
     return Navigator.single()
 
 
-def _load_navigator_from_config(config: dict):
-    """
-    Load a Navigator instance from a config dictionary.
-    Strictly validates required keys and types. Raises ValueError on unknown keys or malformed config.
-    """
-    single_keys = {"position", "orientation"}
-    multi_keys = {"positions", "orientations"}
-    config_keys = set(config)
-    # Strict: error on unknown keys
-    allowed_keys = single_keys | multi_keys
-    if unknown := config_keys - allowed_keys:
-        raise ValueError(f"Unknown keys in config: {unknown}")
-    # Multi-agent
-    if "positions" in config:
-        if not isinstance(config["positions"], (list, tuple)) or not all(isinstance(p, (list, tuple)) and len(p) == 2 for p in config["positions"]):
-            raise ValueError("'positions' must be a sequence of (x, y) pairs")
-        return Navigator.multi(
-            positions=config["positions"],
-            orientations=config.get("orientations")
-        )
-    # Single-agent
-    if "position" in config:
-        if not isinstance(config["position"], (list, tuple)) or len(config["position"]) != 2:
-            raise ValueError("'position' must be a tuple or list of length 2")
-        return Navigator.single(
-            position=config["position"],
-            orientation=config.get("orientation")
-        )
-    # Missing required
-    if "positions" in config_keys:
-        raise ValueError("Config for multi-agent navigator must include a valid 'positions' key.")
-    if "position" in config_keys:
-        raise ValueError("Config for single-agent navigator must include a valid 'position' key.")
-    # If neither present, error
-    raise ValueError("Config must include either 'positions' (multi-agent) or 'position' (single-agent) key.")
-
-
 def create_video_plume(
     video_path: Optional[Union[str, pathlib.Path]] = None,
     flip: Optional[bool] = None,
     kernel_size: Optional[int] = None,
     kernel_sigma: Optional[float] = None,
     config_path: Optional[Union[str, pathlib.Path]] = None
-):
-    """Create a VideoPlume instance from arguments or config file, with validation and merging."""
+) -> VideoPlume:
+    """Create a VideoPlume instance from arguments or config file, with validation and merging.
+
+    Parameters
+    ----------
+    video_path : str or Path, optional
+        Path to the video file.
+    flip : bool, optional
+        Whether to flip the video vertically.
+    kernel_size : int, optional
+        Size of the Gaussian kernel for plume smoothing.
+    kernel_sigma : float, optional
+        Standard deviation of the Gaussian kernel.
+    config_path : str or Path, optional
+        Optional path to a configuration file. If provided, values from the config
+        are loaded and overridden by any direct arguments provided.
+
+    Returns
+    -------
+    VideoPlume
+        Configured VideoPlume instance.
+
+    See Also
+    --------
+    create_navigator : For creating agent navigators.
+    run_plume_simulation : For running a full plume navigation simulation pipeline.
+    """
     params = {}
     if config_path is not None:
-        config = _load_config(config_path)
+        config = load_config(config_path)
         params |= config
     # Direct args override config
     if video_path is not None:
@@ -200,45 +180,46 @@ def create_video_plume(
 
 
 def run_plume_simulation(
-    navigator,
-    plume,
+    navigator: Navigator,
+    plume: VideoPlume,
     num_steps: Optional[int] = None,
     dt: Optional[float] = None,
     config_path: Optional[Union[str, pathlib.Path]] = None,
-):
-    """Run a plume simulation with config merging and strict validation.
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Run a plume simulation with config merging and strict validation.
 
     Parameters
     ----------
     navigator : Navigator
         The navigator instance (single- or multi-agent).
     plume : VideoPlume
-        The plume environment instance.
+        The VideoPlume environment instance.
     num_steps : int, optional
-        Number of simulation steps.
+        Number of simulation steps to run.
     dt : float, optional
-        Simulation time-step (delta t).
+        Simulation time step.
     config_path : str or Path, optional
-        Path to YAML config file.
+        Optional path to a configuration file. If provided, values from the config
+        are loaded and overridden by any direct arguments provided.
 
     Returns
     -------
     positions : np.ndarray
-        Agent positions (n_agents, n_steps, 2)
+        Agent positions of shape (n_agents, n_steps, 2).
     orientations : np.ndarray
-        Agent orientations (n_agents, n_steps)
+        Agent orientations of shape (n_agents, n_steps).
     readings : np.ndarray
-        Agent sensor readings (n_agents, n_steps)
+        Sensor readings of shape (n_agents, n_steps).
 
-    Examples
+    See Also
     --------
-    >>> nav = create_navigator(positions=[(0, 0), (1, 1)])
-    >>> plume = create_video_plume("video.mp4")
-    >>> pos, ori, read = run_plume_simulation(nav, plume, num_steps=10, dt=0.2)
+    create_navigator : For creating agent navigators.
+    create_video_plume : For generating video plumes for simulation environments.
     """
     params = {}
     if config_path is not None:
-        config = _load_config(config_path)
+        config = load_config(config_path)
         params |= config
     # Direct args override config
     if num_steps is not None:
@@ -282,12 +263,6 @@ def run_plume_simulation(
     return positions, orientations, readings
 
 
-def _load_config(config_path):
-    """Load a configuration file."""
-    from odor_plume_nav.config.utils import load_config
-    return load_config(config_path)
-
-
 def visualize_simulation_results(
     positions: np.ndarray,
     orientations: np.ndarray,
@@ -321,41 +296,11 @@ def visualize_simulation_results(
     matplotlib.figure.Figure
         The created matplotlib figure.
     """
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    fig, ax = plt.subplots()
-    if plume_frames is not None:
-        # Show the first frame as background (or mean across frames)
-        if plume_frames.ndim == 4:
-            bg = np.mean(plume_frames, axis=0).astype(np.uint8)
-        else:
-            bg = plume_frames
-        ax.imshow(bg)
-    # Plot agent trajectories
-    n_agents = positions.shape[0]
-    for i in range(n_agents):
-        ax.plot(positions[i, :, 0], positions[i, :, 1], label=f"Agent {i+1}")
-        # Optionally add orientation arrows (quiver)
-        ax.quiver(
-            positions[i, :, 0],
-            positions[i, :, 1],
-            np.cos(orientations[i]),
-            np.sin(orientations[i]),
-            angles='xy', scale_units='xy', scale=0.5, width=0.003, alpha=0.5
-        )
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_title("Agent Trajectories" + (" on Plume" if plume_frames is not None else ""))
-    ax.legend()
-    # Output logic
-    if output_path is not None:
-        fig.savefig(output_path)
-    if show_plot:
-        plt.show()
-    # Plot lifecycle management
-    if close_plot is None:
-        close_plot = output_path is not None and not show_plot
-    if close_plot:
-        plt.close(fig)
-    return fig
+    return visualize_trajectory(
+        positions=positions,
+        orientations=orientations,
+        plume_frames=plume_frames,
+        output_path=output_path,
+        show_plot=show_plot,
+        close_plot=close_plot
+    )

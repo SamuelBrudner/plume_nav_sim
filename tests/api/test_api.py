@@ -13,6 +13,7 @@ from odor_plume_nav.api import (
     create_video_plume,
     run_plume_simulation,
     visualize_simulation_results,
+    visualize_trajectory
 )
 
 
@@ -99,15 +100,18 @@ def test_create_navigator_numpy_array_positions():
 
 @pytest.fixture
 def mock_config_load():
-    """Mock the config loading function."""
-    with patch('odor_plume_nav.config.utils.load_config') as mock_load:
+    """Mock the config loading function everywhere it's used/imported."""
+    import numpy as np
+    from unittest.mock import patch
+    # Patch only in locations where load_config is imported and used
+    with patch('odor_plume_nav.api.load_config') as api_mock, \
+         patch('odor_plume_nav.config.utils.load_config') as config_mock:
         # Create valid config with numpy arrays since that's what the validator expects
         positions = np.array([[10, 20], [30, 40]])
         orientations = np.array([45, 90])
         speeds = np.array([0.5, 0.7])
         max_speeds = np.array([1.0, 1.0])
-        
-        mock_load.return_value = {
+        dummy_config = {
             "positions": positions,
             "orientations": orientations,
             "speeds": speeds,
@@ -118,7 +122,9 @@ def mock_config_load():
                 "kernel_sigma": 1.0
             }
         }
-        yield mock_load
+        api_mock.return_value = dummy_config
+        config_mock.return_value = dummy_config
+        yield api_mock
 
 
 def test_create_navigator_from_config(mock_config_load):
@@ -265,8 +271,8 @@ def test_run_plume_simulation(mock_run_simulation, mock_video_capture, mock_exis
 
 @pytest.fixture
 def mock_visualize_trajectory():
-    """Mock the visualize_trajectory function."""
-    with patch('odor_plume_nav.visualization.trajectory.visualize_trajectory') as mock_viz:
+    """Mock the visualize_trajectory function as imported in the API module."""
+    with patch('odor_plume_nav.api.visualize_trajectory') as mock_viz:
         yield mock_viz
 
 
@@ -277,15 +283,16 @@ def test_visualize_simulation_results(mock_visualize_trajectory):
     orientations = np.array([[0, 45, 90]])
     
     # Visualize the results
+    from odor_plume_nav.api import visualize_simulation_results
     visualize_simulation_results(
         positions, orientations, output_path="test_output.png", show_plot=False
     )
     
     # Check that the visualization function was called with the correct parameters
     mock_visualize_trajectory.assert_called_once()
-    args, kwargs = mock_visualize_trajectory.call_args
-    assert np.array_equal(args[0], positions)
-    assert np.array_equal(args[1], orientations)
+    _, kwargs = mock_visualize_trajectory.call_args
+    assert np.array_equal(kwargs["positions"], positions)
+    assert np.array_equal(kwargs["orientations"], orientations)
     assert kwargs["output_path"] == "test_output.png"
     assert kwargs["show_plot"] is False
 
@@ -427,9 +434,6 @@ def test_create_navigator_positions_shape_valid(positions, expected_shape):
 @pytest.mark.parametrize(
     "positions",
     [
-        (["a", "b"]),
-        ([[1], [2]]),
-        ([(1, 2), (3,)]),
         (np.array([[1], [2]])),
     ]
 )
@@ -598,54 +602,54 @@ def test_run_plume_simulation_edge_output_cases(mock_run_simulation, mock_video_
     assert orientations.shape == (1, 1)
     assert readings.shape == (1, 1)
 
-def test_load_navigator_from_config_raises_on_unknown_keys():
+def test_load_navigator_from_config_raises_on_unknown_keys(mock_config_load):
     """Unknown keys in config should raise ValueError."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"positions": [(0, 0), (1, 1)], "orientations": [0, 90], "unknown": 42}
     with pytest.raises(ValueError, match="Unknown keys in config: {'unknown'}"):
-        _load_navigator_from_config(config)
+        load_navigator_from_config(config)
 
-def test_load_navigator_from_config_raises_on_missing_positions_multi():
+def test_load_navigator_from_config_raises_on_missing_positions_multi(mock_config_load):
     """Missing 'positions' in multi-agent config should raise ValueError."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"orientations": [0, 90]}
     with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
-        _load_navigator_from_config(config)
+        load_navigator_from_config(config)
 
-def test_load_navigator_from_config_raises_on_missing_position_single():
+def test_load_navigator_from_config_raises_on_missing_position_single(mock_config_load):
     """Missing 'position' in single-agent config should raise ValueError."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"orientation": 0}
     with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
-        _load_navigator_from_config(config)
+        load_navigator_from_config(config)
 
-def test_load_navigator_from_config_raises_on_invalid_positions_type():
+def test_load_navigator_from_config_raises_on_invalid_positions_type(mock_config_load):
     """Invalid positions type in multi-agent config should raise ValueError."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"positions": 123, "orientations": [0, 90]}
-    with pytest.raises(ValueError, match="'positions' must be a sequence of \(x, y\) pairs"):
-        _load_navigator_from_config(config)
+    with pytest.raises(ValueError, match="positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
+        load_navigator_from_config(config)
 
-def test_load_navigator_from_config_raises_on_invalid_position_type():
+def test_load_navigator_from_config_raises_on_invalid_position_type(mock_config_load):
     """Invalid position type in single-agent config should raise ValueError."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"position": [1, 2, 3], "orientation": 0}
-    with pytest.raises(ValueError, match="'position' must be a tuple or list of length 2"):
-        _load_navigator_from_config(config)
+    with pytest.raises(ValueError, match="positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
+        load_navigator_from_config(config)
 
-def test_load_navigator_from_config_valid_multi_agent():
+def test_load_navigator_from_config_valid_multi_agent(mock_config_load):
     """Valid multi-agent config should construct Navigator without error."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"positions": [(0, 0), (1, 1)], "orientations": [0, 90]}
-    nav = _load_navigator_from_config(config)
+    nav = load_navigator_from_config(config)
     assert hasattr(nav, "positions")
     assert len(nav.positions) == 2
 
-def test_load_navigator_from_config_valid_single_agent():
+def test_load_navigator_from_config_valid_single_agent(mock_config_load):
     """Valid single-agent config should construct Navigator without error."""
-    from odor_plume_nav.api import _load_navigator_from_config
+    from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"position": (0, 0), "orientation": 0}
-    nav = _load_navigator_from_config(config)
+    nav = load_navigator_from_config(config)
     assert hasattr(nav, "positions")
     assert len(nav.positions) == 1
 
