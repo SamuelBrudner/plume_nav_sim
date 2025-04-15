@@ -83,3 +83,10 @@ api.txt
 
 # Credentials
 configs/local/credentials.yml
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
