@@ -606,35 +606,35 @@ def test_load_navigator_from_config_raises_on_unknown_keys(mock_config_load):
     """Unknown keys in config should raise ValueError."""
     from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"positions": [(0, 0), (1, 1)], "orientations": [0, 90], "unknown": 42}
-    with pytest.raises(ValueError, match="Unknown keys in config: {'unknown'}"):
+    with pytest.raises(ValueError, match=r"Unknown keys in config: {'unknown'}"):
         load_navigator_from_config(config)
 
 def test_load_navigator_from_config_raises_on_missing_positions_multi(mock_config_load):
     """Missing 'positions' in multi-agent config should raise ValueError."""
     from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"orientations": [0, 90]}
-    with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
+    with pytest.raises(ValueError, match=r"Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
         load_navigator_from_config(config)
 
 def test_load_navigator_from_config_raises_on_missing_position_single(mock_config_load):
     """Missing 'position' in single-agent config should raise ValueError."""
     from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"orientation": 0}
-    with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
+    with pytest.raises(ValueError, match=r"Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
         load_navigator_from_config(config)
 
 def test_load_navigator_from_config_raises_on_invalid_positions_type(mock_config_load):
     """Invalid positions type in multi-agent config should raise ValueError."""
     from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"positions": 123, "orientations": [0, 90]}
-    with pytest.raises(ValueError, match="positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
+    with pytest.raises(ValueError, match=r"positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
         load_navigator_from_config(config)
 
 def test_load_navigator_from_config_raises_on_invalid_position_type(mock_config_load):
     """Invalid position type in single-agent config should raise ValueError."""
     from odor_plume_nav.utils.navigator_utils import load_navigator_from_config
     config = {"position": [1, 2, 3], "orientation": 0}
-    with pytest.raises(ValueError, match="positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
+    with pytest.raises(ValueError, match=r"positions must be a single \(x, y\) or a sequence of \(x, y\) pairs \(shape \(2,\) or \(N, 2\)\)"):
         load_navigator_from_config(config)
 
 def test_load_navigator_from_config_valid_multi_agent(mock_config_load):
