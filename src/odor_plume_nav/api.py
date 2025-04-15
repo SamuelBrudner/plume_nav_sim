@@ -294,27 +294,68 @@ def visualize_simulation_results(
     plume_frames: Optional[np.ndarray] = None,
     output_path: Optional[Union[str, pathlib.Path]] = None,
     show_plot: bool = True,
-) -> None:
+    close_plot: Optional[bool] = None,
+) -> "matplotlib.figure.Figure":
     """
-    Visualize simulation results.
-    
-    Args:
-        positions: Array of agent positions from simulation
-        orientations: Array of agent orientations from simulation
-        plume_frames: Optional array of plume frames for background
-        output_path: Path to save visualization
-        show_plot: Whether to display the plot
-        
-    Examples:
-        >>> positions, orientations, _ = run_plume_simulation(...)
-        >>> visualize_simulation_results(positions, orientations)
+    Visualize agent trajectories and orientations, optionally overlayed on plume frames.
+
+    If `plume_frames` is None, the function plots only agent positions/orientations.
+
+    Parameters
+    ----------
+    positions : np.ndarray
+        Agent positions of shape (n_agents, n_steps, 2).
+    orientations : np.ndarray
+        Agent orientations of shape (n_agents, n_steps).
+    plume_frames : np.ndarray, optional
+        Plume video frames (n_steps, H, W, 3) or None.
+    output_path : str or Path, optional
+        If specified, saves the figure to this path.
+    show_plot : bool, default True
+        If True, displays the plot interactively.
+    close_plot : bool, optional
+        If True, closes the figure after saving (default: True if output_path is set and show_plot is False).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The created matplotlib figure.
     """
-    from odor_plume_nav.visualization.trajectory import visualize_trajectory
-    
-    visualize_trajectory(
-        positions, 
-        orientations, 
-        plume_frames=plume_frames,
-        output_path=output_path,
-        show_plot=show_plot
-    )
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    fig, ax = plt.subplots()
+    if plume_frames is not None:
+        # Show the first frame as background (or mean across frames)
+        if plume_frames.ndim == 4:
+            bg = np.mean(plume_frames, axis=0).astype(np.uint8)
+        else:
+            bg = plume_frames
+        ax.imshow(bg)
+    # Plot agent trajectories
+    n_agents = positions.shape[0]
+    for i in range(n_agents):
+        ax.plot(positions[i, :, 0], positions[i, :, 1], label=f"Agent {i+1}")
+        # Optionally add orientation arrows (quiver)
+        ax.quiver(
+            positions[i, :, 0],
+            positions[i, :, 1],
+            np.cos(orientations[i]),
+            np.sin(orientations[i]),
+            angles='xy', scale_units='xy', scale=0.5, width=0.003, alpha=0.5
+        )
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_title("Agent Trajectories" + (" on Plume" if plume_frames is not None else ""))
+    ax.legend()
+    # Output logic
+    if output_path is not None:
+        fig.savefig(output_path)
+    if show_plot:
+        plt.show()
+    # Plot lifecycle management
+    if close_plot is None:
+        close_plot = output_path is not None and not show_plot
+    if close_plot:
+        plt.close(fig)
+    return fig
