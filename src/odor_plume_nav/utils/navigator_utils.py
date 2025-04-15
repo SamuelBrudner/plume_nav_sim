@@ -815,3 +815,56 @@ def create_multi_agent_navigator(
     
     # Create navigator instance
     return navigator_class(**kwargs)
+
+
+def validate_positions(positions: Any) -> None:
+    """Ensure positions/position is either a single (x, y) or a sequence of (x, y) pairs (shape (2,) or (N, 2))."""
+    import numpy as np
+    if positions is None:
+        return
+    arr = np.asarray(positions)
+    if arr.ndim == 1 and arr.shape[0] == 2:
+        # Single agent (x, y)
+        if not np.issubdtype(arr.dtype, np.number):
+            raise ValueError("positions must be numeric.")
+        return
+    if arr.ndim == 2 and arr.shape[1] == 2:
+        # Multi-agent
+        if not np.issubdtype(arr.dtype, np.number):
+            raise ValueError("positions must be numeric.")
+        return
+    raise ValueError(f"positions must be a single (x, y) or a sequence of (x, y) pairs (shape (2,) or (N, 2)), got shape {arr.shape}.")
+
+
+def load_navigator_from_config(config: dict):
+    """
+    Load a Navigator instance from a config dictionary.
+    Strictly validates required keys and types. Raises ValueError on unknown keys or malformed config.
+    """
+    from odor_plume_nav.core.navigator import Navigator
+    required_keys = {"positions", "orientations", "speeds", "max_speeds"}
+    allowed_keys = required_keys | {"position", "orientation", "speed", "max_speed"}
+    if unknown_keys := set(config.keys()) - allowed_keys:
+        raise ValueError(f"Unknown keys in config: {unknown_keys}")
+    # Validate required fields
+    if "positions" in config:
+        validate_positions(config["positions"])
+    elif "position" in config:
+        validate_positions(config["position"])
+    else:
+        raise ValueError("Config must include either 'positions' (multi-agent) or 'position' (single-agent) key.")
+    # Instantiate Navigator
+    if "positions" in config:
+        return Navigator.multi(
+            positions=config["positions"],
+            orientations=config.get("orientations"),
+            speeds=config.get("speeds"),
+            max_speeds=config.get("max_speeds")
+        )
+    else:
+        return Navigator.single(
+            position=config["position"],
+            orientation=config.get("orientation"),
+            speed=config.get("speed"),
+            max_speed=config.get("max_speed")
+        )
