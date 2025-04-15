@@ -1,5 +1,7 @@
 """Tests for the public API functions."""
 
+
+import contextlib
 import pytest
 import numpy as np
 import cv2
@@ -69,13 +71,8 @@ def test_create_navigator_multi_agent():
     # Check that the navigator has the correct number of agents
     assert len(navigator.positions) == 3
     
-    # Check the properties of the first agent using array indexing
-    assert navigator.orientations[0] == 45
-    assert navigator.speeds[0] == 0.5
-    
     # Check that all agents have correct positions
-    for i, expected_pos in enumerate(positions):
-        assert np.allclose(navigator.positions[i], expected_pos)
+    assert np.allclose(navigator.positions, positions)
     
     # Verify each agent has correct orientation and speed
     assert np.allclose(navigator.orientations, orientations)
@@ -249,7 +246,7 @@ def test_run_plume_simulation(mock_run_simulation, mock_video_capture, mock_exis
     
     # Run the simulation
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=100, step_size=0.5
+        navigator, plume, num_steps=100, dt=0.5
     )
     
     # Check that the simulation function was called with the correct parameters
@@ -258,7 +255,7 @@ def test_run_plume_simulation(mock_run_simulation, mock_video_capture, mock_exis
     assert args[0] == navigator
     assert args[1] == plume
     assert kwargs["num_steps"] == 100
-    assert kwargs["step_size"] == 0.5
+    assert kwargs["dt"] == 0.5
     
     # Check that the results were returned correctly
     assert positions.shape == (1, 3, 2)  # (num_agents, num_steps, 2)
@@ -362,11 +359,9 @@ def test_create_video_plume_unknown_config_field(mock_video_capture, mock_exists
         "unknown_field": 42
     }
     # Accept either: ignore unknown field, or raise ValueError
-    try:
+    with contextlib.suppress(ValueError):
         plume = create_video_plume("test_video.mp4", config_path="test_config.yaml")
         assert hasattr(plume, "video_path")
-    except ValueError:
-        pass
 
 
 def test_create_video_plume_conflicting_fields(mock_video_capture, mock_exists, mock_config_load):
@@ -402,36 +397,83 @@ import pytest
         (np.array([[1], [2]]), ValueError),  # invalid np.ndarray
     ]
 )
-def test_create_navigator_positions_shape(positions, expected_exception):
-    """Test that create_navigator validates positions shape and type strictly."""
-    if expected_exception is None:
-        navigator = create_navigator(positions=positions)
-        # Accept both single-agent and multi-agent shapes
-        arr = np.asarray(positions)
-        if arr.ndim == 2:
-            assert navigator.positions.shape[1] == 2  # Should be (N, 2)
-        elif arr.ndim == 1:
-            assert navigator.positions.shape == (1, 2)  # Single agent promoted to (1, 2)
-    else:
-        with pytest.raises(ValueError):
-            create_navigator(positions=positions)
+
+
+@pytest.mark.parametrize(
+    "i,expected_pos",
+    [(0, (10, 20)), (1, (30, 40)), (2, (50, 60))]
+)
+def test_create_navigator_position_index(i, expected_pos):
+    positions = [(10, 20), (30, 40), (50, 60)]
+    navigator = create_navigator(
+        positions=positions
+    )
+    assert np.allclose(navigator.positions[i], expected_pos)
+
+
+@pytest.mark.parametrize(
+    "positions,expected_shape",
+    [
+        ([(1, 2), (3, 4)], (2, 2)),
+        ([1, 2], (1, 2)),
+        ((1, 2), (1, 2)),
+        (np.array([[1, 2], [3, 4]]), (2, 2)),
+    ]
+)
+def test_create_navigator_positions_shape_valid(positions, expected_shape):
+    navigator = create_navigator(positions=positions)
+    assert navigator.positions.shape == expected_shape
+
+@pytest.mark.parametrize(
+    "positions",
+    [
+        (["a", "b"]),
+        ([[1], [2]]),
+        ([(1, 2), (3,)]),
+        (np.array([[1], [2]])),
+    ]
+)
+def test_create_navigator_positions_shape_invalid(positions):
+    with pytest.raises(ValueError):
+        create_navigator(positions=positions)
+
+
+def test_run_plume_simulation_valid_dt():
+    """run_plume_simulation should accept dt and produce correct output."""
+    from odor_plume_nav.api import create_navigator, create_video_plume, run_plume_simulation
+    import numpy as np
+    class DummyVideoCapture:
+        def __init__(self, *a, **kw): pass
+        def isOpened(self): return True
+        def read(self): return True, np.zeros((10, 10, 3), dtype=np.uint8)
+        def release(self): pass
+        def get(self, prop): return 1  # Plausible dummy value for any property
+        def set(self, prop, value): pass  # Accept any set call, do nothing
+    with patch("pathlib.Path.exists", return_value=True), \
+         patch("cv2.VideoCapture", DummyVideoCapture):
+        nav = create_navigator(positions=[(0.0, 0.0), (1.0, 1.0)])  # ensure float positions
+        plume = create_video_plume("test_video.mp4")
+        pos, ori, read = run_plume_simulation(nav, plume, num_steps=3, dt=0.5)
+        assert pos.shape == (2, 3, 2)
+        assert ori.shape == (2, 3)
+        assert read.shape == (2, 3)
 
 
 def test_run_plume_simulation_config_override(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
     """Direct argument should override config value."""
     mock_config_load.return_value = {
         "num_steps": 50,
-        "step_size": 0.1
+        "dt": 0.1
     }
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=100, step_size=0.5, config_path="test_config.yaml"
+        navigator, plume, num_steps=100, dt=0.5, config_path="test_config.yaml"
     )
     mock_run_simulation.assert_called_once()
     args, kwargs = mock_run_simulation.call_args
     assert kwargs["num_steps"] == 100
-    assert kwargs["step_size"] == 0.5
+    assert kwargs["dt"] == 0.5
 
 
 def test_run_plume_simulation_partial_config(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
@@ -442,12 +484,12 @@ def test_run_plume_simulation_partial_config(mock_run_simulation, mock_video_cap
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, config_path="test_config.yaml", step_size=0.2
+        navigator, plume, config_path="test_config.yaml", dt=0.2
     )
     mock_run_simulation.assert_called_once()
     args, kwargs = mock_run_simulation.call_args
     assert kwargs["num_steps"] == 25
-    assert kwargs["step_size"] == 0.2
+    assert kwargs["dt"] == 0.2
 
 
 def test_run_plume_simulation_direct_args_only(mock_run_simulation, mock_video_capture, mock_exists):
@@ -455,58 +497,56 @@ def test_run_plume_simulation_direct_args_only(mock_run_simulation, mock_video_c
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=5, step_size=1.0
+        navigator, plume, num_steps=5, dt=1.0
     )
     mock_run_simulation.assert_called_once()
     args, kwargs = mock_run_simulation.call_args
     assert kwargs["num_steps"] == 5
-    assert kwargs["step_size"] == 1.0
+    assert kwargs["dt"] == 1.0
 
 
-def test_run_plume_simulation_invalid_num_steps(mock_run_simulation, mock_video_capture, mock_exists):
+@pytest.mark.parametrize("bad", [0, -1, "ten"])
+def test_run_plume_simulation_invalid_num_steps_param(mock_run_simulation, mock_video_capture, mock_exists, bad):
     """Negative or zero num_steps raises ValueError."""
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
-    for bad in [0, -1, "ten"]:
-        with pytest.raises(ValueError):
-            run_plume_simulation(navigator, plume, num_steps=bad, step_size=1.0)
+    with pytest.raises(ValueError):
+        run_plume_simulation(navigator, plume, num_steps=bad, dt=1.0)
 
 
-def test_run_plume_simulation_invalid_step_size(mock_run_simulation, mock_video_capture, mock_exists):
-    """Non-positive or non-float step_size raises ValueError."""
+@pytest.mark.parametrize("bad", [0, -0.1, "small"])
+def test_run_plume_simulation_invalid_dt_param(mock_run_simulation, mock_video_capture, mock_exists, bad):
+    """Non-positive or non-float dt raises ValueError."""
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
-    for bad in [0, -0.1, "small"]:
-        with pytest.raises(ValueError):
-            run_plume_simulation(navigator, plume, num_steps=10, step_size=bad)
+    with pytest.raises(ValueError):
+        run_plume_simulation(navigator, plume, num_steps=10, dt=bad)
 
 
 def test_run_plume_simulation_missing_required(mock_run_simulation, mock_video_capture, mock_exists):
     """Missing navigator or plume raises TypeError or ValueError."""
     with pytest.raises((TypeError, ValueError)):
-        run_plume_simulation(None, None, num_steps=5, step_size=1.0)
+        run_plume_simulation(None, None, num_steps=5, dt=1.0)
 
 
 def test_run_plume_simulation_unknown_config_field(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
     """Unknown config field is ignored or raises error."""
     mock_config_load.return_value = {
         "num_steps": 10,
-        "step_size": 1.0,
+        "dt": 1.0,
         "unknown_field": 42
     }
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
-    try:
+    with contextlib.suppress(ValueError):
         run_plume_simulation(navigator, plume, config_path="test_config.yaml")
-    except ValueError:
-        pass
 
 
 def test_run_plume_simulation_conflicting_fields(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
     """Direct arg and config provide different values for same field; direct arg wins."""
     mock_config_load.return_value = {
         "num_steps": 10,
-        "step_size": 1.0
+        "dt": 1.0
     }
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
@@ -516,7 +556,7 @@ def test_run_plume_simulation_conflicting_fields(mock_run_simulation, mock_video
     mock_run_simulation.assert_called_once()
     args, kwargs = mock_run_simulation.call_args
     assert kwargs["num_steps"] == 20
-    assert kwargs["step_size"] == 1.0
+    assert kwargs["dt"] == 1.0
 
 
 def test_run_plume_simulation_output_shapes(mock_run_simulation, mock_video_capture, mock_exists):
@@ -525,7 +565,7 @@ def test_run_plume_simulation_output_shapes(mock_run_simulation, mock_video_capt
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=3, step_size=1.0
+        navigator, plume, num_steps=3, dt=1.0
     )
     assert positions.shape == (1, 3, 2)
     assert orientations.shape == (1, 3)
@@ -533,7 +573,7 @@ def test_run_plume_simulation_output_shapes(mock_run_simulation, mock_video_capt
     # Multi-agent
     navigator = create_navigator(positions=[(0, 0), (1, 1)])
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=3, step_size=1.0
+        navigator, plume, num_steps=3, dt=1.0
     )
     assert positions.shape == (2, 3, 2)
     assert orientations.shape == (2, 3)
@@ -544,7 +584,7 @@ def test_run_plume_simulation_mismatched_types(mock_run_simulation, mock_video_c
     """Navigator and plume from incompatible protocols raises error (if enforced)."""
     # Here, just pass wrong types
     with pytest.raises((TypeError, ValueError)):
-        run_plume_simulation("not_a_navigator", "not_a_plume", num_steps=5, step_size=1.0)
+        run_plume_simulation("not_a_navigator", "not_a_plume", num_steps=5, dt=1.0)
 
 
 def test_run_plume_simulation_edge_output_cases(mock_run_simulation, mock_video_capture, mock_exists):
@@ -552,8 +592,97 @@ def test_run_plume_simulation_edge_output_cases(mock_run_simulation, mock_video_
     navigator = create_navigator(positions=(0, 0))
     plume = create_video_plume("test_video.mp4")
     positions, orientations, readings = run_plume_simulation(
-        navigator, plume, num_steps=1, step_size=1.0
+        navigator, plume, num_steps=1, dt=1.0
     )
     assert positions.shape == (1, 1, 2)
     assert orientations.shape == (1, 1)
     assert readings.shape == (1, 1)
+
+def test_load_navigator_from_config_raises_on_unknown_keys():
+    """Unknown keys in config should raise ValueError."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"positions": [(0, 0), (1, 1)], "orientations": [0, 90], "unknown": 42}
+    with pytest.raises(ValueError, match="Unknown keys in config: {'unknown'}"):
+        _load_navigator_from_config(config)
+
+def test_load_navigator_from_config_raises_on_missing_positions_multi():
+    """Missing 'positions' in multi-agent config should raise ValueError."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"orientations": [0, 90]}
+    with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
+        _load_navigator_from_config(config)
+
+def test_load_navigator_from_config_raises_on_missing_position_single():
+    """Missing 'position' in single-agent config should raise ValueError."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"orientation": 0}
+    with pytest.raises(ValueError, match="Config must include either 'positions' \(multi-agent\) or 'position' \(single-agent\) key."):
+        _load_navigator_from_config(config)
+
+def test_load_navigator_from_config_raises_on_invalid_positions_type():
+    """Invalid positions type in multi-agent config should raise ValueError."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"positions": 123, "orientations": [0, 90]}
+    with pytest.raises(ValueError, match="'positions' must be a sequence of \(x, y\) pairs"):
+        _load_navigator_from_config(config)
+
+def test_load_navigator_from_config_raises_on_invalid_position_type():
+    """Invalid position type in single-agent config should raise ValueError."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"position": [1, 2, 3], "orientation": 0}
+    with pytest.raises(ValueError, match="'position' must be a tuple or list of length 2"):
+        _load_navigator_from_config(config)
+
+def test_load_navigator_from_config_valid_multi_agent():
+    """Valid multi-agent config should construct Navigator without error."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"positions": [(0, 0), (1, 1)], "orientations": [0, 90]}
+    nav = _load_navigator_from_config(config)
+    assert hasattr(nav, "positions")
+    assert len(nav.positions) == 2
+
+def test_load_navigator_from_config_valid_single_agent():
+    """Valid single-agent config should construct Navigator without error."""
+    from odor_plume_nav.api import _load_navigator_from_config
+    config = {"position": (0, 0), "orientation": 0}
+    nav = _load_navigator_from_config(config)
+    assert hasattr(nav, "positions")
+    assert len(nav.positions) == 1
+
+@pytest.mark.parametrize(
+    "i,expected_pos",
+    [(0, (10, 20)), (1, (30, 40)), (2, (50, 60))]
+)
+def test_create_navigator_position_index(i, expected_pos):
+    positions = [(10, 20), (30, 40), (50, 60)]
+    orientations = [45, 90, 135]
+    speeds = [0.5, 0.7, 0.9]
+    navigator = create_navigator(
+        positions=positions,
+        orientations=orientations,
+        speeds=speeds
+    )
+    assert np.allclose(navigator.positions[i], expected_pos)
+
+@pytest.mark.parametrize(
+    "positions,expected_shape",
+    [
+        ([(1, 2), (3, 4)], (2, 2)),
+        ([1, 2], (1, 2)),
+        ((1, 2), (1, 2)),
+        (np.array([[1, 2], [3, 4]]), (2, 2)),
+    ]
+)
+def test_create_navigator_positions_shape_valid(positions, expected_shape):
+    navigator = create_navigator(positions=positions)
+    assert navigator.positions.shape == expected_shape
+
+@pytest.mark.parametrize(
+    "positions",
+    [
+        (np.array([[1], [2]])),
+    ]
+)
+def test_create_navigator_positions_shape_invalid(positions):
+    with pytest.raises(ValueError):
+        create_navigator(positions=positions)

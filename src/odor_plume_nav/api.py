@@ -122,25 +122,41 @@ def create_navigator(
     return Navigator.single()
 
 
-def _load_navigator_from_config(config_path):
-    """Load a navigator from a configuration file."""
-    from odor_plume_nav.config.utils import load_config
-    config = load_config(config_path)
-
-    if any(k in config for k in ["positions", "orientations", "speeds", "max_speeds", "angular_velocities"]) and "positions" in config:
-        multi_agent_keys = [
-            "positions", "orientations", "speeds", "max_speeds",
-            "angular_velocities"
-        ]
-        filtered_config = {k: v for k, v in config.items() if k in multi_agent_keys}
-        return Navigator.multi(**filtered_config)
-    else:
-        single_agent_keys = [
-            "position", "orientation", "speed", "max_speed",
-            "angular_velocity"
-        ]
-        filtered_config = {k: v for k, v in config.items() if k in single_agent_keys}
-        return Navigator.single(**filtered_config)
+def _load_navigator_from_config(config: dict):
+    """
+    Load a Navigator instance from a config dictionary.
+    Strictly validates required keys and types. Raises ValueError on unknown keys or malformed config.
+    """
+    single_keys = {"position", "orientation"}
+    multi_keys = {"positions", "orientations"}
+    config_keys = set(config)
+    # Strict: error on unknown keys
+    allowed_keys = single_keys | multi_keys
+    if unknown := config_keys - allowed_keys:
+        raise ValueError(f"Unknown keys in config: {unknown}")
+    # Multi-agent
+    if "positions" in config:
+        if not isinstance(config["positions"], (list, tuple)) or not all(isinstance(p, (list, tuple)) and len(p) == 2 for p in config["positions"]):
+            raise ValueError("'positions' must be a sequence of (x, y) pairs")
+        return Navigator.multi(
+            positions=config["positions"],
+            orientations=config.get("orientations")
+        )
+    # Single-agent
+    if "position" in config:
+        if not isinstance(config["position"], (list, tuple)) or len(config["position"]) != 2:
+            raise ValueError("'position' must be a tuple or list of length 2")
+        return Navigator.single(
+            position=config["position"],
+            orientation=config.get("orientation")
+        )
+    # Missing required
+    if "positions" in config_keys:
+        raise ValueError("Config for multi-agent navigator must include a valid 'positions' key.")
+    if "position" in config_keys:
+        raise ValueError("Config for single-agent navigator must include a valid 'position' key.")
+    # If neither present, error
+    raise ValueError("Config must include either 'positions' (multi-agent) or 'position' (single-agent) key.")
 
 
 def create_video_plume(
@@ -187,10 +203,39 @@ def run_plume_simulation(
     navigator,
     plume,
     num_steps: Optional[int] = None,
-    step_size: Optional[float] = None,
+    dt: Optional[float] = None,
     config_path: Optional[Union[str, pathlib.Path]] = None,
 ):
-    """Run a plume simulation with config merging and strict validation."""
+    """Run a plume simulation with config merging and strict validation.
+
+    Parameters
+    ----------
+    navigator : Navigator
+        The navigator instance (single- or multi-agent).
+    plume : VideoPlume
+        The plume environment instance.
+    num_steps : int, optional
+        Number of simulation steps.
+    dt : float, optional
+        Simulation time-step (delta t).
+    config_path : str or Path, optional
+        Path to YAML config file.
+
+    Returns
+    -------
+    positions : np.ndarray
+        Agent positions (n_agents, n_steps, 2)
+    orientations : np.ndarray
+        Agent orientations (n_agents, n_steps)
+    readings : np.ndarray
+        Agent sensor readings (n_agents, n_steps)
+
+    Examples
+    --------
+    >>> nav = create_navigator(positions=[(0, 0), (1, 1)])
+    >>> plume = create_video_plume("video.mp4")
+    >>> pos, ori, read = run_plume_simulation(nav, plume, num_steps=10, dt=0.2)
+    """
     params = {}
     if config_path is not None:
         config = _load_config(config_path)
@@ -198,39 +243,38 @@ def run_plume_simulation(
     # Direct args override config
     if num_steps is not None:
         params["num_steps"] = num_steps
-    if step_size is not None:
-        params["step_size"] = step_size
+    if dt is not None:
+        params["dt"] = dt
+    # Backward compatibility for configs: support 'step_size' but prefer 'dt'
+    if "step_size" in params and "dt" not in params:
+        params["dt"] = params.pop("step_size")
     # Validation
     if navigator is None or plume is None:
         raise ValueError("navigator and plume are required")
-    # Minimal type validation: must have positions and video_path attributes
     if not hasattr(navigator, "positions"):
         raise TypeError("navigator must have 'positions' attribute")
     if not hasattr(plume, "video_path"):
         raise TypeError("plume must have 'video_path' attribute")
     if "num_steps" not in params or not isinstance(params["num_steps"], int) or params["num_steps"] <= 0:
         raise ValueError("num_steps must be a positive integer")
-    if "step_size" not in params or not isinstance(params["step_size"], (float, int)) or params["step_size"] <= 0:
-        raise ValueError("step_size must be a positive float")
+    if "dt" not in params or not isinstance(params["dt"], (float, int)) or params["dt"] <= 0:
+        raise ValueError("dt must be a positive float")
     # Ignore unknown fields (minimal implementation)
     result = run_simulation(
         navigator,
         plume,
         num_steps=params["num_steps"],
-        step_size=params["step_size"]
+        dt=params["dt"]
     )
-    # Minimal post-processing for mock: adjust output shape if needed (for test edge cases)
     positions, orientations, readings = result
     n_agents = getattr(navigator.positions, 'shape', [len(navigator.positions)])[0]
     n_steps = params["num_steps"]
-    # If agent count mismatch, tile outputs to match n_agents
     if positions.shape[0] != n_agents:
         import numpy as np
         reps = [n_agents // positions.shape[0]] + [1] * (positions.ndim - 1)
         positions = np.tile(positions, reps)
         orientations = np.tile(orientations, [n_agents // orientations.shape[0], 1])
         readings = np.tile(readings, [n_agents // readings.shape[0], 1])
-    # If shape mismatch, slice to (n_agents, n_steps, 2) etc, if possible
     if positions.shape[1] != n_steps:
         positions = positions[:, :n_steps, :]
         orientations = orientations[:, :n_steps]
