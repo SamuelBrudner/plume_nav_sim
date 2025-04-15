@@ -291,3 +291,269 @@ def test_visualize_simulation_results(mock_visualize_trajectory):
     assert np.array_equal(args[1], orientations)
     assert kwargs["output_path"] == "test_output.png"
     assert kwargs["show_plot"] is False
+
+
+def test_create_navigator_config_and_override(tmp_path, mock_config_load):
+    """Test that direct arguments override config file values when both are provided."""
+    # Mock config: positions = [[10, 20], [30, 40]], orientations = [45, 90]
+    config_path = tmp_path / "test_config.yaml"
+    # The mock_config_load fixture patches the config loader, so we only need to call with the path
+    # Direct argument overrides orientation for first agent
+    override_orientations = [180, 90]
+    navigator = create_navigator(
+        config_path=str(config_path),
+        orientations=override_orientations
+    )
+    # Direct argument should take precedence
+    assert np.allclose(navigator.orientations, override_orientations)
+    # Positions should still be loaded from config
+    assert np.allclose(navigator.positions, np.array([[10, 20], [30, 40]]))
+
+
+def test_create_video_plume_config_override(mock_video_capture, mock_exists, mock_config_load):
+    """Direct argument should override config value."""
+    mock_config_load.return_value = {
+        "video_path": "test_video.mp4",
+        "flip": False,
+        "kernel_size": 3
+    }
+    plume = create_video_plume("test_video.mp4", config_path="test_config.yaml", flip=True, kernel_size=5)
+    assert plume.flip is True
+    assert plume.kernel_size == 5
+
+
+def test_create_video_plume_partial_config(mock_video_capture, mock_exists, mock_config_load):
+    """Direct argument supplies missing config field."""
+    mock_config_load.return_value = {
+        "video_path": "test_video.mp4",
+        "flip": True
+    }
+    plume = create_video_plume("test_video.mp4", config_path="test_config.yaml", kernel_size=7)
+    assert plume.kernel_size == 7
+    assert plume.flip is True
+
+
+def test_create_video_plume_invalid_kernel_size(mock_video_capture, mock_exists):
+    """Invalid kernel_size (negative/int as string) raises ValueError."""
+    with pytest.raises(ValueError):
+        create_video_plume("test_video.mp4", kernel_size=-1)
+    with pytest.raises(ValueError):
+        create_video_plume("test_video.mp4", kernel_size="five")
+
+
+def test_create_video_plume_invalid_flip(mock_video_capture, mock_exists):
+    """Non-bool flip raises ValueError."""
+    with pytest.raises(ValueError):
+        create_video_plume("test_video.mp4", flip="yes")
+
+
+def test_create_video_plume_missing_video_path(mock_video_capture, mock_exists):
+    """Missing video_path should raise TypeError or ValueError."""
+    with pytest.raises((TypeError, ValueError)):
+        create_video_plume()
+
+
+def test_create_video_plume_unknown_config_field(mock_video_capture, mock_exists, mock_config_load):
+    """Unknown config field is ignored or raises error (depending on implementation)."""
+    mock_config_load.return_value = {
+        "video_path": "test_video.mp4",
+        "flip": True,
+        "kernel_size": 3,
+        "unknown_field": 42
+    }
+    # Accept either: ignore unknown field, or raise ValueError
+    try:
+        plume = create_video_plume("test_video.mp4", config_path="test_config.yaml")
+        assert hasattr(plume, "video_path")
+    except ValueError:
+        pass
+
+
+def test_create_video_plume_conflicting_fields(mock_video_capture, mock_exists, mock_config_load):
+    """Direct arg and config provide different values for same field; direct arg wins."""
+    mock_config_load.return_value = {
+        "video_path": "test_video.mp4",
+        "flip": False,
+        "kernel_size": 3
+    }
+    plume = create_video_plume("test_video.mp4", config_path="test_config.yaml", flip=True)
+    assert plume.flip is True
+
+
+# Edge case: invalid file path (if path validation is present)
+def test_create_video_plume_invalid_path(mock_video_capture, monkeypatch):
+    """Non-existent video file path raises error if validated."""
+    monkeypatch.setattr(Path, "exists", lambda self: False)
+    with pytest.raises((FileNotFoundError, ValueError)):
+        create_video_plume("nonexistent.mp4")
+
+
+import pytest
+@pytest.mark.parametrize(
+    "positions,expected_exception",
+    [
+        ([(1, 2), (3, 4)], None),  # valid
+        ([1, 2], None),            # valid single-agent: treat as (x, y)
+        ([(1, 2, 3), (4, 5, 6)], ValueError),  # wrong shape
+        (["a", "b"], ValueError),  # not numeric
+        ([[1], [2]], ValueError),   # wrong length
+        ([(1, 2), (3,)], ValueError),  # one valid, one invalid
+        (np.array([[1, 2], [3, 4]]), None),  # valid np.ndarray
+        (np.array([[1], [2]]), ValueError),  # invalid np.ndarray
+    ]
+)
+def test_create_navigator_positions_shape(positions, expected_exception):
+    """Test that create_navigator validates positions shape and type strictly."""
+    if expected_exception is None:
+        navigator = create_navigator(positions=positions)
+        # Accept both single-agent and multi-agent shapes
+        arr = np.asarray(positions)
+        if arr.ndim == 2:
+            assert navigator.positions.shape[1] == 2  # Should be (N, 2)
+        elif arr.ndim == 1:
+            assert navigator.positions.shape == (1, 2)  # Single agent promoted to (1, 2)
+    else:
+        with pytest.raises(ValueError):
+            create_navigator(positions=positions)
+
+
+def test_run_plume_simulation_config_override(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
+    """Direct argument should override config value."""
+    mock_config_load.return_value = {
+        "num_steps": 50,
+        "step_size": 0.1
+    }
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=100, step_size=0.5, config_path="test_config.yaml"
+    )
+    mock_run_simulation.assert_called_once()
+    args, kwargs = mock_run_simulation.call_args
+    assert kwargs["num_steps"] == 100
+    assert kwargs["step_size"] == 0.5
+
+
+def test_run_plume_simulation_partial_config(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
+    """Direct argument supplies missing config field."""
+    mock_config_load.return_value = {
+        "num_steps": 25
+    }
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, config_path="test_config.yaml", step_size=0.2
+    )
+    mock_run_simulation.assert_called_once()
+    args, kwargs = mock_run_simulation.call_args
+    assert kwargs["num_steps"] == 25
+    assert kwargs["step_size"] == 0.2
+
+
+def test_run_plume_simulation_direct_args_only(mock_run_simulation, mock_video_capture, mock_exists):
+    """Test running simulation with only direct arguments."""
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=5, step_size=1.0
+    )
+    mock_run_simulation.assert_called_once()
+    args, kwargs = mock_run_simulation.call_args
+    assert kwargs["num_steps"] == 5
+    assert kwargs["step_size"] == 1.0
+
+
+def test_run_plume_simulation_invalid_num_steps(mock_run_simulation, mock_video_capture, mock_exists):
+    """Negative or zero num_steps raises ValueError."""
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    for bad in [0, -1, "ten"]:
+        with pytest.raises(ValueError):
+            run_plume_simulation(navigator, plume, num_steps=bad, step_size=1.0)
+
+
+def test_run_plume_simulation_invalid_step_size(mock_run_simulation, mock_video_capture, mock_exists):
+    """Non-positive or non-float step_size raises ValueError."""
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    for bad in [0, -0.1, "small"]:
+        with pytest.raises(ValueError):
+            run_plume_simulation(navigator, plume, num_steps=10, step_size=bad)
+
+
+def test_run_plume_simulation_missing_required(mock_run_simulation, mock_video_capture, mock_exists):
+    """Missing navigator or plume raises TypeError or ValueError."""
+    with pytest.raises((TypeError, ValueError)):
+        run_plume_simulation(None, None, num_steps=5, step_size=1.0)
+
+
+def test_run_plume_simulation_unknown_config_field(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
+    """Unknown config field is ignored or raises error."""
+    mock_config_load.return_value = {
+        "num_steps": 10,
+        "step_size": 1.0,
+        "unknown_field": 42
+    }
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    try:
+        run_plume_simulation(navigator, plume, config_path="test_config.yaml")
+    except ValueError:
+        pass
+
+
+def test_run_plume_simulation_conflicting_fields(mock_run_simulation, mock_video_capture, mock_exists, mock_config_load):
+    """Direct arg and config provide different values for same field; direct arg wins."""
+    mock_config_load.return_value = {
+        "num_steps": 10,
+        "step_size": 1.0
+    }
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, config_path="test_config.yaml", num_steps=20
+    )
+    mock_run_simulation.assert_called_once()
+    args, kwargs = mock_run_simulation.call_args
+    assert kwargs["num_steps"] == 20
+    assert kwargs["step_size"] == 1.0
+
+
+def test_run_plume_simulation_output_shapes(mock_run_simulation, mock_video_capture, mock_exists):
+    """Output arrays have correct shapes for single- and multi-agent."""
+    # Single agent
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=3, step_size=1.0
+    )
+    assert positions.shape == (1, 3, 2)
+    assert orientations.shape == (1, 3)
+    assert readings.shape == (1, 3)
+    # Multi-agent
+    navigator = create_navigator(positions=[(0, 0), (1, 1)])
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=3, step_size=1.0
+    )
+    assert positions.shape == (2, 3, 2)
+    assert orientations.shape == (2, 3)
+    assert readings.shape == (2, 3)
+
+
+def test_run_plume_simulation_mismatched_types(mock_run_simulation, mock_video_capture, mock_exists):
+    """Navigator and plume from incompatible protocols raises error (if enforced)."""
+    # Here, just pass wrong types
+    with pytest.raises((TypeError, ValueError)):
+        run_plume_simulation("not_a_navigator", "not_a_plume", num_steps=5, step_size=1.0)
+
+
+def test_run_plume_simulation_edge_output_cases(mock_run_simulation, mock_video_capture, mock_exists):
+    """Edge output cases: 1 agent, 1 step; output shapes correct."""
+    navigator = create_navigator(positions=(0, 0))
+    plume = create_video_plume("test_video.mp4")
+    positions, orientations, readings = run_plume_simulation(
+        navigator, plume, num_steps=1, step_size=1.0
+    )
+    assert positions.shape == (1, 1, 2)
+    assert orientations.shape == (1, 1)
+    assert readings.shape == (1, 1)
