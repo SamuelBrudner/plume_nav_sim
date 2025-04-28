@@ -56,12 +56,15 @@ def create_navigator(
     ------
     ValueError
         If positions are not valid (see above).
+        If both 'position' and 'positions' are provided.
 
     See Also
     --------
     create_video_plume : For generating video plumes for simulation environments.
     run_plume_simulation : For running a full plume navigation simulation pipeline.
     """
+    if position is not None and positions is not None:
+        raise ValueError("Cannot specify both 'position' (single-agent) and 'positions' (multi-agent). Please provide only one.")
     if config_path is not None:
         config = load_config(config_path)
         params = merge_config_with_args(

@@ -98,6 +98,12 @@ def test_create_navigator_numpy_array_positions():
     assert np.allclose(navigator.speeds, np.zeros(3))
 
 
+def test_create_navigator_conflicting_position_and_positions():
+    """If both position and positions are provided, should raise ValueError."""
+    with pytest.raises(ValueError, match=r"Cannot specify both 'position' \(single-agent\) and 'positions' \(multi-agent\). Please provide only one."):
+        create_navigator(position=(0, 0), positions=[(1, 2), (3, 4)])
+
+
 @pytest.fixture
 def mock_config_load():
     """Mock the config loading function everywhere it's used/imported."""
