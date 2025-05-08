@@ -7,8 +7,8 @@ This module provides functions to create navigator instances based on configurat
 from typing import Optional, Union, Dict, Any
 from pathlib import Path
 
-from odor_plume_nav.core.navigator import Navigator
-from odor_plume_nav.config.utils import load_config
+from odor_plume_nav.domain.navigator import Navigator
+from odor_plume_nav.services.config_loader import load_config
 
 
 def create_navigator_from_config(config_path: Optional[Union[str, Path]] = None, **kwargs) -> Navigator:

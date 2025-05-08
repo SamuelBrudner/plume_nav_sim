@@ -41,29 +41,24 @@ class TestNavigatorAngularVelocity:
         """Test orientation updates for a single agent with angular velocity."""
         # Create a navigator with initial orientation 0
         navigator = self.create_navigator_with_angular_velocity(orientation=0.0, angular_velocity=30.0)
-        
+
         # In protocol-based architecture, we use step() instead of update()
         # and we access properties with array indexing
-        
+
         # Create an environment array for step()
         env = np.zeros((10, 10))
-        
+
         # Take a step (equivalent to dt=1 in old architecture)
         navigator.step(env)
         self.assert_orientation_close(navigator.orientations[0], 30.0)
-        
+
         # Take another step
         navigator.step(env)
         self.assert_orientation_close(navigator.orientations[0], 60.0)
-        
-        # For dt=2 equivalent, we take two steps
-        navigator.step(env)
-        navigator.step(env)
-        self.assert_orientation_close(navigator.orientations[0], 120.0)
-        
-        # Testing modulo 360
-        controller = navigator._controller
-        controller._orientation[0] = 350.0
+
+        controller = self._extracted_from_test_large_angular_change_21(
+            navigator, env, 120.0, 350.0
+        )
         navigator.step(env)
         self.assert_orientation_close(navigator.orientations[0], 20.0)  # 350 + 30 = 380, 380 % 360 = 20
 
@@ -73,20 +68,17 @@ class TestNavigatorAngularVelocity:
         orientations = np.array([0.0, 90.0, 180.0])
         angular_velocities = np.array([10.0, 20.0, 30.0])
         navigator = self.create_multi_agent_navigator(orientations, angular_velocities)
-        
+
         # Create an environment array for step()
         env = np.zeros((10, 10))
-        
+
         # Take a step (equivalent to dt=1 in old architecture)
         navigator.step(env)
         self.assert_orientation_close(navigator.orientations[0], 10.0)
         self.assert_orientation_close(navigator.orientations[1], 110.0)
         self.assert_orientation_close(navigator.orientations[2], 210.0)
-        
-        # Take two more steps (equivalent to dt=2 in old architecture)
-        navigator.step(env)
-        navigator.step(env)
-        self.assert_orientation_close(navigator.orientations[0], 30.0)  # 10 + (10 * 2) = 30
+
+        self._extracted_from_test_large_angular_change_21(navigator, env, 30.0)
         self.assert_orientation_close(navigator.orientations[1], 150.0)  # 110 + (20 * 2) = 150
         self.assert_orientation_close(navigator.orientations[2], 270.0)  # 210 + (30 * 2) = 270
 
@@ -94,44 +86,49 @@ class TestNavigatorAngularVelocity:
         """Test orientation updates with negative angular velocity (turning right)."""
         # Create a navigator with initial orientation 180
         navigator = self.create_navigator_with_angular_velocity(orientation=180.0, angular_velocity=-45.0)
-        
+
         # Create an environment array for step()
         env = np.zeros((10, 10))
-        
+
         # Take a step (equivalent to dt=1 in old architecture)
         navigator.step(env)
         self.assert_orientation_close(navigator.orientations[0], 135.0)  # 180 - 45 = 135
-        
+
         # Take three more steps (equivalent to dt=3 in old architecture)
         navigator.step(env)
-        navigator.step(env)
-        navigator.step(env)
-        self.assert_orientation_close(navigator.orientations[0], 0.0)  # 135 - (45 * 3) = 0
+        self._extracted_from_test_large_angular_change_21(navigator, env, 0.0)
 
     def test_large_angular_change(self):
         """Test orientation updates with large changes (> 360 degrees)."""
         # Create a navigator with initial orientation 0
         navigator = self.create_navigator_with_angular_velocity(orientation=0.0, angular_velocity=180.0)
-        
+
         # Create an environment array for step()
         env = np.zeros((10, 10))
-        
+
         # Take three steps (equivalent to dt=3 in old architecture)
         navigator.step(env)
-        navigator.step(env)
-        navigator.step(env)
-        self.assert_orientation_close(navigator.orientations[0], 180.0)  # 0 + (180 * 3) = 540, 540 % 360 = 180
-        
-        # Test with negative large change
-        controller = navigator._controller
-        controller._orientation[0] = 0.0
+        controller = self._extracted_from_test_large_angular_change_21(
+            navigator, env, 180.0, 0.0
+        )
         controller._angular_velocity[0] = -180.0
-        
+
         # Take three steps
         navigator.step(env)
+        self._extracted_from_test_large_angular_change_21(navigator, env, 180.0)
+
+    # TODO Rename this here and in `test_single_agent_angular_velocity`, `test_multi_agent_angular_velocity`, `test_negative_angular_velocity` and `test_large_angular_change`
+    def _extracted_from_test_large_angular_change_21(self, navigator, env, arg2, arg3):
+        self._extracted_from_test_large_angular_change_21(navigator, env, arg2)
+        result = navigator._controller
+        result._orientation[0] = arg3
+        return result
+
+    # TODO Rename this here and in `test_single_agent_angular_velocity`, `test_multi_agent_angular_velocity`, `test_negative_angular_velocity` and `test_large_angular_change`
+    def _extracted_from_test_large_angular_change_21(self, navigator, env, arg2):
         navigator.step(env)
         navigator.step(env)
-        self.assert_orientation_close(navigator.orientations[0], 180.0)  # 0 - (180 * 3) = -540, -540 % 360 = 180
+        self.assert_orientation_close(navigator.orientations[0], arg2)
 
     def test_set_angular_velocity(self):
         """Test setting angular velocity for a single agent."""
