@@ -8,8 +8,8 @@ navigating through plume environments.
 from typing import Dict, Tuple, Optional, Union
 import numpy as np
 
-from odor_plume_nav.core.navigator import Navigator
-from odor_plume_nav.environments.video_plume import VideoPlume
+from odor_plume_nav.domain.navigator import Navigator
+from odor_plume_nav.adapters.video_plume_opencv import VideoPlume
 
 
 def run_simulation(

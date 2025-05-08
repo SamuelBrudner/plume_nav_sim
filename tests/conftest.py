@@ -8,6 +8,8 @@ to reduce duplication and ensure consistency.
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
 
 @pytest.fixture
