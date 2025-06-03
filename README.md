@@ -1,629 +1,705 @@
-# Odor Plume Navigation: A Reusable Simulation Library
+# Odor Plume Navigation Library
 
-[![PyPI version](https://badge.fury.io/py/{{cookiecutter.project_slug}}.svg)](https://badge.fury.io/py/{{cookiecutter.project_slug}})
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+A reusable Python library for simulating agent navigation through odor plumes with sophisticated Hydra-based configuration management, designed for integration with Kedro pipelines, reinforcement learning frameworks, and machine learning/neural network analyses.
 
-A reusable Python library for simulating navigation of odor plumes with Hydra configuration management, designed for seamless integration with Kedro pipelines, reinforcement learning frameworks, and machine learning analysis workflows.
+## Overview
 
-## 🚀 Quick Start
+The Odor Plume Navigation library provides a comprehensive toolkit for research-grade simulation of how agents navigate through odor plumes. Designed as an importable library, it offers clean APIs, modular architecture, and enterprise-grade configuration management for seamless integration into research workflows.
 
-### Library Import Patterns
+### Key Features
 
-```python
-# For Kedro projects
-from {{cookiecutter.project_slug}} import Navigator, VideoPlume
-from {{cookiecutter.project_slug}}.config import NavigatorConfig
+- **Reusable Library Architecture**: Import and use in any Python project
+- **Hydra Configuration Management**: Sophisticated hierarchical configuration with environment variable integration
+- **Multi-Framework Integration**: Compatible with Kedro, RL frameworks, and ML/neural network analyses
+- **CLI Interface**: Command-line tools for automation and batch processing
+- **Docker-Ready**: Containerized development and deployment environments
+- **Dual Workflow Support**: Poetry and pip installation methods
+- **Research-Grade Quality**: Type-safe, well-documented, and thoroughly tested
 
-# For RL projects
-from {{cookiecutter.project_slug}}.core import NavigatorProtocol
-from {{cookiecutter.project_slug}}.api import create_navigator
+## Installation
 
-# For ML/neural network analyses
-from {{cookiecutter.project_slug}}.utils import set_global_seed
-from {{cookiecutter.project_slug}}.data import VideoPlume
-```
+### Prerequisites
 
-### Basic Usage with Hydra Configuration
+- Python 3.9 or higher
+- Poetry (recommended) or pip for dependency management
+- Docker and docker-compose (optional, for containerized development)
 
-```python
-from hydra import compose, initialize
-from {{cookiecutter.project_slug}}.api.navigation import create_navigator
-from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
+### Installation Methods
 
-# Initialize with Hydra configuration
-with initialize(config_path="conf", version_base=None):
-    cfg = compose(config_name="config")
-    
-    # Create navigator from configuration
-    navigator = create_navigator(cfg.navigator)
-    
-    # Create video plume environment
-    video_plume = VideoPlume.from_config(cfg.video_plume)
-    
-    # Run simulation
-    results = run_plume_simulation(navigator, video_plume, cfg.simulation)
-```
-
-## 📦 Installation
-
-### Option 1: Poetry (Recommended)
+#### Poetry Installation (Recommended)
 
 ```bash
-# Install Poetry if not already installed
-curl -sSL https://install.python-poetry.org | python3 -
+# Install from PyPI
+poetry add {{cookiecutter.project_slug}}
 
-# Clone and install
-git clone <repository-url>
-cd {{cookiecutter.project_slug}}
-poetry install
-
-# Activate environment
-poetry shell
+# For development with all optional dependencies
+poetry add {{cookiecutter.project_slug}} --group dev,docs,viz
 ```
 
-### Option 2: pip
+#### Pip Installation
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Standard installation
+pip install {{cookiecutter.project_slug}}
 
-# Install package
-pip install -e .
-
-# Install development dependencies
-pip install -e ".[dev]"
+# Development installation with optional dependencies
+pip install "{{cookiecutter.project_slug}}[dev,docs,viz]"
 ```
 
-### Option 3: Conda
-
-```bash
-# Create conda environment
-conda create -n {{cookiecutter.project_slug}} python=3.9
-conda activate {{cookiecutter.project_slug}}
-
-# Install package
-pip install -e .
-```
-
-### Option 4: Docker Development Environment
+#### Development Installation
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/organization/{{cookiecutter.project_slug}}.git
 cd {{cookiecutter.project_slug}}
 
-# Start development environment with docker-compose
-docker-compose up -d
+# Poetry development setup (recommended)
+poetry install --with dev,docs,viz
+poetry shell
 
-# Access development container
-docker-compose exec app bash
-
-# Or use integrated development with volume mounting
-docker-compose -f docker-compose.dev.yml up
+# Alternative: pip development setup
+pip install -e ".[dev,docs,viz]"
 ```
 
-## 🖥️ Command Line Interface
-
-The library provides comprehensive CLI commands using Click-based interface:
-
-### Basic Commands
+#### Docker-Based Development Environment
 
 ```bash
-# Run simulation with default configuration
+# Full development environment with database and pgAdmin
+docker-compose up --build
+
+# Library container only
+docker build -t {{cookiecutter.project_slug}} .
+docker run -it {{cookiecutter.project_slug}}
+```
+
+## Library Usage Patterns
+
+### For Kedro Projects
+
+```python
+from {{cookiecutter.project_slug}} import Navigator, VideoPlume
+from {{cookiecutter.project_slug}}.config import NavigatorConfig
+from hydra import compose, initialize
+
+# Kedro pipeline integration
+def create_navigation_pipeline():
+    with initialize(config_path="../conf", version_base=None):
+        cfg = compose(config_name="config")
+        
+        # Create components using Hydra configuration
+        navigator = Navigator.from_config(cfg.navigator)
+        video_plume = VideoPlume.from_config(cfg.video_plume)
+        
+        return navigator, video_plume
+
+# Use in Kedro nodes
+def navigation_node(navigator: Navigator, video_plume: VideoPlume) -> dict:
+    """Kedro node for odor plume navigation simulation."""
+    results = navigator.simulate(video_plume, duration=cfg.simulation.max_duration)
+    return {"trajectory": results.trajectory, "sensor_data": results.sensor_data}
+```
+
+### For Reinforcement Learning Projects
+
+```python
+from {{cookiecutter.project_slug}}.core import NavigatorProtocol
+from {{cookiecutter.project_slug}}.api import create_navigator
+from {{cookiecutter.project_slug}}.utils import set_global_seed
+
+# RL environment integration
+class OdorPlumeRLEnv(gym.Env):
+    def __init__(self, config_path: str = "conf/config.yaml"):
+        super().__init__()
+        
+        # Set deterministic behavior for RL training
+        set_global_seed(42)
+        
+        # Create navigator from configuration
+        self.navigator = create_navigator(config_path)
+        self.video_plume = VideoPlume.from_config(config_path)
+        
+        # Define RL action and observation spaces
+        self.action_space = gym.spaces.Box(
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+        )
+        self.observation_space = gym.spaces.Box(
+            low=0, high=255, shape=(64, 64, 1), dtype=np.uint8
+        )
+    
+    def step(self, action):
+        # Execute action and get next state
+        self.navigator.update(action)
+        observation = self.video_plume.get_sensor_reading(self.navigator.position)
+        reward = self._calculate_reward()
+        done = self._check_termination()
+        return observation, reward, done, {}
+```
+
+### For ML/Neural Network Analyses
+
+```python
+from {{cookiecutter.project_slug}}.utils import set_global_seed
+from {{cookiecutter.project_slug}}.data import VideoPlume
+from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+import torch
+import numpy as np
+
+# Neural network training data generation
+def generate_training_data(num_episodes: int = 1000) -> tuple[np.ndarray, np.ndarray]:
+    """Generate training data for neural navigation models."""
+    
+    # Set reproducible seeds for ML workflows
+    set_global_seed(42)
+    
+    # Load configuration with ML-optimized parameters
+    with initialize(config_path="../conf"):
+        cfg = compose(config_name="config", overrides=[
+            "simulation.recording.export_format=numpy",
+            "performance.numpy.precision=float32"
+        ])
+    
+    # Generate diverse navigation scenarios
+    trajectories = []
+    sensor_readings = []
+    
+    for episode in range(num_episodes):
+        # Create randomized navigator for data diversity
+        navigator = Navigator.from_config(cfg.navigator)
+        navigator.position = np.random.uniform(0, 100, 2)
+        
+        # Run simulation
+        results = run_plume_simulation(navigator, video_plume, cfg)
+        
+        trajectories.append(results.trajectory)
+        sensor_readings.append(results.sensor_data)
+    
+    return np.array(trajectories), np.array(sensor_readings)
+
+# PyTorch dataset integration
+class NavigationDataset(torch.utils.data.Dataset):
+    def __init__(self, config_path: str = "conf/config.yaml"):
+        self.trajectories, self.sensor_data = generate_training_data()
+    
+    def __len__(self):
+        return len(self.trajectories)
+    
+    def __getitem__(self, idx):
+        return {
+            'trajectory': torch.tensor(self.trajectories[idx], dtype=torch.float32),
+            'sensor_reading': torch.tensor(self.sensor_data[idx], dtype=torch.float32)
+        }
+```
+
+## Command-Line Interface
+
+The library provides comprehensive CLI commands for automation and batch processing.
+
+### Available Commands
+
+```bash
+# Run a simulation with default configuration
 plume-nav-sim run
 
 # Run with parameter overrides
-plume-nav-sim run navigator.max_speed=2.0 video_plume.flip=true
+plume-nav-sim run navigator.max_speed=2.0 simulation.fps=60
 
-# Generate visualization from results
-plume-nav-sim visualize outputs/latest/trajectories.npy
+# Parameter sweep execution
+plume-nav-sim run --multirun navigator.max_speed=1.0,2.0,3.0 video_plume.kernel_size=3,5,7
 
-# Multi-run parameter sweep
-plume-nav-sim run --multirun navigator.max_speed=1.0,2.0,3.0 navigator.orientation=0,45,90
+# Visualization commands
+plume-nav-sim visualize --input-path outputs/experiment_results.npz
+plume-nav-sim visualize --animation --save-video output.mp4
+
+# Configuration validation
+plume-nav-sim config validate
+plume-nav-sim config show
+
+# Environment setup
+plume-nav-sim setup --create-dirs --init-config
 ```
 
-### Advanced CLI Usage
+### CLI Integration Examples
 
 ```bash
-# Run with custom configuration
-plume-nav-sim run --config-path=./custom_configs --config-name=experiment_1
+# Research workflow automation
+#!/bin/bash
+# Multi-condition experiment execution
+for speed in 1.0 1.5 2.0; do
+    for kernel in 3 5 7; do
+        plume-nav-sim run \
+            navigator.max_speed=$speed \
+            video_plume.kernel_size=$kernel \
+            hydra.job.name="speed_${speed}_kernel_${kernel}"
+    done
+done
 
-# Environment variable integration
-DEBUG=true LOG_LEVEL=INFO plume-nav-sim run
-
-# Batch processing with specific output directory
-plume-nav-sim run hydra.run.dir=./outputs/experiment_batch_001
-
-# Export configuration template
-plume-nav-sim config --template > my_config.yaml
+# Batch visualization generation
+plume-nav-sim visualize \
+    --input-dir outputs/multirun/2024-01-15_10-30-00 \
+    --output-format mp4 \
+    --quality high
 ```
 
-## ⚙️ Configuration System
+## Configuration System
 
-### New Hydra-Based Configuration Architecture
+The library uses a sophisticated Hydra-based configuration hierarchy that supports environment variable integration, parameter sweeps, and multi-environment deployment.
 
-The library uses a sophisticated hierarchical configuration system:
+### Configuration Structure
 
 ```
 conf/
 ├── base.yaml          # Foundation defaults and core parameters
-├── config.yaml        # Environment-specific overrides
-└── local/             # Local development configurations
+├── config.yaml        # User customizations and environment-specific overrides
+└── local/             # Local development and deployment-specific settings
     ├── credentials.yaml.template
+    ├── development.yaml
+    ├── production.yaml
     └── paths.yaml.template
 ```
 
-### Configuration Hierarchy
+### Basic Configuration Usage
 
-1. **conf/base.yaml** - Immutable foundation defaults
-2. **conf/config.yaml** - Environment-specific overrides  
-3. **conf/local/*.yaml** - Runtime customizations
+```python
+from hydra import compose, initialize
+from {{cookiecutter.project_slug}}.api import create_navigator
 
-### Example Configuration Usage
+# Basic configuration loading
+with initialize(config_path="../conf", version_base=None):
+    cfg = compose(config_name="config")
+    navigator = create_navigator(cfg.navigator)
 
-```yaml
-# conf/config.yaml
-defaults:
-  - base
-  - _self_
-
-# Override specific parameters
-navigator:
-  orientation: 90.0  # Start facing up
-  speed: 0.5         # Initial movement speed
-  max_speed: 2.0     # Enhanced speed limit
-
-video_plume:
-  flip: true          # Horizontal flip for testing
-  kernel_size: 3      # Gaussian smoothing
-  
-# Environment variable integration
-database:
-  url: ${oc.env:DATABASE_URL,sqlite:///local.db}
-  username: ${oc.env:DB_USER,dev_user}
-  password: ${oc.env:DB_PASSWORD}
+# Dynamic parameter overrides
+with initialize(config_path="../conf"):
+    cfg = compose(config_name="config", overrides=[
+        "navigator.max_speed=2.5",
+        "video_plume.flip=true",
+        "simulation.fps=60"
+    ])
 ```
 
 ### Environment Variable Integration
 
-```bash
-# .env file for development
-export VIDEO_PATH="/path/to/video.mp4"
-export DATABASE_URL="postgresql://user:pass@localhost/db"
-export DEBUG="true"
-export LOG_LEVEL="DEBUG"
-export MATPLOTLIB_BACKEND="Qt5Agg"
+The configuration system supports secure credential management through environment variables:
 
-# Load with python-dotenv
-from dotenv import load_dotenv
-load_dotenv()
+```yaml
+# conf/config.yaml
+database:
+  url: ${oc.env:DATABASE_URL,sqlite:///local.db}
+  username: ${oc.env:DB_USER,admin}
+  password: ${oc.env:DB_PASSWORD}
+
+video_plume:
+  video_path: ${oc.env:VIDEO_PATH,data/videos/example_plume.mp4}
+  
+navigator:
+  max_speed: ${oc.env:NAVIGATOR_MAX_SPEED,1.5}
 ```
 
-## 🏗️ Project Structure
+#### Environment Variable Setup
 
-```
-{{cookiecutter.project_slug}}/
-├── src/{{cookiecutter.project_slug}}/
-│   ├── __init__.py                     # Public API exports
-│   ├── api/                           # Public interfaces
-│   │   ├── __init__.py
-│   │   └── navigation.py              # Main API functions
-│   ├── cli/                           # Command-line interface
-│   │   ├── __init__.py
-│   │   └── main.py                    # Click-based CLI commands
-│   ├── config/                        # Configuration schemas
-│   │   ├── __init__.py
-│   │   └── schemas.py                 # Pydantic validation models
-│   ├── core/                          # Navigation algorithms
-│   │   ├── __init__.py
-│   │   ├── navigator.py               # NavigatorProtocol definition
-│   │   ├── controllers.py             # Agent controller implementations
-│   │   └── sensors.py                 # Sensor configuration models
-│   ├── data/                          # Data processing
-│   │   ├── __init__.py
-│   │   └── video_plume.py             # OpenCV video processing
-│   ├── db/                            # Database support (future)
-│   │   └── session.py                 # SQLAlchemy session management
-│   └── utils/                         # Utilities and visualization
-│       ├── __init__.py
-│       ├── seed_manager.py            # Random seed management
-│       ├── visualization.py           # Matplotlib visualization
-│       └── logging.py                 # Loguru configuration
-├── conf/                              # Hydra configuration
-│   ├── base.yaml                      # Foundation defaults
-│   ├── config.yaml                    # Environment-specific settings
-│   └── local/                         # Local development configs
-├── notebooks/                         # Jupyter notebooks
-│   ├── demos/                         # Example demonstrations
-│   └── exploratory/                   # Research and analysis
-├── tests/                             # Test suite
-├── workflow/                          # DVC/Snakemake integration
-│   ├── dvc/                          # DVC pipeline definitions
-│   └── snakemake/                    # Snakemake workflow rules
-├── docker-compose.yml                # Development environment
-├── Makefile                          # Development automation
-├── pyproject.toml                    # Project metadata and dependencies
-└── README.md                         # This file
-```
-
-## 💻 Development Workflow
-
-### Development Environment Setup
+Create a `.env` file in your project root:
 
 ```bash
-# Install pre-commit hooks
-pre-commit install
-
-# Install development dependencies
-make install-dev
-
-# Set up development environment
-make setup-dev
+# .env file
+ENVIRONMENT_TYPE=development
+DATABASE_URL=postgresql://user:password@localhost:5432/plume_nav
+VIDEO_PATH=/data/experiments/high_resolution_plume.mp4
+NAVIGATOR_MAX_SPEED=2.0
+DEBUG=true
+LOG_LEVEL=INFO
 ```
 
-### Available Make Commands
+### Migration from Legacy Configuration
 
-```bash
-# Core development tasks
-make install              # Install package in development mode
-make install-dev          # Install with development dependencies
-make test                 # Run test suite with coverage
-make lint                 # Run code linting (black, isort, flake8)
-make type-check           # Run mypy type checking
-make format               # Format code with black and isort
+If migrating from the old `configs/` structure to the new Hydra-based `conf/` system:
 
-# Advanced development tasks
-make test-fast            # Run tests without coverage
-make test-integration     # Run integration tests only
-make docs                 # Build documentation
-make docs-serve           # Serve documentation locally
-make clean                # Clean build artifacts
-make setup-dev           # Complete development environment setup
-
-# Docker development
-make docker-build        # Build development Docker image
-make docker-dev          # Start development environment
-make docker-test         # Run tests in Docker container
+#### Legacy Structure (Old)
+```
+configs/
+├── default.yaml
+├── example_user_config.yaml
+└── README.md
 ```
 
-### Code Quality and Testing
-
-```bash
-# Run all quality checks
-make qa
-
-# Run tests with coverage report
-pytest --cov={{cookiecutter.project_slug}} --cov-report=html
-
-# Type checking with mypy
-mypy src tests
-
-# Code formatting
-black src tests
-isort src tests
-
-# Linting
-flake8 src tests
+#### New Hydra Structure
 ```
-
-## 🔧 Advanced Usage
-
-### Multi-Agent Simulations
-
-```python
-from {{cookiecutter.project_slug}}.core.controllers import MultiAgentController
-import numpy as np
-
-# Configure multi-agent simulation
-cfg.navigator.num_agents = 10
-cfg.navigator.formation = "grid"
-cfg.navigator.communication_range = 15.0
-
-# Create multi-agent navigator
-navigator = MultiAgentController.from_config(cfg.navigator)
-
-# Run swarm simulation
-results = run_plume_simulation(navigator, video_plume, cfg.simulation)
-```
-
-### Custom Visualization
-
-```python
-from {{cookiecutter.project_slug}}.utils.visualization import visualize_simulation_results
-import matplotlib.pyplot as plt
-
-# Generate publication-quality figures
-fig = visualize_simulation_results(
-    results, 
-    cfg.visualization,
-    show_trails=True,
-    trail_length=100,
-    export_format="pdf"
-)
-
-# Save high-resolution plot
-plt.savefig("trajectory_analysis.pdf", dpi=300, bbox_inches='tight')
-```
-
-### Reproducible Research
-
-```python
-from {{cookiecutter.project_slug}}.utils.seed_manager import set_global_seed
-
-# Set reproducible random seeds
-set_global_seed(42)
-
-# Enable strict deterministic mode
-cfg.reproducibility.strict_mode = True
-cfg.reproducibility.validate_reproducibility = True
-
-# Run reproducible experiment
-results = run_plume_simulation(navigator, video_plume, cfg.simulation)
-```
-
-## 📊 Integration Examples
-
-### Kedro Pipeline Integration
-
-```python
-# kedro_project/src/nodes.py
-from kedro.pipeline import node, Pipeline
-from {{cookiecutter.project_slug}}.api.navigation import create_navigator
-from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
-
-def simulate_navigation(video_path: str, nav_config: dict) -> dict:
-    """Kedro node for odor plume navigation simulation."""
-    video_plume = VideoPlume(video_path=video_path)
-    navigator = create_navigator(nav_config)
-    return run_plume_simulation(navigator, video_plume)
-
-# kedro_project/src/pipeline.py
-def create_pipeline(**kwargs) -> Pipeline:
-    return Pipeline([
-        node(
-            func=simulate_navigation,
-            inputs=["video_data", "params:navigator"],
-            outputs="simulation_results",
-            name="navigation_simulation"
-        )
-    ])
-```
-
-### Reinforcement Learning Integration
-
-```python
-import gym
-from {{cookiecutter.project_slug}}.core import NavigatorProtocol
-from {{cookiecutter.project_slug}}.data import VideoPlume
-
-class OdorNavigationEnv(gym.Env):
-    """RL environment using odor plume navigation library."""
-    
-    def __init__(self, config):
-        self.video_plume = VideoPlume.from_config(config.video_plume)
-        self.navigator = create_navigator(config.navigator)
-        
-    def step(self, action):
-        # Use library components for environment dynamics
-        return self.navigator.step(action, self.video_plume.current_frame)
-```
-
-### Jupyter Notebook Analysis
-
-```python
-# Research notebook integration
-%load_ext autoreload
-%autoreload 2
-
-from {{cookiecutter.project_slug}} import Navigator, VideoPlume
-from {{cookiecutter.project_slug}}.utils import set_global_seed
-
-# Set up reproducible experiment
-set_global_seed(123)
-
-# Interactive parameter exploration
-cfg.navigator.max_speed = 3.0  # Modify configuration dynamically
-navigator = Navigator.from_config(cfg.navigator)
-
-# Visualize results inline
-%matplotlib inline
-visualize_simulation_results(results, cfg.visualization)
-```
-
-## 🔄 Migration Guide
-
-### From Legacy configs/ to New conf/ System
-
-The refactored library replaces the original PyYAML-based configuration with Hydra:
-
-#### Legacy Configuration (Old)
-```python
-# Old approach - manual YAML loading
-import yaml
-with open('configs/default.yaml', 'r') as f:
-    config = yaml.safe_load(f)
-
-navigator = Navigator.from_config(config['navigator'])
-```
-
-#### New Hydra Configuration (Current)
-```python
-# New approach - Hydra composition
-from hydra import compose, initialize
-
-with initialize(config_path="conf", version_base=None):
-    cfg = compose(config_name="config")
-    navigator = create_navigator(cfg.navigator)
+conf/
+├── base.yaml          # Replaces default.yaml
+├── config.yaml        # Replaces example_user_config.yaml
+└── local/             # New: environment-specific overrides
+    ├── development.yaml
+    └── production.yaml
 ```
 
 #### Migration Steps
 
-1. **Move configuration files:**
-   ```bash
-   mkdir conf/
-   mv configs/default.yaml conf/base.yaml
-   mv configs/example_user_config.yaml conf/config.yaml
-   ```
-
-2. **Update configuration format:**
-   ```bash
-   # Add Hydra defaults to conf/config.yaml
-   echo "defaults:\n  - base\n  - _self_" > conf/config.yaml.new
-   cat conf/config.yaml >> conf/config.yaml.new
-   mv conf/config.yaml.new conf/config.yaml
-   ```
-
-3. **Update import statements:**
+1. **Copy base parameters**: Move `configs/default.yaml` content to `conf/base.yaml`
+2. **User customizations**: Move `configs/example_user_config.yaml` to `conf/config.yaml`
+3. **Environment setup**: Create environment-specific files in `conf/local/`
+4. **Update imports**: Change from:
    ```python
-   # Replace old imports
-   from odor_plume_nav.api import Navigator
+   # Old approach
+   from {{cookiecutter.project_slug}}.services.config_loader import load_config
+   config = load_config("configs/default.yaml")
+   ```
    
-   # With new imports
-   from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+   To:
+   ```python
+   # New Hydra approach
+   from hydra import compose, initialize
+   with initialize(config_path="../conf"):
+       cfg = compose(config_name="config")
    ```
 
-4. **Update CLI usage:**
+5. **CLI migration**: Replace manual script execution with new CLI commands:
    ```bash
-   # Old CLI (if existed)
-   python -m odor_plume_nav --config configs/default.yaml
+   # Old approach
+   python scripts/run_simulation.py --config configs/my_config.yaml
    
-   # New CLI
-   plume-nav-sim run navigator.max_speed=2.0
+   # New approach
+   plume-nav-sim run --config-name my_config
    ```
 
-## 📚 Examples and Demos
+## Development Workflow
 
-### Basic Single-Agent Navigation
-
-```python
-# examples/basic_navigation.py
-from hydra import compose, initialize
-from {{cookiecutter.project_slug}}.api.navigation import create_navigator, run_plume_simulation
-from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
-
-def basic_navigation_demo():
-    with initialize(config_path="../conf", version_base=None):
-        cfg = compose(config_name="config", overrides=[
-            "navigator.orientation=45",
-            "navigator.max_speed=1.5",
-            "video_plume.kernel_size=3"
-        ])
-        
-        navigator = create_navigator(cfg.navigator)
-        video_plume = VideoPlume.from_config(cfg.video_plume)
-        
-        results = run_plume_simulation(navigator, video_plume, cfg.simulation)
-        print(f"Simulation completed: {len(results.trajectory)} steps")
-
-if __name__ == "__main__":
-    basic_navigation_demo()
-```
-
-### Batch Parameter Study
-
-```python
-# examples/parameter_study.py
-import itertools
-from {{cookiecutter.project_slug}}.utils.seed_manager import set_global_seed
-
-def parameter_sweep():
-    speeds = [0.5, 1.0, 1.5, 2.0]
-    orientations = [0, 45, 90, 135]
-    
-    results = {}
-    for speed, orientation in itertools.product(speeds, orientations):
-        set_global_seed(42)  # Reproducible results
-        
-        with initialize(config_path="../conf", version_base=None):
-            cfg = compose(config_name="config", overrides=[
-                f"navigator.max_speed={speed}",
-                f"navigator.orientation={orientation}"
-            ])
-            
-            navigator = create_navigator(cfg.navigator)
-            video_plume = VideoPlume.from_config(cfg.video_plume)
-            
-            sim_results = run_plume_simulation(navigator, video_plume, cfg.simulation)
-            results[(speed, orientation)] = sim_results
-    
-    return results
-```
-
-## 🔗 Dependencies
-
-### Core Dependencies
-- **numpy** ≥1.24.0 - Numerical computing and array operations
-- **matplotlib** ≥3.7.0 - Scientific visualization and plotting
-- **opencv-python** ≥4.8.0 - Video processing and computer vision
-- **scipy** ≥1.10.0 - Scientific computing and algorithms
-- **hydra-core** ≥1.3.2 - Configuration management and composition
-- **pydantic** ≥2.5.0 - Data validation and configuration schemas
-- **loguru** ≥0.7.0 - Structured logging and debugging
-
-### Infrastructure Dependencies
-- **click** ≥8.2.1 - Command-line interface framework
-- **python-dotenv** ≥1.1.0 - Environment variable management
-- **sqlalchemy** ≥2.0.41 - Database ORM for future persistence features
-- **typing-extensions** ≥4.13.2 - Enhanced type hints and annotations
-
-### Development Dependencies
-- **pytest** ≥7.4.0 - Test framework and execution
-- **pytest-cov** ≥4.1.0 - Code coverage reporting
-- **pre-commit** ≥3.6.0 - Git hooks and code quality automation
-- **black** ≥23.12.0 - Code formatting and style consistency
-- **isort** ≥5.13.0 - Import sorting and organization
-- **flake8** ≥6.0.0 - Code linting and style checking
-- **mypy** ≥1.5.0 - Static type checking and validation
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
-
-- Setting up the development environment
-- Code style and testing requirements
-- Submitting pull requests
-- Reporting issues and feature requests
-
-### Development Setup for Contributors
+### Setup Development Environment
 
 ```bash
-# Fork and clone the repository
-git clone https://github.com/your-username/{{cookiecutter.project_slug}}.git
+# Clone and setup
+git clone https://github.com/organization/{{cookiecutter.project_slug}}.git
 cd {{cookiecutter.project_slug}}
 
-# Set up development environment
-make setup-dev
+# Poetry setup (recommended)
+poetry install --with dev,docs,viz
+poetry shell
 
 # Install pre-commit hooks
 pre-commit install
 
-# Run tests to verify setup
-make test
+# Alternative: Make-based setup
+make setup-dev
 ```
 
-## 📈 Roadmap
+### Makefile Commands
 
-- [ ] **Enhanced RL Integration** - Gym environment wrappers and OpenAI Baselines compatibility
-- [ ] **Neural Navigation Models** - Built-in neural network-based navigation algorithms
-- [ ] **Cloud Storage Integration** - S3/GCS support for large-scale dataset management
-- [ ] **Real-time Streaming** - WebSocket-based real-time visualization and monitoring
-- [ ] **Performance Optimization** - GPU acceleration for multi-agent simulations
-- [ ] **Extended Sensor Models** - Additional sensor types and noise models
+The project includes comprehensive Makefile automation:
 
-## 📞 Support
+```bash
+# Development commands
+make install-dev       # Poetry install with dev dependencies
+make setup-dev         # Complete development environment setup
+make install          # Traditional pip install (fallback)
+
+# Code quality
+make format           # Run black and isort formatting
+make lint            # Run flake8 linting
+make type-check      # Run mypy type checking
+make test            # Run pytest with coverage
+make test-all        # Run all quality checks
+
+# Build and distribution
+make build           # Build wheel and sdist
+make poetry-build    # Build using Poetry
+make clean           # Clean build artifacts
+
+# Documentation
+make docs            # Build Sphinx documentation
+make docs-serve      # Serve documentation locally
+
+# Docker commands
+make docker-build    # Build Docker image
+make docker-run      # Run container
+make docker-dev      # Development environment with docker-compose
+```
+
+### Pre-commit Hooks
+
+The project includes automated code quality checks:
+
+```yaml
+# .pre-commit-config.yaml (example hooks)
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.0
+    hooks:
+      - id: black
+  
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.0
+    hooks:
+      - id: isort
+  
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+```
+
+### Testing Strategy
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov={{cookiecutter.project_slug}} --cov-report=html
+
+# Run specific test categories
+pytest -m "not slow"          # Skip slow tests
+pytest -m integration         # Integration tests only
+pytest tests/unit/            # Unit tests only
+
+# Run with parallel execution
+pytest -n auto               # Parallel execution
+```
+
+## Advanced Features
+
+### Multi-Run Experiment Management
+
+```bash
+# Systematic parameter exploration
+plume-nav-sim run --multirun \
+  navigator.max_speed=1.0,1.5,2.0 \
+  navigator.angular_velocity=0.1,0.2,0.3 \
+  video_plume.gaussian_blur.sigma=1.0,2.0,3.0
+
+# Results organized automatically in:
+# outputs/multirun/2024-01-15_10-30-00/
+# ├── run_0_navigator.max_speed=1.0,navigator.angular_velocity=0.1,video_plume.gaussian_blur.sigma=1.0/
+# ├── run_1_navigator.max_speed=1.0,navigator.angular_velocity=0.1,video_plume.gaussian_blur.sigma=2.0/
+# └── ...
+```
+
+### Docker-Compose Development Environment
+
+The library includes a complete development infrastructure:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  {{cookiecutter.project_slug}}:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - ./conf:/app/conf
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/odor_nav
+      - ENVIRONMENT_TYPE=development
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: odor_nav
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+```
+
+### Performance Optimization
+
+```python
+# Configure for high-performance computation
+from {{cookiecutter.project_slug}}.utils import configure_performance
+
+# Optimize NumPy and OpenCV for multi-core systems
+configure_performance(
+    numpy_threads=8,
+    opencv_threads=6,
+    use_gpu=True
+)
+
+# Environment variable configuration
+export NUMPY_THREADS=8
+export OPENCV_OPENCL=true
+export MATPLOTLIB_BACKEND=Agg  # Headless mode for batch processing
+```
+
+## Project Structure
+
+```
+{{cookiecutter.project_slug}}/
+├── src/{{cookiecutter.project_slug}}/           # Main library package
+│   ├── __init__.py                   # Public API exports
+│   ├── api/                          # Public interfaces
+│   │   ├── __init__.py
+│   │   └── navigation.py             # Main API functions
+│   ├── cli/                          # Command-line interface
+│   │   ├── __init__.py
+│   │   └── main.py                   # CLI entry point
+│   ├── config/                       # Configuration management
+│   │   ├── __init__.py
+│   │   └── schemas.py                # Pydantic validation schemas
+│   ├── core/                         # Core business logic
+│   │   ├── __init__.py
+│   │   ├── navigator.py              # Navigation protocols
+│   │   ├── controllers.py            # Agent controllers
+│   │   └── sensors.py                # Sensor strategies
+│   ├── data/                         # Data processing
+│   │   ├── __init__.py
+│   │   └── video_plume.py            # Video plume processing
+│   ├── db/                           # Database integration (future)
+│   │   └── session.py                # Session management
+│   └── utils/                        # Utilities
+│       ├── __init__.py
+│       ├── seed_manager.py           # Reproducibility
+│       ├── visualization.py          # Plotting and animation
+│       └── logging.py                # Logging configuration
+├── conf/                             # Hydra configuration
+│   ├── base.yaml                     # Foundation defaults
+│   ├── config.yaml                   # User customizations
+│   └── local/                        # Environment-specific
+│       ├── credentials.yaml.template
+│       └── paths.yaml.template
+├── tests/                            # Test suite
+├── notebooks/                        # Example notebooks
+│   ├── demos/                        # Demonstration notebooks
+│   └── exploratory/                  # Research notebooks
+├── workflow/                         # Workflow definitions (future)
+│   ├── dvc/                          # DVC pipelines
+│   └── snakemake/                    # Snakemake workflows
+├── docker-compose.yml               # Development environment
+├── Dockerfile                       # Container image
+├── Makefile                         # Development automation
+├── pyproject.toml                   # Package configuration
+└── README.md                        # This file
+```
+
+## Integration Examples
+
+### Jupyter Notebook Integration
+
+```python
+# notebook_example.ipynb
+from hydra import compose, initialize
+from {{cookiecutter.project_slug}} import Navigator, VideoPlume
+from {{cookiecutter.project_slug}}.utils import set_global_seed
+
+# Setup reproducible environment
+set_global_seed(42)
+
+# Load configuration in notebook
+with initialize(config_path="../conf", version_base=None):
+    cfg = compose(config_name="config", overrides=[
+        "visualization.animation.enabled=true",
+        "visualization.plotting.figure_size=[14,10]"
+    ])
+
+# Create and run simulation
+navigator = Navigator.from_config(cfg.navigator)
+video_plume = VideoPlume.from_config(cfg.video_plume)
+
+# Interactive visualization
+results = navigator.simulate(video_plume, duration=60)
+results.plot_trajectory(interactive=True)
+```
+
+### Kedro Pipeline Integration
+
+```python
+# kedro_pipeline_example.py
+from kedro.pipeline import Pipeline, node
+from {{cookiecutter.project_slug}}.api import create_navigator, run_plume_simulation
+
+def create_navigation_pipeline(**kwargs) -> Pipeline:
+    """Create Kedro pipeline for odor plume navigation."""
+    
+    return Pipeline([
+        node(
+            func=create_navigator,
+            inputs=["params:navigator_config"],
+            outputs="navigator",
+            name="create_navigator_node"
+        ),
+        node(
+            func=run_plume_simulation,
+            inputs=["navigator", "video_plume", "params:simulation_config"],
+            outputs="simulation_results",
+            name="run_simulation_node"
+        ),
+        node(
+            func=analyze_trajectory,
+            inputs=["simulation_results"],
+            outputs="trajectory_analysis",
+            name="analyze_trajectory_node"
+        )
+    ])
+```
+
+## Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+1. **Fork the repository** and create a feature branch
+2. **Setup development environment**: `make setup-dev`
+3. **Make changes** with appropriate tests
+4. **Run quality checks**: `make test-all`
+5. **Submit pull request** with clear description
+
+### Development Standards
+
+- **Code Style**: Black formatting, isort imports, flake8 compliance
+- **Type Safety**: MyPy static type checking required
+- **Test Coverage**: Minimum 80% coverage for new code
+- **Documentation**: Docstrings for all public APIs
+- **Commit Messages**: Conventional commits format
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use this library in your research, please cite:
+
+```bibtex
+@software{odor_plume_navigation_library,
+  title={Odor Plume Navigation Library},
+  author={Samuel Brudner},
+  year={2024},
+  url={https://github.com/organization/{{cookiecutter.project_slug}}},
+  version={0.1.0}
+}
+```
+
+## Support and Documentation
 
 - **Documentation**: [https://{{cookiecutter.project_slug}}.readthedocs.io](https://{{cookiecutter.project_slug}}.readthedocs.io)
 - **Issues**: [GitHub Issues](https://github.com/organization/{{cookiecutter.project_slug}}/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/organization/{{cookiecutter.project_slug}}/discussions)
-- **Email**: support@{{cookiecutter.project_slug}}.org
+- **API Reference**: Generated automatically from docstrings
 
----
+## Changelog
 
-**🧭 Navigate the future of odor-guided simulation with confidence.**
+### Version 0.1.0 (Initial Release)
+
+- **Library Architecture**: Transformed from standalone application to importable library
+- **Hydra Configuration**: Sophisticated hierarchical configuration management
+- **CLI Interface**: Comprehensive command-line tools with Click framework
+- **Multi-Framework Support**: Integration patterns for Kedro, RL, and ML workflows
+- **Docker Support**: Containerized development and deployment environments
+- **Dual Workflows**: Poetry and pip installation support
+- **Enhanced Documentation**: Comprehensive usage examples and migration guides
+
+For detailed changes, see [CHANGELOG.md](CHANGELOG.md).
