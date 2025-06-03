@@ -1,395 +1,458 @@
 """
-Data processing module for odor plume navigation simulation.
+Data processing package for video-based odor plume environments.
 
-This module provides unified access to video-based odor plume environments and data
-handling components, serving as the primary entry point for data processing functionality
-within the simulation framework. The module supports multiple integration patterns for
-scientific computing workflows including Kedro pipelines, reinforcement learning
-frameworks, and machine learning analysis tools.
+This package provides unified access to video plume environments and data handling 
+components with comprehensive framework integration support. It serves as the primary
+entry point for video-based odor plume data processing across different research 
+workflows including Kedro pipelines, reinforcement learning frameworks, and 
+machine learning analysis tools.
 
-The module is designed to support modern research workflows through:
-- Clean import patterns for different use cases
-- DVC/Snakemake workflow integration 
-- Hydra configuration management integration
-- NumPy array interfaces for ML frameworks
-- Protocol-based extensibility for custom environments
+Key Features:
+    - Clean import patterns for different framework integrations
+    - Hydra configuration support with DictConfig factory methods  
+    - Workflow orchestration integration (DVC/Snakemake compatibility)
+    - NumPy array interfaces for ML framework compatibility
+    - Kedro pipeline-compatible data processing interfaces
+    - Enhanced metadata extraction for research documentation
 
-Import Examples:
-    # For Kedro projects
-    from {{cookiecutter.project_slug}}.data import VideoPlume
+Supported Import Patterns:
     
-    # For RL frameworks  
-    from {{cookiecutter.project_slug}}.data import VideoPlume, create_video_plume_from_dvc_path
+    Basic VideoPlume usage:
+        >>> from {{cookiecutter.project_slug}}.data import VideoPlume
+        >>> plume = VideoPlume("data/plume_video.mp4")
     
-    # For ML/neural network analyses
-    from {{cookiecutter.project_slug}}.data import VideoPlume
+    Hydra configuration integration:
+        >>> from {{cookiecutter.project_slug}}.data import VideoPlume, create_video_plume
+        >>> from hydra import compose, initialize
+        >>> 
+        >>> with initialize(config_path="../conf"):
+        ...     cfg = compose(config_name="config")
+        ...     plume = VideoPlume.from_config(cfg.video_plume)
+        ...     # Alternative factory method
+        ...     plume2 = create_video_plume(cfg.video_plume, flip=True)
     
-    # For workflow orchestration
-    from {{cookiecutter.project_slug}}.data import create_snakemake_rule_config
+    Kedro pipeline integration:
+        >>> from {{cookiecutter.project_slug}}.data import get_video_plume_catalog_entry
+        >>> # Use in Kedro data catalog definition
+        >>> catalog_entry = get_video_plume_catalog_entry("plume_video")
+    
+    RL framework compatibility:
+        >>> from {{cookiecutter.project_slug}}.data import VideoPlume
+        >>> plume = VideoPlume("environment.mp4", normalize=True)
+        >>> frame = plume.get_frame(step_idx)  # Returns NumPy array for RL agent
+    
+    ML/Neural network analysis:
+        >>> from {{cookiecutter.project_slug}}.data import VideoPlume, get_frame_batch
+        >>> plume = VideoPlume("dataset.mp4", grayscale=True, normalize=True)
+        >>> frames = get_frame_batch(plume, indices=[10, 20, 30])  # Batch processing
 
-Architecture:
-    The data module follows a clean architecture pattern with clear separation of concerns:
-    - VideoPlume: Core environment class with frame-by-frame video processing
-    - Workflow utilities: Integration functions for DVC and Snakemake
-    - Configuration support: Hydra DictConfig factory methods
-    - Resource management: Automatic cleanup and thread-safe operations
+Workflow Integration:
+    
+    DVC data versioning:
+        >>> from {{cookiecutter.project_slug}}.data import get_workflow_metadata
+        >>> metadata = get_workflow_metadata(plume)
+        >>> # Compatible with DVC stage definition
+    
+    Snakemake rules:
+        >>> # In Snakefile
+        >>> from {{cookiecutter.project_slug}}.data import VideoPlume
+        >>> plume = VideoPlume(input.video_file)
+        >>> frames = [plume.get_frame(i) for i in range(plume.frame_count)]
+
+Environment Variable Support:
+    The package supports secure path management through environment variables:
+    
+    >>> import os
+    >>> os.environ['PLUME_VIDEO_PATH'] = '/secure/path/to/videos'
+    >>> # In Hydra config: video_path: ${oc.env:PLUME_VIDEO_PATH}/dataset.mp4
 """
 
-from typing import Dict, Any, Optional, Union
-import warnings
+from typing import Dict, List, Optional, Union, Any, Tuple
+import numpy as np
+from pathlib import Path
 
-# Core video plume environment implementation
-from .video_plume import (
-    VideoPlume,
-    create_video_plume_from_dvc_path,
-    create_snakemake_rule_config
-)
+# Core video plume functionality
+from .video_plume import VideoPlume, create_video_plume
 
-# Ensure compatibility with optional dependencies
+# Type imports for better IDE support and documentation
 try:
     from omegaconf import DictConfig
     HYDRA_AVAILABLE = True
 except ImportError:
-    DictConfig = dict  # Fallback type
     HYDRA_AVAILABLE = False
-    warnings.warn(
-        "Hydra not available. Some configuration features may be limited.",
-        ImportWarning,
-        stacklevel=2
-    )
+    # Fallback type hint for when Hydra is not available
+    DictConfig = Dict[str, Any]
 
 
-def create_video_plume(
-    cfg: Optional[Union[DictConfig, Dict[str, Any]]] = None,
-    **kwargs
-) -> VideoPlume:
+def get_frame_batch(
+    video_plume: VideoPlume, 
+    indices: List[int], 
+    skip_missing: bool = True
+) -> List[Optional[np.ndarray]]:
     """
-    Create VideoPlume instance with flexible configuration support.
+    Extract multiple frames from a VideoPlume instance for batch processing.
     
-    This factory function provides a unified interface for creating VideoPlume
-    instances that supports both Hydra DictConfig objects and traditional
-    dictionary-based configuration. It serves as the primary entry point for
-    data processing consumers as specified in Section 7.2.1.2.
+    Optimized for ML/neural network analysis workflows requiring batch data loading.
+    Provides efficient frame extraction with optional missing frame handling for
+    robust dataset processing.
     
     Args:
-        cfg: Hydra DictConfig or dictionary containing configuration parameters.
-             If None, parameters must be provided via kwargs.
-        **kwargs: Additional configuration parameters that override cfg values
+        video_plume: VideoPlume instance to extract frames from
+        indices: List of frame indices to extract
+        skip_missing: If True, missing frames return None; if False, raises error
         
     Returns:
-        Configured VideoPlume instance ready for simulation integration
+        List of frames as NumPy arrays, with None for missing frames if skip_missing=True
         
     Raises:
-        ValueError: If configuration validation fails
-        IOError: If specified video file cannot be accessed
-        
-    Examples:
-        # Using Hydra configuration (recommended for Kedro pipelines)
-        >>> from omegaconf import DictConfig
-        >>> cfg = DictConfig({
-        ...     "video_path": "data/experiment_001.mp4",
-        ...     "flip": True,
-        ...     "kernel_size": 5
-        ... })
-        >>> plume = create_video_plume(cfg)
-        
-        # Using dictionary configuration (RL frameworks)
-        >>> config = {
-        ...     "video_path": "videos/plume_data.mp4",
-        ...     "grayscale": True,
-        ...     "normalize": True
-        ... }
-        >>> plume = create_video_plume(config)
-        
-        # Using kwargs (ML analysis workflows)
-        >>> plume = create_video_plume(
-        ...     video_path="analysis_video.mp4",
-        ...     kernel_size=3,
-        ...     kernel_sigma=1.5
-        ... )
-        
-        # DVC integration pattern
-        >>> plume = create_video_plume_from_dvc_path(
-        ...     "data/plume_videos/experiment.mp4"
-        ... )
-    """
-    if cfg is not None:
-        # Use factory method for configuration-based creation
-        return VideoPlume.from_config(cfg, **kwargs)
-    elif kwargs:
-        # Direct instantiation from kwargs
-        return VideoPlume(**kwargs)
-    else:
-        raise ValueError(
-            "Either cfg parameter or keyword arguments must be provided "
-            "to create VideoPlume instance"
-        )
-
-
-# Kedro pipeline integration utilities
-def get_video_plume_catalog_entry(
-    dataset_name: str,
-    video_path: str,
-    processing_params: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """
-    Generate Kedro catalog entry for VideoPlume dataset integration.
-    
-    This utility function creates standardized Kedro catalog entries that enable
-    seamless integration with data science pipelines. The generated catalog entry
-    follows Kedro conventions for dataset definition and parameter management.
-    
-    Args:
-        dataset_name: Name for the dataset in Kedro catalog
-        video_path: Path to video file (supports templating)
-        processing_params: Optional processing configuration parameters
-        
-    Returns:
-        Dictionary suitable for Kedro catalog.yml configuration
+        ValueError: If skip_missing=False and any frame is missing
         
     Example:
-        >>> catalog_entry = get_video_plume_catalog_entry(
-        ...     dataset_name="experiment_video",
-        ...     video_path="data/01_raw/experiment_001.mp4",
-        ...     processing_params={
-        ...         "flip": True,
-        ...         "kernel_size": 5,
-        ...         "grayscale": True
-        ...     }
-        ... )
-        >>> # Add to conf/base/catalog.yml:
-        >>> # experiment_video:
-        >>> #   type: {{cookiecutter.project_slug}}.data.VideoPlume
-        >>> #   filepath: data/01_raw/experiment_001.mp4
-        >>> #   ...
+        >>> plume = VideoPlume("dataset.mp4", normalize=True)
+        >>> frames = get_frame_batch(plume, [0, 10, 20, 30])
+        >>> valid_frames = [f for f in frames if f is not None]
+        >>> batch_array = np.stack(valid_frames)  # Shape: (batch_size, height, width)
+        
+    Note:
+        For large batch sizes, consider processing in chunks to manage memory usage.
+        Frame order in the output list corresponds to the input indices order.
     """
-    params = processing_params or {}
+    frames = []
     
-    catalog_entry = {
-        f"{dataset_name}": {
-            "type": f"{__name__.split('.')[0]}.data.VideoPlume",
-            "filepath": video_path,
-            "load_args": params.copy(),
-            "save_args": {},  # VideoPlume is read-only
+    for idx in indices:
+        try:
+            frame = video_plume.get_frame(idx)
+            if frame is None and not skip_missing:
+                raise ValueError(f"Frame {idx} not available and skip_missing=False")
+            frames.append(frame)
+        except Exception as e:
+            if not skip_missing:
+                raise ValueError(f"Failed to extract frame {idx}: {e}") from e
+            frames.append(None)
+    
+    return frames
+
+
+def get_workflow_metadata(video_plume: VideoPlume) -> Dict[str, Any]:
+    """
+    Generate comprehensive metadata for workflow integration systems.
+    
+    Creates workflow-compatible metadata supporting DVC data versioning,
+    Snakemake pipeline definitions, and automated research documentation.
+    Extends the base VideoPlume metadata with additional workflow-specific
+    information for enhanced reproducibility and tracking.
+    
+    Args:
+        video_plume: VideoPlume instance to extract metadata from
+        
+    Returns:
+        Dictionary containing comprehensive workflow metadata including:
+        - File metadata (path, size, hash)
+        - Video properties (dimensions, frame count, duration)
+        - Processing configuration (preprocessing parameters)
+        - Workflow compatibility information
+        - Dependency versions and requirements
+        
+    Example:
+        >>> plume = VideoPlume("experiment_data.mp4")
+        >>> metadata = get_workflow_metadata(plume)
+        >>> # Use in DVC stage definition
+        >>> with open("video_metadata.yaml", "w") as f:
+        ...     yaml.dump(metadata, f)
+        
+        >>> # Use in Snakemake rule
+        >>> with open("processing_log.json", "w") as f:
+        ...     json.dump(metadata, f, indent=2)
+    """
+    # Get base workflow metadata from VideoPlume
+    base_metadata = video_plume.get_workflow_metadata()
+    
+    # Add package-level workflow information
+    workflow_metadata = {
+        **base_metadata,
+        "package_info": {
+            "data_module": "{{cookiecutter.project_slug}}.data",
+            "video_plume_class": "VideoPlume",
+            "api_version": "1.0.0",
+            "workflow_compatibility": {
+                "dvc": True,
+                "snakemake": True,
+                "kedro": True,
+                "hydra": HYDRA_AVAILABLE
+            }
+        },
+        "processing_capabilities": {
+            "batch_processing": True,
+            "frame_indexing": True,
+            "metadata_extraction": True,
+            "preprocessing_pipeline": True,
+            "memory_efficient": True
+        },
+        "integration_patterns": {
+            "numpy_interface": True,
+            "hydra_config": HYDRA_AVAILABLE,
+            "environment_variables": True,
+            "path_interpolation": True
         }
     }
+    
+    return workflow_metadata
+
+
+def get_video_plume_catalog_entry(
+    name: str,
+    video_path: Optional[Union[str, Path]] = None,
+    config_overrides: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Generate Kedro data catalog entry for VideoPlume integration.
+    
+    Creates standardized Kedro catalog entries for seamless integration with
+    Kedro pipelines, supporting both direct instantiation and configuration-based
+    creation with Hydra parameter management.
+    
+    Args:
+        name: Dataset name for Kedro catalog
+        video_path: Optional path to video file (can use Hydra interpolation)
+        config_overrides: Optional configuration parameters to override defaults
+        
+    Returns:
+        Dictionary formatted for Kedro data catalog with VideoPlume configuration
+        
+    Example:
+        >>> # Basic catalog entry
+        >>> entry = get_video_plume_catalog_entry(
+        ...     "experiment_video",
+        ...     video_path="data/experiment.mp4"
+        ... )
+        
+        >>> # With configuration overrides
+        >>> entry = get_video_plume_catalog_entry(
+        ...     "processed_video",
+        ...     video_path="${oc.env:DATA_PATH}/video.mp4",
+        ...     config_overrides={"flip": True, "grayscale": True}
+        ... )
+        
+        >>> # Use in Kedro catalog.yml
+        >>> # experiment_video:
+        >>> #   type: {{cookiecutter.project_slug}}.data.VideoPlume
+        >>> #   video_path: data/experiment.mp4
+        >>> #   flip: false
+        >>> #   grayscale: true
+    """
+    # Base catalog entry structure
+    catalog_entry = {
+        "type": "{{cookiecutter.project_slug}}.data.VideoPlume",
+        "description": f"VideoPlume dataset: {name}",
+        "metadata": {
+            "kedro_compatible": True,
+            "hydra_configurable": HYDRA_AVAILABLE,
+            "workflow_ready": True
+        }
+    }
+    
+    # Add video path if provided
+    if video_path is not None:
+        catalog_entry["video_path"] = str(video_path)
+    
+    # Apply configuration overrides
+    if config_overrides:
+        catalog_entry.update(config_overrides)
+    
+    # Add default processing parameters for Kedro compatibility
+    default_params = {
+        "flip": False,
+        "grayscale": True,
+        "normalize": True
+    }
+    
+    # Only add defaults that aren't already specified
+    for key, value in default_params.items():
+        if key not in catalog_entry:
+            catalog_entry[key] = value
     
     return catalog_entry
 
 
-# ML framework integration utilities  
-def get_frame_iterator(video_plume: VideoPlume, batch_size: int = 1):
+def validate_video_file(video_path: Union[str, Path]) -> bool:
     """
-    Create frame iterator for ML framework integration.
+    Validate video file accessibility and format compatibility.
     
-    This generator function provides efficient frame-by-frame iteration over
-    VideoPlume data with batching support for machine learning workflows.
-    The iterator yields NumPy arrays compatible with tensor frameworks.
+    Performs comprehensive validation of video files for VideoPlume compatibility,
+    checking file existence, format support, and basic metadata accessibility.
+    Useful for workflow validation and error prevention in automated pipelines.
     
     Args:
-        video_plume: VideoPlume instance to iterate over
-        batch_size: Number of frames per batch (default: 1)
+        video_path: Path to video file for validation
         
-    Yields:
-        NumPy arrays containing frame data with shape (batch_size, height, width)
-        or (batch_size, height, width, channels) depending on grayscale setting
-        
-    Example:
-        >>> plume = VideoPlume("experiment.mp4")
-        >>> for frame_batch in get_frame_iterator(plume, batch_size=8):
-        ...     # Process batch with PyTorch/TensorFlow
-        ...     predictions = model(torch.from_numpy(frame_batch))
-    """
-    import numpy as np
-    
-    frame_count = video_plume.frame_count
-    
-    for start_idx in range(0, frame_count, batch_size):
-        end_idx = min(start_idx + batch_size, frame_count)
-        batch_frames = []
-        
-        for frame_idx in range(start_idx, end_idx):
-            frame = video_plume.get_frame(frame_idx)
-            if frame is not None:
-                batch_frames.append(frame)
-        
-        if batch_frames:
-            # Stack frames into batch tensor
-            yield np.stack(batch_frames, axis=0)
-
-
-# Workflow integration status checking
-def check_workflow_integration() -> Dict[str, bool]:
-    """
-    Check availability of workflow integration dependencies.
-    
-    This utility function provides runtime detection of workflow orchestration
-    capabilities, enabling conditional workflow integration based on available
-    dependencies. Supports DVC, Snakemake, and Hydra availability checking.
-    
     Returns:
-        Dictionary indicating availability of integration components
+        True if video file is valid and compatible, False otherwise
         
     Example:
-        >>> integration_status = check_workflow_integration()
-        >>> if integration_status['dvc_available']:
-        ...     # Use DVC integration features
-        ...     plume = create_video_plume_from_dvc_path("data/video.mp4")
-        >>> if integration_status['hydra_available']:
-        ...     # Use Hydra configuration features
-        ...     plume = VideoPlume.from_config(hydra_cfg)
-    """
-    status = {
-        'hydra_available': HYDRA_AVAILABLE,
-        'dvc_available': False,
-        'snakemake_available': False,
-        'kedro_available': False
-    }
-    
-    # Check DVC availability
-    try:
-        import dvc
-        status['dvc_available'] = True
-    except ImportError:
-        pass
-    
-    # Check Snakemake availability
-    try:
-        import snakemake
-        status['snakemake_available'] = True
-    except ImportError:
-        pass
+        >>> if validate_video_file("data/experiment.mp4"):
+        ...     plume = VideoPlume("data/experiment.mp4")
+        ... else:
+        ...     print("Invalid video file")
         
-    # Check Kedro availability
+        >>> # Use in workflow validation
+        >>> video_files = ["video1.mp4", "video2.avi"]
+        >>> valid_files = [f for f in video_files if validate_video_file(f)]
+    """
     try:
-        import kedro
-        status['kedro_available'] = True
-    except ImportError:
-        pass
+        video_path = Path(video_path)
+        
+        # Check file existence and accessibility
+        if not video_path.exists():
+            return False
+        
+        if not video_path.is_file():
+            return False
+        
+        # Try to create VideoPlume instance for format validation
+        test_plume = VideoPlume(video_path)
+        
+        # Basic validation of video properties
+        if test_plume.frame_count <= 0:
+            test_plume.close()
+            return False
+        
+        if test_plume.width <= 0 or test_plume.height <= 0:
+            test_plume.close()
+            return False
+        
+        # Clean up test instance
+        test_plume.close()
+        return True
+        
+    except Exception:
+        # Any exception during validation indicates incompatible file
+        return False
+
+
+def create_video_plume_from_env(
+    env_var_name: str = "PLUME_VIDEO_PATH",
+    config_overrides: Optional[Dict[str, Any]] = None,
+    **kwargs
+) -> VideoPlume:
+    """
+    Create VideoPlume instance from environment variable path.
     
-    return status
+    Convenient factory method for creating VideoPlume instances using environment
+    variable path resolution, supporting secure deployment and configuration
+    management in production environments.
+    
+    Args:
+        env_var_name: Environment variable containing video file path
+        config_overrides: Optional configuration parameters to override
+        **kwargs: Additional parameters passed to VideoPlume constructor
+        
+    Returns:
+        VideoPlume instance configured with environment variable path
+        
+    Raises:
+        EnvironmentError: If environment variable is not set
+        IOError: If video file path is invalid or inaccessible
+        
+    Example:
+        >>> import os
+        >>> os.environ['PLUME_VIDEO_PATH'] = '/data/experiment.mp4'
+        >>> plume = create_video_plume_from_env()
+        
+        >>> # With custom environment variable
+        >>> os.environ['CUSTOM_VIDEO'] = '/videos/dataset.mp4'
+        >>> plume = create_video_plume_from_env("CUSTOM_VIDEO", {"flip": True})
+    """
+    import os
+    
+    # Get video path from environment variable
+    video_path = os.getenv(env_var_name)
+    if video_path is None:
+        raise EnvironmentError(
+            f"Environment variable '{env_var_name}' not set. "
+            f"Please set it to the path of your video file."
+        )
+    
+    # Merge configuration overrides with kwargs
+    config = kwargs.copy()
+    if config_overrides:
+        config.update(config_overrides)
+    
+    # Create VideoPlume instance
+    return VideoPlume(video_path, **config)
 
 
-# Package metadata for discovery and integration
+# Package metadata and version info
 __version__ = "1.0.0"
-__author__ = "Odor Plume Navigation Team"
+__author__ = "{{cookiecutter.author_name}}"
 
-# Define public API surface following Section 7.2.1.2 environment creation interface
+# Comprehensive public API exports
 __all__ = [
-    # Core video plume environment
+    # Core classes and functions
     "VideoPlume",
+    "create_video_plume", 
     
-    # Factory and creation functions  
-    "create_video_plume",
-    "create_video_plume_from_dvc_path",
+    # Batch processing utilities
+    "get_frame_batch",
     
-    # Workflow integration utilities
-    "create_snakemake_rule_config",
+    # Workflow integration
+    "get_workflow_metadata",
     "get_video_plume_catalog_entry",
     
-    # ML framework integration
-    "get_frame_iterator",
+    # Validation utilities
+    "validate_video_file",
     
-    # System integration utilities
-    "check_workflow_integration",
+    # Environment-based creation
+    "create_video_plume_from_env",
     
-    # Configuration support
-    "HYDRA_AVAILABLE",
+    # Type hints for external use
+    "DictConfig" if HYDRA_AVAILABLE else None,
 ]
 
-
-# Module-level documentation for integration patterns
-_INTEGRATION_DOCS = """
-Integration Patterns:
-
-1. Kedro Pipeline Integration:
-   ```python
-   # In pipeline nodes
-   from {{cookiecutter.project_slug}}.data import VideoPlume
-   
-   def process_video_node(video_dataset: VideoPlume) -> np.ndarray:
-       frames = []
-       for i in range(video_dataset.frame_count):
-           frame = video_dataset.get_frame(i)
-           if frame is not None:
-               frames.append(frame)
-       return np.stack(frames)
-   ```
-
-2. Reinforcement Learning Integration:
-   ```python
-   # RL environment wrapper
-   from {{cookiecutter.project_slug}}.data import VideoPlume
-   
-   class VideoPlumeEnv(gym.Env):
-       def __init__(self, video_path: str):
-           self.plume = VideoPlume(video_path=video_path)
-           # Define observation/action spaces
-           
-       def reset(self):
-           return self.plume.get_frame(0)
-   ```
-
-3. Machine Learning Analysis:
-   ```python
-   # Batch processing for ML models
-   from {{cookiecutter.project_slug}}.data import VideoPlume, get_frame_iterator
-   
-   plume = VideoPlume("data.mp4", normalize=True)
-   for batch in get_frame_iterator(plume, batch_size=32):
-       predictions = model.predict(batch)
-   ```
-
-4. DVC Workflow Integration:
-   ```yaml
-   # dvc.yaml pipeline stage
-   stages:
-     process_video:
-       cmd: python process.py ${video_path}
-       deps:
-       - ${video_path}
-       params:
-       - flip: true
-       - kernel_size: 5
-   ```
-
-5. Snakemake Workflow Integration:
-   ```python
-   # Snakemake rule
-   rule process_video:
-       input: "data/raw/experiment.mp4"
-       output: "data/processed/frames.npz"
-       script: "scripts/process_video.py"
-   ```
-"""
+# Clean up None values from __all__ when Hydra is not available
+__all__ = [item for item in __all__ if item is not None]
 
 
-def get_integration_documentation() -> str:
-    """
-    Get comprehensive integration documentation.
+# Package-level configuration for improved usability
+def _configure_logging():
+    """Configure package-level logging for better debugging and monitoring."""
+    from loguru import logger
+    import sys
     
-    Returns:
-        String containing detailed integration patterns and examples
-    """
-    return _INTEGRATION_DOCS
+    # Add package-specific log formatting
+    logger.configure(
+        handlers=[
+            {
+                "sink": sys.stderr,
+                "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+                         "<level>{level: <8}</level> | "
+                         "<cyan>{{cookiecutter.project_slug}}.data</cyan> | "
+                         "<level>{message}</level>",
+                "level": "INFO"
+            }
+        ]
+    )
 
 
-# Enhanced import support for different usage patterns
-def _configure_import_hooks():
-    """
-    Configure import hooks for enhanced integration support.
-    
-    This function sets up module-level configuration that enables
-    seamless integration with various scientific computing frameworks
-    while maintaining backward compatibility.
-    """
-    # Add VideoPlume to module namespace for direct access
-    globals()['VideoPlume'] = VideoPlume
-    
-    # Enable shortened import patterns when possible
-    if HYDRA_AVAILABLE:
-        globals()['DictConfig'] = DictConfig
+# Initialize package-level configuration
+_configure_logging()
 
-
-# Initialize import hooks
-_configure_import_hooks()
+# Package documentation and metadata for automated tools
+__doc_format__ = "restructuredtext"
+__package_metadata__ = {
+    "name": "{{cookiecutter.project_slug}}.data",
+    "description": "Video-based odor plume data processing with workflow integration",
+    "version": __version__,
+    "author": __author__,
+    "compatibility": {
+        "kedro": ">=0.18.0",
+        "hydra": ">=1.1.0" if HYDRA_AVAILABLE else "not available",
+        "opencv": ">=4.5.0",
+        "numpy": ">=1.20.0"
+    },
+    "workflow_support": {
+        "dvc": True,
+        "snakemake": True,
+        "kedro_pipelines": True,
+        "hydra_configs": HYDRA_AVAILABLE
+    }
+}
