@@ -1,991 +1,1051 @@
 """
-Enhanced logging configuration with Hydra integration and experiment tracking.
+Enhanced logging configuration system with Hydra integration and experiment tracking.
 
-This module provides comprehensive logging setup using Loguru with integrated Hydra
-configuration support, structured output formats, and experiment tracking capabilities.
-It establishes centralized logging configuration with configurable sinks, formatting
-patterns, and correlation IDs for comprehensive traceability across experiments and
-CLI operations.
+This module provides comprehensive logging setup for the odor plume navigation system,
+integrating Loguru with Hydra configuration management, seed manager context binding,
+and structured experiment tracking. It establishes centralized logging infrastructure
+with configurable sinks, correlation IDs, and comprehensive traceability across 
+experiments and CLI operations.
 
-Features:
-- Centralized logging configuration via enhanced setup per Section 5.4.1 monitoring approach
-- Hydra job tracking integration for enhanced experiment observability per Feature F-006
-- CLI command execution metrics including parameter validation time per Section 5.4.1
-- Reproducibility context binding with seed manager integration per Feature F-014
-- Configuration composition tracking for hierarchical config validation per Section 5.4.2
-- Structured output formats compatible with both development and production environments
-- Environment variable interpolation logging for secure credential tracking
-- Runtime override documentation for parameter sweep analysis support
+The logging system supports:
+- Hydra job tracking with configuration checksum validation
+- Automatic seed manager context injection for reproducibility
+- CLI command execution metrics and parameter validation timing
+- Configuration composition tracking with hierarchical source identification
+- Structured output formats compatible with development and production environments
+- Environment variable interpolation logging for secure credential management
+- Runtime override documentation for parameter sweep analysis
+
+Examples:
+    Basic setup:
+        >>> from {{cookiecutter.project_slug}}.utils.logging import setup_enhanced_logging
+        >>> setup_enhanced_logging()
+        >>> logger.info("System initialized")
+        
+    With Hydra configuration:
+        >>> from {{cookiecutter.project_slug}}.utils.logging import configure_from_hydra
+        >>> configure_from_hydra(cfg)
+        >>> logger.info("Hydra-configured logging active")
+        
+    CLI command tracking:
+        >>> from {{cookiecutter.project_slug}}.utils.logging import track_cli_command
+        >>> with track_cli_command("simulate", {"agents": 5}) as tracker:
+        ...     # Command execution with automatic metrics
+        ...     result = run_simulation()
+        
+    Experiment context:
+        >>> from {{cookiecutter.project_slug}}.utils.logging import bind_experiment_context
+        >>> context = bind_experiment_context(experiment_id="exp_001")
+        >>> logger.bind(**context).info("Experiment started")
 """
 
 import os
 import sys
 import time
-import hashlib
-import platform
-import threading
 import uuid
+import hashlib
+import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union, Callable, ContextManager, Set
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from typing import Dict, Any, Optional, Union, List, Generator, Tuple
+from dataclasses import dataclass, field
 
+import loguru
 from loguru import logger
-from hydra.core.config_store import ConfigStore
-from hydra.core.global_hydra import GlobalHydra
-from hydra.core.hydra_config import HydraConfig
-from hydra.types import JobReturn, JobStatus
-from omegaconf import DictConfig, OmegaConf, ListConfig
-import numpy as np
 
-from ..config.schemas import BaseModel, Field
+# Hydra imports with graceful fallback
+try:
+    from hydra.core.hydra_config import HydraConfig
+    from omegaconf import DictConfig, OmegaConf, ListConfig
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    HydraConfig = None
+    DictConfig = dict
+    OmegaConf = None
+    ListConfig = list
+
+# Import seed manager with fallback
+try:
+    from .seed_manager import SeedManager, get_global_seed_manager
+    SEED_MANAGER_AVAILABLE = True
+except ImportError:
+    SEED_MANAGER_AVAILABLE = False
+    SeedManager = None
+    get_global_seed_manager = lambda: None
+
+# Import configuration schemas with fallback
+try:
+    from ..config.schemas import NavigatorConfig, VideoPlumeConfig
+    CONFIG_SCHEMAS_AVAILABLE = True
+except ImportError:
+    CONFIG_SCHEMAS_AVAILABLE = False
+    NavigatorConfig = dict
+    VideoPlumeConfig = dict
 
 
-class LoggingConfig(BaseModel):
-    """Configuration schema for enhanced logging system."""
+# Enhanced log format patterns with correlation and experiment tracking
+ENHANCED_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+    "<blue>correlation_id={extra[correlation_id]}</blue> | "
+    "<magenta>experiment_id={extra[experiment_id]}</magenta> - "
+    "<level>{message}</level>"
+)
+
+# Hydra-aware format with job and configuration tracking
+HYDRA_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+    "<blue>correlation_id={extra[correlation_id]}</blue> | "
+    "<magenta>experiment_id={extra[experiment_id]}</magenta> | "
+    "<yellow>hydra_job={extra[hydra_job_name]}</yellow> | "
+    "<white>config_checksum={extra[config_checksum]}</white> - "
+    "<level>{message}</level>"
+)
+
+# CLI command format with execution metrics
+CLI_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+    "<blue>correlation_id={extra[correlation_id]}</blue> | "
+    "<magenta>experiment_id={extra[experiment_id]}</magenta> | "
+    "<yellow>cli_command={extra[cli_command]}</yellow> | "
+    "<red>execution_time_ms={extra[execution_time_ms]}</red> - "
+    "<level>{message}</level>"
+)
+
+# Minimal format for development environments
+MINIMAL_FORMAT = (
+    "<green>{time:HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}</cyan> - "
+    "<level>{message}</level>"
+)
+
+# Production format with structured JSON output
+PRODUCTION_FORMAT = (
+    "{time:YYYY-MM-DD HH:mm:ss.SSSZ} | "
+    "{level} | "
+    "{name}:{function}:{line} | "
+    "correlation_id={extra[correlation_id]} | "
+    "experiment_id={extra[experiment_id]} | "
+    "seed_value={extra[seed_value]} | "
+    "{message}"
+)
+
+
+@dataclass
+class LoggingConfig:
+    """
+    Comprehensive logging configuration schema for enhanced logging setup.
+    
+    Supports multiple output sinks, format patterns, and integration configurations
+    for Hydra job tracking, seed manager context binding, and CLI metrics.
+    
+    Attributes:
+        level: Minimum log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        format: Log format pattern (enhanced, hydra, cli, minimal, production)
+        console_enabled: Enable console output sink
+        file_enabled: Enable file output sink
+        file_path: Path for file output (supports environment variable interpolation)
+        rotation: Log file rotation policy (e.g., "10 MB", "1 day")
+        retention: Log file retention policy (e.g., "1 week", "30 days")
+        compression: Compression format for rotated files (gz, bz2, xz)
+        enqueue: Enable message queuing for better multiprocessing
+        backtrace: Include backtrace in exception logs
+        diagnose: Enable detailed exception diagnosis
+        correlation_id_enabled: Enable automatic correlation ID generation
+        experiment_tracking_enabled: Enable experiment context tracking
+        hydra_integration_enabled: Enable Hydra job tracking integration
+        seed_context_enabled: Enable automatic seed manager context binding
+        cli_metrics_enabled: Enable CLI command execution metrics
+        environment_logging_enabled: Enable environment variable logging
+        performance_monitoring_enabled: Enable performance metric collection
+    """
     
     # Basic logging configuration
-    level: str = Field(
-        default="INFO",
-        description="Minimum log level to display (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
-    )
-    console_format: str = Field(
-        default="enhanced",
-        description="Console output format (simple, enhanced, structured, json)"
-    )
-    file_format: str = Field(
-        default="structured",
-        description="File output format (simple, enhanced, structured, json)"
-    )
+    level: str = field(default="INFO")
+    format: str = field(default="enhanced")
     
-    # File logging configuration
-    enable_file_logging: bool = Field(
-        default=True,
-        description="Enable file-based logging output"
-    )
-    log_directory: Optional[str] = Field(
-        default=None,
-        description="Directory for log files. If None, uses Hydra output directory"
-    )
-    log_filename: str = Field(
-        default="experiment.log",
-        description="Filename for log output"
-    )
-    rotation: str = Field(
-        default="100 MB",
-        description="Log file rotation trigger (size or time-based)"
-    )
-    retention: str = Field(
-        default="30 days",
-        description="Log file retention period"
-    )
-    compression: str = Field(
-        default="gz",
-        description="Compression format for rotated logs (gz, bz2, xz)"
-    )
+    # Output sink configuration
+    console_enabled: bool = field(default=True)
+    file_enabled: bool = field(default=False)
+    file_path: Optional[str] = field(default=None)
     
-    # Enhanced features
-    enable_hydra_integration: bool = Field(
-        default=True,
-        description="Enable Hydra job tracking and configuration logging"
-    )
-    enable_seed_context: bool = Field(
-        default=True,
-        description="Enable automatic seed manager context binding"
-    )
-    enable_cli_metrics: bool = Field(
-        default=True,
-        description="Enable CLI command execution metrics tracking"
-    )
-    enable_config_tracking: bool = Field(
-        default=True,
-        description="Enable configuration composition tracking"
-    )
-    enable_correlation_ids: bool = Field(
-        default=True,
-        description="Enable correlation ID generation for request tracing"
-    )
+    # File rotation and retention
+    rotation: Optional[str] = field(default="10 MB")
+    retention: Optional[str] = field(default="1 week")
+    compression: Optional[str] = field(default=None)
     
-    # Performance and debugging
-    enable_performance_monitoring: bool = Field(
-        default=True,
-        description="Enable performance metrics collection and logging"
-    )
-    performance_threshold_ms: float = Field(
-        default=100.0,
-        description="Performance threshold in milliseconds for warning logs"
-    )
-    enable_exception_diagnostics: bool = Field(
-        default=True,
-        description="Enable enhanced exception diagnostics with backtraces"
-    )
-    enable_environment_logging: bool = Field(
-        default=True,
-        description="Enable environment variable interpolation logging"
-    )
+    # Loguru configuration
+    enqueue: bool = field(default=True)
+    backtrace: bool = field(default=True)
+    diagnose: bool = field(default=True)
     
-    # Development and debugging
-    enable_module_filtering: bool = Field(
-        default=False,
-        description="Enable module-specific log level filtering"
-    )
-    filtered_modules: List[str] = Field(
-        default_factory=list,
-        description="List of module names to apply specific filtering"
-    )
-    debug_hydra_composition: bool = Field(
-        default=False,
-        description="Enable detailed Hydra configuration composition debugging"
-    )
+    # Enhanced tracking features
+    correlation_id_enabled: bool = field(default=True)
+    experiment_tracking_enabled: bool = field(default=True)
+    hydra_integration_enabled: bool = field(default=True)
+    seed_context_enabled: bool = field(default=True)
+    cli_metrics_enabled: bool = field(default=True)
+    environment_logging_enabled: bool = field(default=True)
+    performance_monitoring_enabled: bool = field(default=True)
     
-    class Config:
-        extra = "forbid"  # Strict validation for configuration integrity
-
-
-class CorrelationContext:
-    """Thread-local correlation context for request tracing."""
+    def get_format_string(self) -> str:
+        """Get the appropriate format string based on configuration."""
+        format_map = {
+            'enhanced': ENHANCED_FORMAT,
+            'hydra': HYDRA_FORMAT,
+            'cli': CLI_FORMAT,
+            'minimal': MINIMAL_FORMAT,
+            'production': PRODUCTION_FORMAT
+        }
+        return format_map.get(self.format, ENHANCED_FORMAT)
     
-    _local = threading.local()
-    
-    @classmethod
-    def get_correlation_id(cls) -> str:
-        """Get current correlation ID or generate new one."""
-        if not hasattr(cls._local, 'correlation_id'):
-            cls._local.correlation_id = str(uuid.uuid4())[:8]
-        return cls._local.correlation_id
-    
-    @classmethod
-    def set_correlation_id(cls, correlation_id: str) -> None:
-        """Set correlation ID for current thread."""
-        cls._local.correlation_id = correlation_id
-    
-    @classmethod
-    def clear_correlation_id(cls) -> None:
-        """Clear correlation ID for current thread."""
-        if hasattr(cls._local, 'correlation_id'):
-            delattr(cls._local, 'correlation_id')
-    
-    @classmethod
-    @contextmanager
-    def correlation_scope(cls, correlation_id: Optional[str] = None) -> ContextManager[str]:
-        """Context manager for correlation ID scope."""
-        if correlation_id is None:
-            correlation_id = str(uuid.uuid4())[:8]
+    def resolve_file_path(self) -> Optional[Path]:
+        """Resolve file path with environment variable interpolation."""
+        if not self.file_path:
+            return None
         
-        # Save previous correlation ID
-        previous_id = getattr(cls._local, 'correlation_id', None)
+        # Handle environment variable interpolation
+        resolved_path = os.path.expandvars(self.file_path)
+        resolved_path = os.path.expanduser(resolved_path)
+        return Path(resolved_path)
+
+
+@dataclass
+class ExperimentContext:
+    """
+    Comprehensive experiment context for logging integration.
+    
+    Captures all relevant experiment metadata including Hydra configuration,
+    seed manager state, CLI command context, and system information for
+    complete experiment traceability and reproducibility.
+    
+    Attributes:
+        experiment_id: Unique experiment identifier
+        correlation_id: Request/session correlation identifier
+        hydra_job_name: Hydra job name from configuration
+        hydra_run_id: Hydra run identifier
+        config_checksum: Configuration checksum for validation
+        seed_value: Random seed value for reproducibility
+        cli_command: CLI command being executed
+        cli_parameters: CLI command parameters and overrides
+        start_time: Experiment start timestamp
+        system_info: System and environment information
+        config_composition: Configuration composition hierarchy
+        environment_variables: Relevant environment variables
+        performance_metrics: Performance and timing metrics
+    """
+    
+    experiment_id: str = field(default_factory=lambda: f"exp_{int(time.time() * 1000000)}")
+    correlation_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    
+    # Hydra integration
+    hydra_job_name: Optional[str] = field(default=None)
+    hydra_run_id: Optional[str] = field(default=None)
+    config_checksum: Optional[str] = field(default=None)
+    
+    # Seed manager integration
+    seed_value: Optional[int] = field(default=None)
+    seed_manager_context: Optional[Dict[str, Any]] = field(default=None)
+    
+    # CLI command integration
+    cli_command: Optional[str] = field(default=None)
+    cli_parameters: Optional[Dict[str, Any]] = field(default=None)
+    
+    # Timing and performance
+    start_time: float = field(default_factory=time.time)
+    execution_time_ms: Optional[float] = field(default=None)
+    
+    # System information
+    system_info: Dict[str, Any] = field(default_factory=dict)
+    config_composition: List[str] = field(default_factory=list)
+    environment_variables: Dict[str, str] = field(default_factory=dict)
+    performance_metrics: Dict[str, float] = field(default_factory=dict)
+    
+    def to_logger_context(self) -> Dict[str, Any]:
+        """Convert experiment context to logger binding context."""
+        context = {
+            'experiment_id': self.experiment_id,
+            'correlation_id': self.correlation_id,
+            'seed_value': self.seed_value or 'N/A',
+            'hydra_job_name': self.hydra_job_name or 'N/A',
+            'config_checksum': self.config_checksum or 'N/A',
+            'cli_command': self.cli_command or 'N/A',
+            'execution_time_ms': self.execution_time_ms or 0.0
+        }
+        
+        # Add CLI parameters if available
+        if self.cli_parameters:
+            context['cli_parameters'] = str(self.cli_parameters)
+        
+        # Add performance metrics
+        if self.performance_metrics:
+            context.update(self.performance_metrics)
+        
+        return context
+    
+    def update_from_hydra(self, cfg: Optional[DictConfig] = None) -> None:
+        """Update context from Hydra configuration."""
+        if not HYDRA_AVAILABLE:
+            return
         
         try:
-            cls.set_correlation_id(correlation_id)
-            yield correlation_id
-        finally:
-            # Restore previous correlation ID
-            if previous_id is not None:
-                cls.set_correlation_id(previous_id)
-            else:
-                cls.clear_correlation_id()
-
-
-class HydraJobTracker:
-    """Hydra job tracking and configuration composition monitoring."""
-    
-    def __init__(self):
-        self._job_start_time: Optional[float] = None
-        self._job_name: Optional[str] = None
-        self._config_checksum: Optional[str] = None
-        self._composition_info: Dict[str, Any] = {}
-        self._override_info: Dict[str, Any] = {}
-        self._environment_vars: Set[str] = set()
-    
-    def initialize(self) -> Dict[str, Any]:
-        """Initialize Hydra job tracking."""
-        job_info = {}
-        
-        try:
-            # Check if Hydra is initialized
-            if GlobalHydra().is_initialized():
-                hydra_cfg = GlobalHydra.instance().hydra_cfg
-                hydra_runtime = GlobalHydra.instance().cfg
-                
-                # Extract job information
-                if hydra_cfg:
-                    self._job_name = hydra_cfg.job.name
-                    job_info['job_name'] = self._job_name
-                    job_info['hydra_version'] = hydra_cfg.hydra.version
-                    job_info['runtime_choices'] = dict(hydra_cfg.runtime.choices) if hasattr(hydra_cfg.runtime, 'choices') else {}
-                
-                # Extract configuration checksum
-                if hydra_runtime:
-                    self._config_checksum = self._generate_config_checksum(hydra_runtime)
-                    job_info['config_checksum'] = self._config_checksum
-                
-                # Extract composition information
-                self._composition_info = self._extract_composition_info(hydra_cfg)
-                job_info['composition_info'] = self._composition_info
-                
-                # Extract override information
-                self._override_info = self._extract_override_info(hydra_cfg)
-                job_info['override_info'] = self._override_info
-                
-                # Track environment variable usage
-                self._environment_vars = self._extract_environment_variables(hydra_runtime)
-                job_info['environment_variables'] = list(self._environment_vars)
-                
-                # Initialize job start time
-                self._job_start_time = time.perf_counter()
-                job_info['job_start_time'] = datetime.now(timezone.utc).isoformat()
+            hydra_config = HydraConfig.get()
+            self.hydra_job_name = hydra_config.job.name
+            self.hydra_run_id = hydra_config.runtime.output_dir.split('/')[-1]
             
-            else:
-                job_info['status'] = 'hydra_not_initialized'
-        
+            # Generate configuration checksum
+            if cfg is not None:
+                config_str = OmegaConf.to_yaml(cfg)
+                self.config_checksum = hashlib.md5(config_str.encode()).hexdigest()[:8]
+                
+                # Extract configuration composition
+                self.config_composition = self._extract_config_composition(cfg)
+                
         except Exception as e:
-            job_info['initialization_error'] = str(e)
-            logger.warning(f"Failed to initialize Hydra job tracking: {e}")
-        
-        return job_info
+            logger.debug(f"Failed to update context from Hydra: {e}")
     
-    def _generate_config_checksum(self, config: DictConfig) -> str:
-        """Generate checksum for configuration reproducibility."""
-        try:
-            # Convert to container and sort for deterministic hashing
-            config_dict = OmegaConf.to_container(config, resolve=True)
-            config_str = str(sorted(config_dict.items()) if isinstance(config_dict, dict) else config_dict)
-            return hashlib.md5(config_str.encode()).hexdigest()[:12]
-        except Exception as e:
-            logger.debug(f"Failed to generate config checksum: {e}")
-            return "unknown"
-    
-    def _extract_composition_info(self, hydra_cfg: DictConfig) -> Dict[str, Any]:
-        """Extract configuration composition information."""
-        composition_info = {}
+    def update_from_seed_manager(self) -> None:
+        """Update context from seed manager."""
+        if not SEED_MANAGER_AVAILABLE:
+            return
         
         try:
-            # Extract config search path
-            if hasattr(hydra_cfg.hydra, 'searchpath'):
-                composition_info['search_paths'] = list(hydra_cfg.hydra.searchpath)
-            
-            # Extract composed configuration sources
-            if hasattr(hydra_cfg.hydra, 'compose'):
-                composition_info['compose_info'] = OmegaConf.to_container(hydra_cfg.hydra.compose)
+            seed_manager = get_global_seed_manager()
+            if seed_manager:
+                self.seed_value = seed_manager.seed
+                self.seed_manager_context = seed_manager.bind_to_logger()
+                
+        except Exception as e:
+            logger.debug(f"Failed to update context from seed manager: {e}")
+    
+    def update_system_info(self) -> None:
+        """Update system and environment information."""
+        import platform
+        
+        self.system_info = {
+            'platform': platform.system(),
+            'platform_version': platform.version(),
+            'python_version': platform.python_version(),
+            'architecture': platform.architecture()[0],
+            'processor': platform.processor(),
+            'hostname': platform.node()
+        }
+        
+        # Capture relevant environment variables
+        env_vars = [
+            'PYTHONPATH', 'PYTHONHASHSEED', 'CUDA_VISIBLE_DEVICES',
+            'OMP_NUM_THREADS', 'HYDRA_FULL_ERROR', 'LOGURU_LEVEL'
+        ]
+        
+        self.environment_variables = {
+            key: os.environ.get(key, 'N/A') for key in env_vars
+        }
+    
+    def _extract_config_composition(self, cfg: DictConfig) -> List[str]:
+        """Extract configuration composition hierarchy."""
+        composition = []
+        
+        try:
+            # Extract primary config sources
+            if hasattr(cfg, '_metadata') and cfg._metadata:
+                metadata = cfg._metadata
+                if hasattr(metadata, 'ref_type'):
+                    composition.append(f"ref_type: {metadata.ref_type}")
+                if hasattr(metadata, 'object_type'):
+                    composition.append(f"object_type: {metadata.object_type}")
             
             # Extract config groups
-            if hasattr(hydra_cfg, 'defaults'):
-                composition_info['config_groups'] = OmegaConf.to_container(hydra_cfg.defaults)
+            if hasattr(cfg, 'hydra') and cfg.hydra:
+                hydra_cfg = cfg.hydra
+                if hasattr(hydra_cfg, 'runtime') and hydra_cfg.runtime:
+                    if hasattr(hydra_cfg.runtime, 'choices'):
+                        choices = hydra_cfg.runtime.choices
+                        for key, value in choices.items():
+                            composition.append(f"{key}: {value}")
             
         except Exception as e:
-            logger.debug(f"Failed to extract composition info: {e}")
+            logger.debug(f"Failed to extract config composition: {e}")
+            composition.append("composition_extraction_failed")
         
-        return composition_info
-    
-    def _extract_override_info(self, hydra_cfg: DictConfig) -> Dict[str, Any]:
-        """Extract configuration override information."""
-        override_info = {}
-        
-        try:
-            # Extract command-line overrides
-            if hasattr(hydra_cfg.hydra, 'overrides'):
-                overrides = hydra_cfg.hydra.overrides
-                if hasattr(overrides, 'task'):
-                    override_info['task_overrides'] = list(overrides.task)
-                if hasattr(overrides, 'hydra'):
-                    override_info['hydra_overrides'] = list(overrides.hydra)
-            
-            # Extract runtime choices
-            if hasattr(hydra_cfg, 'runtime') and hasattr(hydra_cfg.runtime, 'choices'):
-                override_info['runtime_choices'] = dict(hydra_cfg.runtime.choices)
-            
-        except Exception as e:
-            logger.debug(f"Failed to extract override info: {e}")
-        
-        return override_info
-    
-    def _extract_environment_variables(self, config: DictConfig) -> Set[str]:
-        """Extract environment variables used in configuration."""
-        env_vars = set()
-        
-        try:
-            # Convert to string and search for environment variable patterns
-            config_str = OmegaConf.to_yaml(config)
-            
-            # Look for ${oc.env:VAR_NAME} patterns
-            import re
-            env_pattern = r'\$\{oc\.env:([^}]+)\}'
-            matches = re.findall(env_pattern, config_str)
-            env_vars.update(matches)
-            
-            # Look for ${ENV_VAR} patterns
-            simple_env_pattern = r'\$\{([A-Z_][A-Z0-9_]*)\}'
-            simple_matches = re.findall(simple_env_pattern, config_str)
-            env_vars.update(simple_matches)
-            
-        except Exception as e:
-            logger.debug(f"Failed to extract environment variables: {e}")
-        
-        return env_vars
-    
-    def get_job_metrics(self) -> Dict[str, Any]:
-        """Get current job execution metrics."""
-        metrics = {
-            'job_name': self._job_name,
-            'config_checksum': self._config_checksum,
-        }
-        
-        if self._job_start_time is not None:
-            metrics['job_duration_seconds'] = time.perf_counter() - self._job_start_time
-        
-        return metrics
-    
-    def log_configuration_change(self, change_type: str, details: Dict[str, Any]) -> None:
-        """Log configuration changes during runtime."""
-        logger.info(
-            f"Configuration change detected: {change_type}",
-            extra={
-                'event_type': 'config_change',
-                'change_type': change_type,
-                'change_details': details,
-                'job_name': self._job_name,
-                'config_checksum': self._config_checksum,
-            }
-        )
+        return composition
 
 
-class CLIMetricsTracker:
-    """CLI command execution metrics and performance tracking."""
-    
-    def __init__(self):
-        self._command_start_time: Optional[float] = None
-        self._command_name: Optional[str] = None
-        self._parameter_validation_time: Optional[float] = None
-        self._initialization_time: Optional[float] = None
-        
-    @contextmanager
-    def track_command(self, command_name: str) -> ContextManager[Dict[str, Any]]:
-        """Track CLI command execution metrics."""
-        self._command_name = command_name
-        self._command_start_time = time.perf_counter()
-        
-        metrics = {
-            'command_name': command_name,
-            'start_time': datetime.now(timezone.utc).isoformat(),
-        }
-        
-        try:
-            yield metrics
-        finally:
-            if self._command_start_time is not None:
-                total_time = (time.perf_counter() - self._command_start_time) * 1000
-                metrics['total_execution_time_ms'] = total_time
-                
-                logger.info(
-                    f"CLI command completed: {command_name}",
-                    extra={
-                        'event_type': 'cli_command_complete',
-                        'command_metrics': metrics,
-                    }
-                )
-    
-    @contextmanager
-    def track_parameter_validation(self) -> ContextManager[Dict[str, Any]]:
-        """Track parameter validation timing."""
-        start_time = time.perf_counter()
-        validation_metrics = {}
-        
-        try:
-            yield validation_metrics
-        finally:
-            validation_time = (time.perf_counter() - start_time) * 1000
-            self._parameter_validation_time = validation_time
-            validation_metrics['validation_time_ms'] = validation_time
-            
-            if validation_time > 100:  # Performance threshold
-                logger.warning(
-                    f"Parameter validation exceeded performance threshold: {validation_time:.2f}ms",
-                    extra={
-                        'event_type': 'performance_warning',
-                        'validation_metrics': validation_metrics,
-                    }
-                )
-            else:
-                logger.debug(
-                    f"Parameter validation completed: {validation_time:.2f}ms",
-                    extra={
-                        'event_type': 'parameter_validation',
-                        'validation_metrics': validation_metrics,
-                    }
-                )
-
-
-class EnhancedLoggingManager:
+class EnhancedLogger:
     """
-    Enhanced logging management system with Hydra integration.
+    Enhanced logger implementation with comprehensive experiment tracking.
     
-    Provides centralized logging configuration, experiment tracking, and
-    comprehensive observability for odor plume navigation experiments.
+    Provides centralized logging configuration with Hydra integration, seed manager
+    context binding, CLI command tracking, and structured experiment metadata
+    for complete traceability and reproducibility across research experiments.
+    
+    Features:
+    - Automatic correlation ID generation for request tracing
+    - Hydra job name and configuration checksum integration
+    - Seed manager context binding for reproducibility
+    - CLI command execution metrics and parameter tracking
+    - Configuration composition tracking with hierarchical source identification
+    - Environment variable interpolation logging for secure credential management
+    - Performance monitoring with timing metrics
+    - Structured output formats for development and production environments
+    
+    Examples:
+        Basic usage:
+            >>> enhanced_logger = EnhancedLogger()
+            >>> enhanced_logger.setup()
+            >>> logger.info("System initialized")
+            
+        With configuration:
+            >>> config = LoggingConfig(level="DEBUG", file_enabled=True)
+            >>> enhanced_logger = EnhancedLogger(config)
+            >>> enhanced_logger.setup()
+            
+        Context binding:
+            >>> context = enhanced_logger.create_experiment_context()
+            >>> logger.bind(**context.to_logger_context()).info("Experiment started")
     """
     
-    _instance: Optional['EnhancedLoggingManager'] = None
-    _initialized: bool = False
-    
-    def __new__(cls) -> 'EnhancedLoggingManager':
-        """Singleton implementation ensuring single logging manager."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def __init__(self):
-        """Initialize logging manager (only once due to singleton pattern)."""
-        if not self._initialized:
-            self._config: Optional[LoggingConfig] = None
-            self._hydra_tracker = HydraJobTracker()
-            self._cli_tracker = CLIMetricsTracker()
-            self._log_context: Dict[str, Any] = {}
-            self._formatters: Dict[str, str] = {}
-            self._setup_formatters()
-            EnhancedLoggingManager._initialized = True
-    
-    @classmethod
-    def reset(cls) -> None:
-        """Reset singleton instance for testing purposes."""
-        cls._instance = None
-        cls._initialized = False
-    
-    def initialize(
-        self,
-        config: Optional[Union[LoggingConfig, DictConfig, Dict[str, Any]]] = None
-    ) -> None:
+    def __init__(self, config: Optional[LoggingConfig] = None):
         """
-        Initialize enhanced logging system.
+        Initialize enhanced logger with configuration.
         
         Args:
-            config: Logging configuration (LoggingConfig, DictConfig, or dict).
-                   If None, attempts to load from Hydra global config.
+            config: Logging configuration (uses defaults if not provided)
         """
-        start_time = time.perf_counter()
+        self.config = config or LoggingConfig()
+        self.experiment_context: Optional[ExperimentContext] = None
+        self._setup_complete = False
+        self._sink_ids: List[int] = []
+        self._lock = threading.Lock()
+        
+        # Performance tracking
+        self._setup_start_time: Optional[float] = None
+        self._setup_duration_ms: Optional[float] = None
+    
+    def setup(self, 
+              cfg: Optional[DictConfig] = None,
+              experiment_id: Optional[str] = None) -> 'EnhancedLogger':
+        """
+        Setup enhanced logging system with comprehensive integration.
+        
+        Configures Loguru with enhanced features including Hydra integration,
+        seed manager context binding, and experiment tracking. Ensures all
+        logging configuration meets performance requirements (<100ms setup).
+        
+        Args:
+            cfg: Optional Hydra configuration for integration
+            experiment_id: Optional experiment identifier
+            
+        Returns:
+            EnhancedLogger: Configured logger instance
+            
+        Raises:
+            RuntimeError: If setup exceeds performance requirements
+        """
+        self._setup_start_time = time.perf_counter()
+        
+        with self._lock:
+            if self._setup_complete:
+                return self
+            
+            try:
+                # Remove default logger to start fresh
+                logger.remove()
+                
+                # Create experiment context
+                self.experiment_context = self.create_experiment_context(
+                    cfg=cfg,
+                    experiment_id=experiment_id
+                )
+                
+                # Setup console sink
+                if self.config.console_enabled:
+                    self._setup_console_sink()
+                
+                # Setup file sink
+                if self.config.file_enabled:
+                    self._setup_file_sink()
+                
+                # Configure global context
+                self._configure_global_context()
+                
+                # Log setup completion
+                self._setup_duration_ms = (time.perf_counter() - self._setup_start_time) * 1000
+                self._setup_complete = True
+                
+                # Validate performance requirement
+                if self._setup_duration_ms > 100:
+                    warning_msg = (
+                        f"Logging setup took {self._setup_duration_ms:.2f}ms, "
+                        f"exceeding 100ms performance requirement"
+                    )
+                    logger.warning(warning_msg)
+                
+                # Log successful setup
+                logger.bind(**self.experiment_context.to_logger_context()).info(
+                    f"Enhanced logging configured successfully "
+                    f"(setup_time={self._setup_duration_ms:.2f}ms, "
+                    f"experiment_id={self.experiment_context.experiment_id})"
+                )
+                
+                return self
+                
+            except Exception as e:
+                error_msg = f"Failed to setup enhanced logging: {str(e)}"
+                # Use basic logger since enhanced setup failed
+                loguru.logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
+    
+    def _setup_console_sink(self) -> None:
+        """Setup console output sink with enhanced formatting."""
+        format_string = self.config.get_format_string()
+        
+        sink_id = logger.add(
+            sys.stderr,
+            format=format_string,
+            level=self.config.level,
+            backtrace=self.config.backtrace,
+            diagnose=self.config.diagnose,
+            enqueue=self.config.enqueue,
+            colorize=True
+        )
+        
+        self._sink_ids.append(sink_id)
+    
+    def _setup_file_sink(self) -> None:
+        """Setup file output sink with rotation and compression."""
+        file_path = self.config.resolve_file_path()
+        if not file_path:
+            return
+        
+        # Create directory if it doesn't exist
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        format_string = self.config.get_format_string()
+        
+        sink_id = logger.add(
+            str(file_path),
+            format=format_string,
+            level=self.config.level,
+            rotation=self.config.rotation,
+            retention=self.config.retention,
+            compression=self.config.compression,
+            backtrace=self.config.backtrace,
+            diagnose=self.config.diagnose,
+            enqueue=self.config.enqueue,
+            encoding="utf-8"
+        )
+        
+        self._sink_ids.append(sink_id)
+    
+    def _configure_global_context(self) -> None:
+        """Configure global logger context with experiment metadata."""
+        if not self.experiment_context:
+            return
+        
+        # Configure default extra values for all log records
+        global_context = self.experiment_context.to_logger_context()
+        
+        # Add environment and system information if enabled
+        if self.config.environment_logging_enabled:
+            global_context.update({
+                'platform': self.experiment_context.system_info.get('platform', 'unknown'),
+                'python_version': self.experiment_context.system_info.get('python_version', 'unknown')
+            })
+        
+        # Configure logger with global context
+        logger.configure(extra=global_context)
+    
+    def create_experiment_context(self, 
+                                  cfg: Optional[DictConfig] = None,
+                                  experiment_id: Optional[str] = None) -> ExperimentContext:
+        """
+        Create comprehensive experiment context for tracking.
+        
+        Generates experiment context with Hydra integration, seed manager
+        binding, and system information for complete experiment traceability.
+        
+        Args:
+            cfg: Optional Hydra configuration
+            experiment_id: Optional experiment identifier
+            
+        Returns:
+            ExperimentContext: Complete experiment context
+        """
+        context = ExperimentContext(experiment_id=experiment_id or f"exp_{int(time.time() * 1000000)}")
+        
+        # Update from various sources
+        if self.config.hydra_integration_enabled:
+            context.update_from_hydra(cfg)
+        
+        if self.config.seed_context_enabled:
+            context.update_from_seed_manager()
+        
+        if self.config.performance_monitoring_enabled:
+            context.update_system_info()
+        
+        return context
+    
+    def bind_experiment_context(self, **additional_context) -> Dict[str, Any]:
+        """
+        Create logger context binding for experiment tracking.
+        
+        Args:
+            **additional_context: Additional context parameters
+            
+        Returns:
+            Dict[str, Any]: Complete logger binding context
+        """
+        if not self.experiment_context:
+            self.experiment_context = self.create_experiment_context()
+        
+        context = self.experiment_context.to_logger_context()
+        context.update(additional_context)
+        
+        return context
+    
+    def track_configuration_composition(self, cfg: DictConfig) -> None:
+        """
+        Track configuration composition for hierarchical validation.
+        
+        Logs configuration composition hierarchy, override sources, and
+        environment variable interpolation for comprehensive config tracking.
+        
+        Args:
+            cfg: Hydra configuration to track
+        """
+        if not self.config.hydra_integration_enabled or not self.experiment_context:
+            return
         
         try:
-            # Load configuration
-            self._config = self._load_config(config)
+            # Update experiment context with configuration
+            self.experiment_context.update_from_hydra(cfg)
             
-            # Remove existing loggers
-            logger.remove()
-            
-            # Initialize Hydra tracking if enabled
-            if self._config.enable_hydra_integration:
-                hydra_info = self._hydra_tracker.initialize()
-                self._log_context.update(hydra_info)
-            
-            # Setup logging context
-            self._setup_logging_context()
-            
-            # Configure console logging
-            self._setup_console_logging()
-            
-            # Configure file logging if enabled
-            if self._config.enable_file_logging:
-                self._setup_file_logging()
-            
-            # Setup performance monitoring if enabled
-            if self._config.enable_performance_monitoring:
-                self._setup_performance_monitoring()
-            
-            # Setup correlation ID handling if enabled
-            if self._config.enable_correlation_ids:
-                self._setup_correlation_context()
-            
-            # Setup seed manager integration if enabled
-            if self._config.enable_seed_context:
-                self._setup_seed_context()
-            
-            # Validate initialization performance
-            initialization_time = (time.perf_counter() - start_time) * 1000
-            if initialization_time > 100:  # Performance threshold
-                logger.warning(
-                    f"Logging initialization exceeded performance threshold: {initialization_time:.2f}ms"
-                )
-            
-            logger.info(
-                "Enhanced logging system initialized successfully",
-                extra={
-                    'event_type': 'logging_initialized',
-                    'initialization_time_ms': f"{initialization_time:.2f}",
-                    'config_summary': self._get_config_summary(),
-                }
+            # Log configuration composition
+            logger.bind(**self.experiment_context.to_logger_context()).info(
+                f"Configuration composition tracked: {self.experiment_context.config_composition}"
             )
             
-        except Exception as e:
-            # Fallback to basic logging if initialization fails
-            self._setup_fallback_logging()
-            logger.error(f"Enhanced logging initialization failed, using fallback: {e}")
-            raise RuntimeError(f"Logging initialization failed: {e}") from e
-    
-    def _load_config(self, config: Optional[Union[LoggingConfig, DictConfig, Dict[str, Any]]]) -> LoggingConfig:
-        """Load and validate logging configuration."""
-        if config is None:
-            # Attempt to load from Hydra global config
-            config = self._load_from_hydra()
-        
-        if isinstance(config, LoggingConfig):
-            return config
-        elif isinstance(config, (DictConfig, dict)):
-            return LoggingConfig(**dict(config))
-        else:
-            logger.warning("No valid logging configuration found, using defaults")
-            return LoggingConfig()
-    
-    def _load_from_hydra(self) -> Dict[str, Any]:
-        """Load logging configuration from Hydra global config."""
-        try:
-            if GlobalHydra().is_initialized():
-                hydra_cfg = GlobalHydra.instance().cfg
-                if hydra_cfg and "logging" in hydra_cfg:
-                    return OmegaConf.to_container(hydra_cfg.logging, resolve=True)
-        except Exception as e:
-            logger.debug(f"Could not load logging config from Hydra: {e}")
-        
-        return {}
-    
-    def _setup_formatters(self) -> None:
-        """Setup logging format templates."""
-        # Simple format for basic console output
-        self._formatters['simple'] = (
-            "<green>{time:HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<level>{message}</level>"
-        )
-        
-        # Enhanced format with module and function context
-        self._formatters['enhanced'] = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<blue>corr={extra[correlation_id]}</blue> - "
-            "<level>{message}</level>"
-        )
-        
-        # Structured format for detailed logging
-        self._formatters['structured'] = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-            "<blue>corr={extra[correlation_id]}</blue> | "
-            "<blue>job={extra[job_name]}</blue> | "
-            "<blue>seed={extra[seed]}</blue> - "
-            "<level>{message}</level>"
-        )
-        
-        # JSON format for machine-readable logs
-        self._formatters['json'] = (
-            '{"timestamp": "{time:YYYY-MM-DD HH:mm:ss.SSSZ}", '
-            '"level": "{level}", '
-            '"module": "{name}", '
-            '"function": "{function}", '
-            '"line": {line}, '
-            '"correlation_id": "{extra[correlation_id]}", '
-            '"job_name": "{extra[job_name]}", '
-            '"seed": "{extra[seed]}", '
-            '"message": "{message}", '
-            '"extra": {extra}}'
-        )
-    
-    def _setup_logging_context(self) -> None:
-        """Setup global logging context with default values."""
-        # Default context values
-        default_context = {
-            'correlation_id': 'unknown',
-            'job_name': 'unknown',
-            'seed': 'unknown',
-            'run_id': 'unknown',
-            'environment_hash': 'unknown',
-        }
-        
-        # Update with any existing context
-        default_context.update(self._log_context)
-        self._log_context = default_context
-        
-        # Configure Loguru patcher for automatic context injection
-        def add_context(record):
-            """Add global context to log record."""
-            if 'extra' not in record:
-                record['extra'] = {}
-            
-            # Add correlation ID
-            if self._config.enable_correlation_ids:
-                record['extra']['correlation_id'] = CorrelationContext.get_correlation_id()
-            
-            # Add global context
-            for key, value in self._log_context.items():
-                if key not in record['extra']:
-                    record['extra'][key] = value
-            
-            return record
-        
-        logger.configure(patcher=add_context)
-    
-    def _setup_console_logging(self) -> None:
-        """Setup console logging with appropriate format."""
-        console_format = self._formatters.get(self._config.console_format, self._formatters['enhanced'])
-        
-        logger.add(
-            sys.stderr,
-            format=console_format,
-            level=self._config.level,
-            backtrace=self._config.enable_exception_diagnostics,
-            diagnose=self._config.enable_exception_diagnostics,
-            enqueue=True,  # Thread-safe logging
-        )
-    
-    def _setup_file_logging(self) -> None:
-        """Setup file logging with rotation and retention."""
-        # Determine log directory
-        log_dir = self._get_log_directory()
-        log_file = Path(log_dir) / self._config.log_filename
-        
-        # Ensure directory exists
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Select file format
-        file_format = self._formatters.get(self._config.file_format, self._formatters['structured'])
-        
-        logger.add(
-            str(log_file),
-            format=file_format,
-            level=self._config.level,
-            rotation=self._config.rotation,
-            retention=self._config.retention,
-            compression=self._config.compression,
-            backtrace=self._config.enable_exception_diagnostics,
-            diagnose=self._config.enable_exception_diagnostics,
-            enqueue=True,
-        )
-        
-        logger.debug(f"File logging configured: {log_file}")
-    
-    def _get_log_directory(self) -> str:
-        """Get log directory from configuration or Hydra output directory."""
-        if self._config.log_directory:
-            return self._config.log_directory
-        
-        # Try to use Hydra output directory
-        try:
-            if GlobalHydra().is_initialized():
-                hydra_cfg = HydraConfig.get()
-                if hydra_cfg.runtime.output_dir:
-                    return hydra_cfg.runtime.output_dir
-        except Exception as e:
-            logger.debug(f"Could not get Hydra output directory: {e}")
-        
-        # Fallback to current directory
-        return "logs"
-    
-    def _setup_performance_monitoring(self) -> None:
-        """Setup performance monitoring and thresholds."""
-        # Add performance monitoring filter
-        def performance_filter(record):
-            """Filter and enhance performance-related logs."""
-            if 'event_type' in record.get('extra', {}):
-                event_type = record['extra']['event_type']
+            # Log environment variable interpolation if enabled
+            if self.config.environment_logging_enabled:
+                env_vars = self.experiment_context.environment_variables
+                interpolated_vars = {k: v for k, v in env_vars.items() if v != 'N/A'}
                 
-                # Check performance thresholds
-                if event_type in ['parameter_validation', 'config_load', 'initialization']:
-                    duration_key = None
-                    for key in record['extra'].keys():
-                        if 'time_ms' in key or 'duration_ms' in key:
-                            duration_key = key
-                            break
-                    
-                    if duration_key and record['extra'][duration_key] > self._config.performance_threshold_ms:
-                        record['level'] = 'WARNING'
-                        record['message'] = f"PERFORMANCE: {record['message']}"
+                if interpolated_vars:
+                    logger.bind(**self.experiment_context.to_logger_context()).info(
+                        f"Environment variables tracked: {interpolated_vars}"
+                    )
             
-            return record
-        
-        logger.configure(patcher=performance_filter)
-    
-    def _setup_correlation_context(self) -> None:
-        """Setup correlation ID context management."""
-        # Correlation context is handled in the patcher function
-        # This method can be extended for additional correlation features
-        logger.debug("Correlation ID context management enabled")
-    
-    def _setup_seed_context(self) -> None:
-        """Setup seed manager context integration."""
-        try:
-            # Import seed manager to get current context
-            from .seed_manager import get_seed_manager
-            
-            seed_manager = get_seed_manager()
-            if seed_manager.current_seed is not None:
-                self._log_context.update({
-                    'seed': seed_manager.current_seed,
-                    'run_id': seed_manager.run_id or 'unknown',
-                    'environment_hash': seed_manager.environment_hash or 'unknown',
-                })
-                
-                logger.debug(
-                    "Seed manager context integrated",
-                    extra={
-                        'seed_context': {
-                            'seed': seed_manager.current_seed,
-                            'run_id': seed_manager.run_id,
-                            'environment_hash': seed_manager.environment_hash,
-                        }
-                    }
-                )
         except Exception as e:
-            logger.debug(f"Could not integrate seed manager context: {e}")
+            logger.warning(f"Failed to track configuration composition: {e}")
     
-    def _setup_fallback_logging(self) -> None:
-        """Setup minimal fallback logging if initialization fails."""
-        logger.remove()
-        logger.add(
-            sys.stderr,
-            format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | <level>{message}</level>",
-            level="INFO",
+    def track_performance_metric(self, metric_name: str, value: float, unit: str = "ms") -> None:
+        """
+        Track performance metric with experiment context.
+        
+        Args:
+            metric_name: Name of the performance metric
+            value: Metric value
+            unit: Metric unit (default: ms)
+        """
+        if not self.config.performance_monitoring_enabled or not self.experiment_context:
+            return
+        
+        metric_key = f"{metric_name}_{unit}"
+        self.experiment_context.performance_metrics[metric_key] = value
+        
+        logger.bind(**self.experiment_context.to_logger_context()).info(
+            f"Performance metric tracked: {metric_name}={value}{unit}"
         )
     
-    def _get_config_summary(self) -> Dict[str, Any]:
-        """Get configuration summary for logging."""
+    def cleanup(self) -> None:
+        """Cleanup logging configuration and remove sinks."""
+        with self._lock:
+            for sink_id in self._sink_ids:
+                try:
+                    logger.remove(sink_id)
+                except ValueError:
+                    # Sink already removed
+                    pass
+            
+            self._sink_ids.clear()
+            self._setup_complete = False
+    
+    def get_setup_metrics(self) -> Dict[str, Any]:
+        """Get logging setup performance metrics."""
         return {
-            'level': self._config.level,
-            'console_format': self._config.console_format,
-            'file_logging_enabled': self._config.enable_file_logging,
-            'hydra_integration_enabled': self._config.enable_hydra_integration,
-            'seed_context_enabled': self._config.enable_seed_context,
-            'cli_metrics_enabled': self._config.enable_cli_metrics,
-            'correlation_ids_enabled': self._config.enable_correlation_ids,
-            'performance_monitoring_enabled': self._config.enable_performance_monitoring,
+            'setup_duration_ms': self._setup_duration_ms,
+            'sinks_configured': len(self._sink_ids),
+            'experiment_id': self.experiment_context.experiment_id if self.experiment_context else None,
+            'config_checksum': self.experiment_context.config_checksum if self.experiment_context else None
         }
-    
-    def update_context(self, context: Dict[str, Any]) -> None:
-        """Update global logging context."""
-        self._log_context.update(context)
-        logger.debug(f"Logging context updated: {list(context.keys())}")
-    
-    def get_cli_tracker(self) -> CLIMetricsTracker:
-        """Get CLI metrics tracker instance."""
-        return self._cli_tracker
-    
-    def get_hydra_tracker(self) -> HydraJobTracker:
-        """Get Hydra job tracker instance."""
-        return self._hydra_tracker
-    
-    def log_environment_variables(self, var_names: List[str]) -> None:
-        """Log environment variable usage for security tracking."""
-        if self._config.enable_environment_logging:
-            env_info = {}
-            for var_name in var_names:
-                env_value = os.getenv(var_name)
-                if env_value:
-                    # Mask sensitive values
-                    if any(sensitive in var_name.lower() for sensitive in ['password', 'secret', 'key', 'token']):
-                        env_info[var_name] = f"***{env_value[-4:]}" if len(env_value) > 4 else "***"
-                    else:
-                        env_info[var_name] = env_value
-                else:
-                    env_info[var_name] = None
-            
-            logger.info(
-                "Environment variables accessed",
-                extra={
-                    'event_type': 'environment_access',
-                    'environment_variables': env_info,
-                }
-            )
-    
-    def log_configuration_composition(self, composition_details: Dict[str, Any]) -> None:
-        """Log configuration composition for hierarchical tracking."""
-        if self._config.enable_config_tracking:
-            logger.info(
-                "Configuration composition tracked",
-                extra={
-                    'event_type': 'config_composition',
-                    'composition_details': composition_details,
-                }
-            )
-    
-    def create_correlation_scope(self, correlation_id: Optional[str] = None) -> ContextManager[str]:
-        """Create correlation ID scope for request tracing."""
-        return CorrelationContext.correlation_scope(correlation_id)
-    
-    def create_cli_command_scope(self, command_name: str) -> ContextManager[Dict[str, Any]]:
-        """Create CLI command tracking scope."""
-        return self._cli_tracker.track_command(command_name)
-    
-    def create_parameter_validation_scope(self) -> ContextManager[Dict[str, Any]]:
-        """Create parameter validation tracking scope."""
-        return self._cli_tracker.track_parameter_validation()
 
 
-# Global logging manager instance
-_global_logging_manager: Optional[EnhancedLoggingManager] = None
-
-
-def get_logging_manager() -> EnhancedLoggingManager:
-    """Get the global enhanced logging manager instance."""
-    global _global_logging_manager
-    if _global_logging_manager is None:
-        _global_logging_manager = EnhancedLoggingManager()
-    return _global_logging_manager
+# Global enhanced logger instance
+_global_enhanced_logger: Optional[EnhancedLogger] = None
+_global_logger_lock = threading.Lock()
 
 
 def setup_enhanced_logging(
-    config: Optional[Union[LoggingConfig, DictConfig, Dict[str, Any]]] = None
-) -> None:
+    config: Optional[LoggingConfig] = None,
+    cfg: Optional[DictConfig] = None,
+    experiment_id: Optional[str] = None
+) -> EnhancedLogger:
     """
-    Setup enhanced logging system with Hydra integration.
+    Setup global enhanced logging system with comprehensive integration.
     
-    Convenience function for initializing the enhanced logging system.
+    Provides centralized logging configuration with Hydra integration, seed manager
+    context binding, and experiment tracking. This is the primary entry point for
+    configuring enhanced logging throughout the application.
     
     Args:
-        config: Logging configuration. If None, uses defaults or loads from Hydra.
+        config: Logging configuration (uses defaults if not provided)
+        cfg: Optional Hydra configuration for integration
+        experiment_id: Optional experiment identifier
+        
+    Returns:
+        EnhancedLogger: Configured enhanced logger instance
+        
+    Examples:
+        Basic setup:
+            >>> setup_enhanced_logging()
+            
+        With custom configuration:
+            >>> config = LoggingConfig(level="DEBUG", file_enabled=True)
+            >>> setup_enhanced_logging(config)
+            
+        With Hydra integration:
+            >>> setup_enhanced_logging(cfg=hydra_config, experiment_id="exp_001")
+    """
+    global _global_enhanced_logger
     
-    Example:
-        # Basic setup
+    with _global_logger_lock:
+        if _global_enhanced_logger is not None:
+            _global_enhanced_logger.cleanup()
+        
+        _global_enhanced_logger = EnhancedLogger(config)
+        _global_enhanced_logger.setup(cfg=cfg, experiment_id=experiment_id)
+        
+        return _global_enhanced_logger
+
+
+def configure_from_hydra(cfg: DictConfig, experiment_id: Optional[str] = None) -> bool:
+    """
+    Configure enhanced logging from Hydra configuration.
+    
+    Convenience function for integrating enhanced logging with Hydra-based
+    configuration systems. Automatically extracts logging configuration and
+    initializes enhanced logging with comprehensive tracking.
+    
+    Args:
+        cfg: Hydra configuration object
+        experiment_id: Optional experiment identifier
+        
+    Returns:
+        bool: True if configuration was successful
+        
+    Examples:
+        >>> from hydra import compose, initialize
+        >>> with initialize(config_path="../conf"):
+        ...     cfg = compose(config_name="config")
+        ...     configure_from_hydra(cfg)
+    """
+    if not HYDRA_AVAILABLE:
+        logger.warning("Hydra not available, using default logging configuration")
+        setup_enhanced_logging(experiment_id=experiment_id)
+        return False
+    
+    try:
+        # Extract logging configuration from Hydra config
+        logging_config = LoggingConfig()
+        
+        # Update configuration from Hydra if available
+        if hasattr(cfg, 'logging'):
+            logging_cfg = cfg.logging
+            
+            # Update basic configuration
+            if hasattr(logging_cfg, 'level'):
+                logging_config.level = logging_cfg.level
+            if hasattr(logging_cfg, 'format'):
+                logging_config.format = logging_cfg.format
+            if hasattr(logging_cfg, 'file_enabled'):
+                logging_config.file_enabled = logging_cfg.file_enabled
+            if hasattr(logging_cfg, 'file_path'):
+                logging_config.file_path = logging_cfg.file_path
+        
+        # Setup enhanced logging with Hydra integration
+        enhanced_logger = setup_enhanced_logging(
+            config=logging_config,
+            cfg=cfg,
+            experiment_id=experiment_id
+        )
+        
+        # Track configuration composition
+        enhanced_logger.track_configuration_composition(cfg)
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to configure logging from Hydra: {e}")
+        # Fallback to default configuration
+        setup_enhanced_logging(experiment_id=experiment_id)
+        return False
+
+
+def bind_experiment_context(**additional_context) -> Dict[str, Any]:
+    """
+    Create logger context binding for experiment tracking.
+    
+    Generates complete experiment context for logger binding with automatic
+    integration of seed manager, Hydra configuration, and system information.
+    
+    Args:
+        **additional_context: Additional context parameters
+        
+    Returns:
+        Dict[str, Any]: Complete logger binding context
+        
+    Examples:
+        >>> context = bind_experiment_context(step=1, agent_count=5)
+        >>> logger.bind(**context).info("Simulation step completed")
+    """
+    global _global_enhanced_logger
+    
+    if _global_enhanced_logger is None:
         setup_enhanced_logging()
-        
-        # With custom configuration
-        config = LoggingConfig(level="DEBUG", enable_cli_metrics=True)
-        setup_enhanced_logging(config)
-        
-        # From dictionary
-        setup_enhanced_logging({"level": "DEBUG", "enable_file_logging": False})
-    """
-    logging_manager = get_logging_manager()
-    logging_manager.initialize(config)
+    
+    return _global_enhanced_logger.bind_experiment_context(**additional_context)
 
 
-def get_module_logger(name: str) -> logger:
+@contextmanager
+def track_cli_command(
+    command_name: str,
+    parameters: Optional[Dict[str, Any]] = None,
+    track_performance: bool = True
+) -> Generator['CLICommandTracker', None, None]:
     """
-    Get a logger for a specific module with enhanced context.
+    Context manager for CLI command execution tracking.
     
-    Args:
-        name: Module name (typically __name__)
-    
-    Returns:
-        Loguru logger instance with module context binding
-    
-    Example:
-        logger = get_module_logger(__name__)
-        logger.info("Module-specific log message")
-    """
-    return logger.bind(module=name)
-
-
-def create_correlation_scope(correlation_id: Optional[str] = None) -> ContextManager[str]:
-    """
-    Create correlation ID scope for request tracing.
-    
-    Args:
-        correlation_id: Optional correlation ID. If None, generates new one.
-    
-    Returns:
-        Context manager yielding correlation ID
-    
-    Example:
-        with create_correlation_scope() as corr_id:
-            logger.info("Operation with correlation tracking")
-    """
-    logging_manager = get_logging_manager()
-    return logging_manager.create_correlation_scope(correlation_id)
-
-
-def create_cli_command_scope(command_name: str) -> ContextManager[Dict[str, Any]]:
-    """
-    Create CLI command tracking scope.
+    Provides comprehensive CLI command tracking with execution metrics,
+    parameter validation timing, and performance monitoring for enhanced
+    observability of command-line operations.
     
     Args:
         command_name: Name of the CLI command being executed
-    
-    Returns:
-        Context manager yielding command metrics dictionary
-    
-    Example:
-        with create_cli_command_scope("simulate") as metrics:
-            # Command execution
-            metrics['parameter_count'] = 5
+        parameters: Command parameters and overrides
+        track_performance: Enable performance metric collection
+        
+    Yields:
+        CLICommandTracker: Command tracker instance
+        
+    Examples:
+        >>> with track_cli_command("simulate", {"agents": 5}) as tracker:
+        ...     result = run_simulation()
+        ...     tracker.log_metric("agents_processed", 5)
     """
-    logging_manager = get_logging_manager()
-    return logging_manager.create_cli_command_scope(command_name)
+    tracker = CLICommandTracker(command_name, parameters, track_performance)
+    
+    try:
+        yield tracker
+    finally:
+        tracker.complete()
 
 
-def create_parameter_validation_scope() -> ContextManager[Dict[str, Any]]:
+class CLICommandTracker:
     """
-    Create parameter validation tracking scope.
+    CLI command execution tracker with performance monitoring.
     
-    Returns:
-        Context manager yielding validation metrics dictionary
+    Tracks CLI command execution metrics including parameter validation time,
+    execution duration, and performance indicators for comprehensive command
+    observability and optimization analysis.
     
-    Example:
-        with create_parameter_validation_scope() as validation_metrics:
-            # Parameter validation logic
-            validation_metrics['parameters_validated'] = 10
+    Attributes:
+        command_name: Name of the CLI command
+        parameters: Command parameters and overrides
+        start_time: Command start timestamp
+        metrics: Performance metrics collection
+        context: Logger context for command tracking
     """
-    logging_manager = get_logging_manager()
-    return logging_manager.create_parameter_validation_scope()
+    
+    def __init__(self, 
+                 command_name: str,
+                 parameters: Optional[Dict[str, Any]] = None,
+                 track_performance: bool = True):
+        """
+        Initialize CLI command tracker.
+        
+        Args:
+            command_name: Name of the CLI command
+            parameters: Command parameters and overrides
+            track_performance: Enable performance tracking
+        """
+        self.command_name = command_name
+        self.parameters = parameters or {}
+        self.track_performance = track_performance
+        self.start_time = time.perf_counter()
+        self.metrics: Dict[str, float] = {}
+        
+        # Create command-specific context
+        self.context = bind_experiment_context(
+            cli_command=command_name,
+            cli_parameters=self.parameters
+        )
+        
+        # Log command start
+        logger.bind(**self.context).info(
+            f"CLI command started: {command_name} with parameters {self.parameters}"
+        )
+    
+    def log_metric(self, metric_name: str, value: float, unit: str = "ms") -> None:
+        """
+        Log performance metric for the command.
+        
+        Args:
+            metric_name: Name of the metric
+            value: Metric value
+            unit: Metric unit
+        """
+        if self.track_performance:
+            self.metrics[f"{metric_name}_{unit}"] = value
+            
+            logger.bind(**self.context).info(
+                f"CLI metric: {metric_name}={value}{unit}"
+            )
+    
+    def log_validation_time(self, validation_time_ms: float) -> None:
+        """Log parameter validation time."""
+        self.log_metric("parameter_validation_time", validation_time_ms, "ms")
+    
+    def complete(self) -> None:
+        """Complete command tracking and log final metrics."""
+        end_time = time.perf_counter()
+        execution_time_ms = (end_time - self.start_time) * 1000
+        
+        # Update context with execution time
+        self.context['execution_time_ms'] = execution_time_ms
+        
+        # Log command completion
+        logger.bind(**self.context).info(
+            f"CLI command completed: {self.command_name} "
+            f"(execution_time={execution_time_ms:.2f}ms, "
+            f"metrics={self.metrics})"
+        )
 
 
-def log_environment_variables(var_names: List[str]) -> None:
+def get_module_logger(name: str, **extra_context) -> loguru.Logger:
     """
-    Log environment variable usage for security tracking.
+    Get module-specific logger with enhanced context binding.
+    
+    Creates a module-specific logger with automatic experiment context binding
+    and optional additional context for component identification and tracing.
     
     Args:
-        var_names: List of environment variable names to log
+        name: Module name (typically __name__)
+        **extra_context: Additional context for the module logger
+        
+    Returns:
+        loguru.Logger: Configured logger instance with module context
+        
+    Examples:
+        >>> module_logger = get_module_logger(__name__)
+        >>> module_logger.info("Module operation completed")
+        
+        >>> component_logger = get_module_logger(__name__, component="navigator")
+        >>> component_logger.debug("Navigation step executed")
+    """
+    # Ensure enhanced logging is setup
+    global _global_enhanced_logger
+    if _global_enhanced_logger is None:
+        setup_enhanced_logging()
     
-    Example:
-        log_environment_variables(['DATABASE_URL', 'API_KEY'])
-    """
-    logging_manager = get_logging_manager()
-    logging_manager.log_environment_variables(var_names)
+    # Bind module context
+    context = bind_experiment_context(module=name, **extra_context)
+    return logger.bind(**context)
 
 
-def log_configuration_composition(composition_details: Dict[str, Any]) -> None:
+def log_configuration_override(override_key: str, 
+                               old_value: Any, 
+                               new_value: Any,
+                               source: str = "runtime") -> None:
     """
-    Log configuration composition for hierarchical tracking.
+    Log configuration override for parameter sweep analysis.
+    
+    Provides comprehensive logging of runtime configuration overrides with
+    source identification and value comparison for parameter sweep analysis
+    and configuration composition tracking.
     
     Args:
-        composition_details: Details about configuration composition
-    
-    Example:
-        log_configuration_composition({
-            'base_config': 'base.yaml',
-            'overrides': ['experiment=test'],
-            'resolved_keys': ['model.learning_rate', 'data.batch_size']
-        })
+        override_key: Configuration key being overridden
+        old_value: Original configuration value
+        new_value: New configuration value
+        source: Source of the override (runtime, hydra, cli, etc.)
+        
+    Examples:
+        >>> log_configuration_override("navigator.max_speed", 1.0, 2.0, "cli")
+        >>> log_configuration_override("seed", 42, 123, "hydra")
     """
-    logging_manager = get_logging_manager()
-    logging_manager.log_configuration_composition(composition_details)
-
-
-# Register configuration schema with Hydra
-cs = ConfigStore.instance()
-cs.store(name="logging_config", node=LoggingConfig)
-
-
-# Default setup for basic console logging (fallback)
-try:
-    setup_enhanced_logging()
-except Exception:
-    # If enhanced setup fails, fall back to basic logging
-    logger.remove()
-    logger.add(
-        sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | <level>{message}</level>",
-        level="INFO",
+    context = bind_experiment_context(
+        override_key=override_key,
+        override_source=source
+    )
+    
+    logger.bind(**context).info(
+        f"Configuration override: {override_key} changed from {old_value} to {new_value} "
+        f"(source: {source})"
     )
 
 
+def get_logging_metrics() -> Dict[str, Any]:
+    """
+    Get comprehensive logging system metrics.
+    
+    Returns:
+        Dict[str, Any]: Complete logging metrics and status information
+    """
+    global _global_enhanced_logger
+    
+    if _global_enhanced_logger is None:
+        return {"status": "not_initialized"}
+    
+    metrics = _global_enhanced_logger.get_setup_metrics()
+    metrics.update({
+        "status": "initialized",
+        "config": {
+            "level": _global_enhanced_logger.config.level,
+            "format": _global_enhanced_logger.config.format,
+            "console_enabled": _global_enhanced_logger.config.console_enabled,
+            "file_enabled": _global_enhanced_logger.config.file_enabled,
+            "hydra_integration_enabled": _global_enhanced_logger.config.hydra_integration_enabled,
+            "seed_context_enabled": _global_enhanced_logger.config.seed_context_enabled,
+            "cli_metrics_enabled": _global_enhanced_logger.config.cli_metrics_enabled
+        }
+    })
+    
+    return metrics
+
+
+# Export public API
 __all__ = [
-    "LoggingConfig",
-    "EnhancedLoggingManager",
-    "CorrelationContext",
-    "HydraJobTracker",
-    "CLIMetricsTracker",
-    "get_logging_manager",
-    "setup_enhanced_logging", 
-    "get_module_logger",
-    "create_correlation_scope",
-    "create_cli_command_scope",
-    "create_parameter_validation_scope",
-    "log_environment_variables",
-    "log_configuration_composition",
+    'EnhancedLogger',
+    'LoggingConfig',
+    'ExperimentContext',
+    'CLICommandTracker',
+    'setup_enhanced_logging',
+    'configure_from_hydra',
+    'bind_experiment_context',
+    'track_cli_command',
+    'get_module_logger',
+    'log_configuration_override',
+    'get_logging_metrics',
+    'ENHANCED_FORMAT',
+    'HYDRA_FORMAT',
+    'CLI_FORMAT',
+    'MINIMAL_FORMAT',
+    'PRODUCTION_FORMAT'
 ]
