@@ -1,0 +1,318 @@
+# Environment-specific configuration for odor_plume_nav
+# This file demonstrates Hydra composition patterns, parameter overrides, and 
+# environment variable interpolation for flexible deployment scenarios.
+
+# Hydra configuration composition - inherits from conf/base.yaml with selective overrides
+defaults:
+  - base  # Inherit all defaults from conf/base.yaml
+  - _self_  # Apply this file's overrides last for proper precedence
+
+# ============================================================================
+# HYDRA FRAMEWORK CONFIGURATION
+# ============================================================================
+
+hydra:
+  # Output directory management for experiment tracking and reproducibility
+  run:
+    # Organize outputs by timestamp for automatic experiment versioning
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  
+  # Multi-run execution configuration for parameter sweeps and batch processing
+  sweep:
+    # Organize multi-run experiments with hierarchical directory structure
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    # Individual run subdirectories identified by job number
+    subdir: ${hydra:job.num}
+  
+  # Job configuration for CLI execution and parameter management
+  job:
+    # Environment-specific job name with dynamic configuration
+    name: odor_plume_nav_${hydra:runtime.choices.navigator}_${hydra:runtime.choices.video_plume}
+    # Change working directory to output directory for consistent file handling
+    chdir: true
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTERPOLATION EXAMPLES
+# ============================================================================
+
+# Development environment configuration with secure credential management
+environment:
+  # Environment type with fallback default
+  type: ${oc.env:ENVIRONMENT_TYPE,development}
+  
+  # Debug settings controlled by environment variables
+  debug: ${oc.env:DEBUG,true}
+  
+  # Logging configuration with environment-specific levels
+  log_level: ${oc.env:LOG_LEVEL,DEBUG}
+  
+  # Optional performance monitoring endpoints
+  metrics_endpoint: ${oc.env:METRICS_ENDPOINT,null}
+
+# Database configuration with secure credential injection
+database:
+  # Database URL with environment variable interpolation and local fallback
+  url: ${oc.env:DATABASE_URL,sqlite:///local_development.db}
+  
+  # Connection credentials (typically provided via .env files)
+  username: ${oc.env:DB_USERNAME,dev_user}
+  password: ${oc.env:DB_PASSWORD}
+  
+  # Connection pool settings with environment-specific tuning
+  pool_size: ${oc.env:DB_POOL_SIZE,5}
+  max_overflow: ${oc.env:DB_MAX_OVERFLOW,10}
+
+# External API integration with secure credential management
+api_credentials:
+  # Visualization service API key (for future cloud visualization features)
+  visualization_service_key: ${oc.env:VIZ_API_KEY}
+  
+  # Data storage service credentials (for future cloud storage integration)
+  storage_service_key: ${oc.env:STORAGE_API_KEY}
+  storage_bucket: ${oc.env:STORAGE_BUCKET,odor-plume-dev}
+
+# ============================================================================
+# NAVIGATION CONFIGURATION OVERRIDES
+# ============================================================================
+
+# Navigator settings with customization for development and testing scenarios
+navigator:
+  # Override default orientation for upward-facing initial direction
+  orientation: 90.0  # Start facing up instead of default 0.0 (right)
+  
+  # Initial speed for active navigation (overriding default stationary start)
+  speed: 0.5  # Start with moderate speed instead of default 0.0
+  
+  # Enhanced speed limits for development testing
+  max_speed: 2.0  # Increased from default 1.0 for faster navigation testing
+  
+  # Multi-agent configuration examples for batch processing scenarios
+  multi_agent:
+    # Number of agents for multi-agent simulations
+    num_agents: ${oc.env:NUM_AGENTS,4}
+    
+    # Agent formation pattern (grid, circle, random)
+    formation: ${oc.env:AGENT_FORMATION,grid}
+    
+    # Inter-agent communication range for future social navigation features
+    communication_range: ${oc.env:COMM_RANGE,10.0}
+
+# ============================================================================
+# VIDEO PLUME PROCESSING OVERRIDES
+# ============================================================================
+
+# Video plume environment configuration with development-friendly settings
+video_plume:
+  # Enable frame flipping for testing different orientations
+  flip: true  # Override default false for development testing
+  
+  # Add Gaussian smoothing for noise reduction during development
+  kernel_size: 3  # Override default 0 (no smoothing) for cleaner visualization
+  kernel_sigma: 1.5  # Slightly increased sigma for smoother results
+  
+  # Development-specific processing options
+  preprocessing:
+    # Enable enhanced contrast for better visualization during development
+    enhance_contrast: ${oc.env:ENHANCE_CONTRAST,true}
+    
+    # Threshold adjustment for plume detection sensitivity
+    detection_threshold: ${oc.env:DETECTION_THRESHOLD,0.3}
+    
+    # Frame rate control for real-time vs. accelerated processing
+    target_fps: ${oc.env:TARGET_FPS,30}
+
+# ============================================================================
+# SIMULATION EXECUTION CONFIGURATION
+# ============================================================================
+
+# Simulation parameters optimized for development and testing workflows
+simulation:
+  # Maximum simulation duration with environment variable override
+  max_duration: ${oc.env:SIM_MAX_DURATION,300.0}  # 5 minutes default
+  
+  # Frame rate management for performance optimization
+  fps: ${oc.env:SIM_FPS,30}
+  
+  # Recording configuration for experiment data collection
+  recording:
+    # Enable comprehensive trajectory recording for analysis
+    save_trajectories: ${oc.env:SAVE_TRAJECTORIES,true}
+    
+    # Save sensor data for detailed analysis
+    save_sensor_data: ${oc.env:SAVE_SENSOR_DATA,true}
+    
+    # Export format preferences with environment control
+    export_format: ${oc.env:EXPORT_FORMAT,numpy}  # numpy, csv, hdf5
+    
+    # Compression settings for large datasets
+    compression: ${oc.env:DATA_COMPRESSION,gzip}
+
+# ============================================================================
+# VISUALIZATION CONFIGURATION OVERRIDES
+# ============================================================================
+
+# Visualization settings enhanced for development and analysis workflows
+visualization:
+  # Animation settings with development-friendly defaults
+  animation:
+    # Enable real-time animation for development debugging
+    real_time: ${oc.env:REALTIME_VIZ,true}
+    
+    # Frame rate for smooth animation
+    fps: ${oc.env:VIZ_FPS,30}
+    
+    # Export animation files for presentation and analysis
+    save_animation: ${oc.env:SAVE_ANIMATION,false}
+    
+    # Animation format with environment variable control
+    animation_format: ${oc.env:ANIMATION_FORMAT,mp4}
+  
+  # Plot styling for publication-quality outputs
+  plotting:
+    # Figure size optimization for different output targets
+    figure_size: [${oc.env:FIG_WIDTH,12}, ${oc.env:FIG_HEIGHT,8}]
+    
+    # DPI settings for high-quality outputs
+    dpi: ${oc.env:PLOT_DPI,150}
+    
+    # Color scheme selection with environment override
+    color_scheme: ${oc.env:COLOR_SCHEME,viridis}
+    
+    # Font size scaling for readability
+    font_scale: ${oc.env:FONT_SCALE,1.2}
+
+# ============================================================================
+# DEVELOPMENT AND TESTING CONFIGURATION
+# ============================================================================
+
+# Development-specific settings for enhanced debugging and testing
+development:
+  # Verbose logging for detailed debugging information
+  verbose_logging: ${oc.env:VERBOSE_LOGGING,true}
+  
+  # Enable performance profiling for optimization analysis
+  enable_profiling: ${oc.env:ENABLE_PROFILING,false}
+  
+  # Testing configuration
+  testing:
+    # Reduced simulation parameters for faster test execution
+    quick_test_mode: ${oc.env:QUICK_TEST,false}
+    
+    # Test data generation settings
+    generate_test_data: ${oc.env:GENERATE_TEST_DATA,true}
+    
+    # Random seed for reproducible testing
+    test_seed: ${oc.env:TEST_SEED,42}
+
+# ============================================================================
+# ADVANCED HYDRA FEATURES DEMONSTRATION
+# ============================================================================
+
+# Configuration groups and composition examples for sophisticated parameter management
+config_groups:
+  # Navigator configuration variants for different experimental scenarios
+  navigator_variants:
+    # Single agent high-speed configuration
+    speed_test: 
+      max_speed: 5.0
+      angular_velocity: 1.0
+    
+    # Precision navigation configuration
+    precision:
+      max_speed: 0.5
+      angular_velocity: 0.1
+    
+    # Multi-agent swarming configuration
+    swarm:
+      num_agents: 20
+      formation: "random"
+      communication_range: 15.0
+
+# ============================================================================
+# CLI PARAMETER OVERRIDE EXAMPLES
+# ============================================================================
+
+# The following parameters can be overridden via command line using Hydra syntax:
+#
+# Basic parameter overrides:
+#   python -m {{cookiecutter.project_slug}}.cli.main navigator.max_speed=3.0
+#   python -m {{cookiecutter.project_slug}}.cli.main video_plume.flip=false
+#
+# Environment variable integration:
+#   DEBUG=false LOG_LEVEL=INFO python -m {{cookiecutter.project_slug}}.cli.main
+#
+# Multi-run parameter sweeps:
+#   python -m {{cookiecutter.project_slug}}.cli.main --multirun \
+#     navigator.max_speed=1.0,2.0,3.0 \
+#     navigator.orientation=0,45,90,135
+#
+# Configuration group selection:
+#   python -m {{cookiecutter.project_slug}}.cli.main +navigator_variants=speed_test
+#
+# Complex nested parameter overrides:
+#   python -m {{cookiecutter.project_slug}}.cli.main \
+#     simulation.recording.save_trajectories=true \
+#     visualization.animation.real_time=false \
+#     database.url="postgresql://user:pass@localhost/db"
+
+# ============================================================================
+# PERFORMANCE AND OPTIMIZATION SETTINGS
+# ============================================================================
+
+# Performance configuration for different deployment scenarios
+performance:
+  # NumPy optimization settings
+  numpy:
+    # Thread count for NumPy operations (0 = auto-detect)
+    num_threads: ${oc.env:NUMPY_THREADS,0}
+    
+    # Memory allocation strategy
+    memory_policy: ${oc.env:NUMPY_MEMORY,optimal}
+  
+  # OpenCV performance tuning
+  opencv:
+    # Thread count for OpenCV operations
+    num_threads: ${oc.env:OPENCV_THREADS,4}
+    
+    # Enable hardware acceleration when available
+    use_opencl: ${oc.env:USE_OPENCL,true}
+  
+  # Visualization performance optimization
+  matplotlib:
+    # Backend selection for headless vs. interactive operation
+    backend: ${oc.env:MPL_BACKEND,Qt5Agg}
+    
+    # Interactive mode settings
+    interactive: ${oc.env:MPL_INTERACTIVE,true}
+
+# ============================================================================
+# REPRODUCIBILITY AND EXPERIMENT TRACKING
+# ============================================================================
+
+# Seed management for reproducible experiments
+reproducibility:
+  # Global random seed with environment variable control
+  global_seed: ${oc.env:GLOBAL_SEED,null}
+  
+  # Component-specific seeds for fine-grained control
+  seeds:
+    numpy: ${oc.env:NUMPY_SEED,null}
+    opencv: ${oc.env:OPENCV_SEED,null}
+    visualization: ${oc.env:VIZ_SEED,null}
+  
+  # Experiment metadata for tracking and analysis
+  experiment:
+    # Experiment name with timestamp for uniqueness
+    name: ${oc.env:EXPERIMENT_NAME,odor_nav_${now:%Y%m%d_%H%M%S}}
+    
+    # Description for experiment documentation
+    description: ${oc.env:EXPERIMENT_DESC,"Development configuration with enhanced debugging"}
+    
+    # Tags for experiment categorization
+    tags: ${oc.env:EXPERIMENT_TAGS,"development,testing,debug"}
+
+# Note: This configuration file demonstrates the full capabilities of the Hydra-based
+# configuration system. In practice, users would typically only override the specific
+# parameters they need to customize, keeping the configuration file minimal and focused.
+# The extensive documentation and examples provided here serve as a comprehensive
+# reference for advanced configuration patterns and deployment scenarios.
