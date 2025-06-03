@@ -1,663 +1,547 @@
 """
-Unified configuration management with Hydra integration and Pydantic validation.
+Configuration package providing unified access to Hydra-integrated Pydantic schemas.
 
-This module provides a comprehensive configuration system supporting hierarchical 
-composition through Hydra-core, environment variable interpolation via python-dotenv,
-and type-safe validation through Pydantic schemas. The system enables sophisticated
-experiment orchestration and configuration management for scientific computing workflows.
+This module serves as the public API aggregator for the configuration system, enabling
+sophisticated experiment orchestration through Hydra-core integration with comprehensive
+Pydantic schema validation. The configuration architecture supports hierarchical
+composition (base.yaml → config.yaml → local overrides), environment variable 
+interpolation through python-dotenv, and automatic schema discovery via ConfigStore
+registration.
+
+The unified configuration system enables seamless integration with Kedro pipelines,
+reinforcement learning frameworks, and machine learning workflows while maintaining
+backward compatibility with existing PyYAML-based configurations.
 
 Key Features:
     - Hydra ConfigStore integration for automatic schema discovery
-    - Environment variable interpolation with ${oc.env:VAR_NAME} syntax
-    - Hierarchical configuration through conf/base.yaml → conf/config.yaml → local overrides
-    - Type-safe configuration validation with comprehensive error reporting
-    - Support for both programmatic and CLI-based configuration management
-    - Seamless integration with Kedro, RL frameworks, and ML pipelines
-
-Configuration Structure:
-    conf/
-    ├── base.yaml           # Foundation defaults and core parameters
-    ├── config.yaml         # Environment-specific parameters and overrides
-    └── local/              # Local development and testing overrides
-        ├── credentials.yaml.template
-        └── paths.yaml.template
+    - Environment variable interpolation with secure credential management
+    - Hierarchical configuration composition with validation
+    - Protocol-based interfaces for external framework integration
+    - Type-safe configuration validation through Pydantic models
 
 Import Patterns:
-    # Traditional schema imports
+    # Direct schema access
     from {{cookiecutter.project_slug}}.config import NavigatorConfig, VideoPlumeConfig
     
-    # Factory-based configuration (Hydra-integrated)
-    from {{cookiecutter.project_slug}}.config import create_navigator_config, load_config
+    # Configuration utilities
+    from {{cookiecutter.project_slug}}.config import register_config_schemas
     
-    # Environment variable utilities
-    from {{cookiecutter.project_slug}}.config import setup_environment, validate_environment
+    # Environment management
+    from {{cookiecutter.project_slug}}.config import load_environment_variables
     
-    # CLI integration (automatic with @hydra.main decorator)
-    from {{cookiecutter.project_slug}}.config import register_configs
-
-Environment Variable Examples:
-    # Basic interpolation
-    max_speed: ${oc.env:NAVIGATOR_MAX_SPEED,1.0}
-    
-    # Secure credentials
-    database_url: ${oc.env:DATABASE_URL}
-    
-    # Development overrides
-    video_path: ${oc.env:PLUME_VIDEO_PATH,./data/default_plume.mp4}
-    
-    # Multi-agent scaling
-    num_agents: ${oc.env:SWARM_SIZE,5}
+    # Backward compatibility
+    from {{cookiecutter.project_slug}}.config import validate_config
 """
 
 import os
-import sys
-from pathlib import Path
-from typing import Any, Dict, Optional, Union, Type
 import logging
+from pathlib import Path
+from typing import Dict, Any, Optional, Union, Type
+from dotenv import load_dotenv, find_dotenv
 
-# Core configuration schemas - import all from schemas.py
+# Import Hydra components for configuration management
+from hydra.core.config_store import ConfigStore
+from hydra.core.global_hydra import GlobalHydra
+from hydra import initialize, compose
+from omegaconf import DictConfig, OmegaConf
+
+# Import all configuration schemas from schemas module
 from .schemas import (
+    # Core configuration models
     NavigatorConfig,
     SingleAgentConfig, 
     MultiAgentConfig,
     VideoPlumeConfig,
+    SimulationConfig,
+    
+    # ConfigStore registration function
+    register_config_schemas,
+    
+    # Environment variable utilities
+    validate_env_interpolation,
+    resolve_env_value,
 )
-
-# Hydra and OmegaConf imports with graceful fallback
-try:
-    import hydra
-    from hydra.core.config_store import ConfigStore
-    from hydra.core.global_hydra import GlobalHydra
-    from hydra.initialize import initialize
-    from hydra.compose import compose
-    from omegaconf import DictConfig, OmegaConf, MISSING
-    HYDRA_AVAILABLE = True
-except ImportError:
-    hydra = None
-    ConfigStore = None
-    GlobalHydra = None
-    initialize = None
-    compose = None
-    DictConfig = dict
-    OmegaConf = None
-    MISSING = "???"
-    HYDRA_AVAILABLE = False
-
-# Environment variable management with python-dotenv
-try:
-    from dotenv import load_dotenv, find_dotenv, dotenv_values
-    DOTENV_AVAILABLE = True
-except ImportError:
-    load_dotenv = None
-    find_dotenv = None
-    dotenv_values = None
-    DOTENV_AVAILABLE = False
-
-# Pydantic for validation
-from pydantic import BaseModel, ValidationError
 
 # Set up module logger
 logger = logging.getLogger(__name__)
 
+# Initialize ConfigStore for automatic schema discovery
+cs = ConfigStore.instance()
 
-class ConfigurationError(Exception):
-    """
-    Comprehensive configuration error with context and suggestions.
-    
-    Provides detailed error information for configuration validation failures,
-    missing environment variables, and Hydra composition issues.
-    """
-    
-    def __init__(self, message: str, context: Optional[Dict[str, Any]] = None, 
-                 suggestions: Optional[list] = None):
-        super().__init__(message)
-        self.context = context or {}
-        self.suggestions = suggestions or []
-    
-    def __str__(self):
-        error_msg = super().__str__()
-        
-        if self.context:
-            error_msg += f"\n\nContext: {self.context}"
-        
-        if self.suggestions:
-            error_msg += f"\n\nSuggestions:"
-            for suggestion in self.suggestions:
-                error_msg += f"\n  - {suggestion}"
-                
-        return error_msg
+# Module-level configuration state
+_config_initialized = False
+_environment_loaded = False
 
 
-def setup_environment(env_file: Optional[Union[str, Path]] = None, 
-                     verbose: bool = False) -> Dict[str, str]:
+def load_environment_variables(
+    dotenv_path: Optional[Union[str, Path]] = None,
+    override: bool = False,
+    verbose: bool = False
+) -> bool:
     """
-    Set up environment variables with python-dotenv integration.
+    Load environment variables from .env files with sophisticated hierarchy support.
     
-    Loads environment variables from .env files with comprehensive search
-    and precedence handling. Supports hierarchical environment files
-    for development, testing, and production configurations.
+    This function implements comprehensive environment variable management supporting
+    multi-environment configurations (.env.development, .env.testing, .env.production)
+    with automatic selection based on runtime context and secure credential handling.
     
     Args:
-        env_file: Specific .env file to load (optional)
-        verbose: Enable detailed logging of environment loading
+        dotenv_path: Specific .env file path. If None, uses automatic discovery
+        override: Whether to override existing environment variables
+        verbose: Enable detailed logging of environment loading process
         
     Returns:
-        Dictionary of loaded environment variables
-        
-    Raises:
-        ConfigurationError: If environment setup fails or required variables missing
+        True if environment variables were successfully loaded
         
     Examples:
-        # Load default environment files
-        env_vars = setup_environment()
+        # Automatic environment discovery
+        >>> load_environment_variables()
+        True
         
         # Load specific environment file
-        env_vars = setup_environment("./conf/local/.env.development")
+        >>> load_environment_variables(".env.development")
+        True
         
-        # Verbose environment loading
-        env_vars = setup_environment(verbose=True)
+        # Override existing variables with verbose logging
+        >>> load_environment_variables(override=True, verbose=True)
+        True
     """
-    if not DOTENV_AVAILABLE:
-        logger.warning("python-dotenv not available - environment variables from system only")
-        return dict(os.environ)
+    global _environment_loaded
     
-    loaded_vars = {}
+    if _environment_loaded and not override:
+        if verbose:
+            logger.info("Environment variables already loaded. Use override=True to reload.")
+        return True
     
     try:
-        if env_file:
-            # Load specific file
-            env_path = Path(env_file)
-            if env_path.exists():
-                loaded = load_dotenv(env_path, verbose=verbose)
-                if verbose and loaded:
-                    logger.info(f"Loaded environment from: {env_path}")
-                loaded_vars.update(dotenv_values(env_path))
-            else:
-                raise ConfigurationError(
-                    f"Specified environment file not found: {env_path}",
-                    context={"env_file": str(env_path)},
-                    suggestions=[
-                        "Check file path spelling and permissions",
-                        "Create environment file from template",
-                        "Use default environment loading (env_file=None)"
-                    ]
-                )
-        else:
-            # Auto-discover and load environment files with precedence
+        # Determine environment context for automatic file selection
+        env_context = os.getenv('ENVIRONMENT', 'development')
+        
+        if dotenv_path is None:
+            # Implement hierarchical .env file loading with fallback chain
             env_files = [
-                ".env.local",
-                ".env.development", 
-                ".env.testing",
-                ".env.production",
-                ".env"
+                f'.env.{env_context}',  # Environment-specific
+                '.env.local',           # Local overrides
+                '.env'                  # Base configuration
             ]
             
-            for env_name in env_files:
-                env_path = find_dotenv(env_name)
+            loaded_files = []
+            for env_file in env_files:
+                env_path = find_dotenv(env_file, usecwd=True)
                 if env_path:
-                    loaded = load_dotenv(env_path, verbose=verbose)
-                    if verbose and loaded:
-                        logger.info(f"Loaded environment from: {env_path}")
-                    loaded_vars.update(dotenv_values(env_path))
+                    load_dotenv(env_path, override=override, verbose=verbose)
+                    loaded_files.append(env_file)
+                    if verbose:
+                        logger.info(f"Loaded environment file: {env_file}")
+                else:
+                    if verbose:
+                        logger.debug(f"Environment file not found: {env_file}")
+            
+            if not loaded_files:
+                logger.warning("No .env files found. Using system environment variables only.")
+                
+        else:
+            # Load specific .env file
+            env_path = Path(dotenv_path) if isinstance(dotenv_path, str) else dotenv_path
+            
+            if env_path.exists():
+                load_dotenv(env_path, override=override, verbose=verbose)
+                if verbose:
+                    logger.info(f"Loaded environment file: {env_path}")
+            else:
+                logger.error(f"Specified .env file not found: {env_path}")
+                return False
         
-        # Add system environment variables (highest priority)
-        loaded_vars.update(dict(os.environ))
+        # Validate critical environment variables for Hydra integration
+        critical_vars = ['HYDRA_FULL_ERROR', 'OC_CAUSE']
+        missing_vars = []
+        
+        for var in critical_vars:
+            if var not in os.environ:
+                # Set default values for missing Hydra variables
+                if var == 'HYDRA_FULL_ERROR':
+                    os.environ[var] = '1'  # Enable full error reporting
+                elif var == 'OC_CAUSE':
+                    os.environ[var] = '1'  # Enable error cause tracking
+                
+                if verbose:
+                    logger.debug(f"Set default value for missing variable: {var}")
+        
+        _environment_loaded = True
         
         if verbose:
-            logger.info(f"Total environment variables loaded: {len(loaded_vars)}")
+            logger.info("Environment variable loading completed successfully")
             
-        return loaded_vars
+        return True
         
     except Exception as e:
-        raise ConfigurationError(
-            f"Failed to set up environment: {str(e)}",
-            context={"env_file": str(env_file) if env_file else "auto-discovery"},
-            suggestions=[
-                "Check .env file format and syntax",
-                "Verify file permissions and accessibility",
-                "Use absolute paths for environment files",
-                "Check python-dotenv installation"
-            ]
-        ) from e
+        logger.error(f"Failed to load environment variables: {e}")
+        return False
 
 
-def validate_environment(required_vars: list, optional_vars: Optional[list] = None) -> Dict[str, str]:
+def initialize_hydra_config_store() -> bool:
     """
-    Validate presence and format of required environment variables.
+    Initialize Hydra ConfigStore with all configuration schemas.
     
-    Ensures all required environment variables are present and optionally
-    validates their format. Provides comprehensive error reporting with
-    suggestions for missing or invalid variables.
+    This function ensures that all Pydantic configuration schemas are properly
+    registered with Hydra's ConfigStore for automatic discovery and validation
+    within the structured configuration system. It handles initialization order
+    dependencies and provides graceful fallback for missing components.
     
-    Args:
-        required_vars: List of required environment variable names
-        optional_vars: List of optional environment variable names
-        
     Returns:
-        Dictionary of validated environment variables
-        
-    Raises:
-        ConfigurationError: If required variables missing or invalid
+        True if ConfigStore initialization was successful
         
     Examples:
-        # Basic validation
-        env_vars = validate_environment(["DATABASE_URL", "API_KEY"])
-        
-        # With optional variables
-        env_vars = validate_environment(
-            required_vars=["DATABASE_URL"],
-            optional_vars=["DEBUG", "LOG_LEVEL"]
-        )
+        >>> initialize_hydra_config_store()
+        True
     """
-    optional_vars = optional_vars or []
-    validated_vars = {}
-    missing_vars = []
+    global _config_initialized
     
-    # Check required variables
-    for var_name in required_vars:
-        value = os.getenv(var_name)
-        if value is None:
-            missing_vars.append(var_name)
+    if _config_initialized:
+        logger.debug("Hydra ConfigStore already initialized")
+        return True
+    
+    try:
+        # Ensure environment variables are loaded first
+        if not _environment_loaded:
+            load_environment_variables(verbose=False)
+        
+        # Register all configuration schemas with ConfigStore
+        register_config_schemas()
+        
+        # Verify critical schema registrations
+        required_schemas = [
+            'navigator/unified',
+            'video_plume/default', 
+            'simulation/standard'
+        ]
+        
+        for schema_path in required_schemas:
+            try:
+                # Attempt to retrieve registered schema to verify registration
+                group, name = schema_path.split('/')
+                if not cs.repo.exists(f"{group}/{name}"):
+                    logger.warning(f"Schema not found in ConfigStore: {schema_path}")
+                else:
+                    logger.debug(f"Verified schema registration: {schema_path}")
+            except Exception as e:
+                logger.warning(f"Could not verify schema registration {schema_path}: {e}")
+        
+        _config_initialized = True
+        logger.info("Hydra ConfigStore initialization completed successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize Hydra ConfigStore: {e}")
+        return False
+
+
+def validate_config(config: Union[Dict[str, Any], DictConfig]) -> bool:
+    """
+    Validate configuration against registered Pydantic schemas.
+    
+    This function provides comprehensive configuration validation by checking
+    the configuration structure against the appropriate Pydantic models and
+    ensuring compliance with Hydra's structured configuration requirements.
+    
+    Args:
+        config: Configuration object to validate (dict or DictConfig)
+        
+    Returns:
+        True if configuration is valid
+        
+    Raises:
+        ValueError: If configuration fails validation
+        TypeError: If configuration type is unsupported
+        
+    Examples:
+        >>> config = {"navigator": {"mode": "single", "position": [50, 50]}}
+        >>> validate_config(config)
+        True
+        
+        >>> invalid_config = {"navigator": {"mode": "invalid"}}
+        >>> validate_config(invalid_config)
+        ValueError: mode must be one of ['single', 'multi', 'auto']
+    """
+    try:
+        # Convert DictConfig to dict for Pydantic validation
+        if isinstance(config, DictConfig):
+            config_dict = OmegaConf.to_container(config, resolve=True)
+        elif isinstance(config, dict):
+            config_dict = config
         else:
-            validated_vars[var_name] = value
-    
-    # Check optional variables
-    for var_name in optional_vars:
-        value = os.getenv(var_name)
-        if value is not None:
-            validated_vars[var_name] = value
-    
-    if missing_vars:
-        raise ConfigurationError(
-            f"Required environment variables missing: {missing_vars}",
-            context={
-                "missing_vars": missing_vars,
-                "available_vars": list(validated_vars.keys())
-            },
-            suggestions=[
-                "Create .env file with required variables",
-                "Set environment variables in your shell",
-                "Use conf/local/credentials.yaml.template as reference",
-                "Check Hydra interpolation syntax: ${oc.env:VAR_NAME}"
-            ]
-        )
-    
-    logger.debug(f"Environment validation successful: {len(validated_vars)} variables")
-    return validated_vars
-
-
-def register_configs() -> None:
-    """
-    Register all configuration schemas with Hydra ConfigStore.
-    
-    Enables automatic configuration discovery and structured composition
-    for CLI applications and factory methods. Registers both individual
-    schemas and configuration groups for hierarchical composition.
-    
-    This function is automatically called when the module is imported
-    if Hydra is available, ensuring seamless integration with @hydra.main
-    decorators and compose() API.
-    
-    Raises:
-        ConfigurationError: If Hydra not available or registration fails
+            raise TypeError(f"Unsupported configuration type: {type(config)}")
         
-    Examples:
-        # Manual registration (normally automatic)
-        register_configs()
+        # Validate navigator configuration if present
+        if 'navigator' in config_dict:
+            navigator_config = NavigatorConfig.model_validate(config_dict['navigator'])
+            logger.debug("Navigator configuration validation passed")
         
-        # Use in Hydra application
-        @hydra.main(version_base=None, config_path="../conf", config_name="config")
-        def my_app(cfg: DictConfig) -> None:
-            # Configuration automatically available
-            navigator_config = NavigatorConfig(**cfg.navigator)
-    """
-    if not HYDRA_AVAILABLE:
-        logger.warning("Hydra not available - ConfigStore registration skipped")
-        return
-    
-    try:
-        cs = ConfigStore.instance()
+        # Validate video plume configuration if present
+        if 'video_plume' in config_dict:
+            video_config = VideoPlumeConfig.model_validate(config_dict['video_plume'])
+            logger.debug("Video plume configuration validation passed")
         
-        # Register individual configuration schemas
-        cs.store(name="navigator_config", node=NavigatorConfig)
-        cs.store(name="single_agent_config", node=SingleAgentConfig)
-        cs.store(name="multi_agent_config", node=MultiAgentConfig)
-        cs.store(name="video_plume_config", node=VideoPlumeConfig)
+        # Validate simulation configuration if present
+        if 'simulation' in config_dict:
+            sim_config = SimulationConfig.model_validate(config_dict['simulation'])
+            logger.debug("Simulation configuration validation passed")
         
-        # Register configuration groups for hierarchical composition
-        cs.store(group="navigator", name="single_agent", node=SingleAgentConfig)
-        cs.store(group="navigator", name="multi_agent", node=MultiAgentConfig)
-        cs.store(group="navigator", name="unified", node=NavigatorConfig)
-        cs.store(group="environment", name="video_plume", node=VideoPlumeConfig)
-        
-        # Register default configurations for common use cases
-        cs.store(group="defaults", name="research", node={
-            "navigator": "unified",
-            "environment": "video_plume"
-        })
-        
-        logger.debug("Hydra ConfigStore registration completed successfully")
+        logger.info("Configuration validation completed successfully")
+        return True
         
     except Exception as e:
-        raise ConfigurationError(
-            f"Failed to register configurations with Hydra: {str(e)}",
-            context={"hydra_available": HYDRA_AVAILABLE},
-            suggestions=[
-                "Check Hydra installation and version (≥1.3.2)",
-                "Verify configuration schema definitions",
-                "Import config module after Hydra initialization",
-                "Check for circular import dependencies"
-            ]
-        ) from e
+        error_msg = f"Configuration validation failed: {e}"
+        logger.error(error_msg)
+        raise ValueError(error_msg) from e
 
 
-def load_config(config_path: Optional[str] = None, 
-               config_name: str = "config",
-               overrides: Optional[list] = None) -> DictConfig:
+def get_config_schema(schema_name: str) -> Optional[Type]:
     """
-    Load and compose Hydra configuration with environment interpolation.
+    Retrieve a specific configuration schema class by name.
     
-    Provides programmatic access to Hydra configuration composition without
-    requiring @hydra.main decorator. Supports runtime configuration loading
-    for notebooks, testing, and library usage scenarios.
+    This utility function provides programmatic access to configuration schemas
+    for dynamic validation, documentation generation, and integration with
+    external frameworks that require schema introspection.
     
     Args:
-        config_path: Path to configuration directory (defaults to ../conf)
-        config_name: Name of primary config file (defaults to "config")
-        overrides: List of configuration overrides in key=value format
+        schema_name: Name of the schema to retrieve
         
     Returns:
-        Composed and validated DictConfig object
-        
-    Raises:
-        ConfigurationError: If configuration loading or validation fails
+        Schema class if found, None otherwise
         
     Examples:
-        # Basic configuration loading
-        cfg = load_config()
+        >>> schema = get_config_schema("NavigatorConfig")
+        >>> schema.__name__
+        'NavigatorConfig'
         
-        # Custom configuration path
-        cfg = load_config(config_path="./custom_conf")
-        
-        # With overrides
-        cfg = load_config(overrides=["navigator.max_speed=2.0", "hydra.job.name=experiment_1"])
-        
-        # Environment-specific configuration
-        cfg = load_config(config_name="development")
+        >>> schema = get_config_schema("InvalidSchema")
+        >>> schema is None
+        True
     """
-    if not HYDRA_AVAILABLE:
-        raise ConfigurationError(
-            "Hydra not available - cannot load configuration",
-            suggestions=[
-                "Install hydra-core: pip install hydra-core",
-                "Use direct Pydantic schema instantiation",
-                "Check dependencies in pyproject.toml"
-            ]
-        )
+    schema_mapping = {
+        'NavigatorConfig': NavigatorConfig,
+        'SingleAgentConfig': SingleAgentConfig,
+        'MultiAgentConfig': MultiAgentConfig,
+        'VideoPlumeConfig': VideoPlumeConfig,
+        'SimulationConfig': SimulationConfig,
+    }
     
-    overrides = overrides or []
+    schema = schema_mapping.get(schema_name)
+    if schema is None:
+        logger.warning(f"Schema not found: {schema_name}")
+        logger.debug(f"Available schemas: {list(schema_mapping.keys())}")
     
-    try:
-        # Set default config path relative to package location
-        if config_path is None:
-            current_dir = Path(__file__).parent
-            # Navigate up to project root and find conf directory
-            config_path = str(current_dir.parent.parent.parent / "conf")
+    return schema
+
+
+def compose_config_from_overrides(
+    config_name: str = "config",
+    overrides: Optional[Dict[str, Any]] = None,
+    return_hydra_cfg: bool = False
+) -> Union[DictConfig, Dict[str, Any]]:
+    """
+    Compose configuration using Hydra with optional parameter overrides.
+    
+    This function provides programmatic access to Hydra's configuration composition
+    system, enabling dynamic configuration creation with runtime parameter overrides.
+    It supports both command-line style overrides and nested dictionary updates.
+    
+    Args:
+        config_name: Base configuration name to load
+        overrides: Dictionary of parameter overrides to apply
+        return_hydra_cfg: Whether to return DictConfig (True) or dict (False)
         
-        # Initialize Hydra if not already initialized
+    Returns:
+        Composed configuration as DictConfig or dict
+        
+    Examples:
+        >>> config = compose_config_from_overrides("config")
+        >>> isinstance(config, dict)
+        True
+        
+        >>> overrides = {"navigator.mode": "multi", "simulation.max_steps": 500}
+        >>> config = compose_config_from_overrides("config", overrides)
+        >>> config["navigator"]["mode"]
+        'multi'
+    """
+    try:
+        # Ensure ConfigStore is initialized
+        if not _config_initialized:
+            initialize_hydra_config_store()
+        
+        # Convert dict overrides to Hydra override format
+        override_list = []
+        if overrides:
+            for key, value in overrides.items():
+                if isinstance(value, str):
+                    override_list.append(f"{key}={value}")
+                else:
+                    override_list.append(f"{key}={str(value)}")
+        
+        # Initialize Hydra context if not already initialized
         if not GlobalHydra().is_initialized():
-            with initialize(version_base=None, config_path=config_path):
-                cfg = compose(config_name=config_name, overrides=overrides)
+            # Try to find config directory relative to package
+            config_dir = Path(__file__).parent.parent.parent.parent / "conf"
+            if not config_dir.exists():
+                # Fallback to current directory
+                config_dir = Path.cwd() / "conf"
+            
+            with initialize(version_base=None, config_path=str(config_dir)):
+                cfg = compose(config_name=config_name, overrides=override_list)
         else:
-            # Use existing Hydra instance
-            cfg = compose(config_name=config_name, overrides=overrides)
+            cfg = compose(config_name=config_name, overrides=override_list)
         
-        logger.debug(f"Configuration loaded successfully from: {config_path}/{config_name}.yaml")
-        return cfg
-        
+        # Return appropriate format
+        if return_hydra_cfg:
+            return cfg
+        else:
+            return OmegaConf.to_container(cfg, resolve=True)
+            
     except Exception as e:
-        raise ConfigurationError(
-            f"Failed to load configuration: {str(e)}",
-            context={
-                "config_path": config_path,
-                "config_name": config_name,
-                "overrides": overrides
-            },
-            suggestions=[
-                "Check configuration file paths and permissions",
-                "Verify YAML syntax in configuration files", 
-                "Ensure environment variables are properly set",
-                "Check Hydra interpolation syntax: ${oc.env:VAR_NAME}",
-                "Validate configuration schema compatibility"
-            ]
-        ) from e
+        logger.error(f"Failed to compose configuration: {e}")
+        raise
 
 
-def create_navigator_config(config_data: Union[Dict[str, Any], DictConfig]) -> NavigatorConfig:
+def create_default_config() -> Dict[str, Any]:
     """
-    Create and validate NavigatorConfig from dictionary or DictConfig.
+    Create a default configuration with sensible parameter values.
     
-    Factory method for creating type-safe NavigatorConfig instances with
-    comprehensive validation and error reporting. Supports both direct
-    dictionary input and Hydra DictConfig composition.
+    This function generates a complete default configuration suitable for
+    basic simulation scenarios, providing a starting point for configuration
+    customization and serving as a reference for required parameters.
     
-    Args:
-        config_data: Configuration data as dictionary or DictConfig
-        
     Returns:
-        Validated NavigatorConfig instance
-        
-    Raises:
-        ConfigurationError: If validation fails with detailed error context
+        Dictionary containing default configuration values
         
     Examples:
-        # From dictionary
-        nav_config = create_navigator_config({
-            "position": [0.0, 0.0],
-            "max_speed": 1.0,
-            "orientation": 45.0
-        })
+        >>> config = create_default_config()
+        >>> config["navigator"]["mode"]
+        'auto'
         
-        # From Hydra DictConfig
-        cfg = load_config()
-        nav_config = create_navigator_config(cfg.navigator)
-        
-        # Multi-agent configuration
-        nav_config = create_navigator_config({
-            "positions": [[0.0, 0.0], [1.0, 0.0]],
-            "num_agents": 2,
-            "max_speeds": [1.0, 1.2]
-        })
+        >>> config["simulation"]["max_steps"]
+        1000
     """
     try:
-        # Convert DictConfig to dictionary if needed
-        if hasattr(config_data, '_content'):  # DictConfig check
-            config_dict = OmegaConf.to_container(config_data, resolve=True)
-        else:
-            config_dict = dict(config_data)
+        # Create default configuration using schema defaults
+        default_config = {
+            "navigator": NavigatorConfig().model_dump(),
+            "video_plume": VideoPlumeConfig(
+                video_path="${oc.env:VIDEO_PATH,./data/default_plume.mp4}"
+            ).model_dump(),
+            "simulation": SimulationConfig().model_dump(),
+        }
         
-        # Create and validate NavigatorConfig
-        navigator_config = NavigatorConfig(**config_dict)
+        logger.debug("Created default configuration with schema defaults")
+        return default_config
         
-        logger.debug("NavigatorConfig created and validated successfully")
-        return navigator_config
-        
-    except ValidationError as e:
-        raise ConfigurationError(
-            f"NavigatorConfig validation failed: {str(e)}",
-            context={
-                "config_data": config_data,
-                "validation_errors": e.errors()
-            },
-            suggestions=[
-                "Check parameter types and value ranges",
-                "Verify position coordinates are valid [x, y] pairs",
-                "Ensure speed values are non-negative",
-                "Check multi-agent parameter list lengths match",
-                "Review NavigatorConfig documentation"
-            ]
-        ) from e
     except Exception as e:
-        raise ConfigurationError(
-            f"Failed to create NavigatorConfig: {str(e)}",
-            context={"config_data": config_data},
-            suggestions=[
-                "Check configuration data format",
-                "Verify all required parameters are present",
-                "Use load_config() for Hydra integration",
-                "Check environment variable interpolation"
-            ]
-        ) from e
+        logger.error(f"Failed to create default configuration: {e}")
+        raise
 
 
-def create_video_plume_config(config_data: Union[Dict[str, Any], DictConfig]) -> VideoPlumeConfig:
+# Automatic initialization on module import
+def _initialize_module():
     """
-    Create and validate VideoPlumeConfig from dictionary or DictConfig.
+    Perform automatic module initialization including environment loading and ConfigStore setup.
     
-    Factory method for creating type-safe VideoPlumeConfig instances with
-    path validation and preprocessing parameter verification. Supports
-    environment variable interpolation for video paths and processing options.
-    
-    Args:
-        config_data: Configuration data as dictionary or DictConfig
-        
-    Returns:
-        Validated VideoPlumeConfig instance
-        
-    Raises:
-        ConfigurationError: If validation fails or video file not accessible
-        
-    Examples:
-        # Basic video configuration
-        video_config = create_video_plume_config({
-            "video_path": "./data/plume_video.mp4",
-            "flip": False,
-            "grayscale": True
-        })
-        
-        # With environment variables
-        video_config = create_video_plume_config({
-            "video_path": "${oc.env:PLUME_VIDEO_PATH}",
-            "threshold": 0.5,
-            "kernel_size": 5
-        })
-        
-        # Advanced preprocessing
-        video_config = create_video_plume_config({
-            "video_path": "./data/turbulent_plume.avi",
-            "flip": True,
-            "kernel_size": 7,
-            "kernel_sigma": 2.0,
-            "normalize": True
-        })
+    This function is called automatically when the module is imported, ensuring that
+    the configuration system is ready for use without requiring explicit initialization
+    by the user. It handles initialization order dependencies and provides graceful
+    fallback for missing components.
     """
     try:
-        # Convert DictConfig to dictionary if needed
-        if hasattr(config_data, '_content'):  # DictConfig check
-            config_dict = OmegaConf.to_container(config_data, resolve=True)
-        else:
-            config_dict = dict(config_data)
+        # Load environment variables with automatic discovery
+        load_environment_variables(verbose=False)
         
-        # Create and validate VideoPlumeConfig
-        video_config = VideoPlumeConfig(**config_dict)
+        # Initialize Hydra ConfigStore with all schemas
+        initialize_hydra_config_store()
         
-        logger.debug("VideoPlumeConfig created and validated successfully")
-        return video_config
+        logger.info("Configuration module initialization completed successfully")
         
-    except ValidationError as e:
-        raise ConfigurationError(
-            f"VideoPlumeConfig validation failed: {str(e)}",
-            context={
-                "config_data": config_data,
-                "validation_errors": e.errors()
-            },
-            suggestions=[
-                "Check video file path exists and is accessible",
-                "Verify kernel_size is odd and positive if specified",
-                "Ensure kernel_sigma is positive when kernel_size provided",
-                "Check threshold value is between 0.0 and 1.0",
-                "Review VideoPlumeConfig documentation"
-            ]
-        ) from e
     except Exception as e:
-        raise ConfigurationError(
-            f"Failed to create VideoPlumeConfig: {str(e)}",
-            context={"config_data": config_data},
-            suggestions=[
-                "Check configuration data format",
-                "Verify video file path resolution",
-                "Use load_config() for environment variable interpolation",
-                "Check file permissions and accessibility"
-            ]
-        ) from e
+        logger.warning(f"Module initialization completed with warnings: {e}")
+        # Continue with partial initialization rather than failing completely
 
 
-# Automatic environment setup and config registration on module import
-try:
-    # Set up environment variables from .env files
-    if DOTENV_AVAILABLE:
-        setup_environment(verbose=False)
-        logger.debug("Environment variables loaded automatically")
-    
-    # Register configurations with Hydra ConfigStore
-    if HYDRA_AVAILABLE:
-        register_configs()
-        logger.debug("Hydra ConfigStore registration completed")
-        
-except Exception as e:
-    logger.warning(f"Automatic configuration setup failed: {str(e)}")
-    # Continue without automatic setup - manual setup still available
-
-
-# Public API exports - comprehensive configuration interface
+# Public API exports
 __all__ = [
-    # Configuration schemas (from schemas.py)
+    # Configuration schema classes
     "NavigatorConfig",
     "SingleAgentConfig", 
     "MultiAgentConfig",
     "VideoPlumeConfig",
+    "SimulationConfig",
     
-    # Factory methods for configuration creation
-    "create_navigator_config",
-    "create_video_plume_config",
+    # Configuration management functions
+    "load_environment_variables",
+    "initialize_hydra_config_store",
+    "validate_config",
+    "get_config_schema",
+    "compose_config_from_overrides",
+    "create_default_config",
     
-    # Environment and configuration management
-    "setup_environment",
-    "validate_environment",
-    "load_config",
-    "register_configs",
+    # Schema registration utilities
+    "register_config_schemas",
     
-    # Error handling
-    "ConfigurationError",
+    # Environment variable utilities
+    "validate_env_interpolation",
+    "resolve_env_value",
     
-    # Hydra integration utilities (when available)
-    "HYDRA_AVAILABLE",
-    "DOTENV_AVAILABLE",
+    # ConfigStore instance for advanced usage
+    "cs",
 ]
 
-# Version information and metadata
-__version__ = "1.0.0"
-__author__ = "Odor Plume Navigation Team"
-__description__ = "Unified configuration management with Hydra and Pydantic integration"
+# Automatic module initialization
+_initialize_module()
 
-# Configuration system metadata for introspection
-CONFIG_METADATA = {
-    "version": __version__,
-    "hydra_available": HYDRA_AVAILABLE,
-    "dotenv_available": DOTENV_AVAILABLE,
-    "schemas": [
-        "NavigatorConfig",
-        "SingleAgentConfig", 
-        "MultiAgentConfig",
-        "VideoPlumeConfig"
-    ],
-    "config_groups": [
-        "navigator",
-        "environment", 
-        "defaults"
-    ],
-    "supported_interpolations": [
-        "${oc.env:VAR_NAME}",
-        "${oc.env:VAR_NAME,default_value}"
-    ]
-}
+# Backward compatibility support for legacy imports
+def validate_navigator_config(config: Dict[str, Any]) -> bool:
+    """
+    Legacy function for backward compatibility with existing code.
+    
+    Args:
+        config: Navigator configuration dictionary
+        
+    Returns:
+        True if configuration is valid
+        
+    Deprecated:
+        Use validate_config() instead for comprehensive validation
+    """
+    logger.warning("validate_navigator_config is deprecated. Use validate_config() instead.")
+    try:
+        NavigatorConfig.model_validate(config)
+        return True
+    except Exception as e:
+        logger.error(f"Navigator configuration validation failed: {e}")
+        return False
+
+
+def validate_video_plume_config(config: Dict[str, Any]) -> bool:
+    """
+    Legacy function for backward compatibility with existing code.
+    
+    Args:
+        config: Video plume configuration dictionary
+        
+    Returns:
+        True if configuration is valid
+        
+    Deprecated:
+        Use validate_config() instead for comprehensive validation
+    """
+    logger.warning("validate_video_plume_config is deprecated. Use validate_config() instead.")
+    try:
+        VideoPlumeConfig.model_validate(config)
+        return True
+    except Exception as e:
+        logger.error(f"Video plume configuration validation failed: {e}")
+        return False
+
+
+# Add legacy functions to exports for backward compatibility
+__all__.extend([
+    "validate_navigator_config",
+    "validate_video_plume_config",
+])
