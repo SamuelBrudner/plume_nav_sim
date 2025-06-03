@@ -1,334 +1,500 @@
-"""Tests for VideoPlume factory functions with Hydra configuration integration."""
+"""
+Tests for VideoPlume factory functions with enhanced Hydra configuration support.
+
+This test module validates the video plume factory functionality within the new
+{{cookiecutter.project_slug}}.api.navigation module, including Hydra-based configuration
+composition, parameter validation, and factory method patterns for video plume creation.
+
+The tests cover:
+- Legacy create_video_plume_from_config functionality
+- Enhanced Hydra DictConfig integration
+- Configuration validation and parameter merging
+- Error handling for invalid configurations
+- Factory method patterns for different use cases
+"""
 
 import pytest
 import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from omegaconf import DictConfig, OmegaConf
-from hydra import compose, initialize_config_store
-from hydra.core.config_store import ConfigStore
+from typing import Dict, Any
 
-from {{cookiecutter.project_slug}}.api.navigation import create_video_plume_from_config
+# Import the new API structure
+from {{cookiecutter.project_slug}}.api.navigation import (
+    create_video_plume,
+    create_video_plume_from_config, 
+    ConfigurationError
+)
 from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
 from {{cookiecutter.project_slug}}.config.schemas import VideoPlumeConfig
 
-
-@pytest.fixture
-def hydra_config():
-    """Create a Hydra DictConfig for testing."""
-    config_dict = {
-        "video_plume": {
-            "flip": False,
-            "kernel_size": 0,
-            "kernel_sigma": 1.0,
-        }
-    }
-    return OmegaConf.create(config_dict)
+# Try to import Hydra components for advanced testing
+try:
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    DictConfig = dict
 
 
-@pytest.fixture
-def hydra_user_config():
-    """Create a Hydra DictConfig with user overrides."""
-    config_dict = {
-        "video_plume": {
-            "flip": True,
-            "kernel_size": 5,
-            "kernel_sigma": 1.5,
-        }
-    }
-    return OmegaConf.create(config_dict)
-
-
-@pytest.fixture
-def mock_cv2_videocapture():
-    """Mock cv2.VideoCapture for testing."""
-    with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
-        mock_instance = MagicMock()
-        mock_cv.return_value = mock_instance
-        
-        # Configure video properties
-        mock_instance.isOpened.return_value = True
-        mock_instance.get.side_effect = lambda prop: {
-            0: 640,  # CAP_PROP_FRAME_WIDTH
-            1: 480,  # CAP_PROP_FRAME_HEIGHT
-            5: 30.0,  # CAP_PROP_FPS
-            7: 300,  # CAP_PROP_FRAME_COUNT
-        }.get(prop, 0)
-        
-        # Configure frame reading
-        mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
-        
-        yield mock_cv
-
-
-class TestVideoPlumeFactor:
-    """Test suite for VideoPlume factory methods with Hydra integration."""
-
-    def test_create_video_plume_with_hydra_config(self, hydra_config, mock_cv2_videocapture, mock_exists):
-        """Test creating a VideoPlume with Hydra configuration."""
-        video_path = "test_video.mp4"
-        
-        # Test the factory method with Hydra config
-        plume = create_video_plume_from_config(video_path, config=hydra_config)
-        
-        # Verify the VideoPlume was created with correct settings
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is False
-        assert plume.kernel_size == 0
-        assert plume.kernel_sigma == 1.0
-
-    def test_create_video_plume_with_user_overrides(self, hydra_user_config, mock_cv2_videocapture, mock_exists):
-        """Test creating a VideoPlume with user configuration overrides."""
-        video_path = "test_video.mp4"
-        
-        plume = create_video_plume_from_config(video_path, config=hydra_user_config)
-        
-        # Check that user overrides were applied
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is True  # Overridden in user config
-        assert plume.kernel_size == 5  # Overridden in user config
-        assert plume.kernel_sigma == 1.5  # Overridden in user config
-
-    def test_create_video_plume_with_parameter_overrides(self, hydra_config, mock_cv2_videocapture, mock_exists):
-        """Test creating a VideoPlume with explicit parameter overrides."""
-        video_path = "test_video.mp4"
-        
-        # Override parameters directly in factory call
-        plume = create_video_plume_from_config(
-            video_path,
-            config=hydra_config,
-            flip=True,  # Override config
-            kernel_size=3  # Override config
-        )
-        
-        # Verify explicit parameters override config
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is True  # Explicitly overridden
-        assert plume.kernel_size == 3  # Explicitly overridden
-        assert plume.kernel_sigma == 1.0  # From config (not overridden)
-
-    def test_create_video_plume_from_config_dict(self, mock_cv2_videocapture, mock_exists):
-        """Test creating VideoPlume from raw config dictionary."""
-        video_path = "test_video.mp4"
-        config_dict = {
-            "video_plume": {
-                "flip": True,
-                "kernel_size": 7,
-                "kernel_sigma": 2.0,
-            }
-        }
-        
-        plume = create_video_plume_from_config(
-            video_path,
-            config_dict=config_dict
-        )
-        
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is True
-        assert plume.kernel_size == 7
-        assert plume.kernel_sigma == 2.0
-
-    def test_video_plume_config_validation(self, mock_cv2_videocapture, mock_exists):
-        """Test configuration validation using Pydantic schemas."""
-        video_path = "test_video.mp4"
-        
-        # Test valid configuration
-        valid_config = {
-            "flip": False,
-            "kernel_size": 5,
-            "kernel_sigma": 1.5,
-        }
-        
-        # Should pass validation
-        validated_config = VideoPlumeConfig.model_validate(valid_config)
-        assert validated_config.flip is False
-        assert validated_config.kernel_size == 5
-        assert validated_config.kernel_sigma == 1.5
-
-    def test_video_plume_config_validation_errors(self):
-        """Test configuration validation with invalid parameters."""
-        # Test invalid kernel_size (negative)
-        with pytest.raises(ValueError, match="kernel_size must be non-negative"):
-            VideoPlumeConfig.model_validate({
-                "flip": False,
-                "kernel_size": -1,
-                "kernel_sigma": 1.0,
-            })
-        
-        # Test invalid kernel_sigma (non-positive)
-        with pytest.raises(ValueError, match="kernel_sigma must be positive"):
-            VideoPlumeConfig.model_validate({
-                "flip": False,
-                "kernel_size": 0,
-                "kernel_sigma": 0.0,
-            })
-
-    def test_create_video_plume_with_merged_config(self, mock_cv2_videocapture, mock_exists):
-        """Test creating VideoPlume with configuration merging."""
-        video_path = "test_video.mp4"
-        
-        # Base configuration
-        base_config = OmegaConf.create({
-            "video_plume": {
-                "flip": False,
-                "kernel_size": 0,
-                "kernel_sigma": 1.0,
-            }
-        })
-        
-        # User overrides (partial)
-        user_overrides = OmegaConf.create({
-            "video_plume": {
-                "flip": True,
-                # kernel_size not specified, should use base
-                "kernel_sigma": 2.0,
-            }
-        })
-        
-        # Merge configurations
-        merged_config = OmegaConf.merge(base_config, user_overrides)
-        
-        plume = create_video_plume_from_config(video_path, config=merged_config)
-        
-        # Verify merged settings
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is True  # From user overrides
-        assert plume.kernel_size == 0  # From base (not overridden)
-        assert plume.kernel_sigma == 2.0  # From user overrides
-
-    def test_video_plume_from_config_method(self, mock_cv2_videocapture, mock_exists):
-        """Test VideoPlume.from_config class method with Hydra integration."""
-        video_path = "test_video.mp4"
-        
-        config_dict = {
-            "flip": True,
-            "kernel_size": 3,
-            "kernel_sigma": 1.5,
-        }
-        
-        plume = VideoPlume.from_config(
-            video_path=video_path,
-            config_dict=config_dict
-        )
-        
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is True
-        assert plume.kernel_size == 3
-        assert plume.kernel_sigma == 1.5
-
-    def test_create_video_plume_parameter_precedence(self, hydra_config, mock_cv2_videocapture, mock_exists):
-        """Test parameter precedence: kwargs > config > defaults."""
-        video_path = "test_video.mp4"
-        
-        # Config has flip=False, kernel_size=0
-        # We'll override flip via kwargs
-        plume = create_video_plume_from_config(
-            video_path,
-            config=hydra_config,
-            flip=True  # This should override config
-        )
-        
-        assert plume.flip is True  # kwargs override
-        assert plume.kernel_size == 0  # from config
-        assert plume.kernel_sigma == 1.0  # from config
-
-    def test_create_video_plume_with_environment_interpolation(self, mock_cv2_videocapture, mock_exists):
-        """Test configuration with environment variable interpolation."""
-        import os
-        
-        # Set environment variable
-        os.environ['TEST_KERNEL_SIZE'] = '7'
-        
-        try:
-            # Create config with environment interpolation
-            config_dict = {
-                "video_plume": {
-                    "flip": False,
-                    "kernel_size": "${oc.env:TEST_KERNEL_SIZE}",
-                    "kernel_sigma": 1.0,
-                }
-            }
-            config = OmegaConf.create(config_dict)
-            
-            video_path = "test_video.mp4"
-            plume = create_video_plume_from_config(video_path, config=config)
-            
-            # Verify environment variable was interpolated
-            assert plume.kernel_size == 7
-            assert plume.flip is False
-            assert plume.kernel_sigma == 1.0
-            
-        finally:
-            # Clean up environment
-            del os.environ['TEST_KERNEL_SIZE']
-
-    def test_create_video_plume_error_handling(self, mock_cv2_videocapture):
-        """Test error handling in factory method."""
-        video_path = "nonexistent_video.mp4"
-        
-        # Mock file existence check to return False
-        with patch('pathlib.Path.exists', return_value=False):
-            with pytest.raises(IOError, match="Video file does not exist"):
-                create_video_plume_from_config(video_path)
-
-    def test_create_video_plume_opencv_failure(self, mock_exists):
-        """Test handling of OpenCV failure."""
-        video_path = "test_video.mp4"
-        
+class TestCreateVideoPlume:
+    """Test suite for the create_video_plume function with direct parameters."""
+    
+    def test_create_video_plume_basic(self, mock_exists):
+        """Test creating a VideoPlume with basic parameters."""
         with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640,  # CAP_PROP_FRAME_WIDTH
+                1: 480,  # CAP_PROP_FRAME_HEIGHT 
+                5: 30.0, # CAP_PROP_FPS
+                7: 300,  # CAP_PROP_FRAME_COUNT
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create a VideoPlume with basic parameters
+            video_path = "test_video.mp4"
+            plume = create_video_plume(video_path=video_path)
+            
+            # Verify the VideoPlume was created with default settings
+            assert isinstance(plume, VideoPlume)
+            assert plume.video_path == Path(video_path)
+            assert plume.flip is False
+            assert plume.kernel_size == 0
+            assert plume.kernel_sigma == 1.0
+    
+    def test_create_video_plume_with_parameters(self, mock_exists):
+        """Test creating a VideoPlume with custom parameters."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create a VideoPlume with custom parameters
+            video_path = "test_video.mp4"
+            plume = create_video_plume(
+                video_path=video_path,
+                flip=True,
+                kernel_size=5,
+                kernel_sigma=2.0
+            )
+            
+            # Verify the VideoPlume was created with custom settings
+            assert plume.video_path == Path(video_path)
+            assert plume.flip is True
+            assert plume.kernel_size == 5
+            assert plume.kernel_sigma == 2.0
+    
+    def test_create_video_plume_missing_path(self):
+        """Test that create_video_plume requires video_path."""
+        with pytest.raises(ConfigurationError, match="video_path is required"):
+            create_video_plume()
+    
+    def test_create_video_plume_file_not_found(self):
+        """Test error handling for non-existent video file."""
+        with pytest.raises(FileNotFoundError, match="Video file does not exist"):
+            create_video_plume(video_path="nonexistent_video.mp4")
+    
+    def test_create_video_plume_invalid_kernel_size(self, mock_exists):
+        """Test validation of kernel_size parameter."""
+        with pytest.raises(ConfigurationError, match="kernel_size must be a positive integer"):
+            create_video_plume(video_path="test_video.mp4", kernel_size=-1)
+    
+    def test_create_video_plume_invalid_kernel_sigma(self, mock_exists):
+        """Test validation of kernel_sigma parameter."""
+        with pytest.raises(ConfigurationError, match="kernel_sigma must be a positive number"):
+            create_video_plume(video_path="test_video.mp4", kernel_sigma=-1.0)
+
+
+class TestCreateVideoPlumeFromConfig:
+    """Test suite for the create_video_plume_from_config function (legacy compatibility)."""
+    
+    def test_create_video_plume_with_default_config(self, config_files, mock_exists):
+        """Test creating a VideoPlume with default configuration."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create configuration with video_path
+            config = config_files["default_config"]["video_plume"].copy()
+            config["video_path"] = "test_video.mp4"
+            
+            # Create a VideoPlume with default config
+            plume = create_video_plume_from_config(config)
+            
+            # Check that the VideoPlume was created with default settings
+            assert plume.video_path == Path("test_video.mp4")
+            assert plume.flip is False
+            assert plume.kernel_size == 0
+            assert plume.kernel_sigma == 1.0
+    
+    def test_create_video_plume_with_user_config(self, config_files, mock_exists):
+        """Test creating a VideoPlume with user configuration overrides."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create configuration with overrides and video_path
+            config = config_files["user_config"]["video_plume"].copy()
+            config["video_path"] = "test_video.mp4"
+            
+            # Create a VideoPlume with user config
+            plume = create_video_plume_from_config(config)
+            
+            # Check that the VideoPlume was created with user settings
+            assert plume.video_path == Path("test_video.mp4")
+            assert plume.flip is True  # Overridden in user config
+            assert plume.kernel_size == 5  # Overridden in user config
+            assert plume.kernel_sigma == 1.0  # Default value since not overridden
+    
+    def test_create_video_plume_with_parameter_overrides(self, config_files, mock_exists):
+        """Test creating a VideoPlume with config and direct parameter overrides."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create configuration
+            config = config_files["default_config"]["video_plume"].copy()
+            config["video_path"] = "test_video.mp4"
+            
+            # Create a VideoPlume with config and parameter overrides
+            plume = create_video_plume_from_config(
+                config,
+                flip=True,  # Override the config
+                kernel_sigma=3.0  # Override the config
+            )
+            
+            # Check that the explicitly provided parameters override config
+            assert plume.video_path == Path("test_video.mp4")
+            assert plume.flip is True  # Explicitly overridden
+            assert plume.kernel_size == 0  # From config
+            assert plume.kernel_sigma == 3.0  # Explicitly overridden
+
+
+@pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
+class TestHydraConfigurationIntegration:
+    """Test suite for enhanced Hydra-based factory method patterns."""
+    
+    def test_create_video_plume_with_dictconfig(self, mock_exists):
+        """Test creating VideoPlume with Hydra DictConfig object."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create DictConfig
+            config_dict = {
+                "video_path": "test_video.mp4",
+                "flip": True,
+                "kernel_size": 5,
+                "kernel_sigma": 1.5
+            }
+            cfg = DictConfig(config_dict)
+            
+            # Create VideoPlume using DictConfig
+            plume = create_video_plume(cfg=cfg)
+            
+            # Verify configuration was applied correctly
+            assert plume.video_path == Path("test_video.mp4")
+            assert plume.flip is True
+            assert plume.kernel_size == 5
+            assert plume.kernel_sigma == 1.5
+    
+    def test_create_video_plume_with_dictconfig_overrides(self, mock_exists):
+        """Test DictConfig with parameter overrides."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create DictConfig
+            config_dict = {
+                "video_path": "test_video.mp4",
+                "flip": False,
+                "kernel_size": 3
+            }
+            cfg = DictConfig(config_dict)
+            
+            # Create VideoPlume with overrides
+            plume = create_video_plume(
+                cfg=cfg,
+                flip=True,  # Override config
+                kernel_sigma=2.5  # Add new parameter
+            )
+            
+            # Verify overrides took precedence
+            assert plume.flip is True  # Overridden
+            assert plume.kernel_size == 3  # From config
+            assert plume.kernel_sigma == 2.5  # Direct parameter
+    
+    def test_create_video_plume_with_environment_interpolation(self, mock_exists, monkeypatch):
+        """Test DictConfig with environment variable interpolation."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Set environment variable
+            monkeypatch.setenv("TEST_VIDEO_PATH", "test_video.mp4")
+            
+            # Create DictConfig with interpolation
+            config_dict = {
+                "video_path": "${oc.env:TEST_VIDEO_PATH}",
+                "flip": True
+            }
+            cfg = DictConfig(config_dict)
+            
+            # Resolve interpolation manually for testing
+            resolved_cfg = OmegaConf.to_container(cfg, resolve=True)
+            
+            # Create VideoPlume
+            plume = create_video_plume(cfg=resolved_cfg)
+            
+            # Verify interpolation worked
+            assert plume.video_path == Path("test_video.mp4")
+            assert plume.flip is True
+
+
+class TestConfigurationValidationAndMerging:
+    """Test suite for configuration validation and parameter merging functionality."""
+    
+    def test_configuration_schema_validation(self, mock_exists):
+        """Test that configurations are validated using Pydantic schemas."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Valid configuration
+            config = {
+                "video_path": "test_video.mp4",
+                "flip": True,
+                "kernel_size": 5,
+                "kernel_sigma": 1.5
+            }
+            
+            # This should not raise an error
+            plume = create_video_plume(cfg=config)
+            assert isinstance(plume, VideoPlume)
+    
+    def test_configuration_validation_failure(self):
+        """Test that invalid configurations raise appropriate errors."""
+        # Invalid kernel_size (even number)
+        invalid_config = {
+            "video_path": "test_video.mp4",
+            "kernel_size": 4  # Invalid: must be odd
+        }
+        
+        with pytest.raises(ConfigurationError):
+            create_video_plume(cfg=invalid_config)
+    
+    def test_parameter_merging_precedence(self, mock_exists):
+        """Test that direct parameters take precedence over configuration."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Configuration
+            config = {
+                "video_path": "test_video.mp4",
+                "flip": False,
+                "kernel_size": 3,
+                "kernel_sigma": 1.0
+            }
+            
+            # Create with overrides
+            plume = create_video_plume(
+                cfg=config,
+                flip=True,  # Should override config
+                kernel_sigma=2.0  # Should override config
+                # kernel_size not overridden, should use config value
+            )
+            
+            # Verify precedence
+            assert plume.flip is True  # Overridden
+            assert plume.kernel_size == 3  # From config
+            assert plume.kernel_sigma == 2.0  # Overridden
+    
+    def test_none_values_handling(self, mock_exists):
+        """Test that None values in parameters don't override config."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Configuration
+            config = {
+                "video_path": "test_video.mp4",
+                "flip": True,
+                "kernel_size": 5
+            }
+            
+            # Create with None values (should not override)
+            plume = create_video_plume(
+                cfg=config,
+                flip=None,  # Should not override
+                kernel_sigma=None  # Should not override
+            )
+            
+            # Verify None values didn't override config
+            assert plume.flip is True  # From config, not overridden
+            assert plume.kernel_size == 5  # From config
+            assert plume.kernel_sigma == 1.0  # Default value
+
+
+class TestErrorHandlingAndEdgeCases:
+    """Test suite for error handling and edge case scenarios."""
+    
+    def test_create_video_plume_opencv_failure(self, mock_exists):
+        """Test handling of OpenCV VideoCapture failure."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up mock to simulate failure
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
             mock_instance.isOpened.return_value = False  # Simulate failure
             
-            with pytest.raises(IOError, match="Failed to open video file"):
-                create_video_plume_from_config(video_path)
+            # This should raise an error during VideoPlume creation
+            with pytest.raises(ConfigurationError, match="Failed to create VideoPlume"):
+                create_video_plume(video_path="test_video.mp4")
+    
+    def test_create_video_plume_with_additional_kwargs(self, mock_exists):
+        """Test that additional kwargs are passed through to VideoPlume."""
+        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+            # Set up the mock video capture
+            mock_instance = MagicMock()
+            mock_cv.return_value = mock_instance
+            mock_instance.isOpened.return_value = True
+            mock_instance.get.side_effect = lambda prop: {
+                0: 640, 1: 480, 5: 30.0, 7: 300
+            }.get(prop, 0)
+            mock_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+            
+            # Create VideoPlume with additional parameters
+            plume = create_video_plume(
+                video_path="test_video.mp4",
+                flip=True,
+                grayscale=False,  # Additional parameter
+                normalize=False   # Additional parameter
+            )
+            
+            # Verify additional parameters were set
+            assert plume.flip is True
+            assert plume.grayscale is False
+            assert plume.normalize is False
+    
+    def test_legacy_config_path_handling(self):
+        """Test that string/Path config arguments raise appropriate errors."""
+        # Test string path (deprecated)
+        with pytest.raises(ConfigurationError, match="File path configuration loading is deprecated"):
+            create_video_plume_from_config("path/to/config.yaml")
+        
+        # Test Path object (deprecated)
+        with pytest.raises(ConfigurationError, match="File path configuration loading is deprecated"):
+            create_video_plume_from_config(Path("path/to/config.yaml"))
 
-    def test_hydra_structured_config_integration(self):
-        """Test integration with Hydra structured configs."""
-        # This test verifies that our configuration can be used with Hydra's
-        # structured config system for type safety
-        
-        config = VideoPlumeConfig(
-            flip=True,
-            kernel_size=5,
-            kernel_sigma=1.5
-        )
-        
-        # Convert to OmegaConf for Hydra compatibility
-        omega_config = OmegaConf.structured(config)
-        
-        assert omega_config.flip is True
-        assert omega_config.kernel_size == 5
-        assert omega_config.kernel_sigma == 1.5
-        
-        # Verify it can be converted back
-        reconstructed = VideoPlumeConfig(**omega_config)
-        assert reconstructed.flip is True
-        assert reconstructed.kernel_size == 5
-        assert reconstructed.kernel_sigma == 1.5
 
-    def test_factory_with_none_config(self, mock_cv2_videocapture, mock_exists):
-        """Test factory method with None config (should use defaults)."""
-        video_path = "test_video.mp4"
-        
-        plume = create_video_plume_from_config(video_path, config=None)
-        
-        # Should use default values
-        assert plume.video_path == Path(video_path)
-        assert plume.flip is False  # default
-        assert plume.kernel_size == 0  # default
-        assert plume.kernel_sigma == 1.0  # default
+@pytest.fixture
+def mock_hydra_config():
+    """Fixture providing mock Hydra configuration for testing."""
+    if HYDRA_AVAILABLE:
+        config_dict = {
+            "video_path": "test_plume.mp4",
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.5,
+            "grayscale": True,
+            "normalize": True
+        }
+        return DictConfig(config_dict)
+    else:
+        return {
+            "video_path": "test_plume.mp4",
+            "flip": True,
+            "kernel_size": 5,
+            "kernel_sigma": 1.5,
+            "grayscale": True,
+            "normalize": True
+        }
 
-    def test_factory_performance_timing(self, hydra_config, mock_cv2_videocapture, mock_exists):
-        """Test that factory method meets performance requirements."""
-        import time
-        
-        video_path = "test_video.mp4"
-        
-        start_time = time.time()
-        plume = create_video_plume_from_config(video_path, config=hydra_config)
-        end_time = time.time()
-        
-        # Should complete in reasonable time (< 2 seconds as per requirements)
-        assert (end_time - start_time) < 2.0
-        assert plume is not None
+
+@pytest.fixture
+def extended_config_files(config_files):
+    """Extended configuration fixtures for video plume testing."""
+    extended = config_files.copy()
+    
+    # Add video plume specific configurations
+    extended["video_plume_basic"] = {
+        "video_path": "basic_plume.mp4",
+        "flip": False,
+        "kernel_size": 0,
+        "kernel_sigma": 1.0
+    }
+    
+    extended["video_plume_advanced"] = {
+        "video_path": "advanced_plume.mp4", 
+        "flip": True,
+        "kernel_size": 7,
+        "kernel_sigma": 2.0,
+        "grayscale": True,
+        "normalize": True,
+        "threshold": 0.5
+    }
+    
+    return extended
