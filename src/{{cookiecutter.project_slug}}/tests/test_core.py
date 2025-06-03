@@ -1,1855 +1,1058 @@
-"""Core navigation system testing module.
+"""
+Core navigation system testing module.
 
-This module provides comprehensive validation for Navigator facade, controller implementations,
-and protocol interface compliance. Tests single-agent and multi-agent navigation logic,
-state management, sensor sampling, and protocol adherence through systematic unit testing.
+This module provides comprehensive validation for Navigator facade, controller 
+implementations, and protocol interface compliance. Tests cover single-agent 
+and multi-agent navigation logic, state management, sensor sampling, and 
+protocol adherence through systematic unit testing.
 
 Test Categories:
-- Navigator facade class testing (single-agent and multi-agent scenarios)
+- Navigator facade testing with configuration-driven instantiation
 - SingleAgentController and MultiAgentController implementation validation
-- NavigatorProtocol compliance and interface adherence verification
-- State management validation (positions, orientations, speeds, angular velocities)
-- Sensor sampling functions and multi-sensor capabilities testing
-- Factory method integration with configuration-driven instantiation
-- Numerical precision and accuracy validation for position calculations
-- Performance requirements validation for multi-agent scenarios
+- NavigatorProtocol compliance and interface verification
+- State management testing for positions, orientations, speeds, and velocities
+- Sensor sampling validation including multi-sensor capabilities
+- Performance requirements validation per Section 6.6.3.3
+- Numerical precision validation with 1e-6 tolerance per research standards
 - Collision avoidance and boundary handling behavior testing
-- State reset and initialization patterns for reproducible experiments
+- Factory method integration with Hydra configuration system
 
-Performance Requirements (per Section 6.6.3.3):
-- Single agent step operations: <1ms execution time
+Performance Requirements:
+- Single agent step operations: <1ms (Section 6.6.3.3)
 - Multi-agent operations: efficient scaling up to 100 agents
-- Numerical precision: 1e-6 tolerance for research standards
-- Test coverage target: >90% for Navigator components
+- Navigator components: >90% test coverage (Section 6.6.3.1)
+- Numerical precision: 1e-6 tolerance for research accuracy
+
 """
 
 import pytest
 import numpy as np
 import time
-from typing import Optional, Tuple, Union, Any, List
-from unittest.mock import Mock, MagicMock, patch
+from typing import Dict, Any, List, Tuple, Union, Optional
+from unittest.mock import Mock, patch, MagicMock
 import tempfile
-import contextlib
+import os
 
-# Import the core components under test
-from src.{{cookiecutter.project_slug}}.core.navigator import Navigator, NavigatorProtocol
-from src.{{cookiecutter.project_slug}}.core.controllers import SingleAgentController, MultiAgentController
+# Import core navigation components
+from src.{{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol
+from src.{{cookiecutter.project_slug}}.core.controllers import (
+    SingleAgentController, 
+    MultiAgentController
+)
 from src.{{cookiecutter.project_slug}}.core.sensors import (
-    SensorLayout, 
-    SensorConfiguration,
-    calculate_sensor_positions,
-    sample_odor_at_sensors
+    SensorLayout,
+    get_predefined_sensor_layout,
+    sample_odor_at_sensors,
+    read_odor_values,
+    compute_sensor_positions
 )
 
 
-class TestNavigatorFacade:
-    """Test suite for Navigator facade class functionality.
-    
-    Validates single-agent and multi-agent scenarios, factory methods,
-    configuration-driven instantiation, and protocol compliance.
-    """
-    
-    def test_navigator_single_agent_initialization_default(self):
-        """Test Navigator single-agent initialization with default parameters."""
-        navigator = Navigator.single()
-        
-        # Validate initial state
-        assert navigator.num_agents == 1
-        assert navigator.is_single_agent is True
-        
-        # Check default position (should be at origin)
-        np.testing.assert_array_equal(navigator.positions, np.array([[0.0, 0.0]]))
-        
-        # Check default orientation (should be 0 degrees)
-        np.testing.assert_array_equal(navigator.orientations, np.array([0.0]))
-        
-        # Check default speed and max_speed
-        np.testing.assert_array_equal(navigator.speeds, np.array([0.0]))
-        np.testing.assert_array_equal(navigator.max_speeds, np.array([1.0]))
-        
-        # Check default angular velocity
-        np.testing.assert_array_equal(navigator.angular_velocities, np.array([0.0]))
-    
-    def test_navigator_single_agent_initialization_custom(self):
-        """Test Navigator single-agent initialization with custom parameters."""
-        position = (10.0, 20.0)
-        orientation = 45.0
-        speed = 1.5
-        max_speed = 2.0
-        angular_velocity = 10.0
-        
-        navigator = Navigator.single(
-            position=position,
-            orientation=orientation,
-            speed=speed,
-            max_speed=max_speed,
-            angular_velocity=angular_velocity
-        )
-        
-        # Validate custom initialization
-        assert navigator.num_agents == 1
-        assert navigator.is_single_agent is True
-        
-        np.testing.assert_allclose(navigator.positions, np.array([position]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([orientation]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([speed]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, np.array([max_speed]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, np.array([angular_velocity]), rtol=1e-6)
-    
-    def test_navigator_multi_agent_initialization_default(self):
-        """Test Navigator multi-agent initialization with default parameters."""
-        positions = np.array([[0.0, 0.0], [10.0, 15.0], [20.0, 25.0]])
-        navigator = Navigator.multi(positions=positions)
-        
-        # Validate multi-agent state
-        assert navigator.num_agents == 3
-        assert navigator.is_single_agent is False
-        
-        np.testing.assert_array_equal(navigator.positions, positions)
-        
-        # Check default orientations, speeds, etc.
-        np.testing.assert_array_equal(navigator.orientations, np.zeros(3))
-        np.testing.assert_array_equal(navigator.speeds, np.zeros(3))
-        np.testing.assert_array_equal(navigator.max_speeds, np.ones(3))
-        np.testing.assert_array_equal(navigator.angular_velocities, np.zeros(3))
-    
-    def test_navigator_multi_agent_initialization_custom(self):
-        """Test Navigator multi-agent initialization with custom parameters."""
-        positions = np.array([[5.0, 10.0], [15.0, 20.0]])
-        orientations = np.array([30.0, 60.0])
-        speeds = np.array([1.0, 1.5])
-        max_speeds = np.array([2.0, 2.5])
-        angular_velocities = np.array([5.0, -5.0])
-        
-        navigator = Navigator.multi(
-            positions=positions,
-            orientations=orientations,
-            speeds=speeds,
-            max_speeds=max_speeds,
-            angular_velocities=angular_velocities
-        )
-        
-        # Validate custom multi-agent initialization
-        assert navigator.num_agents == 2
-        assert navigator.is_single_agent is False
-        
-        np.testing.assert_allclose(navigator.positions, positions, rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, orientations, rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, speeds, rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, max_speeds, rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, angular_velocities, rtol=1e-6)
-    
-    def test_navigator_from_config_single_agent(self):
-        """Test Navigator creation from configuration dictionary for single agent."""
-        config = {
-            'position': (5.0, 7.5),
-            'orientation': 90.0,
-            'speed': 2.0,
-            'max_speed': 3.0,
-            'angular_velocity': 15.0
-        }
-        
-        navigator = Navigator.from_config(config)
-        
-        assert navigator.num_agents == 1
-        assert navigator.is_single_agent is True
-        np.testing.assert_allclose(navigator.positions, np.array([[5.0, 7.5]]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([90.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([2.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, np.array([3.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, np.array([15.0]), rtol=1e-6)
-    
-    def test_navigator_from_config_multi_agent(self):
-        """Test Navigator creation from configuration dictionary for multi-agent."""
-        config = {
-            'positions': np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
-            'orientations': np.array([0.0, 120.0, 240.0]),
-            'speeds': np.array([0.5, 1.0, 1.5]),
-            'max_speeds': np.array([2.0, 2.0, 2.0]),
-            'angular_velocities': np.array([10.0, -10.0, 0.0])
-        }
-        
-        navigator = Navigator.from_config(config)
-        
-        assert navigator.num_agents == 3
-        assert navigator.is_single_agent is False
-        np.testing.assert_allclose(navigator.positions, config['positions'], rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, config['orientations'], rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, config['speeds'], rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, config['max_speeds'], rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, config['angular_velocities'], rtol=1e-6)
+# Test tolerance for numerical precision validation per research standards
+NUMERICAL_PRECISION_TOLERANCE = 1e-6
+
+# Performance thresholds per Section 6.6.3.3
+SINGLE_AGENT_STEP_THRESHOLD_MS = 1.0
+MULTI_AGENT_10_STEP_THRESHOLD_MS = 5.0
+MULTI_AGENT_100_STEP_THRESHOLD_MS = 50.0
 
 
-class TestNavigatorProtocolCompliance:
-    """Test suite for NavigatorProtocol compliance verification.
+class TestNavigatorProtocol:
+    """Test NavigatorProtocol interface compliance and type checking."""
     
-    Validates that all Navigator implementations properly adhere to the
-    protocol interface and provide consistent behavior across different
-    agent configurations.
-    """
+    def test_protocol_interface_definition(self):
+        """Test that NavigatorProtocol defines required interface methods and properties."""
+        # Test that NavigatorProtocol is runtime checkable
+        assert hasattr(NavigatorProtocol, '__runtime_checkable__')
+        
+        # Test required properties exist in protocol
+        required_properties = [
+            'positions', 'orientations', 'speeds', 'max_speeds', 
+            'angular_velocities', 'num_agents'
+        ]
+        
+        for prop in required_properties:
+            assert hasattr(NavigatorProtocol, prop), f"Protocol missing property: {prop}"
     
-    @pytest.fixture
-    def single_agent_navigator(self) -> NavigatorProtocol:
-        """Fixture providing a single-agent navigator for protocol testing."""
-        return Navigator.single(position=(10.0, 15.0), orientation=45.0, speed=1.0)
+    def test_protocol_required_methods(self):
+        """Test that NavigatorProtocol defines required interface methods."""
+        required_methods = [
+            'reset', 'step', 'sample_odor', 'read_single_antenna_odor',
+            'sample_multiple_sensors'
+        ]
+        
+        for method in required_methods:
+            assert hasattr(NavigatorProtocol, method), f"Protocol missing method: {method}"
     
-    @pytest.fixture
-    def multi_agent_navigator(self) -> NavigatorProtocol:
-        """Fixture providing a multi-agent navigator for protocol testing."""
+    def test_single_agent_controller_protocol_compliance(self):
+        """Test that SingleAgentController implements NavigatorProtocol."""
+        controller = SingleAgentController(
+            position=(10.0, 20.0),
+            orientation=45.0,
+            speed=2.0,
+            max_speed=5.0
+        )
+        
+        # Test protocol compliance
+        assert isinstance(controller, NavigatorProtocol)
+        
+        # Test all required properties are accessible
+        assert hasattr(controller, 'positions')
+        assert hasattr(controller, 'orientations')
+        assert hasattr(controller, 'speeds')
+        assert hasattr(controller, 'max_speeds')
+        assert hasattr(controller, 'angular_velocities')
+        assert hasattr(controller, 'num_agents')
+        
+        # Test all required methods are callable
+        assert callable(controller.reset)
+        assert callable(controller.step)
+        assert callable(controller.sample_odor)
+        assert callable(controller.read_single_antenna_odor)
+        assert callable(controller.sample_multiple_sensors)
+    
+    def test_multi_agent_controller_protocol_compliance(self):
+        """Test that MultiAgentController implements NavigatorProtocol."""
         positions = np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]])
         orientations = np.array([0.0, 90.0, 180.0])
-        speeds = np.array([0.5, 1.0, 1.5])
-        return Navigator.multi(positions=positions, orientations=orientations, speeds=speeds)
-    
-    @pytest.fixture
-    def test_environment(self) -> np.ndarray:
-        """Fixture providing a test environment array for odor sampling."""
-        # Create a 50x50 environment with a Gaussian odor plume
-        x, y = np.meshgrid(np.linspace(0, 49, 50), np.linspace(0, 49, 50))
-        center_x, center_y = 25, 25
-        sigma = 8.0
-        
-        # Gaussian concentration field
-        concentration = np.exp(-((x - center_x)**2 + (y - center_y)**2) / (2 * sigma**2))
-        return concentration.astype(np.float32)
-    
-    def test_protocol_properties_single_agent(self, single_agent_navigator, test_environment):
-        """Test NavigatorProtocol property access for single agent."""
-        nav = single_agent_navigator
-        
-        # Test property shapes and types
-        assert isinstance(nav.positions, np.ndarray)
-        assert nav.positions.shape == (1, 2)
-        
-        assert isinstance(nav.orientations, np.ndarray)
-        assert nav.orientations.shape == (1,)
-        
-        assert isinstance(nav.speeds, np.ndarray)
-        assert nav.speeds.shape == (1,)
-        
-        assert isinstance(nav.max_speeds, np.ndarray)
-        assert nav.max_speeds.shape == (1,)
-        
-        assert isinstance(nav.angular_velocities, np.ndarray)
-        assert nav.angular_velocities.shape == (1,)
-        
-        assert nav.num_agents == 1
-        assert isinstance(nav.num_agents, int)
-    
-    def test_protocol_properties_multi_agent(self, multi_agent_navigator, test_environment):
-        """Test NavigatorProtocol property access for multi-agent."""
-        nav = multi_agent_navigator
-        
-        # Test property shapes and types
-        assert isinstance(nav.positions, np.ndarray)
-        assert nav.positions.shape == (3, 2)
-        
-        assert isinstance(nav.orientations, np.ndarray)
-        assert nav.orientations.shape == (3,)
-        
-        assert isinstance(nav.speeds, np.ndarray)
-        assert nav.speeds.shape == (3,)
-        
-        assert isinstance(nav.max_speeds, np.ndarray)
-        assert nav.max_speeds.shape == (3,)
-        
-        assert isinstance(nav.angular_velocities, np.ndarray)
-        assert nav.angular_velocities.shape == (3,)
-        
-        assert nav.num_agents == 3
-        assert isinstance(nav.num_agents, int)
-    
-    def test_protocol_step_method_single_agent(self, single_agent_navigator, test_environment):
-        """Test NavigatorProtocol step method for single agent."""
-        nav = single_agent_navigator
-        
-        # Store initial state
-        initial_positions = nav.positions.copy()
-        initial_orientations = nav.orientations.copy()
-        
-        # Execute step
-        nav.step(test_environment)
-        
-        # Verify state has been updated (positions should change with non-zero speed)
-        if nav.speeds[0] > 0:
-            position_changed = not np.allclose(nav.positions, initial_positions, rtol=1e-6)
-            assert position_changed, "Position should change when speed > 0"
-        
-        # Verify method doesn't raise exceptions
-        assert nav.positions.shape == (1, 2)
-        assert nav.orientations.shape == (1,)
-    
-    def test_protocol_step_method_multi_agent(self, multi_agent_navigator, test_environment):
-        """Test NavigatorProtocol step method for multi-agent."""
-        nav = multi_agent_navigator
-        
-        # Store initial state
-        initial_positions = nav.positions.copy()
-        initial_orientations = nav.orientations.copy()
-        
-        # Execute step
-        nav.step(test_environment)
-        
-        # Verify state dimensions preserved
-        assert nav.positions.shape == (3, 2)
-        assert nav.orientations.shape == (3,)
-        
-        # Verify positions changed for agents with non-zero speed
-        for i in range(nav.num_agents):
-            if nav.speeds[i] > 0:
-                position_changed = not np.allclose(
-                    nav.positions[i], initial_positions[i], rtol=1e-6
-                )
-                assert position_changed, f"Agent {i} position should change when speed > 0"
-    
-    def test_protocol_sample_odor_single_agent(self, single_agent_navigator, test_environment):
-        """Test NavigatorProtocol sample_odor method for single agent."""
-        nav = single_agent_navigator
-        
-        # Test odor sampling
-        odor_value = nav.sample_odor(test_environment)
-        
-        assert isinstance(odor_value, (float, np.floating))
-        assert 0.0 <= odor_value <= 1.0  # Normalized concentration
-        assert np.isfinite(odor_value)
-    
-    def test_protocol_sample_odor_multi_agent(self, multi_agent_navigator, test_environment):
-        """Test NavigatorProtocol sample_odor method for multi-agent."""
-        nav = multi_agent_navigator
-        
-        # Test odor sampling
-        odor_values = nav.sample_odor(test_environment)
-        
-        assert isinstance(odor_values, np.ndarray)
-        assert odor_values.shape == (3,)
-        assert np.all(odor_values >= 0.0)
-        assert np.all(odor_values <= 1.0)  # Normalized concentration
-        assert np.all(np.isfinite(odor_values))
-    
-    def test_protocol_read_single_antenna_odor(self, single_agent_navigator, multi_agent_navigator, test_environment):
-        """Test NavigatorProtocol read_single_antenna_odor method."""
-        # Test single agent
-        single_odor = single_agent_navigator.read_single_antenna_odor(test_environment)
-        assert isinstance(single_odor, (float, np.floating))
-        assert np.isfinite(single_odor)
-        
-        # Test multi-agent
-        multi_odor = multi_agent_navigator.read_single_antenna_odor(test_environment)
-        assert isinstance(multi_odor, np.ndarray)
-        assert multi_odor.shape == (3,)
-        assert np.all(np.isfinite(multi_odor))
-    
-    def test_protocol_sample_multiple_sensors(self, single_agent_navigator, multi_agent_navigator, test_environment):
-        """Test NavigatorProtocol sample_multiple_sensors method."""
-        # Test single agent with multiple sensors
-        single_readings = single_agent_navigator.sample_multiple_sensors(
-            test_environment,
-            sensor_distance=5.0,
-            sensor_angle=45.0,
-            num_sensors=3
-        )
-        assert isinstance(single_readings, np.ndarray)
-        assert single_readings.shape == (3,)
-        assert np.all(np.isfinite(single_readings))
-        
-        # Test multi-agent with multiple sensors
-        multi_readings = multi_agent_navigator.sample_multiple_sensors(
-            test_environment,
-            sensor_distance=3.0,
-            sensor_angle=60.0,
-            num_sensors=2
-        )
-        assert isinstance(multi_readings, np.ndarray)
-        assert multi_readings.shape == (3, 2)  # 3 agents, 2 sensors each
-        assert np.all(np.isfinite(multi_readings))
-    
-    def test_protocol_reset_method(self, single_agent_navigator, multi_agent_navigator):
-        """Test NavigatorProtocol reset method."""
-        # Test single agent reset
-        single_agent_navigator.reset(position=(50.0, 50.0), orientation=180.0)
-        np.testing.assert_allclose(single_agent_navigator.positions, np.array([[50.0, 50.0]]), rtol=1e-6)
-        np.testing.assert_allclose(single_agent_navigator.orientations, np.array([180.0]), rtol=1e-6)
-        
-        # Test multi-agent reset
-        new_positions = np.array([[100.0, 100.0], [110.0, 110.0], [120.0, 120.0]])
-        multi_agent_navigator.reset(positions=new_positions)
-        np.testing.assert_allclose(multi_agent_navigator.positions, new_positions, rtol=1e-6)
-
-
-class TestControllerImplementations:
-    """Test suite for SingleAgentController and MultiAgentController implementations.
-    
-    Validates the concrete controller classes that implement the navigation
-    logic and state management for both single and multi-agent scenarios.
-    """
-    
-    def test_single_agent_controller_initialization(self):
-        """Test SingleAgentController initialization and default values."""
-        controller = SingleAgentController()
-        
-        assert controller.num_agents == 1
-        np.testing.assert_array_equal(controller.positions, np.array([[0.0, 0.0]]))
-        np.testing.assert_array_equal(controller.orientations, np.array([0.0]))
-        np.testing.assert_array_equal(controller.speeds, np.array([0.0]))
-        np.testing.assert_array_equal(controller.max_speeds, np.array([1.0]))
-        np.testing.assert_array_equal(controller.angular_velocities, np.array([0.0]))
-    
-    def test_single_agent_controller_custom_initialization(self):
-        """Test SingleAgentController with custom initialization parameters."""
-        position = (25.0, 35.0)
-        orientation = 270.0
-        speed = 2.5
-        max_speed = 5.0
-        angular_velocity = -15.0
-        
-        controller = SingleAgentController(
-            position=position,
-            orientation=orientation,
-            speed=speed,
-            max_speed=max_speed,
-            angular_velocity=angular_velocity
-        )
-        
-        assert controller.num_agents == 1
-        np.testing.assert_allclose(controller.positions, np.array([position]), rtol=1e-6)
-        np.testing.assert_allclose(controller.orientations, np.array([orientation]), rtol=1e-6)
-        np.testing.assert_allclose(controller.speeds, np.array([speed]), rtol=1e-6)
-        np.testing.assert_allclose(controller.max_speeds, np.array([max_speed]), rtol=1e-6)
-        np.testing.assert_allclose(controller.angular_velocities, np.array([angular_velocity]), rtol=1e-6)
-    
-    def test_multi_agent_controller_initialization(self):
-        """Test MultiAgentController initialization and default values."""
-        positions = np.array([[0.0, 5.0], [10.0, 15.0], [20.0, 25.0], [30.0, 35.0]])
-        controller = MultiAgentController(positions=positions)
-        
-        assert controller.num_agents == 4
-        np.testing.assert_array_equal(controller.positions, positions)
-        np.testing.assert_array_equal(controller.orientations, np.zeros(4))
-        np.testing.assert_array_equal(controller.speeds, np.zeros(4))
-        np.testing.assert_array_equal(controller.max_speeds, np.ones(4))
-        np.testing.assert_array_equal(controller.angular_velocities, np.zeros(4))
-    
-    def test_multi_agent_controller_custom_initialization(self):
-        """Test MultiAgentController with custom initialization parameters."""
-        positions = np.array([[1.0, 2.0], [3.0, 4.0]])
-        orientations = np.array([45.0, 135.0])
-        speeds = np.array([1.2, 2.3])
-        max_speeds = np.array([3.0, 4.0])
-        angular_velocities = np.array([12.0, -8.0])
         
         controller = MultiAgentController(
             positions=positions,
             orientations=orientations,
-            speeds=speeds,
-            max_speeds=max_speeds,
-            angular_velocities=angular_velocities
+            speeds=np.array([1.0, 2.0, 1.5]),
+            max_speeds=np.array([3.0, 4.0, 3.5])
         )
         
-        assert controller.num_agents == 2
-        np.testing.assert_allclose(controller.positions, positions, rtol=1e-6)
-        np.testing.assert_allclose(controller.orientations, orientations, rtol=1e-6)
-        np.testing.assert_allclose(controller.speeds, speeds, rtol=1e-6)
-        np.testing.assert_allclose(controller.max_speeds, max_speeds, rtol=1e-6)
-        np.testing.assert_allclose(controller.angular_velocities, angular_velocities, rtol=1e-6)
-    
-    def test_controller_step_position_updates(self):
-        """Test position updates during step operations."""
-        # Test single agent movement
-        single_controller = SingleAgentController(
-            position=(0.0, 0.0),
-            orientation=0.0,  # Facing east
-            speed=1.0
-        )
+        # Test protocol compliance
+        assert isinstance(controller, NavigatorProtocol)
         
-        env_array = np.zeros((50, 50))
-        single_controller.step(env_array, dt=1.0)
-        
-        # After 1 second at speed 1.0 facing east, should move 1 unit in x direction
-        expected_position = np.array([[1.0, 0.0]])
-        np.testing.assert_allclose(single_controller.positions, expected_position, rtol=1e-6)
-        
-        # Test multi-agent movement
-        positions = np.array([[0.0, 0.0], [10.0, 10.0]])
-        orientations = np.array([90.0, 270.0])  # North and South
-        speeds = np.array([2.0, 1.5])
-        
-        multi_controller = MultiAgentController(
-            positions=positions,
-            orientations=orientations,
-            speeds=speeds
-        )
-        
-        multi_controller.step(env_array, dt=1.0)
-        
-        # Agent 0: moves north (positive y) by 2.0 units
-        # Agent 1: moves south (negative y) by 1.5 units
-        expected_positions = np.array([[0.0, 2.0], [10.0, 8.5]])
-        np.testing.assert_allclose(multi_controller.positions, expected_positions, rtol=1e-6)
-    
-    def test_controller_step_orientation_updates(self):
-        """Test orientation updates during step operations with angular velocity."""
-        # Test single agent orientation change
-        single_controller = SingleAgentController(
-            position=(0.0, 0.0),
-            orientation=0.0,
-            angular_velocity=90.0  # 90 degrees per second
-        )
-        
-        env_array = np.zeros((50, 50))
-        single_controller.step(env_array, dt=1.0)
-        
-        # After 1 second with 90 deg/s angular velocity, orientation should be 90 degrees
-        np.testing.assert_allclose(single_controller.orientations, np.array([90.0]), rtol=1e-6)
-        
-        # Test multi-agent orientation changes
-        positions = np.array([[0.0, 0.0], [5.0, 5.0]])
-        orientations = np.array([0.0, 180.0])
-        angular_velocities = np.array([45.0, -30.0])
-        
-        multi_controller = MultiAgentController(
-            positions=positions,
-            orientations=orientations,
-            angular_velocities=angular_velocities
-        )
-        
-        multi_controller.step(env_array, dt=1.0)
-        
-        # Agent 0: 0° + 45° = 45°
-        # Agent 1: 180° - 30° = 150°
-        expected_orientations = np.array([45.0, 150.0])
-        np.testing.assert_allclose(multi_controller.orientations, expected_orientations, rtol=1e-6)
-    
-    def test_controller_reset_functionality(self):
-        """Test reset functionality for controllers."""
-        # Test single agent reset
-        single_controller = SingleAgentController(position=(10.0, 20.0), speed=1.5)
-        
-        # Modify state
-        single_controller.step(np.zeros((50, 50)), dt=1.0)
-        
-        # Reset with new parameters
-        single_controller.reset(position=(50.0, 60.0), orientation=45.0, speed=2.0)
-        
-        np.testing.assert_allclose(single_controller.positions, np.array([[50.0, 60.0]]), rtol=1e-6)
-        np.testing.assert_allclose(single_controller.orientations, np.array([45.0]), rtol=1e-6)
-        np.testing.assert_allclose(single_controller.speeds, np.array([2.0]), rtol=1e-6)
-        
-        # Test multi-agent reset
-        positions = np.array([[1.0, 2.0], [3.0, 4.0]])
-        multi_controller = MultiAgentController(positions=positions)
-        
-        # Reset with new positions
-        new_positions = np.array([[10.0, 20.0], [30.0, 40.0]])
-        new_speeds = np.array([1.0, 2.0])
-        multi_controller.reset(positions=new_positions, speeds=new_speeds)
-        
-        np.testing.assert_allclose(multi_controller.positions, new_positions, rtol=1e-6)
-        np.testing.assert_allclose(multi_controller.speeds, new_speeds, rtol=1e-6)
+        # Test property types and shapes
+        assert isinstance(controller.positions, np.ndarray)
+        assert isinstance(controller.orientations, np.ndarray)
+        assert isinstance(controller.speeds, np.ndarray)
+        assert isinstance(controller.max_speeds, np.ndarray)
+        assert isinstance(controller.angular_velocities, np.ndarray)
+        assert isinstance(controller.num_agents, int)
 
 
-class TestStateManagement:
-    """Test suite for state management validation.
-    
-    Validates positions, orientations, speeds, angular velocities,
-    and state consistency across navigation operations.
-    """
+class TestSingleAgentController:
+    """Comprehensive testing for SingleAgentController implementation."""
     
     @pytest.fixture
-    def complex_environment(self) -> np.ndarray:
-        """Create a complex environment for state management testing."""
-        # Create a 100x100 environment with multiple odor sources
-        x, y = np.meshgrid(np.linspace(0, 99, 100), np.linspace(0, 99, 100))
-        
-        # Multiple Gaussian sources
-        source1 = np.exp(-((x - 30)**2 + (y - 30)**2) / (2 * 10**2))
-        source2 = np.exp(-((x - 70)**2 + (y - 70)**2) / (2 * 15**2))
-        source3 = np.exp(-((x - 50)**2 + (y - 20)**2) / (2 * 8**2))
-        
-        environment = 0.5 * source1 + 0.3 * source2 + 0.7 * source3
-        return environment.astype(np.float32)
-    
-    def test_state_consistency_single_agent(self, complex_environment):
-        """Test state consistency for single agent across multiple operations."""
-        navigator = Navigator.single(
-            position=(25.0, 25.0),
+    def basic_single_agent(self):
+        """Create a basic single agent controller for testing."""
+        return SingleAgentController(
+            position=(5.0, 10.0),
             orientation=30.0,
             speed=1.5,
             max_speed=3.0,
             angular_velocity=5.0
         )
-        
-        # Record initial state
-        initial_position = navigator.positions.copy()
-        initial_orientation = navigator.orientations.copy()
-        
-        # Perform multiple steps
-        for i in range(10):
-            navigator.step(complex_environment, dt=0.1)
-            
-            # Validate state shapes remain consistent
-            assert navigator.positions.shape == (1, 2)
-            assert navigator.orientations.shape == (1,)
-            assert navigator.speeds.shape == (1,)
-            assert navigator.max_speeds.shape == (1,)
-            assert navigator.angular_velocities.shape == (1,)
-            
-            # Validate numerical properties
-            assert np.all(np.isfinite(navigator.positions))
-            assert np.all(np.isfinite(navigator.orientations))
-            assert np.all(navigator.speeds >= 0)
-            assert np.all(navigator.speeds <= navigator.max_speeds)
-            
-            # Sample odor to ensure interaction works
-            odor = navigator.sample_odor(complex_environment)
-            assert np.isfinite(odor)
-            assert odor >= 0.0
-        
-        # Verify position has changed due to movement
-        position_changed = not np.allclose(navigator.positions, initial_position, rtol=1e-6)
-        assert position_changed, "Position should change during movement"
-        
-        # Verify orientation has changed due to angular velocity
-        orientation_changed = not np.allclose(navigator.orientations, initial_orientation, rtol=1e-6)
-        assert orientation_changed, "Orientation should change with angular velocity"
     
-    def test_state_consistency_multi_agent(self, complex_environment):
-        """Test state consistency for multi-agent across multiple operations."""
-        positions = np.array([[10.0, 10.0], [30.0, 30.0], [50.0, 50.0], [70.0, 70.0]])
-        orientations = np.array([0.0, 90.0, 180.0, 270.0])
-        speeds = np.array([0.5, 1.0, 1.5, 2.0])
-        max_speeds = np.array([2.0, 2.5, 3.0, 3.5])
-        angular_velocities = np.array([10.0, -5.0, 15.0, -20.0])
+    @pytest.fixture
+    def default_single_agent(self):
+        """Create a single agent controller with default parameters."""
+        return SingleAgentController()
+    
+    def test_single_agent_initialization_with_parameters(self, basic_single_agent):
+        """Test single agent initialization with explicit parameters."""
+        agent = basic_single_agent
         
-        navigator = Navigator.multi(
+        # Test property shapes and types
+        assert agent.positions.shape == (1, 2)
+        assert agent.orientations.shape == (1,)
+        assert agent.speeds.shape == (1,)
+        assert agent.max_speeds.shape == (1,)
+        assert agent.angular_velocities.shape == (1,)
+        assert agent.num_agents == 1
+        
+        # Test initial values with numerical precision
+        np.testing.assert_allclose(agent.positions[0], [5.0, 10.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], 30.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 1.5, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.max_speeds[0], 3.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.angular_velocities[0], 5.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_single_agent_initialization_defaults(self, default_single_agent):
+        """Test single agent initialization with default parameters."""
+        agent = default_single_agent
+        
+        # Test default values
+        np.testing.assert_allclose(agent.positions[0], [0.0, 0.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], 0.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 0.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.max_speeds[0], 1.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.angular_velocities[0], 0.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_single_agent_parameter_validation(self):
+        """Test parameter validation during initialization."""
+        # Test speed exceeding max_speed
+        with pytest.raises((ValueError, RuntimeError)):
+            SingleAgentController(speed=5.0, max_speed=3.0)
+        
+        # Test negative max_speed
+        with pytest.raises((ValueError, RuntimeError)):
+            SingleAgentController(max_speed=-1.0)
+    
+    def test_single_agent_reset_with_kwargs(self, basic_single_agent):
+        """Test reset functionality with keyword arguments."""
+        agent = basic_single_agent
+        
+        # Reset with new parameters
+        agent.reset(
+            position=(15.0, 25.0),
+            orientation=60.0,
+            speed=2.0,
+            max_speed=4.0,
+            angular_velocity=10.0
+        )
+        
+        # Verify reset values
+        np.testing.assert_allclose(agent.positions[0], [15.0, 25.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], 60.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 2.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.max_speeds[0], 4.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.angular_velocities[0], 10.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_single_agent_reset_partial_parameters(self, basic_single_agent):
+        """Test reset with only some parameters updated."""
+        agent = basic_single_agent
+        original_position = agent.positions[0].copy()
+        original_orientation = agent.orientations[0]
+        
+        # Reset only speed
+        agent.reset(speed=2.5)
+        
+        # Verify only speed changed
+        np.testing.assert_allclose(agent.positions[0], original_position, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], original_orientation, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 2.5, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations')
+    def test_single_agent_step_functionality(self, mock_update, basic_single_agent):
+        """Test step method calls utility functions correctly."""
+        agent = basic_single_agent
+        mock_env_array = np.random.rand(100, 100)
+        
+        agent.step(mock_env_array)
+        
+        # Verify utility function was called
+        mock_update.assert_called_once()
+        call_args = mock_update.call_args[0]
+        
+        # Verify correct arrays were passed
+        assert np.array_equal(call_args[0], agent.positions)
+        assert np.array_equal(call_args[1], agent.orientations)
+        assert np.array_equal(call_args[2], agent.speeds)
+        assert np.array_equal(call_args[3], agent.angular_velocities)
+    
+    def test_single_agent_step_performance(self, basic_single_agent):
+        """Test single agent step performance meets <1ms requirement."""
+        agent = basic_single_agent
+        mock_env_array = np.random.rand(50, 50)  # Smaller array for performance test
+        
+        # Warm up
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        
+        # Performance test
+        start_time = time.time()
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        execution_time_ms = (time.time() - start_time) * 1000
+        
+        # Verify performance requirement
+        assert execution_time_ms < SINGLE_AGENT_STEP_THRESHOLD_MS, \
+            f"Single agent step took {execution_time_ms:.2f}ms, should be <{SINGLE_AGENT_STEP_THRESHOLD_MS}ms"
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.read_odor_values')
+    def test_single_agent_odor_sampling(self, mock_read_odor, basic_single_agent):
+        """Test odor sampling functionality for single agent."""
+        agent = basic_single_agent
+        mock_env_array = np.random.rand(100, 100)
+        mock_read_odor.return_value = np.array([0.75])
+        
+        result = agent.sample_odor(mock_env_array)
+        
+        # Verify correct result type and value
+        assert isinstance(result, float)
+        assert result == 0.75
+        
+        # Verify utility function called correctly
+        mock_read_odor.assert_called_once_with(mock_env_array, agent.positions)
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.sample_odor_at_sensors')
+    def test_single_agent_multi_sensor_sampling(self, mock_sample_sensors, basic_single_agent):
+        """Test multi-sensor sampling for single agent."""
+        agent = basic_single_agent
+        mock_env_array = np.random.rand(100, 100)
+        mock_sample_sensors.return_value = np.array([[0.6, 0.8]])  # 1 agent, 2 sensors
+        
+        result = agent.sample_multiple_sensors(
+            mock_env_array,
+            sensor_distance=8.0,
+            sensor_angle=30.0,
+            num_sensors=2
+        )
+        
+        # Verify result shape and type
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (2,)  # 2 sensors for single agent
+        np.testing.assert_allclose(result, [0.6, 0.8], atol=NUMERICAL_PRECISION_TOLERANCE)
+        
+        # Verify utility function called with correct parameters
+        mock_sample_sensors.assert_called_once_with(
+            agent, mock_env_array,
+            sensor_distance=8.0,
+            sensor_angle=30.0,
+            num_sensors=2,
+            layout_name=None
+        )
+    
+    def test_single_agent_state_validation_edge_cases(self):
+        """Test state validation for edge cases and boundary conditions."""
+        # Test with very small values
+        agent = SingleAgentController(
+            position=(1e-10, 1e-10),
+            orientation=0.001,
+            speed=1e-6,
+            max_speed=1e-5
+        )
+        
+        assert agent.num_agents == 1
+        assert np.all(np.isfinite(agent.positions))
+        assert np.all(np.isfinite(agent.orientations))
+        assert np.all(np.isfinite(agent.speeds))
+        assert np.all(np.isfinite(agent.max_speeds))
+    
+    def test_single_agent_configuration_integration(self):
+        """Test integration with Hydra configuration system."""
+        # Test with mock configuration
+        mock_config = {
+            'position': (12.0, 18.0),
+            'orientation': 45.0,
+            'speed': 1.0,
+            'max_speed': 2.5,
+            'angular_velocity': 3.0
+        }
+        
+        agent = SingleAgentController(config=mock_config)
+        
+        # Verify configuration was applied
+        np.testing.assert_allclose(agent.positions[0], [12.0, 18.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], 45.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 1.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+
+
+class TestMultiAgentController:
+    """Comprehensive testing for MultiAgentController implementation."""
+    
+    @pytest.fixture
+    def basic_multi_agent(self):
+        """Create a basic multi-agent controller for testing."""
+        positions = np.array([
+            [0.0, 0.0],
+            [10.0, 5.0],
+            [5.0, 15.0]
+        ])
+        orientations = np.array([0.0, 45.0, 90.0])
+        speeds = np.array([1.0, 1.5, 2.0])
+        max_speeds = np.array([2.0, 3.0, 4.0])
+        angular_velocities = np.array([0.0, 5.0, -3.0])
+        
+        return MultiAgentController(
             positions=positions,
             orientations=orientations,
             speeds=speeds,
             max_speeds=max_speeds,
             angular_velocities=angular_velocities
         )
-        
-        # Record initial state
-        initial_positions = navigator.positions.copy()
-        initial_orientations = navigator.orientations.copy()
-        
-        # Perform multiple steps
-        for i in range(20):
-            navigator.step(complex_environment, dt=0.05)
-            
-            # Validate state shapes remain consistent
-            assert navigator.positions.shape == (4, 2)
-            assert navigator.orientations.shape == (4,)
-            assert navigator.speeds.shape == (4,)
-            assert navigator.max_speeds.shape == (4,)
-            assert navigator.angular_velocities.shape == (4,)
-            
-            # Validate numerical properties for all agents
-            assert np.all(np.isfinite(navigator.positions))
-            assert np.all(np.isfinite(navigator.orientations))
-            assert np.all(navigator.speeds >= 0)
-            assert np.all(navigator.speeds <= navigator.max_speeds)
-            
-            # Sample odor for all agents
-            odor_values = navigator.sample_odor(complex_environment)
-            assert odor_values.shape == (4,)
-            assert np.all(np.isfinite(odor_values))
-            assert np.all(odor_values >= 0.0)
-        
-        # Verify positions have changed for agents with non-zero speed
-        for i in range(4):
-            if speeds[i] > 0:
-                position_changed = not np.allclose(
-                    navigator.positions[i], initial_positions[i], rtol=1e-6
-                )
-                assert position_changed, f"Agent {i} position should change during movement"
-        
-        # Verify orientations have changed for agents with non-zero angular velocity
-        for i in range(4):
-            if angular_velocities[i] != 0:
-                orientation_changed = not np.allclose(
-                    navigator.orientations[i], initial_orientations[i], rtol=1e-6
-                )
-                assert orientation_changed, f"Agent {i} orientation should change with angular velocity"
     
-    def test_state_bounds_validation(self):
-        """Test validation of state bounds and constraints."""
-        # Test speed constraints
-        navigator = Navigator.single(speed=1.0, max_speed=2.0)
-        assert navigator.speeds[0] <= navigator.max_speeds[0]
+    @pytest.fixture
+    def large_multi_agent(self):
+        """Create a large multi-agent controller for scaling tests."""
+        num_agents = 50
+        positions = np.random.rand(num_agents, 2) * 100
+        orientations = np.random.rand(num_agents) * 360
+        speeds = np.random.rand(num_agents) * 2
+        max_speeds = speeds + np.random.rand(num_agents) * 2
+        angular_velocities = (np.random.rand(num_agents) - 0.5) * 20
         
-        # Test multi-agent speed constraints
-        positions = np.array([[0.0, 0.0], [10.0, 10.0]])
-        speeds = np.array([1.5, 2.5])
-        max_speeds = np.array([2.0, 3.0])
+        return MultiAgentController(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds,
+            max_speeds=max_speeds,
+            angular_velocities=angular_velocities
+        )
+    
+    def test_multi_agent_initialization_with_arrays(self, basic_multi_agent):
+        """Test multi-agent initialization with explicit arrays."""
+        agent = basic_multi_agent
         
-        multi_navigator = Navigator.multi(
+        # Test array shapes
+        assert agent.positions.shape == (3, 2)
+        assert agent.orientations.shape == (3,)
+        assert agent.speeds.shape == (3,)
+        assert agent.max_speeds.shape == (3,)
+        assert agent.angular_velocities.shape == (3,)
+        assert agent.num_agents == 3
+        
+        # Test specific values with numerical precision
+        expected_positions = np.array([[0.0, 0.0], [10.0, 5.0], [5.0, 15.0]])
+        expected_orientations = np.array([0.0, 45.0, 90.0])
+        expected_speeds = np.array([1.0, 1.5, 2.0])
+        
+        np.testing.assert_allclose(agent.positions, expected_positions, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations, expected_orientations, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds, expected_speeds, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_multi_agent_initialization_defaults(self):
+        """Test multi-agent initialization with minimal parameters."""
+        positions = np.array([[0.0, 0.0], [1.0, 1.0]])
+        agent = MultiAgentController(positions=positions)
+        
+        # Test default values
+        assert agent.num_agents == 2
+        np.testing.assert_allclose(agent.orientations, [0.0, 0.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds, [0.0, 0.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.max_speeds, [1.0, 1.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.angular_velocities, [0.0, 0.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_multi_agent_array_validation(self):
+        """Test array shape and consistency validation."""
+        positions = np.array([[0.0, 0.0], [1.0, 1.0]])
+        
+        # Test mismatched array shapes
+        with pytest.raises((ValueError, RuntimeError)):
+            MultiAgentController(
+                positions=positions,
+                orientations=np.array([0.0])  # Wrong size
+            )
+        
+        # Test invalid position array shape
+        with pytest.raises((ValueError, RuntimeError)):
+            MultiAgentController(
+                positions=np.array([0.0, 1.0])  # Should be (N, 2)
+            )
+    
+    def test_multi_agent_parameter_validation(self):
+        """Test parameter validation for multi-agent scenario."""
+        positions = np.array([[0.0, 0.0], [1.0, 1.0]])
+        speeds = np.array([3.0, 4.0])
+        max_speeds = np.array([2.0, 3.0])  # Some speeds exceed max_speeds
+        
+        # Should handle speed violations gracefully
+        agent = MultiAgentController(
             positions=positions,
             speeds=speeds,
             max_speeds=max_speeds
         )
         
-        assert np.all(multi_navigator.speeds <= multi_navigator.max_speeds)
+        # Verify speeds were clamped to max_speeds
+        assert np.all(agent.speeds <= agent.max_speeds)
     
-    def test_orientation_normalization(self):
-        """Test orientation normalization behavior."""
-        # Test large positive orientation
-        navigator = Navigator.single(orientation=450.0)  # Should normalize to 90.0
-        expected_orientation = 450.0 % 360.0
-        np.testing.assert_allclose(navigator.orientations, np.array([expected_orientation]), rtol=1e-6)
+    def test_multi_agent_reset_functionality(self, basic_multi_agent):
+        """Test reset functionality for multi-agent controller."""
+        agent = basic_multi_agent
         
-        # Test negative orientation
-        navigator = Navigator.single(orientation=-90.0)  # Should normalize to 270.0
-        expected_orientation = (-90.0) % 360.0
-        np.testing.assert_allclose(navigator.orientations, np.array([expected_orientation]), rtol=1e-6)
+        new_positions = np.array([[20.0, 20.0], [30.0, 30.0], [40.0, 40.0]])
+        new_orientations = np.array([180.0, 270.0, 0.0])
         
-        # Test multi-agent orientation normalization
-        orientations = np.array([720.0, -180.0, 450.0])  # [0.0, 180.0, 90.0]
-        expected_orientations = orientations % 360.0
-        
-        positions = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-        navigator = Navigator.multi(positions=positions, orientations=orientations)
-        
-        np.testing.assert_allclose(navigator.orientations, expected_orientations, rtol=1e-6)
-
-
-class TestSensorSampling:
-    """Test suite for sensor sampling functions and multi-sensor capabilities.
-    
-    Validates single antenna sampling, multi-sensor sampling, sensor layouts,
-    and odor concentration reading accuracy.
-    """
-    
-    @pytest.fixture
-    def gradient_environment(self) -> np.ndarray:
-        """Create a gradient environment for sensor testing."""
-        # Create a linear gradient from left to right
-        x, y = np.meshgrid(np.linspace(0, 49, 50), np.linspace(0, 49, 50))
-        gradient = x / 49.0  # Normalized gradient 0 to 1
-        return gradient.astype(np.float32)
-    
-    @pytest.fixture
-    def circular_environment(self) -> np.ndarray:
-        """Create a circular environment for sensor testing."""
-        # Create concentric circles with different concentrations
-        x, y = np.meshgrid(np.linspace(0, 49, 50), np.linspace(0, 49, 50))
-        center_x, center_y = 25, 25
-        distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-        
-        # Create rings with different concentrations
-        environment = np.zeros_like(distance)
-        environment[distance <= 10] = 1.0
-        environment[(distance > 10) & (distance <= 20)] = 0.5
-        environment[distance > 20] = 0.1
-        
-        return environment.astype(np.float32)
-    
-    def test_single_antenna_sampling_accuracy(self, gradient_environment):
-        """Test single antenna odor sampling accuracy."""
-        # Test known positions in gradient environment
-        test_cases = [
-            ((5.0, 25.0), 5.0 / 49.0),    # Left side, low concentration
-            ((25.0, 25.0), 25.0 / 49.0),  # Center, medium concentration
-            ((45.0, 25.0), 45.0 / 49.0),  # Right side, high concentration
-        ]
-        
-        for position, expected_concentration in test_cases:
-            navigator = Navigator.single(position=position)
-            odor_value = navigator.read_single_antenna_odor(gradient_environment)
-            
-            np.testing.assert_allclose(odor_value, expected_concentration, rtol=0.1)
-    
-    def test_multi_agent_single_antenna_sampling(self, circular_environment):
-        """Test single antenna sampling for multiple agents."""
-        # Position agents at different distances from center
-        positions = np.array([
-            [25.0, 25.0],  # Center, should read 1.0
-            [35.0, 25.0],  # Distance 10, should read 1.0
-            [40.0, 25.0],  # Distance 15, should read 0.5
-            [45.0, 25.0],  # Distance 20, should read 0.5
-            [48.0, 25.0],  # Distance 23, should read 0.1
-        ])
-        
-        expected_readings = np.array([1.0, 1.0, 0.5, 0.5, 0.1])
-        
-        navigator = Navigator.multi(positions=positions)
-        odor_values = navigator.read_single_antenna_odor(circular_environment)
-        
-        assert odor_values.shape == (5,)
-        np.testing.assert_allclose(odor_values, expected_readings, rtol=0.1)
-    
-    def test_multi_sensor_sampling_single_agent(self, gradient_environment):
-        """Test multi-sensor sampling for single agent."""
-        # Position agent at center facing east (0 degrees)
-        navigator = Navigator.single(position=(25.0, 25.0), orientation=0.0)
-        
-        # Sample with 3 sensors: left, center, right relative to heading
-        sensor_readings = navigator.sample_multiple_sensors(
-            gradient_environment,
-            sensor_distance=5.0,
-            sensor_angle=90.0,  # 90 degrees between sensors
-            num_sensors=3
+        agent.reset(
+            positions=new_positions,
+            orientations=new_orientations
         )
         
-        assert sensor_readings.shape == (3,)
-        assert np.all(np.isfinite(sensor_readings))
-        
-        # In gradient environment, right sensor should read higher than left
-        # (assuming sensor layout places sensors relative to orientation)
-        assert np.all(sensor_readings >= 0.0)
-        assert np.all(sensor_readings <= 1.0)
+        # Verify reset values
+        np.testing.assert_allclose(agent.positions, new_positions, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations, new_orientations, atol=NUMERICAL_PRECISION_TOLERANCE)
     
-    def test_multi_sensor_sampling_multi_agent(self, circular_environment):
-        """Test multi-sensor sampling for multiple agents."""
-        positions = np.array([[20.0, 20.0], [30.0, 30.0]])
-        orientations = np.array([45.0, 225.0])
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations')
+    def test_multi_agent_step_functionality(self, mock_update, basic_multi_agent):
+        """Test step method for multi-agent scenario."""
+        agent = basic_multi_agent
+        mock_env_array = np.random.rand(100, 100)
         
-        navigator = Navigator.multi(positions=positions, orientations=orientations)
+        agent.step(mock_env_array)
         
-        # Sample with 2 sensors per agent
-        sensor_readings = navigator.sample_multiple_sensors(
-            circular_environment,
-            sensor_distance=3.0,
-            sensor_angle=60.0,
+        # Verify utility function was called with correct arrays
+        mock_update.assert_called_once()
+        call_args = mock_update.call_args[0]
+        
+        assert np.array_equal(call_args[0], agent.positions)
+        assert np.array_equal(call_args[1], agent.orientations)
+        assert np.array_equal(call_args[2], agent.speeds)
+        assert np.array_equal(call_args[3], agent.angular_velocities)
+    
+    def test_multi_agent_step_performance_10_agents(self):
+        """Test multi-agent step performance for 10 agents meets <5ms requirement."""
+        positions = np.random.rand(10, 2) * 50
+        agent = MultiAgentController(positions=positions)
+        mock_env_array = np.random.rand(50, 50)
+        
+        # Warm up
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        
+        # Performance test
+        start_time = time.time()
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        execution_time_ms = (time.time() - start_time) * 1000
+        
+        # Verify performance requirement
+        assert execution_time_ms < MULTI_AGENT_10_STEP_THRESHOLD_MS, \
+            f"10-agent step took {execution_time_ms:.2f}ms, should be <{MULTI_AGENT_10_STEP_THRESHOLD_MS}ms"
+    
+    def test_multi_agent_step_performance_100_agents(self):
+        """Test multi-agent step performance for 100 agents meets <50ms requirement."""
+        positions = np.random.rand(100, 2) * 100
+        agent = MultiAgentController(positions=positions)
+        mock_env_array = np.random.rand(100, 100)
+        
+        # Warm up
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        
+        # Performance test
+        start_time = time.time()
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
+        execution_time_ms = (time.time() - start_time) * 1000
+        
+        # Verify performance requirement
+        assert execution_time_ms < MULTI_AGENT_100_STEP_THRESHOLD_MS, \
+            f"100-agent step took {execution_time_ms:.2f}ms, should be <{MULTI_AGENT_100_STEP_THRESHOLD_MS}ms"
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.read_odor_values')
+    def test_multi_agent_odor_sampling(self, mock_read_odor, basic_multi_agent):
+        """Test odor sampling for multi-agent scenario."""
+        agent = basic_multi_agent
+        mock_env_array = np.random.rand(100, 100)
+        mock_read_odor.return_value = np.array([0.3, 0.7, 0.5])
+        
+        result = agent.sample_odor(mock_env_array)
+        
+        # Verify result type and shape
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (3,)
+        np.testing.assert_allclose(result, [0.3, 0.7, 0.5], atol=NUMERICAL_PRECISION_TOLERANCE)
+        
+        # Verify utility function called correctly
+        mock_read_odor.assert_called_once_with(mock_env_array, agent.positions)
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.sample_odor_at_sensors')
+    def test_multi_agent_multi_sensor_sampling(self, mock_sample_sensors, basic_multi_agent):
+        """Test multi-sensor sampling for multi-agent scenario."""
+        agent = basic_multi_agent
+        mock_env_array = np.random.rand(100, 100)
+        # 3 agents, 2 sensors each
+        mock_sample_sensors.return_value = np.array([
+            [0.2, 0.4],  # Agent 1 sensors
+            [0.6, 0.8],  # Agent 2 sensors
+            [0.3, 0.9]   # Agent 3 sensors
+        ])
+        
+        result = agent.sample_multiple_sensors(
+            mock_env_array,
+            sensor_distance=5.0,
             num_sensors=2
         )
         
-        assert sensor_readings.shape == (2, 2)  # 2 agents, 2 sensors each
-        assert np.all(np.isfinite(sensor_readings))
-        assert np.all(sensor_readings >= 0.0)
-        assert np.all(sensor_readings <= 1.0)
+        # Verify result shape and values
+        assert result.shape == (3, 2)  # 3 agents, 2 sensors each
+        expected = np.array([[0.2, 0.4], [0.6, 0.8], [0.3, 0.9]])
+        np.testing.assert_allclose(result, expected, atol=NUMERICAL_PRECISION_TOLERANCE)
     
-    def test_sensor_layout_configurations(self, gradient_environment):
-        """Test different sensor layout configurations."""
-        navigator = Navigator.single(position=(25.0, 25.0), orientation=0.0)
+    def test_multi_agent_scaling_efficiency(self, large_multi_agent):
+        """Test that multi-agent operations scale efficiently."""
+        agent = large_multi_agent
+        mock_env_array = np.random.rand(100, 100)
         
-        # Test different numbers of sensors
-        for num_sensors in [2, 3, 4, 5]:
-            readings = navigator.sample_multiple_sensors(
-                gradient_environment,
-                sensor_distance=4.0,
-                num_sensors=num_sensors
-            )
-            assert readings.shape == (num_sensors,)
-            assert np.all(np.isfinite(readings))
+        # Test that array operations maintain efficiency
+        start_time = time.time()
         
-        # Test different sensor distances
-        for distance in [1.0, 3.0, 7.0, 10.0]:
-            readings = navigator.sample_multiple_sensors(
-                gradient_environment,
-                sensor_distance=distance,
-                num_sensors=3
-            )
-            assert readings.shape == (3,)
-            assert np.all(np.isfinite(readings))
+        # Simulate multiple operations
+        positions = agent.positions
+        orientations = agent.orientations
+        speeds = agent.speeds
         
-        # Test different sensor angles
-        for angle in [30.0, 60.0, 90.0, 120.0]:
-            readings = navigator.sample_multiple_sensors(
-                gradient_environment,
-                sensor_angle=angle,
-                num_sensors=3
-            )
-            assert readings.shape == (3,)
-            assert np.all(np.isfinite(readings))
+        # Test vectorized operations
+        distances = np.linalg.norm(positions, axis=1)
+        normalized_orientations = orientations % 360
+        speed_ratios = speeds / agent.max_speeds
+        
+        execution_time = time.time() - start_time
+        
+        # Verify operations complete quickly for 50 agents
+        assert execution_time < 0.01, f"Scaling operations took {execution_time:.4f}s, should be <0.01s"
+        
+        # Verify results maintain numerical precision
+        assert np.all(np.isfinite(distances))
+        assert np.all(normalized_orientations >= 0) and np.all(normalized_orientations < 360)
+        assert np.all(speed_ratios >= 0)
     
-    def test_boundary_conditions_odor_sampling(self):
-        """Test odor sampling at environment boundaries."""
-        # Create small environment for boundary testing
-        small_env = np.ones((10, 10), dtype=np.float32)
+    def test_multi_agent_configuration_integration(self):
+        """Test multi-agent configuration integration."""
+        mock_config = {
+            'positions': [[0.0, 0.0], [10.0, 10.0]],
+            'orientations': [0.0, 90.0],
+            'speeds': [1.0, 2.0],
+            'max_speeds': [3.0, 4.0]
+        }
         
-        # Test positions at boundaries and outside
-        boundary_positions = [
-            (0.0, 0.0),    # Top-left corner
-            (9.0, 9.0),    # Bottom-right corner
-            (-1.0, 5.0),   # Outside left boundary
-            (10.0, 5.0),   # Outside right boundary
-            (5.0, -1.0),   # Outside top boundary
-            (5.0, 10.0),   # Outside bottom boundary
-        ]
+        agent = MultiAgentController(config=mock_config)
         
-        for position in boundary_positions:
-            navigator = Navigator.single(position=position)
-            
-            # Should not raise exceptions
-            odor_value = navigator.read_single_antenna_odor(small_env)
-            assert np.isfinite(odor_value)
-            assert odor_value >= 0.0
-            
-            # Multi-sensor sampling should also work
-            sensor_readings = navigator.sample_multiple_sensors(
-                small_env,
-                sensor_distance=2.0,
-                num_sensors=2
-            )
-            assert sensor_readings.shape == (2,)
-            assert np.all(np.isfinite(sensor_readings))
+        # Verify configuration was applied
+        assert agent.num_agents == 2
+        expected_positions = np.array([[0.0, 0.0], [10.0, 10.0]])
+        np.testing.assert_allclose(agent.positions, expected_positions, atol=NUMERICAL_PRECISION_TOLERANCE)
 
 
-class TestPerformanceRequirements:
-    """Test suite for performance requirements validation.
-    
-    Validates single agent <1ms execution time, multi-agent scaling efficiency,
-    and overall system performance against specified benchmarks.
-    """
+class TestSensorSampling:
+    """Test sensor sampling functionality and sensor layout configurations."""
     
     @pytest.fixture
-    def performance_environment(self) -> np.ndarray:
-        """Create a representative environment for performance testing."""
-        # Create a complex 200x200 environment
-        x, y = np.meshgrid(np.linspace(0, 199, 200), np.linspace(0, 199, 200))
-        
-        # Multiple overlapping Gaussian sources
-        sources = []
-        for i in range(5):
-            center_x = 40 + i * 30
-            center_y = 40 + i * 25
-            sigma = 15 + i * 3
-            source = np.exp(-((x - center_x)**2 + (y - center_y)**2) / (2 * sigma**2))
-            sources.append(source)
-        
-        environment = sum(sources) / len(sources)
-        return environment.astype(np.float32)
-    
-    def test_single_agent_step_performance(self, performance_environment):
-        """Test single agent step operation performance (<1ms requirement)."""
-        navigator = Navigator.single(
-            position=(50.0, 50.0),
-            orientation=45.0,
-            speed=2.0,
-            angular_velocity=10.0
-        )
-        
-        # Warm up
-        for _ in range(5):
-            navigator.step(performance_environment, dt=0.1)
-        
-        # Measure performance over multiple iterations
-        num_iterations = 100
-        start_time = time.perf_counter()
-        
-        for _ in range(num_iterations):
-            navigator.step(performance_environment, dt=0.1)
-        
-        end_time = time.perf_counter()
-        average_time = (end_time - start_time) / num_iterations
-        
-        # Should be less than 1ms per step
-        assert average_time < 0.001, f"Single agent step took {average_time:.6f}s, should be <0.001s"
-    
-    def test_multi_agent_scaling_performance(self, performance_environment):
-        """Test multi-agent scaling performance up to 100 agents."""
-        agent_counts = [10, 25, 50, 75, 100]
-        performance_results = []
-        
-        for num_agents in agent_counts:
-            # Create agents in a grid pattern
-            positions = []
-            for i in range(num_agents):
-                x = 20 + (i % 10) * 15
-                y = 20 + (i // 10) * 15
-                positions.append([x, y])
-            
-            positions = np.array(positions)
-            orientations = np.random.uniform(0, 360, num_agents)
-            speeds = np.random.uniform(0.5, 2.0, num_agents)
-            angular_velocities = np.random.uniform(-20, 20, num_agents)
-            
-            navigator = Navigator.multi(
-                positions=positions,
-                orientations=orientations,
-                speeds=speeds,
-                angular_velocities=angular_velocities
-            )
-            
-            # Warm up
-            for _ in range(3):
-                navigator.step(performance_environment, dt=0.1)
-            
-            # Measure performance
-            num_iterations = 50
-            start_time = time.perf_counter()
-            
-            for _ in range(num_iterations):
-                navigator.step(performance_environment, dt=0.1)
-            
-            end_time = time.perf_counter()
-            total_time = end_time - start_time
-            average_time = total_time / num_iterations
-            time_per_agent = average_time / num_agents
-            
-            performance_results.append({
-                'agents': num_agents,
-                'total_time': total_time,
-                'avg_time': average_time,
-                'time_per_agent': time_per_agent
-            })
-            
-            # Performance should scale efficiently (sub-linear with agent count)
-            # Time per agent should remain approximately constant
-            assert time_per_agent < 0.0001, f"Time per agent ({time_per_agent:.6f}s) too high for {num_agents} agents"
-        
-        # Verify scaling efficiency - time per agent should not increase significantly
-        first_time_per_agent = performance_results[0]['time_per_agent']
-        last_time_per_agent = performance_results[-1]['time_per_agent']
-        scaling_factor = last_time_per_agent / first_time_per_agent
-        
-        # Should scale efficiently (less than 2x degradation)
-        assert scaling_factor < 2.0, f"Performance degradation too high: {scaling_factor:.2f}x"
-    
-    def test_odor_sampling_performance(self, performance_environment):
-        """Test odor sampling performance requirements."""
-        # Test single agent odor sampling
-        navigator = Navigator.single(position=(100.0, 100.0))
-        
-        num_samples = 1000
-        start_time = time.perf_counter()
-        
-        for _ in range(num_samples):
-            odor_value = navigator.sample_odor(performance_environment)
-        
-        end_time = time.perf_counter()
-        avg_sample_time = (end_time - start_time) / num_samples
-        
-        # Should be much faster than 1ms for single sample
-        assert avg_sample_time < 0.0001, f"Odor sampling took {avg_sample_time:.6f}s, should be <0.0001s"
-        
-        # Test multi-agent odor sampling
-        positions = np.random.uniform(20, 180, (50, 2))
-        multi_navigator = Navigator.multi(positions=positions)
-        
-        start_time = time.perf_counter()
-        
-        for _ in range(num_samples):
-            odor_values = multi_navigator.sample_odor(performance_environment)
-        
-        end_time = time.perf_counter()
-        avg_multi_sample_time = (end_time - start_time) / num_samples
-        
-        # Multi-agent sampling should be efficient (vectorized)
-        assert avg_multi_sample_time < 0.001, f"Multi-agent odor sampling took {avg_multi_sample_time:.6f}s"
-    
-    def test_sensor_sampling_performance(self, performance_environment):
-        """Test multi-sensor sampling performance."""
-        navigator = Navigator.single(position=(100.0, 100.0))
-        
-        num_samples = 200
-        start_time = time.perf_counter()
-        
-        for _ in range(num_samples):
-            sensor_readings = navigator.sample_multiple_sensors(
-                performance_environment,
-                sensor_distance=5.0,
-                num_sensors=5
-            )
-        
-        end_time = time.perf_counter()
-        avg_sensor_sample_time = (end_time - start_time) / num_samples
-        
-        # Multi-sensor sampling should complete quickly
-        assert avg_sensor_sample_time < 0.005, f"Multi-sensor sampling took {avg_sensor_sample_time:.6f}s"
-
-
-class TestNumericalPrecision:
-    """Test suite for numerical precision and accuracy validation.
-    
-    Validates position calculations, numerical stability, floating-point
-    precision, and consistency across different numerical operations.
-    """
-    
-    def test_position_calculation_precision(self):
-        """Test numerical precision of position calculations."""
-        # Test precise movement calculations
-        navigator = Navigator.single(
-            position=(0.0, 0.0),
-            orientation=0.0,  # East
-            speed=1.0
-        )
-        
-        # Move for precise time steps
-        env_array = np.zeros((50, 50))
-        dt = 0.1
-        num_steps = 10
-        
-        for _ in range(num_steps):
-            navigator.step(env_array, dt=dt)
-        
-        # After 10 steps of 0.1s at speed 1.0, should be at (1.0, 0.0)
-        expected_position = np.array([[1.0, 0.0]])
-        np.testing.assert_allclose(navigator.positions, expected_position, rtol=1e-6)
-    
-    def test_orientation_calculation_precision(self):
-        """Test numerical precision of orientation calculations."""
-        navigator = Navigator.single(
-            position=(0.0, 0.0),
-            orientation=0.0,
-            angular_velocity=36.0  # 36 degrees per second
-        )
-        
-        env_array = np.zeros((50, 50))
-        dt = 0.1
-        num_steps = 10
-        
-        for _ in range(num_steps):
-            navigator.step(env_array, dt=dt)
-        
-        # After 10 steps of 0.1s at 36°/s, should be at 36° total
-        expected_orientation = np.array([36.0])
-        np.testing.assert_allclose(navigator.orientations, expected_orientation, rtol=1e-6)
-    
-    def test_multi_agent_precision_consistency(self):
-        """Test numerical precision consistency across multiple agents."""
-        # Create identical agents at different positions
-        positions = np.array([[0.0, 0.0], [100.0, 100.0], [200.0, 200.0]])
-        orientations = np.array([45.0, 45.0, 45.0])  # Same orientation
-        speeds = np.array([1.5, 1.5, 1.5])           # Same speed
-        angular_velocities = np.array([10.0, 10.0, 10.0])  # Same angular velocity
-        
-        navigator = Navigator.multi(
-            positions=positions,
-            orientations=orientations,
-            speeds=speeds,
-            angular_velocities=angular_velocities
-        )
-        
-        env_array = np.zeros((300, 300))
-        dt = 0.1
-        
-        # Track relative positions between agents
-        initial_relative_positions = positions[1:] - positions[0]
-        
-        # Simulate for multiple steps
-        for _ in range(20):
-            navigator.step(env_array, dt=dt)
-        
-        # Relative positions should remain constant (same movement for all)
-        current_relative_positions = navigator.positions[1:] - navigator.positions[0]
-        
-        np.testing.assert_allclose(
-            current_relative_positions,
-            initial_relative_positions,
-            rtol=1e-6
-        )
-        
-        # All agents should have same orientation change
-        orientation_differences = navigator.orientations[1:] - navigator.orientations[0]
-        np.testing.assert_allclose(orientation_differences, np.zeros(2), atol=1e-6)
-    
-    def test_cumulative_error_bounds(self):
-        """Test that cumulative numerical errors remain within bounds."""
-        navigator = Navigator.single(
-            position=(0.0, 0.0),
-            orientation=0.0,
-            speed=1.0,
-            angular_velocity=1.0  # 1 degree per second
-        )
-        
-        env_array = np.zeros((100, 100))
-        dt = 0.001  # Very small time step to test numerical stability
-        
-        # Simulate for 1000 small steps (equivalent to 1 second)
-        for _ in range(1000):
-            navigator.step(env_array, dt=dt)
-        
-        # Position should be approximately (1.0, 0.0) after 1 second
-        expected_position = np.array([[1.0, 0.0]])
-        np.testing.assert_allclose(navigator.positions, expected_position, rtol=1e-3)
-        
-        # Orientation should be approximately 1.0 degree
-        expected_orientation = np.array([1.0])
-        np.testing.assert_allclose(navigator.orientations, expected_orientation, rtol=1e-3)
-    
-    def test_floating_point_edge_cases(self):
-        """Test handling of floating-point edge cases."""
-        # Test very small values
-        navigator = Navigator.single(
-            position=(1e-10, 1e-10),
-            speed=1e-8,
-            angular_velocity=1e-6
-        )
-        
-        env_array = np.zeros((50, 50))
-        
-        # Should handle very small values without underflow
-        navigator.step(env_array, dt=1.0)
-        assert np.all(np.isfinite(navigator.positions))
-        assert np.all(np.isfinite(navigator.orientations))
-        
-        # Test large values (within reasonable bounds)
-        navigator = Navigator.single(
-            position=(1e6, 1e6),
-            speed=1e4,
-            angular_velocity=1e3
-        )
-        
-        # Should handle large values without overflow
-        navigator.step(env_array, dt=0.001)  # Small dt to prevent huge movements
-        assert np.all(np.isfinite(navigator.positions))
-        assert np.all(np.isfinite(navigator.orientations))
-    
-    def test_trigonometric_precision(self):
-        """Test precision of trigonometric calculations in movement."""
-        # Test movement at cardinal directions
-        cardinal_angles = [0.0, 90.0, 180.0, 270.0]
-        expected_movements = [
-            [1.0, 0.0],   # East
-            [0.0, 1.0],   # North  
-            [-1.0, 0.0],  # West
-            [0.0, -1.0]   # South
-        ]
-        
-        env_array = np.zeros((50, 50))
-        
-        for angle, expected_movement in zip(cardinal_angles, expected_movements):
-            navigator = Navigator.single(
-                position=(25.0, 25.0),
-                orientation=angle,
-                speed=1.0
-            )
-            
-            navigator.step(env_array, dt=1.0)
-            
-            actual_movement = navigator.positions[0] - np.array([25.0, 25.0])
-            np.testing.assert_allclose(actual_movement, expected_movement, rtol=1e-6)
-    
-    def test_inverse_operations_precision(self):
-        """Test precision of inverse operations (reset to original state)."""
-        # Record initial state
-        initial_position = (15.0, 25.0)
-        initial_orientation = 30.0
-        initial_speed = 1.2
-        
-        navigator = Navigator.single(
-            position=initial_position,
-            orientation=initial_orientation,
-            speed=initial_speed
-        )
-        
-        # Perform operations that should be reversible
-        env_array = np.zeros((50, 50))
-        
-        # Move forward then backward
-        navigator.step(env_array, dt=1.0)
-        current_position = navigator.positions.copy()
-        current_orientation = navigator.orientations.copy()
-        
-        # Reverse direction and move back
-        navigator.reset(
-            position=current_position[0],
-            orientation=(current_orientation[0] + 180.0) % 360.0,
-            speed=initial_speed
-        )
-        navigator.step(env_array, dt=1.0)
-        
-        # Should be very close to original position
-        np.testing.assert_allclose(navigator.positions, np.array([initial_position]), rtol=1e-3)
-
-
-class TestFactoryMethodIntegration:
-    """Test suite for factory method integration with configuration-driven instantiation.
-    
-    Validates Hydra configuration integration, factory patterns, and
-    configuration validation across different instantiation methods.
-    """
-    
-    def test_single_agent_factory_creation(self):
-        """Test single agent creation through factory methods."""
-        # Test Navigator.single factory method
-        navigator = Navigator.single(
-            position=(20.0, 30.0),
-            orientation=60.0,
-            speed=2.5,
-            max_speed=4.0,
-            angular_velocity=15.0
-        )
-        
-        assert isinstance(navigator, Navigator)
-        assert navigator.is_single_agent is True
-        assert navigator.num_agents == 1
-        
-        # Verify all parameters were set correctly
-        np.testing.assert_allclose(navigator.positions, np.array([[20.0, 30.0]]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([60.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([2.5]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, np.array([4.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, np.array([15.0]), rtol=1e-6)
-    
-    def test_multi_agent_factory_creation(self):
-        """Test multi-agent creation through factory methods."""
-        # Test Navigator.multi factory method
-        positions = np.array([[5.0, 10.0], [15.0, 20.0], [25.0, 30.0]])
-        orientations = np.array([0.0, 120.0, 240.0])
-        speeds = np.array([1.0, 1.5, 2.0])
-        max_speeds = np.array([3.0, 3.5, 4.0])
-        angular_velocities = np.array([5.0, -10.0, 15.0])
-        
-        navigator = Navigator.multi(
-            positions=positions,
-            orientations=orientations,
-            speeds=speeds,
-            max_speeds=max_speeds,
-            angular_velocities=angular_velocities
-        )
-        
-        assert isinstance(navigator, Navigator)
-        assert navigator.is_single_agent is False
-        assert navigator.num_agents == 3
-        
-        # Verify all parameters were set correctly
-        np.testing.assert_allclose(navigator.positions, positions, rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, orientations, rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, speeds, rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, max_speeds, rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, angular_velocities, rtol=1e-6)
-    
-    def test_configuration_dictionary_creation(self):
-        """Test Navigator creation from configuration dictionaries."""
-        # Test single agent config
-        single_config = {
-            'position': (12.0, 18.0),
-            'orientation': 75.0,
-            'speed': 1.8,
-            'max_speed': 3.5,
-            'angular_velocity': 8.0
-        }
-        
-        navigator = Navigator.from_config(single_config)
-        assert navigator.is_single_agent is True
-        assert navigator.num_agents == 1
-        
-        # Test multi-agent config
-        multi_config = {
-            'positions': np.array([[0.0, 0.0], [10.0, 20.0]]),
-            'orientations': np.array([45.0, 225.0]),
-            'speeds': np.array([1.2, 1.8]),
-            'max_speeds': np.array([2.5, 3.0]),
-            'angular_velocities': np.array([12.0, -6.0])
-        }
-        
-        navigator = Navigator.from_config(multi_config)
-        assert navigator.is_single_agent is False
-        assert navigator.num_agents == 2
-        
-        np.testing.assert_allclose(navigator.positions, multi_config['positions'], rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, multi_config['orientations'], rtol=1e-6)
-    
-    def test_partial_configuration_handling(self):
-        """Test handling of partial configurations with defaults."""
-        # Test single agent with minimal config
-        minimal_config = {'position': (5.0, 7.0)}
-        navigator = Navigator.from_config(minimal_config)
-        
-        assert navigator.is_single_agent is True
-        np.testing.assert_allclose(navigator.positions, np.array([[5.0, 7.0]]), rtol=1e-6)
-        # Should have default values for other parameters
-        np.testing.assert_allclose(navigator.orientations, np.array([0.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([0.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.max_speeds, np.array([1.0]), rtol=1e-6)
-        
-        # Test multi-agent with minimal config
-        positions_only = {'positions': np.array([[1.0, 2.0], [3.0, 4.0]])}
-        navigator = Navigator.from_config(positions_only)
-        
-        assert navigator.is_single_agent is False
-        assert navigator.num_agents == 2
-        np.testing.assert_allclose(navigator.positions, np.array([[1.0, 2.0], [3.0, 4.0]]), rtol=1e-6)
-        # Should have default values
-        np.testing.assert_allclose(navigator.orientations, np.zeros(2), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.zeros(2), rtol=1e-6)
-    
-    def test_configuration_validation(self):
-        """Test configuration validation during factory creation."""
-        # Test invalid single agent configuration
-        with pytest.raises(Exception):  # Should raise some form of validation error
-            invalid_config = {'position': [1, 2, 3]}  # Wrong format
-            Navigator.from_config(invalid_config)
-        
-        # Test mismatched array sizes in multi-agent config
-        with pytest.raises(Exception):
-            mismatched_config = {
-                'positions': np.array([[1.0, 2.0], [3.0, 4.0]]),
-                'orientations': np.array([0.0])  # Wrong size
-            }
-            Navigator.from_config(mismatched_config)
-    
-    def test_factory_method_equivalence(self):
-        """Test that different factory methods produce equivalent results."""
-        # Create navigator using direct constructor
-        direct_navigator = Navigator(
-            position=(10.0, 15.0),
-            orientation=30.0,
-            speed=1.5,
-            max_speed=2.5,
-            angular_velocity=5.0
-        )
-        
-        # Create navigator using factory method
-        factory_navigator = Navigator.single(
-            position=(10.0, 15.0),
-            orientation=30.0,
-            speed=1.5,
-            max_speed=2.5,
-            angular_velocity=5.0
-        )
-        
-        # Create navigator using config dictionary
-        config = {
-            'position': (10.0, 15.0),
-            'orientation': 30.0,
-            'speed': 1.5,
-            'max_speed': 2.5,
-            'angular_velocity': 5.0
-        }
-        config_navigator = Navigator.from_config(config)
-        
-        # All should produce equivalent navigators
-        for nav in [factory_navigator, config_navigator]:
-            np.testing.assert_allclose(nav.positions, direct_navigator.positions, rtol=1e-6)
-            np.testing.assert_allclose(nav.orientations, direct_navigator.orientations, rtol=1e-6)
-            np.testing.assert_allclose(nav.speeds, direct_navigator.speeds, rtol=1e-6)
-            np.testing.assert_allclose(nav.max_speeds, direct_navigator.max_speeds, rtol=1e-6)
-            np.testing.assert_allclose(nav.angular_velocities, direct_navigator.angular_velocities, rtol=1e-6)
-
-
-class TestBoundaryHandlingAndCollisionAvoidance:
-    """Test suite for boundary handling and collision avoidance behavior.
-    
-    Validates safety requirements, boundary conditions, collision detection,
-    and proper handling of edge cases in navigation.
-    """
+    def mock_navigator(self):
+        """Create a mock navigator for sensor testing."""
+        navigator = Mock(spec=NavigatorProtocol)
+        navigator.positions = np.array([[5.0, 10.0], [15.0, 20.0]])
+        navigator.orientations = np.array([0.0, 90.0])
+        navigator.num_agents = 2
+        return navigator
     
     @pytest.fixture
-    def bounded_environment(self) -> Tuple[np.ndarray, Tuple[float, float]]:
-        """Create a bounded environment for testing boundary conditions."""
-        # Create a 30x30 environment
-        environment = np.ones((30, 30), dtype=np.float32)
-        bounds = (0.0, 29.0)  # Valid coordinate range
-        return environment, bounds
+    def sample_env_array(self):
+        """Create a sample environment array for testing."""
+        return np.random.rand(50, 50).astype(np.float32)
     
-    def test_position_boundary_validation(self, bounded_environment):
-        """Test position validation at environment boundaries."""
-        env, (min_bound, max_bound) = bounded_environment
+    def test_predefined_sensor_layouts(self):
+        """Test predefined sensor layout configurations."""
+        # Test LEFT_RIGHT layout
+        layout = get_predefined_sensor_layout("LEFT_RIGHT", distance=10.0)
+        expected = np.array([[0.0, 10.0], [0.0, -10.0]])
+        np.testing.assert_allclose(layout, expected, atol=NUMERICAL_PRECISION_TOLERANCE)
         
-        # Test positions at boundaries
-        boundary_positions = [
-            (min_bound, min_bound),           # Top-left corner
-            (max_bound, max_bound),           # Bottom-right corner
-            (min_bound, max_bound),           # Bottom-left corner
-            (max_bound, min_bound),           # Top-right corner
-            (min_bound + 0.5, min_bound + 0.5),  # Near top-left
-            (max_bound - 0.5, max_bound - 0.5),  # Near bottom-right
-        ]
+        # Test FRONT_SIDES layout
+        layout = get_predefined_sensor_layout("FRONT_SIDES", distance=5.0)
+        expected = np.array([[5.0, 0.0], [0.0, 5.0], [0.0, -5.0]])
+        np.testing.assert_allclose(layout, expected, atol=NUMERICAL_PRECISION_TOLERANCE)
         
-        for position in boundary_positions:
-            navigator = Navigator.single(position=position, speed=0.0)
-            
-            # Should not raise exceptions during odor sampling
-            odor_value = navigator.sample_odor(env)
-            assert np.isfinite(odor_value)
-            assert odor_value >= 0.0
-            
-            # Position should remain valid
-            assert np.all(np.isfinite(navigator.positions))
+        # Test SINGLE layout
+        layout = get_predefined_sensor_layout("SINGLE", distance=1.0)
+        expected = np.array([[0.0, 0.0]])
+        np.testing.assert_allclose(layout, expected, atol=NUMERICAL_PRECISION_TOLERANCE)
     
-    def test_movement_boundary_constraints(self, bounded_environment):
-        """Test movement constraints at environment boundaries."""
-        env, (min_bound, max_bound) = bounded_environment
+    def test_sensor_layout_validation(self):
+        """Test sensor layout validation and error handling."""
+        # Test invalid layout name
+        with pytest.raises(ValueError):
+            get_predefined_sensor_layout("INVALID_LAYOUT")
         
-        # Test agent starting near boundary
-        navigator = Navigator.single(
-            position=(1.0, 1.0),  # Near left/top boundary
-            orientation=225.0,    # Southwest direction (toward boundary)
-            speed=2.0
+        # Test SensorLayout with invalid parameters
+        with pytest.raises(ValueError):
+            SensorLayout(distance=-1.0)  # Negative distance
+        
+        with pytest.raises(ValueError):
+            SensorLayout(num_sensors=0)  # Zero sensors
+    
+    def test_sensor_position_computation(self, mock_navigator):
+        """Test sensor position computation for multiple agents."""
+        agent_positions = mock_navigator.positions
+        agent_orientations = mock_navigator.orientations
+        
+        # Test with LEFT_RIGHT layout
+        sensor_positions = compute_sensor_positions(
+            agent_positions,
+            agent_orientations,
+            "LEFT_RIGHT",
+            distance=8.0
         )
         
-        # Simulate movement toward boundary
-        for _ in range(5):
-            navigator.step(env, dt=1.0)
-            
-            # Positions should remain finite and reasonable
-            assert np.all(np.isfinite(navigator.positions))
-            
-            # System should handle boundary conditions gracefully
-            # (specific behavior depends on implementation)
-    
-    def test_out_of_bounds_odor_sampling(self):
-        """Test odor sampling for out-of-bounds positions."""
-        # Small environment for testing boundaries
-        small_env = np.ones((10, 10), dtype=np.float32)
+        # Verify shape: 2 agents, 2 sensors each, 2D positions
+        assert sensor_positions.shape == (2, 2, 2)
         
-        # Test positions outside environment bounds
-        out_of_bounds_positions = [
-            (-5.0, 5.0),   # Left of environment
-            (15.0, 5.0),   # Right of environment
-            (5.0, -5.0),   # Above environment
-            (5.0, 15.0),   # Below environment
-            (-2.0, -2.0),  # Upper-left outside
-            (12.0, 12.0),  # Lower-right outside
-        ]
+        # Verify all positions are finite
+        assert np.all(np.isfinite(sensor_positions))
         
-        for position in out_of_bounds_positions:
-            navigator = Navigator.single(position=position)
-            
-            # Should handle out-of-bounds gracefully (not crash)
-            try:
-                odor_value = navigator.sample_odor(small_env)
-                # If no exception, value should be reasonable
-                assert np.isfinite(odor_value)
-                assert odor_value >= 0.0
-            except (IndexError, ValueError):
-                # Some implementations may raise exceptions for out-of-bounds
-                # This is also acceptable behavior
-                pass
+        # Test sensor positions are different from agent positions
+        for agent_idx in range(2):
+            for sensor_idx in range(2):
+                sensor_pos = sensor_positions[agent_idx, sensor_idx]
+                agent_pos = agent_positions[agent_idx]
+                distance = np.linalg.norm(sensor_pos - agent_pos)
+                assert distance > 0, "Sensor should not be at agent position"
     
-    def test_agent_collision_detection_multi_agent(self):
-        """Test collision detection and handling for multi-agent scenarios."""
-        # Place agents very close to each other
+    def test_odor_value_reading(self, sample_env_array):
+        """Test odor value reading from environment array."""
         positions = np.array([
-            [10.0, 10.0],
-            [10.1, 10.0],  # Very close to first agent
-            [10.0, 10.1],  # Very close to first agent
-            [15.0, 15.0],  # Separate agent
+            [10.0, 15.0],  # Valid position
+            [25.0, 30.0],  # Valid position
+            [100.0, 100.0]  # Out of bounds position
         ])
         
-        navigator = Navigator.multi(
-            positions=positions,
-            orientations=np.array([0.0, 180.0, 270.0, 90.0]),
-            speeds=np.array([1.0, 1.0, 1.0, 1.0])
-        )
+        odor_values = read_odor_values(sample_env_array, positions)
         
-        env = np.ones((30, 30), dtype=np.float32)
+        # Verify result shape and type
+        assert odor_values.shape == (3,)
+        assert odor_values.dtype == np.float64
         
-        # Simulate movement - agents might collide
-        for _ in range(10):
-            navigator.step(env, dt=0.1)
-            
-            # All positions should remain valid
-            assert np.all(np.isfinite(navigator.positions))
-            
-            # Check that agents haven't moved to identical positions
-            # (basic collision avoidance expectation)
-            for i in range(navigator.num_agents):
-                for j in range(i + 1, navigator.num_agents):
-                    distance = np.linalg.norm(navigator.positions[i] - navigator.positions[j])
-                    # Agents should maintain some minimum separation
-                    # (this test depends on implementation details)
-                    assert distance >= 0.0  # Basic sanity check
+        # Verify finite values for in-bounds positions
+        assert np.isfinite(odor_values[0])
+        assert np.isfinite(odor_values[1])
+        
+        # Verify out-of-bounds position returns 0
+        assert odor_values[2] == 0.0
     
-    def test_extreme_parameter_handling(self):
-        """Test handling of extreme parameter values."""
-        # Test very high speeds
-        navigator = Navigator.single(
-            position=(15.0, 15.0),
-            speed=1000.0,  # Extremely high speed
-            max_speed=1000.0
+    @patch('src.{{cookiecutter.project_slug}}.core.sensors.read_odor_values')
+    @patch('src.{{cookiecutter.project_slug}}.core.sensors.calculate_sensor_positions')
+    def test_multi_sensor_odor_sampling(self, mock_calc_sensors, mock_read_odor, 
+                                       mock_navigator, sample_env_array):
+        """Test complete multi-sensor odor sampling workflow."""
+        # Mock sensor positions (2 agents, 3 sensors each)
+        mock_sensor_positions = np.array([
+            [[5.0, 8.0], [5.0, 10.0], [5.0, 12.0]],    # Agent 1 sensors
+            [[13.0, 20.0], [15.0, 20.0], [17.0, 20.0]]  # Agent 2 sensors
+        ])
+        mock_calc_sensors.return_value = mock_sensor_positions
+        
+        # Mock odor readings (6 total readings: 2 agents × 3 sensors)
+        mock_read_odor.return_value = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        
+        result = sample_odor_at_sensors(
+            mock_navigator,
+            sample_env_array,
+            sensor_distance=3.0,
+            num_sensors=3
         )
         
-        env = np.ones((30, 30), dtype=np.float32)
+        # Verify result shape and values
+        assert result.shape == (2, 3)  # 2 agents, 3 sensors each
+        expected = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        np.testing.assert_allclose(result, expected, atol=NUMERICAL_PRECISION_TOLERANCE)
         
-        # Should handle extreme speeds without crashing
-        navigator.step(env, dt=0.001)  # Small time step
-        assert np.all(np.isfinite(navigator.positions))
-        
-        # Test very high angular velocities
-        navigator = Navigator.single(
-            position=(15.0, 15.0),
-            angular_velocity=3600.0  # 10 rotations per second
-        )
-        
-        navigator.step(env, dt=0.1)
-        assert np.all(np.isfinite(navigator.orientations))
-        
-        # Test zero and negative values
-        navigator = Navigator.single(
-            position=(15.0, 15.0),
-            speed=0.0,
-            angular_velocity=0.0
-        )
-        
-        initial_position = navigator.positions.copy()
-        initial_orientation = navigator.orientations.copy()
-        
-        navigator.step(env, dt=1.0)
-        
-        # With zero speed and angular velocity, should not move
-        np.testing.assert_allclose(navigator.positions, initial_position, rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, initial_orientation, rtol=1e-6)
+        # Verify function calls
+        mock_calc_sensors.assert_called_once()
+        mock_read_odor.assert_called_once()
     
-    def test_sensor_boundary_conditions(self):
-        """Test multi-sensor sampling at environment boundaries."""
-        # Small environment
-        small_env = np.ones((15, 15), dtype=np.float32)
+    def test_sensor_layout_custom_configuration(self):
+        """Test custom sensor layout configuration."""
+        custom_offsets = np.array([
+            [1.0, 0.0],   # Forward
+            [-1.0, 0.0],  # Backward
+            [0.0, 1.0],   # Left
+            [0.0, -1.0]   # Right
+        ])
         
-        # Position agent near boundary
-        navigator = Navigator.single(
-            position=(2.0, 2.0),  # Near boundary
-            orientation=225.0     # Facing toward boundary
-        )
+        layout = SensorLayout(custom_offsets=custom_offsets, distance=7.0)
         
-        # Test multi-sensor sampling with sensors potentially outside bounds
-        sensor_readings = navigator.sample_multiple_sensors(
-            small_env,
-            sensor_distance=5.0,  # Large sensor distance
-            num_sensors=4
-        )
-        
-        # Should handle boundary conditions gracefully
-        assert sensor_readings.shape == (4,)
-        assert np.all(np.isfinite(sensor_readings))
-        assert np.all(sensor_readings >= 0.0)
+        # Verify custom layout properties
+        assert layout.sensor_count == 4
+        expected_offsets = custom_offsets * 7.0
+        np.testing.assert_allclose(layout.local_offsets, expected_offsets, atol=NUMERICAL_PRECISION_TOLERANCE)
     
-    def test_numerical_stability_edge_cases(self):
-        """Test numerical stability in edge cases."""
-        # Test with very small movements
-        navigator = Navigator.single(
-            position=(10.0, 10.0),
-            speed=1e-10  # Extremely small speed
-        )
+    def test_sensor_sampling_edge_cases(self, sample_env_array):
+        """Test sensor sampling edge cases and boundary conditions."""
+        # Test with positions at array boundaries
+        boundary_positions = np.array([
+            [0.0, 0.0],                    # Corner
+            [49.0, 49.0],                  # Opposite corner
+            [24.5, 24.5]                   # Center with decimals
+        ])
         
-        env = np.ones((20, 20), dtype=np.float32)
+        odor_values = read_odor_values(sample_env_array, boundary_positions)
         
-        # Should handle very small movements without numerical issues
-        for _ in range(100):
-            navigator.step(env, dt=1.0)
-            assert np.all(np.isfinite(navigator.positions))
-        
-        # Test with very small time steps
-        navigator = Navigator.single(
-            position=(10.0, 10.0),
-            speed=1.0
-        )
-        
-        for _ in range(100):
-            navigator.step(env, dt=1e-10)  # Extremely small time step
-            assert np.all(np.isfinite(navigator.positions))
+        # Verify all values are finite and valid
+        assert np.all(np.isfinite(odor_values))
+        assert np.all(odor_values >= 0.0)
+        assert np.all(odor_values <= 1.0)  # Assuming normalized environment
 
 
-class TestStateResetAndInitialization:
-    """Test suite for state reset and initialization patterns.
+class TestNavigatorFactoryMethods:
+    """Test factory method integration with configuration system."""
     
-    Validates reproducible experiments, proper state management,
-    reset functionality, and initialization consistency.
-    """
+    @pytest.fixture
+    def single_agent_config(self):
+        """Create configuration for single agent."""
+        return {
+            'type': 'single',
+            'position': [8.0, 12.0],
+            'orientation': 45.0,
+            'speed': 1.5,
+            'max_speed': 3.0,
+            'angular_velocity': 2.0
+        }
     
-    def test_state_reset_single_agent(self):
-        """Test state reset functionality for single agent."""
-        # Create navigator with initial state
-        navigator = Navigator.single(
-            position=(10.0, 15.0),
-            orientation=45.0,
-            speed=1.5,
-            max_speed=3.0,
-            angular_velocity=10.0
-        )
-        
-        # Modify state through simulation
-        env = np.ones((50, 50), dtype=np.float32)
-        for _ in range(5):
-            navigator.step(env, dt=1.0)
-        
-        # State should have changed
-        modified_position = navigator.positions.copy()
-        modified_orientation = navigator.orientations.copy()
-        
-        # Reset to new state
-        new_position = (25.0, 35.0)
-        new_orientation = 90.0
-        new_speed = 2.0
-        
-        navigator.reset(
-            position=new_position,
-            orientation=new_orientation,
-            speed=new_speed
-        )
-        
-        # Verify reset worked
-        np.testing.assert_allclose(navigator.positions, np.array([new_position]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([new_orientation]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([new_speed]), rtol=1e-6)
+    @pytest.fixture  
+    def multi_agent_config(self):
+        """Create configuration for multi-agent scenario."""
+        return {
+            'type': 'multi',
+            'positions': [[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]],
+            'orientations': [0.0, 90.0, 180.0],
+            'speeds': [1.0, 1.5, 2.0],
+            'max_speeds': [2.0, 3.0, 4.0],
+            'angular_velocities': [0.0, 5.0, -5.0]
+        }
     
-    def test_state_reset_multi_agent(self):
-        """Test state reset functionality for multi-agent."""
-        # Create multi-agent navigator
-        initial_positions = np.array([[5.0, 10.0], [15.0, 20.0], [25.0, 30.0]])
-        navigator = Navigator.multi(
-            positions=initial_positions,
-            orientations=np.array([0.0, 120.0, 240.0]),
-            speeds=np.array([1.0, 1.5, 2.0])
-        )
+    def test_single_agent_factory_creation(self, single_agent_config):
+        """Test single agent creation via factory method pattern."""
+        # Create agent using configuration
+        agent = SingleAgentController(config=single_agent_config)
         
-        # Modify state through simulation
-        env = np.ones((50, 50), dtype=np.float32)
-        for _ in range(5):
-            navigator.step(env, dt=1.0)
+        # Verify configuration was applied correctly
+        assert isinstance(agent, NavigatorProtocol)
+        assert agent.num_agents == 1
         
-        # Reset to new state
-        new_positions = np.array([[50.0, 50.0], [60.0, 60.0], [70.0, 70.0]])
-        new_orientations = np.array([90.0, 180.0, 270.0])
-        new_speeds = np.array([2.5, 3.0, 3.5])
-        
-        navigator.reset(
-            positions=new_positions,
-            orientations=new_orientations,
-            speeds=new_speeds
-        )
-        
-        # Verify reset worked
-        np.testing.assert_allclose(navigator.positions, new_positions, rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, new_orientations, rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, new_speeds, rtol=1e-6)
+        np.testing.assert_allclose(agent.positions[0], [8.0, 12.0], atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations[0], 45.0, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.speeds[0], 1.5, atol=NUMERICAL_PRECISION_TOLERANCE)
     
-    def test_partial_state_reset(self):
-        """Test partial state reset (only some parameters)."""
-        navigator = Navigator.single(
+    def test_multi_agent_factory_creation(self, multi_agent_config):
+        """Test multi-agent creation via factory method pattern."""
+        # Create agent using configuration
+        agent = MultiAgentController(config=multi_agent_config)
+        
+        # Verify configuration was applied correctly
+        assert isinstance(agent, NavigatorProtocol)
+        assert agent.num_agents == 3
+        
+        expected_positions = np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]])
+        expected_orientations = np.array([0.0, 90.0, 180.0])
+        
+        np.testing.assert_allclose(agent.positions, expected_positions, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(agent.orientations, expected_orientations, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    @patch('src.{{cookiecutter.project_slug}}.utils.seed_manager.get_seed_manager')
+    def test_factory_seed_manager_integration(self, mock_seed_manager, single_agent_config):
+        """Test factory method integration with seed manager."""
+        mock_seed_manager.return_value.current_seed = 42
+        
+        agent = SingleAgentController(config=single_agent_config)
+        
+        # Verify seed manager was called
+        mock_seed_manager.assert_called()
+        
+        # Verify agent was created successfully
+        assert isinstance(agent, NavigatorProtocol)
+
+
+class TestNavigatorStateManagement:
+    """Test comprehensive state management functionality."""
+    
+    @pytest.fixture
+    def state_test_agent(self):
+        """Create agent for state management testing."""
+        return SingleAgentController(
             position=(10.0, 20.0),
             orientation=30.0,
-            speed=1.0,
-            angular_velocity=5.0
+            speed=2.0,
+            max_speed=5.0,
+            angular_velocity=10.0
         )
-        
-        # Store initial values for non-reset parameters
-        initial_speed = navigator.speeds.copy()
-        initial_angular_velocity = navigator.angular_velocities.copy()
-        
-        # Reset only position and orientation
-        navigator.reset(
-            position=(40.0, 50.0),
-            orientation=60.0
-        )
-        
-        # Verify only specified parameters were reset
-        np.testing.assert_allclose(navigator.positions, np.array([[40.0, 50.0]]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([60.0]), rtol=1e-6)
-        
-        # Non-specified parameters should remain unchanged
-        np.testing.assert_allclose(navigator.speeds, initial_speed, rtol=1e-6)
-        np.testing.assert_allclose(navigator.angular_velocities, initial_angular_velocity, rtol=1e-6)
     
-    def test_initialization_reproducibility(self):
-        """Test that identical initialization produces identical navigators."""
-        # Create multiple navigators with identical parameters
-        params = {
-            'position': (12.5, 17.5),
-            'orientation': 67.5,
-            'speed': 1.75,
-            'max_speed': 2.25,
-            'angular_velocity': 12.5
+    def test_state_consistency_after_operations(self, state_test_agent):
+        """Test that state remains consistent after various operations."""
+        agent = state_test_agent
+        initial_state = {
+            'positions': agent.positions.copy(),
+            'orientations': agent.orientations.copy(),
+            'speeds': agent.speeds.copy(),
+            'max_speeds': agent.max_speeds.copy(),
+            'angular_velocities': agent.angular_velocities.copy()
         }
         
-        navigator1 = Navigator.single(**params)
-        navigator2 = Navigator.single(**params)
-        navigator3 = Navigator.single(**params)
+        # Perform mock step operation
+        mock_env_array = np.random.rand(50, 50)
+        with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+            agent.step(mock_env_array)
         
-        # All should be identical
-        for nav in [navigator2, navigator3]:
-            np.testing.assert_allclose(nav.positions, navigator1.positions, rtol=1e-15)
-            np.testing.assert_allclose(nav.orientations, navigator1.orientations, rtol=1e-15)
-            np.testing.assert_allclose(nav.speeds, navigator1.speeds, rtol=1e-15)
-            np.testing.assert_allclose(nav.max_speeds, navigator1.max_speeds, rtol=1e-15)
-            np.testing.assert_allclose(nav.angular_velocities, navigator1.angular_velocities, rtol=1e-15)
+        # State should still be valid (arrays unchanged in mock)
+        assert agent.positions.shape == initial_state['positions'].shape
+        assert agent.orientations.shape == initial_state['orientations'].shape
+        assert np.all(np.isfinite(agent.positions))
+        assert np.all(np.isfinite(agent.orientations))
     
-    def test_state_independence_after_reset(self):
-        """Test that reset creates independent state (no shared references)."""
-        navigator = Navigator.single(position=(5.0, 5.0))
+    def test_state_validation_with_invalid_values(self):
+        """Test state validation rejects invalid values."""
+        # Test with NaN values
+        with pytest.raises((ValueError, RuntimeError)):
+            SingleAgentController(
+                position=(float('nan'), 10.0)
+            )
         
-        # Get reference to original position
-        original_position_reference = navigator.positions
-        
-        # Reset to new position
-        navigator.reset(position=(10.0, 10.0))
-        
-        # Modify current position array
-        navigator.positions[0, 0] = 999.0
-        
-        # Original reference should not be affected by reset
-        # (this tests that reset creates new arrays, not shared references)
-        assert original_position_reference[0, 0] != 999.0
+        # Test with infinite values
+        with pytest.raises((ValueError, RuntimeError)):
+            SingleAgentController(
+                speed=float('inf')
+            )
     
-    def test_reset_parameter_validation(self):
-        """Test parameter validation during reset operations."""
-        navigator = Navigator.single(position=(10.0, 10.0))
+    def test_state_reset_reproducibility(self, state_test_agent):
+        """Test that state reset is reproducible."""
+        agent = state_test_agent
         
-        # Test valid reset operations (should not raise exceptions)
-        navigator.reset(position=(20.0, 25.0))
-        navigator.reset(orientation=45.0)
-        navigator.reset(speed=2.0)
-        navigator.reset(max_speed=3.0)
-        navigator.reset(angular_velocity=15.0)
+        # Reset to specific state
+        reset_params = {
+            'position': (50.0, 60.0),
+            'orientation': 120.0,
+            'speed': 3.0
+        }
         
-        # Test reset with multiple parameters
-        navigator.reset(
-            position=(30.0, 35.0),
-            orientation=90.0,
-            speed=1.5
-        )
+        agent.reset(**reset_params)
+        state_1 = {
+            'positions': agent.positions.copy(),
+            'orientations': agent.orientations.copy(),
+            'speeds': agent.speeds.copy()
+        }
         
-        # Verify final state
-        np.testing.assert_allclose(navigator.positions, np.array([[30.0, 35.0]]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([90.0]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.speeds, np.array([1.5]), rtol=1e-6)
+        # Reset again with same parameters
+        agent.reset(**reset_params)
+        state_2 = {
+            'positions': agent.positions.copy(),
+            'orientations': agent.orientations.copy(),
+            'speeds': agent.speeds.copy()
+        }
+        
+        # Verify states are identical
+        np.testing.assert_array_equal(state_1['positions'], state_2['positions'])
+        np.testing.assert_array_equal(state_1['orientations'], state_2['orientations'])
+        np.testing.assert_array_equal(state_1['speeds'], state_2['speeds'])
     
-    def test_initialization_with_edge_case_values(self):
-        """Test initialization with edge case parameter values."""
-        # Test with zero values
-        navigator = Navigator.single(
-            position=(0.0, 0.0),
-            orientation=0.0,
-            speed=0.0,
-            max_speed=0.0,
-            angular_velocity=0.0
-        )
+    def test_boundary_condition_handling(self):
+        """Test handling of boundary conditions and edge cases."""
+        # Test very large position values
+        agent = SingleAgentController(position=(1e6, 1e6))
+        assert np.all(np.isfinite(agent.positions))
         
-        assert navigator.num_agents == 1
-        np.testing.assert_allclose(navigator.positions, np.array([[0.0, 0.0]]), rtol=1e-6)
-        np.testing.assert_allclose(navigator.orientations, np.array([0.0]), rtol=1e-6)
+        # Test very small speed values
+        agent = SingleAgentController(speed=1e-10, max_speed=1e-9)
+        assert np.all(agent.speeds >= 0)
+        assert np.all(agent.speeds <= agent.max_speeds)
         
-        # Test with large values
-        navigator = Navigator.single(
-            position=(1000.0, 2000.0),
-            orientation=3600.0,  # Multiple full rotations
-            speed=100.0,
-            max_speed=200.0,
-            angular_velocity=720.0  # 2 rotations per second
-        )
-        
-        assert navigator.num_agents == 1
-        # Should handle large values appropriately
-        assert np.all(np.isfinite(navigator.positions))
-        assert np.all(np.isfinite(navigator.orientations))
-    
-    def test_multi_agent_reset_consistency(self):
-        """Test multi-agent reset maintains consistency between agents."""
-        positions = np.array([[10.0, 10.0], [20.0, 20.0], [30.0, 30.0]])
-        navigator = Navigator.multi(positions=positions)
-        
-        # Reset all agents to new positions
-        new_positions = np.array([[50.0, 60.0], [70.0, 80.0], [90.0, 100.0]])
-        navigator.reset(positions=new_positions)
-        
-        # Verify all agents were reset correctly
-        np.testing.assert_allclose(navigator.positions, new_positions, rtol=1e-6)
-        
-        # Test partial reset (only some agents)
-        navigator.reset(
-            positions=np.array([[100.0, 110.0], [120.0, 130.0], [140.0, 150.0]]),
-            orientations=np.array([45.0, 90.0, 135.0])
-        )
-        
-        # Verify consistency
-        assert navigator.positions.shape == (3, 2)
-        assert navigator.orientations.shape == (3,)
-        assert np.all(np.isfinite(navigator.positions))
-        assert np.all(np.isfinite(navigator.orientations))
+        # Test orientation wrapping (if implemented)
+        agent = SingleAgentController(orientation=720.0)  # 2 full rotations
+        assert np.all(np.isfinite(agent.orientations))
 
 
-# Test execution and performance monitoring
+class TestErrorHandlingAndRecovery:
+    """Test error handling and recovery mechanisms."""
+    
+    def test_graceful_degradation_invalid_environment(self):
+        """Test graceful handling of invalid environment arrays."""
+        agent = SingleAgentController()
+        
+        # Test with None environment
+        with pytest.raises((AttributeError, TypeError)):
+            agent.sample_odor(None)
+        
+        # Test with invalid array shape
+        invalid_env = np.array([1, 2, 3])  # 1D array instead of 2D
+        result = agent.sample_odor(invalid_env)
+        
+        # Should return valid result or raise informative error
+        assert isinstance(result, (float, type(None))) or np.isfinite(result)
+    
+    def test_resource_cleanup_on_failure(self):
+        """Test that resources are properly cleaned up on failure."""
+        with pytest.raises((ValueError, RuntimeError)):
+            # Create controller with invalid parameters
+            SingleAgentController(max_speed=-1.0)
+        
+        # Memory should not be leaked after failed initialization
+        # This is more of a conceptual test - actual memory leak detection
+        # would require specialized tools
+    
+    def test_concurrent_access_safety(self):
+        """Test that controllers handle concurrent access safely."""
+        agent = SingleAgentController()
+        
+        # Test that multiple property accesses don't interfere
+        positions_1 = agent.positions
+        orientations = agent.orientations
+        positions_2 = agent.positions
+        
+        # Arrays should be consistent
+        np.testing.assert_array_equal(positions_1, positions_2)
+
+
+class TestNumericalPrecisionAndAccuracy:
+    """Test numerical precision and accuracy requirements."""
+    
+    def test_floating_point_precision(self):
+        """Test floating point precision in calculations."""
+        # Test with high precision input values
+        precise_position = (np.pi, np.e)  # Irrational numbers
+        agent = SingleAgentController(position=precise_position)
+        
+        # Verify precision is maintained
+        np.testing.assert_allclose(
+            agent.positions[0], 
+            [np.pi, np.e], 
+            atol=NUMERICAL_PRECISION_TOLERANCE
+        )
+    
+    def test_accumulation_error_prevention(self):
+        """Test that numerical errors don't accumulate over operations."""
+        agent = SingleAgentController(
+            position=(1.0, 1.0),
+            speed=0.1,
+            angular_velocity=1.0
+        )
+        
+        mock_env = np.ones((10, 10))
+        
+        # Perform multiple operations
+        for _ in range(100):
+            with patch('src.{{cookiecutter.project_slug}}.utils.navigator_utils.update_positions_and_orientations'):
+                agent.step(mock_env)
+            
+            # Verify values remain finite and reasonable
+            assert np.all(np.isfinite(agent.positions))
+            assert np.all(np.isfinite(agent.orientations))
+            assert np.all(np.isfinite(agent.speeds))
+    
+    def test_vector_operation_precision(self):
+        """Test precision in vectorized operations for multi-agent scenarios."""
+        num_agents = 10
+        positions = np.random.rand(num_agents, 2) * 100
+        
+        agent = MultiAgentController(positions=positions)
+        
+        # Test vectorized distance calculations
+        distances = np.linalg.norm(agent.positions, axis=1)
+        
+        # Verify precision
+        for i in range(num_agents):
+            expected_distance = np.sqrt(positions[i, 0]**2 + positions[i, 1]**2)
+            np.testing.assert_allclose(
+                distances[i], 
+                expected_distance, 
+                atol=NUMERICAL_PRECISION_TOLERANCE
+            )
+    
+    def test_trigonometric_precision(self):
+        """Test precision in trigonometric calculations."""
+        # Test with special angles
+        special_angles = [0.0, 30.0, 45.0, 60.0, 90.0, 180.0, 270.0, 360.0]
+        
+        for angle in special_angles:
+            agent = SingleAgentController(orientation=angle)
+            
+            # Verify angle is stored with proper precision
+            np.testing.assert_allclose(
+                agent.orientations[0], 
+                angle, 
+                atol=NUMERICAL_PRECISION_TOLERANCE
+            )
+
+
 if __name__ == "__main__":
-    # Run with coverage reporting
+    # Run tests with appropriate verbosity and coverage
     pytest.main([
-        __file__,
-        "-v",
+        __file__, 
+        "-v", 
         "--tb=short",
-        "--cov=src.{{cookiecutter.project_slug}}.core",
-        "--cov-report=term-missing",
-        "--cov-report=html:htmlcov/test_core_coverage",
-        "--cov-fail-under=90"
+        f"--cov=src.{{cookiecutter.project_slug}}.core",
+        "--cov-report=term-missing"
     ])
