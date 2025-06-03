@@ -1,565 +1,641 @@
 # ============================================================================
-# ODOR PLUME NAVIGATION: FOUNDATIONAL CONFIGURATION (base.yaml)
+# ODOR PLUME NAVIGATION: FOUNDATIONAL DEFAULT CONFIGURATION (base.yaml)  
 # ============================================================================
 #
-# This file provides the immutable foundation defaults for the Hydra-based
-# hierarchical configuration system. It defines core parameter baselines for
-# all odor plume navigation components and serves as the base for configuration
-# composition across development, testing, and production environments.
+# This file defines the immutable foundational defaults for the Hydra-based
+# odor plume navigation system. It serves as the baseline configuration that
+# all other configurations inherit from, providing consistent and stable 
+# default values across development, testing, and production environments.
 #
-# Configuration Hierarchy:
-#   1. conf/base.yaml (this file) - Foundational defaults
-#   2. conf/config.yaml - Environment-specific overrides  
-#   3. conf/local/*.yaml - Runtime customizations
+# HIERARCHICAL CONFIGURATION COMPOSITION:
+#   1. conf/base.yaml (THIS FILE) - Immutable system foundation defaults
+#   2. conf/config.yaml - User customizations and environment-specific overrides
+#   3. conf/local/*.yaml - Local development and deployment-specific secrets
+#   4. CLI overrides - Dynamic runtime parameter modifications
 #
-# Key Features:
-#   - Hydra structured configuration support with OmegaConf compatibility
-#   - Environment variable interpolation via ${oc.env:VAR_NAME} syntax
-#   - Comprehensive parameter coverage for all Pydantic validation schemas
-#   - Cross-platform compatibility with secure credential management
-#   - Performance optimization settings for scientific computing workflows
+# DESIGN PRINCIPLES:
+#   - Conservative defaults prioritizing stability and compatibility
+#   - Environment variable interpolation support for deployment flexibility
+#   - Comprehensive parameter coverage ensuring no missing configurations
+#   - Type-safe values compatible with Pydantic validation schemas
+#   - Performance-optimized defaults suitable for research workflows
 #
-# Note: This configuration is designed to be inherited and extended, not
-# modified directly. Create environment-specific overrides in conf/config.yaml
-# or local configurations in conf/local/ for customizations.
+# HYDRA INTEGRATION FEATURES:
+#   - Structured configuration support with automatic schema validation
+#   - Environment variable interpolation through ${oc.env:VAR_NAME,default}
+#   - Configuration group composition and parameter inheritance
+#   - Multi-run execution support for automated parameter sweeps
+#   - Working directory management and output organization
+#
+# DO NOT MODIFY THIS FILE DIRECTLY:
+#   This file contains foundational defaults that should remain stable.
+#   Use conf/config.yaml for customizations and conf/local/ for secrets.
+#   Override specific parameters through CLI arguments or environment variables.
 #
 # ============================================================================
 
-# Hydra framework configuration for structured composition and runtime management
-hydra:
-  # Output directory management for reproducible experiment tracking
-  run:
-    # Default output organization with timestamp-based directories
-    dir: outputs/runs/${now:%Y-%m-%d_%H-%M-%S}
-  
-  # Multi-run execution support for parameter sweeps and batch processing
-  sweep:
-    dir: outputs/multirun/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: run_${hydra:job.num}
-  
-  # Job configuration with dynamic naming for experiment identification
-  job:
-    name: odor_plume_nav_${hydra:runtime.choices.navigator,single}_${hydra:runtime.choices.video_plume,default}
-    chdir: false  # Keep working directory stable for file path consistency
+# ============================================================================
+# HYDRA CONFIGURATION METADATA AND SYSTEM SETTINGS
+# ============================================================================
+# Core Hydra system configuration defining composition behavior and
+# structured configuration integration for type-safe parameter management.
+
+# @package _global_
+# Hydra structured configuration annotations for enhanced type safety
+# and automatic schema validation integration with Pydantic models
+
+_target_: "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig"
+_partial_: false
+_convert_: "object"
+
+# Configuration metadata for enhanced tooling and documentation
+_config_:
+  version: "1.0.0"
+  schema: "odor_plume_navigation_base"
+  description: "Foundational defaults for Hydra-based odor plume navigation system"
+  maintainer: "{{cookiecutter.author_name}} <{{cookiecutter.author_email}}>"
+  created: "2024-01-01"
+  last_modified: "2024-01-01"
+  compatibility:
+    python: ">=3.9"
+    hydra: ">=1.3.2"
+    numpy: ">=1.24.0"
+    opencv: ">=4.8.0"
+
+# Hydra composition defaults - defines the baseline configuration hierarchy
+defaults:
+  # Core structured configuration schemas (registered via ConfigStore)
+  - _self_
 
 # ============================================================================
-# NAVIGATOR CONFIGURATION
+# ENVIRONMENT AND SYSTEM FOUNDATION DEFAULTS
 # ============================================================================
-# Comprehensive navigation parameter defaults supporting both single-agent
-# and multi-agent scenarios with vectorized operations and protocol-based
-# extensibility. Parameters align with NavigatorConfig Pydantic schema.
-
-navigator:
-  # Single-agent navigation parameters (primary configuration mode)
-  position: null  # [x, y] coordinates - null enables automatic initialization
-  orientation: 0.0  # Initial orientation in degrees (0=right, 90=up, 180=left, 270=down)
-  speed: 0.0  # Initial speed in units per time step
-  max_speed: 1.0  # Maximum allowed speed for movement constraints
-  angular_velocity: 0.0  # Initial angular velocity in degrees per second
-
-  # Multi-agent navigation parameters (activated when positions is not null)
-  positions: null  # List of [x, y] positions for multi-agent scenarios
-  orientations: null  # List of orientations for each agent (degrees)
-  speeds: null  # List of initial speeds for each agent
-  max_speeds: null  # List of maximum speeds for each agent
-  angular_velocities: null  # List of angular velocities for each agent (degrees/second)
-  num_agents: null  # Number of agents for multi-agent simulations
-
-  # Advanced navigation parameters for sophisticated control algorithms
-  control:
-    # Movement dynamics and physics-based parameters
-    acceleration: 0.1  # Maximum acceleration per time step
-    deceleration: 0.1  # Maximum deceleration per time step
-    turning_rate: 30.0  # Maximum turning rate in degrees per second
-    inertia_factor: 0.9  # Movement inertia (0=instant stop, 1=no friction)
-    
-    # Boundary and collision handling
-    boundary_behavior: "reflect"  # Options: reflect, wrap, stop, absorb
-    collision_detection: false  # Enable agent-to-agent collision detection
-    collision_radius: 1.0  # Agent collision radius for multi-agent scenarios
-    
-    # Sensor and sampling configuration
-    sensor_range: 10.0  # Maximum sensor detection range
-    sensor_resolution: 1.0  # Spatial resolution for odor sampling
-    sensor_noise: 0.0  # Gaussian noise standard deviation for sensor readings
-
-  # Formation and swarm behavior parameters for multi-agent scenarios
-  formation:
-    type: "grid"  # Formation pattern: grid, circle, line, random, custom
-    spacing: 5.0  # Distance between agents in formation
-    maintain_formation: false  # Whether to actively maintain formation during navigation
-    leader_follower: false  # Enable leader-follower dynamics
-    communication_range: 15.0  # Range for agent-to-agent communication
-
-# ============================================================================
-# VIDEO PLUME CONFIGURATION  
-# ============================================================================
-# Video-based odor plume environment parameters supporting comprehensive
-# preprocessing, analysis, and real-time processing. Aligns with 
-# VideoPlumeConfig Pydantic schema for OpenCV integration.
-
-video_plume:
-  # Video file specification (required parameter)
-  video_path: ${oc.env:VIDEO_PATH,""}  # Path to video file with environment variable support
-  
-  # Basic preprocessing parameters for frame transformation
-  flip: false  # Horizontal flip for coordinate system alignment
-  grayscale: true  # Convert to grayscale for simplified processing
-  kernel_size: 0  # Gaussian kernel size (0=no smoothing, must be odd if >0)
-  kernel_sigma: 1.0  # Gaussian kernel standard deviation for smoothing
-  threshold: null  # Threshold value for binary plume detection (null=no thresholding)
-  normalize: true  # Normalize frame intensities to [0,1] range
-
-  # Advanced preprocessing and enhancement options
-  preprocessing:
-    # Contrast and brightness adjustments
-    enhance_contrast: false  # Enable adaptive histogram equalization
-    contrast_alpha: 1.0  # Contrast adjustment factor (1.0=no change)
-    brightness_beta: 0.0  # Brightness adjustment offset
-    
-    # Noise reduction and filtering
-    median_filter_size: 0  # Median filter kernel size (0=disabled)
-    bilateral_filter: false  # Enable edge-preserving bilateral filtering
-    bilateral_d: 9  # Bilateral filter diameter
-    bilateral_sigma_color: 75.0  # Bilateral filter color sigma
-    bilateral_sigma_space: 75.0  # Bilateral filter spatial sigma
-    
-    # Morphological operations for plume structure enhancement
-    morphology_enabled: false  # Enable morphological operations
-    morphology_operation: "opening"  # Options: opening, closing, gradient, tophat, blackhat
-    morphology_kernel_size: 3  # Morphological operation kernel size
-    morphology_iterations: 1  # Number of morphological operation iterations
-
-  # Frame extraction and temporal processing
-  sampling:
-    # Frame selection and temporal resolution
-    start_frame: 0  # Starting frame index for processing
-    end_frame: null  # Ending frame index (null=process all frames)
-    frame_skip: 1  # Process every Nth frame (1=process all frames)
-    temporal_window: 1  # Number of frames for temporal averaging
-    
-    # Region of interest (ROI) specification
-    roi_enabled: false  # Enable region of interest processing
-    roi_x: 0  # ROI top-left x coordinate
-    roi_y: 0  # ROI top-left y coordinate  
-    roi_width: null  # ROI width (null=full frame width)
-    roi_height: null  # ROI height (null=full frame height)
-
-  # Performance and optimization settings
-  performance:
-    # Memory management and caching
-    frame_cache_size: 100  # Number of frames to cache in memory
-    preload_frames: false  # Preload all frames into memory (for small videos)
-    memory_limit_mb: 1024  # Maximum memory usage for frame processing
-    
-    # Processing optimization
-    multithreading: false  # Enable multithreaded frame processing
-    thread_count: 4  # Number of processing threads
-    gpu_acceleration: false  # Enable GPU acceleration if available
-    
-    # Video codec and format handling
-    force_codec: null  # Force specific video codec (null=auto-detect)
-    pixel_format: "bgr24"  # Pixel format for frame processing
-
-# ============================================================================
-# SIMULATION EXECUTION CONFIGURATION
-# ============================================================================
-# Core simulation parameters controlling execution flow, timing, and 
-# data collection for reproducible research workflows.
-
-simulation:
-  # Temporal parameters and execution control
-  max_duration: 300.0  # Maximum simulation duration in seconds
-  max_frames: null  # Maximum number of frames to process (null=no limit)
-  fps: 30  # Target frames per second for real-time simulation
-  time_step: 0.033  # Simulation time step in seconds (1/fps)
-  
-  # Real-time vs accelerated execution
-  real_time: true  # Run simulation in real-time vs maximum speed
-  speed_multiplier: 1.0  # Simulation speed multiplier (2.0=double speed)
-  frame_rate_limit: true  # Enforce frame rate limits for consistent timing
-  
-  # Simulation initialization and setup
-  initialization:
-    auto_start: true  # Automatically start simulation after setup
-    warmup_frames: 0  # Number of frames for system warmup
-    reset_on_boundary: false  # Reset agents when they hit boundaries
-    random_start_positions: false  # Randomize agent starting positions
-    
-    # Environment and world parameters
-    world_width: null  # World width in simulation units (null=use video width)
-    world_height: null  # World height in simulation units (null=use video height)
-    coordinate_system: "image"  # Coordinate system: image, cartesian, custom
-
-  # Data recording and output configuration
-  recording:
-    enabled: true  # Enable trajectory and sensor data recording
-    save_trajectories: true  # Save agent position trajectories
-    save_sensor_data: true  # Save odor concentration measurements
-    save_metadata: true  # Save simulation metadata and parameters
-    
-    # Output format and compression
-    export_format: "numpy"  # Export format: numpy, csv, hdf5, json
-    compression: null  # Compression method: gzip, bz2, lzma (null=no compression)
-    precision: "float32"  # Numerical precision for saved data
-    
-    # Sampling frequency for data collection
-    recording_frequency: 1  # Record every Nth frame (1=record all frames)
-    subsample_trajectories: false  # Subsample trajectory points for large datasets
-
-# ============================================================================
-# VISUALIZATION CONFIGURATION
-# ============================================================================
-# Comprehensive visualization parameters for real-time animation, static plots,
-# and publication-quality figure generation using matplotlib backend.
-
-visualization:
-  # Real-time animation parameters
-  animation:
-    enabled: false  # Enable real-time visualization during simulation
-    fps: 30  # Animation frame rate
-    real_time: true  # Synchronize animation with simulation timing
-    buffer_size: 100  # Frame buffer size for smooth animation
-    
-    # Display options and styling
-    show_trails: true  # Show agent trajectory trails
-    trail_length: 50  # Number of points in trajectory trails
-    show_sensors: false  # Display sensor ranges and orientations
-    show_plume_overlay: true  # Overlay plume visualization on video frames
-    
-    # Export and recording options
-    save_animation: false  # Save animation to video file
-    animation_format: "mp4"  # Animation export format: mp4, avi, gif
-    animation_quality: "high"  # Quality setting: low, medium, high, lossless
-
-  # Static plot generation and styling
-  plotting:
-    # Figure dimensions and layout
-    figure_size: [12, 8]  # Figure size in inches [width, height]
-    dpi: 150  # Dots per inch for high-quality output
-    subplot_layout: "auto"  # Subplot arrangement: auto, grid, custom
-    
-    # Color schemes and styling
-    color_scheme: "viridis"  # Matplotlib colormap for visualizations
-    agent_colors: ["red", "blue", "green", "orange", "purple"]  # Agent color cycle
-    background_color: "white"  # Plot background color
-    grid_enabled: true  # Show coordinate grid
-    
-    # Font and text settings
-    font_size: 12  # Base font size for labels and text
-    font_family: "sans-serif"  # Font family for text rendering
-    title_size: 16  # Title font size
-    label_size: 14  # Axis label font size
-    legend_size: 10  # Legend font size
-    
-    # Trajectory and path visualization
-    trajectory_style: "line"  # Trajectory style: line, scatter, both
-    trajectory_width: 2.0  # Line width for trajectory plots
-    marker_size: 8  # Marker size for position indicators
-    start_marker: "o"  # Starting position marker style
-    end_marker: "x"  # Ending position marker style
-
-  # 3D visualization and advanced plotting options
-  advanced:
-    # 3D plotting capabilities
-    enable_3d: false  # Enable 3D visualization modes
-    elevation_angle: 30  # 3D plot elevation angle
-    azimuth_angle: 45  # 3D plot azimuth angle
-    
-    # Interactive features
-    interactive_mode: false  # Enable interactive plot manipulation
-    zoom_enabled: true  # Allow zooming in plots
-    pan_enabled: true  # Allow panning in plots
-    
-    # Statistical visualization overlays
-    show_statistics: false  # Display statistical summaries on plots
-    confidence_intervals: false  # Show confidence intervals for trajectories
-    density_plots: false  # Generate trajectory density heatmaps
-
-# ============================================================================
-# LOGGING AND DEBUGGING CONFIGURATION
-# ============================================================================
-# Structured logging configuration using Loguru with support for multiple
-# output targets, performance monitoring, and debugging capabilities.
-
-logging:
-  # Core logging configuration
-  level: "INFO"  # Global log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
-  format: "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
-  
-  # Output destinations and file handling
-  console_enabled: true  # Enable console logging output
-  file_enabled: false  # Enable file logging output
-  file_path: "logs/odor_plume_nav.log"  # Log file path
-  file_rotation: "10 MB"  # Log file rotation size
-  file_retention: "1 week"  # Log file retention period
-  
-  # Structured logging and serialization
-  json_format: false  # Use JSON format for structured logging
-  include_extra_fields: true  # Include additional context fields
-  
-  # Performance monitoring and profiling
-  performance:
-    enabled: false  # Enable performance monitoring
-    timing_precision: "milliseconds"  # Timing precision: microseconds, milliseconds, seconds
-    memory_tracking: false  # Track memory usage in logs
-    function_profiling: false  # Enable function-level profiling
-    
-    # Critical performance thresholds
-    slow_operation_threshold: 1.0  # Log operations slower than N seconds
-    memory_warning_threshold: 512  # Warn when memory usage exceeds N MB
-
-  # Component-specific logging levels
-  components:
-    navigator: "INFO"  # Navigation algorithm logging level
-    video_plume: "INFO"  # Video processing logging level
-    configuration: "WARNING"  # Configuration system logging level
-    visualization: "ERROR"  # Visualization logging level (typically quiet)
-    database: "WARNING"  # Database operations logging level
-
-# ============================================================================
-# REPRODUCIBILITY AND SEED MANAGEMENT
-# ============================================================================
-# Comprehensive random seed management for deterministic simulation behavior
-# and reproducible research workflows across all stochastic components.
-
-reproducibility:
-  # Global seed management and initialization
-  global_seed: null  # Master seed for all random number generators (null=random)
-  auto_seed: true  # Automatically generate and log seeds if not specified
-  seed_logging: true  # Log all seeds used during simulation
-  
-  # Component-specific seed allocation
-  seeds:
-    numpy: null  # NumPy random number generator seed
-    python_random: null  # Python random module seed
-    navigation: null  # Navigation algorithm randomness seed
-    initialization: null  # Agent initialization randomness seed
-    sensor_noise: null  # Sensor noise generation seed
-    video_sampling: null  # Video frame sampling randomness seed
-  
-  # Deterministic behavior enforcement
-  deterministic:
-    strict_mode: false  # Enforce strict deterministic behavior
-    validate_reproducibility: false  # Validate that repeated runs are identical
-    hash_verification: false  # Generate and verify result hashes
-    
-    # Thread safety and parallel execution
-    thread_safe_rng: true  # Use thread-safe random number generators
-    parallel_seed_management: true  # Manage seeds for parallel execution
-
-# ============================================================================
-# PERFORMANCE AND OPTIMIZATION SETTINGS
-# ============================================================================
-# System-level performance optimization parameters for scientific computing
-# workflows with NumPy, OpenCV, and visualization backends.
-
-performance:
-  # NumPy optimization and mathematical libraries
-  numpy:
-    thread_count: 0  # Number of threads for NumPy operations (0=auto-detect)
-    memory_policy: "optimal"  # Memory allocation strategy: minimal, optimal, aggressive
-    precision: "float64"  # Default numerical precision: float32, float64
-    error_handling: "warn"  # NumPy error handling: ignore, warn, raise, call
-  
-  # OpenCV performance optimization
-  opencv:
-    thread_count: 4  # Number of threads for OpenCV operations
-    use_opencl: false  # Enable OpenCL acceleration if available
-    memory_limit: 512  # OpenCV memory limit in MB
-    optimization_flags: true  # Enable OpenCV optimization flags
-  
-  # Matplotlib and visualization performance
-  matplotlib:
-    backend: ${oc.env:MATPLOTLIB_BACKEND,"Agg"}  # Matplotlib backend (Agg=headless)
-    interactive: false  # Enable interactive matplotlib mode
-    figure_cache_size: 10  # Number of figures to cache in memory
-    
-    # Rendering optimization
-    rasterization_dpi: 150  # DPI for rasterized plot elements
-    vector_graphics: true  # Use vector graphics when possible
-    font_cache: true  # Enable font caching for better performance
-
-  # Memory management and garbage collection
-  memory:
-    garbage_collection: "auto"  # Garbage collection strategy: auto, manual, disabled
-    gc_threshold: 100  # Memory threshold for triggering garbage collection (MB)
-    large_array_threshold: 50  # Threshold for large array handling (MB)
-    
-    # Cache and buffer management
-    enable_caching: true  # Enable various system caches
-    cache_limit: 256  # Total cache size limit in MB
-    buffer_size: 32  # I/O buffer size in MB
-
-# ============================================================================
-# ENVIRONMENT AND DEPLOYMENT CONFIGURATION
-# ============================================================================
-# Environment-specific settings with secure credential management and
-# deployment flexibility through environment variable interpolation.
+# Foundational system environment configuration providing stable defaults
+# for all deployment scenarios with environment variable interpolation support.
 
 environment:
-  # Environment identification and context
-  type: ${oc.env:ENVIRONMENT_TYPE,"development"}  # Environment: development, testing, production
-  debug_mode: ${oc.env:DEBUG,"false"}  # Enable debug mode features
-  verbose_output: ${oc.env:VERBOSE,"false"}  # Enable verbose output and logging
+  # Core environment type with secure default fallback
+  # Production deployments should override via ENVIRONMENT_TYPE=production
+  type: "development"  # Options: development, testing, production
   
-  # System resource and platform configuration
-  platform: ${oc.env:PLATFORM,"auto"}  # Target platform: auto, linux, windows, macos
-  cpu_count: ${oc.env:CPU_COUNT,"auto"}  # Available CPU cores (auto=detect)
-  memory_limit: ${oc.env:MEMORY_LIMIT_GB,"8"}  # System memory limit in GB
+  # Debug mode defaults optimized for development workflows
+  # Set DEBUG=false in production environments for performance
+  debug_mode: true  # Enable comprehensive debugging features
   
-  # Path and directory configuration
+  # Verbose output control with conservative default
+  # Set VERBOSE=false for quieter automated execution
+  verbose_output: true  # Show detailed operation progress and metrics
+  
+  # Platform detection with automatic configuration adaptation
+  # Override with PLATFORM=linux|windows|macos for specific optimizations
+  platform: "auto"  # Automatic platform detection and optimization
+  
+  # Core path configuration with flexible environment variable support
   paths:
-    # Base directories for data and output
-    data_dir: ${oc.env:DATA_DIR,"data"}  # Base directory for input data
-    output_dir: ${oc.env:OUTPUT_DIR,"outputs"}  # Base directory for results
-    temp_dir: ${oc.env:TEMP_DIR,"tmp"}  # Temporary file directory
-    cache_dir: ${oc.env:CACHE_DIR,"cache"}  # Cache directory for processed data
+    # Primary data directory for all input datasets and resources
+    # Set DATA_DIR=/path/to/data for production data location management
+    data_dir: "data"
     
-    # Specific path configurations
-    video_dir: ${oc.env:VIDEO_DIR,"data/videos"}  # Directory for video files
-    config_dir: ${oc.env:CONFIG_DIR,"conf"}  # Configuration file directory
-    log_dir: ${oc.env:LOG_DIR,"logs"}  # Log file directory
+    # Output directory for simulation results, visualizations, and exports
+    # Set OUTPUT_DIR=/path/to/outputs for centralized results management  
+    output_dir: "outputs"
+    
+    # Video directory for plume data storage and organization
+    # Set VIDEO_DIR=/path/to/videos for custom video asset management
+    video_dir: "data/videos"
+    
+    # Temporary directory for intermediate processing and caching
+    # Set TEMP_DIR=/path/to/temp for custom temporary storage location
+    temp_dir: "temp"
+    
+    # Log directory for comprehensive logging and debugging output
+    # Set LOG_DIR=/path/to/logs for centralized log file management
+    log_dir: "logs"
 
 # ============================================================================
-# DATABASE AND PERSISTENCE CONFIGURATION
+# NAVIGATOR CORE CONFIGURATION DEFAULTS
 # ============================================================================
-# Optional database configuration for future trajectory storage and metadata
-# persistence through SQLAlchemy session management infrastructure.
+# Foundational navigation parameters supporting both single-agent and 
+# multi-agent scenarios with conservative defaults for research stability.
+
+navigator:
+  # Single-agent foundational configuration (default navigation mode)
+  # These values provide stable starting points for all navigation experiments
+  
+  # Initial position coordinates [x, y] - null enables auto-positioning
+  # Override with specific coordinates for deterministic starting positions
+  position: null  # Automatic positioning based on environment constraints
+  
+  # Initial orientation in degrees (0 = right, 90 = up, 180 = left, 270 = down)
+  # Conservative default pointing rightward for consistent directional bias
+  orientation: 0.0  # Initial heading direction in degrees
+  
+  # Initial speed in units per time step - stationary start for stability
+  # Override with positive values for moving start condition experiments
+  speed: 0.0  # Conservative stationary initialization
+  
+  # Maximum allowed speed in units per time step - moderate default for safety
+  # Research-appropriate maximum ensuring controlled navigation behavior
+  max_speed: 1.0  # Conservative maximum speed for stable navigation
+  
+  # Angular velocity in degrees per second - stationary rotation default
+  # Override with non-zero values for dynamic orientation experiments
+  angular_velocity: 0.0  # Initial rotational motion (degrees/second)
+  
+  # Multi-agent configuration defaults (activated when positions is specified)
+  # Foundational parameters for swarm navigation and collaborative behavior
+  
+  # Multi-agent positions - null enables single-agent mode by default
+  # Specify list of [x, y] coordinates to activate multi-agent navigation
+  positions: null  # Single-agent mode (override for multi-agent)
+  
+  # Multi-agent orientations - null inherits single-agent orientation
+  # Specify list of orientations in degrees for individual agent heading
+  orientations: null  # Inherit single-agent orientation (override for diversity)
+  
+  # Multi-agent speeds - null inherits single-agent speed for consistency
+  # Specify list of speeds for heterogeneous agent motion characteristics  
+  speeds: null  # Inherit single-agent speed (override for heterogeneous motion)
+  
+  # Multi-agent maximum speeds - null inherits single-agent max_speed
+  # Specify list of max speeds for individual agent capability constraints
+  max_speeds: null  # Inherit single-agent max_speed (override for diversity)
+  
+  # Multi-agent angular velocities - null inherits single-agent default
+  # Specify list of angular velocities for diverse rotational behaviors
+  angular_velocities: null  # Inherit single-agent default (override for diversity)
+  
+  # Number of agents - automatically inferred from positions when specified
+  # Explicit specification enables validation and consistency checking
+  num_agents: null  # Auto-inferred from positions list (override for validation)
+  
+  # Advanced control parameters with research-appropriate defaults
+  control:
+    # Acceleration control for dynamic response characteristics
+    # Conservative default providing smooth and predictable agent response
+    acceleration: 0.1  # Acceleration rate (units per time step squared)
+    
+    # Turning rate control for rotational maneuverability and agility
+    # Moderate default balancing responsiveness with navigation stability
+    turning_rate: 30.0  # Maximum turning rate (degrees per time step)
+    
+    # Sensor configuration for environmental perception and interaction
+    sensor_range: 10.0  # Sensor detection range (units)
+    sensor_noise: 0.0  # Sensor measurement noise (standard deviation)
+    sensor_resolution: 1.0  # Sensor spatial resolution (units per measurement)
+  
+  # Formation control for multi-agent coordination and swarm behavior
+  formation:
+    # Formation type for organized multi-agent deployment patterns
+    # Grid formation provides systematic spatial organization for research
+    type: "grid"  # Formation pattern (grid, line, circle, custom)
+    
+    # Agent spacing within formation structure for collision avoidance
+    # Conservative spacing ensuring safe inter-agent distances
+    spacing: 5.0  # Inter-agent spacing distance (units)
+    
+    # Formation maintenance behavior during navigation execution
+    # Disabled by default for maximum navigation flexibility
+    maintain_formation: false  # Formation rigidity during navigation
+    
+    # Communication range for agent-to-agent information exchange
+    # Conservative range supporting local coordination without complexity
+    communication_range: 15.0  # Inter-agent communication distance (units)
+
+# ============================================================================
+# VIDEO PLUME ENVIRONMENT FOUNDATION DEFAULTS  
+# ============================================================================
+# Core video processing parameters with conservative defaults optimized
+# for research reproducibility and broad video format compatibility.
+
+video_plume:
+  # Video source configuration with placeholder for environment override
+  # Production deployments should specify VIDEO_PATH environment variable
+  video_path: "data/videos/example_plume.mp4"  # Default example video path
+  
+  # Video preprocessing foundational settings optimized for research
+  # Conservative defaults ensuring consistent preprocessing across experiments
+  
+  # Horizontal flip control for camera orientation and coordinate system alignment
+  # Disabled by default to preserve original video orientation
+  flip: false  # Preserve original video orientation
+  
+  # Grayscale conversion for simplified plume concentration analysis
+  # Enabled by default for computational efficiency and standardization
+  grayscale: true  # Convert to grayscale for concentration analysis
+  
+  # Gaussian smoothing parameters for noise reduction and signal enhancement
+  # Disabled by default (kernel_size: 0) to preserve original video fidelity
+  kernel_size: 0  # Gaussian kernel size (0 = no smoothing, must be odd if >0)
+  kernel_sigma: 1.0  # Gaussian kernel standard deviation
+  
+  # Threshold and normalization foundational settings
+  # Conservative defaults supporting various plume detection methodologies
+  
+  # Binary threshold for plume detection and concentration mapping  
+  # Null default enables automatic threshold selection algorithms
+  threshold: null  # Binary detection threshold (0.0-1.0, null = auto)
+  
+  # Normalization control for consistent value ranges across video sources
+  # Enabled by default ensuring [0,1] range for downstream processing
+  normalize: true  # Normalize frame values to [0,1] range
+  
+  # Advanced preprocessing foundational parameters for specialized applications
+  preprocessing:
+    # Contrast enhancement for low-contrast video sources
+    # Disabled by default to preserve original video characteristics
+    enhance_contrast: false  # Contrast enhancement activation
+    contrast_alpha: 1.0  # Contrast multiplier (1.0 = no change)
+    brightness_beta: 0.0  # Brightness offset (0.0 = no change)
+    
+    # Noise reduction parameters for high-noise video sources
+    # Conservative defaults minimizing processing artifacts
+    median_filter_size: 0  # Median filter kernel size (0 = disabled)
+    bilateral_filter: false  # Edge-preserving bilateral filtering
+    bilateral_d: 5  # Bilateral filter neighborhood diameter
+    bilateral_sigma_color: 75.0  # Color space filtering strength
+    bilateral_sigma_space: 75.0  # Coordinate space filtering strength
+    
+    # Morphological operations for shape enhancement and noise removal
+    morphology_enabled: false  # Morphological operation activation
+    morphology_operation: "opening"  # Operation type (opening, closing, gradient)
+    morphology_kernel_size: 3  # Morphological kernel size (must be odd)
+    morphology_iterations: 1  # Number of morphological iterations
+  
+  # Temporal sampling configuration for frame selection and processing efficiency
+  sampling:
+    # Frame range specification for focused temporal analysis
+    # Null defaults enable full video processing for comprehensive analysis
+    start_frame: 0  # Starting frame index (0 = beginning)
+    end_frame: null  # Ending frame index (null = process all frames)
+    frame_skip: 1  # Frame sampling interval (1 = process every frame)
+    
+    # Region of interest (ROI) configuration for spatial analysis focus
+    # Disabled by default for full-frame processing and analysis
+    roi_enabled: false  # Region of interest processing activation
+    roi_x: 0  # ROI top-left x coordinate (pixels)
+    roi_y: 0  # ROI top-left y coordinate (pixels)  
+    roi_width: null  # ROI width (null = full width)
+    roi_height: null  # ROI height (null = full height)
+    
+    # Temporal filtering for multi-frame analysis and noise reduction
+    temporal_window: 1  # Temporal averaging window size (frames)
+    temporal_method: "mean"  # Temporal aggregation method (mean, median, max)
+
+# ============================================================================
+# SIMULATION EXECUTION FOUNDATION DEFAULTS
+# ============================================================================
+# Core simulation parameters optimized for research workflows with
+# conservative defaults ensuring reproducible and stable execution.
+
+simulation:
+  # Temporal execution parameters for controlled experiment duration
+  # Research-appropriate duration supporting comprehensive trajectory analysis
+  max_duration: 300.0  # Maximum simulation duration (seconds)
+  fps: 30  # Simulation temporal resolution (frames per second)
+  
+  # Real-time execution control for development and analysis workflows
+  # Disabled by default enabling maximum processing speed for research
+  real_time: false  # Real-time execution constraint (false = maximum speed)
+  speed_multiplier: 1.0  # Simulation speed scaling factor
+  
+  # Simulation initialization foundational parameters
+  initialization:
+    # Automatic simulation startup for streamlined experiment execution
+    # Enabled by default for consistent and reproducible initialization
+    auto_start: true  # Automatic simulation initialization
+    
+    # System warmup period for stable initial conditions
+    # Conservative default ensuring stable system state before data collection
+    warmup_frames: 0  # System stabilization period (frames)
+    
+    # Randomized starting positions for statistical experiment design
+    # Disabled by default for deterministic and reproducible experiments
+    random_start_positions: false  # Randomized agent initialization
+    
+    # Coordinate system specification for spatial analysis compatibility
+    # Image coordinates default supporting direct video coordinate mapping
+    coordinate_system: "image"  # Coordinate reference frame (image, cartesian)
+  
+  # Data recording configuration for comprehensive experiment documentation
+  recording:
+    # Core data recording activation for research data collection
+    # Enabled by default ensuring comprehensive experiment documentation
+    enabled: true  # Simulation data recording activation
+    
+    # Trajectory data recording for position and movement analysis
+    # Enabled by default for fundamental navigation research requirements
+    save_trajectories: true  # Agent position and orientation recording
+    
+    # Sensor data recording for environmental interaction analysis
+    # Enabled by default for comprehensive agent-environment interaction study
+    save_sensor_data: true  # Odor concentration and sensor measurement recording
+    
+    # Metadata recording for experiment reproducibility and documentation
+    # Enabled by default ensuring complete experiment parameter preservation
+    save_metadata: true  # Configuration and system state recording
+    
+    # Data export format configuration optimized for research workflows
+    # NumPy format default providing efficient storage and analysis compatibility
+    export_format: "numpy"  # Data export format (numpy, hdf5, csv)
+    compression: null  # Data compression algorithm (null, gzip, lzf)
+    precision: "float32"  # Numerical precision for data storage
+    
+    # Recording frequency control for data volume management
+    # Full frequency default ensuring complete temporal resolution preservation
+    recording_frequency: 1  # Recording interval (1 = every frame)
+
+# ============================================================================
+# VISUALIZATION FOUNDATION DEFAULTS
+# ============================================================================
+# Foundational visualization parameters optimized for research analysis
+# and development workflows with conservative performance defaults.
+
+visualization:
+  # Real-time animation foundational configuration
+  animation:
+    # Animation system activation for development and presentation workflows  
+    # Disabled by default for computational efficiency during batch processing
+    enabled: false  # Real-time visualization activation
+    
+    # Animation temporal resolution matching simulation parameters
+    # Synchronized with simulation fps for consistent temporal representation
+    fps: 30  # Animation frame rate (frames per second)
+    
+    # Real-time synchronization control for interactive development
+    # Disabled by default enabling maximum processing throughput
+    real_time: false  # Real-time animation constraint
+    
+    # Visual feature configuration for comprehensive agent representation
+    # Research-appropriate defaults providing complete navigation visualization
+    show_trails: true  # Trajectory history visualization
+    trail_length: 50  # Historical trajectory segment length (frames)
+    show_sensors: false  # Sensor range and detection area visualization
+    show_plume_overlay: true  # Environmental plume data overlay
+    
+    # Animation export configuration for presentation and documentation
+    # Disabled by default for computational efficiency during development
+    save_animation: false  # Animation file export activation
+    animation_format: "mp4"  # Export video format for compatibility
+    animation_quality: "high"  # Export quality setting (low, medium, high)
+  
+  # Static plot generation for research publication and analysis
+  plotting:
+    # Figure dimension configuration optimized for research presentation
+    # Conservative dimensions suitable for publication and documentation
+    figure_size: [12, 8]  # Figure dimensions [width, height] in inches
+    dpi: 150  # Figure resolution (dots per inch)
+    
+    # Color scheme and aesthetic configuration for professional presentation
+    # Viridis colormap default providing perceptually uniform color representation
+    color_scheme: "viridis"  # Color palette for data visualization
+    background_color: "white"  # Figure background color for clarity
+    
+    # Typography configuration for publication-quality text rendering
+    # Conservative font sizes ensuring readability across presentation contexts
+    font_size: 12  # General text font size (points)
+    title_size: 16  # Title and heading font size (points)
+    
+    # Trajectory visualization styling for clear data representation
+    # Line-based visualization default providing clean trajectory representation
+    trajectory_style: "line"  # Trajectory rendering style (line, markers, both)
+    trajectory_width: 2.0  # Trajectory line thickness (points)
+    marker_size: 8  # Trajectory marker size (points)
+
+# ============================================================================
+# LOGGING AND DEBUGGING FOUNDATION DEFAULTS
+# ============================================================================
+# Comprehensive logging configuration providing research-appropriate
+# debugging and performance monitoring with structured output management.
+
+logging:
+  # Core logging level configuration optimized for development workflows
+  # INFO level default providing comprehensive operational visibility
+  level: "INFO"  # Logging verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  
+  # Output destination configuration for flexible log management
+  # Console output enabled by default for immediate feedback during development
+  console_enabled: true  # Console logging activation
+  file_enabled: true  # File logging activation for persistent records
+  file_path: "logs/odor_plume_nav.log"  # Log file location and naming
+  
+  # Log file management configuration for operational stability
+  # Conservative rotation and retention ensuring manageable disk usage
+  file_rotation: "10 MB"  # Log file rotation size threshold
+  file_retention: "1 week"  # Log file retention duration
+  
+  # Performance monitoring foundational configuration
+  # Disabled by default for computational efficiency during research execution
+  performance:
+    enabled: false  # Performance metrics collection activation
+    timing_precision: "milliseconds"  # Temporal measurement precision
+    memory_tracking: false  # Memory usage monitoring activation
+    slow_operation_threshold: 1.0  # Performance warning threshold (seconds)
+  
+  # Component-specific logging level configuration for targeted debugging
+  # Balanced defaults providing operational visibility without overwhelming detail
+  components:
+    navigator: "INFO"  # Navigation component logging verbosity
+    video_plume: "INFO"  # Video processing component logging verbosity
+    visualization: "ERROR"  # Visualization component logging verbosity (quiet)
+
+# ============================================================================
+# REPRODUCIBILITY AND EXPERIMENT MANAGEMENT DEFAULTS
+# ============================================================================
+# Foundational configuration for scientific reproducibility and
+# deterministic experiment execution with comprehensive seed management.
+
+reproducibility:
+  # Random seed management for deterministic experiment execution
+  # Null default enabling automatic seed generation with logging
+  global_seed: null  # Global random seed (null = auto-generate)
+  
+  # Automatic seed generation and logging for experiment documentation
+  # Enabled by default ensuring reproducible experiment conditions
+  auto_seed: true  # Automatic seed generation and recording
+  seed_logging: true  # Seed value documentation and logging
+  
+  # Deterministic behavior enforcement for rigorous scientific reproducibility
+  # Conservative defaults balancing reproducibility with computational flexibility
+  deterministic:
+    strict_mode: false  # Strict deterministic behavior enforcement
+    validate_reproducibility: false  # Post-execution reproducibility validation
+    hash_verification: false  # Result hash generation for integrity checking
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION FOUNDATION DEFAULTS
+# ============================================================================
+# System performance configuration optimized for research computing
+# environments with conservative defaults ensuring broad compatibility.
+
+performance:
+  # NumPy optimization configuration for efficient scientific computing
+  numpy:
+    # CPU thread utilization with automatic detection for optimal performance
+    # Zero default enables NumPy automatic thread detection and configuration
+    thread_count: 0  # CPU thread count (0 = automatic detection)
+    memory_policy: "optimal"  # Memory allocation strategy
+    precision: "float64"  # Numerical precision for scientific accuracy
+  
+  # OpenCV performance configuration for efficient video processing
+  opencv:
+    # Conservative thread count providing stable performance across systems
+    # Balanced default suitable for research workstation and laptop environments
+    thread_count: 4  # OpenCV thread utilization
+    use_opencl: false  # GPU acceleration via OpenCL (disabled for compatibility)
+    memory_limit: 512  # Memory usage limit (MB)
+  
+  # Matplotlib performance configuration for efficient visualization
+  matplotlib:
+    # Agg backend default providing headless operation for automated workflows
+    # Non-interactive backend ensuring consistent behavior across environments
+    backend: "Agg"  # Matplotlib rendering backend
+    interactive: false  # Interactive plotting mode
+    figure_cache_size: 10  # Figure cache memory allocation
+
+# ============================================================================
+# DATABASE AND PERSISTENCE FOUNDATION DEFAULTS (FUTURE EXTENSIBILITY)
+# ============================================================================
+# Infrastructure configuration for optional data persistence and
+# experiment tracking with conservative defaults for future enhancement.
 
 database:
-  # Connection configuration with environment variable support
-  enabled: false  # Enable database persistence features
-  url: ${oc.env:DATABASE_URL,"sqlite:///odor_plume_nav.db"}  # Database connection URL
+  # Database system activation control for optional persistence features
+  # Disabled by default maintaining current system behavior and performance
+  enabled: false  # Database persistence activation
   
-  # Connection pooling and performance
-  pool_size: ${oc.env:DB_POOL_SIZE,"5"}  # Connection pool size
-  max_overflow: ${oc.env:DB_MAX_OVERFLOW,"10"}  # Maximum pool overflow
-  pool_timeout: 30  # Connection pool timeout in seconds
-  pool_recycle: 3600  # Connection recycle time in seconds
+  # Database connection configuration with development-friendly defaults
+  # SQLite default providing zero-configuration persistence capability
+  url: "sqlite:///experiments.db"  # Database connection string
   
-  # Transaction and session management
-  autocommit: false  # Enable autocommit mode
-  autoflush: true  # Enable automatic session flushing
-  expire_on_commit: true  # Expire objects on commit
+  # Connection pool configuration for production scalability
+  # Conservative defaults suitable for single-user research environments
+  pool_size: 5  # Database connection pool size
+  max_overflow: 10  # Maximum connection pool overflow
   
-  # Schema and table configuration
+  # Database schema management for development workflow integration
   schema:
-    create_tables: true  # Automatically create database tables
-    drop_existing: false  # Drop existing tables on startup
-    table_prefix: "opn_"  # Prefix for all table names
-    
-    # Data retention and cleanup
-    retention_days: 90  # Data retention period in days
-    auto_cleanup: false  # Enable automatic data cleanup
-    backup_enabled: false  # Enable automatic database backups
+    create_tables: true  # Automatic table creation during initialization
+    drop_existing: false  # Preserve existing data during system updates
+    table_prefix: "opn_"  # Table naming prefix for namespace management
 
 # ============================================================================
-# EXPERIMENTAL AND ADVANCED FEATURES
+# EXPERIMENTAL FEATURES AND ADVANCED CONFIGURATION (FUTURE RESEARCH)
 # ============================================================================
-# Advanced configuration options for experimental features, plugin support,
-# and integration with external systems and frameworks.
+# Foundational configuration for experimental capabilities and
+# advanced research features with conservative defaults ensuring stability.
 
 experimental:
-  # Plugin and extension system
+  # Plugin system configuration for extensible research capability
+  # Disabled by default ensuring system stability and predictable behavior
   plugins:
-    enabled: false  # Enable plugin system
-    auto_discovery: true  # Automatically discover available plugins
-    plugin_dir: "plugins"  # Directory for plugin modules
-    safe_mode: true  # Run plugins in safe mode with restricted access
+    enabled: false  # Plugin system activation
+    auto_discovery: true  # Automatic plugin detection and loading
+    safe_mode: true  # Safe plugin execution with error isolation
   
-  # Machine learning and AI integration
+  # Machine learning integration infrastructure for AI research applications
+  # Disabled by default maintaining current system focus and performance
   ml_integration:
-    enabled: false  # Enable ML framework integration
-    frameworks: []  # Supported ML frameworks: pytorch, tensorflow, sklearn
-    model_dir: "models"  # Directory for ML model storage
-    inference_mode: "cpu"  # Inference device: cpu, gpu, auto
+    enabled: false  # Machine learning framework integration activation
+    frameworks: []  # Supported ML frameworks (pytorch, tensorflow, jax)
+    inference_mode: "cpu"  # ML inference device (cpu, gpu, auto)
   
-  # Distributed computing and cloud integration
-  distributed:
-    enabled: false  # Enable distributed computing features
-    coordinator_url: null  # Distributed coordinator service URL
-    worker_count: 1  # Number of distributed workers
-    task_queue: "local"  # Task queue backend: local, redis, celery
-  
-  # Feature flags for experimental capabilities
+  # Advanced feature flags for cutting-edge research capabilities
+  # Disabled by default ensuring stable operation during standard research
   features:
-    neural_navigation: false  # Enable neural network-based navigation
-    adaptive_sampling: false  # Enable adaptive sensor sampling
-    collaborative_agents: false  # Enable multi-agent collaboration
-    real_time_optimization: false  # Enable real-time parameter optimization
+    neural_navigation: false  # Neural network-based navigation algorithms
+    adaptive_sampling: false  # Dynamic sensor sampling optimization
+    collaborative_agents: false  # Advanced multi-agent coordination
+    real_time_optimization: false  # Dynamic parameter optimization
 
 # ============================================================================
-# VALIDATION AND CONSTRAINTS
+# HYDRA RUNTIME CONFIGURATION DEFAULTS
 # ============================================================================
-# Parameter validation rules and constraints for Pydantic schema integration
-# and runtime configuration validation.
+# Hydra framework configuration optimized for research workflows with
+# organized output management and comprehensive experiment tracking.
 
-validation:
-  # Parameter bounds and constraints
-  constraints:
-    # Navigator parameter limits
-    max_agent_count: 1000  # Maximum number of agents in multi-agent scenarios
-    min_speed: 0.0  # Minimum allowed agent speed
-    max_speed_limit: 100.0  # Maximum allowed speed limit
-    orientation_range: [-180.0, 180.0]  # Valid orientation range in degrees
-    
-    # Video processing limits
-    max_video_resolution: [1920, 1080]  # Maximum video resolution [width, height]
-    min_video_resolution: [64, 64]  # Minimum video resolution [width, height]
-    max_kernel_size: 99  # Maximum Gaussian kernel size
-    min_kernel_size: 0  # Minimum kernel size (0=disabled)
-    
-    # Performance and resource limits
-    max_memory_usage: 8192  # Maximum memory usage in MB
-    max_cpu_usage: 100  # Maximum CPU usage percentage
-    timeout_seconds: 3600  # Maximum operation timeout in seconds
-
-  # Type checking and validation behavior
-  strict_validation: false  # Enable strict type checking
-  allow_extra_fields: true  # Allow extra fields in configuration
-  validate_on_assignment: true  # Validate parameters when assigned
-  use_enum_values: true  # Use enum values for validation
-
-# ============================================================================
-# MIGRATION AND COMPATIBILITY
-# ============================================================================
-# Legacy configuration support and migration utilities for transitioning
-# from previous configuration formats to Hydra-based system.
-
-compatibility:
-  # Legacy format support
-  legacy_yaml_support: true  # Support legacy YAML configuration files
-  migration_mode: false  # Enable configuration migration assistance
+hydra:
+  # Output directory management for organized experiment results
+  run:
+    # Structured output directory with timestamp-based organization
+    # Enables comprehensive experiment tracking and result management
+    dir: "outputs/experiments/${now:%Y-%m-%d_%H-%M-%S}"
   
-  # Version compatibility
-  config_version: "2.0"  # Configuration format version
-  min_supported_version: "1.0"  # Minimum supported configuration version
+  # Multi-run experiment configuration for parameter sweep automation
+  sweep:
+    # Organized multi-run output with comprehensive experiment grouping
+    # Supports systematic parameter exploration and comparative analysis
+    dir: "outputs/multirun/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "run_${hydra:job.num}"
   
-  # Deprecation warnings and migration guidance
-  deprecation_warnings: true  # Show deprecation warnings for old parameters
-  migration_guidance: true  # Provide migration guidance for deprecated features
-  strict_compatibility: false  # Enforce strict compatibility requirements
+  # Job configuration for experiment identification and tracking
+  job:
+    # Descriptive job naming for experiment organization and identification
+    # Combines timestamp and key parameters for comprehensive experiment tracking
+    name: "plume_nav_${now:%H-%M-%S}"
+    chdir: false  # Maintain working directory for development workflow stability
 
 # ============================================================================
-# END OF CONFIGURATION
+# CONFIGURATION VALIDATION AND COMPATIBILITY METADATA
 # ============================================================================
-# This configuration file provides comprehensive defaults for all odor plume
-# navigation system components. For environment-specific customizations,
-# create overrides in conf/config.yaml or conf/local/ directories.
+# System metadata and validation information supporting configuration
+# management, version control, and compatibility verification.
+
+_metadata_:
+  # Configuration schema version for compatibility validation
+  config_version: "1.0.0"
+  
+  # Minimum system requirements for configuration compatibility
+  requirements:
+    python: ">=3.9"
+    hydra: ">=1.3.2"
+    numpy: ">=1.24.0"
+    opencv: ">=4.8.0"
+    pydantic: ">=2.5.0"
+  
+  # Configuration validation schema references
+  validation:
+    navigator_schema: "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig"
+    video_plume_schema: "{{cookiecutter.project_slug}}.config.schemas.VideoPlumeConfig"
+    
+  # Documentation and support references
+  documentation:
+    technical_spec: "Technical Specification Sections 3.2, 5.2, 7.2"
+    configuration_guide: "conf/config.yaml for usage examples and customization patterns"
+    schema_reference: "src/{{cookiecutter.project_slug}}/config/schemas.py for validation details"
+
+# ============================================================================
+# END OF FOUNDATIONAL CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive foundational defaults for the
+# Hydra-based odor plume navigation system. All parameters can be overridden
+# through conf/config.yaml, conf/local/ files, environment variables, or
+# CLI arguments while maintaining type safety and validation integrity.
 #
-# Environment Variable Interpolation Examples:
-#   ${oc.env:VAR_NAME} - Required environment variable
-#   ${oc.env:VAR_NAME,default_value} - Optional with default
-#   ${oc.env:VAR_NAME,null} - Optional that can be null
+# IMPORTANT USAGE NOTES:
+#   - DO NOT modify this file for customizations
+#   - Use conf/config.yaml for user-specific parameter overrides
+#   - Use conf/local/ directory for environment-specific secrets
+#   - Use environment variables for deployment-specific configurations
+#   - Use CLI overrides for dynamic runtime parameter modifications
 #
-# Hydra Configuration Override Examples:
-#   python script.py navigator.max_speed=2.0
-#   python script.py video_plume.flip=true simulation.fps=60
-#   python script.py --multirun navigator.max_speed=1.0,2.0,3.0
+# ENVIRONMENT VARIABLE EXAMPLES:
+#   export VIDEO_PATH="/path/to/custom/video.mp4"
+#   export NAVIGATOR_MAX_SPEED="2.0"
+#   export LOG_LEVEL="DEBUG"
+#   export ENVIRONMENT_TYPE="production"
 #
-# For detailed configuration documentation and examples, see:
-#   - conf/config.yaml for advanced configuration patterns
-#   - Technical specification sections 3.2, 5.2, and 6.1
-#   - Pydantic schemas in src/{{cookiecutter.project_slug}}/config/schemas.py
+# CLI OVERRIDE EXAMPLES:
+#   python -m {{cookiecutter.project_slug}}.cli.main navigator.max_speed=2.0
+#   python -m {{cookiecutter.project_slug}}.cli.main video_plume.flip=true
+#   python -m {{cookiecutter.project_slug}}.cli.main --multirun navigator.speed=0.5,1.0,1.5
+#
+# CONFIGURATION COMPOSITION EXAMPLES:
+#   from hydra import compose, initialize
+#   with initialize(config_path="../conf"):
+#       cfg = compose(config_name="config")
+#       navigator = create_navigator_from_config(cfg.navigator)
+#
+# For detailed configuration usage and advanced composition patterns,
+# see conf/config.yaml and the technical specification documentation.
 # ============================================================================
