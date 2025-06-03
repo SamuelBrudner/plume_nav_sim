@@ -149,14 +149,85 @@ def check_import_compliance() -> Tuple[bool, List[str]]:
 
 def enforce_import_compliance() -> None:
     """
-    Enforce compliance with the expected import structure.
+    Enforce compliance with the expected {{cookiecutter.project_slug}} package structure.
+    
+    Validates the cookiecutter template organization including new subdirectories
+    and provides migration guidance for legacy odor_plume_nav imports.
     
     Raises:
-        AssertionError: If any imports violate the expected structure
+        AssertionError: If any imports violate the expected structure, with detailed
+                       migration guidance for moving to cookiecutter template structure
     """
     success, violations = check_import_compliance()
     if not success:
-        raise AssertionError(
-            "Import violations detected:\n" + 
-            "\n".join(f"- {violation}" for violation in violations)
+        error_msg = (
+            "{{cookiecutter.project_slug}} package structure violations detected:\n" + 
+            "\n".join(f"- {violation}" for violation in violations) +
+            "\n\nRefer to Section 0.2.1 of the technical specification for "
+            "comprehensive mapping from legacy odor_plume_nav to cookiecutter template structure."
         )
+        raise AssertionError(error_msg)
+
+
+def scan_new_components() -> Dict[str, List[str]]:
+    """
+    Scan for new components introduced in the cookiecutter template structure.
+    
+    Returns:
+        Dictionary mapping subdirectories to lists of available components
+    """
+    new_components = {
+        'cli': ['main', 'run_simulation_cli', 'validate_config_cli'],
+        'utils': ['set_global_seed', 'get_random_state', 'SeedManager'],
+        'db': ['DatabaseSessionManager', 'get_session', 'create_engine'],
+        'config': ['NavigatorConfig', 'ConfigValidationError'],
+        'core': ['NavigatorProtocol', 'Navigator', 'SingleAgentController', 'MultiAgentController'],
+        'data': ['VideoPlume'],
+        'api': ['create_navigator', 'run_plume_simulation', 'create_navigator_from_config']
+    }
+    
+    available_components = {}
+    for subdirectory, components in new_components.items():
+        available_components[subdirectory] = []
+        for component in components:
+            if get_target_module(component):
+                available_components[subdirectory].append(component)
+    
+    return available_components
+
+
+def validate_new_structure_integrity() -> Tuple[bool, List[str]]:
+    """
+    Validate the integrity of the new cookiecutter template structure.
+    
+    Checks that all expected new components (CLI, seed management, database sessions)
+    are properly mapped and that the subdirectory organization is correct.
+    
+    Returns:
+        Tuple of (success, list of integrity issues)
+    """
+    issues = []
+    
+    # Validate package structure mapping
+    structure_valid, structure_violations = validate_package_structure()
+    if not structure_valid:
+        issues.extend(structure_violations)
+    
+    # Check for new component availability
+    new_components = scan_new_components()
+    required_components = {
+        'cli': ['main'],
+        'utils': ['set_global_seed', 'SeedManager'],
+        'db': ['DatabaseSessionManager'],
+    }
+    
+    for subdirectory, required in required_components.items():
+        available = new_components.get(subdirectory, [])
+        for component in required:
+            if component not in available:
+                issues.append(
+                    f"Required new component '{component}' not available in "
+                    f"{subdirectory}/ subdirectory"
+                )
+    
+    return not issues, issues

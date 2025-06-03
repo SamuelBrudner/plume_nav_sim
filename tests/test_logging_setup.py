@@ -109,6 +109,7 @@ class TestLoggingSetup:
         
         # Ensure writes are flushed
         import time
+import yaml
         time.sleep(0.1)
         
         # Read file and verify messages

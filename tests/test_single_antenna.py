@@ -5,7 +5,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from unittest.mock import MagicMock
 
-from odor_plume_nav.core.navigator import Navigator
+from {{cookiecutter.project_slug}}.core import Navigator
 
 
 class TestSingleAntennaSensing:

@@ -90,3 +90,24 @@ configs/local/credentials.yml
 *.jpeg
 *.gif
 *.webp
+
+# Poetry dependency management
+poetry.lock
+
+# Docker
+docker-compose.override.yml
+
+# Database files
+*.db
+pg_data/
+
+# Hydra configuration framework
+outputs/
+multirun/
+
+# Pre-commit
+.pre-commit-cache/
+
+# New project structure
+workflow/
+conf/local/
