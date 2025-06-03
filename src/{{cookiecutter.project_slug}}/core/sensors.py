@@ -1,482 +1,300 @@
 """
 Sensor strategies, position calculations, and odor sampling utilities.
 
-This module centralizes all sensor-related functionality for both single-agent 
-and multi-agent navigation scenarios. It provides flexible sensor placement systems,
-predefined layouts, custom sensor configurations, and comprehensive odor sampling
-capabilities integrated with Hydra configuration management.
+This module centralizes sensor-related functionality for both single-agent and 
+multi-agent navigation scenarios, providing flexible sensor placement systems, 
+predefined layouts, and comprehensive odor sampling capabilities with Hydra 
+configuration integration.
 
 Key Features:
 - Predefined sensor layouts (SINGLE, LEFT_RIGHT, FRONT_SIDES, etc.)
-- Custom sensor geometry with configurable distance and angular parameters
-- Position calculation utilities for both single and multi-agent scenarios
-- Odor sampling at sensor positions with bounds checking and normalization
-- Integration with Hydra configuration system for parameter management
-- Support for biological sensing strategy modeling and optimization
+- Custom sensor geometry configuration
+- Position calculations with rotation matrices
+- Multi-sensor odor sampling with bilinear interpolation
+- Integration with Hydra configuration system
+- Support for both single and multi-agent scenarios
+
+Examples
+--------
+Basic sensor usage:
+
+>>> from {{cookiecutter.project_slug}}.core.sensors import calculate_sensor_positions
+>>> from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+>>> navigator = create_navigator({"type": "single", "position": [10, 10]})
+>>> positions = calculate_sensor_positions(navigator, layout_name="LEFT_RIGHT")
+
+Custom sensor configuration:
+
+>>> from {{cookiecutter.project_slug}}.core.sensors import sample_odor_at_sensors
+>>> odor_values = sample_odor_at_sensors(
+...     navigator, env_array, 
+...     sensor_distance=8.0, 
+...     sensor_angle=30.0, 
+...     num_sensors=4
+... )
+
+Hydra integration:
+
+>>> # In conf/config.yaml:
+>>> # sensors:
+>>> #   layout_name: "BILATERAL" 
+>>> #   distance: 5.0
+>>> #   angle: 45.0
+>>> from hydra import compose, initialize
+>>> with initialize(config_path="../conf"):
+...     cfg = compose(config_name="config")
+...     positions = calculate_sensor_positions(navigator, **cfg.sensors)
 """
 
-from typing import Optional, Dict, Any, Union, Protocol, runtime_checkable
+from typing import Dict, Optional, Tuple, Union, Any
 import numpy as np
 
+# Import types and protocols from dependencies
+try:
+    from .navigator import NavigatorProtocol
+except ImportError:
+    # Fallback for development environments
+    from typing import Protocol
+    
+    class NavigatorProtocol(Protocol):
+        """Fallback NavigatorProtocol for development."""
+        positions: np.ndarray
+        orientations: np.ndarray
+        num_agents: int
 
-# Predefined sensor layouts in agent's local coordinate frame
-# Each layout defines base offsets where the agent faces +x direction
-# and +y is "left" of the agent (standard mathematical orientation)
+
+# Predefined sensor layouts in local agent coordinates
+# Each layout defines sensor offsets in the agent's local frame where:
+# - Agent faces positive x-direction
+# - Positive y is to the left of the agent (standard mathematical orientation)
+# - Values are base offsets that get scaled by sensor_distance parameter
 PREDEFINED_SENSOR_LAYOUTS: Dict[str, np.ndarray] = {
-    # Single sensor at agent position
+    # Single sensor at agent center
     "SINGLE": np.array([[0.0, 0.0]]),
     
-    # Left-Right configuration: one sensor at +y, another at -y
+    # Two sensors: left and right of agent
     "LEFT_RIGHT": np.array([
         [0.0,  1.0],  # Left sensor
         [0.0, -1.0],  # Right sensor
     ]),
     
-    # Front and sides configuration: forward sensor plus left and right
+    # Three sensors: forward, left, and right
     "FRONT_SIDES": np.array([
-        [1.0,  0.0],  # Front sensor
+        [1.0,  0.0],  # Forward sensor
         [0.0,  1.0],  # Left sensor
         [0.0, -1.0],  # Right sensor
     ]),
     
-    # Triangular configuration for enhanced spatial coverage
-    "TRIANGLE": np.array([
-        [1.0,  0.0],   # Front
-        [-0.5, 0.866], # Back-left (120 degrees)
-        [-0.5, -0.866] # Back-right (240 degrees)
+    # Bilateral arrangement at 45-degree angles (common in biological systems)
+    "BILATERAL": np.array([
+        [0.707,  0.707],  # Forward-left at 45°
+        [0.707, -0.707],  # Forward-right at -45°
     ]),
     
-    # Cross configuration for four-directional sensing
-    "CROSS": np.array([
-        [1.0,  0.0],  # Front
+    # Four sensors in cardinal directions
+    "CARDINAL": np.array([
+        [1.0,  0.0],  # Forward
         [0.0,  1.0],  # Left
-        [-1.0, 0.0],  # Back
+        [-1.0, 0.0],  # Backward
         [0.0, -1.0],  # Right
     ]),
     
-    # Linear array for directional gradient sensing
-    "LINEAR": np.array([
-        [1.5,  0.0],  # Far front
-        [0.5,  0.0],  # Near front
-        [0.0,  0.0],  # Center
-        [-0.5, 0.0],  # Near back
-        [-1.5, 0.0],  # Far back
-    ])
+    # Six sensors in hexagonal arrangement
+    "HEXAGONAL": np.array([
+        [1.0,    0.0],       # 0°
+        [0.5,    0.866],     # 60°
+        [-0.5,   0.866],     # 120°
+        [-1.0,   0.0],       # 180°
+        [-0.5,  -0.866],     # 240°
+        [0.5,   -0.866],     # 300°
+    ]),
+    
+    # Linear array extending forward from agent
+    "FORWARD": np.array([
+        [0.5, 0.0],  # Close forward sensor
+        [1.0, 0.0],  # Mid forward sensor
+        [1.5, 0.0],  # Far forward sensor
+    ]),
+    
+    # Radial arrangement with 8 sensors
+    "RADIAL": np.array([
+        [1.0,    0.0],       # 0°
+        [0.707,  0.707],     # 45°
+        [0.0,    1.0],       # 90°
+        [-0.707, 0.707],     # 135°
+        [-1.0,   0.0],       # 180°
+        [-0.707, -0.707],    # 225°
+        [0.0,    -1.0],      # 270°
+        [0.707,  -0.707],    # 315°
+    ]),
 }
-
-
-@runtime_checkable
-class NavigatorProtocol(Protocol):
-    """Protocol defining the navigator interface for sensor calculations.
-    
-    This protocol ensures compatibility with navigator implementations
-    by defining the minimum required properties for sensor positioning.
-    """
-    
-    @property
-    def positions(self) -> np.ndarray:
-        """Agent position(s) as numpy array.
-        
-        Returns
-        -------
-        np.ndarray
-            Shape (1, 2) for single agent or (num_agents, 2) for multiple agents
-        """
-        ...
-    
-    @property
-    def orientations(self) -> np.ndarray:
-        """Agent orientation(s) in degrees.
-        
-        Returns
-        -------
-        np.ndarray
-            Shape (1,) for single agent or (num_agents,) for multiple agents
-        """
-        ...
-    
-    @property
-    def num_agents(self) -> int:
-        """Number of agents.
-        
-        Returns
-        -------
-        int
-            Number of agents (1 for single agent, >1 for multi-agent)
-        """
-        ...
-
-
-class SensorLayout:
-    """Represents a sensor layout configuration.
-    
-    This class encapsulates sensor layout information including predefined
-    layouts and custom configurations, providing a unified interface for
-    sensor position calculations.
-    
-    Parameters
-    ----------
-    layout_name : str, optional
-        Name of predefined layout from PREDEFINED_SENSOR_LAYOUTS
-    distance : float, default=5.0
-        Distance from agent center to sensors
-    num_sensors : int, optional
-        Number of sensors (used for custom layouts)
-    angle : float, default=45.0
-        Angular separation between sensors in degrees (for custom layouts)
-    custom_offsets : np.ndarray, optional
-        Custom sensor offsets in agent's local coordinate frame
-    
-    Examples
-    --------
-    >>> # Using predefined layout
-    >>> layout = SensorLayout(layout_name="LEFT_RIGHT", distance=10.0)
-    >>> 
-    >>> # Custom layout with specific parameters
-    >>> layout = SensorLayout(distance=5.0, num_sensors=3, angle=30.0)
-    >>> 
-    >>> # Fully custom layout
-    >>> offsets = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
-    >>> layout = SensorLayout(custom_offsets=offsets, distance=1.0)
-    """
-    
-    def __init__(
-        self,
-        layout_name: Optional[str] = None,
-        distance: float = 5.0,
-        num_sensors: Optional[int] = None,
-        angle: float = 45.0,
-        custom_offsets: Optional[np.ndarray] = None
-    ):
-        self.layout_name = layout_name
-        self.distance = distance
-        self.num_sensors = num_sensors
-        self.angle = angle
-        self.custom_offsets = custom_offsets
-        
-        # Validate and compute local offsets
-        self._local_offsets = self._compute_local_offsets()
-    
-    def _compute_local_offsets(self) -> np.ndarray:
-        """Compute local sensor offsets based on configuration.
-        
-        Returns
-        -------
-        np.ndarray
-            Shape (num_sensors, 2) array of local offsets
-            
-        Raises
-        ------
-        ValueError
-            If configuration is invalid or incomplete
-        """
-        if self.custom_offsets is not None:
-            # Use custom offsets, scaled by distance
-            offsets = np.array(self.custom_offsets, dtype=float)
-            if offsets.ndim != 2 or offsets.shape[1] != 2:
-                raise ValueError(
-                    f"custom_offsets must be shape (N, 2), got {offsets.shape}"
-                )
-            return offsets * self.distance
-        
-        elif self.layout_name is not None:
-            # Use predefined layout
-            return get_predefined_sensor_layout(self.layout_name, self.distance)
-        
-        elif self.num_sensors is not None:
-            # Generate custom layout based on parameters
-            return define_sensor_offsets(self.num_sensors, self.distance, self.angle)
-        
-        else:
-            raise ValueError(
-                "Must specify either layout_name, num_sensors, or custom_offsets"
-            )
-    
-    @property
-    def local_offsets(self) -> np.ndarray:
-        """Get local sensor offsets.
-        
-        Returns
-        -------
-        np.ndarray
-            Shape (num_sensors, 2) array of (x, y) offsets in agent's local frame
-        """
-        return self._local_offsets.copy()
-    
-    @property
-    def sensor_count(self) -> int:
-        """Get number of sensors in this layout.
-        
-        Returns
-        -------
-        int
-            Number of sensors
-        """
-        return self._local_offsets.shape[0]
-    
-    def __repr__(self) -> str:
-        """String representation of the sensor layout."""
-        if self.layout_name:
-            return f"SensorLayout('{self.layout_name}', distance={self.distance})"
-        elif self.custom_offsets is not None:
-            return f"SensorLayout(custom, {self.sensor_count} sensors, distance={self.distance})"
-        else:
-            return f"SensorLayout({self.sensor_count} sensors, angle={self.angle}°, distance={self.distance})"
 
 
 def get_predefined_sensor_layout(
     layout_name: str,
     distance: float = 5.0
 ) -> np.ndarray:
-    """Get a predefined sensor layout scaled by distance.
-    
-    Retrieves base sensor offsets from PREDEFINED_SENSOR_LAYOUTS and scales
-    them by the specified distance parameter.
-    
+    """
+    Retrieve a predefined sensor layout scaled by the specified distance.
+
     Parameters
     ----------
     layout_name : str
-        Name of the layout; must be a key in PREDEFINED_SENSOR_LAYOUTS
-    distance : float, default=5.0
-        Scaling distance from agent center to sensors
-        
+        Name of the predefined layout. Must be a key in PREDEFINED_SENSOR_LAYOUTS.
+        Available layouts: SINGLE, LEFT_RIGHT, FRONT_SIDES, BILATERAL, CARDINAL,
+        HEXAGONAL, FORWARD, RADIAL.
+    distance : float, default 5.0
+        Scaling distance from agent center to sensors in environment units.
+
     Returns
     -------
     np.ndarray
-        Shape (num_sensors, 2) array of local (x, y) offsets
-        
+        Sensor offsets with shape (num_sensors, 2). Each row contains the
+        local (x, y) offset for a sensor in the agent's coordinate frame.
+
     Raises
     ------
     ValueError
-        If layout_name is not found in PREDEFINED_SENSOR_LAYOUTS
-        
+        If layout_name is not found in predefined layouts.
+
     Examples
     --------
-    >>> offsets = get_predefined_sensor_layout("LEFT_RIGHT", distance=10.0)
+    >>> offsets = get_predefined_sensor_layout("LEFT_RIGHT", distance=3.0)
     >>> print(offsets)
-    [[ 0. 10.]
-     [ 0. -10.]]
+    [[ 0.  3.]
+     [ 0. -3.]]
+    
+    >>> offsets = get_predefined_sensor_layout("BILATERAL", distance=5.0)
+    >>> print(offsets.shape)
+    (2, 2)
     """
-    try:
-        base_layout = PREDEFINED_SENSOR_LAYOUTS[layout_name]
-    except KeyError as e:
+    if layout_name not in PREDEFINED_SENSOR_LAYOUTS:
         available_layouts = list(PREDEFINED_SENSOR_LAYOUTS.keys())
         raise ValueError(
             f"Unknown sensor layout: '{layout_name}'. "
             f"Available layouts: {available_layouts}"
-        ) from e
-    
-    # Scale by the requested distance
-    return base_layout.astype(float) * distance
+        )
+
+    # Get base layout and scale by distance
+    base_layout = PREDEFINED_SENSOR_LAYOUTS[layout_name]
+    return base_layout * distance
 
 
-def define_sensor_offsets(
+def define_custom_sensor_offsets(
     num_sensors: int,
     distance: float,
-    angle: float
+    angle: float,
+    start_angle: float = 0.0
 ) -> np.ndarray:
-    """Define custom sensor offsets in agent's local coordinate frame.
+    """
+    Create custom sensor offsets in the agent's local coordinate frame.
     
-    Creates sensor positions distributed symmetrically around the agent's
-    forward direction. The sensors are positioned at equal angular intervals
-    with the specified angular separation.
-    
+    Sensors are distributed evenly with the specified angular separation,
+    starting from the start_angle and extending symmetrically around the agent.
+
     Parameters
     ----------
     num_sensors : int
-        Number of sensors to create (must be >= 1)
+        Number of sensors to create. Must be positive.
     distance : float
-        Distance from agent center to each sensor (must be > 0)
+        Distance from agent center to each sensor in environment units.
     angle : float
-        Angular increment between adjacent sensors in degrees
-        
+        Angular separation between adjacent sensors in degrees.
+    start_angle : float, default 0.0
+        Starting angle for sensor placement in degrees. 0° points forward.
+
     Returns
     -------
     np.ndarray
-        Shape (num_sensors, 2) array of (x, y) offsets in local coordinates
-        
-    Raises
-    ------
-    ValueError
-        If num_sensors < 1 or distance <= 0
-        
-    Notes
-    -----
-    - For odd number of sensors, one sensor is placed directly ahead
-    - For even numbers, sensors are placed symmetrically around forward direction
-    - The total angular span is (num_sensors - 1) * angle
-    - Agent's forward direction is +x, left is +y
-    
+        Sensor offsets with shape (num_sensors, 2). Each row contains
+        the (x, y) offset in the agent's local coordinate frame.
+
     Examples
     --------
-    >>> # Three sensors with 30° separation
-    >>> offsets = define_sensor_offsets(3, distance=5.0, angle=30.0)
-    >>> # Results in sensors at -30°, 0°, +30° relative to forward direction
+    >>> # Create 3 sensors with 45° separation
+    >>> offsets = define_custom_sensor_offsets(3, distance=5.0, angle=45.0)
+    >>> print(offsets.shape)
+    (3, 2)
+    
+    >>> # Create forward-facing sensors starting at -30°
+    >>> offsets = define_custom_sensor_offsets(
+    ...     4, distance=3.0, angle=20.0, start_angle=-30.0
+    ... )
     """
-    if num_sensors < 1:
-        raise ValueError(f"num_sensors must be >= 1, got {num_sensors}")
-    if distance <= 0:
-        raise ValueError(f"distance must be > 0, got {distance}")
+    if num_sensors <= 0:
+        raise ValueError("num_sensors must be positive")
     
-    # Single sensor case - place at agent center
     if num_sensors == 1:
-        return np.array([[0.0, 0.0]])
+        # Single sensor at start_angle
+        angle_rad = np.deg2rad(start_angle)
+        return np.array([[
+            distance * np.cos(angle_rad),
+            distance * np.sin(angle_rad)
+        ]])
     
-    # Calculate angular range and starting angle
-    total_angular_range = (num_sensors - 1) * angle
-    start_angle = -total_angular_range / 2.0
+    # Calculate symmetric distribution around start_angle
+    total_angle_range = (num_sensors - 1) * angle
+    half_range = total_angle_range / 2
+    first_angle = start_angle - half_range
     
-    # Generate offsets for each sensor
-    offsets = np.zeros((num_sensors, 2), dtype=float)
-    
+    # Generate sensor offsets
+    offsets = np.zeros((num_sensors, 2))
     for i in range(num_sensors):
-        # Calculate current angle in degrees
-        current_angle_deg = start_angle + i * angle
+        current_angle = first_angle + i * angle
+        angle_rad = np.deg2rad(current_angle)
         
-        # Convert to radians for trigonometric functions
-        current_angle_rad = np.deg2rad(current_angle_deg)
-        
-        # Calculate position using polar coordinates
-        offsets[i, 0] = distance * np.cos(current_angle_rad)  # x-component
-        offsets[i, 1] = distance * np.sin(current_angle_rad)  # y-component
+        offsets[i, 0] = distance * np.cos(angle_rad)  # x component
+        offsets[i, 1] = distance * np.sin(angle_rad)  # y component
     
     return offsets
 
 
-def rotate_offset(local_offset: np.ndarray, orientation_deg: float) -> np.ndarray:
-    """Rotate a local offset by agent's orientation.
+def rotate_sensor_offset(
+    local_offset: np.ndarray, 
+    orientation_deg: float
+) -> np.ndarray:
+    """
+    Rotate a local sensor offset by an agent's orientation.
     
-    Transforms sensor positions from agent's local coordinate frame to
-    global coordinate frame using 2D rotation matrix.
-    
+    Transforms sensor positions from the agent's local coordinate frame
+    to the global coordinate frame using a 2D rotation matrix.
+
     Parameters
     ----------
     local_offset : np.ndarray
-        Shape (2,) array representing (x, y) in local coordinates
+        Local offset with shape (2,) representing (x, y) in agent coordinates.
     orientation_deg : float
-        Agent's orientation in degrees (0° = facing +x direction)
-        
+        Agent's orientation in degrees (0° = positive x-axis).
+
     Returns
     -------
     np.ndarray
-        Shape (2,) array representing the offset in global coordinates
-        
+        Global offset with shape (2,) representing the transformed (x, y).
+
     Notes
     -----
-    Uses standard 2D rotation matrix:
-    [cos(θ) -sin(θ)]
-    [sin(θ)  cos(θ)]
-    
+    The rotation follows standard mathematical conventions:
+    - Positive angles rotate counter-clockwise
+    - 0° orientation points in the positive x-direction
+
     Examples
     --------
-    >>> local_pos = np.array([1.0, 0.0])  # 1 unit forward
-    >>> global_pos = rotate_offset(local_pos, 90.0)  # Rotate 90°
-    >>> print(global_pos)  # Should be [0.0, 1.0] (pointing up)
+    >>> local_offset = np.array([1.0, 0.0])  # Forward sensor
+    >>> global_offset = rotate_sensor_offset(local_offset, 90.0)  # Rotate 90°
+    >>> print(np.round(global_offset, 2))
+    [0. 1.]
     """
-    # Convert orientation to radians
     orientation_rad = np.deg2rad(orientation_deg)
     
-    # Create 2D rotation matrix
+    # 2D rotation matrix
     cos_theta = np.cos(orientation_rad)
     sin_theta = np.sin(orientation_rad)
-    
     rotation_matrix = np.array([
         [cos_theta, -sin_theta],
         [sin_theta,  cos_theta]
     ])
     
-    # Apply rotation transformation
     return rotation_matrix @ local_offset
-
-
-def compute_sensor_positions(
-    agent_positions: np.ndarray,
-    agent_orientations: np.ndarray,
-    sensor_layout: Union[SensorLayout, str, np.ndarray],
-    distance: float = 5.0,
-    angle: float = 45.0,
-    num_sensors: int = 2
-) -> np.ndarray:
-    """Compute global sensor positions for all agents.
-    
-    Transforms sensor offsets from local agent coordinates to global
-    coordinates based on each agent's position and orientation.
-    
-    Parameters
-    ----------
-    agent_positions : np.ndarray
-        Shape (num_agents, 2) array of agent (x, y) positions
-    agent_orientations : np.ndarray
-        Shape (num_agents,) array of agent orientations in degrees
-    sensor_layout : Union[SensorLayout, str, np.ndarray]
-        Sensor configuration - can be:
-        - SensorLayout object with predefined configuration
-        - String name of predefined layout
-        - np.ndarray of custom local offsets
-    distance : float, default=5.0
-        Distance from agent center (used if sensor_layout is string)
-    angle : float, default=45.0
-        Angular separation (used for custom layouts)
-    num_sensors : int, default=2
-        Number of sensors (used for custom layouts)
-        
-    Returns
-    -------
-    np.ndarray
-        Shape (num_agents, num_sensors, 2) array of global sensor positions
-        
-    Raises
-    ------
-    ValueError
-        If agent_positions and agent_orientations have incompatible shapes
-        
-    Examples
-    --------
-    >>> positions = np.array([[0.0, 0.0], [10.0, 10.0]])
-    >>> orientations = np.array([0.0, 90.0])  # First agent faces east, second north
-    >>> sensor_pos = compute_sensor_positions(positions, orientations, "LEFT_RIGHT")
-    """
-    # Validate input shapes
-    if agent_positions.shape[0] != agent_orientations.shape[0]:
-        raise ValueError(
-            f"Incompatible shapes: positions {agent_positions.shape} "
-            f"vs orientations {agent_orientations.shape}"
-        )
-    
-    num_agents = agent_positions.shape[0]
-    
-    # Handle different sensor_layout types
-    if isinstance(sensor_layout, SensorLayout):
-        local_offsets = sensor_layout.local_offsets
-    elif isinstance(sensor_layout, str):
-        local_offsets = get_predefined_sensor_layout(sensor_layout, distance)
-    elif isinstance(sensor_layout, np.ndarray):
-        local_offsets = sensor_layout.astype(float)
-        if local_offsets.ndim != 2 or local_offsets.shape[1] != 2:
-            raise ValueError(
-                f"Custom offsets must be shape (N, 2), got {local_offsets.shape}"
-            )
-    else:
-        # Fallback to custom layout generation
-        local_offsets = define_sensor_offsets(num_sensors, distance, angle)
-    
-    num_sensors = local_offsets.shape[0]
-    sensor_positions = np.zeros((num_agents, num_sensors, 2), dtype=float)
-    
-    # Transform each agent's sensors to global coordinates
-    for agent_idx in range(num_agents):
-        agent_pos = agent_positions[agent_idx]
-        agent_orientation = agent_orientations[agent_idx]
-        
-        # Transform each sensor for this agent
-        for sensor_idx in range(num_sensors):
-            local_offset = local_offsets[sensor_idx]
-            
-            # Rotate offset to global frame and add agent position
-            global_offset = rotate_offset(local_offset, agent_orientation)
-            sensor_positions[agent_idx, sensor_idx] = agent_pos + global_offset
-    
-    return sensor_positions
 
 
 def calculate_sensor_positions(
@@ -484,121 +302,193 @@ def calculate_sensor_positions(
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
     num_sensors: int = 2,
-    layout_name: Optional[str] = None
+    layout_name: Optional[str] = None,
+    start_angle: float = 0.0
 ) -> np.ndarray:
-    """Calculate sensor positions using navigator state.
+    """
+    Calculate global sensor positions for all agents in a navigator.
     
-    Convenience function that extracts position and orientation from
-    a navigator and computes sensor positions.
-    
+    Computes sensor positions by transforming local sensor geometry to global
+    coordinates based on each agent's position and orientation. Supports both
+    predefined layouts and custom sensor configurations.
+
     Parameters
     ----------
     navigator : NavigatorProtocol
-        Navigator with position and orientation information
-    sensor_distance : float, default=5.0
-        Distance from agent center to each sensor
-    sensor_angle : float, default=45.0
-        Angular separation between sensors in degrees
-    num_sensors : int, default=2
-        Number of sensors per agent
+        Navigator instance containing agent positions and orientations.
+    sensor_distance : float, default 5.0
+        Distance from agent center to sensors in environment units.
+    sensor_angle : float, default 45.0
+        Angular separation between adjacent sensors in degrees.
+        Ignored if layout_name is provided.
+    num_sensors : int, default 2
+        Number of sensors per agent. Ignored if layout_name is provided.
     layout_name : str, optional
-        Name of predefined sensor layout. If provided, other parameters ignored.
-        
+        Name of predefined sensor layout. If provided, overrides sensor_angle
+        and num_sensors parameters.
+    start_angle : float, default 0.0
+        Starting angle for custom sensor arrangements in degrees.
+
     Returns
     -------
     np.ndarray
-        Shape (num_agents, num_sensors, 2) array of global sensor positions
-        
+        Global sensor positions with shape (num_agents, num_sensors, 2).
+        Each element contains the (x, y) position of a sensor in global coordinates.
+
     Examples
     --------
-    >>> # Assuming navigator is already configured
-    >>> sensor_pos = calculate_sensor_positions(
-    ...     navigator, 
-    ...     layout_name="LEFT_RIGHT",
-    ...     sensor_distance=8.0
+    >>> # Using predefined layout
+    >>> positions = calculate_sensor_positions(navigator, layout_name="LEFT_RIGHT")
+    >>> print(positions.shape)  # (num_agents, 2, 2)
+    
+    >>> # Using custom configuration
+    >>> positions = calculate_sensor_positions(
+    ...     navigator,
+    ...     sensor_distance=8.0,
+    ...     sensor_angle=30.0,
+    ...     num_sensors=4
     ... )
+    
+    Notes
+    -----
+    This function is the primary interface for sensor position calculation and
+    integrates seamlessly with Hydra configuration systems for parameter management.
     """
-    return compute_sensor_positions(
-        navigator.positions,
-        navigator.orientations,
-        layout_name if layout_name else "custom",
-        distance=sensor_distance,
-        angle=sensor_angle,
-        num_sensors=num_sensors
-    )
+    # Get agent positions and orientations
+    agent_positions = navigator.positions
+    agent_orientations = navigator.orientations
+    
+    # Ensure positions are 2D array (num_agents, 2)
+    if agent_positions.ndim == 1:
+        agent_positions = agent_positions.reshape(1, -1)
+    if agent_orientations.ndim == 0:
+        agent_orientations = np.array([agent_orientations])
+    
+    # Determine sensor layout
+    if layout_name is not None:
+        local_offsets = get_predefined_sensor_layout(layout_name, sensor_distance)
+        actual_num_sensors = local_offsets.shape[0]
+    else:
+        local_offsets = define_custom_sensor_offsets(
+            num_sensors, sensor_distance, sensor_angle, start_angle
+        )
+        actual_num_sensors = num_sensors
+    
+    num_agents = agent_positions.shape[0]
+    sensor_positions = np.zeros((num_agents, actual_num_sensors, 2))
+    
+    # Calculate sensor positions for each agent
+    for agent_idx in range(num_agents):
+        agent_pos = agent_positions[agent_idx]
+        agent_orientation = agent_orientations[agent_idx]
+        
+        for sensor_idx in range(actual_num_sensors):
+            local_offset = local_offsets[sensor_idx]
+            # Transform to global coordinates
+            global_offset = rotate_sensor_offset(local_offset, agent_orientation)
+            sensor_positions[agent_idx, sensor_idx] = agent_pos + global_offset
+    
+    return sensor_positions
 
 
-def read_odor_values(
+def sample_odor_with_interpolation(
     env_array: np.ndarray,
-    positions: np.ndarray
+    positions: np.ndarray,
+    interpolation: str = "bilinear"
 ) -> np.ndarray:
-    """Read odor concentration values at specified positions.
+    """
+    Sample odor values from environment array with sub-pixel interpolation.
     
-    Samples the environment array at given positions with proper bounds
-    checking, coordinate conversion, and data type handling.
-    
+    Provides accurate odor sampling at arbitrary positions using interpolation
+    methods to handle non-integer coordinates. Includes comprehensive bounds
+    checking and data type normalization.
+
     Parameters
     ----------
     env_array : np.ndarray
-        Environment array representing odor concentrations
-        Can be 2D array or object with 'current_frame' attribute
+        Environment array with shape (height, width) containing odor data.
+        Supports uint8 (automatically normalized to [0,1]) and float types.
     positions : np.ndarray
-        Shape (N, 2) array of (x, y) positions to sample
-        
+        Positions to sample with shape (N, 2) where each row is (x, y).
+    interpolation : str, default "bilinear"
+        Interpolation method. Currently supports "bilinear" and "nearest".
+
     Returns
     -------
     np.ndarray
-        Shape (N,) array of odor concentration values
-        
-    Notes
-    -----
-    - Positions outside array bounds return 0.0
-    - uint8 arrays are automatically normalized to [0, 1] range
-    - Coordinates are converted to integer indices using floor operation
-    - Supports mock plume objects for testing
-    
+        Odor values with shape (N,) corresponding to input positions.
+        Out-of-bounds positions return 0.0.
+
     Examples
     --------
-    >>> env = np.random.rand(100, 100) * 255
-    >>> env = env.astype(np.uint8)
-    >>> positions = np.array([[25.7, 30.2], [50.0, 75.5]])
-    >>> odor_values = read_odor_values(env, positions)
-    >>> print(odor_values.shape)  # (2,)
+    >>> env = np.random.rand(100, 100)
+    >>> positions = np.array([[25.5, 30.7], [50.0, 50.0]])
+    >>> odor_values = sample_odor_with_interpolation(env, positions)
+    >>> print(odor_values.shape)
+    (2,)
+    
+    Notes
+    -----
+    Bilinear interpolation provides smooth odor gradients essential for
+    gradient-following navigation algorithms.
     """
-    # Handle mock plume objects (for testing compatibility)
+    # Handle mock objects or invalid arrays
     if hasattr(env_array, 'current_frame'):
         env_array = env_array.current_frame
     
-    # Validate environment array
     if not hasattr(env_array, 'shape') or len(env_array.shape) < 2:
-        # Return zeros for invalid or mock arrays
-        return np.zeros(len(positions), dtype=float)
+        return np.zeros(positions.shape[0])
     
     height, width = env_array.shape[:2]
     num_positions = positions.shape[0]
-    odor_values = np.zeros(num_positions, dtype=float)
+    odor_values = np.zeros(num_positions)
     
-    # Convert positions to integer pixel coordinates
-    x_indices = np.floor(positions[:, 0]).astype(int)
-    y_indices = np.floor(positions[:, 1]).astype(int)
-    
-    # Create bounds mask for valid positions
-    valid_mask = (
-        (x_indices >= 0) & (x_indices < width) &
-        (y_indices >= 0) & (y_indices < height)
-    )
-    
-    # Sample values for positions within bounds
     for i in range(num_positions):
-        if valid_mask[i]:
-            # Note: array indexing is [row, col] = [y, x]
-            raw_value = env_array[y_indices[i], x_indices[i]]
+        x, y = positions[i]
+        
+        # Check bounds
+        if x < 0 or x >= width or y < 0 or y >= height:
+            odor_values[i] = 0.0
+            continue
+        
+        if interpolation == "nearest":
+            # Nearest neighbor interpolation
+            x_idx = int(round(x))
+            y_idx = int(round(y))
+            x_idx = np.clip(x_idx, 0, width - 1)
+            y_idx = np.clip(y_idx, 0, height - 1)
+            odor_values[i] = env_array[y_idx, x_idx]
             
-            # Normalize uint8 values to [0, 1] range
-            if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
-                odor_values[i] = float(raw_value) / 255.0
-            else:
-                odor_values[i] = float(raw_value)
+        elif interpolation == "bilinear":
+            # Bilinear interpolation
+            x0 = int(np.floor(x))
+            x1 = min(x0 + 1, width - 1)
+            y0 = int(np.floor(y))
+            y1 = min(y0 + 1, height - 1)
+            
+            # Calculate interpolation weights
+            wx = x - x0
+            wy = y - y0
+            
+            # Get corner values
+            q00 = env_array[y0, x0]
+            q01 = env_array[y1, x0]
+            q10 = env_array[y0, x1]
+            q11 = env_array[y1, x1]
+            
+            # Bilinear interpolation
+            odor_values[i] = (
+                q00 * (1 - wx) * (1 - wy) +
+                q10 * wx * (1 - wy) +
+                q01 * (1 - wx) * wy +
+                q11 * wx * wy
+            )
+        else:
+            raise ValueError(f"Unknown interpolation method: {interpolation}")
+        
+        # Normalize uint8 to [0, 1]
+        if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
+            odor_values[i] /= 255.0
     
     return odor_values
 
@@ -609,220 +499,227 @@ def sample_odor_at_sensors(
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
     num_sensors: int = 2,
-    layout_name: Optional[str] = None
+    layout_name: Optional[str] = None,
+    interpolation: str = "bilinear",
+    start_angle: float = 0.0
 ) -> np.ndarray:
-    """Sample odor concentrations at all sensor positions.
+    """
+    Sample odor values at sensor positions for all agents.
     
-    Combines sensor position calculation with odor sampling to provide
-    a complete sensor reading system for navigation algorithms.
-    
+    High-level interface that combines sensor position calculation with odor
+    sampling, providing comprehensive multi-sensor readings for navigation
+    algorithms. Supports both predefined and custom sensor configurations.
+
     Parameters
     ----------
     navigator : NavigatorProtocol
-        Navigator instance with current agent state
+        Navigator instance containing agent state information.
     env_array : np.ndarray
-        Environment array representing odor concentrations
-    sensor_distance : float, default=5.0
-        Distance from agent center to sensors
-    sensor_angle : float, default=45.0
-        Angular separation between sensors in degrees
-    num_sensors : int, default=2
-        Number of sensors per agent
+        Environment array containing odor concentration data.
+    sensor_distance : float, default 5.0
+        Distance from agent center to sensors.
+    sensor_angle : float, default 45.0
+        Angular separation between sensors in degrees.
+    num_sensors : int, default 2
+        Number of sensors per agent.
     layout_name : str, optional
-        Name of predefined sensor layout
-        
+        Predefined sensor layout name. Overrides other parameters if provided.
+    interpolation : str, default "bilinear"
+        Interpolation method for sub-pixel sampling.
+    start_angle : float, default 0.0
+        Starting angle for custom sensor arrangements.
+
     Returns
     -------
     np.ndarray
-        Shape (num_agents, num_sensors) array of odor readings
-        
+        Odor readings with shape (num_agents, num_sensors).
+        Each element contains the odor concentration at a sensor location.
+
     Examples
     --------
-    >>> # Sample with left-right sensor configuration
-    >>> readings = sample_odor_at_sensors(
-    ...     navigator, 
-    ...     env_array,
-    ...     layout_name="LEFT_RIGHT", 
-    ...     sensor_distance=10.0
+    >>> # Basic bilateral sensing
+    >>> odor_readings = sample_odor_at_sensors(
+    ...     navigator, env_array, layout_name="LEFT_RIGHT"
     ... )
-    >>> print(f"Left sensor: {readings[0, 0]}, Right sensor: {readings[0, 1]}")
+    
+    >>> # Custom 4-sensor array
+    >>> odor_readings = sample_odor_at_sensors(
+    ...     navigator, env_array,
+    ...     sensor_distance=8.0,
+    ...     sensor_angle=30.0,
+    ...     num_sensors=4
+    ... )
+    
+    Notes
+    -----
+    This function is the primary interface for multi-sensor odor sampling and
+    integrates seamlessly with navigation algorithms and visualization systems.
     """
-    # Calculate global sensor positions
+    # Calculate sensor positions
     sensor_positions = calculate_sensor_positions(
-        navigator, sensor_distance, sensor_angle, num_sensors, layout_name
+        navigator=navigator,
+        sensor_distance=sensor_distance,
+        sensor_angle=sensor_angle,
+        num_sensors=num_sensors,
+        layout_name=layout_name,
+        start_angle=start_angle
     )
     
-    # Reshape for batch sampling: (num_agents * num_sensors, 2)
+    # Reshape for batch sampling
+    num_agents, actual_num_sensors, _ = sensor_positions.shape
     flat_positions = sensor_positions.reshape(-1, 2)
     
     # Sample odor at all sensor positions
-    flat_readings = read_odor_values(env_array, flat_positions)
+    flat_odor_values = sample_odor_with_interpolation(
+        env_array, flat_positions, interpolation
+    )
     
     # Reshape back to (num_agents, num_sensors)
-    num_agents = navigator.num_agents
-    actual_num_sensors = sensor_positions.shape[1]
-    odor_readings = flat_readings.reshape(num_agents, actual_num_sensors)
+    odor_values = flat_odor_values.reshape(num_agents, actual_num_sensors)
     
-    return odor_readings
+    return odor_values
 
 
-def validate_sensor_configuration(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and normalize sensor configuration parameters.
+def sample_single_antenna_odor(
+    navigator: NavigatorProtocol,
+    env_array: np.ndarray,
+    antenna_distance: float = 5.0,
+    interpolation: str = "bilinear"
+) -> Union[float, np.ndarray]:
+    """
+    Sample odor at each agent's primary antenna location.
     
-    Ensures sensor configuration dictionaries contain valid parameters
-    and provides sensible defaults for missing values.
-    
+    Provides simplified single-sensor odor reading at a fixed forward position
+    relative to each agent. Useful for basic gradient-following algorithms.
+
     Parameters
     ----------
-    config : Dict[str, Any]
-        Sensor configuration dictionary
-        
+    navigator : NavigatorProtocol
+        Navigator instance with agent state information.
+    env_array : np.ndarray
+        Environment array containing odor data.
+    antenna_distance : float, default 5.0
+        Distance from agent center to antenna in forward direction.
+    interpolation : str, default "bilinear"
+        Interpolation method for sampling.
+
+    Returns
+    -------
+    Union[float, np.ndarray]
+        Antenna odor readings:
+        - float: For single agent navigator
+        - np.ndarray: For multi-agent navigator with shape (num_agents,)
+
+    Examples
+    --------
+    >>> # Single agent
+    >>> odor_value = sample_single_antenna_odor(single_navigator, env_array)
+    >>> print(type(odor_value))
+    <class 'float'>
+    
+    >>> # Multi-agent
+    >>> odor_values = sample_single_antenna_odor(multi_navigator, env_array)
+    >>> print(odor_values.shape)
+    (num_agents,)
+    """
+    # Use SINGLE layout for antenna positioning
+    antenna_readings = sample_odor_at_sensors(
+        navigator=navigator,
+        env_array=env_array,
+        sensor_distance=antenna_distance,
+        layout_name="SINGLE",
+        interpolation=interpolation
+    )
+    
+    # Return appropriate format based on navigator type
+    if navigator.num_agents == 1:
+        return antenna_readings[0, 0]  # Single float value
+    else:
+        return antenna_readings[:, 0]  # Array of values
+
+
+# Configuration utilities for Hydra integration
+def create_sensor_config_from_hydra(
+    cfg: Any,
+    default_distance: float = 5.0,
+    default_angle: float = 45.0,
+    default_num_sensors: int = 2
+) -> Dict[str, Any]:
+    """
+    Create sensor configuration dictionary from Hydra config object.
+    
+    Extracts sensor parameters from Hydra configuration with fallback defaults,
+    enabling seamless integration with structured configuration systems.
+
+    Parameters
+    ----------
+    cfg : Any
+        Hydra configuration object or dictionary containing sensor parameters.
+    default_distance : float, default 5.0
+        Default sensor distance if not specified in config.
+    default_angle : float, default 45.0
+        Default sensor angle if not specified in config.
+    default_num_sensors : int, default 2
+        Default number of sensors if not specified in config.
+
     Returns
     -------
     Dict[str, Any]
-        Validated and normalized configuration
-        
-    Raises
-    ------
-    ValueError
-        If configuration contains invalid parameters
-        
+        Dictionary of sensor parameters ready for use with sensor functions.
+
     Examples
     --------
-    >>> config = {"layout_name": "LEFT_RIGHT", "distance": 8.0}
-    >>> validated = validate_sensor_configuration(config)
-    >>> print(validated["distance"])  # 8.0
+    >>> # Hydra config in conf/config.yaml:
+    >>> # sensors:
+    >>> #   layout_name: "BILATERAL"
+    >>> #   distance: 8.0
+    >>> #   interpolation: "bilinear"
+    >>> 
+    >>> sensor_config = create_sensor_config_from_hydra(cfg.sensors)
+    >>> odor_values = sample_odor_at_sensors(navigator, env_array, **sensor_config)
     """
-    # Define valid configuration keys and their types
-    valid_keys = {
-        'layout_name': (str, type(None)),
-        'distance': (int, float),
-        'num_sensors': int,
-        'angle': (int, float),
-        'custom_offsets': (np.ndarray, type(None))
-    }
+    # Handle both dict and DictConfig objects
+    if hasattr(cfg, 'get'):
+        # DictConfig or dict-like object
+        config = {
+            'sensor_distance': cfg.get('distance', default_distance),
+            'sensor_angle': cfg.get('angle', default_angle),
+            'num_sensors': cfg.get('num_sensors', default_num_sensors),
+            'layout_name': cfg.get('layout_name', None),
+            'interpolation': cfg.get('interpolation', 'bilinear'),
+            'start_angle': cfg.get('start_angle', 0.0),
+        }
+    else:
+        # Fallback for simple dict or missing config
+        config = {
+            'sensor_distance': default_distance,
+            'sensor_angle': default_angle,
+            'num_sensors': default_num_sensors,
+            'layout_name': None,
+            'interpolation': 'bilinear',
+            'start_angle': 0.0,
+        }
     
-    # Default values
-    defaults = {
-        'distance': 5.0,
-        'angle': 45.0,
-        'num_sensors': 2
-    }
-    
-    # Create validated configuration
-    validated_config = {}
-    
-    # Check for unknown keys
-    unknown_keys = set(config.keys()) - set(valid_keys.keys())
-    if unknown_keys:
-        raise ValueError(f"Unknown sensor configuration keys: {unknown_keys}")
-    
-    # Validate and set known keys
-    for key, expected_types in valid_keys.items():
-        if key in config:
-            value = config[key]
-            if not isinstance(value, expected_types):
-                raise ValueError(
-                    f"Invalid type for '{key}': expected {expected_types}, "
-                    f"got {type(value)}"
-                )
-            validated_config[key] = value
-        elif key in defaults:
-            validated_config[key] = defaults[key]
-    
-    # Validate specific constraints
-    if 'distance' in validated_config and validated_config['distance'] <= 0:
-        raise ValueError("Sensor distance must be positive")
-    
-    if 'num_sensors' in validated_config and validated_config['num_sensors'] < 1:
-        raise ValueError("Number of sensors must be at least 1")
-    
-    return validated_config
+    # Remove None values to use function defaults
+    return {k: v for k, v in config.items() if v is not None}
 
 
-def create_sensor_layout_from_config(config: Dict[str, Any]) -> SensorLayout:
-    """Create a SensorLayout from configuration dictionary.
+# Export public API
+__all__ = [
+    # Layout and configuration
+    "PREDEFINED_SENSOR_LAYOUTS",
+    "get_predefined_sensor_layout",
+    "define_custom_sensor_offsets",
     
-    Factory function to create SensorLayout instances from configuration
-    data, typically loaded from Hydra configuration files.
+    # Position calculations
+    "rotate_sensor_offset",
+    "calculate_sensor_positions",
     
-    Parameters
-    ----------
-    config : Dict[str, Any]
-        Configuration dictionary with sensor parameters
-        
-    Returns
-    -------
-    SensorLayout
-        Configured sensor layout instance
-        
-    Examples
-    --------
-    >>> config = {
-    ...     "layout_name": "LEFT_RIGHT",
-    ...     "distance": 10.0
-    ... }
-    >>> layout = create_sensor_layout_from_config(config)
-    >>> print(layout.sensor_count)  # 2
-    """
-    # Validate configuration
-    validated_config = validate_sensor_configuration(config)
+    # Odor sampling
+    "sample_odor_with_interpolation",
+    "sample_odor_at_sensors",
+    "sample_single_antenna_odor",
     
-    # Create SensorLayout with validated parameters
-    return SensorLayout(**validated_config)
-
-
-# Convenience functions for common sensor operations
-def get_available_layouts() -> list[str]:
-    """Get list of available predefined sensor layouts.
-    
-    Returns
-    -------
-    list[str]
-        Names of all predefined sensor layouts
-    """
-    return list(PREDEFINED_SENSOR_LAYOUTS.keys())
-
-
-def describe_layout(layout_name: str) -> Dict[str, Any]:
-    """Get description and metadata for a sensor layout.
-    
-    Parameters
-    ----------
-    layout_name : str
-        Name of the sensor layout
-        
-    Returns
-    -------
-    Dict[str, Any]
-        Layout metadata including sensor count and offsets
-        
-    Raises
-    ------
-    ValueError
-        If layout_name is not found
-    """
-    if layout_name not in PREDEFINED_SENSOR_LAYOUTS:
-        raise ValueError(f"Unknown layout: {layout_name}")
-    
-    layout = PREDEFINED_SENSOR_LAYOUTS[layout_name]
-    
-    return {
-        'name': layout_name,
-        'sensor_count': layout.shape[0],
-        'base_offsets': layout.tolist(),
-        'description': _get_layout_description(layout_name)
-    }
-
-
-def _get_layout_description(layout_name: str) -> str:
-    """Get human-readable description of sensor layout."""
-    descriptions = {
-        "SINGLE": "Single sensor at agent position",
-        "LEFT_RIGHT": "Two sensors positioned left and right of agent",
-        "FRONT_SIDES": "Three sensors: front, left, and right",
-        "TRIANGLE": "Three sensors in triangular configuration",
-        "CROSS": "Four sensors in cross pattern (front, left, back, right)",
-        "LINEAR": "Five sensors in linear array along agent's forward axis"
-    }
-    return descriptions.get(layout_name, "Custom sensor layout")
+    # Hydra integration
+    "create_sensor_config_from_hydra",
+]
