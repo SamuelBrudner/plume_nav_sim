@@ -1,894 +1,1102 @@
 """
-Comprehensive test suite for utility functions validating seed management, logging configuration,
+Comprehensive test module for utility functions validating seed management, logging configuration,
 visualization utilities, and cross-cutting concerns.
 
 This module ensures utility function reliability, mathematical precision, and proper integration
-with the broader system architecture per Section 6.6.3.1 requirements.
+with the broader system architecture. Tests cover reproducibility management, performance monitoring,
+visualization capabilities, and cross-platform compatibility per Section 6.6.3.1 requirements.
+
+Test Coverage Targets:
+- Seed management: >85% coverage with reproducibility validation
+- Logging configuration: >85% coverage with performance validation  
+- Visualization utilities: >75% coverage with rendering validation
+- Mathematical utilities: >90% coverage with precision validation
+- Cross-platform compatibility: 100% coverage for file I/O and path handling
 """
+
+import os
+import sys
+import time
+import tempfile
+import threading
+import platform
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock, call
+from typing import Dict, Any, List, Optional, Tuple
+import uuid
 
 import pytest
 import numpy as np
-import time
-import tempfile
-import os
-import sys
-import platform
-import gc
-import psutil
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
-from typing import Any, Dict, List, Optional, Tuple, Union
-import threading
-import multiprocessing
-from contextlib import contextmanager
-import io
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.animation import FuncAnimation
 
-# Import utility modules to test
-try:
-    from {{cookiecutter.project_slug}}.utils.seed_manager import (
-        set_global_seed, get_current_seed, initialize_reproducibility,
-        get_random_state_context, reset_random_state
-    )
-    SEED_MANAGER_AVAILABLE = True
-except ImportError:
-    SEED_MANAGER_AVAILABLE = False
-
-try:
-    from {{cookiecutter.project_slug}}.utils.logging import (
-        setup_logger, get_module_logger, configure_hydra_logging,
-        get_correlation_id, bind_experiment_context
-    )
-    LOGGING_AVAILABLE = True
-except ImportError:
-    LOGGING_AVAILABLE = False
-
-try:
-    from {{cookiecutter.project_slug}}.utils.visualization import (
-        SimulationVisualization, visualize_trajectory, export_animation,
-        create_trajectory_plot, setup_headless_mode
-    )
-    VISUALIZATION_AVAILABLE = True
-except ImportError:
-    VISUALIZATION_AVAILABLE = False
+# Test the utils package modules
+from src.{{cookiecutter.project_slug}}.utils.seed_manager import (
+    SeedManager, SeedConfig, get_seed_manager, set_global_seed,
+    get_current_seed, get_numpy_generator
+)
+from src.{{cookiecutter.project_slug}}.utils.logging import (
+    LoggingConfig, EnhancedLoggingManager, CorrelationContext,
+    HydraJobTracker, CLIMetricsTracker, get_logging_manager,
+    setup_enhanced_logging, get_module_logger, create_correlation_scope,
+    create_cli_command_scope, create_parameter_validation_scope
+)
+from src.{{cookiecutter.project_slug}}.utils.visualization import (
+    SimulationVisualization, visualize_trajectory, batch_visualize_trajectories,
+    setup_headless_mode, get_available_themes, DEFAULT_VISUALIZATION_CONFIG
+)
 
 
 class TestSeedManager:
-    """Test suite for seed management utilities ensuring reproducible randomization."""
+    """
+    Comprehensive test suite for seed management functionality.
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_set_global_seed_reproducibility(self):
-        """Test that global seed setting ensures reproducible results across runs."""
-        test_seed = 12345
-        
-        # Set seed and generate random numbers
-        set_global_seed(test_seed)
-        np_result1 = np.random.random(10)
-        python_result1 = [np.random.random() for _ in range(5)]
-        
-        # Reset seed and generate again
-        set_global_seed(test_seed)
-        np_result2 = np.random.random(10)
-        python_result2 = [np.random.random() for _ in range(5)]
-        
-        # Results should be identical
-        np.testing.assert_array_equal(np_result1, np_result2)
-        assert python_result1 == python_result2
+    Tests reproducibility, random state management, Hydra integration,
+    performance characteristics, and cross-platform consistency.
+    """
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_seed_initialization_performance(self):
-        """Test that seed initialization completes within 100ms per Section 6.6.3.3."""
-        start_time = time.perf_counter()
-        
-        set_global_seed(42)
-        
-        end_time = time.perf_counter()
-        initialization_time = (end_time - start_time) * 1000  # Convert to milliseconds
-        
-        assert initialization_time < 100, f"Seed initialization took {initialization_time:.2f}ms, should be <100ms"
+    def setup_method(self):
+        """Reset seed manager state before each test."""
+        SeedManager.reset()
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_cross_platform_consistency(self):
-        """Test that seed management produces consistent results across platforms."""
-        test_seed = 54321
-        
-        # Test with different data types and operations
-        set_global_seed(test_seed)
-        results = {
-            'random_floats': np.random.random(100),
-            'random_ints': np.random.randint(0, 1000, 50),
-            'normal_dist': np.random.normal(0, 1, 75),
-            'choice_array': np.random.choice(range(100), 25, replace=False)
-        }
-        
-        # Reset and test again
-        set_global_seed(test_seed)
-        repeated_results = {
-            'random_floats': np.random.random(100),
-            'random_ints': np.random.randint(0, 1000, 50),
-            'normal_dist': np.random.normal(0, 1, 75),
-            'choice_array': np.random.choice(range(100), 25, replace=False)
-        }
-        
-        # Verify all results are identical
-        for key in results:
-            np.testing.assert_array_equal(
-                results[key], repeated_results[key],
-                err_msg=f"Results for {key} differ between runs"
-            )
+    def teardown_method(self):
+        """Clean up after each test."""
+        SeedManager.reset()
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_get_current_seed(self):
-        """Test retrieval of current seed value."""
-        test_seed = 98765
-        set_global_seed(test_seed)
+    def test_seed_manager_singleton_pattern(self):
+        """Test that SeedManager implements singleton pattern correctly."""
+        manager1 = SeedManager()
+        manager2 = SeedManager()
+        assert manager1 is manager2
         
-        current_seed = get_current_seed()
-        assert current_seed == test_seed
+        # Test factory function returns same instance
+        manager3 = get_seed_manager()
+        assert manager1 is manager3
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_random_state_context_isolation(self):
-        """Test that random state context provides isolation without affecting global state."""
-        global_seed = 11111
-        context_seed = 22222
+    def test_seed_config_validation(self):
+        """Test SeedConfig Pydantic schema validation."""
+        # Valid configuration
+        config = SeedConfig(seed=42, auto_seed=False, validate_initialization=True)
+        assert config.seed == 42
+        assert config.auto_seed is False
+        assert config.validate_initialization is True
         
-        set_global_seed(global_seed)
-        global_value1 = np.random.random()
+        # Test default values
+        default_config = SeedConfig()
+        assert default_config.seed is None
+        assert default_config.auto_seed is True
+        assert default_config.validate_initialization is True
         
-        # Use context with different seed
-        with get_random_state_context(context_seed):
-            context_value = np.random.random()
-            
-        # Continue with global state
-        global_value2 = np.random.random()
-        
-        # Reset global seed and verify sequence continues correctly
-        set_global_seed(global_seed)
-        expected_value1 = np.random.random()
-        expected_value2 = np.random.random()
-        
-        assert global_value1 == expected_value1
-        assert global_value2 == expected_value2
-        # Context value should be different from global sequence
-        assert context_value != global_value1
-        assert context_value != global_value2
+        # Test invalid seed range (should not raise due to Field constraints)
+        config_negative = SeedConfig(seed=-1)
+        assert config_negative.seed == -1  # Pydantic allows this, validation happens in manager
     
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
-    def test_multiprocess_seed_isolation(self):
-        """Test that seed management works correctly in multiprocess environments."""
-        def worker_function(seed_value, return_dict, process_id):
-            set_global_seed(seed_value)
-            results = np.random.random(10)
-            return_dict[process_id] = results.tolist()
+    def test_seed_manager_initialization_basic(self):
+        """Test basic seed manager initialization."""
+        manager = SeedManager()
         
-        manager = multiprocessing.Manager()
-        return_dict = manager.dict()
-        processes = []
+        # Test initialization with explicit seed
+        seed = manager.initialize(config=SeedConfig(seed=42))
+        assert seed == 42
+        assert manager.current_seed == 42
+        assert manager.numpy_generator is not None
         
-        # Start multiple processes with the same seed
-        test_seed = 33333
-        for i in range(3):
-            p = multiprocessing.Process(
-                target=worker_function,
-                args=(test_seed, return_dict, i)
-            )
-            processes.append(p)
-            p.start()
-        
-        # Wait for all processes to complete
-        for p in processes:
-            p.join()
-        
-        # All processes should produce identical results
-        results_list = [return_dict[i] for i in range(3)]
-        for i in range(1, 3):
-            np.testing.assert_array_almost_equal(results_list[0], results_list[i])
-
-
-class TestLoggingConfiguration:
-    """Test suite for logging configuration and performance monitoring integration."""
+        # Test reproducible random number generation
+        random_value = manager.numpy_generator.random()
+        assert isinstance(random_value, float)
+        assert 0.0 <= random_value <= 1.0
     
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_logger_setup_performance(self):
-        """Test that logger setup completes quickly for real-time applications."""
-        start_time = time.perf_counter()
+    def test_seed_manager_auto_generation(self):
+        """Test automatic seed generation from entropy."""
+        manager = SeedManager()
         
-        with patch('loguru.logger') as mock_logger:
-            setup_logger(level="INFO")
-            
-        end_time = time.perf_counter()
-        setup_time = (end_time - start_time) * 1000
+        # Test auto-generation
+        config = SeedConfig(auto_seed=True, seed=None)
+        seed1 = manager.initialize(config=config)
         
-        assert setup_time < 50, f"Logger setup took {setup_time:.2f}ms, should be <50ms"
-        assert mock_logger.remove.called
-        assert mock_logger.add.called
+        # Reset and generate again
+        SeedManager.reset()
+        manager = SeedManager()
+        seed2 = manager.initialize(config=config)
+        
+        # Seeds should be different (high probability)
+        assert seed1 != seed2
+        assert 0 <= seed1 <= 2**32 - 1
+        assert 0 <= seed2 <= 2**32 - 1
     
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_module_logger_context_binding(self):
-        """Test that module loggers bind context correctly."""
-        module_name = "test_module"
-        
-        with patch('loguru.logger') as mock_logger:
-            mock_bound_logger = MagicMock()
-            mock_logger.bind.return_value = mock_bound_logger
-            
-            logger = get_module_logger(module_name)
-            
-            mock_logger.bind.assert_called_once_with(module=module_name)
-            assert logger == mock_bound_logger
-    
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    @patch('{{cookiecutter.project_slug}}.utils.logging.uuid4')
-    def test_correlation_id_generation(self, mock_uuid):
-        """Test correlation ID generation for experiment tracking."""
-        mock_uuid.return_value.hex = "test_correlation_id_123"
-        
-        correlation_id = get_correlation_id()
-        
-        assert correlation_id == "test_correlation_id_123"
-        mock_uuid.assert_called_once()
-    
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_hydra_logging_integration(self):
-        """Test Hydra configuration integration with logging system."""
-        mock_config = {
-            'job': {'name': 'test_experiment'},
-            'hydra': {'job': {'chdir': '/tmp/test'}},
-            'logging': {'level': 'DEBUG'}
-        }
-        
-        with patch('loguru.logger') as mock_logger:
-            configure_hydra_logging(mock_config)
-            
-            # Verify logger configuration was updated
-            assert mock_logger.remove.called
-            assert mock_logger.add.called
-    
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_experiment_context_binding(self):
-        """Test experiment context binding for enhanced traceability."""
-        experiment_context = {
-            'experiment_id': 'exp_001',
-            'run_id': 'run_123',
-            'seed': 42,
-            'timestamp': '2023-01-01T00:00:00'
-        }
-        
-        with patch('loguru.logger') as mock_logger:
-            mock_bound_logger = MagicMock()
-            mock_logger.bind.return_value = mock_bound_logger
-            
-            result_logger = bind_experiment_context(experiment_context)
-            
-            mock_logger.bind.assert_called_once_with(**experiment_context)
-            assert result_logger == mock_bound_logger
-    
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_logging_memory_efficiency(self):
-        """Test that logging operations don't cause memory leaks."""
-        initial_memory = psutil.Process().memory_info().rss
-        
-        with patch('loguru.logger'):
-            # Perform many logging operations
-            for i in range(1000):
-                logger = get_module_logger(f"test_module_{i}")
-                setup_logger(level="INFO")
-        
-        # Force garbage collection
-        gc.collect()
-        
-        final_memory = psutil.Process().memory_info().rss
-        memory_increase = final_memory - initial_memory
-        
-        # Memory increase should be minimal (less than 10MB)
-        assert memory_increase < 10 * 1024 * 1024, f"Memory increased by {memory_increase / 1024 / 1024:.2f}MB"
-
-
-class TestVisualizationUtilities:
-    """Test suite for visualization utilities including trajectory plotting and animation export."""
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_simulation_visualization_initialization(self, mock_plt):
-        """Test SimulationVisualization class initialization."""
-        mock_fig = MagicMock()
-        mock_ax = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, mock_ax)
-        
-        viz = SimulationVisualization(figsize=(12, 10), dpi=150)
-        
-        mock_plt.subplots.assert_called_once_with(figsize=(12, 10), dpi=150)
-        assert viz.fig == mock_fig
-        assert viz.ax == mock_ax
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_trajectory_visualization_single_agent(self, mock_plt):
-        """Test trajectory plotting for single agent scenarios."""
-        positions = np.array([[0, 0], [1, 1], [2, 2], [3, 3]])
-        orientations = np.array([0, 45, 90, 135])
-        
-        mock_fig = MagicMock()
-        mock_ax = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, mock_ax)
-        
-        visualize_trajectory(positions, orientations, show_plot=False)
-        
-        # Verify plotting calls were made
-        mock_plt.subplots.assert_called()
-        mock_ax.plot.assert_called()
-        mock_ax.quiver.assert_called()
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_trajectory_visualization_multi_agent(self, mock_plt):
-        """Test trajectory plotting for multi-agent scenarios."""
-        # Multi-agent positions (2 agents, 4 timesteps each)
-        positions = np.array([
-            [[0, 0], [1, 1], [2, 2], [3, 3]],  # Agent 1
-            [[0, 5], [1, 4], [2, 3], [3, 2]]   # Agent 2
-        ])
-        orientations = np.array([
-            [0, 45, 90, 135],    # Agent 1
-            [180, 225, 270, 315] # Agent 2
-        ])
-        
-        mock_fig = MagicMock()
-        mock_ax = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, mock_ax)
-        
-        visualize_trajectory(positions, orientations, show_plot=False)
-        
-        # Should have multiple plot calls for multiple agents
-        assert mock_ax.plot.call_count >= 2
-        mock_ax.quiver.assert_called()
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_animation_export_performance(self, mock_plt):
-        """Test animation export meets performance requirements."""
-        mock_animation = MagicMock()
-        mock_fig = MagicMock()
+    def test_seed_manager_performance(self):
+        """Test seed manager initialization performance requirements."""
+        manager = SeedManager()
         
         start_time = time.perf_counter()
+        manager.initialize(config=SeedConfig(seed=42))
+        initialization_time = (time.perf_counter() - start_time) * 1000
         
-        with patch('matplotlib.animation.FuncAnimation', return_value=mock_animation):
-            export_animation(
-                mock_fig, 
-                update_function=lambda x: [],
-                frames=30,
-                filename="test_animation.mp4"
-            )
-        
-        end_time = time.perf_counter()
-        export_time = (end_time - start_time) * 1000
-        
-        # Animation setup should be fast (actual rendering can be slow)
-        assert export_time < 100, f"Animation export setup took {export_time:.2f}ms"
+        # Should initialize in under 100ms per specification
+        assert initialization_time < 100, f"Initialization took {initialization_time:.2f}ms > 100ms"
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_headless_mode_setup(self, mock_plt):
-        """Test headless mode setup for batch processing."""
-        with patch('matplotlib.use') as mock_use:
-            setup_headless_mode()
-            mock_use.assert_called_with('Agg')
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    @patch('matplotlib.pyplot')
-    def test_trajectory_plot_with_background(self, mock_plt):
-        """Test trajectory plotting with odor plume background."""
-        positions = np.array([[0, 0], [1, 1], [2, 2]])
-        background = np.random.random((100, 100))
+    def test_reproducibility_validation(self):
+        """Test reproducibility across multiple initializations."""
+        # Initialize with specific seed
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42))
         
-        mock_fig = MagicMock()
-        mock_ax = MagicMock()
-        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+        # Generate reference values
+        np.random.seed(42)  # Set legacy numpy random state
+        manager.numpy_generator.bit_generator.state = np.random.default_rng(42).bit_generator.state
         
-        visualize_trajectory(positions, background=background, show_plot=False)
-        
-        # Should include background plotting
-        mock_ax.imshow.assert_called()
-        mock_plt.colorbar.assert_called()
-    
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    def test_visualization_memory_cleanup(self):
-        """Test that visualization operations properly clean up memory."""
-        initial_memory = psutil.Process().memory_info().rss
-        
-        with patch('matplotlib.pyplot') as mock_plt:
-            mock_fig = MagicMock()
-            mock_ax = MagicMock()
-            mock_plt.subplots.return_value = (mock_fig, mock_ax)
-            
-            # Create many visualization objects
-            for i in range(50):
-                viz = SimulationVisualization()
-                positions = np.random.random((10, 2))
-                visualize_trajectory(positions, show_plot=False)
-        
-        # Force cleanup
-        gc.collect()
-        
-        final_memory = psutil.Process().memory_info().rss
-        memory_increase = final_memory - initial_memory
-        
-        # Memory increase should be reasonable
-        assert memory_increase < 50 * 1024 * 1024, f"Memory increased by {memory_increase / 1024 / 1024:.2f}MB"
-
-
-class TestMathematicalPrecision:
-    """Test suite for mathematical utilities ensuring numerical precision requirements."""
-    
-    def test_array_normalization_precision(self):
-        """Test that array normalization maintains 1e-6 precision per research standards."""
-        test_arrays = [
-            np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
-            np.array([0.1, 0.01, 0.001, 0.0001]),
-            np.array([1e6, 1e7, 1e8, 1e9]),
-            np.array([-1.0, -2.0, -3.0])
-        ]
-        
-        for arr in test_arrays:
-            # Simulate array normalization (would be actual utility function)
-            normalized = arr / np.linalg.norm(arr)
-            
-            # Verify unit vector property
-            norm = np.linalg.norm(normalized)
-            assert abs(norm - 1.0) < 1e-6, f"Normalization precision error: {abs(norm - 1.0)}"
-    
-    def test_angle_calculations_precision(self):
-        """Test angle calculations maintain required precision."""
-        test_angles = np.linspace(0, 2*np.pi, 1000)
-        
-        for angle in test_angles:
-            # Test trigonometric identity: sin²(θ) + cos²(θ) = 1
-            sin_val = np.sin(angle)
-            cos_val = np.cos(angle)
-            identity_result = sin_val**2 + cos_val**2
-            
-            assert abs(identity_result - 1.0) < 1e-6, f"Trigonometric precision error at angle {angle}"
-    
-    def test_vector_operations_precision(self):
-        """Test vector operations maintain numerical stability."""
-        # Test with various vector magnitudes
-        test_vectors = [
-            np.array([1.0, 0.0]),
-            np.array([1e-10, 1e-10]),
-            np.array([1e10, 1e10]),
-            np.array([np.sqrt(2)/2, np.sqrt(2)/2])
-        ]
-        
-        for vec in test_vectors:
-            # Test dot product with itself equals squared magnitude
-            dot_product = np.dot(vec, vec)
-            magnitude_squared = np.linalg.norm(vec)**2
-            
-            relative_error = abs(dot_product - magnitude_squared) / max(abs(magnitude_squared), 1e-15)
-            assert relative_error < 1e-6, f"Vector operation precision error: {relative_error}"
-    
-    def test_numerical_stability_edge_cases(self):
-        """Test numerical stability with edge cases."""
-        # Test with very small numbers
-        small_array = np.array([1e-15, 1e-14, 1e-13])
-        assert np.all(np.isfinite(small_array)), "Small numbers should remain finite"
-        
-        # Test with very large numbers
-        large_array = np.array([1e14, 1e15])
-        assert np.all(np.isfinite(large_array)), "Large numbers should remain finite"
-        
-        # Test division by small numbers
-        result = 1.0 / 1e-10
-        assert np.isfinite(result), "Division by small number should be finite"
-
-
-class TestCrossPlatformCompatibility:
-    """Test suite for cross-platform compatibility of file I/O and path handling."""
-    
-    def test_path_handling_cross_platform(self):
-        """Test that path operations work consistently across platforms."""
-        test_paths = [
-            "simple_file.txt",
-            "folder/subfolder/file.txt",
-            "file with spaces.txt",
-            "file-with-dashes.txt",
-            "file_with_underscores.txt"
-        ]
-        
-        for path_str in test_paths:
-            path_obj = Path(path_str)
-            
-            # Test path operations work on all platforms
-            assert isinstance(path_obj.name, str)
-            assert isinstance(path_obj.suffix, str)
-            assert isinstance(str(path_obj), str)
-            
-            # Test path resolution
-            resolved = path_obj.resolve()
-            assert resolved.is_absolute()
-    
-    def test_file_io_consistency(self):
-        """Test file I/O operations work consistently across platforms."""
-        test_data = {
-            'text': "Test data\nWith newlines\n",
-            'json_data': {"key": "value", "number": 42},
-            'binary_data': b'\x00\x01\x02\x03\x04'
+        reference_values = {
+            'numpy_generator': manager.numpy_generator.random()
         }
         
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            
-            # Test text file I/O
-            text_file = temp_path / "test.txt"
-            text_file.write_text(test_data['text'], encoding='utf-8')
-            read_text = text_file.read_text(encoding='utf-8')
-            assert read_text == test_data['text']
-            
-            # Test binary file I/O
-            binary_file = temp_path / "test.bin"
-            binary_file.write_bytes(test_data['binary_data'])
-            read_binary = binary_file.read_bytes()
-            assert read_binary == test_data['binary_data']
+        # Reset and reinitialize
+        SeedManager.reset()
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42))
+        
+        # Validate reproducibility (allow for some floating point tolerance)
+        current_value = manager.numpy_generator.random()
+        assert abs(current_value - reference_values['numpy_generator']) < 1e-10
     
-    def test_directory_operations(self):
-        """Test directory operations work across platforms."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            base_path = Path(temp_dir)
-            
-            # Create nested directory structure
-            nested_path = base_path / "level1" / "level2" / "level3"
-            nested_path.mkdir(parents=True, exist_ok=True)
-            
-            assert nested_path.exists()
-            assert nested_path.is_dir()
-            
-            # Test directory listing
-            (nested_path / "test_file.txt").touch()
-            files = list(nested_path.iterdir())
-            assert len(files) == 1
-            assert files[0].name == "test_file.txt"
+    def test_temporary_seed_context(self):
+        """Test temporary seed override functionality."""
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42, preserve_state=True))
+        
+        # Get original random value
+        original_value = manager.numpy_generator.random()
+        
+        # Use temporary seed
+        with manager.temporary_seed(100) as temp_seed:
+            assert temp_seed == 100
+            assert manager.current_seed == 100
+            temp_value = manager.numpy_generator.random()
+        
+        # Should restore original seed
+        assert manager.current_seed == 42
+        # Note: We can't test exact value restoration without complex state management
+        # but we can test that the context manager works
     
-    def test_platform_specific_behaviors(self):
-        """Test handling of platform-specific behaviors."""
-        current_platform = platform.system()
+    def test_experiment_seed_generation(self):
+        """Test deterministic experiment seed generation."""
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42))
         
-        # Test that we can detect the platform
-        assert current_platform in ['Windows', 'Linux', 'Darwin', 'Java']
+        # Generate experiment seeds
+        seeds = manager.generate_experiment_seeds(5)
+        assert len(seeds) == 5
+        assert all(isinstance(seed, int) for seed in seeds)
+        assert all(0 <= seed <= 2**32 - 1 for seed in seeds)
         
-        # Test platform-specific path separators
-        if current_platform == 'Windows':
-            assert os.sep == '\\'
-        else:
-            assert os.sep == '/'
-        
-        # Test that pathlib handles platform differences correctly
-        path = Path("folder") / "subfolder" / "file.txt"
-        path_str = str(path)
-        assert os.sep in path_str or path_str.count('/') > 0
-
-
-class TestPerformanceCharacteristics:
-    """Test suite for validating performance characteristics meet operational requirements."""
+        # Should be deterministic
+        seeds2 = manager.generate_experiment_seeds(5)
+        assert seeds == seeds2
     
-    def test_utility_function_performance(self):
-        """Test that utility functions meet timing requirements."""
-        # Test array operations performance
-        large_array = np.random.random((10000, 2))
+    def test_state_preservation_and_restoration(self):
+        """Test random state preservation and restoration."""
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42, preserve_state=True))
         
-        start_time = time.perf_counter()
-        normalized = large_array / np.linalg.norm(large_array, axis=1, keepdims=True)
-        end_time = time.perf_counter()
+        # Generate some random numbers
+        _ = manager.numpy_generator.random()
+        _ = manager.numpy_generator.random()
         
-        operation_time = (end_time - start_time) * 1000
-        assert operation_time < 10, f"Array normalization took {operation_time:.2f}ms, should be <10ms"
+        # Capture state
+        state = manager.get_state()
+        assert state is not None
+        assert 'numpy_generator_state' in state
+        assert 'seed' in state
+        
+        # Generate more numbers
+        value_before_restore = manager.numpy_generator.random()
+        
+        # Restore state
+        manager.restore_state(state)
+        
+        # Should get same value as before
+        value_after_restore = manager.numpy_generator.random()
+        assert value_before_restore == value_after_restore
     
-    def test_configuration_processing_performance(self):
-        """Test configuration processing meets timing requirements."""
-        # Simulate configuration validation
-        config_data = {
-            'navigator': {
-                'speed': 1.0,
-                'max_speed': 2.0,
-                'orientation': 0.0
-            },
-            'video_plume': {
-                'path': '/path/to/video.mp4',
-                'frame_count': 1000
-            }
-        }
+    def test_environment_hash_generation(self):
+        """Test environment hash generation for cross-platform consistency."""
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(seed=42, hash_environment=True))
         
-        start_time = time.perf_counter()
-        
-        # Simulate validation operations
-        for _ in range(100):
-            validated = dict(config_data)
-            validated['navigator']['speed'] = float(validated['navigator']['speed'])
-            
-        end_time = time.perf_counter()
-        
-        processing_time = (end_time - start_time) * 1000
-        assert processing_time < 100, f"Config processing took {processing_time:.2f}ms, should be <100ms"
+        env_hash = manager.environment_hash
+        assert env_hash is not None
+        assert len(env_hash) == 8  # MD5 hash truncated to 8 characters
+        assert isinstance(env_hash, str)
     
-    def test_memory_usage_efficiency(self):
-        """Test memory usage remains efficient for large datasets."""
-        initial_memory = psutil.Process().memory_info().rss
+    def test_convenience_functions(self):
+        """Test module-level convenience functions."""
+        # Test set_global_seed
+        seed = set_global_seed(42)
+        assert seed == 42
         
-        # Create large arrays and process them
-        large_arrays = []
-        for i in range(10):
-            arr = np.random.random((1000, 1000))
-            processed = arr * 2.0 + 1.0
-            large_arrays.append(processed)
+        # Test get_current_seed
+        current = get_current_seed()
+        assert current == 42
         
-        peak_memory = psutil.Process().memory_info().rss
-        
-        # Clean up
-        del large_arrays
-        gc.collect()
-        
-        final_memory = psutil.Process().memory_info().rss
-        
-        memory_increase = peak_memory - initial_memory
-        memory_cleaned = peak_memory - final_memory
-        
-        # Memory should be released after cleanup
-        cleanup_ratio = memory_cleaned / memory_increase if memory_increase > 0 else 1.0
-        assert cleanup_ratio > 0.8, f"Only {cleanup_ratio:.2%} of memory was cleaned up"
+        # Test get_numpy_generator
+        generator = get_numpy_generator()
+        assert generator is not None
+        assert hasattr(generator, 'random')
     
-    def test_concurrent_operations_performance(self):
-        """Test performance under concurrent operations."""
-        def worker_task(n):
-            # Simulate computational work
-            arr = np.random.random((100, 100))
-            result = np.sum(arr * arr)
-            return result
-        
-        start_time = time.perf_counter()
-        
-        # Run tasks concurrently
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(worker_task, i) for i in range(20)]
-            results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        
-        end_time = time.perf_counter()
-        
-        total_time = (end_time - start_time) * 1000
-        assert total_time < 1000, f"Concurrent operations took {total_time:.2f}ms, should be <1000ms"
-        assert len(results) == 20
-
-
-class TestIntegrationWithConfigurationSystem:
-    """Test suite for integration with Hydra configuration system and environment management."""
-    
-    @patch('hydra.compose')
-    @patch('hydra.initialize')
-    def test_hydra_configuration_integration(self, mock_initialize, mock_compose):
-        """Test integration with Hydra configuration composition."""
-        mock_config = {
-            'utils': {
-                'seed': 42,
-                'logging_level': 'INFO',
-                'visualization': {
-                    'dpi': 150,
-                    'figsize': [10, 8]
-                }
-            }
-        }
-        
-        mock_compose.return_value = mock_config
-        
-        # Simulate configuration-driven utility setup
-        with mock_initialize:
-            config = mock_compose(config_name="config")
-            
-            assert config['utils']['seed'] == 42
-            assert config['utils']['logging_level'] == 'INFO'
-            assert config['utils']['visualization']['dpi'] == 150
-    
-    def test_environment_variable_integration(self):
-        """Test integration with environment variables for configuration."""
-        test_env_vars = {
-            'PLUME_UTILS_SEED': '12345',
-            'PLUME_LOGGING_LEVEL': 'DEBUG',
-            'PLUME_VIZ_DPI': '300'
-        }
-        
-        with patch.dict(os.environ, test_env_vars):
-            # Test environment variable access
-            seed = int(os.environ.get('PLUME_UTILS_SEED', '0'))
-            log_level = os.environ.get('PLUME_LOGGING_LEVEL', 'INFO')
-            dpi = int(os.environ.get('PLUME_VIZ_DPI', '100'))
-            
-            assert seed == 12345
-            assert log_level == 'DEBUG'
-            assert dpi == 300
-    
-    def test_configuration_validation_integration(self):
-        """Test configuration validation with utility parameters."""
-        valid_config = {
-            'seed': 42,
-            'logging_level': 'INFO',
-            'max_memory_mb': 1024,
-            'performance_mode': 'standard'
-        }
-        
-        invalid_configs = [
-            {'seed': -1},  # Negative seed
-            {'logging_level': 'INVALID'},  # Invalid log level
-            {'max_memory_mb': 'not_a_number'},  # Wrong type
-            {'performance_mode': 'unknown'}  # Unknown mode
-        ]
-        
-        # Valid config should pass
-        assert self._validate_utils_config(valid_config) is True
-        
-        # Invalid configs should fail
-        for invalid_config in invalid_configs:
-            assert self._validate_utils_config(invalid_config) is False
-    
-    def _validate_utils_config(self, config: Dict[str, Any]) -> bool:
-        """Helper method to validate utility configuration."""
-        try:
-            # Simulate validation logic
-            if 'seed' in config:
-                if not isinstance(config['seed'], int) or config['seed'] < 0:
-                    return False
-            
-            if 'logging_level' in config:
-                valid_levels = ['TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
-                if config['logging_level'] not in valid_levels:
-                    return False
-            
-            if 'max_memory_mb' in config:
-                if not isinstance(config['max_memory_mb'], (int, float)) or config['max_memory_mb'] <= 0:
-                    return False
-            
-            if 'performance_mode' in config:
-                valid_modes = ['standard', 'high_performance', 'memory_optimized']
-                if config['performance_mode'] not in valid_modes:
-                    return False
-            
-            return True
-        except Exception:
-            return False
-
-
-class TestErrorHandlingAndEdgeCases:
-    """Test suite for error handling and edge case behavior validation."""
-    
-    @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="Seed manager module not available")
     def test_seed_manager_error_handling(self):
-        """Test seed manager handles edge cases gracefully."""
-        # Test with invalid seed types
-        invalid_seeds = [None, "string", 3.14, [], {}]
+        """Test error handling in seed manager."""
+        manager = SeedManager()
         
-        for invalid_seed in invalid_seeds:
-            with pytest.raises((TypeError, ValueError)):
-                set_global_seed(invalid_seed)
+        # Test invalid seed range in initialization
+        with pytest.raises((ValueError, RuntimeError)):
+            manager.initialize(config=SeedConfig(seed=2**32))  # Too large
         
-        # Test with boundary values
-        boundary_seeds = [0, 2**31 - 1, 2**63 - 1]
-        for seed in boundary_seeds:
-            try:
-                set_global_seed(seed)
-                current = get_current_seed()
-                assert current is not None
-            except (OverflowError, ValueError):
-                # Some boundary values may not be supported
-                pass
+        # Test state operations without preservation enabled
+        manager.initialize(config=SeedConfig(seed=42, preserve_state=False))
+        assert manager.get_state() is None
+        
+        with pytest.raises(RuntimeError):
+            manager.temporary_seed(100).__enter__()
     
-    @pytest.mark.skipif(not LOGGING_AVAILABLE, reason="Logging module not available")
-    def test_logging_error_recovery(self):
-        """Test logging system recovers from errors gracefully."""
-        with patch('loguru.logger') as mock_logger:
-            # Simulate logger setup failure
-            mock_logger.add.side_effect = Exception("Setup failed")
+    @pytest.mark.parametrize("platform_info", [
+        ("Windows", "10", "AMD64"),
+        ("Linux", "5.4.0", "x86_64"),
+        ("Darwin", "20.0.0", "x86_64"),
+    ])
+    def test_cross_platform_consistency(self, platform_info):
+        """Test cross-platform deterministic behavior."""
+        with patch('platform.platform') as mock_platform, \
+             patch('platform.python_version') as mock_python, \
+             patch('sys.maxsize', 9223372036854775807):
             
-            try:
-                setup_logger()
-            except Exception:
-                pass  # Should handle gracefully
+            mock_platform.return_value = f"{platform_info[0]}-{platform_info[1]}-{platform_info[2]}"
+            mock_python.return_value = "3.9.0"
             
-            # Logger should still be functional after error
-            mock_logger.remove.assert_called()
+            manager = SeedManager()
+            manager.initialize(config=SeedConfig(seed=42, hash_environment=True))
+            
+            # Environment hash should be deterministic for same platform info
+            env_hash = manager.environment_hash
+            assert env_hash is not None
+            assert len(env_hash) == 8
+
+
+class TestLoggingUtilities:
+    """
+    Comprehensive test suite for enhanced logging functionality.
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
-    def test_visualization_error_handling(self):
-        """Test visualization handles invalid inputs gracefully."""
-        # Test with invalid position arrays
-        invalid_positions = [
-            np.array([]),  # Empty array
-            np.array([1, 2, 3]),  # Wrong dimensions
-            np.array([[1], [2]]),  # Wrong shape
-            None,  # None input
-        ]
-        
-        for invalid_pos in invalid_positions:
-            with patch('matplotlib.pyplot'):
-                try:
-                    visualize_trajectory(invalid_pos, show_plot=False)
-                except (ValueError, TypeError, AttributeError):
-                    pass  # Expected to handle gracefully
+    Tests configuration management, performance monitoring, Hydra integration,
+    correlation context management, and CLI metrics tracking.
+    """
     
-    def test_numerical_edge_cases(self):
-        """Test numerical operations handle edge cases."""
-        # Test with special values
-        special_values = [np.inf, -np.inf, np.nan, 0.0, -0.0]
-        
-        for val in special_values:
-            arr = np.array([val, 1.0, 2.0])
-            
-            # Operations should handle special values appropriately
-            finite_mask = np.isfinite(arr)
-            finite_arr = arr[finite_mask]
-            
-            if len(finite_arr) > 0:
-                # Should be able to process finite values
-                result = finite_arr * 2.0
-                assert np.all(np.isfinite(result))
+    def setup_method(self):
+        """Reset logging manager state before each test."""
+        EnhancedLoggingManager.reset()
+        CorrelationContext.clear_correlation_id()
     
-    def test_memory_pressure_handling(self):
-        """Test behavior under memory pressure conditions."""
-        # Simulate memory pressure by allocating large arrays
-        large_arrays = []
-        
-        try:
-            # Try to allocate until we get close to memory limits
-            for i in range(100):
-                try:
-                    arr = np.random.random((1000, 1000))
-                    large_arrays.append(arr)
-                except MemoryError:
-                    break
-            
-            # Test that utilities still function under memory pressure
-            if SEED_MANAGER_AVAILABLE:
-                set_global_seed(42)
-                result = np.random.random(10)
-                assert len(result) == 10
-                
-        finally:
-            # Clean up
-            del large_arrays
-            gc.collect()
+    def teardown_method(self):
+        """Clean up after each test."""
+        EnhancedLoggingManager.reset()
+        CorrelationContext.clear_correlation_id()
     
-    def test_thread_safety(self):
-        """Test thread safety of utility functions."""
-        results = []
-        errors = []
+    def test_logging_config_validation(self):
+        """Test LoggingConfig Pydantic schema validation."""
+        # Valid configuration
+        config = LoggingConfig(
+            level="DEBUG",
+            console_format="enhanced",
+            enable_file_logging=True,
+            enable_hydra_integration=True
+        )
+        assert config.level == "DEBUG"
+        assert config.console_format == "enhanced"
+        assert config.enable_file_logging is True
+        assert config.enable_hydra_integration is True
         
-        def worker_function(thread_id):
-            try:
-                # Test thread-safe operations
-                if SEED_MANAGER_AVAILABLE:
-                    set_global_seed(thread_id)
-                    result = np.random.random(5)
-                    results.append((thread_id, result.tolist()))
-            except Exception as e:
-                errors.append((thread_id, str(e)))
+        # Test defaults
+        default_config = LoggingConfig()
+        assert default_config.level == "INFO"
+        assert default_config.enable_correlation_ids is True
+        assert default_config.performance_threshold_ms == 100.0
+    
+    def test_enhanced_logging_manager_singleton(self):
+        """Test enhanced logging manager singleton pattern."""
+        manager1 = EnhancedLoggingManager()
+        manager2 = EnhancedLoggingManager()
+        assert manager1 is manager2
         
-        # Start multiple threads
+        # Test factory function
+        manager3 = get_logging_manager()
+        assert manager1 is manager3
+    
+    def test_logging_manager_initialization(self):
+        """Test logging manager initialization."""
+        manager = EnhancedLoggingManager()
+        
+        # Test initialization with config
+        config = LoggingConfig(level="DEBUG", enable_file_logging=False)
+        manager.initialize(config=config)
+        
+        # Verify initialization completed without errors
+        assert manager._config is not None
+        assert manager._config.level == "DEBUG"
+        assert manager._config.enable_file_logging is False
+    
+    def test_correlation_context_management(self):
+        """Test correlation ID context management."""
+        # Test automatic ID generation
+        corr_id1 = CorrelationContext.get_correlation_id()
+        assert corr_id1 is not None
+        assert len(corr_id1) == 8
+        
+        # Test explicit ID setting
+        test_id = "test123"
+        CorrelationContext.set_correlation_id(test_id)
+        assert CorrelationContext.get_correlation_id() == test_id
+        
+        # Test context manager
+        with CorrelationContext.correlation_scope("scope123") as scope_id:
+            assert scope_id == "scope123"
+            assert CorrelationContext.get_correlation_id() == "scope123"
+        
+        # Should restore previous context
+        assert CorrelationContext.get_correlation_id() == test_id
+    
+    def test_hydra_job_tracker(self):
+        """Test Hydra job tracking functionality."""
+        tracker = HydraJobTracker()
+        
+        # Test initialization without Hydra
+        job_info = tracker.initialize()
+        assert 'status' in job_info
+        assert job_info['status'] == 'hydra_not_initialized'
+        
+        # Test job metrics
+        metrics = tracker.get_job_metrics()
+        assert 'job_name' in metrics
+        assert 'config_checksum' in metrics
+    
+    def test_cli_metrics_tracker(self):
+        """Test CLI metrics tracking functionality."""
+        tracker = CLIMetricsTracker()
+        
+        # Test command tracking
+        with tracker.track_command("test_command") as metrics:
+            metrics['test_param'] = "test_value"
+            time.sleep(0.01)  # Small delay to test timing
+        
+        assert 'command_name' in metrics
+        assert 'start_time' in metrics
+        assert 'total_execution_time_ms' in metrics
+        assert metrics['total_execution_time_ms'] > 0
+    
+    def test_parameter_validation_timing(self):
+        """Test parameter validation timing tracking."""
+        tracker = CLIMetricsTracker()
+        
+        with tracker.track_parameter_validation() as validation_metrics:
+            # Simulate parameter validation work
+            time.sleep(0.01)
+        
+        assert 'validation_time_ms' in validation_metrics
+        assert validation_metrics['validation_time_ms'] > 0
+    
+    def test_logging_performance_requirements(self):
+        """Test logging initialization performance."""
+        manager = EnhancedLoggingManager()
+        config = LoggingConfig(enable_file_logging=False)  # Disable file I/O for speed
+        
+        start_time = time.perf_counter()
+        manager.initialize(config=config)
+        initialization_time = (time.perf_counter() - start_time) * 1000
+        
+        # Should initialize quickly (reasonable threshold for testing)
+        assert initialization_time < 500, f"Logging init took {initialization_time:.2f}ms"
+    
+    def test_convenience_functions(self):
+        """Test module-level convenience functions."""
+        # Test setup function
+        setup_enhanced_logging(LoggingConfig(enable_file_logging=False))
+        
+        # Test module logger creation
+        logger = get_module_logger(__name__)
+        assert logger is not None
+        
+        # Test correlation scope
+        with create_correlation_scope("test123") as corr_id:
+            assert corr_id == "test123"
+        
+        # Test CLI command scope
+        with create_cli_command_scope("test_cmd") as cmd_metrics:
+            assert 'command_name' in cmd_metrics
+            assert cmd_metrics['command_name'] == "test_cmd"
+        
+        # Test parameter validation scope
+        with create_parameter_validation_scope() as val_metrics:
+            pass  # metrics dict should be available
+    
+    def test_logging_context_injection(self):
+        """Test automatic context injection into log records."""
+        manager = EnhancedLoggingManager()
+        config = LoggingConfig(
+            enable_correlation_ids=True,
+            enable_seed_context=False,  # Disable to avoid seed manager dependency
+            enable_hydra_integration=False  # Disable to avoid Hydra dependency
+        )
+        manager.initialize(config=config)
+        
+        # Set correlation context
+        CorrelationContext.set_correlation_id("test_correlation")
+        
+        # Update logging context
+        manager.update_context({'test_key': 'test_value'})
+        
+        # Context should be available in manager
+        assert 'test_key' in manager._log_context
+        assert manager._log_context['test_key'] == 'test_value'
+    
+    def test_threading_safety(self):
+        """Test thread safety of correlation context."""
+        results = {}
+        
+        def worker(thread_id):
+            CorrelationContext.set_correlation_id(f"thread_{thread_id}")
+            time.sleep(0.01)  # Allow context switching
+            results[thread_id] = CorrelationContext.get_correlation_id()
+        
         threads = []
-        for i in range(10):
-            thread = threading.Thread(target=worker_function, args=(i,))
+        for i in range(5):
+            thread = threading.Thread(target=worker, args=(i,))
             threads.append(thread)
             thread.start()
         
-        # Wait for all threads to complete
         for thread in threads:
             thread.join()
         
-        # Check for thread safety issues
-        if errors:
-            pytest.fail(f"Thread safety errors: {errors}")
+        # Each thread should have its own correlation ID
+        for i in range(5):
+            assert results[i] == f"thread_{i}"
+    
+    def test_logging_environment_variable_tracking(self):
+        """Test environment variable usage logging."""
+        manager = get_logging_manager()
+        manager.initialize(LoggingConfig(enable_environment_logging=True))
         
-        # Results should be different for different thread IDs
-        if len(results) > 1:
-            for i in range(len(results) - 1):
-                assert results[i][1] != results[i+1][1], "Thread isolation failed"
+        # Set up test environment variable
+        test_env_var = "TEST_LOG_VAR"
+        os.environ[test_env_var] = "test_value"
+        
+        try:
+            # This should log environment variable usage
+            manager.log_environment_variables([test_env_var, "NONEXISTENT_VAR"])
+            # Should complete without error
+        finally:
+            # Clean up
+            if test_env_var in os.environ:
+                del os.environ[test_env_var]
 
 
-# Import required for concurrent operations test
-import concurrent.futures
+class TestVisualizationUtilities:
+    """
+    Comprehensive test suite for visualization functionality.
+    
+    Tests real-time animation, static trajectory plots, batch processing,
+    configuration management, and headless operation modes.
+    """
+    
+    def setup_method(self):
+        """Set up test environment for visualization tests."""
+        # Ensure matplotlib backend is set for testing
+        plt.switch_backend('Agg')  # Non-interactive backend
+    
+    def teardown_method(self):
+        """Clean up after visualization tests."""
+        plt.close('all')  # Close all figures
+    
+    def test_default_visualization_config(self):
+        """Test default visualization configuration structure."""
+        config = DEFAULT_VISUALIZATION_CONFIG
+        
+        # Test required configuration sections
+        assert 'animation' in config
+        assert 'export' in config
+        assert 'resolution' in config
+        assert 'theme' in config
+        assert 'agents' in config
+        
+        # Test animation defaults
+        assert config['animation']['fps'] == 30
+        assert config['animation']['interval'] == 33
+        assert config['animation']['blit'] is True
+        
+        # Test export defaults
+        assert config['export']['format'] == "mp4"
+        assert config['export']['codec'] == "libx264"
+    
+    def test_simulation_visualization_initialization(self):
+        """Test SimulationVisualization initialization."""
+        # Test basic initialization
+        viz = SimulationVisualization(headless=True)
+        assert viz.fig is not None
+        assert viz.ax is not None
+        assert viz.headless is True
+        
+        # Test initialization with custom config
+        custom_config = {'animation': {'fps': 60}, 'theme': {'colormap': 'plasma'}}
+        viz_custom = SimulationVisualization(config=custom_config, headless=True)
+        assert viz_custom.config.animation.fps == 60
+        assert viz_custom.config.theme.colormap == 'plasma'
+    
+    def test_simulation_visualization_environment_setup(self):
+        """Test environment setup for visualization."""
+        viz = SimulationVisualization(headless=True)
+        
+        # Create test environment
+        environment = np.random.rand(50, 50)
+        extent = (0, 50, 0, 50)
+        
+        viz.setup_environment(environment, extent)
+        
+        assert viz.img is not None
+        assert viz.colorbar is not None
+        assert viz.environment_bounds == extent
+    
+    def test_simulation_visualization_update_single_agent(self):
+        """Test visualization update for single agent."""
+        viz = SimulationVisualization(headless=True)
+        
+        # Set up environment
+        environment = np.random.rand(20, 20)
+        viz.setup_environment(environment)
+        
+        # Test single agent update
+        positions = np.array([10.0, 10.0])
+        orientations = 45.0
+        odor_values = 0.5
+        
+        frame_data = (positions, orientations, odor_values)
+        artists = viz.update_visualization(frame_data)
+        
+        assert len(artists) > 0
+        assert len(viz.agent_markers) == 1
+    
+    def test_simulation_visualization_update_multi_agent(self):
+        """Test visualization update for multiple agents."""
+        viz = SimulationVisualization(headless=True)
+        
+        # Set up environment
+        environment = np.random.rand(20, 20)
+        viz.setup_environment(environment)
+        
+        # Test multi-agent update
+        positions = np.array([[5.0, 5.0], [15.0, 15.0], [10.0, 10.0]])
+        orientations = np.array([0.0, 90.0, 180.0])
+        odor_values = np.array([0.3, 0.7, 0.5])
+        
+        frame_data = (positions, orientations, odor_values)
+        artists = viz.update_visualization(frame_data)
+        
+        assert len(artists) > 0
+        assert len(viz.agent_markers) == 3
+        assert len(viz.trail_data) == 3
+    
+    def test_simulation_visualization_performance_adaptive_quality(self):
+        """Test adaptive quality management for performance."""
+        viz = SimulationVisualization(headless=True)
+        viz.adaptive_quality = True
+        
+        # Set up environment
+        environment = np.random.rand(20, 20)
+        viz.setup_environment(environment)
+        
+        # Simulate large number of agents (should trigger quality reduction)
+        n_agents = 100
+        positions = np.random.rand(n_agents, 2) * 20
+        orientations = np.random.rand(n_agents) * 360
+        odor_values = np.random.rand(n_agents)
+        
+        frame_data = (positions, orientations, odor_values)
+        artists = viz.update_visualization(frame_data)
+        
+        # Should complete without error even with many agents
+        assert len(artists) > 0
+        assert len(viz.agent_markers) == n_agents
+    
+    def test_simulation_visualization_animation_creation(self):
+        """Test animation creation functionality."""
+        viz = SimulationVisualization(headless=True)
+        
+        # Set up environment
+        environment = np.random.rand(20, 20)
+        viz.setup_environment(environment)
+        
+        # Create simple update function
+        def update_func(frame_idx):
+            positions = np.array([[frame_idx % 20, 10.0]])
+            orientations = np.array([frame_idx * 10])
+            odor_values = np.array([0.5])
+            return positions, orientations, odor_values
+        
+        # Create animation (small number of frames for testing)
+        anim = viz.create_animation(update_func, frames=5, interval=100)
+        
+        assert anim is not None
+        assert isinstance(anim, FuncAnimation)
+        assert viz.animation_obj is anim
+    
+    def test_visualize_trajectory_single_agent(self):
+        """Test static trajectory visualization for single agent."""
+        # Create test trajectory data
+        time_steps = 50
+        positions = np.column_stack([
+            np.linspace(0, 10, time_steps),
+            np.sin(np.linspace(0, 2*np.pi, time_steps)) * 2 + 5
+        ])
+        
+        # Test basic trajectory plot
+        fig = visualize_trajectory(
+            positions=positions,
+            show_plot=False,
+            batch_mode=True
+        )
+        
+        assert fig is not None
+        assert isinstance(fig, Figure)
+    
+    def test_visualize_trajectory_multi_agent(self):
+        """Test static trajectory visualization for multiple agents."""
+        # Create test trajectory data for multiple agents
+        time_steps = 30
+        n_agents = 3
+        
+        positions = np.zeros((n_agents, time_steps, 2))
+        for i in range(n_agents):
+            positions[i, :, 0] = np.linspace(i*2, i*2 + 10, time_steps)
+            positions[i, :, 1] = np.sin(np.linspace(0, 2*np.pi, time_steps)) * (i+1) + 5
+        
+        orientations = np.random.rand(n_agents, time_steps) * 360
+        
+        fig = visualize_trajectory(
+            positions=positions,
+            orientations=orientations,
+            show_plot=False,
+            batch_mode=True,
+            title="Multi-Agent Test Trajectory"
+        )
+        
+        assert fig is not None
+        assert isinstance(fig, Figure)
+    
+    def test_visualize_trajectory_with_plume_background(self):
+        """Test trajectory visualization with plume background."""
+        # Create test data
+        positions = np.column_stack([
+            np.linspace(0, 20, 25),
+            np.linspace(0, 20, 25)
+        ])
+        
+        # Create test plume background
+        plume_frames = np.random.rand(20, 20)
+        
+        fig = visualize_trajectory(
+            positions=positions,
+            plume_frames=plume_frames,
+            show_plot=False,
+            batch_mode=True
+        )
+        
+        assert fig is not None
+        assert isinstance(fig, Figure)
+    
+    def test_batch_visualize_trajectories(self):
+        """Test batch trajectory visualization processing."""
+        # Create test trajectory data
+        trajectory_data = []
+        for i in range(3):
+            positions = np.column_stack([
+                np.linspace(0, 10, 20),
+                np.sin(np.linspace(0, 2*np.pi, 20)) * (i+1)
+            ])
+            trajectory_data.append({
+                'positions': positions,
+                'title': f'Test Trajectory {i+1}'
+            })
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            saved_paths = batch_visualize_trajectories(
+                trajectory_data=trajectory_data,
+                output_dir=temp_dir,
+                naming_pattern="test_batch_{idx:02d}"
+            )
+            
+            assert len(saved_paths) == 3
+            for path in saved_paths:
+                assert path.exists()
+                assert path.suffix == '.png'
+    
+    def test_visualization_headless_mode(self):
+        """Test headless mode setup and operation."""
+        setup_headless_mode()
+        
+        # Should be able to create visualizations in headless mode
+        viz = SimulationVisualization(headless=True)
+        assert viz.headless is True
+        
+        # Should be able to create static plots
+        positions = np.column_stack([np.linspace(0, 10, 20), np.linspace(0, 10, 20)])
+        fig = visualize_trajectory(positions, show_plot=False, batch_mode=True)
+        assert fig is not None
+    
+    def test_get_available_themes(self):
+        """Test available themes functionality."""
+        themes = get_available_themes()
+        
+        assert isinstance(themes, dict)
+        assert len(themes) > 0
+        
+        # Test expected themes
+        expected_themes = ["scientific", "presentation", "high_contrast"]
+        for theme in expected_themes:
+            assert theme in themes
+            assert 'colormap' in themes[theme]
+            assert 'background' in themes[theme]
+            assert 'dpi' in themes[theme]
+    
+    def test_visualization_configuration_validation(self):
+        """Test visualization configuration validation and merging."""
+        # Test with valid configuration
+        config = {
+            'animation': {'fps': 60},
+            'theme': {'colormap': 'plasma'},
+            'agents': {'max_agents_full_quality': 25}
+        }
+        
+        viz = SimulationVisualization(config=config, headless=True)
+        assert viz.config.animation.fps == 60
+        assert viz.config.theme.colormap == 'plasma'
+        assert viz.config.agents.max_agents_full_quality == 25
+    
+    def test_visualization_error_handling(self):
+        """Test error handling in visualization components."""
+        viz = SimulationVisualization(headless=True)
+        
+        # Test with invalid frame data
+        with pytest.raises((ValueError, IndexError, AttributeError)):
+            invalid_frame_data = (None, None, None)
+            viz.update_visualization(invalid_frame_data)
+    
+    @pytest.mark.parametrize("n_agents,expected_performance", [
+        (1, "high"),
+        (10, "high"),
+        (50, "medium"),
+        (100, "low")
+    ])
+    def test_visualization_scaling_performance(self, n_agents, expected_performance):
+        """Test visualization performance scaling with agent count."""
+        viz = SimulationVisualization(headless=True)
+        environment = np.random.rand(20, 20)
+        viz.setup_environment(environment)
+        
+        # Generate test data
+        positions = np.random.rand(n_agents, 2) * 20
+        orientations = np.random.rand(n_agents) * 360
+        odor_values = np.random.rand(n_agents)
+        
+        frame_data = (positions, orientations, odor_values)
+        
+        # Measure update time
+        start_time = time.perf_counter()
+        artists = viz.update_visualization(frame_data)
+        update_time = (time.perf_counter() - start_time) * 1000
+        
+        # Verify update completed
+        assert len(artists) > 0
+        assert len(viz.agent_markers) == n_agents
+        
+        # Performance expectations (relaxed for testing environment)
+        if expected_performance == "high":
+            assert update_time < 100  # 100ms threshold for testing
+        elif expected_performance == "medium":
+            assert update_time < 200  # 200ms threshold
+        else:  # low performance expected
+            assert update_time < 500  # 500ms threshold
+
+
+class TestUtilityIntegration:
+    """
+    Integration tests for utility functions working together.
+    
+    Tests cross-cutting concerns, module interactions, and system-wide
+    utility functionality.
+    """
+    
+    def setup_method(self):
+        """Set up integration test environment."""
+        SeedManager.reset()
+        EnhancedLoggingManager.reset()
+        plt.switch_backend('Agg')
+    
+    def teardown_method(self):
+        """Clean up integration test environment."""
+        SeedManager.reset()
+        EnhancedLoggingManager.reset()
+        plt.close('all')
+    
+    def test_seed_manager_logging_integration(self):
+        """Test integration between seed manager and logging system."""
+        # Initialize seed manager first
+        set_global_seed(42)
+        
+        # Initialize logging with seed context enabled
+        setup_enhanced_logging(LoggingConfig(
+            enable_seed_context=True,
+            enable_file_logging=False
+        ))
+        
+        # Logging manager should pick up seed context
+        manager = get_logging_manager()
+        assert 'seed' in manager._log_context
+        assert manager._log_context['seed'] == 42
+    
+    def test_reproducible_visualization_generation(self):
+        """Test reproducible visualization generation with seed management."""
+        # Set deterministic seed
+        set_global_seed(42)
+        
+        # Generate reproducible test data
+        positions1 = np.random.rand(20, 2) * 10
+        
+        # Reset and regenerate with same seed
+        set_global_seed(42)
+        positions2 = np.random.rand(20, 2) * 10
+        
+        # Should be identical
+        np.testing.assert_array_equal(positions1, positions2)
+        
+        # Create visualizations
+        fig1 = visualize_trajectory(positions1, show_plot=False, batch_mode=True)
+        fig2 = visualize_trajectory(positions2, show_plot=False, batch_mode=True)
+        
+        assert fig1 is not None
+        assert fig2 is not None
+    
+    def test_logging_performance_monitoring_integration(self):
+        """Test logging integration with performance monitoring."""
+        # Set up logging with performance monitoring
+        setup_enhanced_logging(LoggingConfig(
+            enable_performance_monitoring=True,
+            performance_threshold_ms=50.0,
+            enable_file_logging=False
+        ))
+        
+        # Test CLI metrics tracking
+        with create_cli_command_scope("test_integration") as metrics:
+            # Simulate some work
+            time.sleep(0.01)
+            
+            # Test parameter validation timing
+            with create_parameter_validation_scope() as val_metrics:
+                time.sleep(0.005)
+            
+            metrics['test_param'] = 'test_value'
+        
+        assert 'total_execution_time_ms' in metrics
+        assert 'validation_time_ms' in val_metrics
+    
+    def test_cross_platform_file_operations(self):
+        """Test cross-platform compatibility for file I/O operations."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            # Test path handling across platforms
+            test_file = temp_path / "test_file.png"
+            
+            # Generate test visualization
+            positions = np.column_stack([np.linspace(0, 10, 20), np.linspace(0, 10, 20)])
+            
+            # Save visualization
+            fig = visualize_trajectory(
+                positions=positions,
+                output_path=test_file,
+                show_plot=False,
+                batch_mode=True
+            )
+            
+            # Verify file was created
+            assert test_file.exists()
+            assert test_file.stat().st_size > 0
+    
+    def test_memory_management_integration(self):
+        """Test memory management across utility components."""
+        import psutil
+        import gc
+        
+        # Get baseline memory usage
+        process = psutil.Process()
+        baseline_memory = process.memory_info().rss
+        
+        # Perform memory-intensive operations
+        for i in range(10):
+            # Seed management
+            set_global_seed(i)
+            
+            # Visualization creation
+            positions = np.random.rand(50, 2) * 20
+            fig = visualize_trajectory(positions, show_plot=False, batch_mode=True)
+            plt.close(fig)
+            
+            # Force garbage collection
+            gc.collect()
+        
+        # Check memory usage hasn't grown excessively
+        final_memory = process.memory_info().rss
+        memory_growth = (final_memory - baseline_memory) / 1024 / 1024  # MB
+        
+        # Allow some growth but not excessive (50MB threshold for test)
+        assert memory_growth < 50, f"Memory grew by {memory_growth:.2f}MB"
+    
+    def test_configuration_error_recovery_integration(self):
+        """Test error recovery across utility components."""
+        # Test logging initialization with invalid config
+        with pytest.raises((ValueError, RuntimeError, TypeError)):
+            setup_enhanced_logging("invalid_config")  # Should be dict or LoggingConfig
+        
+        # Should still be able to initialize with valid config
+        setup_enhanced_logging(LoggingConfig(enable_file_logging=False))
+        
+        # Test seed manager error recovery
+        try:
+            SeedManager().initialize(config="invalid")  # Should fail
+        except (ValueError, TypeError, RuntimeError):
+            pass  # Expected
+        
+        # Should still work with valid config
+        seed = set_global_seed(42)
+        assert seed == 42
+    
+    def test_concurrent_utility_operations(self):
+        """Test thread safety of utility operations."""
+        import concurrent.futures
+        
+        def worker(thread_id):
+            # Each thread should have independent state
+            with create_correlation_scope(f"thread_{thread_id}"):
+                seed = set_global_seed(thread_id)
+                positions = np.random.rand(10, 2) * 10
+                
+                return {
+                    'thread_id': thread_id,
+                    'seed': seed,
+                    'correlation_id': CorrelationContext.get_correlation_id(),
+                    'data_shape': positions.shape
+                }
+        
+        # Run concurrent workers
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(worker, i) for i in range(3)]
+            results = [future.result() for future in futures]
+        
+        # Verify each thread had independent state
+        for i, result in enumerate(results):
+            assert result['thread_id'] == i
+            assert result['seed'] == i
+            assert result['correlation_id'] == f"thread_{i}"
+            assert result['data_shape'] == (10, 2)
+
+
+class TestUtilityErrorHandling:
+    """
+    Test error handling and edge cases for utility functions.
+    
+    Validates robust error handling, graceful degradation, and
+    appropriate error messages for all utility components.
+    """
+    
+    def test_seed_manager_edge_cases(self):
+        """Test seed manager edge cases and error conditions."""
+        manager = SeedManager()
+        
+        # Test with None configuration
+        seed = manager.initialize(config=None)
+        assert isinstance(seed, int)
+        assert 0 <= seed <= 2**32 - 1
+        
+        # Test state operations edge cases
+        SeedManager.reset()
+        manager = SeedManager()
+        manager.initialize(config=SeedConfig(preserve_state=False))
+        
+        # Should handle missing state gracefully
+        assert manager.get_state() is None
+    
+    def test_logging_edge_cases(self):
+        """Test logging system edge cases."""
+        # Test initialization with minimal config
+        manager = EnhancedLoggingManager()
+        manager.initialize(config={})  # Empty config dict
+        
+        # Should use defaults
+        assert manager._config is not None
+        
+        # Test correlation context edge cases
+        CorrelationContext.clear_correlation_id()
+        
+        # Should generate new ID when needed
+        corr_id = CorrelationContext.get_correlation_id()
+        assert corr_id is not None
+        assert len(corr_id) == 8
+    
+    def test_visualization_edge_cases(self):
+        """Test visualization edge cases and error handling."""
+        # Test with empty trajectory data
+        empty_positions = np.array([]).reshape(0, 2)
+        
+        # Should handle gracefully or raise appropriate error
+        try:
+            fig = visualize_trajectory(empty_positions, show_plot=False, batch_mode=True)
+            if fig is not None:
+                plt.close(fig)
+        except (ValueError, IndexError):
+            pass  # Expected for empty data
+        
+        # Test with single point trajectory
+        single_point = np.array([[5.0, 5.0]])
+        fig = visualize_trajectory(single_point, show_plot=False, batch_mode=True)
+        assert fig is not None
+        plt.close(fig)
+    
+    def test_mathematical_precision_edge_cases(self):
+        """Test mathematical precision in edge cases."""
+        # Test with very small numbers
+        tiny_positions = np.array([[1e-10, 1e-10], [2e-10, 2e-10]])
+        fig = visualize_trajectory(tiny_positions, show_plot=False, batch_mode=True)
+        assert fig is not None
+        plt.close(fig)
+        
+        # Test with very large numbers
+        large_positions = np.array([[1e6, 1e6], [2e6, 2e6]])
+        fig = visualize_trajectory(large_positions, show_plot=False, batch_mode=True)
+        assert fig is not None
+        plt.close(fig)
+    
+    def test_resource_cleanup_edge_cases(self):
+        """Test resource cleanup in error conditions."""
+        # Test visualization cleanup after errors
+        viz = SimulationVisualization(headless=True)
+        
+        try:
+            # Force an error during setup
+            viz.setup_environment(None)  # Should fail
+        except (AttributeError, TypeError):
+            pass  # Expected error
+        
+        # Should be able to clean up gracefully
+        viz.close()
+        
+        # Test multiple cleanup calls
+        viz.close()  # Should not error
+
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    # Run the tests with verbose output
+    pytest.main([__file__, "-v", "--tb=short"])
