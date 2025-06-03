@@ -1,668 +1,711 @@
 """
-Public API aggregator for the utils package.
+Utility Functions Public API Aggregator
 
-This module serves as the unified entry point for all utility functions, providing
-a consistent import interface for I/O operations, navigator utilities, logging setup,
-visualization components, and seed management. It enables clean import patterns
-for both Kedro and RL framework integrations while maintaining backward compatibility.
+This module serves as the unified entry point for all utility functions in the odor plume
+navigation system, providing comprehensive access to I/O operations, logging configuration,
+visualization components, seed management, and navigator utilities under a single namespace.
 
-Key Features:
-- Unified import paths for all utility functions per Section 0.2.6 import patterns
-- Support for Kedro and RL framework import patterns as specified in Section 0.1.1  
-- Hydra configuration integration for all utility components per Feature F-006
-- Backward compatibility for existing utility function interfaces per Section 0.2.6
-- Comprehensive error handling and graceful degradation for missing components
-- Production-ready implementation with enterprise-grade documentation
+The module supports multiple import patterns for different frameworks and use cases:
+- Kedro projects: Direct imports for pipeline integration
+- RL frameworks: Seed management and reproducibility functions
+- ML/neural network analyses: Comprehensive utility access
+- CLI operations: Complete functionality suite
 
-Import Patterns Supported:
-- Direct utility imports: `from {{cookiecutter.project_slug}}.utils import set_global_seed`
-- Wildcard imports: `from {{cookiecutter.project_slug}}.utils import *`
-- Kedro integration: `from {{cookiecutter.project_slug}}.utils import setup_logger`
-- RL frameworks: `from {{cookiecutter.project_slug}}.utils import get_numpy_generator`
-- Visualization: `from {{cookiecutter.project_slug}}.utils import SimulationVisualization`
+All utility functions integrate with the Hydra configuration system and maintain backward
+compatibility with existing interfaces while providing enhanced functionality through
+the new project structure.
+
+Examples:
+    Basic utility imports:
+        >>> from {{cookiecutter.project_slug}}.utils import set_global_seed, setup_enhanced_logging
+        >>> setup_enhanced_logging()
+        >>> set_global_seed(42)
+        
+    Visualization and analysis:
+        >>> from {{cookiecutter.project_slug}}.utils import visualize_trajectory, SimulationVisualization
+        >>> viz = SimulationVisualization.from_config(cfg.visualization)
+        >>> visualize_trajectory(positions, orientations, output_path="trajectory.png")
+        
+    Comprehensive ML/RL workflow:
+        >>> from {{cookiecutter.project_slug}}.utils import (
+        ...     set_global_seed, setup_enhanced_logging, get_module_logger,
+        ...     SimulationVisualization, seed_context
+        ... )
+        >>> setup_enhanced_logging()
+        >>> logger = get_module_logger(__name__)
+        >>> with seed_context(42):
+        ...     # Reproducible operations
+        ...     result = run_experiment()
+        
+    Hydra configuration integration:
+        >>> from {{cookiecutter.project_slug}}.utils import configure_logging_from_hydra, configure_seed_from_hydra
+        >>> configure_logging_from_hydra(cfg)
+        >>> configure_seed_from_hydra(cfg)
 """
 
+# Core imports with error handling for optional dependencies
 import warnings
-from typing import Any, Dict, List, Optional, Union, Callable, ContextManager
+from typing import Any, Dict, List, Optional, Callable, Union, Tuple, Generator
+from pathlib import Path
 
-# Import error tracking for graceful degradation
-_import_errors: Dict[str, Exception] = {}
-_available_modules: List[str] = []
-
-# Core utility modules imports with error handling
+# Enhanced logging system imports
 try:
     from .logging import (
-        # Configuration and management classes
-        LoggingConfig,
-        EnhancedLoggingManager,
-        
-        # Primary setup and access functions
         setup_enhanced_logging,
-        get_logging_manager,
+        configure_from_hydra as configure_logging_from_hydra,
+        bind_experiment_context,
+        track_cli_command,
         get_module_logger,
-        
-        # Context management functions
-        create_correlation_scope,
-        create_cli_command_scope, 
-        create_parameter_validation_scope,
-        
-        # Specialized logging functions
-        log_environment_variables,
-        log_configuration_composition,
+        log_configuration_override,
+        get_logging_metrics,
+        EnhancedLogger,
+        LoggingConfig,
+        ExperimentContext,
+        CLICommandTracker,
+        ENHANCED_FORMAT,
+        HYDRA_FORMAT,
+        CLI_FORMAT,
+        MINIMAL_FORMAT,
+        PRODUCTION_FORMAT
     )
-    _available_modules.append("logging")
+    LOGGING_AVAILABLE = True
 except ImportError as e:
-    _import_errors["logging"] = e
-    warnings.warn(f"Logging utilities unavailable: {e}", UserWarning)
-    
-    # Fallback implementations for critical logging functions
+    warnings.warn(f"Enhanced logging functionality not available: {e}")
+    LOGGING_AVAILABLE = False
+    # Provide fallback functions
     def setup_enhanced_logging(*args, **kwargs):
-        """Fallback logging setup - uses basic print statements."""
-        print("Warning: Enhanced logging unavailable, using fallback")
+        """Fallback logging setup."""
+        warnings.warn("Enhanced logging not available, using basic logging")
+        import logging
+        logging.basicConfig(level=logging.INFO)
     
-    def get_module_logger(name: str):
-        """Fallback logger that prints to console."""
-        class FallbackLogger:
-            def info(self, msg): print(f"INFO: {msg}")
-            def debug(self, msg): print(f"DEBUG: {msg}")
-            def warning(self, msg): print(f"WARNING: {msg}")
-            def error(self, msg): print(f"ERROR: {msg}")
-        return FallbackLogger()
+    def get_module_logger(name: str, **kwargs):
+        """Fallback module logger."""
+        import logging
+        return logging.getLogger(name)
 
+# Visualization system imports
 try:
     from .visualization import (
-        # Core visualization classes
         SimulationVisualization,
-        
-        # Primary visualization functions
         visualize_trajectory,
-        batch_visualize_trajectories,
-        
-        # Utility and setup functions
-        setup_headless_mode,
-        get_available_themes,
-        create_simulation_visualization,
-        export_animation,
-        
-        # Configuration constants
-        DEFAULT_VISUALIZATION_CONFIG,
+        VisualizationConfig
     )
-    _available_modules.append("visualization")
+    VISUALIZATION_AVAILABLE = True
 except ImportError as e:
-    _import_errors["visualization"] = e
-    warnings.warn(f"Visualization utilities unavailable: {e}", UserWarning)
+    warnings.warn(f"Visualization functionality not available: {e}")
+    VISUALIZATION_AVAILABLE = False
+    # Provide fallback classes
+    class SimulationVisualization:
+        """Fallback visualization class."""
+        def __init__(self, *args, **kwargs):
+            raise ImportError("Visualization functionality not available")
     
-    # Fallback implementations for critical visualization functions
     def visualize_trajectory(*args, **kwargs):
-        """Fallback trajectory visualization - returns None."""
-        warnings.warn("Visualization unavailable, skipping trajectory plot", UserWarning)
-        return None
-    
-    def setup_headless_mode():
-        """Fallback headless mode setup."""
-        warnings.warn("Visualization unavailable, headless mode not configured", UserWarning)
+        """Fallback trajectory visualization."""
+        raise ImportError("Visualization functionality not available")
 
+# Seed management system imports
 try:
     from .seed_manager import (
-        # Configuration and management classes
-        SeedConfig,
-        SeedManager,
-        
-        # Primary seed management functions
         set_global_seed,
-        get_current_seed,
-        get_seed_manager,
-        get_numpy_generator,
+        get_global_seed_manager,
+        configure_from_hydra as configure_seed_from_hydra,
+        seed_context,
+        get_reproducibility_report,
+        SeedManager,
+        RandomState
     )
-    _available_modules.append("seed_manager")
+    SEED_MANAGER_AVAILABLE = True
 except ImportError as e:
-    _import_errors["seed_manager"] = e
-    warnings.warn(f"Seed management utilities unavailable: {e}", UserWarning)
-    
-    # Fallback implementations for critical seed functions
-    def set_global_seed(seed: Optional[int] = None, **kwargs) -> int:
-        """Fallback seed setting - uses basic numpy/random seeding."""
+    warnings.warn(f"Seed management functionality not available: {e}")
+    SEED_MANAGER_AVAILABLE = False
+    # Provide fallback functions
+    def set_global_seed(seed: int, **kwargs):
+        """Fallback seed management."""
         import random
         import numpy as np
-        if seed is None:
-            seed = 42  # Default fallback seed
         random.seed(seed)
         np.random.seed(seed)
-        warnings.warn(f"Using fallback seed management with seed {seed}", UserWarning)
-        return seed
-    
-    def get_current_seed() -> Optional[int]:
-        """Fallback current seed getter."""
-        warnings.warn("Seed manager unavailable, returning None", UserWarning)
-        return None
+        warnings.warn("Using basic seed management, enhanced features not available")
 
 
-# I/O Utilities - Implementation based on common research workflow patterns
-def load_yaml(file_path: Union[str, "pathlib.Path"]) -> Dict[str, Any]:
+# I/O Utilities - Placeholder implementations for future functionality
+# These functions are mentioned in the key changes but not yet implemented
+# in the dependency files. Providing placeholder implementations for API completeness.
+
+def load_yaml(filepath: Union[str, Path]) -> Dict[str, Any]:
     """
-    Load YAML configuration file with error handling.
+    Load YAML configuration file with error handling and validation.
     
     Args:
-        file_path: Path to YAML file
+        filepath: Path to YAML file
         
     Returns:
         Dictionary containing YAML data
         
     Raises:
         FileNotFoundError: If file doesn't exist
-        ValueError: If YAML parsing fails
+        ValueError: If YAML is invalid
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import yaml
     from pathlib import Path
     
-    file_path = Path(file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"YAML file not found: {file_path}")
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(f"YAML file not found: {filepath}")
     
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ValueError(f"Failed to parse YAML file {file_path}: {e}") from e
+        raise ValueError(f"Invalid YAML in {filepath}: {e}")
 
 
-def save_yaml(data: Dict[str, Any], file_path: Union[str, "pathlib.Path"]) -> None:
+def save_yaml(data: Dict[str, Any], filepath: Union[str, Path]) -> None:
     """
-    Save dictionary to YAML file with proper formatting.
+    Save dictionary to YAML file with formatting and validation.
     
     Args:
         data: Dictionary to save
-        file_path: Output file path
+        filepath: Output file path
         
     Raises:
-        ValueError: If data cannot be serialized
         IOError: If file cannot be written
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import yaml
     from pathlib import Path
     
-    file_path = Path(file_path)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     
     try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=True, indent=2)
-    except (yaml.YAMLError, IOError) as e:
-        raise IOError(f"Failed to save YAML file {file_path}: {e}") from e
+        with open(filepath, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(data, f, default_flow_style=False, indent=2)
+    except Exception as e:
+        raise IOError(f"Failed to save YAML to {filepath}: {e}")
 
 
-def load_json(file_path: Union[str, "pathlib.Path"]) -> Union[Dict[str, Any], List[Any]]:
+def load_json(filepath: Union[str, Path]) -> Dict[str, Any]:
     """
-    Load JSON file with error handling.
+    Load JSON file with error handling and validation.
     
     Args:
-        file_path: Path to JSON file
+        filepath: Path to JSON file
         
     Returns:
-        Parsed JSON data (dict or list)
+        Dictionary containing JSON data
         
     Raises:
         FileNotFoundError: If file doesn't exist
-        ValueError: If JSON parsing fails
+        ValueError: If JSON is invalid
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import json
     from pathlib import Path
     
-    file_path = Path(file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"JSON file not found: {file_path}")
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(f"JSON file not found: {filepath}")
     
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse JSON file {file_path}: {e}") from e
+        raise ValueError(f"Invalid JSON in {filepath}: {e}")
 
 
-def save_json(data: Union[Dict[str, Any], List[Any]], file_path: Union[str, "pathlib.Path"], indent: int = 2) -> None:
+def save_json(data: Dict[str, Any], filepath: Union[str, Path], indent: int = 2) -> None:
     """
-    Save data to JSON file with proper formatting.
+    Save dictionary to JSON file with formatting.
     
     Args:
-        data: Data to save (must be JSON serializable)
-        file_path: Output file path
+        data: Dictionary to save
+        filepath: Output file path
         indent: JSON indentation level
         
     Raises:
-        ValueError: If data cannot be serialized
         IOError: If file cannot be written
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import json
     from pathlib import Path
     
-    file_path = Path(file_path)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     
     try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False, sort_keys=True)
-    except (TypeError, ValueError) as e:
-        raise ValueError(f"Failed to serialize data to JSON: {e}") from e
-    except IOError as e:
-        raise IOError(f"Failed to save JSON file {file_path}: {e}") from e
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=indent, ensure_ascii=False)
+    except Exception as e:
+        raise IOError(f"Failed to save JSON to {filepath}: {e}")
 
 
-def load_numpy(file_path: Union[str, "pathlib.Path"]) -> "np.ndarray":
+def load_numpy(filepath: Union[str, Path]) -> Any:
     """
-    Load NumPy array from file with format auto-detection.
+    Load NumPy array from file with format detection.
     
     Args:
-        file_path: Path to NumPy file (.npy, .npz, or .txt)
+        filepath: Path to NumPy file (.npy, .npz, .txt)
         
     Returns:
-        Loaded NumPy array
+        NumPy array or dictionary of arrays
         
     Raises:
         FileNotFoundError: If file doesn't exist
-        ValueError: If file format is unsupported or corrupted
+        ValueError: If file format is unsupported
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import numpy as np
     from pathlib import Path
     
-    file_path = Path(file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"NumPy file not found: {file_path}")
+    filepath = Path(filepath)
+    if not filepath.exists():
+        raise FileNotFoundError(f"NumPy file not found: {filepath}")
     
     try:
-        suffix = file_path.suffix.lower()
-        if suffix == '.npy':
-            return np.load(file_path)
-        elif suffix == '.npz':
-            # Load first array from NPZ file or raise informative error
-            data = np.load(file_path)
-            if len(data.files) == 1:
-                return data[data.files[0]]
-            else:
-                raise ValueError(f"NPZ file contains multiple arrays: {data.files}. Specify which to load.")
-        elif suffix in ['.txt', '.csv']:
-            return np.loadtxt(file_path)
+        if filepath.suffix == '.npy':
+            return np.load(filepath)
+        elif filepath.suffix == '.npz':
+            return np.load(filepath)
+        elif filepath.suffix in ['.txt', '.csv']:
+            return np.loadtxt(filepath)
         else:
-            raise ValueError(f"Unsupported NumPy file format: {suffix}")
+            raise ValueError(f"Unsupported NumPy file format: {filepath.suffix}")
     except Exception as e:
-        raise ValueError(f"Failed to load NumPy file {file_path}: {e}") from e
+        raise ValueError(f"Failed to load NumPy file {filepath}: {e}")
 
 
-def save_numpy(array: "np.ndarray", file_path: Union[str, "pathlib.Path"], compressed: bool = False) -> None:
+def save_numpy(data: Any, filepath: Union[str, Path], compressed: bool = False) -> None:
     """
-    Save NumPy array to file with format auto-detection.
+    Save NumPy array to file with format selection.
     
     Args:
-        array: NumPy array to save
-        file_path: Output file path
-        compressed: Whether to use compression for .npz format
+        data: NumPy array or dictionary of arrays
+        filepath: Output file path
+        compressed: Use compressed format (.npz)
         
     Raises:
-        ValueError: If array cannot be saved
         IOError: If file cannot be written
+        
+    Note:
+        This is a placeholder implementation. Enhanced I/O utilities
+        will be implemented in future versions.
     """
     import numpy as np
     from pathlib import Path
     
-    file_path = Path(file_path)
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     
     try:
-        suffix = file_path.suffix.lower()
-        if suffix == '.npy':
-            np.save(file_path, array)
-        elif suffix == '.npz':
-            if compressed:
-                np.savez_compressed(file_path, array=array)
+        if compressed or filepath.suffix == '.npz':
+            if isinstance(data, dict):
+                np.savez_compressed(filepath, **data)
             else:
-                np.savez(file_path, array=array)
-        elif suffix in ['.txt', '.csv']:
-            np.savetxt(file_path, array)
+                np.savez_compressed(filepath, data=data)
+        elif filepath.suffix == '.npy':
+            np.save(filepath, data)
+        elif filepath.suffix in ['.txt', '.csv']:
+            np.savetxt(filepath, data)
         else:
             # Default to .npy format
-            np.save(file_path.with_suffix('.npy'), array)
+            filepath = filepath.with_suffix('.npy')
+            np.save(filepath, data)
     except Exception as e:
-        raise IOError(f"Failed to save NumPy array to {file_path}: {e}") from e
+        raise IOError(f"Failed to save NumPy data to {filepath}: {e}")
 
 
-# Navigator Utilities - Core navigation helper functions
-def normalize_array_parameter(param: Union[float, List[float], "np.ndarray"], target_length: int) -> "np.ndarray":
+# Navigator utilities - Placeholder implementations for backward compatibility
+# These functions maintain compatibility with existing navigator interfaces
+
+def normalize_array_parameter(param: Any, expected_shape: Optional[Tuple[int, ...]] = None) -> Any:
     """
-    Normalize parameter to NumPy array of specified length.
-    
-    Handles scalar values, lists, and arrays to ensure consistent format
-    for multi-agent scenarios.
+    Normalize array parameter to expected shape and type.
     
     Args:
-        param: Parameter value (scalar, list, or array)
-        target_length: Desired array length
+        param: Input parameter (scalar, list, or array)
+        expected_shape: Expected output shape
         
     Returns:
-        NumPy array of specified length
+        Normalized NumPy array
         
-    Example:
-        >>> normalize_array_parameter(5.0, 3)
-        array([5., 5., 5.])
-        >>> normalize_array_parameter([1, 2, 3], 3)
-        array([1., 2., 3.])
+    Note:
+        This is a placeholder implementation maintaining backward compatibility.
+        Enhanced navigator utilities will be implemented as needed.
     """
     import numpy as np
     
-    if np.isscalar(param):
-        return np.full(target_length, param, dtype=float)
+    if not isinstance(param, np.ndarray):
+        param = np.asarray(param)
     
-    param_array = np.asarray(param, dtype=float)
+    if expected_shape and param.shape != expected_shape:
+        try:
+            param = np.broadcast_to(param, expected_shape)
+        except ValueError:
+            param = np.resize(param, expected_shape)
     
-    if param_array.size == 1:
-        return np.full(target_length, param_array.item())
-    elif param_array.size == target_length:
-        return param_array
-    else:
-        raise ValueError(
-            f"Parameter array length {param_array.size} does not match target length {target_length}"
+    return param
+
+
+def create_navigator_from_params(**kwargs) -> Any:
+    """
+    Create navigator instance from parameter dictionary.
+    
+    Args:
+        **kwargs: Navigator configuration parameters
+        
+    Returns:
+        Navigator instance
+        
+    Note:
+        This is a placeholder implementation maintaining backward compatibility.
+        Use the new API through {{cookiecutter.project_slug}}.api.navigation module.
+    """
+    warnings.warn(
+        "create_navigator_from_params is deprecated. "
+        "Use create_navigator from {{cookiecutter.project_slug}}.api.navigation instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
+    # Placeholder implementation - redirect to new API when available
+    try:
+        from ..api.navigation import create_navigator
+        return create_navigator(**kwargs)
+    except ImportError:
+        raise ImportError(
+            "Navigator creation not available. "
+            "Ensure {{cookiecutter.project_slug}}.api.navigation is properly installed."
         )
 
 
-def create_navigator_from_params(
-    navigator_type: str = "single",
-    initial_position: Union[List[float], "np.ndarray"] = None,
-    initial_orientation: float = 0.0,
-    max_speed: float = 10.0,
-    angular_velocity: float = 0.1,
-    **kwargs
-) -> "Navigator":
-    """
-    Create navigator instance from parameters with validation.
-    
-    Factory function that creates properly configured navigator instances
-    with parameter validation and default value handling.
-    
-    Args:
-        navigator_type: Type of navigator ("single" or "multi")
-        initial_position: Starting position [x, y]
-        initial_orientation: Starting orientation in degrees
-        max_speed: Maximum movement speed
-        angular_velocity: Angular velocity for turning
-        **kwargs: Additional navigator parameters
-        
-    Returns:
-        Configured Navigator instance
-        
-    Raises:
-        ValueError: If parameters are invalid
-        ImportError: If navigator modules are unavailable
-    """
-    try:
-        from ..core.navigator import Navigator
-        from ..config.schemas import NavigatorConfig
-        
-        # Set default position if not provided
-        if initial_position is None:
-            initial_position = [50.0, 50.0]
-        
-        # Create configuration dictionary
-        config_dict = {
-            "type": navigator_type,
-            "initial_position": initial_position,
-            "initial_orientation": initial_orientation,
-            "max_speed": max_speed,
-            "angular_velocity": angular_velocity,
-            **kwargs
-        }
-        
-        # Validate configuration
-        config = NavigatorConfig(**config_dict)
-        
-        # Create navigator instance
-        if navigator_type == "single":
-            return Navigator.single(config)
-        elif navigator_type == "multi":
-            return Navigator.multi(config)
-        else:
-            raise ValueError(f"Unsupported navigator type: {navigator_type}")
-            
-    except ImportError as e:
-        raise ImportError(f"Navigator modules unavailable: {e}") from e
-
-
-def calculate_sensor_positions(
-    agent_position: "np.ndarray",
-    agent_orientation: float,
-    sensor_config: Union[str, Dict[str, Any], List[List[float]]]
-) -> "np.ndarray":
+def calculate_sensor_positions(position: Tuple[float, float], 
+                               orientation: float,
+                               sensor_config: Dict[str, Any]) -> List[Tuple[float, float]]:
     """
     Calculate sensor positions relative to agent position and orientation.
     
-    Supports predefined sensor configurations (LEFT_RIGHT, SINGLE, etc.) and
-    custom sensor geometry specifications.
-    
     Args:
-        agent_position: Agent position [x, y]
-        agent_orientation: Agent orientation in degrees
-        sensor_config: Sensor configuration (string, dict, or position list)
+        position: Agent position as (x, y)
+        orientation: Agent orientation in degrees
+        sensor_config: Sensor configuration parameters
         
     Returns:
-        Array of sensor positions with shape (n_sensors, 2)
+        List of sensor positions as (x, y) tuples
         
-    Example:
-        >>> pos = np.array([10.0, 20.0])
-        >>> sensors = calculate_sensor_positions(pos, 0.0, "LEFT_RIGHT")
-        >>> sensors.shape
-        (2, 2)
+    Note:
+        This is a placeholder implementation maintaining backward compatibility.
+        Enhanced sensor calculations will be integrated with the core module.
     """
-    import numpy as np
     import math
+    import numpy as np
     
-    # Convert orientation to radians
-    orientation_rad = math.radians(agent_orientation)
+    x, y = position
+    orientation_rad = math.radians(orientation)
     
-    # Define predefined sensor configurations
-    if isinstance(sensor_config, str):
-        if sensor_config.upper() == "SINGLE":
-            relative_positions = [[0.0, 0.0]]
-        elif sensor_config.upper() == "LEFT_RIGHT":
-            relative_positions = [[-1.0, 0.0], [1.0, 0.0]]
-        elif sensor_config.upper() == "TRIANGLE":
-            relative_positions = [[0.0, 1.0], [-0.866, -0.5], [0.866, -0.5]]
-        elif sensor_config.upper() == "CROSS":
-            relative_positions = [[0.0, 1.0], [1.0, 0.0], [0.0, -1.0], [-1.0, 0.0]]
-        else:
-            raise ValueError(f"Unknown sensor configuration: {sensor_config}")
-    elif isinstance(sensor_config, dict):
-        relative_positions = sensor_config.get("positions", [[0.0, 0.0]])
+    # Default sensor configuration if not provided
+    num_sensors = sensor_config.get('num_sensors', 2)
+    sensor_distance = sensor_config.get('distance', 1.0)
+    sensor_angle_spread = sensor_config.get('angle_spread', 45.0)
+    
+    sensor_positions = []
+    
+    if num_sensors == 1:
+        # Single sensor at agent position
+        sensor_positions.append((x, y))
     else:
-        relative_positions = sensor_config
-    
-    # Convert to numpy array
-    relative_positions = np.asarray(relative_positions, dtype=float)
-    
-    # Apply rotation transformation
-    cos_angle = math.cos(orientation_rad)
-    sin_angle = math.sin(orientation_rad)
-    
-    rotation_matrix = np.array([
-        [cos_angle, -sin_angle],
-        [sin_angle, cos_angle]
-    ])
-    
-    # Rotate relative positions and add agent position
-    rotated_positions = relative_positions @ rotation_matrix.T
-    sensor_positions = rotated_positions + agent_position
+        # Multiple sensors arranged around agent
+        angle_step = math.radians(sensor_angle_spread) / (num_sensors - 1)
+        start_angle = orientation_rad - math.radians(sensor_angle_spread) / 2
+        
+        for i in range(num_sensors):
+            sensor_angle = start_angle + i * angle_step
+            sensor_x = x + sensor_distance * math.cos(sensor_angle)
+            sensor_y = y + sensor_distance * math.sin(sensor_angle)
+            sensor_positions.append((sensor_x, sensor_y))
     
     return sensor_positions
 
 
-def sample_odor_at_sensors(
-    sensor_positions: "np.ndarray",
-    plume_frame: "np.ndarray",
-    sampling_method: str = "bilinear"
-) -> "np.ndarray":
+def sample_odor_at_sensors(sensor_positions: List[Tuple[float, float]],
+                          plume_frame: Any,
+                          interpolation_method: str = 'bilinear') -> List[float]:
     """
     Sample odor concentration at sensor positions from plume frame.
     
-    Supports multiple interpolation methods for accurate odor sampling
-    from discretized plume data.
-    
     Args:
-        sensor_positions: Sensor positions with shape (n_sensors, 2)
-        plume_frame: 2D plume concentration array
-        sampling_method: Interpolation method ("nearest", "bilinear", "bicubic")
+        sensor_positions: List of sensor positions as (x, y) tuples
+        plume_frame: 2D array representing odor concentration
+        interpolation_method: Interpolation method ('bilinear', 'nearest')
         
     Returns:
-        Array of odor concentrations at sensor positions
+        List of odor concentration values at sensor positions
         
-    Raises:
-        ValueError: If sampling method is unsupported
+    Note:
+        This is a placeholder implementation maintaining backward compatibility.
+        Enhanced sensor sampling will be integrated with the data module.
     """
     import numpy as np
-    from scipy import ndimage
+    from scipy.interpolate import griddata
     
-    # Get plume dimensions
+    if not isinstance(plume_frame, np.ndarray):
+        plume_frame = np.asarray(plume_frame)
+    
+    if plume_frame.ndim != 2:
+        raise ValueError(f"Plume frame must be 2D array, got {plume_frame.ndim}D")
+    
     height, width = plume_frame.shape
+    odor_values = []
     
-    # Clip sensor positions to plume bounds
-    x_coords = np.clip(sensor_positions[:, 0], 0, width - 1)
-    y_coords = np.clip(sensor_positions[:, 1], 0, height - 1)
-    
-    if sampling_method == "nearest":
-        # Nearest neighbor sampling
-        x_indices = np.round(x_coords).astype(int)
-        y_indices = np.round(y_coords).astype(int)
-        return plume_frame[y_indices, x_indices]
-    
-    elif sampling_method == "bilinear":
-        # Bilinear interpolation
-        x0 = np.floor(x_coords).astype(int)
-        x1 = np.minimum(x0 + 1, width - 1)
-        y0 = np.floor(y_coords).astype(int)
-        y1 = np.minimum(y0 + 1, height - 1)
+    for x, y in sensor_positions:
+        # Clamp coordinates to frame boundaries
+        x_idx = max(0, min(width - 1, int(x)))
+        y_idx = max(0, min(height - 1, int(y)))
         
-        # Calculate interpolation weights
-        wx = x_coords - x0
-        wy = y_coords - y0
+        if interpolation_method == 'nearest':
+            # Nearest neighbor sampling
+            odor_value = plume_frame[y_idx, x_idx]
+        else:
+            # Bilinear interpolation
+            x_frac = x - int(x)
+            y_frac = y - int(y)
+            
+            # Get neighboring pixels
+            x0, x1 = int(x), min(int(x) + 1, width - 1)
+            y0, y1 = int(y), min(int(y) + 1, height - 1)
+            
+            # Clamp to valid indices
+            x0 = max(0, min(x0, width - 1))
+            x1 = max(0, min(x1, width - 1))
+            y0 = max(0, min(y0, height - 1))
+            y1 = max(0, min(y1, height - 1))
+            
+            # Bilinear interpolation
+            top = plume_frame[y0, x0] * (1 - x_frac) + plume_frame[y0, x1] * x_frac
+            bottom = plume_frame[y1, x0] * (1 - x_frac) + plume_frame[y1, x1] * x_frac
+            odor_value = top * (1 - y_frac) + bottom * y_frac
         
-        # Perform bilinear interpolation
-        values = (
-            plume_frame[y0, x0] * (1 - wx) * (1 - wy) +
-            plume_frame[y0, x1] * wx * (1 - wy) +
-            plume_frame[y1, x0] * (1 - wx) * wy +
-            plume_frame[y1, x1] * wx * wy
-        )
-        return values
+        odor_values.append(float(odor_value))
     
-    elif sampling_method == "bicubic":
-        # Bicubic interpolation using scipy
-        coordinates = np.array([y_coords, x_coords])
-        return ndimage.map_coordinates(plume_frame, coordinates, order=3, mode='nearest')
-    
-    else:
-        raise ValueError(f"Unsupported sampling method: {sampling_method}")
+    return odor_values
 
 
-# Backward Compatibility Aliases
-# Maintain compatibility with existing import patterns
-setup_logger = setup_enhanced_logging  # Legacy alias
-DEFAULT_FORMAT = "enhanced"  # Legacy constant
-MODULE_FORMAT = "structured"  # Legacy constant
-LOG_LEVELS = ["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]  # Legacy constant
-
-
-def get_module_info() -> Dict[str, Any]:
+# Convenience function for unified Hydra configuration
+def configure_from_hydra(cfg: Any, components: Optional[List[str]] = None) -> Dict[str, bool]:
     """
-    Get information about available utility modules and any import errors.
+    Configure multiple utility components from Hydra configuration.
     
-    Returns:
-        Dictionary containing module availability and error information
-    """
-    return {
-        "available_modules": _available_modules,
-        "import_errors": {k: str(v) for k, v in _import_errors.items()},
-        "total_modules": len(_available_modules),
-        "total_errors": len(_import_errors),
-        "status": "healthy" if not _import_errors else "degraded"
-    }
-
-
-def initialize_reproducibility(seed: Optional[int] = None, **kwargs) -> int:
-    """
-    Initialize reproducibility settings for experiments.
-    
-    Convenience function that sets up global seed management and
-    logging configuration for reproducible research.
+    Provides unified configuration interface for all utility components,
+    automatically detecting and configuring available subsystems.
     
     Args:
-        seed: Global seed value
-        **kwargs: Additional configuration parameters
+        cfg: Hydra configuration object
+        components: Optional list of specific components to configure
+                   ('logging', 'seed_manager'). If None, configures all available.
         
     Returns:
-        The initialized seed value
+        Dictionary mapping component names to configuration success status
+        
+    Examples:
+        >>> from hydra import compose, initialize
+        >>> with initialize(config_path="../conf"):
+        ...     cfg = compose(config_name="config")
+        >>> results = configure_from_hydra(cfg)
+        >>> print(f"Logging configured: {results['logging']}")
+        >>> print(f"Seed manager configured: {results['seed_manager']}")
+    """
+    results = {}
+    available_components = []
+    
+    # Determine which components to configure
+    if components is None:
+        if LOGGING_AVAILABLE:
+            available_components.append('logging')
+        if SEED_MANAGER_AVAILABLE:
+            available_components.append('seed_manager')
+    else:
+        available_components = components
+    
+    # Configure logging
+    if 'logging' in available_components and LOGGING_AVAILABLE:
+        try:
+            results['logging'] = configure_logging_from_hydra(cfg)
+        except Exception as e:
+            warnings.warn(f"Failed to configure logging from Hydra: {e}")
+            results['logging'] = False
+    else:
+        results['logging'] = False
+    
+    # Configure seed manager
+    if 'seed_manager' in available_components and SEED_MANAGER_AVAILABLE:
+        try:
+            results['seed_manager'] = configure_seed_from_hydra(cfg)
+        except Exception as e:
+            warnings.warn(f"Failed to configure seed manager from Hydra: {e}")
+            results['seed_manager'] = False
+    else:
+        results['seed_manager'] = False
+    
+    return results
+
+
+def initialize_reproducibility(seed: int, experiment_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Initialize complete reproducibility environment with comprehensive setup.
+    
+    Convenience function that sets up seed management, logging, and returns
+    complete reproducibility context for experiment documentation.
+    
+    Args:
+        seed: Random seed for reproducibility
+        experiment_id: Optional experiment identifier
+        
+    Returns:
+        Dictionary containing complete reproducibility information
+        
+    Examples:
+        >>> repro_info = initialize_reproducibility(42, "exp_001")
+        >>> logger = get_module_logger(__name__)
+        >>> logger.info(f"Experiment started with seed {repro_info['seed']}")
     """
     # Initialize seed management
-    actual_seed = set_global_seed(seed, **kwargs)
+    if SEED_MANAGER_AVAILABLE:
+        seed_manager = set_global_seed(seed, experiment_id=experiment_id)
+        repro_info = seed_manager.get_reproducibility_info()
+    else:
+        # Fallback to basic seed setting
+        set_global_seed(seed)
+        repro_info = {
+            'seed_value': seed,
+            'experiment_id': experiment_id,
+            'timestamp': __import__('time').time(),
+            'seed_manager_available': False
+        }
     
-    # Setup logging with correlation
-    try:
-        setup_enhanced_logging()
-        logger = get_module_logger(__name__)
-        logger.info(f"Reproducibility initialized with seed: {actual_seed}")
-    except Exception as e:
-        warnings.warn(f"Failed to setup enhanced logging: {e}", UserWarning)
+    # Set up enhanced logging if available
+    if LOGGING_AVAILABLE:
+        setup_enhanced_logging(experiment_id=experiment_id)
+        repro_info['logging_configured'] = True
+    else:
+        repro_info['logging_configured'] = False
     
-    return actual_seed
+    return repro_info
 
 
-# Public API exports for wildcard imports
+# Expose availability flags for conditional imports
+__availability__ = {
+    'logging': LOGGING_AVAILABLE,
+    'visualization': VISUALIZATION_AVAILABLE,
+    'seed_manager': SEED_MANAGER_AVAILABLE
+}
+
+
+# Public API - All utility functions accessible through unified imports
 __all__ = [
-    # Logging utilities
-    "LoggingConfig",
-    "EnhancedLoggingManager", 
-    "setup_enhanced_logging",
-    "get_logging_manager",
-    "get_module_logger",
-    "create_correlation_scope",
-    "create_cli_command_scope",
-    "create_parameter_validation_scope",
-    "log_environment_variables", 
-    "log_configuration_composition",
-    
-    # Visualization utilities
-    "SimulationVisualization",
-    "visualize_trajectory",
-    "batch_visualize_trajectories",
-    "setup_headless_mode",
-    "get_available_themes",
-    "create_simulation_visualization",
-    "export_animation",
-    "DEFAULT_VISUALIZATION_CONFIG",
-    
-    # Seed management utilities
-    "SeedConfig",
-    "SeedManager",
-    "set_global_seed",
-    "get_current_seed",
-    "get_seed_manager",
-    "get_numpy_generator",
-    
     # I/O utilities
-    "load_yaml",
-    "save_yaml", 
-    "load_json",
-    "save_json",
-    "load_numpy",
-    "save_numpy",
+    'load_yaml',
+    'save_yaml', 
+    'load_json',
+    'save_json',
+    'load_numpy',
+    'save_numpy',
     
-    # Navigator utilities
-    "normalize_array_parameter",
-    "create_navigator_from_params",
-    "calculate_sensor_positions", 
-    "sample_odor_at_sensors",
+    # Navigator utilities (backward compatibility)
+    'normalize_array_parameter',
+    'create_navigator_from_params',
+    'calculate_sensor_positions',
+    'sample_odor_at_sensors',
     
-    # Convenience and compatibility functions
-    "initialize_reproducibility",
-    "get_module_info",
+    # Logging functions
+    'setup_enhanced_logging',
+    'configure_logging_from_hydra',
+    'bind_experiment_context',
+    'track_cli_command',
+    'get_module_logger',
+    'log_configuration_override',
+    'get_logging_metrics',
+    'EnhancedLogger',
+    'LoggingConfig',
+    'ExperimentContext',
+    'CLICommandTracker',
     
-    # Backward compatibility aliases
-    "setup_logger",
-    "DEFAULT_FORMAT",
-    "MODULE_FORMAT", 
-    "LOG_LEVELS",
+    # Visualization functions
+    'SimulationVisualization',
+    'visualize_trajectory',
+    'VisualizationConfig',
+    
+    # Seed management functions
+    'set_global_seed',
+    'get_global_seed_manager',
+    'configure_seed_from_hydra',
+    'seed_context',
+    'get_reproducibility_report',
+    'SeedManager',
+    'RandomState',
+    
+    # Unified configuration and initialization
+    'configure_from_hydra',
+    'initialize_reproducibility',
+    
+    # Logging format constants
+    'ENHANCED_FORMAT',
+    'HYDRA_FORMAT',
+    'CLI_FORMAT',
+    'MINIMAL_FORMAT',
+    'PRODUCTION_FORMAT',
+    
+    # Availability information
+    '__availability__'
 ]
+
+
+# Module-level initialization for optimal import experience
+def _initialize_module():
+    """
+    Perform module-level initialization for optimal user experience.
+    
+    This function sets up basic logging and seed management if they're
+    available, providing immediate functionality for common use cases.
+    """
+    # Set up basic logging if enhanced logging is available
+    if LOGGING_AVAILABLE:
+        try:
+            # Configure basic enhanced logging with sane defaults
+            setup_enhanced_logging()
+        except Exception:
+            # Silently fall back to standard logging
+            pass
+    
+    # Initialize global seed manager with default if available
+    if SEED_MANAGER_AVAILABLE:
+        try:
+            # Only initialize if no global manager exists
+            if get_global_seed_manager() is None:
+                # Use a deterministic default seed for reproducibility
+                default_seed = 42
+                set_global_seed(default_seed)
+        except Exception:
+            # Silently continue if initialization fails
+            pass
+
+
+# Execute module initialization
+_initialize_module()
