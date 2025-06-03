@@ -1,251 +1,170 @@
 """
-VideoPlume module providing comprehensive video-based odor plume environment functionality.
+Consolidated VideoPlume class implementation for video-based odor plume environments.
 
-This module consolidates the video processing capabilities from the original adapters and 
-environments modules, providing enhanced Hydra configuration integration, OpenCV processing,
-and workflow orchestration support for research pipelines.
+This module provides comprehensive video processing capabilities with Hydra configuration 
+integration, OpenCV frame processing, and workflow orchestration support. It merges 
+functionality from legacy adapters and environments into a unified implementation 
+supporting modern configuration management and research workflows.
 
-The VideoPlume class serves as the primary interface for loading and processing video-based
-odor plume data, with support for various preprocessing operations, metadata extraction,
-and integration with DVC/Snakemake workflows.
+Key Features:
+    - Hydra DictConfig factory method for seamless configuration integration
+    - OpenCV-based video processing with preprocessing options
+    - Pydantic schema validation within Hydra structured config system
+    - DVC/Snakemake workflow integration points
+    - Environment variable interpolation for secure video path management
+    - Enhanced metadata extraction for research documentation
+    - Thread-safe resource management with automatic cleanup
+
+Example Usage:
+    Basic factory method creation:
+        >>> from hydra import compose, initialize
+        >>> from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
+        >>> 
+        >>> with initialize(config_path="../conf"):
+        ...     cfg = compose(config_name="config")
+        ...     plume = VideoPlume.from_config(cfg.video_plume)
+    
+    Direct instantiation with preprocessing:
+        >>> plume = VideoPlume(
+        ...     video_path="data/plume_video.mp4",
+        ...     flip=True,
+        ...     grayscale=True,
+        ...     kernel_size=5,
+        ...     kernel_sigma=1.0
+        ... )
+    
+    Workflow integration:
+        >>> # DVC data versioning compatible
+        >>> plume = VideoPlume.from_config(cfg.video_plume)
+        >>> metadata = plume.get_workflow_metadata()
+        >>> # Snakemake rule input compatible
+        >>> frame = plume.get_frame(frame_idx=100)
 """
 
-import numpy as np
-from pathlib import Path
-import cv2
-import os
-from contextlib import suppress
-from typing import Dict, Union, Optional, Any, Tuple
 import threading
-import warnings
+from contextlib import suppress
+from pathlib import Path
+from typing import Dict, Optional, Union, Any, Tuple
 
+import cv2
+import numpy as np
+from loguru import logger
+
+# Hydra imports for configuration management
 try:
     from omegaconf import DictConfig, OmegaConf
     HYDRA_AVAILABLE = True
 except ImportError:
-    # Graceful fallback when Hydra is not available
-    DictConfig = dict
     HYDRA_AVAILABLE = False
-    warnings.warn(
-        "Hydra not available. Some configuration features may be limited.",
-        ImportWarning
-    )
+    DictConfig = dict
+    logger.warning("Hydra not available. Falling back to dictionary configuration.")
 
-from {{cookiecutter.project_slug}}.config.schemas import VideoPlumeConfig
+# Import configuration schema for validation
+from ..config.schemas import VideoPlumeConfig
 
 
 class VideoPlume:
     """
-    Comprehensive video-based odor plume environment implementation.
+    Unified VideoPlume implementation with comprehensive video processing capabilities.
     
-    This class provides frame-by-frame access to video data with advanced preprocessing
-    capabilities, metadata extraction, and integration with research workflows. It supports
-    both traditional dictionary-based configuration and modern Hydra DictConfig objects
-    for enhanced experiment orchestration.
+    This class consolidates video-based odor plume environment functionality with 
+    enhanced Hydra configuration integration, OpenCV processing, and workflow 
+    orchestration support. Designed for research workflows requiring reproducible 
+    video processing with flexible configuration management.
     
     Features:
-    - OpenCV-based video processing with frame-by-frame access
-    - Gaussian smoothing and horizontal flipping preprocessing
-    - Automatic resource management with thread-safe operations
-    - Environment variable interpolation for secure path management
-    - Metadata extraction for research documentation
-    - DVC/Snakemake workflow integration points
-    - Hydra configuration system integration
+        - Factory method creation with Hydra DictConfig support
+        - OpenCV video processing with frame-by-frame access
+        - Configurable preprocessing (grayscale, flipping, Gaussian smoothing)
+        - Thread-safe resource management with automatic cleanup
+        - Environment variable interpolation for secure path management
+        - Workflow integration points for DVC and Snakemake
+        - Enhanced metadata extraction for research documentation
+        - Memory-efficient frame processing without caching
     
-    Example:
-        Basic usage with file path:
-        >>> plume = VideoPlume(video_path="path/to/video.mp4")
-        >>> frame = plume.get_frame(0)
-        >>> metadata = plume.get_metadata()
-        
-        Usage with Hydra configuration:
-        >>> from omegaconf import DictConfig
-        >>> cfg = DictConfig({
-        ...     "video_path": "path/to/video.mp4",
-        ...     "flip": True,
-        ...     "kernel_size": 5,
-        ...     "kernel_sigma": 1.5
-        ... })
-        >>> plume = VideoPlume.from_config(cfg)
-        
-        Advanced metadata extraction:
-        >>> metadata_str = plume.get_metadata_string()
-        >>> print(metadata_str)  # Formatted research documentation
+    Attributes:
+        video_path (Path): Path to the video file
+        flip (bool): Whether to flip frames horizontally
+        grayscale (bool): Whether to convert frames to grayscale
+        kernel_size (Optional[int]): Gaussian kernel size for smoothing
+        kernel_sigma (Optional[float]): Gaussian kernel sigma for smoothing
+        threshold (Optional[float]): Threshold value for binary detection
+        normalize (bool): Whether to normalize frame values to [0, 1] range
+        width (int): Video frame width in pixels
+        height (int): Video frame height in pixels
+        fps (float): Video frame rate
+        frame_count (int): Total number of frames in video
+        duration (float): Video duration in seconds
+    
+    Thread Safety:
+        All public methods are thread-safe. Internal OpenCV VideoCapture 
+        operations are protected by locks to prevent concurrent access issues.
     """
     
     def __init__(
         self,
         video_path: Union[str, Path],
         flip: bool = False,
-        kernel_size: int = 0,
-        kernel_sigma: float = 1.0,
         grayscale: bool = True,
+        kernel_size: Optional[int] = None,
+        kernel_sigma: Optional[float] = None,
         threshold: Optional[float] = None,
         normalize: bool = True,
         **kwargs
-    ):
+    ) -> None:
         """
-        Initialize VideoPlume with comprehensive configuration options.
+        Initialize VideoPlume with specified parameters.
         
         Args:
-            video_path: Path to video file (supports environment variable interpolation)
-            flip: Whether to apply horizontal flipping to frames
-            kernel_size: Size of Gaussian kernel for smoothing (0 disables, must be odd)
-            kernel_sigma: Standard deviation for Gaussian kernel
-            grayscale: Whether to convert frames to grayscale
-            threshold: Optional threshold value for frame processing
-            normalize: Whether to normalize frame values
+            video_path: Path to the video file containing plume data
+            flip: Whether to flip video frames horizontally for coordinate system alignment
+            grayscale: Whether to convert frames to grayscale for processing efficiency
+            kernel_size: Gaussian kernel size for smoothing (must be odd and positive)
+            kernel_sigma: Gaussian kernel sigma for smoothing (must be positive)
+            threshold: Threshold value for binary plume detection (0.0 to 1.0)
+            normalize: Whether to normalize frame values to [0, 1] range
             **kwargs: Additional parameters for future extensibility
             
         Raises:
             IOError: If video file does not exist or cannot be opened
-            ValueError: If kernel_size is even or negative
+            ValueError: If kernel parameters are invalid or inconsistent
             
         Note:
-            The video_path supports environment variable interpolation when used
-            with Hydra configuration. For example: "${oc.env:VIDEO_DATA_PATH}/plume.mp4"
+            Gaussian smoothing is applied only when both kernel_size and 
+            kernel_sigma are specified. All preprocessing operations are 
+            applied in sequence: grayscale → flip → gaussian → threshold → normalize.
         """
-        # Resolve environment variables in video path if present
-        self.video_path = Path(self._resolve_env_path(str(video_path)))
+        # Convert and validate video path
+        self.video_path = Path(video_path)
+        if not self.video_path.exists():
+            raise IOError(f"Video file does not exist: {self.video_path}")
+        if not self.video_path.is_file():
+            raise IOError(f"Video path is not a file: {self.video_path}")
+        
+        # Store preprocessing parameters
         self.flip = flip
+        self.grayscale = grayscale
         self.kernel_size = kernel_size
         self.kernel_sigma = kernel_sigma
-        self.grayscale = grayscale
         self.threshold = threshold
         self.normalize = normalize
         
-        # Validate kernel_size parameter
-        if self.kernel_size < 0:
-            raise ValueError("kernel_size must be non-negative")
-        if self.kernel_size > 0 and self.kernel_size % 2 == 0:
-            raise ValueError("kernel_size must be odd when greater than 0")
+        # Validate Gaussian parameters consistency
+        if (kernel_size is not None) != (kernel_sigma is not None):
+            raise ValueError(
+                "Both kernel_size and kernel_sigma must be specified together or not at all"
+            )
         
-        # Validate kernel_sigma parameter
-        if self.kernel_sigma <= 0:
-            raise ValueError("kernel_sigma must be positive")
+        if kernel_size is not None:
+            if kernel_size <= 0 or kernel_size % 2 == 0:
+                raise ValueError("kernel_size must be positive and odd")
+            if kernel_sigma <= 0:
+                raise ValueError("kernel_sigma must be positive")
         
-        # Thread safety for concurrent access
-        self._lock = threading.RLock()
-        self._is_closed = False
-        self.cap = None
+        if threshold is not None and (threshold < 0.0 or threshold > 1.0):
+            raise ValueError("threshold must be between 0.0 and 1.0")
         
-        # Initialize video capture and extract metadata
-        self._initialize_video_capture()
-        
-        # Store additional configuration for workflow integration
-        self._config_metadata = kwargs.copy()
-        self._config_metadata.update({
-            'flip': flip,
-            'kernel_size': kernel_size,
-            'kernel_sigma': kernel_sigma,
-            'grayscale': grayscale,
-            'threshold': threshold,
-            'normalize': normalize
-        })
-    
-    @classmethod
-    def from_config(
-        cls,
-        cfg: Union[DictConfig, Dict[str, Any]],
-        **kwargs
-    ) -> 'VideoPlume':
-        """
-        Create VideoPlume instance from Hydra DictConfig or dictionary configuration.
-        
-        This factory method provides enhanced integration with Hydra's configuration
-        management system, supporting environment variable interpolation, structured
-        configuration composition, and parameter validation through Pydantic schemas.
-        
-        Args:
-            cfg: Hydra DictConfig or dictionary containing configuration parameters
-            **kwargs: Additional parameters to override configuration values
-            
-        Returns:
-            Configured VideoPlume instance
-            
-        Raises:
-            ValueError: If configuration validation fails
-            KeyError: If required configuration parameters are missing
-            
-        Example:
-            With Hydra DictConfig:
-            >>> from omegaconf import DictConfig
-            >>> cfg = DictConfig({
-            ...     "video_path": "${oc.env:DATA_PATH}/experiment_001.mp4",
-            ...     "flip": True,
-            ...     "gaussian_blur": {"kernel_size": 5, "sigma": 1.5}
-            ... })
-            >>> plume = VideoPlume.from_config(cfg)
-            
-            With dictionary configuration:
-            >>> config = {
-            ...     "video_path": "data/plume_video.mp4",
-            ...     "flip": False,
-            ...     "kernel_size": 3,
-            ...     "kernel_sigma": 1.0
-            ... }
-            >>> plume = VideoPlume.from_config(config)
-        """
-        try:
-            # Convert DictConfig to dictionary if needed
-            if HYDRA_AVAILABLE and isinstance(cfg, DictConfig):
-                # Resolve environment variable interpolations
-                config_dict = OmegaConf.to_container(cfg, resolve=True)
-            else:
-                config_dict = dict(cfg) if not isinstance(cfg, dict) else cfg.copy()
-            
-            # Apply any override parameters
-            config_dict.update(kwargs)
-            
-            # Validate configuration using Pydantic schema
-            validated_config = VideoPlumeConfig.model_validate(config_dict)
-            
-            # Create instance with validated parameters
-            return cls(**validated_config.model_dump())
-            
-        except Exception as e:
-            raise ValueError(f"Invalid VideoPlume configuration: {e}") from e
-    
-    def _resolve_env_path(self, path_str: str) -> str:
-        """
-        Resolve environment variable interpolations in path string.
-        
-        Supports both standard environment variable syntax ($VAR, ${VAR})
-        and Hydra interpolation syntax (${oc.env:VAR}).
-        
-        Args:
-            path_str: Path string potentially containing environment variables
-            
-        Returns:
-            Resolved path string with environment variables expanded
-        """
-        # Handle Hydra-style environment variable interpolation
-        if "${oc.env:" in path_str:
-            # Simple fallback for Hydra syntax when OmegaConf is not available
-            import re
-            def replace_hydra_env(match):
-                var_name = match.group(1)
-                default = match.group(2) if match.group(2) else None
-                return os.getenv(var_name, default or "")
-            
-            # Pattern: ${oc.env:VAR_NAME,default_value} or ${oc.env:VAR_NAME}
-            pattern = r'\$\{oc\.env:([^,}]+)(?:,([^}]*))?\}'
-            path_str = re.sub(pattern, replace_hydra_env, path_str)
-        
-        # Handle standard environment variable expansion
-        return os.path.expandvars(path_str)
-    
-    def _initialize_video_capture(self) -> None:
-        """
-        Initialize OpenCV video capture with comprehensive error handling.
-        
-        Raises:
-            IOError: If video file does not exist or cannot be opened
-        """
-        if not self.video_path.exists():
-            raise IOError(f"Video file does not exist: {self.video_path}")
-        
-        # Initialize video capture
+        # Initialize OpenCV video capture
         self.cap = cv2.VideoCapture(str(self.video_path))
         if not self.cap.isOpened():
             raise IOError(f"Failed to open video file: {self.video_path}")
@@ -256,59 +175,138 @@ class VideoPlume:
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = float(self.cap.get(cv2.CAP_PROP_FPS))
         
-        # Validate video properties
+        # Validate extracted metadata
         if self.frame_count <= 0:
-            raise IOError(f"Video file contains no frames: {self.video_path}")
+            raise IOError(f"Invalid frame count: {self.frame_count}")
         if self.width <= 0 or self.height <= 0:
             raise IOError(f"Invalid video dimensions: {self.width}x{self.height}")
         if self.fps <= 0:
-            warnings.warn(f"Invalid or missing FPS information for: {self.video_path}")
-            self.fps = 30.0  # Default fallback
+            logger.warning(f"Invalid or missing FPS value: {self.fps}, defaulting to 30.0")
+            self.fps = 30.0
+        
+        # Thread safety for OpenCV operations
+        self._lock = threading.RLock()
+        self._is_closed = False
+        
+        logger.info(
+            f"VideoPlume initialized: {self.video_path.name} "
+            f"({self.width}x{self.height}, {self.frame_count} frames, {self.fps:.1f} fps)"
+        )
+    
+    @classmethod
+    def from_config(cls, cfg: Union[DictConfig, Dict]) -> 'VideoPlume':
+        """
+        Create VideoPlume instance from Hydra configuration.
+        
+        This factory method supports Hydra's structured configuration system
+        with automatic Pydantic validation and environment variable interpolation.
+        Compatible with DVC data versioning and Snakemake workflow definitions.
+        
+        Args:
+            cfg: Hydra DictConfig object or dictionary containing video plume parameters.
+                 Expected configuration structure:
+                 ```yaml
+                 video_path: ${oc.env:PLUME_VIDEO_PATH,data/default_plume.mp4}
+                 flip: false
+                 grayscale: true
+                 kernel_size: 5
+                 kernel_sigma: 1.0
+                 threshold: 0.5
+                 normalize: true
+                 ```
+        
+        Returns:
+            VideoPlume: Configured instance ready for frame processing
+            
+        Raises:
+            ValueError: If configuration validation fails
+            IOError: If video file cannot be accessed or opened
+            
+        Example:
+            >>> from hydra import compose, initialize
+            >>> with initialize(config_path="../conf"):
+            ...     cfg = compose(config_name="config")
+            ...     plume = VideoPlume.from_config(cfg.video_plume)
+            
+        Note:
+            Environment variable interpolation is handled automatically by Hydra.
+            For example, ${oc.env:PLUME_VIDEO_PATH} resolves to the value of
+            the PLUME_VIDEO_PATH environment variable.
+        """
+        # Convert DictConfig to regular dict if needed for Pydantic validation
+        if HYDRA_AVAILABLE and isinstance(cfg, DictConfig):
+            # Resolve any remaining interpolations and convert to dict
+            config_dict = OmegaConf.to_container(cfg, resolve=True)
+        else:
+            config_dict = dict(cfg)
+        
+        try:
+            # Validate configuration through Pydantic schema
+            # Note: _skip_validation=True prevents file existence check during validation
+            # since we want to handle that in the main constructor
+            validated_config = VideoPlumeConfig.model_validate(
+                {**config_dict, "_skip_validation": True}
+            )
+            
+            # Create instance with validated parameters
+            return cls(**validated_config.model_dump(exclude={"_skip_validation"}))
+            
+        except Exception as e:
+            logger.error(f"VideoPlume configuration validation failed: {e}")
+            raise ValueError(f"Invalid VideoPlume configuration: {e}") from e
     
     def get_frame(self, frame_idx: int) -> Optional[np.ndarray]:
         """
-        Retrieve and process a specific frame from the video.
+        Retrieve and preprocess a video frame by index.
         
-        This method provides frame-by-frame access with optional preprocessing including
-        horizontal flipping, Gaussian smoothing, grayscale conversion, and normalization.
-        All operations are applied efficiently using OpenCV's optimized implementations.
+        Applies all configured preprocessing operations in sequence:
+        1. Frame extraction from video
+        2. Grayscale conversion (if enabled)
+        3. Horizontal flipping (if enabled)
+        4. Gaussian smoothing (if configured)
+        5. Threshold application (if configured)
+        6. Normalization to [0, 1] range (if enabled)
         
         Args:
-            frame_idx: Index of the frame to retrieve (0-based)
+            frame_idx: Zero-based frame index to retrieve
             
         Returns:
-            Processed frame as numpy array, or None if frame cannot be retrieved
+            Preprocessed frame as numpy array, or None if frame unavailable.
+            Frame shape depends on preprocessing options:
+            - Grayscale: (height, width) with dtype float32 or uint8
+            - Color: (height, width, 3) with dtype float32 or uint8
             
         Raises:
-            ValueError: If VideoPlume is closed
+            ValueError: If VideoPlume has been closed
             
         Note:
-            Frame processing is applied in the following order:
-            1. Frame extraction from video
-            2. Horizontal flipping (if enabled)
-            3. Grayscale conversion (if enabled)
-            4. Gaussian smoothing (if kernel_size > 0)
-            5. Thresholding (if threshold is set)
-            6. Normalization (if enabled)
+            This method is thread-safe and can be called concurrently.
+            Out-of-bounds frame indices return None rather than raising exceptions.
+            
+        Example:
+            >>> frame = plume.get_frame(100)
+            >>> if frame is not None:
+            ...     print(f"Frame shape: {frame.shape}, dtype: {frame.dtype}")
         """
         with self._lock:
             if self._is_closed:
                 raise ValueError("Cannot get frame from closed VideoPlume")
             
-            # Validate frame index
+            # Validate frame index bounds
             if frame_idx < 0 or frame_idx >= self.frame_count:
+                logger.debug(f"Frame index {frame_idx} out of bounds [0, {self.frame_count})")
                 return None
             
-            # Seek to requested frame
+            # Seek to the requested frame
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = self.cap.read()
             
             if not ret:
+                logger.warning(f"Failed to read frame {frame_idx}")
                 return None
             
             # Apply preprocessing pipeline
             frame = self._preprocess_frame(frame)
-            
             return frame
     
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
@@ -316,297 +314,268 @@ class VideoPlume:
         Apply preprocessing pipeline to a raw video frame.
         
         Args:
-            frame: Raw frame from video capture
+            frame: Raw frame from OpenCV VideoCapture
             
         Returns:
-            Processed frame with applied transformations
+            Preprocessed frame according to instance configuration
         """
-        # Apply horizontal flipping if requested
-        if self.flip:
-            frame = cv2.flip(frame, 1)
-        
-        # Convert to grayscale if requested
+        # Step 1: Grayscale conversion
         if self.grayscale and len(frame.shape) == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # Apply Gaussian smoothing if kernel_size > 0
-        if self.kernel_size > 0:
+        # Step 2: Horizontal flipping for coordinate system alignment
+        if self.flip:
+            frame = cv2.flip(frame, 1)  # 1 = horizontal flip
+        
+        # Step 3: Gaussian smoothing for noise reduction
+        if self.kernel_size is not None and self.kernel_sigma is not None:
             frame = cv2.GaussianBlur(
-                frame,
-                (self.kernel_size, self.kernel_size),
+                frame, 
+                (self.kernel_size, self.kernel_size), 
                 self.kernel_sigma
             )
         
-        # Apply threshold if specified
-        if self.threshold is not None:
-            if len(frame.shape) == 3:
-                # Convert to grayscale for thresholding
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            _, frame = cv2.threshold(frame, self.threshold, 255, cv2.THRESH_BINARY)
+        # Step 4: Normalization to [0, 1] range
+        if self.normalize:
+            if frame.dtype != np.float32:
+                frame = frame.astype(np.float32)
+            frame = frame / 255.0
         
-        # Normalize frame values if requested
-        if self.normalize and frame.dtype != np.float32:
-            frame = frame.astype(np.float32) / 255.0
+        # Step 5: Threshold application for binary detection
+        if self.threshold is not None:
+            if not self.normalize:
+                # Convert to float and normalize for thresholding
+                if frame.dtype != np.float32:
+                    frame = frame.astype(np.float32) / 255.0
+            # Apply threshold
+            frame = (frame > self.threshold).astype(np.float32)
         
         return frame
     
-    def get_metadata(self) -> Dict[str, Any]:
+    @property
+    def duration(self) -> float:
         """
-        Extract comprehensive metadata from the video file.
-        
-        Returns comprehensive information about the video including dimensions,
-        frame rate, duration, and processing configuration. This metadata is
-        essential for research documentation and workflow integration.
+        Get video duration in seconds.
         
         Returns:
-            Dictionary containing video and configuration metadata
+            Video duration calculated from frame count and FPS.
+            Returns 0.0 if FPS is invalid.
+        """
+        return 0.0 if self.fps <= 0 else self.frame_count / self.fps
+    
+    @property
+    def shape(self) -> Tuple[int, int]:
+        """
+        Get video frame shape as (height, width).
+        
+        Returns:
+            Tuple of (height, width) representing frame dimensions
+        """
+        return (self.height, self.width)
+    
+    def get_metadata(self) -> Dict[str, Any]:
+        """
+        Extract comprehensive video metadata for analysis and documentation.
+        
+        Returns:
+            Dictionary containing video properties and preprocessing configuration:
+            - width: Frame width in pixels
+            - height: Frame height in pixels  
+            - fps: Frame rate in frames per second
+            - frame_count: Total number of frames
+            - duration: Video duration in seconds
+            - shape: Frame shape as (height, width) tuple
+            - preprocessing: Applied preprocessing configuration
             
         Example:
             >>> metadata = plume.get_metadata()
-            >>> print(f"Video duration: {metadata['duration']:.2f} seconds")
-            >>> print(f"Processing config: {metadata['processing_config']}")
+            >>> print(f"Video: {metadata['width']}x{metadata['height']}")
+            >>> print(f"Duration: {metadata['duration']:.2f}s")
         """
-        with self._lock:
-            return {
-                # Video file properties
-                "video_path": str(self.video_path),
-                "filename": self.video_path.name,
-                "file_size_bytes": self.video_path.stat().st_size if self.video_path.exists() else 0,
-                
-                # Video stream properties
-                "width": self.width,
-                "height": self.height,
-                "fps": self.fps,
-                "frame_count": self.frame_count,
-                "duration": self.duration,
-                "shape": self.shape,
-                
-                # Processing configuration
-                "processing_config": self._config_metadata.copy(),
-                
-                # Workflow integration metadata
-                "dvc_compatible": True,  # Indicates DVC workflow compatibility
-                "snakemake_ready": True,  # Indicates Snakemake rule compatibility
-                "hydra_managed": HYDRA_AVAILABLE,  # Indicates Hydra configuration support
+        return {
+            "video_path": str(self.video_path),
+            "width": self.width,
+            "height": self.height,
+            "fps": self.fps,
+            "frame_count": self.frame_count,
+            "duration": self.duration,
+            "shape": self.shape,
+            "preprocessing": {
+                "flip": self.flip,
+                "grayscale": self.grayscale,
+                "kernel_size": self.kernel_size,
+                "kernel_sigma": self.kernel_sigma,
+                "threshold": self.threshold,
+                "normalize": self.normalize,
             }
+        }
     
     def get_metadata_string(self) -> str:
         """
         Generate formatted metadata string for research documentation.
         
-        Creates a human-readable string containing comprehensive video and processing
-        information suitable for research logs, reports, and documentation. This
-        method consolidates functionality from the original environments module.
+        Creates a human-readable summary of video properties and preprocessing
+        configuration suitable for research logs, experiment documentation,
+        and automated reporting systems.
         
         Returns:
-            Formatted string with video metadata and processing configuration
+            Formatted string with comprehensive video information
             
         Example:
-            >>> metadata_str = plume.get_metadata_string()
-            >>> print(metadata_str)
-            Video: experiment_001.mp4
-            Dimensions: 1920x1080 pixels
+            >>> print(plume.get_metadata_string())
+            Video: plume_video.mp4
+            Dimensions: 640x480 pixels
             Frame rate: 30.0 fps
-            1800 frames
-            Duration: 60.00 seconds
-            Processing: flip=True, gaussian_blur=5x5 (σ=1.5)
+            1500 frames
+            Duration: 50.00 seconds
+            Preprocessing: grayscale, flip, gaussian(5,1.0)
         """
         metadata = self.get_metadata()
         
-        # Format processing configuration for display
-        processing_parts = []
-        if self.flip:
-            processing_parts.append("horizontal_flip=True")
-        if self.kernel_size > 0:
-            processing_parts.append(f"gaussian_blur={self.kernel_size}x{self.kernel_size} (σ={self.kernel_sigma})")
-        if self.threshold is not None:
-            processing_parts.append(f"threshold={self.threshold}")
-        if self.normalize:
-            processing_parts.append("normalize=True")
+        # Build preprocessing description
+        preprocessing_parts = []
+        if metadata["preprocessing"]["grayscale"]:
+            preprocessing_parts.append("grayscale")
+        if metadata["preprocessing"]["flip"]:
+            preprocessing_parts.append("flip")
+        if metadata["preprocessing"]["kernel_size"] is not None:
+            kernel_size = metadata["preprocessing"]["kernel_size"]
+            kernel_sigma = metadata["preprocessing"]["kernel_sigma"]
+            preprocessing_parts.append(f"gaussian({kernel_size},{kernel_sigma})")
+        if metadata["preprocessing"]["threshold"] is not None:
+            threshold = metadata["preprocessing"]["threshold"]
+            preprocessing_parts.append(f"threshold({threshold})")
+        if metadata["preprocessing"]["normalize"]:
+            preprocessing_parts.append("normalize")
         
-        processing_info = ", ".join(processing_parts) if processing_parts else "none"
+        preprocessing_str = ", ".join(preprocessing_parts) if preprocessing_parts else "none"
         
         return (
-            f"Video: {metadata['filename']}\n"
+            f"Video: {self.video_path.name}\n"
             f"Dimensions: {metadata['width']}x{metadata['height']} pixels\n"
             f"Frame rate: {metadata['fps']:.1f} fps\n"
             f"{metadata['frame_count']} frames\n"
             f"Duration: {metadata['duration']:.2f} seconds\n"
-            f"Processing: {processing_info}"
+            f"Preprocessing: {preprocessing_str}"
         )
     
-    @property
-    def duration(self) -> float:
+    def get_workflow_metadata(self) -> Dict[str, Any]:
         """
-        Calculate video duration in seconds.
+        Generate workflow-compatible metadata for DVC and Snakemake integration.
+        
+        Provides metadata in a structure compatible with workflow management
+        systems for reproducible data processing pipelines.
         
         Returns:
-            Duration in seconds, or 0.0 if FPS is unavailable
+            Dictionary with workflow-specific metadata including file hashes,
+            processing parameters, and dependency information
+            
+        Example:
+            >>> metadata = plume.get_workflow_metadata()
+            >>> # Use in Snakemake rule
+            >>> with open("metadata.yaml", "w") as f:
+            ...     yaml.dump(metadata, f)
         """
-        return 0.0 if self.fps == 0 else self.frame_count / self.fps
-    
-    @property
-    def shape(self) -> Tuple[int, int]:
-        """
-        Get video frame dimensions as (height, width) tuple.
+        import hashlib
         
-        Returns:
-            Tuple of (height, width) matching NumPy array convention
-        """
-        return (self.height, self.width)
-    
-    @property
-    def is_closed(self) -> bool:
-        """
-        Check if the VideoPlume is closed.
+        # Calculate file hash for DVC compatibility
+        file_hash = hashlib.md5()
+        with open(self.video_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                file_hash.update(chunk)
         
-        Returns:
-            True if the VideoPlume has been closed and cannot be used
-        """
-        return self._is_closed
+        base_metadata = self.get_metadata()
+        
+        # Add workflow-specific fields
+        workflow_metadata = {
+            **base_metadata,
+            "file_hash": file_hash.hexdigest(),
+            "file_size": self.video_path.stat().st_size,
+            "workflow_version": "1.0",
+            "dependencies": {
+                "opencv_version": cv2.__version__,
+                "numpy_version": np.__version__,
+            }
+        }
+        
+        return workflow_metadata
     
     def close(self) -> None:
         """
         Close video capture and release resources.
         
-        This method ensures proper cleanup of OpenCV video capture resources
-        and marks the instance as closed. It is thread-safe and can be called
-        multiple times without error.
+        Releases the OpenCV VideoCapture object and marks the instance as closed.
+        After calling this method, attempts to get frames will raise ValueError.
+        This method is idempotent and thread-safe.
         
         Note:
-            After calling close(), the VideoPlume instance cannot be used
-            for frame retrieval. This method is automatically called by
-            the destructor, but explicit calls are recommended for
-            deterministic resource management.
+            This method is automatically called by __del__ for cleanup,
+            but explicit calling is recommended for deterministic resource management.
         """
         with self._lock:
             if not self._is_closed and self.cap is not None:
                 self.cap.release()
                 self._is_closed = True
+                logger.debug(f"VideoPlume closed: {self.video_path.name}")
     
-    def __del__(self):
+    def __del__(self) -> None:
         """
-        Destructor ensuring automatic resource cleanup.
+        Automatic cleanup when instance is garbage collected.
         
-        Provides automatic resource management by calling close() when the
-        object is garbage collected. This prevents resource leaks in case
-        explicit close() calls are missed.
+        Ensures OpenCV resources are properly released even if close() 
+        was not called explicitly. Uses suppress to handle any exceptions
+        during cleanup to prevent issues during interpreter shutdown.
         """
         with suppress(Exception):
             self.close()
     
-    def __enter__(self):
+    def __enter__(self) -> 'VideoPlume':
         """Context manager entry."""
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit with automatic cleanup."""
         self.close()
     
     def __repr__(self) -> str:
-        """
-        Provide detailed string representation for debugging.
-        
-        Returns:
-            String representation including key configuration and status
-        """
+        """String representation for debugging."""
         status = "closed" if self._is_closed else "open"
         return (
-            f"VideoPlume(video_path='{self.video_path}', "
-            f"frames={self.frame_count}, shape={self.shape}, "
-            f"fps={self.fps:.1f}, status={status})"
+            f"VideoPlume({self.video_path.name}, {self.width}x{self.height}, "
+            f"{self.frame_count} frames, {status})"
         )
-    
-    def __str__(self) -> str:
-        """
-        Provide user-friendly string representation.
-        
-        Returns:
-            Concise string representation for display
-        """
-        return f"VideoPlume({self.video_path.name}, {self.frame_count} frames)"
 
 
-# Workflow Integration Utilities
-# These functions provide integration points for DVC and Snakemake workflows
-
-def create_video_plume_from_dvc_path(dvc_path: str, **kwargs) -> VideoPlume:
+# Factory function for API compatibility
+def create_video_plume(cfg: Union[DictConfig, Dict], **kwargs) -> VideoPlume:
     """
-    Create VideoPlume instance from DVC-managed data path.
+    Factory function for creating VideoPlume instances with configuration override.
     
-    This utility function provides integration with DVC (Data Version Control)
-    workflows by resolving DVC-managed paths and creating VideoPlume instances
-    with appropriate configuration.
+    Provides an alternative factory method compatible with the API layer
+    while supporting parameter overrides for dynamic configuration.
     
     Args:
-        dvc_path: DVC path specification (e.g., "data/videos/experiment.mp4")
-        **kwargs: Additional VideoPlume configuration parameters
+        cfg: Hydra DictConfig or dictionary with video plume configuration
+        **kwargs: Additional parameters to override configuration values
         
     Returns:
-        Configured VideoPlume instance
+        VideoPlume: Configured instance with applied overrides
         
     Example:
-        >>> # In a DVC pipeline
-        >>> plume = create_video_plume_from_dvc_path(
-        ...     "data/plume_videos/experiment_001.mp4",
-        ...     flip=True,
-        ...     kernel_size=5
-        ... )
+        >>> from {{cookiecutter.project_slug}}.api.navigation import create_video_plume
+        >>> plume = create_video_plume(cfg.video_plume, flip=True)
     """
-    # For DVC integration, we assume the path is already resolved
-    # In a real DVC workflow, this would interface with DVC's Python API
-    resolved_path = Path(dvc_path)
+    # Merge configuration with overrides
+    if HYDRA_AVAILABLE and isinstance(cfg, DictConfig):
+        config_dict = OmegaConf.to_container(cfg, resolve=True)
+    else:
+        config_dict = dict(cfg)
     
-    return VideoPlume(video_path=resolved_path, **kwargs)
+    # Apply overrides
+    config_dict.update(kwargs)
+    
+    return VideoPlume.from_config(config_dict)
 
 
-def create_snakemake_rule_config(
-    input_video: str,
-    output_metadata: str,
-    processing_params: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """
-    Generate Snakemake rule configuration for VideoPlume processing.
-    
-    This utility creates standardized configuration dictionaries for use in
-    Snakemake workflows, enabling reproducible video processing pipelines.
-    
-    Args:
-        input_video: Path to input video file
-        output_metadata: Path for output metadata file
-        processing_params: Optional processing parameters
-        
-    Returns:
-        Dictionary suitable for Snakemake rule configuration
-        
-    Example:
-        >>> # In a Snakemake workflow
-        >>> rule_config = create_snakemake_rule_config(
-        ...     input_video="data/raw/experiment.mp4",
-        ...     output_metadata="data/processed/experiment_meta.json",
-        ...     processing_params={"flip": True, "kernel_size": 5}
-        ... )
-    """
-    config = {
-        "input": {
-            "video": input_video
-        },
-        "output": {
-            "metadata": output_metadata
-        },
-        "params": processing_params or {},
-        "resources": {
-            "mem_mb": 2048,  # Reasonable default for video processing
-            "runtime": 300   # 5 minutes default timeout
-        }
-    }
-    
-    return config
-
-
-# Export the main class and utility functions
-__all__ = [
-    "VideoPlume",
-    "create_video_plume_from_dvc_path", 
-    "create_snakemake_rule_config"
-]
+# Re-export main class for public API
+__all__ = ["VideoPlume", "create_video_plume"]
