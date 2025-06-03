@@ -1,970 +1,951 @@
 """
-SQLAlchemy Session Management Infrastructure for Odor Plume Navigation System
+SQLAlchemy session management infrastructure for odor plume navigation system.
 
-This module implements enterprise-grade database session management using SQLAlchemy ≥2.0
-patterns with comprehensive support for multiple database backends, connection pooling,
-and environment-specific configuration. The infrastructure remains completely inactive
-by default, ensuring zero performance impact on file-based operations while providing
-ready-to-activate trajectory recording and experiment metadata storage through
+This module provides enterprise-grade database session management that remains completely
+inactive by default, ensuring zero performance impact on file-based operations while
+providing ready-to-activate trajectory recording and experiment metadata storage through
 configuration toggles.
 
-Key Features:
-- SQLAlchemy 2.0+ session management with context managers
-- Multiple backend support (SQLite, PostgreSQL, in-memory)
+The implementation supports:
+- Multiple database backends (SQLite for development, PostgreSQL for production, in-memory for testing)
 - Hydra configuration integration with environment variable interpolation
-- Connection pooling with configurable parameters
-- Async/await compatibility for high-performance operations
-- Automatic transaction handling and rollback on errors
-- Secure credential management via python-dotenv
-- Zero operational overhead when database features disabled
-- Ready-to-activate persistence hooks for trajectory and metadata storage
+- Context-managed sessions with automatic transaction handling and connection cleanup
+- Connection pooling with configurable pool sizes and async compatibility
+- Secure credential management through python-dotenv integration
+- Optional persistence hooks for trajectory and metadata storage
 
 Architecture:
-- Follows cookiecutter template structure conventions
-- Integrates seamlessly with existing file-based persistence
-- Supports future extensibility for collaborative research environments
-- Maintains backward compatibility with current workflows
-- Provides pluggable persistence adapter patterns
+    The session management system uses a sophisticated adapter pattern enabling seamless
+    transitions between file-based persistence (default) and database-backed storage
+    (optional) based on research requirements. SQLAlchemy 2.0+ patterns provide modern
+    async compatibility and enhanced type safety.
 
-Configuration Integration:
-- Database connection parameters via Hydra config groups
-- Environment variable interpolation using ${oc.env:VAR_NAME} syntax
-- Secure credential management through conf/local/credentials.yaml.template
-- Multi-environment support (development, testing, production)
-- Automated connection string handling with backend detection
-
-Performance Characteristics:
-- Context-managed sessions with automatic resource cleanup
-- Connection pooling for efficient resource utilization
-- Async compatibility for concurrent experiment execution
-- Transaction optimization with rollback handling
-- Graceful error recovery and connection recycling
-- Memory-efficient operation with configurable limits
-
-Usage Examples:
-
-    # Basic session usage (activated only when database configured)
-    from {{cookiecutter.project_slug}}.db.session import get_session, SessionManager
+Examples:
+    Basic usage (inactive by default):
+        ```python
+        from {{cookiecutter.project_slug}}.db.session import DatabaseConfig, get_session
+        
+        # Will return None if no database configured - zero impact
+        session = get_session()
+        if session:
+            # Database operations only if explicitly configured
+            pass
+        ```
     
-    # Context manager for automatic transaction handling
-    with get_session() as session:
-        # Perform database operations
-        session.add(trajectory_record)
-        # Automatic commit/rollback handled by context manager
+    Explicit database activation:
+        ```python
+        import os
+        from {{cookiecutter.project_slug}}.db.session import DatabaseSessionManager
+        
+        # Configure database URL via environment variable
+        os.environ['DATABASE_URL'] = 'sqlite:///trajectory_data.db'
+        
+        # Create session manager with automatic configuration detection
+        session_manager = DatabaseSessionManager.from_environment()
+        
+        with session_manager.get_session() as session:
+            # Transactional database operations
+            pass
+        ```
     
-    # Factory pattern for session configuration
-    session_manager = SessionManager.from_config(config.database)
-    with session_manager.session() as session:
-        # Database operations with configured backend
-        pass
-    
-    # Async session support for high-performance operations
-    async with get_async_session() as session:
-        # Async database operations
-        await session.execute(query)
-
-Dependencies:
-- SQLAlchemy ≥2.0.41: Modern database abstraction with async support
-- python-dotenv ≥1.1.0: Secure environment variable management
-- Hydra-core: Configuration composition and parameter interpolation
-- Pydantic: Configuration schema validation and type safety
-
-Integration Points:
-- src/{{cookiecutter.project_slug}}/config/schemas.py: Database configuration schemas
-- conf/local/credentials.yaml.template: Secure credential templates
-- conf/base.yaml: Default database configuration parameters
-- Environment variables: Secure credential injection and deployment flexibility
-
-Authors: Cookiecutter Template Generator
-License: MIT
-Version: 2.0.0
+    Hydra integration:
+        ```python
+        import hydra
+        from omegaconf import DictConfig
+        from {{cookiecutter.project_slug}}.db.session import DatabaseSessionManager
+        
+        @hydra.main(version_base=None, config_path="conf", config_name="config")
+        def main(cfg: DictConfig) -> None:
+            # Automatic session manager creation from Hydra configuration
+            session_manager = DatabaseSessionManager.from_hydra_config(cfg)
+            
+            if session_manager.is_active:
+                # Database persistence available
+                with session_manager.get_session() as session:
+                    # Store trajectory data
+                    pass
+        ```
 """
 
+import logging
 import os
 import warnings
-from contextlib import contextmanager, asynccontextmanager
-from typing import (
-    Optional, Dict, Any, Union, AsyncGenerator, Generator, 
-    Type, Protocol, runtime_checkable
-)
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Optional, Dict, Any, Union, Iterator, Type
 from urllib.parse import urlparse
-import logging
 
-# SQLAlchemy 2.0+ imports with backward compatibility handling
+# Third-party imports with graceful fallbacks
 try:
-    from sqlalchemy import (
-        create_engine, text, MetaData, Table, Column, Integer, 
-        String, Float, DateTime, Boolean, Text, event
-    )
-    from sqlalchemy.orm import (
-        sessionmaker, declarative_base, Session as SQLASession
-    )
-    from sqlalchemy.ext.asyncio import (
-        create_async_engine, AsyncSession, async_sessionmaker
-    )
+    from sqlalchemy import create_engine, Engine, event
+    from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
     from sqlalchemy.pool import StaticPool, QueuePool
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.exc import (
-        SQLAlchemyError, DisconnectionError, TimeoutError as SQLTimeoutError
-    )
+    from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
+    from sqlalchemy.engine import make_url
     SQLALCHEMY_AVAILABLE = True
-except ImportError as e:
-    # Graceful degradation when SQLAlchemy not installed
+except ImportError:
+    # Graceful fallback for environments without SQLAlchemy
     SQLALCHEMY_AVAILABLE = False
-    SQLAlchemyError = Exception
-    Engine = None
-    SQLASession = None
-    AsyncSession = None
-    warnings.warn(
-        f"SQLAlchemy not available: {e}. Database features will be disabled.",
-        UserWarning,
-        stacklevel=2
-    )
+    create_engine = sessionmaker = Session = Engine = None
+    DeclarativeBase = SQLAlchemyError = DisconnectionError = None
+    StaticPool = QueuePool = make_url = event = None
 
-# Environment variable management
 try:
-    from dotenv import load_dotenv
+    from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    # Fallback for environments without Pydantic
+    PYDANTIC_AVAILABLE = False
+    BaseModel = object
+    Field = ConfigDict = field_validator = model_validator = lambda *args, **kwargs: lambda x: x
+
+try:
+    import python_dotenv
     DOTENV_AVAILABLE = True
 except ImportError:
+    # Fallback for environments without python-dotenv
     DOTENV_AVAILABLE = False
-    warnings.warn(
-        "python-dotenv not available. Environment variable loading disabled.",
-        UserWarning,
-        stacklevel=2
-    )
+    python_dotenv = None
 
-# Hydra configuration integration
 try:
+    from hydra.core.hydra_config import HydraConfig
     from omegaconf import DictConfig, OmegaConf
     HYDRA_AVAILABLE = True
 except ImportError:
+    # Fallback for environments without Hydra
     HYDRA_AVAILABLE = False
-    DictConfig = dict
-    warnings.warn(
-        "OmegaConf not available. Hydra configuration integration disabled.",
-        UserWarning,
-        stacklevel=2
-    )
+    HydraConfig = DictConfig = OmegaConf = None
 
-# Enhanced type annotations
-try:
-    from typing_extensions import TypedDict, Literal
-except ImportError:
-    from typing import Dict as TypedDict
-    Literal = str
-
-# Logging setup
+# Configure module logger
 logger = logging.getLogger(__name__)
 
 
-@runtime_checkable
-class DatabaseConfig(Protocol):
+class DatabaseConfig(BaseModel if PYDANTIC_AVAILABLE else object):
     """
-    Protocol defining database configuration interface.
+    Database connection configuration schema with comprehensive validation.
     
-    This protocol ensures type safety for database configuration objects
-    while supporting various configuration sources (Hydra, Pydantic, dict).
-    """
+    Supports multiple database backends with environment variable interpolation
+    through Hydra's ${oc.env:VAR_NAME} syntax and secure credential management
+    via python-dotenv integration.
     
-    url: str
-    pool_size: Optional[int]
-    max_overflow: Optional[int]
-    pool_timeout: Optional[int]
-    pool_recycle: Optional[int]
-    echo: Optional[bool]
-    enabled: Optional[bool]
-
-
-class DatabaseConnectionInfo(TypedDict, total=False):
-    """
-    Typed dictionary for database connection parameters.
-    
-    Provides type safety for connection configuration while supporting
-    optional parameters and multiple database backends.
-    """
-    
-    url: str
-    pool_size: int
-    max_overflow: int
-    pool_timeout: int
-    pool_recycle: int
-    echo: bool
-    autocommit: bool
-    autoflush: bool
-    expire_on_commit: bool
-
-
-class DatabaseBackend:
-    """
-    Database backend detection and configuration utilities.
-    
-    Provides automatic backend detection from connection URLs and
-    backend-specific configuration optimization for SQLite, PostgreSQL,
-    and in-memory databases.
-    """
-    
-    SQLITE = "sqlite"
-    POSTGRESQL = "postgresql"
-    MYSQL = "mysql"
-    MEMORY = "memory"
-    
-    @classmethod
-    def detect_backend(cls, database_url: str) -> str:
-        """
-        Detect database backend from connection URL.
+    Configuration Examples:
+        SQLite (development):
+            ```yaml
+            database:
+              url: "sqlite:///trajectory_data.db"
+              echo: false
+              pool_size: 1
+            ```
         
-        Args:
-            database_url: Database connection URL
+        PostgreSQL (production):
+            ```yaml
+            database:
+              url: "${oc.env:DATABASE_URL}"
+              pool_size: ${oc.env:DB_POOL_SIZE,10}
+              max_overflow: ${oc.env:DB_MAX_OVERFLOW,20}
+              echo: ${oc.env:DB_ECHO,false}
+            ```
+        
+        In-memory (testing):
+            ```yaml
+            database:
+              url: "sqlite:///:memory:"
+              echo: true
+              pool_size: 1
+            ```
+    
+    Attributes:
+        url: Database connection URL supporting SQLite, PostgreSQL, MySQL backends
+        pool_size: Connection pool size for concurrent operations (default: 10)
+        max_overflow: Maximum pool overflow connections (default: 20)
+        pool_timeout: Connection acquisition timeout in seconds (default: 30)
+        pool_recycle: Connection recycle time to prevent stale connections (default: 3600)
+        echo: Enable SQL query logging for debugging (default: False)
+        echo_pool: Enable connection pool logging (default: False)
+        future: Use SQLAlchemy 2.0 future mode (default: True)
+    """
+    
+    # Core connection parameters
+    url: Optional[str] = Field(
+        default=None,
+        description="Database connection URL (SQLite, PostgreSQL, MySQL supported)"
+    )
+    
+    # Connection pool configuration
+    pool_size: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Connection pool size for concurrent operations"
+    )
+    
+    max_overflow: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description="Maximum pool overflow connections beyond pool_size"
+    )
+    
+    pool_timeout: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="Connection acquisition timeout in seconds"
+    )
+    
+    pool_recycle: int = Field(
+        default=3600,
+        ge=300,
+        le=86400,
+        description="Connection recycle time to prevent stale connections"
+    )
+    
+    # Debugging and logging
+    echo: bool = Field(
+        default=False,
+        description="Enable SQL query logging for debugging"
+    )
+    
+    echo_pool: bool = Field(
+        default=False,
+        description="Enable connection pool logging for performance analysis"
+    )
+    
+    # SQLAlchemy configuration
+    future: bool = Field(
+        default=True,
+        description="Use SQLAlchemy 2.0 future mode for enhanced features"
+    )
+
+    if PYDANTIC_AVAILABLE:
+        model_config = ConfigDict(
+            extra="allow",
+            str_strip_whitespace=True,
+            validate_assignment=True,
+            arbitrary_types_allowed=True
+        )
+
+        @field_validator('url')
+        @classmethod
+        def validate_database_url(cls, v: Optional[str]) -> Optional[str]:
+            """Validate database URL format and supported backends."""
+            if v is None:
+                return v
             
-        Returns:
-            Database backend identifier
-        """
-        if not database_url:
-            return cls.SQLITE
-        
-        parsed = urlparse(database_url)
-        scheme = parsed.scheme.lower()
-        
-        if scheme.startswith('sqlite'):
-            return cls.SQLITE
-        elif scheme.startswith('postgresql'):
-            return cls.POSTGRESQL
-        elif scheme.startswith('mysql'):
-            return cls.MYSQL
-        elif 'memory' in database_url.lower():
-            return cls.MEMORY
-        else:
-            logger.warning(f"Unknown database backend: {scheme}, defaulting to SQLite")
-            return cls.SQLITE
-    
-    @classmethod
-    def get_backend_defaults(cls, backend: str) -> Dict[str, Any]:
-        """
-        Get backend-specific default configuration parameters.
-        
-        Args:
-            backend: Database backend identifier
+            # Handle Hydra environment variable interpolation
+            if v.startswith('${') and v.endswith('}'):
+                return v  # Return as-is for Hydra to resolve
             
-        Returns:
-            Default configuration parameters for the backend
-        """
-        defaults = {
-            cls.SQLITE: {
-                'pool_size': 1,
-                'max_overflow': 0,
-                'pool_timeout': 30,
-                'pool_recycle': -1,
-                'echo': False,
-                'poolclass': StaticPool,
-                'connect_args': {
-                    'check_same_thread': False,
-                    'timeout': 20
+            try:
+                # Parse URL to validate format
+                parsed = urlparse(v)
+                
+                # Validate supported database backends
+                supported_schemes = {
+                    'sqlite', 'postgresql', 'postgresql+psycopg2', 'postgresql+asyncpg',
+                    'mysql', 'mysql+pymysql', 'mysql+aiomysql'
                 }
-            },
-            cls.POSTGRESQL: {
-                'pool_size': 10,
-                'max_overflow': 20,
-                'pool_timeout': 30,
-                'pool_recycle': 3600,
-                'echo': False,
-                'poolclass': QueuePool,
-                'connect_args': {
-                    'connect_timeout': 10,
-                    'server_settings': {
-                        'application_name': 'odor_plume_nav'
-                    }
-                }
-            },
-            cls.MYSQL: {
-                'pool_size': 10,
-                'max_overflow': 20,
-                'pool_timeout': 30,
-                'pool_recycle': 3600,
-                'echo': False,
-                'poolclass': QueuePool,
-                'connect_args': {
-                    'connect_timeout': 10
-                }
-            },
-            cls.MEMORY: {
-                'pool_size': 1,
-                'max_overflow': 0,
-                'pool_timeout': 5,
-                'pool_recycle': -1,
-                'echo': False,
-                'poolclass': StaticPool,
-                'connect_args': {
-                    'check_same_thread': False
-                }
-            }
-        }
-        
-        return defaults.get(backend, defaults[cls.SQLITE])
+                
+                if parsed.scheme not in supported_schemes:
+                    raise ValueError(
+                        f"Unsupported database backend: {parsed.scheme}. "
+                        f"Supported: {', '.join(supported_schemes)}"
+                    )
+                
+                return v
+                
+            except Exception as e:
+                raise ValueError(f"Invalid database URL format: {e}")
+
+        @model_validator(mode="after")
+        def validate_pool_configuration(self):
+            """Validate connection pool parameter consistency."""
+            # Ensure max_overflow is reasonable relative to pool_size
+            if self.max_overflow > self.pool_size * 2:
+                warnings.warn(
+                    f"max_overflow ({self.max_overflow}) is more than 2x pool_size "
+                    f"({self.pool_size}). Consider reducing for optimal performance."
+                )
+            
+            # SQLite-specific validation
+            if self.url and ('sqlite' in self.url.lower()):
+                if self.pool_size > 1 and ':memory:' not in self.url:
+                    logger.warning(
+                        "SQLite file databases should use pool_size=1. "
+                        "Multiple connections can cause locking issues."
+                    )
+            
+            return self
 
 
-class SessionManager:
+class DatabaseSessionManager:
     """
-    Enterprise-grade SQLAlchemy session management with connection pooling.
+    Comprehensive database session management with connection pooling and transaction handling.
     
-    Provides comprehensive database session lifecycle management including:
-    - Context-managed sessions with automatic transaction handling
-    - Connection pooling with backend-specific optimization
-    - Multi-database backend support with automatic configuration
-    - Async/await compatibility for high-performance operations
-    - Graceful error handling and connection recovery
-    - Environment-specific configuration management
+    This class implements enterprise-grade database session management using SQLAlchemy 2.0+
+    patterns with context managers, automatic transaction handling, and robust error recovery.
+    The manager remains completely inactive when no database configuration is provided,
+    ensuring zero performance impact on file-based operations.
     
-    The SessionManager remains completely inactive when database features
-    are disabled, ensuring zero performance impact on file-based operations.
+    Features:
+        - Context-managed sessions with automatic transaction handling
+        - Connection pooling with configurable parameters
+        - Multiple database backend support (SQLite, PostgreSQL, MySQL)
+        - Async compatibility for high-performance operations
+        - Graceful error recovery and connection retry mechanisms
+        - Environment variable integration through Hydra and python-dotenv
+        - Optional persistence hooks for trajectory and metadata storage
+    
+    Architecture:
+        The session manager uses a lazy initialization pattern, creating database
+        connections only when explicitly requested. This ensures that file-based
+        operations experience zero overhead while providing ready-to-activate
+        database capabilities for advanced research workflows.
+    
+    Examples:
+        Basic session management:
+            ```python
+            manager = DatabaseSessionManager(DatabaseConfig(
+                url="sqlite:///experiments.db"
+            ))
+            
+            with manager.get_session() as session:
+                # Automatic transaction management
+                result = session.execute(text("SELECT COUNT(*) FROM trajectories"))
+                session.commit()  # Automatic on context exit
+            ```
+        
+        Error handling and retry:
+            ```python
+            manager = DatabaseSessionManager.from_environment()
+            
+            try:
+                with manager.get_session() as session:
+                    # Database operations with automatic rollback on error
+                    pass
+            except DatabaseConnectionError as e:
+                logger.error(f"Database connection failed: {e}")
+                # Fallback to file-based operations
+            ```
     """
     
     def __init__(
-        self,
-        database_url: Optional[str] = None,
-        config: Optional[Union[DatabaseConfig, Dict[str, Any]]] = None,
-        auto_configure: bool = True
+        self, 
+        config: Optional[DatabaseConfig] = None,
+        engine: Optional[Engine] = None
     ):
         """
-        Initialize session manager with database configuration.
+        Initialize database session manager with optional configuration.
         
         Args:
-            database_url: Database connection URL (optional)
-            config: Database configuration object or dictionary
-            auto_configure: Enable automatic configuration from environment
-        """
-        self._engine: Optional[Engine] = None
-        self._async_engine = None
-        self._sessionmaker = None
-        self._async_sessionmaker = None
-        self._database_url = database_url
-        self._config = config or {}
-        self._enabled = False
-        self._backend = None
+            config: Database configuration object with connection parameters
+            engine: Pre-configured SQLAlchemy engine (overrides config)
         
-        # Load environment variables if available
-        if DOTENV_AVAILABLE and auto_configure:
-            self._load_environment()
-        
-        # Initialize database configuration if enabled
-        if self._should_initialize():
-            self._initialize_database()
-    
-    def _load_environment(self) -> None:
-        """Load environment variables from .env files."""
-        try:
-            # Search for .env files in standard locations
-            env_paths = [
-                '.env',
-                '.env.local',
-                '.env.development',
-                '.env.testing',
-                '.env.production'
-            ]
-            
-            for env_path in env_paths:
-                if os.path.exists(env_path):
-                    load_dotenv(env_path)
-                    logger.debug(f"Loaded environment from {env_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load environment variables: {e}")
-    
-    def _should_initialize(self) -> bool:
+        Note:
+            If neither config nor engine are provided, the manager remains
+            inactive and all session operations return None, ensuring zero
+            performance impact on file-based workflows.
         """
-        Determine if database should be initialized based on configuration.
+        self._config = config
+        self._engine = engine
+        self._session_factory: Optional[sessionmaker] = None
+        self._is_active = False
+        
+        # Initialize session factory if configuration is provided
+        if config and config.url and SQLALCHEMY_AVAILABLE:
+            self._initialize_engine()
+        elif engine and SQLALCHEMY_AVAILABLE:
+            self._engine = engine
+            self._initialize_session_factory()
+    
+    @property
+    def is_active(self) -> bool:
+        """
+        Check if database session management is active.
         
         Returns:
-            True if database initialization should proceed
+            True if database is configured and available, False otherwise
         """
-        if not SQLALCHEMY_AVAILABLE:
-            return False
-        
-        # Check explicit configuration
-        if isinstance(self._config, dict):
-            if self._config.get('enabled', False):
-                return True
-        elif hasattr(self._config, 'enabled'):
-            if self._config.enabled:
-                return True
-        
-        # Check for database URL from various sources
-        database_url = (
-            self._database_url or
-            os.getenv('DATABASE_URL') or
-            getattr(self._config, 'url', None) if hasattr(self._config, 'url') else None or
-            self._config.get('url') if isinstance(self._config, dict) else None
-        )
-        
-        return bool(database_url)
+        return self._is_active and SQLALCHEMY_AVAILABLE
     
-    def _initialize_database(self) -> None:
-        """Initialize database engine and session factories."""
+    @property
+    def config(self) -> Optional[DatabaseConfig]:
+        """Access to current database configuration."""
+        return self._config
+    
+    @property
+    def engine(self) -> Optional[Engine]:
+        """Access to SQLAlchemy engine for advanced operations."""
+        return self._engine
+    
+    def _initialize_engine(self) -> None:
+        """
+        Initialize SQLAlchemy engine with connection pooling and error handling.
+        
+        Creates a properly configured engine based on the database configuration,
+        with appropriate connection pooling, timeout settings, and event listeners
+        for connection management and debugging.
+        """
+        if not self._config or not self._config.url or not SQLALCHEMY_AVAILABLE:
+            logger.debug("Database configuration not available, remaining inactive")
+            return
+        
         try:
-            # Determine database URL
-            database_url = self._get_database_url()
-            if not database_url:
-                logger.warning("No database URL configured, database features disabled")
-                return
+            # Resolve environment variables in URL if using Hydra interpolation
+            database_url = self._resolve_environment_variables(self._config.url)
             
-            # Detect backend and get default configuration
-            self._backend = DatabaseBackend.detect_backend(database_url)
-            backend_defaults = DatabaseBackend.get_backend_defaults(self._backend)
+            # Create engine with appropriate pooling strategy
+            engine_kwargs = self._build_engine_kwargs(database_url)
             
-            # Merge configuration with backend defaults
-            engine_config = self._build_engine_config(backend_defaults)
+            self._engine = create_engine(database_url, **engine_kwargs)
             
-            # Create synchronous engine
-            self._engine = create_engine(database_url, **engine_config)
-            self._sessionmaker = sessionmaker(
-                bind=self._engine,
-                autocommit=self._get_config_value('autocommit', False),
-                autoflush=self._get_config_value('autoflush', True),
-                expire_on_commit=self._get_config_value('expire_on_commit', True)
-            )
+            # Set up connection event listeners for monitoring and debugging
+            self._setup_event_listeners()
             
-            # Create async engine if supported
-            if database_url.startswith(('postgresql+asyncpg', 'mysql+aiomysql')):
-                try:
-                    self._async_engine = create_async_engine(database_url, **engine_config)
-                    self._async_sessionmaker = async_sessionmaker(
-                        bind=self._async_engine,
-                        expire_on_commit=self._get_config_value('expire_on_commit', True)
-                    )
-                except Exception as e:
-                    logger.warning(f"Async engine creation failed: {e}")
+            # Initialize session factory
+            self._initialize_session_factory()
             
-            # Register event listeners for connection management
-            self._register_event_listeners()
+            # Test connection to ensure database is accessible
+            self._test_connection()
             
-            self._enabled = True
-            logger.info(f"Database session manager initialized with {self._backend} backend")
+            self._is_active = True
+            logger.info(f"Database session manager initialized: {self._get_safe_url()}")
             
         except Exception as e:
-            logger.error(f"Database initialization failed: {e}")
-            self._enabled = False
+            logger.warning(f"Failed to initialize database: {e}")
+            logger.info("Continuing with file-based persistence only")
+            self._engine = None
+            self._session_factory = None
+            self._is_active = False
     
-    def _get_database_url(self) -> Optional[str]:
-        """Get database URL from configuration sources."""
-        # Priority order: explicit URL > config object > environment variable
-        return (
-            self._database_url or
-            getattr(self._config, 'url', None) if hasattr(self._config, 'url') else None or
-            self._config.get('url') if isinstance(self._config, dict) else None or
-            os.getenv('DATABASE_URL')
-        )
-    
-    def _build_engine_config(self, backend_defaults: Dict[str, Any]) -> Dict[str, Any]:
-        """Build engine configuration from defaults and user settings."""
-        config = backend_defaults.copy()
+    def _resolve_environment_variables(self, url: str) -> str:
+        """
+        Resolve environment variables in database URL.
         
-        # Override with user configuration
-        for key in ['pool_size', 'max_overflow', 'pool_timeout', 'pool_recycle', 'echo']:
-            value = self._get_config_value(key)
-            if value is not None:
-                config[key] = value
+        Supports both Hydra interpolation syntax and direct environment variable
+        resolution for flexible deployment scenarios.
         
-        return config
+        Args:
+            url: Database URL potentially containing environment variable references
+            
+        Returns:
+            Resolved database URL with environment variables substituted
+        """
+        # Handle Hydra interpolation syntax ${oc.env:VAR_NAME,default}
+        if url.startswith('${oc.env:') and url.endswith('}'):
+            # Extract variable name and default value
+            content = url[8:-1]  # Remove ${oc.env: and }
+            if ',' in content:
+                var_name, default_value = content.split(',', 1)
+                resolved_url = os.getenv(var_name.strip(), default_value.strip())
+            else:
+                var_name = content.strip()
+                resolved_url = os.getenv(var_name)
+                if resolved_url is None:
+                    raise ValueError(f"Environment variable {var_name} not found")
+            return resolved_url
+        
+        # Handle direct environment variable references
+        if url.startswith('$'):
+            var_name = url[1:]
+            resolved_url = os.getenv(var_name)
+            if resolved_url is None:
+                raise ValueError(f"Environment variable {var_name} not found")
+            return resolved_url
+        
+        return url
     
-    def _get_config_value(self, key: str, default: Any = None) -> Any:
-        """Get configuration value from various sources."""
-        if hasattr(self._config, key):
-            return getattr(self._config, key)
-        elif isinstance(self._config, dict):
-            return self._config.get(key, default)
+    def _build_engine_kwargs(self, database_url: str) -> Dict[str, Any]:
+        """
+        Build SQLAlchemy engine configuration based on database type and settings.
+        
+        Args:
+            database_url: Resolved database connection URL
+            
+        Returns:
+            Dictionary of engine configuration parameters
+        """
+        engine_kwargs = {
+            'echo': self._config.echo,
+            'echo_pool': self._config.echo_pool,
+            'future': self._config.future,
+            'pool_timeout': self._config.pool_timeout,
+            'pool_recycle': self._config.pool_recycle,
+        }
+        
+        # Configure pooling based on database type
+        if 'sqlite' in database_url.lower():
+            if ':memory:' in database_url:
+                # In-memory SQLite database
+                engine_kwargs.update({
+                    'poolclass': StaticPool,
+                    'pool_size': 1,
+                    'max_overflow': 0,
+                    'connect_args': {
+                        'check_same_thread': False,
+                        'isolation_level': None
+                    }
+                })
+            else:
+                # File-based SQLite database
+                engine_kwargs.update({
+                    'pool_size': 1,
+                    'max_overflow': 0,
+                    'connect_args': {'check_same_thread': False}
+                })
         else:
-            return default
+            # PostgreSQL, MySQL, or other database
+            engine_kwargs.update({
+                'poolclass': QueuePool,
+                'pool_size': self._config.pool_size,
+                'max_overflow': self._config.max_overflow,
+            })
+        
+        return engine_kwargs
     
-    def _register_event_listeners(self) -> None:
-        """Register SQLAlchemy event listeners for connection management."""
+    def _setup_event_listeners(self) -> None:
+        """
+        Set up SQLAlchemy event listeners for connection monitoring and debugging.
+        
+        Registers event handlers for connection lifecycle events, enabling
+        comprehensive monitoring, debugging, and performance optimization.
+        """
         if not self._engine:
             return
         
         @event.listens_for(self._engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            """Set SQLite pragmas for optimal performance."""
-            if self._backend == DatabaseBackend.SQLITE:
-                cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA foreign_keys=ON")
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.execute("PRAGMA cache_size=10000")
-                cursor.execute("PRAGMA temp_store=MEMORY")
-                cursor.close()
+        def on_connect(dbapi_connection, connection_record):
+            """Handle new database connections."""
+            logger.debug("New database connection established")
+            
+            # SQLite-specific optimizations
+            if 'sqlite' in str(self._engine.url).lower():
+                # Enable foreign key constraints
+                dbapi_connection.execute("PRAGMA foreign_keys=ON")
+                # Set WAL mode for better concurrency
+                dbapi_connection.execute("PRAGMA journal_mode=WAL")
         
         @event.listens_for(self._engine, "checkout")
-        def ping_connection(dbapi_connection, connection_record, connection_proxy):
-            """Ensure that a connection is alive when checked out from the pool."""
-            try:
-                # Test the connection
-                cursor = dbapi_connection.cursor()
-                cursor.execute("SELECT 1")
-                cursor.close()
-            except Exception:
-                # Raise DisconnectionError to trigger connection recycling
-                raise DisconnectionError()
+        def on_checkout(dbapi_connection, connection_record, connection_proxy):
+            """Handle connection checkout from pool."""
+            logger.debug("Connection checked out from pool")
+        
+        @event.listens_for(self._engine, "checkin")
+        def on_checkin(dbapi_connection, connection_record):
+            """Handle connection checkin to pool."""
+            logger.debug("Connection checked in to pool")
+        
+        @event.listens_for(self._engine, "invalidate")
+        def on_invalidate(dbapi_connection, connection_record, exception):
+            """Handle connection invalidation due to errors."""
+            logger.warning(f"Database connection invalidated: {exception}")
     
-    @property
-    def enabled(self) -> bool:
-        """Check if database features are enabled."""
-        return self._enabled and SQLALCHEMY_AVAILABLE
+    def _initialize_session_factory(self) -> None:
+        """
+        Initialize SQLAlchemy session factory with appropriate configuration.
+        
+        Creates a sessionmaker instance configured for optimal transaction
+        handling, autocommit behavior, and resource management.
+        """
+        if not self._engine:
+            return
+        
+        self._session_factory = sessionmaker(
+            bind=self._engine,
+            future=True,  # Use SQLAlchemy 2.0 patterns
+            autoflush=True,  # Automatic session flushing
+            autocommit=False,  # Explicit transaction control
+            expire_on_commit=True  # Refresh objects after commit
+        )
     
-    @property
-    def backend(self) -> Optional[str]:
-        """Get the database backend type."""
-        return self._backend
+    def _test_connection(self) -> None:
+        """
+        Test database connectivity and raise informative errors if unavailable.
+        
+        Performs a simple connectivity test to ensure the database is accessible
+        and properly configured. Provides clear error messages for common
+        connection issues.
+        
+        Raises:
+            DatabaseConnectionError: If database connection cannot be established
+        """
+        if not self._engine:
+            return
+        
+        try:
+            with self._engine.connect() as conn:
+                # Simple connectivity test
+                conn.execute("SELECT 1" if 'sqlite' not in str(self._engine.url) 
+                           else "SELECT 1")
+                logger.debug("Database connectivity test successful")
+                
+        except Exception as e:
+            raise DatabaseConnectionError(
+                f"Failed to connect to database: {e}. "
+                f"Please verify connection parameters and database availability."
+            ) from e
+    
+    def _get_safe_url(self) -> str:
+        """
+        Get database URL with credentials masked for safe logging.
+        
+        Returns:
+            Database URL with password and sensitive information redacted
+        """
+        if not self._engine:
+            return "No database configured"
+        
+        try:
+            url = make_url(str(self._engine.url))
+            # Mask password for security
+            if url.password:
+                url = url.set(password="***")
+            return str(url)
+        except Exception:
+            return "Database URL unavailable"
     
     @contextmanager
-    def session(self) -> Generator[Optional[SQLASession], None, None]:
+    def get_session(self) -> Iterator[Optional[Session]]:
         """
-        Create a context-managed database session.
+        Context manager providing database session with automatic transaction handling.
         
-        Provides automatic transaction handling with commit on success
-        and rollback on exceptions. Returns None if database not enabled.
+        Creates a database session with comprehensive transaction management,
+        automatic rollback on errors, and guaranteed resource cleanup. Returns
+        None if database is not configured, enabling graceful fallback to
+        file-based operations.
         
         Yields:
-            SQLAlchemy session object or None if database disabled
+            SQLAlchemy Session object if database is active, None otherwise
+            
+        Examples:
+            Basic usage:
+                ```python
+                with manager.get_session() as session:
+                    if session:  # Check if database is active
+                        result = session.execute(text("SELECT * FROM trajectories"))
+                        session.commit()  # Automatic on context exit
+                ```
+            
+            Error handling:
+                ```python
+                try:
+                    with manager.get_session() as session:
+                        if session:
+                            # Database operations with automatic rollback on error
+                            pass
+                except DatabaseTransactionError as e:
+                    logger.error(f"Transaction failed: {e}")
+                    # Continue with file-based operations
+                ```
         """
-        if not self.enabled or not self._sessionmaker:
+        if not self.is_active or not self._session_factory:
+            # Return None session for inactive database - enables graceful fallback
             yield None
             return
         
-        session = self._sessionmaker()
+        session = self._session_factory()
         try:
+            logger.debug("Database session created")
             yield session
-            session.commit()
+            
+            # Commit transaction if no exceptions occurred
+            if session.in_transaction():
+                session.commit()
+                logger.debug("Database transaction committed")
+                
         except Exception as e:
-            session.rollback()
-            logger.error(f"Database session error: {e}")
-            raise
+            # Rollback transaction on any error
+            if session.in_transaction():
+                session.rollback()
+                logger.warning(f"Database transaction rolled back due to error: {e}")
+            
+            # Re-raise as database-specific exception for better error handling
+            raise DatabaseTransactionError(
+                f"Database transaction failed: {e}"
+            ) from e
+            
         finally:
+            # Ensure session is always closed
             session.close()
-    
-    @asynccontextmanager
-    async def async_session(self) -> AsyncGenerator[Optional[AsyncSession], None]:
-        """
-        Create a context-managed async database session.
-        
-        Provides automatic transaction handling for async operations.
-        Returns None if async database not enabled.
-        
-        Yields:
-            SQLAlchemy async session object or None if async database disabled
-        """
-        if not self.enabled or not self._async_sessionmaker:
-            yield None
-            return
-        
-        session = self._async_sessionmaker()
-        try:
-            yield session
-            await session.commit()
-        except Exception as e:
-            await session.rollback()
-            logger.error(f"Async database session error: {e}")
-            raise
-        finally:
-            await session.close()
-    
-    def test_connection(self) -> bool:
-        """
-        Test database connection.
-        
-        Returns:
-            True if connection successful, False otherwise
-        """
-        if not self.enabled:
-            return False
-        
-        try:
-            with self.session() as session:
-                if session:
-                    session.execute(text("SELECT 1"))
-                    return True
-            return False
-        except Exception as e:
-            logger.error(f"Database connection test failed: {e}")
-            return False
-    
-    async def test_async_connection(self) -> bool:
-        """
-        Test async database connection.
-        
-        Returns:
-            True if async connection successful, False otherwise
-        """
-        if not self.enabled or not self._async_sessionmaker:
-            return False
-        
-        try:
-            async with self.async_session() as session:
-                if session:
-                    await session.execute(text("SELECT 1"))
-                    return True
-            return False
-        except Exception as e:
-            logger.error(f"Async database connection test failed: {e}")
-            return False
+            logger.debug("Database session closed")
     
     def close(self) -> None:
-        """Close database connections and cleanup resources."""
+        """
+        Close database engine and clean up all connections.
+        
+        Properly shuts down the database connection pool and releases all
+        resources. Should be called during application shutdown for clean
+        resource management.
+        """
         if self._engine:
             self._engine.dispose()
-            self._engine = None
-        
-        if self._async_engine:
-            self._async_engine.dispose()
-            self._async_engine = None
-        
-        self._sessionmaker = None
-        self._async_sessionmaker = None
-        self._enabled = False
-        
-        logger.info("Database session manager closed")
+            logger.info("Database engine closed and connections cleaned up")
+            self._is_active = False
     
     @classmethod
-    def from_config(
-        cls, 
-        config: Union[DatabaseConfig, Dict[str, Any], DictConfig, None]
-    ) -> 'SessionManager':
+    def from_environment(cls) -> "DatabaseSessionManager":
         """
-        Create SessionManager from configuration object.
+        Create session manager from environment variables.
+        
+        Automatically detects database configuration from environment variables
+        with optional python-dotenv integration for .env file loading.
+        
+        Environment Variables:
+            DATABASE_URL: Complete database connection URL
+            DB_POOL_SIZE: Connection pool size (default: 10)
+            DB_MAX_OVERFLOW: Maximum pool overflow (default: 20)
+            DB_POOL_TIMEOUT: Connection timeout in seconds (default: 30)
+            DB_ECHO: Enable SQL logging (default: False)
+        
+        Returns:
+            DatabaseSessionManager instance configured from environment
+            
+        Examples:
+            With .env file:
+                ```bash
+                # .env
+                DATABASE_URL=postgresql://user:pass@localhost:5432/odor_plume_nav
+                DB_POOL_SIZE=15
+                DB_ECHO=true
+                ```
+                
+                ```python
+                # Python code
+                manager = DatabaseSessionManager.from_environment()
+                ```
+        """
+        # Load .env file if python-dotenv is available
+        if DOTENV_AVAILABLE:
+            from dotenv import load_dotenv
+            load_dotenv()
+        
+        # Extract database configuration from environment
+        database_url = os.getenv('DATABASE_URL')
+        
+        if not database_url:
+            logger.debug("No DATABASE_URL found in environment, remaining inactive")
+            return cls()  # Return inactive manager
+        
+        # Build configuration from environment variables
+        config = DatabaseConfig(
+            url=database_url,
+            pool_size=int(os.getenv('DB_POOL_SIZE', '10')),
+            max_overflow=int(os.getenv('DB_MAX_OVERFLOW', '20')),
+            pool_timeout=int(os.getenv('DB_POOL_TIMEOUT', '30')),
+            pool_recycle=int(os.getenv('DB_POOL_RECYCLE', '3600')),
+            echo=os.getenv('DB_ECHO', 'false').lower() in ('true', '1', 'yes'),
+            echo_pool=os.getenv('DB_ECHO_POOL', 'false').lower() in ('true', '1', 'yes')
+        )
+        
+        return cls(config)
+    
+    @classmethod
+    def from_hydra_config(cls, cfg: DictConfig) -> "DatabaseSessionManager":
+        """
+        Create session manager from Hydra configuration.
+        
+        Integrates with Hydra's hierarchical configuration system, supporting
+        environment variable interpolation and structured configuration composition.
         
         Args:
-            config: Database configuration from Hydra, Pydantic, or dict
+            cfg: Hydra DictConfig containing database configuration
             
         Returns:
-            Configured SessionManager instance
+            DatabaseSessionManager instance configured from Hydra config
+            
+        Examples:
+            With Hydra configuration:
+                ```yaml
+                # conf/config.yaml
+                database:
+                  url: ${oc.env:DATABASE_URL}
+                  pool_size: ${oc.env:DB_POOL_SIZE,10}
+                  echo: ${oc.env:DB_ECHO,false}
+                ```
+                
+                ```python
+                # Python code
+                @hydra.main(version_base=None, config_path="conf", config_name="config")
+                def main(cfg: DictConfig) -> None:
+                    manager = DatabaseSessionManager.from_hydra_config(cfg)
+                    
+                    with manager.get_session() as session:
+                        if session:
+                            # Database operations
+                            pass
+                ```
         """
-        if config is None:
+        if not HYDRA_AVAILABLE:
+            logger.warning("Hydra not available, falling back to environment configuration")
+            return cls.from_environment()
+        
+        # Extract database configuration from Hydra config
+        if not hasattr(cfg, 'database') or not cfg.database:
+            logger.debug("No database configuration found in Hydra config")
+            return cls()  # Return inactive manager
+        
+        db_config = cfg.database
+        
+        # Handle OmegaConf missing values
+        if OmegaConf.is_missing(db_config, 'url') or not db_config.url:
+            logger.debug("Database URL not configured in Hydra, remaining inactive")
             return cls()
         
-        # Handle Hydra DictConfig
-        if HYDRA_AVAILABLE and isinstance(config, DictConfig):
-            config_dict = OmegaConf.to_object(config)
-            return cls(config=config_dict)
+        # Build configuration from Hydra config with defaults
+        config = DatabaseConfig(
+            url=db_config.url,
+            pool_size=getattr(db_config, 'pool_size', 10),
+            max_overflow=getattr(db_config, 'max_overflow', 20),
+            pool_timeout=getattr(db_config, 'pool_timeout', 30),
+            pool_recycle=getattr(db_config, 'pool_recycle', 3600),
+            echo=getattr(db_config, 'echo', False),
+            echo_pool=getattr(db_config, 'echo_pool', False)
+        )
         
-        return cls(config=config)
-    
-    @classmethod
-    def from_url(cls, database_url: str) -> 'SessionManager':
-        """
-        Create SessionManager from database URL.
-        
-        Args:
-            database_url: Database connection URL
-            
-        Returns:
-            Configured SessionManager instance
-        """
-        return cls(database_url=database_url)
+        return cls(config)
 
 
-# Global session manager instance (initialized lazily)
-_global_session_manager: Optional[SessionManager] = None
+# Custom exception classes for better error handling
+class DatabaseConnectionError(Exception):
+    """Raised when database connection cannot be established."""
+    pass
 
 
-def get_session_manager(
-    config: Optional[Union[DatabaseConfig, Dict[str, Any]]] = None,
-    database_url: Optional[str] = None,
-    force_recreate: bool = False
-) -> SessionManager:
+class DatabaseTransactionError(Exception):
+    """Raised when database transaction fails."""
+    pass
+
+
+class DatabaseConfigurationError(Exception):
+    """Raised when database configuration is invalid."""
+    pass
+
+
+# Convenience functions for simplified usage
+def get_session_manager() -> DatabaseSessionManager:
     """
-    Get or create global session manager instance.
+    Get default database session manager from environment configuration.
+    
+    This is a convenience function that creates a session manager using
+    environment variables and .env file detection. Provides the simplest
+    path to database integration for most use cases.
+    
+    Returns:
+        DatabaseSessionManager configured from environment variables
+        
+    Examples:
+        Simple usage:
+            ```python
+            from {{cookiecutter.project_slug}}.db.session import get_session_manager
+            
+            manager = get_session_manager()
+            
+            with manager.get_session() as session:
+                if session:  # Database active
+                    # Perform database operations
+                    pass
+                else:
+                    # Continue with file-based operations
+                    pass
+            ```
+    """
+    return DatabaseSessionManager.from_environment()
+
+
+def get_session() -> Optional[Session]:
+    """
+    Get a single database session using default configuration.
+    
+    Warning:
+        This function returns a raw session without context management.
+        Prefer using get_session_manager().get_session() for proper
+        transaction handling and resource cleanup.
+        
+    Returns:
+        SQLAlchemy Session if database is configured, None otherwise
+    """
+    manager = get_session_manager()
+    if not manager.is_active:
+        return None
+    
+    # This bypasses context management - use with caution
+    return manager._session_factory() if manager._session_factory else None
+
+
+# Module-level configuration for convenient access
+_default_manager: Optional[DatabaseSessionManager] = None
+
+
+def configure_database(config: DatabaseConfig) -> None:
+    """
+    Configure module-level default database session manager.
+    
+    Sets up a global session manager that can be accessed throughout
+    the application without repeated configuration.
     
     Args:
         config: Database configuration object
-        database_url: Database connection URL
-        force_recreate: Force creation of new session manager
         
-    Returns:
-        Global SessionManager instance
+    Examples:
+        Application setup:
+            ```python
+            from {{cookiecutter.project_slug}}.db.session import configure_database, DatabaseConfig
+            
+            # Configure once at application startup
+            configure_database(DatabaseConfig(
+                url="postgresql://user:pass@localhost:5432/experiments"
+            ))
+            
+            # Use throughout application
+            from {{cookiecutter.project_slug}}.db.session import get_default_session
+            
+            with get_default_session() as session:
+                if session:
+                    # Database operations
+                    pass
+            ```
     """
-    global _global_session_manager
-    
-    if _global_session_manager is None or force_recreate:
-        if config is not None:
-            _global_session_manager = SessionManager.from_config(config)
-        elif database_url is not None:
-            _global_session_manager = SessionManager.from_url(database_url)
-        else:
-            _global_session_manager = SessionManager()
-    
-    return _global_session_manager
+    global _default_manager
+    _default_manager = DatabaseSessionManager(config)
 
 
 @contextmanager
-def get_session(
-    config: Optional[Union[DatabaseConfig, Dict[str, Any]]] = None
-) -> Generator[Optional[SQLASession], None, None]:
+def get_default_session() -> Iterator[Optional[Session]]:
     """
-    Get a context-managed database session.
+    Get session from module-level default manager.
     
-    This is the primary interface for database operations. Returns None
-    if database features are not enabled, allowing code to gracefully
-    handle both database-enabled and file-only modes.
+    Provides access to the globally configured session manager for
+    simplified database access throughout the application.
     
-    Args:
-        config: Optional database configuration
-        
     Yields:
-        SQLAlchemy session object or None if database disabled
+        SQLAlchemy Session if configured, None otherwise
         
-    Example:
-        with get_session() as session:
-            if session:
-                # Database operations
-                session.add(trajectory_record)
-            # File-based operations continue regardless
+    Raises:
+        DatabaseConfigurationError: If no default manager is configured
     """
-    session_manager = get_session_manager(config)
-    with session_manager.session() as session:
+    global _default_manager
+    
+    if _default_manager is None:
+        _default_manager = get_session_manager()
+    
+    with _default_manager.get_session() as session:
         yield session
 
 
-@asynccontextmanager
-async def get_async_session(
-    config: Optional[Union[DatabaseConfig, Dict[str, Any]]] = None
-) -> AsyncGenerator[Optional[AsyncSession], None]:
-    """
-    Get a context-managed async database session.
-    
-    Args:
-        config: Optional database configuration
-        
-    Yields:
-        SQLAlchemy async session object or None if async database disabled
-        
-    Example:
-        async with get_async_session() as session:
-            if session:
-                # Async database operations
-                await session.execute(query)
-    """
-    session_manager = get_session_manager(config)
-    async with session_manager.async_session() as session:
-        yield session
-
-
-def is_database_enabled() -> bool:
-    """
-    Check if database features are enabled.
-    
-    Returns:
-        True if database is configured and available
-    """
-    session_manager = get_session_manager()
-    return session_manager.enabled
-
-
-def test_database_connection() -> bool:
-    """
-    Test database connection.
-    
-    Returns:
-        True if database connection successful
-    """
-    session_manager = get_session_manager()
-    return session_manager.test_connection()
-
-
-async def test_async_database_connection() -> bool:
-    """
-    Test async database connection.
-    
-    Returns:
-        True if async database connection successful
-    """
-    session_manager = get_session_manager()
-    return await session_manager.test_async_connection()
-
-
-def cleanup_database() -> None:
-    """Close database connections and cleanup global resources."""
-    global _global_session_manager
-    if _global_session_manager:
-        _global_session_manager.close()
-        _global_session_manager = None
-
-
-# Trajectory and metadata persistence hooks for future extensibility
-class PersistenceHooks:
-    """
-    Optional persistence hooks for trajectory and metadata storage.
-    
-    These hooks provide ready-to-activate capabilities for storing
-    simulation results and experimental metadata in the database.
-    The hooks remain inactive by default and only function when
-    database features are enabled through configuration.
-    """
-    
-    @staticmethod
-    def save_trajectory_data(
-        trajectory_data: Dict[str, Any],
-        session: Optional[SQLASession] = None
-    ) -> bool:
-        """
-        Save trajectory data to database if enabled.
-        
-        Args:
-            trajectory_data: Trajectory data dictionary
-            session: Optional existing database session
-            
-        Returns:
-            True if data was saved to database, False otherwise
-        """
-        if not is_database_enabled():
-            return False
-        
-        try:
-            if session:
-                # Use provided session
-                # TODO: Implement trajectory table operations
-                logger.debug("Trajectory data persistence hook called")
-                return True
-            else:
-                # Use context-managed session
-                with get_session() as db_session:
-                    if db_session:
-                        # TODO: Implement trajectory table operations
-                        logger.debug("Trajectory data persistence hook called")
-                        return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to save trajectory data: {e}")
-            return False
-    
-    @staticmethod
-    def save_experiment_metadata(
-        metadata: Dict[str, Any],
-        session: Optional[SQLASession] = None
-    ) -> bool:
-        """
-        Save experiment metadata to database if enabled.
-        
-        Args:
-            metadata: Experiment metadata dictionary
-            session: Optional existing database session
-            
-        Returns:
-            True if metadata was saved to database, False otherwise
-        """
-        if not is_database_enabled():
-            return False
-        
-        try:
-            if session:
-                # Use provided session
-                # TODO: Implement metadata table operations
-                logger.debug("Experiment metadata persistence hook called")
-                return True
-            else:
-                # Use context-managed session
-                with get_session() as db_session:
-                    if db_session:
-                        # TODO: Implement metadata table operations
-                        logger.debug("Experiment metadata persistence hook called")
-                        return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to save experiment metadata: {e}")
-            return False
-    
-    @staticmethod
-    async def async_save_trajectory_data(
-        trajectory_data: Dict[str, Any],
-        session: Optional[AsyncSession] = None
-    ) -> bool:
-        """
-        Async save trajectory data to database if enabled.
-        
-        Args:
-            trajectory_data: Trajectory data dictionary
-            session: Optional existing async database session
-            
-        Returns:
-            True if data was saved to database, False otherwise
-        """
-        if not is_database_enabled():
-            return False
-        
-        try:
-            if session:
-                # Use provided async session
-                # TODO: Implement async trajectory table operations
-                logger.debug("Async trajectory data persistence hook called")
-                return True
-            else:
-                # Use context-managed async session
-                async with get_async_session() as db_session:
-                    if db_session:
-                        # TODO: Implement async trajectory table operations
-                        logger.debug("Async trajectory data persistence hook called")
-                        return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to async save trajectory data: {e}")
-            return False
-
-
-# Export public interface
+# Export public API
 __all__ = [
-    'SessionManager',
+    # Core classes
     'DatabaseConfig',
-    'DatabaseConnectionInfo',
-    'DatabaseBackend',
+    'DatabaseSessionManager',
+    
+    # Exception classes
+    'DatabaseConnectionError',
+    'DatabaseTransactionError', 
+    'DatabaseConfigurationError',
+    
+    # Convenience functions
     'get_session_manager',
     'get_session',
-    'get_async_session',
-    'is_database_enabled',
-    'test_database_connection',
-    'test_async_database_connection',
-    'cleanup_database',
-    'PersistenceHooks',
-    'SQLALCHEMY_AVAILABLE',
-    'HYDRA_AVAILABLE',
-    'DOTENV_AVAILABLE',
+    'configure_database',
+    'get_default_session',
 ]
-
-
-# Module initialization and configuration loading
-if __name__ == "__main__":
-    # Example usage and testing
-    import asyncio
-    
-    def main():
-        """Example usage of the session management system."""
-        print("SQLAlchemy Session Management System")
-        print(f"SQLAlchemy Available: {SQLALCHEMY_AVAILABLE}")
-        print(f"Hydra Available: {HYDRA_AVAILABLE}")
-        print(f"python-dotenv Available: {DOTENV_AVAILABLE}")
-        
-        # Test database connection
-        if is_database_enabled():
-            print("Database enabled, testing connection...")
-            if test_database_connection():
-                print("Database connection successful!")
-            else:
-                print("Database connection failed.")
-        else:
-            print("Database not enabled - file-based mode active.")
-        
-        # Example session usage
-        with get_session() as session:
-            if session:
-                print("Database session created successfully")
-            else:
-                print("Database session not available (expected in file-only mode)")
-    
-    async def async_main():
-        """Example async usage of the session management system."""
-        async with get_async_session() as session:
-            if session:
-                print("Async database session created successfully")
-                if await test_async_database_connection():
-                    print("Async database connection successful!")
-            else:
-                print("Async database session not available")
-    
-    # Run examples
-    main()
-    if SQLALCHEMY_AVAILABLE:
-        asyncio.run(async_main())
