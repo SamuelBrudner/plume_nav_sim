@@ -1,260 +1,419 @@
 """
 {{cookiecutter.project_name}} - Odor Plume Navigation Library
 
-A modular, research-oriented Python library for simulating agent navigation through odor plumes.
-Supports both single-agent and multi-agent scenarios with sophisticated video-based environments,
-real-time visualization, and comprehensive configuration management through Hydra.
+A refactored, production-ready library for simulating odor plume navigation with 
+support for both single-agent and multi-agent scenarios. This library provides
+clean API interfaces for Kedro pipeline integration, reinforcement learning 
+frameworks, and machine learning analysis tools.
 
-This refactored package transforms the original standalone application into an importable library
-that integrates seamlessly with Kedro pipelines, reinforcement learning frameworks, and 
-machine learning analysis tools.
+The library transforms the original standalone application into an importable
+Python package with enhanced Hydra-based configuration management, improved
+modularity, and standardized project template structure.
 
 Key Features:
-    - Protocol-based navigation interfaces for extensibility
-    - Video-based odor plume environments with OpenCV processing
-    - Hydra-based hierarchical configuration management
-    - Real-time visualization and trajectory recording
-    - Reproducible experiment setup with seed management
-    - CLI interface for batch processing and automation
-    - Database session management for future extensibility
+- Protocol-based navigator interface for extensibility  
+- Factory methods with Hydra configuration support
+- Comprehensive error handling and validation
+- Production-ready logging and monitoring
+- Deterministic behavior through seed management
+- Support for both single and multi-agent navigation
 
 Example Usage:
-    # Kedro integration
+    # Basic usage for Kedro projects
     from {{cookiecutter.project_slug}} import Navigator, VideoPlume
+    navigator = Navigator.single(position=(10.0, 20.0), max_speed=5.0)
+    plume = VideoPlume("path/to/video.mp4")
+    
+    # Advanced usage with Hydra configuration
+    from {{cookiecutter.project_slug}} import create_navigator, create_video_plume
     from {{cookiecutter.project_slug}}.config import NavigatorConfig
+    navigator = create_navigator(cfg=hydra_config.navigator)
+    plume = create_video_plume(cfg=hydra_config.video_plume)
     
     # RL framework integration
     from {{cookiecutter.project_slug}}.core import NavigatorProtocol
     from {{cookiecutter.project_slug}}.api import create_navigator
+    navigator = create_navigator(position=(0, 0), max_speed=10.0)
     
-    # ML/neural network analysis
+    # ML analysis with seed management
     from {{cookiecutter.project_slug}}.utils import set_global_seed
-    from {{cookiecutter.project_slug}}.data import VideoPlume
-    
-    # Complete simulation pipeline
-    navigator = create_navigator(position=(50, 50), max_speed=10.0)
-    plume = VideoPlume.from_config(video_path="odor_plume.mp4")
-    results = run_plume_simulation(navigator, plume, num_steps=1000)
-    visualize_simulation_results(results)
+    set_global_seed(42)  # Ensures reproducible experiments
 """
 
-# Import version information
-try:
-    # Try to import from package metadata (installed package)
-    from importlib.metadata import version, PackageNotFoundError
-    try:
-        __version__ = version("{{cookiecutter.project_slug}}")
-    except PackageNotFoundError:
-        # Development installation or package not found
-        __version__ = "0.1.0-dev"
-except ImportError:
-    # Python < 3.8 fallback
-    try:
-        from pkg_resources import get_distribution, DistributionNotFound
-        try:
-            __version__ = get_distribution("{{cookiecutter.project_slug}}").version
-        except DistributionNotFound:
-            __version__ = "0.1.0-dev"
-    except ImportError:
-        __version__ = "0.1.0-dev"
+import importlib.metadata
+from pathlib import Path
+from typing import Dict, Any, Optional, Union, Tuple, List
+import warnings
 
-# Core API exports for unified import access
-# These provide the primary interfaces for library consumers
 try:
-    # Primary navigation API
-    from {{cookiecutter.project_slug}}.api.navigation import (
-        create_navigator,
-        create_video_plume,
-        run_plume_simulation,
-        visualize_simulation_results,
-    )
-    
-    # Core navigation components
-    from {{cookiecutter.project_slug}}.core.navigator import (
-        Navigator,
-        NavigatorProtocol,
-    )
-    
-    # Navigation controllers
-    from {{cookiecutter.project_slug}}.core.controllers import (
-        SingleAgentController,
-        MultiAgentController,
-    )
-    
-    # Video plume environment
-    from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
-    
-    # Configuration schemas
-    from {{cookiecutter.project_slug}}.config.schemas import (
-        NavigatorConfig,
-        SingleAgentConfig,
-        MultiAgentConfig,
-        VideoPlumeConfig,
-    )
-    
-    # Essential utilities
-    from {{cookiecutter.project_slug}}.utils.seed_manager import set_global_seed
-    from {{cookiecutter.project_slug}}.utils.visualization import visualize_trajectory
-    
-    # Simulation runner for backward compatibility
-    run_simulation = run_plume_simulation
-    
-except ImportError as e:
-    # Graceful degradation for development environments
-    # where some modules may not be available yet
-    import warnings
-    warnings.warn(
-        f"Some {{cookiecutter.project_slug}} components could not be imported: {e}. "
-        "This may indicate a development environment setup issue or missing dependencies.",
-        ImportWarning,
-        stacklevel=2
-    )
-    
-    # Provide minimal fallback interface
+    __version__ = importlib.metadata.version("{{cookiecutter.project_slug}}")
+except importlib.metadata.PackageNotFoundError:
+    # Fallback for development installations
     __version__ = "0.1.0-dev"
-    
-    # Define empty stubs to prevent import errors
-    def create_navigator(*args, **kwargs):
-        raise NotImplementedError("Navigator components not available. Check installation.")
-    
-    def create_video_plume(*args, **kwargs):
-        raise NotImplementedError("VideoPlume components not available. Check installation.")
-    
-    def run_plume_simulation(*args, **kwargs):
-        raise NotImplementedError("Simulation components not available. Check installation.")
-    
-    def visualize_simulation_results(*args, **kwargs):
-        raise NotImplementedError("Visualization components not available. Check installation.")
-    
-    def set_global_seed(*args, **kwargs):
-        raise NotImplementedError("Seed management components not available. Check installation.")
-    
-    # Provide basic protocol stubs
-    class NavigatorProtocol:
-        pass
-    
-    class Navigator:
-        pass
-    
-    class VideoPlume:
-        pass
-    
-    # Configuration stubs
-    class NavigatorConfig:
-        pass
-    
-    class VideoPlumeConfig:
-        pass
-
-# Public API definition
-# This defines what is available when using "from {{cookiecutter.project_slug}} import *"
-__all__ = [
-    # Version information
-    "__version__",
-    
-    # Primary API functions
-    "create_navigator",
-    "create_video_plume", 
-    "run_plume_simulation",
-    "run_simulation",  # Backward compatibility alias
-    "visualize_simulation_results",
-    
-    # Core components
-    "Navigator",
-    "NavigatorProtocol",
-    "SingleAgentController",
-    "MultiAgentController",
-    "VideoPlume",
-    
-    # Configuration schemas
-    "NavigatorConfig",
-    "SingleAgentConfig", 
-    "MultiAgentConfig",
-    "VideoPlumeConfig",
-    
-    # Essential utilities
-    "set_global_seed",
-    "visualize_trajectory",
-]
 
 # Package metadata
 __author__ = "{{cookiecutter.author_name}}"
 __email__ = "{{cookiecutter.author_email}}"
-__description__ = "A modular Python library for odor plume navigation simulation"
-__url__ = "{{cookiecutter.repository_url}}"
+__description__ = "Refactored Odor Plume Navigation library with Hydra configuration support"
 __license__ = "{{cookiecutter.license}}"
 
-# Development and debugging information
-__package_name__ = "{{cookiecutter.project_slug}}"
-__package_title__ = "{{cookiecutter.project_name}}"
-
-# Configuration for library behavior
-# These can be modified by users to customize behavior
-import logging
-
-# Set up default logging configuration
-logging.getLogger(__name__).addHandler(logging.NullHandler())
-
-# Library-wide configuration
-_LIBRARY_CONFIG = {
-    "strict_mode": False,  # Whether to enforce strict validation
-    "debug_mode": False,   # Enable debug logging and checks
-    "numpy_random_seed": None,  # Default random seed for reproducibility
-}
-
-def configure_library(strict_mode=None, debug_mode=None, numpy_random_seed=None):
-    """Configure library-wide behavior settings.
+# Core API exports for simplified import patterns
+try:
+    # Main factory functions - Primary API for most users
+    from .api.navigation import (
+        create_navigator,
+        create_video_plume, 
+        run_plume_simulation,
+        # Factory methods for backward compatibility
+        create_navigator_from_config,
+        create_video_plume_from_config,
+        # Exception classes
+        ConfigurationError,
+        SimulationError,
+    )
     
-    Parameters
-    ----------
-    strict_mode : bool, optional
-        If True, enables strict validation and error checking.
-        If False, allows more permissive behavior for development.
-    debug_mode : bool, optional
-        If True, enables debug logging and additional runtime checks.
-    numpy_random_seed : int, optional
-        Sets the global NumPy random seed for reproducible results.
-        
-    Example
-    -------
-    >>> import {{cookiecutter.project_slug}}
-    >>> {{cookiecutter.project_slug}}.configure_library(strict_mode=True, debug_mode=True)
-    >>> {{cookiecutter.project_slug}}.set_global_seed(42)  # For reproducible experiments
+    # Core navigation components - For advanced users and type hints
+    from .core.navigator import NavigatorProtocol
+    from .core.controllers import SingleAgentController, MultiAgentController
+    
+    # Data processing components
+    from .data.video_plume import VideoPlume
+    
+    # Configuration schemas - For type-safe configuration
+    from .config.schemas import (
+        NavigatorConfig,
+        SingleAgentConfig, 
+        MultiAgentConfig,
+        VideoPlumeConfig,
+        SimulationConfig,
+    )
+    
+    # Utility functions - For reproducibility and advanced features  
+    from .utils.seed_manager import set_global_seed, get_current_seed
+    
+except ImportError as e:
+    # Graceful degradation for partial installations or circular imports
+    warnings.warn(
+        f"Some {{cookiecutter.project_slug}} components could not be imported: {e}. "
+        "This may indicate a missing dependency or installation issue.",
+        ImportWarning,
+        stacklevel=2
+    )
+    
+    # Provide empty fallbacks to prevent complete failure
+    create_navigator = None
+    create_video_plume = None
+    run_plume_simulation = None
+    NavigatorProtocol = None
+    VideoPlume = None
+    NavigatorConfig = None
+
+
+# Navigator factory class for backward compatibility and convenience
+# This provides the Navigator.single() and Navigator.multi() patterns mentioned in the spec
+class Navigator:
     """
-    global _LIBRARY_CONFIG
+    Factory class for creating navigator instances with simplified interface.
     
-    if strict_mode is not None:
-        _LIBRARY_CONFIG["strict_mode"] = strict_mode
+    This class provides convenient static methods for creating single-agent and
+    multi-agent navigators, supporting both direct parameter specification and
+    Hydra configuration objects. It serves as the primary entry point for most
+    navigation use cases.
     
-    if debug_mode is not None:
-        _LIBRARY_CONFIG["debug_mode"] = debug_mode
+    The factory methods delegate to the underlying create_navigator function
+    while providing a more object-oriented interface that matches common usage
+    patterns in machine learning and robotics frameworks.
+    
+    Examples:
+        # Single-agent navigation
+        navigator = Navigator.single(position=(10.0, 20.0), max_speed=5.0)
         
-        # Configure logging level based on debug mode
-        logger = logging.getLogger(__name__)
-        if debug_mode:
-            logger.setLevel(logging.DEBUG)
-        else:
-            logger.setLevel(logging.INFO)
-    
-    if numpy_random_seed is not None:
-        _LIBRARY_CONFIG["numpy_random_seed"] = numpy_random_seed
-        try:
-            # Try to set the seed immediately if possible
-            if "set_global_seed" in globals():
-                set_global_seed(numpy_random_seed)
-        except Exception:
-            # Seed will be set when set_global_seed is imported
-            pass
-
-def get_library_config():
-    """Get current library configuration settings.
-    
-    Returns
-    -------
-    dict
-        Dictionary containing current library configuration.
+        # Multi-agent navigation
+        positions = [(0, 0), (10, 10), (20, 20)]
+        navigator = Navigator.multi(positions=positions, max_speeds=[5, 6, 7])
+        
+        # From Hydra configuration
+        navigator = Navigator.from_config(hydra_config.navigator)
     """
-    return _LIBRARY_CONFIG.copy()
+    
+    @staticmethod
+    def single(
+        position: Union[Tuple[float, float], List[float]] = (0.0, 0.0),
+        orientation: float = 0.0,
+        speed: float = 0.0,
+        max_speed: float = 1.0,
+        angular_velocity: float = 0.0,
+        **kwargs: Any
+    ) -> 'NavigatorProtocol':
+        """
+        Create a single-agent navigator with specified parameters.
+        
+        Args:
+            position: Initial position as (x, y) coordinates
+            orientation: Initial orientation in degrees
+            speed: Initial speed
+            max_speed: Maximum allowed speed
+            angular_velocity: Angular velocity in degrees per second
+            **kwargs: Additional parameters passed to create_navigator
+            
+        Returns:
+            Navigator instance implementing NavigatorProtocol
+            
+        Raises:
+            ConfigurationError: If parameters are invalid
+            
+        Examples:
+            # Basic single agent
+            nav = Navigator.single(position=(10, 20), max_speed=5.0)
+            
+            # With custom parameters
+            nav = Navigator.single(
+                position=(0, 0), 
+                orientation=45.0, 
+                max_speed=10.0,
+                angular_velocity=2.0
+            )
+        """
+        if create_navigator is None:
+            raise ImportError("create_navigator function not available. Check installation.")
+        
+        return create_navigator(
+            position=position,
+            orientation=orientation,
+            speed=speed,
+            max_speed=max_speed,
+            angular_velocity=angular_velocity,
+            **kwargs
+        )
+    
+    @staticmethod
+    def multi(
+        positions: Union[List[Tuple[float, float]], List[List[float]]] = None,
+        orientations: Optional[Union[List[float], tuple]] = None,
+        speeds: Optional[Union[List[float], tuple]] = None,
+        max_speeds: Optional[Union[List[float], tuple]] = None,
+        angular_velocities: Optional[Union[List[float], tuple]] = None,
+        **kwargs: Any
+    ) -> 'NavigatorProtocol':
+        """
+        Create a multi-agent navigator with specified parameters.
+        
+        Args:
+            positions: List of (x, y) position tuples for each agent
+            orientations: List of initial orientations in degrees
+            speeds: List of initial speeds for each agent
+            max_speeds: List of maximum speeds for each agent
+            angular_velocities: List of angular velocities in degrees per second
+            **kwargs: Additional parameters passed to create_navigator
+            
+        Returns:
+            Navigator instance implementing NavigatorProtocol
+            
+        Raises:
+            ConfigurationError: If parameters are invalid or inconsistent
+            
+        Examples:
+            # Basic multi-agent with positions only
+            positions = [(0, 0), (10, 10), (20, 20)]
+            nav = Navigator.multi(positions=positions)
+            
+            # With full parameter specification
+            nav = Navigator.multi(
+                positions=[(0, 0), (10, 10)],
+                orientations=[0.0, 90.0],
+                max_speeds=[5.0, 7.0],
+                angular_velocities=[1.0, 1.5]
+            )
+        """
+        if create_navigator is None:
+            raise ImportError("create_navigator function not available. Check installation.")
+        
+        # Set default positions if not provided
+        if positions is None:
+            positions = [(0.0, 0.0), (10.0, 10.0)]
+        
+        return create_navigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds,
+            max_speeds=max_speeds,
+            angular_velocities=angular_velocities,
+            **kwargs
+        )
+    
+    @staticmethod
+    def from_config(cfg: Union['DictConfig', Dict[str, Any]]) -> 'NavigatorProtocol':
+        """
+        Create a navigator from Hydra configuration object.
+        
+        This method automatically detects whether to create a single-agent or
+        multi-agent navigator based on the configuration structure, providing
+        seamless integration with Hydra-based workflows.
+        
+        Args:
+            cfg: Hydra DictConfig or dictionary containing navigator configuration
+            
+        Returns:
+            Navigator instance implementing NavigatorProtocol
+            
+        Raises:
+            ConfigurationError: If configuration is invalid
+            
+        Examples:
+            # From Hydra configuration
+            navigator = Navigator.from_config(hydra_config.navigator)
+            
+            # From dictionary configuration
+            config = {
+                'position': [10.0, 20.0],
+                'max_speed': 5.0,
+                'orientation': 45.0
+            }
+            navigator = Navigator.from_config(config)
+        """
+        if create_navigator is None:
+            raise ImportError("create_navigator function not available. Check installation.")
+        
+        return create_navigator(cfg=cfg)
 
-# Add configuration functions to public API
-__all__.extend(["configure_library", "get_library_config"])
+
+# Version information and metadata access
+def get_version() -> str:
+    """Get the current version of the library."""
+    return __version__
+
+def get_package_info() -> Dict[str, str]:
+    """Get comprehensive package information."""
+    return {
+        "name": "{{cookiecutter.project_slug}}",
+        "version": __version__,
+        "author": __author__,
+        "email": __email__,
+        "description": __description__,
+        "license": __license__,
+    }
+
+# Check for optional dependencies and provide informative warnings
+def _check_optional_dependencies() -> Dict[str, bool]:
+    """Check availability of optional dependencies."""
+    dependencies = {}
+    
+    try:
+        import hydra
+        dependencies['hydra'] = True
+    except ImportError:
+        dependencies['hydra'] = False
+        warnings.warn(
+            "Hydra not available. Advanced configuration features will be limited.",
+            ImportWarning,
+            stacklevel=2
+        )
+    
+    try:
+        import cv2
+        dependencies['opencv'] = True
+    except ImportError:
+        dependencies['opencv'] = False
+        warnings.warn(
+            "OpenCV not available. Video plume processing will be limited.",
+            ImportWarning,
+            stacklevel=2
+        )
+    
+    try:
+        import matplotlib
+        dependencies['matplotlib'] = True
+    except ImportError:
+        dependencies['matplotlib'] = False
+        warnings.warn(
+            "Matplotlib not available. Visualization features will be limited.",
+            ImportWarning,
+            stacklevel=2
+        )
+    
+    return dependencies
+
+# Store dependency information for runtime checking
+_optional_dependencies = _check_optional_dependencies()
+
+def check_dependencies() -> Dict[str, bool]:
+    """
+    Check the availability of optional dependencies.
+    
+    Returns:
+        Dictionary mapping dependency names to availability status
+    """
+    return _optional_dependencies.copy()
+
+# Public API for library consumers
+# This supports the import patterns specified in the requirements:
+# - from {{cookiecutter.project_slug}} import Navigator, VideoPlume
+# - from {{cookiecutter.project_slug}}.config import NavigatorConfig  
+# - from {{cookiecutter.project_slug}}.core import NavigatorProtocol
+# - from {{cookiecutter.project_slug}}.api import create_navigator
+# - from {{cookiecutter.project_slug}}.utils import set_global_seed
+
+__all__ = [
+    # Version and metadata
+    "__version__",
+    "get_version", 
+    "get_package_info",
+    
+    # Primary API - Main entry points for most users
+    "Navigator",           # Factory class with .single(), .multi(), .from_config()
+    "VideoPlume",         # Video-based environment class
+    "create_navigator",   # Direct factory function
+    "create_video_plume", # Direct factory function  
+    "run_plume_simulation", # Simulation execution
+    
+    # Configuration support for type-safe usage
+    "NavigatorConfig",
+    "SingleAgentConfig",
+    "MultiAgentConfig", 
+    "VideoPlumeConfig",
+    "SimulationConfig",
+    
+    # Advanced API - For framework integration and extension
+    "NavigatorProtocol",  # Protocol for custom implementations
+    "SingleAgentController", # Concrete single-agent implementation
+    "MultiAgentController",  # Concrete multi-agent implementation
+    
+    # Factory methods for backward compatibility
+    "create_navigator_from_config",
+    "create_video_plume_from_config",
+    
+    # Utility functions for reproducibility
+    "set_global_seed",
+    "get_current_seed",
+    
+    # Exception classes for error handling
+    "ConfigurationError",
+    "SimulationError",
+    
+    # Diagnostic and utility functions
+    "check_dependencies",
+]
+
+# Compatibility layer for common import patterns
+# This ensures that legacy code continues to work
+try:
+    # Support legacy import pattern: from package import run_simulation
+    from .api.navigation import run_plume_simulation as run_simulation
+    __all__.append("run_simulation")
+except ImportError:
+    pass
+
+# Initialize package-level configuration
+def _initialize_package():
+    """Initialize package-level configuration and logging."""
+    try:
+        # Configure default logging behavior for the package
+        from .utils.logging import setup_package_logging
+        setup_package_logging()
+    except ImportError:
+        # Graceful fallback if logging utilities are not available
+        import logging
+        logging.getLogger(__name__).addHandler(logging.NullHandler())
+
+# Run package initialization
+_initialize_package()
