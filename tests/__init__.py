@@ -1,1 +1,1 @@
-"""Test package for odor plume navigation."""
+"""Test package for {{cookiecutter.project_slug}}."""
