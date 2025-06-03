@@ -1,450 +1,496 @@
-"""Tests for the navigator factory module.
+"""Tests for the navigator factory module with Hydra configuration integration.
 
-Updated for the new package structure with Hydra-based configuration management
-and enhanced factory method patterns per Feature F-011.
+This test suite validates the enhanced navigator factory functionality including:
+- Legacy navigator factory method migration to API module
+- Hydra-based configuration support and validation
+- Parameter merging and override scenarios
+- Configuration validation and error handling
+- Integration with new Pydantic schema validation
+
+The tests ensure backward compatibility while validating new Hydra configuration
+features per Feature F-011 requirements.
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock
 import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 from typing import Dict, Any
 
-# Updated imports for new package structure
-from {{cookiecutter.project_slug}}.api.navigation import create_navigator_from_config
-from {{cookiecutter.project_slug}}.core.navigator import Navigator
+# Import from new package structure
+from {{cookiecutter.project_slug}}.api.navigation import (
+    create_navigator,
+    create_navigator_from_config,
+    ConfigurationError,
+    _validate_and_merge_config,
+    _normalize_positions
+)
+from {{cookiecutter.project_slug}}.core.navigator import Navigator, NavigatorProtocol
+from {{cookiecutter.project_slug}}.config.schemas import NavigatorConfig, SingleAgentConfig
+
+try:
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    DictConfig = dict
+    OmegaConf = None
+    HYDRA_AVAILABLE = False
 
 
-@pytest.fixture
-def base_hydra_config():
-    """Fixture providing base Hydra configuration for testing."""
-    return {
-        "navigator": {
-            "orientation": 0.0,
-            "speed": 0.0,
-            "max_speed": 1.0,
-            "angular_velocity": 0.0
-        }
-    }
+class TestNavigatorFactory:
+    """Test suite for navigator factory functions with Hydra integration."""
 
+    def test_create_navigator_with_default_config(self, config_files):
+        """Test creating a navigator with default configuration using legacy method."""
+        # Create DictConfig if Hydra is available
+        if HYDRA_AVAILABLE:
+            cfg = OmegaConf.create(config_files["default_config"]["navigator"])
+        else:
+            cfg = config_files["default_config"]["navigator"]
+        
+        # Create a navigator with default config
+        navigator = create_navigator_from_config(cfg)
+        
+        # Verify navigator was created and satisfies protocol
+        assert isinstance(navigator, NavigatorProtocol)
+        assert hasattr(navigator, 'positions')
+        assert hasattr(navigator, 'orientations')
+        assert hasattr(navigator, 'speeds')
+        assert hasattr(navigator, 'max_speeds')
+        
+        # Check that the navigator was created with default settings
+        assert navigator.orientations[0] == 0.0
+        assert navigator.speeds[0] == 0.0
+        assert navigator.max_speeds[0] == 1.0
 
-@pytest.fixture
-def multi_agent_hydra_config():
-    """Fixture providing multi-agent Hydra configuration for testing."""
-    return {
-        "navigator": {
-            "positions": [[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]],
-            "orientations": [0.0, 45.0, 90.0],
-            "speeds": [0.0, 0.5, 1.0],
-            "max_speeds": [1.0, 1.5, 2.0],
-            "angular_velocities": [0.0, 0.1, 0.2]
-        }
-    }
+    def test_create_navigator_with_user_config(self, config_files):
+        """Test creating a navigator with user configuration using legacy method."""
+        if HYDRA_AVAILABLE:
+            cfg = OmegaConf.create(config_files["user_config"]["navigator"])
+        else:
+            cfg = config_files["user_config"]["navigator"]
+        
+        # Create a navigator with user config
+        navigator = create_navigator_from_config(cfg)
+        
+        # Check that the navigator was created with user settings
+        assert navigator.orientations[0] == 45.0
+        assert navigator.speeds[0] == 0.5
+        assert navigator.max_speeds[0] == 2.0
 
-
-@pytest.fixture
-def user_override_config():
-    """Fixture providing user configuration overrides."""
-    return {
-        "navigator": {
-            "orientation": 45.0,
-            "speed": 0.5,
-            "max_speed": 2.0,
-            "angular_velocity": 0.1
-        }
-    }
-
-
-@pytest.fixture
-def invalid_config():
-    """Fixture providing invalid configuration for validation testing."""
-    return {
-        "navigator": {
-            "orientation": 0.0,
-            "speed": 2.0,  # Invalid: exceeds max_speed
-            "max_speed": 1.0,
-            "angular_velocity": 0.0
-        }
-    }
-
-
-@pytest.fixture
-def merged_config():
-    """Fixture providing configuration for testing parameter merging."""
-    return {
-        "navigator": {
-            "orientation": 90.0,  # Override only orientation
-            "speed": 0.0,         # Keep default
-            "max_speed": 1.0,     # Keep default
-            "angular_velocity": 0.0  # Keep default
-        }
-    }
-
-
-class TestNavigatorFactoryBasicFunctionality:
-    """Test basic navigator factory functionality with updated API."""
-
-    def test_create_navigator_with_default_config(self, base_hydra_config):
-        """Test creating a navigator with default Hydra configuration."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            
-            # Create a navigator with default config
-            navigator = create_navigator_from_config()
-            
-            # Check that the navigator was created with default settings
-            assert navigator.orientations[0] == 0.0
-            assert navigator.speeds[0] == 0.0
-            assert navigator.max_speeds[0] == 1.0
-            assert navigator.angular_velocities[0] == 0.0
-
-    def test_create_navigator_with_user_config(self, user_override_config):
-        """Test creating a navigator with user configuration overrides."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=user_override_config):
-            
-            # Create a navigator with user config
-            navigator = create_navigator_from_config()
-            
-            # Check that the navigator was created with user settings
-            assert navigator.orientations[0] == 45.0
-            assert navigator.speeds[0] == 0.5
-            assert navigator.max_speeds[0] == 2.0
-            assert navigator.angular_velocities[0] == 0.1
-
-    def test_create_navigator_with_merged_config(self, merged_config):
+    def test_create_navigator_with_merged_config(self, config_files):
         """Test creating a navigator with merged configuration."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=merged_config):
-            
-            # Create a navigator with merged config
-            navigator = create_navigator_from_config()
-            
-            # Check that the navigator was created with merged settings
-            assert navigator.orientations[0] == 90.0  # Overridden
-            assert navigator.speeds[0] == 0.0         # Default
-            assert navigator.max_speeds[0] == 1.0     # Default
-            assert navigator.angular_velocities[0] == 0.0  # Default
+        # Create a merged config by combining default and parts of user config
+        merged_config = config_files["default_config"]["navigator"].copy()
+        merged_config["orientation"] = 90.0  # Override just the orientation parameter
+        
+        if HYDRA_AVAILABLE:
+            cfg = OmegaConf.create(merged_config)
+        else:
+            cfg = merged_config
+        
+        # Create a navigator with merged config
+        navigator = create_navigator_from_config(cfg)
+        
+        # Check that the navigator was created with merged settings
+        assert navigator.orientations[0] == 90.0  # Overridden
+        assert navigator.speeds[0] == 0.0        # Default
+        assert navigator.max_speeds[0] == 1.0    # Default
 
-    def test_create_navigator_with_additional_params(self, base_hydra_config):
-        """Test creating a navigator with additional parameters."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            
-            # Create a navigator with default config but override some parameters
-            navigator = create_navigator_from_config(orientation=180.0, speed=0.75)
-            
-            # Check that the navigator was created with overridden settings
-            assert navigator.orientations[0] == 180.0  # Explicitly provided
-            assert navigator.speeds[0] == 0.75         # Explicitly provided
-            assert navigator.max_speeds[0] == 1.0      # From default config
-            assert navigator.angular_velocities[0] == 0.0  # From default config
+    def test_create_navigator_with_parameter_overrides(self, config_files):
+        """Test creating a navigator with configuration and parameter overrides."""
+        if HYDRA_AVAILABLE:
+            cfg = OmegaConf.create(config_files["default_config"]["navigator"])
+        else:
+            cfg = config_files["default_config"]["navigator"]
+        
+        # Create a navigator with default config but override some parameters
+        navigator = create_navigator_from_config(cfg, orientation=180.0, speed=0.75)
+        
+        # Check that the navigator was created with overridden settings
+        assert navigator.orientations[0] == 180.0  # Explicitly provided
+        assert navigator.speeds[0] == 0.75         # Explicitly provided
+        assert navigator.max_speeds[0] == 1.0      # From default config
 
 
-class TestHydraBasedFactoryPatterns:
-    """Test enhanced Hydra-based factory method patterns per Feature F-011."""
+class TestEnhancedNavigatorCreation:
+    """Test suite for enhanced create_navigator function with Hydra support."""
 
-    def test_hydra_configuration_loading_integration(self, base_hydra_config):
-        """Test integration with Hydra configuration loading system."""
-        # Mock Hydra's configuration loading mechanism
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config') as mock_load:
-            mock_load.return_value = base_hydra_config
-            
-            # Test that the factory integrates with Hydra config loading
-            navigator = create_navigator_from_config()
-            
-            # Verify Hydra configuration was loaded
-            mock_load.assert_called_once()
-            assert isinstance(navigator, Navigator)
+    def test_create_navigator_direct_parameters(self):
+        """Test creating navigator with direct parameters (no config)."""
+        navigator = create_navigator(
+            position=(10.0, 20.0),
+            orientation=45.0,
+            speed=2.0,
+            max_speed=5.0,
+            angular_velocity=15.0
+        )
+        
+        assert isinstance(navigator, NavigatorProtocol)
+        assert np.allclose(navigator.positions[0], [10.0, 20.0])
+        assert navigator.orientations[0] == 45.0
+        assert navigator.speeds[0] == 2.0
+        assert navigator.max_speeds[0] == 5.0
 
-    def test_hydra_configuration_override_patterns(self, base_hydra_config):
-        """Test Hydra-style configuration override patterns."""
-        # Test CLI-style parameter overrides (Hydra pattern)
-        overrides = {
-            "navigator.orientation": 45.0,
-            "navigator.speed": 1.5,
-            "navigator.max_speed": 3.0
+    def test_create_navigator_with_hydra_config(self, config_files):
+        """Test creating navigator with Hydra DictConfig."""
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available")
+        
+        # Create Hydra DictConfig
+        cfg = OmegaConf.create({
+            "position": [15.0, 25.0],
+            "orientation": 90.0,
+            "speed": 1.5,
+            "max_speed": 3.0
+        })
+        
+        navigator = create_navigator(cfg=cfg)
+        
+        assert isinstance(navigator, NavigatorProtocol)
+        assert np.allclose(navigator.positions[0], [15.0, 25.0])
+        assert navigator.orientations[0] == 90.0
+        assert navigator.speeds[0] == 1.5
+        assert navigator.max_speeds[0] == 3.0
+
+    def test_create_navigator_config_with_overrides(self):
+        """Test creating navigator with config and parameter overrides."""
+        config_dict = {
+            "position": [5.0, 10.0],
+            "orientation": 30.0,
+            "speed": 1.0,
+            "max_speed": 2.0
         }
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.apply_hydra_overrides') as mock_overrides:
-                mock_overrides.return_value = {
-                    "navigator": {
-                        "orientation": 45.0,
-                        "speed": 1.5,
-                        "max_speed": 3.0,
-                        "angular_velocity": 0.0
-                    }
-                }
-                
-                # Create navigator with Hydra-style overrides
-                navigator = create_navigator_from_config(hydra_overrides=overrides)
-                
-                # Verify overrides were applied
-                assert navigator.orientations[0] == 45.0
-                assert navigator.speeds[0] == 1.5
-                assert navigator.max_speeds[0] == 3.0
-
-    def test_hydra_multirun_compatibility(self, base_hydra_config):
-        """Test compatibility with Hydra multirun patterns."""
-        # Test configuration sweeps (Hydra multirun pattern)
-        sweep_configs = [
-            {**base_hydra_config, "navigator": {**base_hydra_config["navigator"], "speed": 0.5}},
-            {**base_hydra_config, "navigator": {**base_hydra_config["navigator"], "speed": 1.0}},
-            {**base_hydra_config, "navigator": {**base_hydra_config["navigator"], "speed": 1.5}}
-        ]
+        # Override some parameters
+        navigator = create_navigator(
+            cfg=config_dict,
+            orientation=60.0,  # Override orientation
+            max_speed=4.0      # Override max_speed
+        )
         
-        navigators = []
-        for config in sweep_configs:
-            with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                       return_value=config):
-                navigators.append(create_navigator_from_config())
-        
-        # Verify each navigator has different speed settings
-        assert navigators[0].speeds[0] == 0.5
-        assert navigators[1].speeds[0] == 1.0
-        assert navigators[2].speeds[0] == 1.5
+        assert np.allclose(navigator.positions[0], [5.0, 10.0])  # From config
+        assert navigator.orientations[0] == 60.0                # Overridden
+        assert navigator.speeds[0] == 1.0                       # From config
+        assert navigator.max_speeds[0] == 4.0                   # Overridden
 
-    def test_hydra_config_composition(self, base_hydra_config):
-        """Test Hydra configuration composition patterns."""
-        # Test composed configurations (Hydra composition pattern)
-        composed_config = {
-            **base_hydra_config,
-            "navigator": {
-                **base_hydra_config["navigator"],
-                "composition": "single_agent",
-                "experiment": "test_run"
-            }
+    def test_create_multi_agent_navigator(self):
+        """Test creating multi-agent navigator with positions array."""
+        positions = np.array([[0, 0], [10, 10], [20, 20]])
+        orientations = [0.0, 45.0, 90.0]
+        max_speeds = [1.0, 2.0, 3.0]
+        
+        navigator = create_navigator(
+            positions=positions,
+            orientations=orientations,
+            max_speeds=max_speeds
+        )
+        
+        assert isinstance(navigator, NavigatorProtocol)
+        assert navigator.positions.shape == (3, 2)
+        assert np.allclose(navigator.positions, positions)
+        assert len(navigator.orientations) == 3
+        assert navigator.orientations[1] == 45.0
+        assert navigator.max_speeds[2] == 3.0
+
+    def test_create_navigator_with_seed(self):
+        """Test creating navigator with seed for reproducibility."""
+        from {{cookiecutter.project_slug}}.utils.seed_manager import get_current_seed
+        
+        # Create navigator with seed
+        navigator1 = create_navigator(
+            position=(0.0, 0.0),
+            orientation=0.0,
+            seed=42
+        )
+        
+        # Verify seed was set (if seed manager tracks it)
+        # Note: This test depends on seed_manager implementation
+        navigator2 = create_navigator(
+            position=(0.0, 0.0),
+            orientation=0.0,
+            seed=42
+        )
+        
+        # Both navigators should be created with same seed
+        assert isinstance(navigator1, NavigatorProtocol)
+        assert isinstance(navigator2, NavigatorProtocol)
+
+
+class TestConfigurationValidation:
+    """Test suite for configuration validation and error handling."""
+
+    def test_validate_and_merge_config_basic(self):
+        """Test basic configuration validation and merging."""
+        config = {"orientation": 45.0, "speed": 1.0}
+        overrides = {"max_speed": 2.0}
+        
+        result = _validate_and_merge_config(cfg=config, **overrides)
+        
+        assert result["orientation"] == 45.0
+        assert result["speed"] == 1.0
+        assert result["max_speed"] == 2.0
+
+    def test_validate_and_merge_config_with_schema(self):
+        """Test configuration validation with Pydantic schema."""
+        config = {
+            "position": [10.0, 20.0],
+            "orientation": 45.0,
+            "speed": 1.0,
+            "max_speed": 2.0
         }
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=composed_config):
-            navigator = create_navigator_from_config()
-            
-            # Verify composed configuration works
-            assert isinstance(navigator, Navigator)
-            assert navigator.is_single_agent
+        result = _validate_and_merge_config(
+            cfg=config,
+            config_schema=SingleAgentConfig
+        )
+        
+        assert result["position"] == [10.0, 20.0]
+        assert result["orientation"] == 45.0
+        assert result["speed"] == 1.0
+        assert result["max_speed"] == 2.0
 
-
-class TestMultiAgentFactoryPatterns:
-    """Test multi-agent factory patterns with Hydra configuration."""
-
-    def test_multi_agent_hydra_config_creation(self, multi_agent_hydra_config):
-        """Test multi-agent navigator creation from Hydra configuration."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=multi_agent_hydra_config):
-            
-            navigator = create_navigator_from_config()
-            
-            # Verify multi-agent navigator was created
-            assert not navigator.is_single_agent
-            assert navigator.num_agents == 3
-            
-            # Verify positions
-            np.testing.assert_array_equal(navigator.positions, 
-                                        np.array([[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]]))
-            
-            # Verify orientations
-            np.testing.assert_array_equal(navigator.orientations, 
-                                        np.array([0.0, 45.0, 90.0]))
-            
-            # Verify speeds
-            np.testing.assert_array_equal(navigator.speeds, 
-                                        np.array([0.0, 0.5, 1.0]))
-
-    def test_multi_agent_parameter_validation(self, multi_agent_hydra_config):
-        """Test parameter validation for multi-agent configurations."""
-        # Create invalid multi-agent config (mismatched array lengths)
-        invalid_multi_config = {
-            "navigator": {
-                "positions": [[0.0, 0.0], [10.0, 10.0]],  # 2 agents
-                "orientations": [0.0, 45.0, 90.0],        # 3 orientations (mismatch!)
-                "speeds": [0.0, 0.5],                      # 2 speeds
-                "max_speeds": [1.0, 1.5],                  # 2 max_speeds
-                "angular_velocities": [0.0, 0.1]          # 2 angular velocities
-            }
+    def test_validate_and_merge_config_invalid_schema(self):
+        """Test configuration validation with invalid data."""
+        config = {
+            "speed": -1.0,  # Invalid: speed should be >= 0
+            "max_speed": 2.0
         }
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=invalid_multi_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.validate_config') as mock_validate:
-                mock_validate.side_effect = ValueError("Array length mismatch")
-                
-                # Test that validation error is raised
-                with pytest.raises(ValueError, match="Array length mismatch"):
-                    create_navigator_from_config(validate=True)
-
-
-class TestConfigurationValidationAndMerging:
-    """Test configuration validation and parameter merging in factory methods."""
-
-    def test_configuration_validation_success(self, base_hydra_config):
-        """Test successful configuration validation."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.validate_config') as mock_validate:
-                mock_validate.return_value = True
-                
-                # Test that validation passes for valid config
-                navigator = create_navigator_from_config(validate=True)
-                
-                mock_validate.assert_called_once()
-                assert isinstance(navigator, Navigator)
-
-    def test_configuration_validation_failure(self, invalid_config):
-        """Test configuration validation with invalid parameters."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=invalid_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.validate_config') as mock_validate:
-                mock_validate.side_effect = ValueError("speed cannot exceed max_speed")
-                
-                # Test that validation error is raised for invalid config
-                with pytest.raises(ValueError, match="speed cannot exceed max_speed"):
-                    create_navigator_from_config(validate=True)
-
-    def test_parameter_merging_precedence(self, base_hydra_config):
-        """Test parameter merging precedence in factory methods."""
-        # Test that explicit parameters override configuration
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            
-            navigator = create_navigator_from_config(
-                speed=2.0,      # Override config speed (0.0)
-                max_speed=3.0,  # Override config max_speed (1.0)
-                # orientation should remain from config (0.0)
+        with pytest.raises(ConfigurationError):
+            _validate_and_merge_config(
+                cfg=config,
+                config_schema=SingleAgentConfig
             )
-            
-            # Verify precedence: explicit params > config
-            assert navigator.speeds[0] == 2.0      # Explicit override
-            assert navigator.max_speeds[0] == 3.0  # Explicit override
-            assert navigator.orientations[0] == 0.0  # From config
 
-    def test_deep_parameter_merging(self, base_hydra_config):
-        """Test deep merging of nested configuration parameters."""
-        # Test with nested parameter updates
-        nested_updates = {
-            "navigator": {
-                "speed": 1.2,
-                "angular_velocity": 0.15
-                # Other parameters should remain from base config
-            }
-        }
+    def test_validate_and_merge_config_override_precedence(self):
+        """Test that direct parameters override config values."""
+        config = {"orientation": 30.0, "speed": 1.0}
         
-        merged_config = {
-            "navigator": {
-                "orientation": 0.0,      # From base
-                "speed": 1.2,            # From update
-                "max_speed": 1.0,        # From base
-                "angular_velocity": 0.15  # From update
-            }
-        }
+        result = _validate_and_merge_config(
+            cfg=config,
+            orientation=60.0,  # Should override config
+            max_speed=3.0      # Should be added
+        )
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.merge_configs', 
-                       return_value=merged_config):
-                
-                navigator = create_navigator_from_config(config_updates=nested_updates)
-                
-                # Verify deep merging worked correctly
-                assert navigator.orientations[0] == 0.0      # From base
-                assert navigator.speeds[0] == 1.2            # From update
-                assert navigator.max_speeds[0] == 1.0        # From base
-                assert navigator.angular_velocities[0] == 0.15  # From update
+        assert result["orientation"] == 60.0  # Overridden
+        assert result["speed"] == 1.0         # From config
+        assert result["max_speed"] == 3.0     # Added
 
-    def test_config_path_resolution(self, base_hydra_config):
-        """Test configuration file path resolution with Hydra patterns."""
-        config_path = Path("conf/navigation/single_agent.yaml")
-        
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config') as mock_load:
-            mock_load.return_value = base_hydra_config
-            
-            # Test with explicit config path
-            navigator = create_navigator_from_config(config_path=config_path)
-            
-            # Verify config path was passed to loader
-            mock_load.assert_called_once_with(config_path)
-            assert isinstance(navigator, Navigator)
 
-    def test_environment_variable_integration(self, base_hydra_config):
-        """Test integration with environment variable overrides."""
-        # Test Hydra environment variable patterns
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            with patch('{{cookiecutter.project_slug}}.api.navigation.resolve_env_vars') as mock_resolve:
-                mock_resolve.return_value = {
-                    "navigator": {
-                        "orientation": 30.0,  # From env var
-                        "speed": 0.0,
-                        "max_speed": 1.0,
-                        "angular_velocity": 0.0
-                    }
-                }
-                
-                navigator = create_navigator_from_config(resolve_env=True)
-                
-                # Verify environment variables were resolved
-                mock_resolve.assert_called_once()
-                assert navigator.orientations[0] == 30.0
+class TestPositionNormalization:
+    """Test suite for position parameter normalization."""
+
+    def test_normalize_positions_single_position(self):
+        """Test normalizing single position parameter."""
+        position = (10.0, 20.0)
+        
+        result_positions, is_multi_agent = _normalize_positions(position=position)
+        
+        assert result_positions.shape == (1, 2)
+        assert np.allclose(result_positions[0], [10.0, 20.0])
+        assert not is_multi_agent
+
+    def test_normalize_positions_multiple_positions(self):
+        """Test normalizing multiple positions parameter."""
+        positions = [[0, 0], [10, 10], [20, 20]]
+        
+        result_positions, is_multi_agent = _normalize_positions(positions=positions)
+        
+        assert result_positions.shape == (3, 2)
+        assert np.allclose(result_positions[0], [0, 0])
+        assert np.allclose(result_positions[2], [20, 20])
+        assert is_multi_agent
+
+    def test_normalize_positions_single_as_positions(self):
+        """Test normalizing single position provided as positions parameter."""
+        positions = (10.0, 20.0)  # Single position as tuple
+        
+        result_positions, is_multi_agent = _normalize_positions(positions=positions)
+        
+        assert result_positions.shape == (1, 2)
+        assert np.allclose(result_positions[0], [10.0, 20.0])
+        assert not is_multi_agent
+
+    def test_normalize_positions_both_provided(self):
+        """Test error when both position and positions are provided."""
+        with pytest.raises(ConfigurationError, match="Cannot specify both"):
+            _normalize_positions(
+                position=(0.0, 0.0),
+                positions=[[10, 10], [20, 20]]
+            )
+
+    def test_normalize_positions_invalid_format(self):
+        """Test error handling for invalid position formats."""
+        with pytest.raises(ConfigurationError):
+            _normalize_positions(position=(10.0,))  # Wrong dimension
+        
+        with pytest.raises(ConfigurationError):
+            _normalize_positions(positions=[[10, 10, 10]])  # Wrong dimension
 
 
 class TestFactoryErrorHandling:
-    """Test error handling in factory methods."""
+    """Test suite for factory method error handling."""
 
-    def test_missing_configuration_section(self):
-        """Test handling of missing navigator configuration section."""
-        config_without_navigator = {
-            "video_plume": {
-                "flip": False,
-                "kernel_size": 0
+    def test_create_navigator_from_config_invalid_type(self):
+        """Test error handling for invalid configuration type in legacy method."""
+        with pytest.raises(ConfigurationError):
+            create_navigator_from_config("invalid_string_config")
+
+    def test_create_navigator_configuration_error(self):
+        """Test configuration error propagation in create_navigator."""
+        with pytest.raises(ConfigurationError):
+            create_navigator(speed=-1.0)  # Invalid speed
+
+    def test_create_navigator_conflicting_parameters(self):
+        """Test error when conflicting parameters are provided."""
+        with pytest.raises(ConfigurationError):
+            create_navigator(
+                position=(0.0, 0.0),
+                positions=[[10, 10], [20, 20]]
+            )
+
+
+class TestBackwardCompatibility:
+    """Test suite for backward compatibility with legacy interfaces."""
+
+    def test_legacy_factory_method_compatibility(self, config_files):
+        """Test that legacy create_navigator_from_config works as expected."""
+        config = config_files["default_config"]["navigator"]
+        
+        # Should work with both dict and DictConfig
+        navigator1 = create_navigator_from_config(config)
+        
+        if HYDRA_AVAILABLE:
+            hydra_config = OmegaConf.create(config)
+            navigator2 = create_navigator_from_config(hydra_config)
+            
+            # Both should create equivalent navigators
+            assert navigator1.orientations[0] == navigator2.orientations[0]
+            assert navigator1.speeds[0] == navigator2.speeds[0]
+            assert navigator1.max_speeds[0] == navigator2.max_speeds[0]
+
+    def test_parameter_naming_compatibility(self):
+        """Test that both old and new parameter names work."""
+        # Test single-agent parameter names
+        navigator = create_navigator(
+            position=(10.0, 20.0),
+            orientation=45.0,
+            speed=1.0,
+            max_speed=2.0
+        )
+        
+        assert np.allclose(navigator.positions[0], [10.0, 20.0])
+        assert navigator.orientations[0] == 45.0
+
+
+class TestHydraIntegration:
+    """Test suite for enhanced Hydra configuration integration."""
+
+    @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
+    def test_hydra_dictconfig_processing(self):
+        """Test processing of Hydra DictConfig objects."""
+        # Create nested DictConfig
+        cfg = OmegaConf.create({
+            "navigator": {
+                "position": [5.0, 15.0],
+                "orientation": 30.0,
+                "speed": 1.5,
+                "max_speed": 3.0
             }
-            # Missing navigator section
+        })
+        
+        navigator = create_navigator(cfg=cfg.navigator)
+        
+        assert isinstance(navigator, NavigatorProtocol)
+        assert np.allclose(navigator.positions[0], [5.0, 15.0])
+        assert navigator.orientations[0] == 30.0
+
+    @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
+    def test_hydra_interpolation_simulation(self):
+        """Test simulation of Hydra variable interpolation."""
+        # Simulate resolved Hydra config (interpolations already resolved)
+        cfg = OmegaConf.create({
+            "position": [0.0, 0.0],
+            "orientation": 0.0,
+            "speed": 1.0,
+            "max_speed": 2.0  # This would be ${env:MAX_SPEED,2.0} before resolution
+        })
+        
+        navigator = create_navigator(cfg=cfg)
+        
+        assert navigator.max_speeds[0] == 2.0
+
+    def test_factory_method_parameter_merging(self):
+        """Test comprehensive parameter merging scenarios."""
+        base_config = {
+            "position": [0.0, 0.0],
+            "orientation": 0.0,
+            "speed": 1.0,
+            "max_speed": 2.0
         }
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=config_without_navigator):
-            
-            # Should create navigator with defaults when section is missing
-            navigator = create_navigator_from_config()
-            
-            # Verify defaults were applied
-            assert isinstance(navigator, Navigator)
-            assert navigator.is_single_agent
+        # Test merging with various override patterns
+        navigator = create_navigator(
+            cfg=base_config,
+            orientation=90.0,      # Override scalar
+            position=(10.0, 20.0), # Override array
+            angular_velocity=30.0  # Add new parameter
+        )
+        
+        assert np.allclose(navigator.positions[0], [10.0, 20.0])
+        assert navigator.orientations[0] == 90.0
+        assert navigator.speeds[0] == 1.0  # From config
+        assert navigator.max_speeds[0] == 2.0  # From config
 
-    def test_config_loading_error(self):
-        """Test handling of configuration loading errors."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config') as mock_load:
-            mock_load.side_effect = FileNotFoundError("Configuration file not found")
-            
-            # Test that config loading error is properly handled
-            with pytest.raises(FileNotFoundError, match="Configuration file not found"):
-                create_navigator_from_config()
 
-    def test_invalid_parameter_types(self, base_hydra_config):
-        """Test handling of invalid parameter types."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            
-            # Test with invalid parameter types
-            with pytest.raises(TypeError):
-                create_navigator_from_config(
-                    orientation="invalid_string",  # Should be float
-                    speed=None,                     # Should be float
-                )
+class TestParameterValidation:
+    """Test suite for enhanced parameter validation in factory methods."""
 
-    def test_configuration_schema_validation(self, base_hydra_config):
-        """Test Pydantic schema validation integration."""
-        with patch('{{cookiecutter.project_slug}}.api.navigation.load_config', 
-                   return_value=base_hydra_config):
-            with patch('{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig') as mock_schema:
-                # Configure mock to validate and return parsed data
-                mock_instance = MagicMock()
-                mock_instance.model_dump.return_value = base_hydra_config["navigator"]
-                mock_schema.return_value = mock_instance
-                
-                navigator = create_navigator_from_config(validate_schema=True)
-                
-                # Verify schema validation was called
-                mock_schema.assert_called_once()
-                assert isinstance(navigator, Navigator)
+    def test_position_validation(self):
+        """Test position parameter validation."""
+        # Valid 2D position
+        navigator = create_navigator(position=(10.0, 20.0))
+        assert np.allclose(navigator.positions[0], [10.0, 20.0])
+        
+        # Invalid position dimensions
+        with pytest.raises(ConfigurationError):
+            create_navigator(position=(10.0,))  # 1D
+        
+        with pytest.raises(ConfigurationError):
+            create_navigator(position=(10.0, 20.0, 30.0))  # 3D
+
+    def test_speed_validation(self):
+        """Test speed parameter validation."""
+        # Valid speed
+        navigator = create_navigator(speed=1.5)
+        assert navigator.speeds[0] == 1.5
+        
+        # Invalid negative speed (should be caught by schema validation)
+        with pytest.raises(ConfigurationError):
+            create_navigator(speed=-1.0)
+
+    def test_orientation_normalization(self):
+        """Test orientation normalization to [0, 360) range."""
+        # Test various orientation values
+        navigator1 = create_navigator(orientation=450.0)  # > 360
+        assert navigator1.orientations[0] == 90.0  # 450 % 360
+        
+        navigator2 = create_navigator(orientation=-90.0)  # Negative
+        assert navigator2.orientations[0] == 270.0  # (-90 % 360)
+
+    def test_multi_agent_parameter_consistency(self):
+        """Test parameter consistency validation for multi-agent scenarios."""
+        positions = [[0, 0], [10, 10], [20, 20]]
+        orientations = [0.0, 45.0, 90.0]
+        speeds = [1.0, 2.0, 3.0]
+        
+        navigator = create_navigator(
+            positions=positions,
+            orientations=orientations,
+            speeds=speeds
+        )
+        
+        assert navigator.positions.shape[0] == 3
+        assert len(navigator.orientations) == 3
+        assert len(navigator.speeds) == 3
