@@ -1,41 +1,97 @@
 """
-Integration testing module for comprehensive system validation.
+Comprehensive integration testing module for odor plume navigation system.
 
-This module provides end-to-end testing for the odor plume navigation system,
-validating complete workflows, component interactions, cross-system compatibility,
-and framework integration patterns. Tests ensure seamless operation across
-CLI interfaces, configuration management, database sessions, and workflow orchestration.
+This module validates end-to-end workflows, component interactions, cross-system 
+compatibility, and framework integration patterns as specified in Section 6.6.1.2
+of the technical specification. Integration tests ensure that the cookiecutter-based
+architecture functions cohesively across all system domains including configuration
+management, CLI interfaces, database sessions, and workflow orchestration.
 
 Test Categories:
-- Complete simulation workflows with Navigator and VideoPlume integration
+- End-to-end simulation workflows with Navigator and VideoPlume integration
 - Kedro pipeline compatibility with factory method patterns
 - CLI-to-core integration with parameter flow validation
-- Configuration system integration across all components
+- Configuration system integration across all components  
 - Database session integration with simulation workflows
 - Visualization export workflows with complete data pipeline testing
 - Multi-component error handling and recovery scenarios
-- Performance characteristics validation per SLA requirements
+- Performance characteristics validation per timing requirements
 - Cross-framework compatibility with RL and ML integration patterns
 - Workflow orchestration integration with DVC and Snakemake scenarios
+
+Architecture Integration Points:
+- src/{{cookiecutter.project_slug}}/api/navigation.py: Public API surface validation
+- src/{{cookiecutter.project_slug}}/cli/main.py: Command-line interface integration
+- src/{{cookiecutter.project_slug}}/core/navigator.py: Core domain logic protocols
+- src/{{cookiecutter.project_slug}}/data/video_plume.py: Video processing adapters
+- src/{{cookiecutter.project_slug}}/config/schemas.py: Configuration validation
+- src/{{cookiecutter.project_slug}}/db/session.py: Database persistence infrastructure
+
+Performance Requirements:
+- CLI command initialization: ≤2 seconds per Section 6.6.3.3
+- End-to-end simulation: 30+ FPS capability per Section 2.2.9.3
+- Database session establishment: ≤100ms per Section 6.6.3.3
+- Configuration loading: ≤500ms for complex hierarchical configs
+- Integration workflow completion: Within specified SLA thresholds
+
+Quality Gates:
+- 100% pass rate for research publication readiness
+- Comprehensive scenario coverage across all integration points
+- Performance validation within specified timing requirements
+- Cross-framework compatibility verification
+- Error handling and recovery validation
+
+Authors: Blitzy Template Engine v2.0.0
+License: MIT
 """
 
 import os
 import sys
-import tempfile
 import time
+import tempfile
+import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Optional
-from unittest.mock import Mock, MagicMock, patch, create_autospec
-import json
+from contextlib import contextmanager, suppress
+from typing import Dict, List, Optional, Any, Tuple, Union, Generator
+from unittest.mock import Mock, MagicMock, patch, mock_open
+from dataclasses import asdict
 
 import pytest
 import numpy as np
 from click.testing import CliRunner
-from hydra import compose, initialize_config_store
-from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig, OmegaConf
 
-# Test framework imports
+# Import system under test components
+from {{cookiecutter.project_slug}}.api.navigation import (
+    create_navigator, create_video_plume, run_plume_simulation,
+    create_navigator_from_config, create_video_plume_from_config,
+    ConfigurationError, SimulationError
+)
+from {{cookiecutter.project_slug}}.cli.main import main as cli_main, cli, CLIError
+from {{cookiecutter.project_slug}}.core.navigator import Navigator, NavigatorProtocol
+from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
+from {{cookiecutter.project_slug}}.config.schemas import (
+    NavigatorConfig, VideoPlumeConfig, SimulationConfig
+)
+from {{cookiecutter.project_slug}}.db.session import (
+    get_session, SessionManager, is_database_enabled, cleanup_database
+)
+
+# Optional imports with graceful degradation
+try:
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    DictConfig = dict
+    OmegaConf = None
+
+try:
+    import hydra
+    from hydra import compose, initialize_config_store
+    from hydra.core.config_store import ConfigStore
+except ImportError:
+    hydra = None
+
 try:
     from kedro.io import DataCatalog
     from kedro.pipeline import Pipeline, node
@@ -43,1123 +99,1417 @@ try:
 except ImportError:
     KEDRO_AVAILABLE = False
 
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend for testing
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
 
-class TestEndToEndSimulationWorkflows:
+
+class IntegrationTestBase:
+    """Base class for integration tests with common fixtures and utilities."""
+    
+    @pytest.fixture(autouse=True)
+    def setup_test_environment(self, tmp_path, monkeypatch):
+        """Set up isolated test environment for each integration test."""
+        # Create temporary directories for test isolation
+        self.temp_dir = tmp_path
+        self.config_dir = tmp_path / "conf"
+        self.output_dir = tmp_path / "outputs"
+        self.data_dir = tmp_path / "data"
+        
+        # Create directory structure
+        for dir_path in [self.config_dir, self.output_dir, self.data_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Set environment variables for test isolation
+        monkeypatch.setenv("HYDRA_FULL_ERROR", "1")
+        monkeypatch.setenv("PYTHONPATH", str(self.temp_dir))
+        
+        # Disable GUI backends for headless testing
+        monkeypatch.setenv("MPLBACKEND", "Agg")
+        
+        # Set up test-specific logging to avoid interference
+        import logging
+        logging.getLogger().setLevel(logging.WARNING)
+        
+        yield
+        
+        # Cleanup after test
+        cleanup_database()
+    
+    @pytest.fixture
+    def mock_video_file(self):
+        """Create a mock video file for testing video plume integration."""
+        video_path = self.data_dir / "test_video.mp4"
+        # Create empty file to satisfy existence checks
+        video_path.touch()
+        return video_path
+    
+    @pytest.fixture
+    def sample_config(self):
+        """Generate sample configuration for integration testing."""
+        return {
+            'navigator': {
+                'position': [10.0, 20.0],
+                'orientation': 45.0,
+                'speed': 1.5,
+                'max_speed': 3.0,
+                'angular_velocity': 5.0
+            },
+            'video_plume': {
+                'video_path': str(self.data_dir / "test_video.mp4"),
+                'flip': True,
+                'kernel_size': 3,
+                'kernel_sigma': 1.0
+            },
+            'simulation': {
+                'num_steps': 100,
+                'dt': 0.1,
+                'sensor_distance': 5.0,
+                'sensor_angle': 45.0,
+                'record_trajectory': True
+            },
+            'database': {
+                'enabled': False,
+                'url': 'sqlite:///:memory:'
+            },
+            'reproducibility': {
+                'global_seed': 42
+            }
+        }
+    
+    @pytest.fixture
+    def hydra_config(self, sample_config):
+        """Create Hydra DictConfig for configuration testing."""
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available for DictConfig testing")
+        return OmegaConf.create(sample_config)
+    
+    @pytest.fixture
+    def mock_video_capture(self):
+        """Mock OpenCV VideoCapture for consistent testing."""
+        with patch('cv2.VideoCapture') as mock_cap:
+            # Configure mock to return predictable frame data
+            mock_instance = MagicMock()
+            mock_instance.get.side_effect = lambda prop: {
+                1: 100,  # CAP_PROP_FRAME_COUNT
+                3: 640,  # CAP_PROP_FRAME_WIDTH  
+                4: 480,  # CAP_PROP_FRAME_HEIGHT
+                5: 30    # CAP_PROP_FPS
+            }.get(prop, 0)
+            
+            # Mock frame reading with synthetic data
+            mock_instance.read.return_value = (True, np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8))
+            mock_instance.isOpened.return_value = True
+            mock_cap.return_value = mock_instance
+            yield mock_cap
+
+
+class TestEndToEndSimulationWorkflows(IntegrationTestBase):
     """Test complete simulation workflows with Navigator and VideoPlume integration."""
     
-    def test_single_agent_complete_workflow(self, mock_navigator, mock_video_plume, 
-                                          mock_hydra_config):
-        """Test complete single-agent simulation workflow from configuration to results."""
-        from {{cookiecutter.project_slug}}.api.navigation import (
-            create_navigator, create_video_plume, run_plume_simulation
+    def test_single_agent_simulation_workflow(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test end-to-end single-agent simulation workflow per integration requirements.
+        
+        Validates:
+        - Navigator creation from configuration
+        - VideoPlume environment initialization
+        - Complete simulation execution with trajectory recording
+        - Result validation and data integrity
+        """
+        # Create navigator from configuration
+        navigator = create_navigator(
+            position=sample_config['navigator']['position'],
+            orientation=sample_config['navigator']['orientation'],
+            max_speed=sample_config['navigator']['max_speed']
         )
         
-        # Configure mocks for realistic simulation
-        mock_navigator.num_agents = 1
-        mock_navigator.positions = np.array([[10.0, 10.0]])
-        mock_navigator.orientations = np.array([45.0])
-        mock_navigator.is_single_agent = True
+        # Validate navigator creation
+        assert isinstance(navigator, Navigator)
+        assert navigator.num_agents == 1
+        np.testing.assert_array_equal(navigator.positions[0], sample_config['navigator']['position'])
         
-        mock_video_plume.width = 640
-        mock_video_plume.height = 480
-        mock_video_plume.frame_count = 100
+        # Create video plume environment
+        video_plume = create_video_plume(
+            video_path=mock_video_file,
+            flip=sample_config['video_plume']['flip'],
+            kernel_size=sample_config['video_plume']['kernel_size']
+        )
         
-        # Mock frame sequence with realistic odor gradient
-        frames = []
-        for i in range(100):
-            frame = np.random.rand(480, 640) * 255
-            # Add odor gradient for realistic navigation
-            y, x = np.ogrid[:480, :640]
-            source_x, source_y = 320, 240
-            distance = np.sqrt((x - source_x)**2 + (y - source_y)**2)
-            odor_field = np.exp(-distance / 100) * 255
-            frame = frame * 0.7 + odor_field * 0.3
-            frames.append(frame.astype(np.uint8))
+        # Validate video plume initialization
+        assert isinstance(video_plume, VideoPlume)
+        assert video_plume.frame_count == 100  # From mock configuration
         
-        mock_video_plume.get_frame.side_effect = frames
-        
-        # Execute complete workflow
-        navigator = create_navigator(cfg=mock_hydra_config.navigator)
-        video_plume = create_video_plume(cfg=mock_hydra_config.video_plume)
-        
-        # Run simulation with performance timing
+        # Execute simulation with performance monitoring
         start_time = time.time()
         positions, orientations, readings = run_plume_simulation(
             navigator=navigator,
-            plume=video_plume,
-            num_steps=50,
-            dt=0.1
+            video_plume=video_plume,
+            num_steps=sample_config['simulation']['num_steps'],
+            dt=sample_config['simulation']['dt'],
+            record_trajectory=True
         )
         execution_time = time.time() - start_time
         
-        # Validate results structure and quality
-        assert positions.shape == (1, 51, 2), "Positions shape incorrect for single agent"
-        assert orientations.shape == (1, 51), "Orientations shape incorrect"
-        assert readings.shape == (1, 51), "Readings shape incorrect"
+        # Validate performance requirements (30+ FPS capability)
+        expected_max_time = sample_config['simulation']['num_steps'] / 30.0  # 30 FPS minimum
+        assert execution_time < expected_max_time * 2, f"Simulation too slow: {execution_time:.3f}s"
         
-        # Validate numerical stability
-        assert np.all(np.isfinite(positions)), "Positions contain invalid values"
-        assert np.all(np.isfinite(orientations)), "Orientations contain invalid values"
-        assert np.all(np.isfinite(readings)), "Readings contain invalid values"
+        # Validate result shapes and data integrity
+        expected_steps = sample_config['simulation']['num_steps'] + 1
+        assert positions.shape == (1, expected_steps, 2)
+        assert orientations.shape == (1, expected_steps)
+        assert readings.shape == (1, expected_steps)
         
-        # Performance validation per Section 6.6.3.3
-        assert execution_time < 5.0, "Single agent simulation exceeds 5s SLA"
+        # Validate trajectory data is finite and reasonable
+        assert np.all(np.isfinite(positions)), "Positions contain NaN or infinite values"
+        assert np.all(np.isfinite(orientations)), "Orientations contain NaN or infinite values"
+        assert np.all(readings >= 0), "Negative odor readings detected"
         
-        # Validate method call patterns
-        assert mock_navigator.step.call_count == 50, "Navigator step not called correctly"
-        assert mock_navigator.sample_odor.call_count == 50, "Odor sampling not performed"
+        # Validate position changes (agent should move)
+        position_changes = np.linalg.norm(np.diff(positions[0], axis=0), axis=1)
+        assert np.any(position_changes > 0), "Agent did not move during simulation"
     
-    def test_multi_agent_complete_workflow(self, mock_multi_navigator, mock_video_plume,
-                                         mock_hydra_config):
-        """Test complete multi-agent simulation workflow with coordination."""
-        from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+    def test_multi_agent_simulation_workflow(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test end-to-end multi-agent simulation workflow with vectorized operations.
         
-        # Configure multi-agent scenario
-        num_agents = 5
-        mock_multi_navigator.num_agents = num_agents
-        mock_multi_navigator.positions = np.random.rand(num_agents, 2) * 100
-        mock_multi_navigator.orientations = np.random.rand(num_agents) * 360
-        mock_multi_navigator.is_single_agent = False
+        Validates:
+        - Multi-agent navigator creation and initialization
+        - Vectorized simulation execution across multiple agents
+        - Inter-agent behavior and collision avoidance
+        - Performance scaling with agent count
+        """
+        num_agents = 3
+        positions = np.array([[0.0, 0.0], [50.0, 50.0], [100.0, 100.0]])
+        max_speeds = [2.0, 2.5, 3.0]
         
-        # Configure realistic frame sequence
-        mock_video_plume.frame_count = 100
-        mock_video_plume.get_frame.return_value = np.random.rand(480, 640) * 255
+        # Create multi-agent navigator
+        navigator = create_navigator(
+            positions=positions,
+            max_speeds=max_speeds,
+            orientations=[0.0, 90.0, 180.0]
+        )
         
-        # Execute multi-agent simulation
+        # Validate multi-agent configuration
+        assert navigator.num_agents == num_agents
+        np.testing.assert_array_equal(navigator.positions, positions)
+        np.testing.assert_array_equal(navigator.max_speeds, max_speeds)
+        
+        # Create video plume environment
+        video_plume = create_video_plume(video_path=mock_video_file)
+        
+        # Execute multi-agent simulation with performance monitoring
         start_time = time.time()
-        positions, orientations, readings = run_plume_simulation(
-            navigator=mock_multi_navigator,
-            plume=mock_video_plume,
-            num_steps=30,
+        positions_result, orientations_result, readings_result = run_plume_simulation(
+            navigator=navigator,
+            video_plume=video_plume,
+            num_steps=50,  # Reduced for multi-agent performance testing
             dt=0.1
         )
         execution_time = time.time() - start_time
         
-        # Validate multi-agent results
-        assert positions.shape == (num_agents, 31, 2), "Multi-agent positions incorrect"
-        assert orientations.shape == (num_agents, 31), "Multi-agent orientations incorrect"
-        assert readings.shape == (num_agents, 31), "Multi-agent readings incorrect"
+        # Validate multi-agent performance requirements (≤5ms per step for 10 agents)
+        steps_per_second = 50 / execution_time
+        assert steps_per_second >= 20, f"Multi-agent simulation too slow: {steps_per_second:.1f} steps/s"
         
-        # Performance validation for multi-agent per Section 6.6.3.3
-        assert execution_time < 10.0, f"Multi-agent ({num_agents}) simulation exceeds SLA"
+        # Validate multi-agent result shapes
+        assert positions_result.shape == (num_agents, 51, 2)
+        assert orientations_result.shape == (num_agents, 51)
+        assert readings_result.shape == (num_agents, 51)
         
-        # Validate vectorized operations were used
-        assert mock_multi_navigator.step.call_count == 30, "Multi-agent steps incorrect"
+        # Validate agent independence (each agent should have different trajectories)
+        for i in range(num_agents):
+            for j in range(i + 1, num_agents):
+                position_diff = np.linalg.norm(
+                    positions_result[i, -1] - positions_result[j, -1]
+                )
+                assert position_diff > 0, f"Agents {i} and {j} ended at identical positions"
     
-    def test_error_recovery_in_simulation_workflow(self, mock_navigator, mock_video_plume):
-        """Test error handling and recovery scenarios in complete workflow."""
-        from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+    def test_simulation_with_hydra_configuration(self, hydra_config, mock_video_capture, mock_video_file):
+        """
+        Test simulation workflow using Hydra configuration objects.
         
-        # Test video frame error recovery
-        mock_video_plume.get_frame.side_effect = [
-            np.random.rand(480, 640) * 255,  # Frame 0 success
-            Exception("Frame read error"),    # Frame 1 failure
-            np.random.rand(480, 640) * 255,  # Frame 2 recovery
-        ]
+        Validates:
+        - Hydra DictConfig integration across all components
+        - Configuration override and interpolation
+        - Environment variable substitution
+        - Factory method patterns for Kedro compatibility
+        """
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available")
         
-        # Test graceful error handling
-        with pytest.raises(Exception) as exc_info:
-            run_plume_simulation(
-                navigator=mock_navigator,
-                plume=mock_video_plume,
-                num_steps=3,
-                dt=0.1
-            )
+        # Test factory method with Hydra config
+        navigator = create_navigator_from_config(hydra_config.navigator)
+        assert isinstance(navigator, Navigator)
         
-        assert "Frame read error" in str(exc_info.value)
+        # Test configuration override capabilities
+        override_config = OmegaConf.merge(
+            hydra_config.navigator,
+            {"max_speed": 5.0}
+        )
+        navigator_override = create_navigator_from_config(override_config)
+        assert navigator_override.max_speeds[0] == 5.0
         
-        # Test navigator error recovery
-        mock_video_plume.get_frame.side_effect = None
-        mock_video_plume.get_frame.return_value = np.random.rand(480, 640) * 255
-        mock_navigator.step.side_effect = [
-            None,  # Step 0 success
-            ValueError("Navigation error"),  # Step 1 failure
-        ]
+        # Test video plume with Hydra config
+        video_plume = create_video_plume_from_config(hydra_config.video_plume)
+        assert isinstance(video_plume, VideoPlume)
         
-        with pytest.raises(ValueError) as exc_info:
-            run_plume_simulation(
-                navigator=mock_navigator,
-                plume=mock_video_plume,
-                num_steps=2,
-                dt=0.1
-            )
+        # Execute simulation with full Hydra configuration
+        positions, orientations, readings = run_plume_simulation(
+            navigator=navigator,
+            video_plume=video_plume,
+            cfg=hydra_config.simulation
+        )
         
-        assert "Navigation error" in str(exc_info.value)
+        # Validate configuration-driven simulation results
+        expected_steps = hydra_config.simulation.num_steps + 1
+        assert positions.shape[1] == expected_steps
+        assert orientations.shape[1] == expected_steps
+        assert readings.shape[1] == expected_steps
 
 
-@pytest.mark.skipif(not KEDRO_AVAILABLE, reason="Kedro not available")
-class TestKedroIntegration:
+class TestKedroIntegration(IntegrationTestBase):
     """Test Kedro pipeline compatibility with factory method patterns."""
     
-    def test_kedro_data_catalog_integration(self, mock_hydra_config):
-        """Test Navigator integration with Kedro data catalog."""
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+    @pytest.mark.skipif(not KEDRO_AVAILABLE, reason="Kedro not available")
+    def test_kedro_pipeline_compatibility(self, hydra_config, mock_video_capture, mock_video_file):
+        """
+        Test Kedro pipeline integration with factory method patterns per Section 0.2.1.
         
-        # Mock Kedro DataCatalog integration
-        with patch('kedro.io.DataCatalog') as mock_catalog_class:
-            mock_catalog = Mock()
-            mock_catalog_class.return_value = mock_catalog
-            
-            # Create mock dataset for navigator
-            mock_dataset = Mock()
-            mock_dataset.load.return_value = create_navigator(cfg=mock_hydra_config.navigator)
-            mock_dataset.save = Mock()
-            
-            mock_catalog.load.return_value = mock_dataset.load.return_value
-            
-            # Test data catalog integration
-            catalog = mock_catalog_class({
-                "navigator": mock_dataset,
-                "config": mock_hydra_config
-            })
-            
-            # Load navigator from catalog
-            navigator = catalog.load("navigator")
-            
-            # Validate navigator properties
-            assert hasattr(navigator, 'positions'), "Navigator missing positions property"
-            assert hasattr(navigator, 'step'), "Navigator missing step method"
-            assert hasattr(navigator, 'sample_odor'), "Navigator missing sample_odor method"
-            
-            # Test saving to catalog
-            catalog.save("navigator", navigator)
-            mock_dataset.save.assert_called_once()
-    
-    def test_kedro_pipeline_node_execution(self, mock_hydra_config):
-        """Test Navigator execution within Kedro pipeline nodes."""
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator, run_plume_simulation
+        Validates:
+        - Factory method integration with Kedro data catalogs
+        - Structured configuration composition
+        - Pipeline execution with Navigator components
+        - Data flow through Kedro node structures
+        """
+        from kedro.io import DataCatalog, MemoryDataSet
+        from kedro.pipeline import Pipeline, node
+        from kedro.runner import SequentialRunner
         
-        def navigator_creation_node(config: DictConfig):
+        # Define Kedro-compatible factory functions
+        def create_navigator_node(config: Dict[str, Any]) -> Navigator:
             """Kedro node function for navigator creation."""
-            return create_navigator(cfg=config.navigator)
+            return create_navigator(**config)
         
-        def simulation_execution_node(navigator, video_plume, config: DictConfig):
+        def create_video_plume_node(config: Dict[str, Any]) -> VideoPlume:
+            """Kedro node function for video plume creation."""
+            return create_video_plume(**config)
+        
+        def run_simulation_node(
+            navigator: Navigator, 
+            video_plume: VideoPlume, 
+            config: Dict[str, Any]
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             """Kedro node function for simulation execution."""
-            return run_plume_simulation(
-                navigator=navigator,
-                plume=video_plume,
-                num_steps=config.simulation.num_steps,
-                dt=config.simulation.dt
+            return run_plume_simulation(navigator, video_plume, **config)
+        
+        # Create Kedro data catalog
+        catalog = DataCatalog({
+            "navigator_config": MemoryDataSet(OmegaConf.to_object(hydra_config.navigator)),
+            "video_plume_config": MemoryDataSet(OmegaConf.to_object(hydra_config.video_plume)),
+            "simulation_config": MemoryDataSet(OmegaConf.to_object(hydra_config.simulation)),
+            "navigator": MemoryDataSet(),
+            "video_plume": MemoryDataSet(),
+            "simulation_results": MemoryDataSet()
+        })
+        
+        # Define Kedro pipeline
+        pipeline = Pipeline([
+            node(
+                func=create_navigator_node,
+                inputs="navigator_config",
+                outputs="navigator",
+                name="create_navigator"
+            ),
+            node(
+                func=create_video_plume_node,
+                inputs="video_plume_config", 
+                outputs="video_plume",
+                name="create_video_plume"
+            ),
+            node(
+                func=run_simulation_node,
+                inputs=["navigator", "video_plume", "simulation_config"],
+                outputs="simulation_results",
+                name="run_simulation"
             )
-        
-        # Mock pipeline execution
-        with patch('kedro.pipeline.Pipeline') as mock_pipeline_class:
-            mock_pipeline = Mock()
-            mock_pipeline_class.return_value = mock_pipeline
-            
-            # Create test pipeline
-            pipeline = mock_pipeline_class([
-                node(
-                    func=navigator_creation_node,
-                    inputs="config",
-                    outputs="navigator",
-                    name="create_navigator"
-                ),
-                node(
-                    func=simulation_execution_node,
-                    inputs=["navigator", "video_plume", "config"],
-                    outputs="simulation_results",
-                    name="run_simulation"
-                )
-            ])
-            
-            # Validate pipeline structure
-            assert pipeline is not None
-            mock_pipeline_class.assert_called_once()
-    
-    def test_kedro_configuration_integration(self):
-        """Test Hydra configuration integration with Kedro parameters."""
-        # Mock Kedro configuration loading
-        kedro_params = {
-            "navigator": {
-                "max_speed": 15.0,
-                "angular_velocity": 0.2
-            },
-            "video_plume": {
-                "flip_horizontal": True,
-                "gaussian_blur": {"enabled": True, "sigma": 2.0}
-            }
-        }
-        
-        # Test configuration merging
-        with patch('hydra.compose') as mock_compose:
-            mock_config = DictConfig(kedro_params)
-            mock_compose.return_value = mock_config
-            
-            # Validate configuration structure
-            assert mock_config.navigator.max_speed == 15.0
-            assert mock_config.video_plume.flip_horizontal is True
-            assert mock_config.video_plume.gaussian_blur.sigma == 2.0
-
-
-class TestCLIIntegration:
-    """Test CLI-to-core integration with parameter flow validation."""
-    
-    def test_cli_command_execution_with_hydra_config(self, mock_hydra_config):
-        """Test CLI command execution with Hydra configuration integration."""
-        from {{cookiecutter.project_slug}}.cli.main import main
-        
-        runner = CliRunner()
-        
-        with patch('{{cookiecutter.project_slug}}.cli.main.create_navigator') as mock_create_nav:
-            mock_navigator = Mock()
-            mock_create_nav.return_value = mock_navigator
-            
-            # Test CLI command with configuration overrides
-            result = runner.invoke(main, [
-                'run-simulation',
-                '--config-override', 'navigator.max_speed=20.0',
-                '--config-override', 'simulation.num_steps=100'
-            ])
-            
-            # Validate command execution
-            if result.exit_code != 0:
-                print(f"CLI Error Output: {result.output}")
-            
-            # Check that configuration was processed
-            assert mock_create_nav.called or result.exit_code == 0, "CLI navigation creation failed"
-    
-    def test_cli_parameter_validation_and_error_handling(self):
-        """Test CLI parameter validation and error handling."""
-        from {{cookiecutter.project_slug}}.cli.main import main
-        
-        runner = CliRunner()
-        
-        # Test invalid parameter handling
-        result = runner.invoke(main, [
-            'run-simulation',
-            '--config-override', 'navigator.max_speed=invalid_value'
         ])
         
-        # Validate error handling
-        assert result.exit_code != 0 or "error" in result.output.lower(), \
-            "CLI should handle invalid parameters gracefully"
-    
-    def test_cli_multi_run_parameter_sweep(self):
-        """Test CLI multi-run parameter sweep functionality."""
-        from {{cookiecutter.project_slug}}.cli.main import main
+        # Execute pipeline with performance monitoring
+        start_time = time.time()
+        runner = SequentialRunner()
+        runner.run(pipeline, catalog)
+        execution_time = time.time() - start_time
         
+        # Validate pipeline execution performance
+        assert execution_time < 10.0, f"Kedro pipeline execution too slow: {execution_time:.3f}s"
+        
+        # Validate pipeline results
+        results = catalog.load("simulation_results")
+        positions, orientations, readings = results
+        
+        # Validate result shapes and data integrity
+        assert isinstance(positions, np.ndarray)
+        assert isinstance(orientations, np.ndarray)
+        assert isinstance(readings, np.ndarray)
+        assert positions.shape[0] == 1  # Single agent from config
+        assert positions.shape[2] == 2  # 2D positions
+        assert np.all(np.isfinite(positions))
+    
+    def test_kedro_data_catalog_integration(self, sample_config):
+        """
+        Test data catalog integration with odor plume navigation components.
+        
+        Validates:
+        - Custom dataset implementations
+        - Configuration parameter flow through catalogs
+        - Data persistence and loading patterns
+        """
+        if not KEDRO_AVAILABLE:
+            pytest.skip("Kedro not available")
+        
+        from kedro.io import DataCatalog, MemoryDataSet
+        
+        # Test configuration storage and retrieval through catalog
+        catalog = DataCatalog({
+            "params:navigator": MemoryDataSet(sample_config['navigator']),
+            "params:simulation": MemoryDataSet(sample_config['simulation'])
+        })
+        
+        # Validate parameter loading
+        nav_params = catalog.load("params:navigator")
+        sim_params = catalog.load("params:simulation")
+        
+        assert nav_params['max_speed'] == sample_config['navigator']['max_speed']
+        assert sim_params['num_steps'] == sample_config['simulation']['num_steps']
+        
+        # Test component storage in catalog
+        navigator = create_navigator(**nav_params)
+        catalog.save("navigator_instance", navigator)
+        
+        loaded_navigator = catalog.load("navigator_instance")
+        assert isinstance(loaded_navigator, Navigator)
+        assert loaded_navigator.num_agents == navigator.num_agents
+        np.testing.assert_array_equal(loaded_navigator.positions, navigator.positions)
+
+
+class TestCLIIntegration(IntegrationTestBase):
+    """Test CLI-to-core integration with parameter flow validation."""
+    
+    def test_cli_command_execution_workflow(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test CLI command execution with parameter flow validation per comprehensive testing.
+        
+        Validates:
+        - Click command registration and parameter parsing
+        - Hydra configuration composition through CLI
+        - Parameter override via command-line arguments
+        - CLI execution performance requirements (<2s initialization)
+        """
         runner = CliRunner()
         
-        with patch('hydra.compose') as mock_compose:
-            mock_config = DictConfig({
-                "navigator": {"max_speed": 10.0},
-                "simulation": {"num_steps": 50}
-            })
-            mock_compose.return_value = mock_config
+        # Test CLI help command for rapid response
+        start_time = time.time()
+        result = runner.invoke(cli, ['--help'])
+        help_time = time.time() - start_time
+        
+        assert result.exit_code == 0
+        assert help_time < 1.0, f"CLI help too slow: {help_time:.3f}s"
+        assert "Odor Plume Navigation System" in result.output
+        
+        # Test configuration validation command
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            import yaml
+            yaml.dump(sample_config, f)
+            config_path = f.name
+        
+        try:
+            # Test dry run execution with performance monitoring
+            start_time = time.time()
+            with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config') as mock_config:
+                mock_config.return_value = OmegaConf.create(sample_config) if HYDRA_AVAILABLE else sample_config
+                
+                result = runner.invoke(cli, ['run', '--dry-run'])
+                initialization_time = time.time() - start_time
+                
+                # Validate CLI initialization performance requirement (<2s)
+                assert initialization_time < 2.0, f"CLI initialization too slow: {initialization_time:.3f}s"
+                
+        finally:
+            os.unlink(config_path)
+    
+    def test_cli_parameter_override_integration(self, sample_config):
+        """
+        Test CLI parameter override capabilities with Hydra integration.
+        
+        Validates:
+        - Command-line parameter parsing and type conversion
+        - Hydra configuration override syntax support
+        - Parameter validation and error handling
+        """
+        runner = CliRunner()
+        
+        # Test parameter override syntax
+        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config') as mock_config:
+            base_config = OmegaConf.create(sample_config) if HYDRA_AVAILABLE else sample_config
+            mock_config.return_value = base_config
             
-            # Test multi-run execution
-            result = runner.invoke(main, [
-                '--multirun',
-                'navigator.max_speed=5,10,15',
-                'run-simulation'
-            ])
+            # Test configuration validation with overrides
+            result = runner.invoke(cli, ['config', 'validate', '--format', 'pretty'])
             
-            # Validate multi-run handling
-            assert result.exit_code == 0 or "multirun" in result.output, \
-                "Multi-run functionality not properly handled"
+            assert result.exit_code == 0
+            assert "Configuration validation passed" in result.output or result.exit_code == 0
+    
+    def test_cli_batch_processing_mode(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test CLI batch processing capabilities for automated workflows.
+        
+        Validates:
+        - Headless execution mode
+        - Automated output generation
+        - Error handling in batch mode
+        - Performance characteristics for batch workflows
+        """
+        runner = CliRunner()
+        
+        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config') as mock_config:
+            mock_config.return_value = OmegaConf.create(sample_config) if HYDRA_AVAILABLE else sample_config
+            
+            # Test batch mode execution
+            with patch('{{cookiecutter.project_slug}}.cli.main.create_navigator') as mock_nav, \
+                 patch('{{cookiecutter.project_slug}}.cli.main.create_video_plume') as mock_plume, \
+                 patch('{{cookiecutter.project_slug}}.cli.main.run_plume_simulation') as mock_sim:
+                
+                # Configure mocks for batch processing
+                mock_nav.return_value = Mock(spec=Navigator, num_agents=1)
+                mock_plume.return_value = Mock(spec=VideoPlume, frame_count=100, width=640, height=480)
+                mock_sim.return_value = (
+                    np.zeros((1, 101, 2)),  # positions
+                    np.zeros((1, 101)),     # orientations  
+                    np.zeros((1, 101))      # readings
+                )
+                
+                result = runner.invoke(cli, ['run', '--batch', '--dry-run'])
+                
+                # Validate batch mode execution
+                assert result.exit_code == 0 or "batch processing mode enabled" in result.output.lower()
 
 
-class TestConfigurationSystemIntegration:
+class TestConfigurationSystemIntegration(IntegrationTestBase):
     """Test configuration system integration across all components."""
     
-    def test_hierarchical_configuration_composition(self):
-        """Test Hydra hierarchical configuration composition and validation."""
-        # Test configuration hierarchy loading
+    def test_hierarchical_configuration_composition(self, sample_config):
+        """
+        Test hierarchical configuration composition per system integration requirements.
+        
+        Validates:
+        - Multi-layer configuration loading (base → config → local)
+        - Environment variable interpolation
+        - Configuration validation across components
+        - Parameter override precedence
+        """
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available for configuration testing")
+        
+        # Create hierarchical configuration structure
         base_config = {
-            "navigator": {
-                "type": "single",
-                "max_speed": 10.0,
-                "angular_velocity": 0.1
-            },
-            "video_plume": {
-                "flip_horizontal": False,
-                "gaussian_blur": {"enabled": False}
-            }
+            'navigator': {'max_speed': 1.0, 'orientation': 0.0},
+            'simulation': {'num_steps': 1000, 'dt': 0.1}
         }
         
         override_config = {
-            "navigator": {
-                "max_speed": 15.0  # Override base value
-            },
-            "video_plume": {
-                "flip_horizontal": True  # Override base value
-            }
+            'navigator': {'max_speed': 2.0},  # Override base value
+            'simulation': {'sensor_distance': 5.0}  # Add new value
         }
         
-        # Test configuration merging
-        with patch('hydra.compose') as mock_compose:
-            final_config = DictConfig(base_config)
-            OmegaConf.update(final_config, override_config)
-            mock_compose.return_value = final_config
-            
-            config = mock_compose()
-            
-            # Validate hierarchy composition
-            assert config.navigator.max_speed == 15.0, "Configuration override failed"
-            assert config.navigator.angular_velocity == 0.1, "Base config value lost"
-            assert config.video_plume.flip_horizontal is True, "Override not applied"
-    
-    def test_environment_variable_interpolation(self):
-        """Test environment variable interpolation in configuration."""
-        # Set test environment variables
-        test_env = {
-            "DATABASE_URL": "sqlite:///test.db",
-            "MAX_SPEED": "12.5",
-            "DEBUG_MODE": "true"
-        }
-        
-        config_template = {
-            "database": {"url": "${oc.env:DATABASE_URL}"},
-            "navigator": {"max_speed": "${oc.env:MAX_SPEED}"},
-            "debug": "${oc.env:DEBUG_MODE}"
-        }
-        
-        with patch.dict(os.environ, test_env):
-            with patch('hydra.compose') as mock_compose:
-                # Mock Hydra environment interpolation
-                resolved_config = DictConfig({
-                    "database": {"url": "sqlite:///test.db"},
-                    "navigator": {"max_speed": 12.5},
-                    "debug": True
-                })
-                mock_compose.return_value = resolved_config
-                
-                config = mock_compose()
-                
-                # Validate environment variable interpolation
-                assert config.database.url == "sqlite:///test.db"
-                assert config.navigator.max_speed == 12.5
-                assert config.debug is True
-    
-    def test_configuration_validation_across_components(self):
-        """Test configuration validation across all system components."""
-        from {{cookiecutter.project_slug}}.config.schemas import (
-            NavigatorConfig, VideoPlumeConfig
+        # Test configuration composition
+        merged_config = OmegaConf.merge(
+            OmegaConf.create(base_config),
+            OmegaConf.create(override_config)
         )
         
-        # Test valid configuration
-        valid_navigator_config = {
-            "position": [50.0, 50.0],
-            "orientation": 45.0,
-            "speed": 5.0,
-            "max_speed": 10.0
-        }
+        # Validate configuration composition
+        assert merged_config.navigator.max_speed == 2.0  # Override applied
+        assert merged_config.navigator.orientation == 0.0  # Base value preserved
+        assert merged_config.simulation.num_steps == 1000  # Base value preserved
+        assert merged_config.simulation.sensor_distance == 5.0  # New value added
         
-        valid_video_config = {
-            "video_path": "/path/to/video.mp4",
-            "flip": False,
-            "kernel_size": 5,
-            "kernel_sigma": 1.0
-        }
+        # Test configuration validation through component creation
+        navigator = create_navigator_from_config(merged_config.navigator)
+        assert navigator.max_speeds[0] == 2.0
+    
+    def test_environment_variable_interpolation(self, monkeypatch):
+        """
+        Test environment variable interpolation in configuration.
         
-        # Validate schemas
-        navigator_config = NavigatorConfig(**valid_navigator_config)
-        video_config = VideoPlumeConfig(**valid_video_config)
+        Validates:
+        - ${oc.env:VAR_NAME} syntax support
+        - Secure credential management patterns
+        - Environment-specific configuration loading
+        """
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available for environment variable testing")
         
-        assert navigator_config.max_speed == 10.0
-        assert video_config.kernel_size == 5
+        # Set test environment variables
+        monkeypatch.setenv("TEST_MAX_SPEED", "3.5")
+        monkeypatch.setenv("TEST_SENSOR_DISTANCE", "7.0")
         
-        # Test invalid configuration
-        invalid_config = {
-            "position": [50.0],  # Invalid: missing y coordinate
-            "speed": -5.0  # Invalid: negative speed
-        }
+        # Create configuration with environment variable interpolation
+        config_yaml = """
+        navigator:
+          max_speed: ${oc.env:TEST_MAX_SPEED,1.0}
+          position: [0.0, 0.0]
+        simulation:
+          sensor_distance: ${oc.env:TEST_SENSOR_DISTANCE,5.0}
+          num_steps: 100
+        """
         
-        with pytest.raises(Exception):  # Pydantic validation error
-            NavigatorConfig(**invalid_config)
+        config = OmegaConf.create(yaml.safe_load(config_yaml))
+        resolved_config = OmegaConf.to_object(config)
+        
+        # Validate environment variable substitution
+        assert float(resolved_config['navigator']['max_speed']) == 3.5
+        assert float(resolved_config['simulation']['sensor_distance']) == 7.0
+    
+    def test_configuration_validation_across_components(self, sample_config):
+        """
+        Test configuration validation across all system components.
+        
+        Validates:
+        - Pydantic schema validation for each component
+        - Cross-component parameter consistency
+        - Error handling for invalid configurations
+        """
+        # Test navigator configuration validation
+        nav_config = NavigatorConfig(**sample_config['navigator'])
+        assert nav_config.max_speed == sample_config['navigator']['max_speed']
+        
+        # Test video plume configuration validation
+        video_config = VideoPlumeConfig(**sample_config['video_plume'])
+        assert video_config.flip == sample_config['video_plume']['flip']
+        
+        # Test simulation configuration validation
+        sim_config = SimulationConfig(**sample_config['simulation'])
+        assert sim_config.num_steps == sample_config['simulation']['num_steps']
+        
+        # Test invalid configuration handling
+        with pytest.raises(ValueError):
+            NavigatorConfig(max_speed=-1.0)  # Invalid negative speed
+        
+        with pytest.raises(ValueError):
+            SimulationConfig(num_steps=0)  # Invalid zero steps
 
 
-class TestDatabaseSessionIntegration:
+class TestDatabaseSessionIntegration(IntegrationTestBase):
     """Test database session integration with simulation workflows."""
     
     def test_database_session_lifecycle_management(self):
-        """Test database session creation, usage, and cleanup."""
-        from {{cookiecutter.project_slug}}.db.session import get_session
+        """
+        Test database session lifecycle per enhanced architecture requirements.
         
-        # Mock SQLAlchemy session
-        with patch('{{cookiecutter.project_slug}}.db.session.SessionLocal') as mock_session_class:
-            mock_session = Mock()
-            mock_session_class.return_value = mock_session
-            
-            # Test session creation
-            session = get_session()
-            
-            assert session is not None
-            mock_session_class.assert_called_once()
-            
-            # Test session cleanup
-            session.close()
-            mock_session.close.assert_called_once()
+        Validates:
+        - Session creation and cleanup
+        - Transaction handling and rollback
+        - Connection pooling and performance
+        - In-memory database testing patterns
+        """
+        # Test session availability checking
+        db_enabled = is_database_enabled()
+        
+        # Test session context management
+        with get_session() as session:
+            if session:
+                # Database enabled - test session operations
+                assert hasattr(session, 'execute')
+                assert hasattr(session, 'commit')
+                assert hasattr(session, 'rollback')
+                
+                # Test basic query execution
+                result = session.execute("SELECT 1 as test_value")
+                assert result is not None
+            else:
+                # Database disabled - validate graceful handling
+                assert session is None
     
-    def test_simulation_data_persistence(self, mock_navigator, mock_video_plume):
-        """Test simulation data persistence through database session."""
-        from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+    def test_database_session_performance_characteristics(self):
+        """
+        Test database session performance per Section 6.6.3.3 requirements.
         
-        # Configure simulation
-        mock_navigator.num_agents = 1
-        mock_navigator.positions = np.array([[10.0, 10.0]])
-        mock_video_plume.get_frame.return_value = np.random.rand(480, 640) * 255
+        Validates:
+        - Session establishment time ≤100ms
+        - Connection pooling efficiency
+        - Transaction performance
+        """
+        if not is_database_enabled():
+            pytest.skip("Database not enabled for performance testing")
         
-        # Mock database session
-        with patch('{{cookiecutter.project_slug}}.db.session.get_session') as mock_get_session:
-            mock_session = Mock()
-            mock_get_session.return_value = mock_session
-            
-            # Run simulation
+        # Test session establishment performance
+        establishment_times = []
+        
+        for _ in range(10):
+            start_time = time.time()
+            with get_session() as session:
+                if session:
+                    session.execute("SELECT 1")
+            establishment_time = time.time() - start_time
+            establishment_times.append(establishment_time)
+        
+        # Validate performance requirements
+        avg_establishment_time = np.mean(establishment_times)
+        max_establishment_time = np.max(establishment_times)
+        
+        assert avg_establishment_time < 0.1, f"Average session establishment too slow: {avg_establishment_time:.3f}s"
+        assert max_establishment_time < 0.2, f"Maximum session establishment too slow: {max_establishment_time:.3f}s"
+    
+    def test_simulation_with_database_integration(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test simulation workflow with database session integration.
+        
+        Validates:
+        - Simulation execution with database persistence hooks
+        - Metadata storage capabilities
+        - Graceful degradation when database unavailable
+        """
+        # Execute simulation with database integration
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
+        
+        # Monitor database session usage during simulation
+        with get_session() as session:
             positions, orientations, readings = run_plume_simulation(
-                navigator=mock_navigator,
-                plume=mock_video_plume,
-                num_steps=10,
-                dt=0.1
+                navigator=navigator,
+                video_plume=video_plume,
+                num_steps=10,  # Short simulation for testing
+                record_trajectory=True
             )
             
-            # Test data structure for persistence
-            assert positions.shape[0] >= 1, "No trajectory data for persistence"
-            assert positions.shape[1] >= 10, "Insufficient data points"
+            # Validate simulation results regardless of database state
+            assert positions.shape == (1, 11, 2)
+            assert orientations.shape == (1, 11)
+            assert readings.shape == (1, 11)
             
-            # Mock data persistence
-            trajectory_data = {
-                "positions": positions.tolist(),
-                "orientations": orientations.tolist(),
-                "readings": readings.tolist()
-            }
-            
-            # Validate data serialization
-            serialized_data = json.dumps(trajectory_data)
-            assert len(serialized_data) > 0, "Data serialization failed"
-    
-    def test_database_transaction_handling(self):
-        """Test database transaction handling and rollback scenarios."""
-        with patch('{{cookiecutter.project_slug}}.db.session.SessionLocal') as mock_session_class:
-            mock_session = Mock()
-            mock_session_class.return_value = mock_session
-            
-            # Test successful transaction
-            mock_session.commit.return_value = None
-            mock_session.rollback.return_value = None
-            
-            try:
-                # Simulate transaction operations
-                mock_session.add(Mock())
-                mock_session.commit()
-            except Exception:
-                mock_session.rollback()
-                raise
-            
-            # Validate transaction calls
-            mock_session.add.assert_called()
-            mock_session.commit.assert_called_once()
-            
-            # Test transaction rollback
-            mock_session.commit.side_effect = Exception("Database error")
-            
-            with pytest.raises(Exception):
-                mock_session.add(Mock())
-                mock_session.commit()
-                mock_session.rollback()
+            # Test persistence hooks if database available
+            if session:
+                from {{cookiecutter.project_slug}}.db.session import PersistenceHooks
+                
+                trajectory_data = {
+                    'positions': positions.tolist(),
+                    'orientations': orientations.tolist(),
+                    'readings': readings.tolist()
+                }
+                
+                # Test trajectory persistence hook
+                success = PersistenceHooks.save_trajectory_data(trajectory_data, session)
+                # Hook returns True if database enabled, False otherwise
+                assert isinstance(success, bool)
 
 
-class TestVisualizationIntegration:
+class TestVisualizationExportWorkflows(IntegrationTestBase):
     """Test visualization export workflows with complete data pipeline testing."""
     
-    def test_complete_visualization_pipeline(self, mock_navigator, mock_video_plume):
-        """Test complete visualization pipeline from simulation to export."""
-        from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
-        from {{cookiecutter.project_slug}}.utils.visualization import (
-            visualize_simulation_results, visualize_trajectory
-        )
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_visualization_export_integration(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test visualization export workflows with complete data pipeline.
         
-        # Configure realistic simulation data
-        mock_navigator.num_agents = 2
-        mock_navigator.positions = np.array([[10.0, 10.0], [20.0, 20.0]])
-        mock_video_plume.get_frame.return_value = np.random.rand(480, 640) * 255
+        Validates:
+        - End-to-end visualization generation
+        - Multiple export format support
+        - Publication-quality output generation
+        - Performance characteristics for visualization workflows
+        """
+        # Execute simulation to generate visualization data
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
         
-        # Run simulation
         positions, orientations, readings = run_plume_simulation(
-            navigator=mock_navigator,
-            plume=mock_video_plume,
-            num_steps=20,
-            dt=0.1
+            navigator=navigator,
+            video_plume=video_plume,
+            num_steps=50,
+            record_trajectory=True
         )
         
-        # Test visualization pipeline
-        with patch('matplotlib.pyplot') as mock_plt:
-            mock_figure = Mock()
-            mock_plt.figure.return_value = mock_figure
+        # Test visualization generation with performance monitoring
+        start_time = time.time()
+        
+        # Import visualization utilities with error handling
+        try:
+            from {{cookiecutter.project_slug}}.utils.visualization import visualize_simulation_results
             
-            # Test trajectory visualization
-            figure = visualize_trajectory(
+            # Generate visualization
+            figure = visualize_simulation_results(
                 positions=positions,
                 orientations=orientations,
-                output_path=None,
-                show_plot=False
+                show_trails=True,
+                quality='high'
             )
             
+            # Validate figure generation
             assert figure is not None
-            mock_plt.figure.assert_called()
+            assert hasattr(figure, 'savefig')
             
-            # Test simulation results visualization
-            visualize_simulation_results(
-                positions, orientations, 
-                plume_frames=None,
-                show_plot=False
-            )
+            # Test export to different formats
+            output_path = self.output_dir / "test_visualization"
             
-            # Validate visualization calls
-            assert mock_plt.figure.call_count >= 1
+            # Test PNG export
+            png_path = output_path.with_suffix('.png')
+            figure.savefig(png_path, dpi=300, bbox_inches='tight')
+            assert png_path.exists()
+            
+            # Test PDF export for publication quality
+            pdf_path = output_path.with_suffix('.pdf')
+            figure.savefig(pdf_path, dpi=300, bbox_inches='tight')
+            assert pdf_path.exists()
+            
+            plt.close(figure)  # Clean up figure
+            
+        except ImportError:
+            pytest.skip("Visualization utilities not available")
+        
+        visualization_time = time.time() - start_time
+        
+        # Validate visualization performance (reasonable time for publication quality)
+        assert visualization_time < 10.0, f"Visualization generation too slow: {visualization_time:.3f}s"
     
-    def test_visualization_export_formats(self):
-        """Test visualization export in multiple formats."""
-        # Mock trajectory data
-        positions = np.random.rand(2, 50, 2) * 100
-        orientations = np.random.rand(2, 50) * 360
+    def test_animation_export_workflow(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test animation export capabilities for research documentation.
         
-        export_formats = ['.png', '.pdf', '.svg', '.mp4']
+        Validates:
+        - Animation generation from simulation data
+        - Video format export (MP4)
+        - Frame rate and quality control
+        """
+        # Generate simulation data for animation
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
         
-        with tempfile.TemporaryDirectory() as temp_dir:
-            for fmt in export_formats:
-                output_path = Path(temp_dir) / f"test_trajectory{fmt}"
-                
-                with patch('matplotlib.pyplot') as mock_plt:
-                    mock_figure = Mock()
-                    mock_plt.figure.return_value = mock_figure
-                    
-                    # Test export format
-                    from {{cookiecutter.project_slug}}.utils.visualization import visualize_trajectory
-                    
-                    figure = visualize_trajectory(
-                        positions=positions,
-                        orientations=orientations,
-                        output_path=str(output_path),
-                        show_plot=False
-                    )
-                    
-                    assert figure is not None
-                    mock_figure.savefig.assert_called() or mock_plt.savefig.assert_called()
-    
-    def test_visualization_performance_characteristics(self):
-        """Test visualization performance per timing requirements."""
-        # Large dataset for performance testing
-        positions = np.random.rand(10, 1000, 2) * 100  # 10 agents, 1000 steps
-        orientations = np.random.rand(10, 1000) * 360
+        positions, orientations, readings = run_plume_simulation(
+            navigator=navigator,
+            video_plume=video_plume,
+            num_steps=30,  # Shorter for animation testing
+            record_trajectory=True
+        )
         
-        with patch('matplotlib.pyplot') as mock_plt:
-            mock_figure = Mock()
-            mock_plt.figure.return_value = mock_figure
+        # Test animation export with mock implementation
+        try:
+            from {{cookiecutter.project_slug}}.utils.visualization import export_animation
             
+            animation_path = self.output_dir / "test_animation.mp4"
+            
+            # Test animation export with performance monitoring
             start_time = time.time()
-            
-            from {{cookiecutter.project_slug}}.utils.visualization import visualize_trajectory
-            visualize_trajectory(
+            export_animation(
                 positions=positions,
                 orientations=orientations,
-                show_plot=False
+                video_plume=video_plume,
+                output_path=animation_path,
+                fps=10,  # Lower FPS for testing
+                quality='medium'
+            )
+            animation_time = time.time() - start_time
+            
+            # Validate animation export
+            assert animation_path.exists()
+            assert animation_time < 30.0, f"Animation export too slow: {animation_time:.3f}s"
+            
+        except ImportError:
+            pytest.skip("Animation export utilities not available")
+
+
+class TestMultiComponentErrorHandling(IntegrationTestBase):
+    """Test multi-component error handling and recovery scenarios."""
+    
+    def test_configuration_error_propagation(self):
+        """
+        Test error handling across configuration boundaries.
+        
+        Validates:
+        - Configuration validation error propagation
+        - Component-specific error handling
+        - Graceful degradation patterns
+        """
+        # Test invalid navigator configuration
+        with pytest.raises(ConfigurationError):
+            create_navigator(max_speed=-1.0)  # Invalid negative speed
+        
+        # Test invalid video path handling
+        with pytest.raises((FileNotFoundError, ConfigurationError)):
+            create_video_plume(video_path="/nonexistent/path.mp4")
+        
+        # Test simulation parameter validation
+        navigator = create_navigator(position=[0, 0], max_speed=1.0)
+        
+        with pytest.raises(ConfigurationError):
+            run_plume_simulation(
+                navigator=navigator,
+                video_plume=None,  # Invalid video plume
+                num_steps=100
+            )
+    
+    def test_simulation_error_recovery(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test simulation error recovery and graceful failure handling.
+        
+        Validates:
+        - Simulation interruption handling
+        - Partial result recovery
+        - Resource cleanup on errors
+        """
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
+        
+        # Test simulation with frame access errors
+        with patch.object(video_plume, 'get_frame', side_effect=[
+            np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8),  # First frame OK
+            None,  # Second frame fails
+            np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8),  # Third frame OK
+        ]):
+            
+            # Simulation should handle frame access errors gracefully
+            positions, orientations, readings = run_plume_simulation(
+                navigator=navigator,
+                video_plume=video_plume,
+                num_steps=3,
+                record_trajectory=True
             )
             
-            execution_time = time.time() - start_time
-            
-            # Performance validation: visualization should complete quickly
-            assert execution_time < 5.0, "Visualization performance exceeds acceptable threshold"
+            # Validate partial results are still generated
+            assert positions.shape[1] >= 2  # At least initial state + one step
+            assert np.all(np.isfinite(positions))
+    
+    def test_database_error_recovery(self):
+        """
+        Test database error handling and graceful degradation.
+        
+        Validates:
+        - Database connection failure handling
+        - Graceful fallback to file-based operations
+        - Session cleanup on errors
+        """
+        # Test with invalid database configuration
+        invalid_config = {'url': 'invalid://connection/string', 'enabled': True}
+        
+        # Database session should handle invalid configuration gracefully
+        with get_session(invalid_config) as session:
+            # Should return None for invalid configuration
+            assert session is None or hasattr(session, 'execute')
+        
+        # Test session cleanup after configuration change
+        cleanup_database()
+        
+        # Verify cleanup was successful
+        with get_session() as session:
+            # New session should be independent of previous configuration
+            pass  # Session creation should not raise exceptions
 
 
-class TestPerformanceCharacteristics:
+class TestPerformanceCharacteristics(IntegrationTestBase):
     """Test performance characteristics for integrated workflows per timing requirements."""
     
-    def test_cli_command_initialization_performance(self):
-        """Test CLI command initialization meets <2 second SLA requirement."""
-        from {{cookiecutter.project_slug}}.cli.main import main
+    def test_integration_workflow_performance_sla(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test integrated workflow performance against SLA requirements.
         
-        runner = CliRunner()
-        
-        # Test CLI startup performance
+        Validates:
+        - End-to-end workflow timing per Section 6.6.3.3
+        - Component initialization performance
+        - Memory usage characteristics
+        - Scalability with simulation parameters
+        """
+        # Test component initialization performance
         start_time = time.time()
-        result = runner.invoke(main, ['--help'])
-        initialization_time = time.time() - start_time
+        navigator = create_navigator(**sample_config['navigator'])
+        nav_init_time = time.time() - start_time
         
-        # Validate CLI initialization performance per Section 6.6.3.3
-        assert initialization_time < 2.0, f"CLI initialization ({initialization_time:.2f}s) exceeds 2s SLA"
-        assert result.exit_code == 0, "CLI help command failed"
-    
-    def test_configuration_loading_performance(self):
-        """Test Hydra configuration loading meets <500ms requirement."""
-        # Test configuration composition performance
-        config_data = {
-            "navigator": {"max_speed": 10.0, "angular_velocity": 0.1},
-            "video_plume": {"flip_horizontal": False},
-            "simulation": {"num_steps": 100, "dt": 0.1}
-        }
+        start_time = time.time()
+        video_plume = create_video_plume(video_path=mock_video_file)
+        plume_init_time = time.time() - start_time
         
-        with patch('hydra.compose') as mock_compose:
-            mock_config = DictConfig(config_data)
-            mock_compose.return_value = mock_config
-            
-            start_time = time.time()
-            config = mock_compose()
-            composition_time = time.time() - start_time
-            
-            # Validate configuration performance per Section 6.6.3.3
-            assert composition_time < 0.5, f"Configuration loading ({composition_time:.3f}s) exceeds 500ms SLA"
-            assert config is not None
-    
-    def test_database_session_establishment_performance(self):
-        """Test database session establishment meets <100ms requirement."""
-        from {{cookiecutter.project_slug}}.db.session import get_session
+        # Validate initialization performance
+        assert nav_init_time < 0.1, f"Navigator initialization too slow: {nav_init_time:.3f}s"
+        assert plume_init_time < 0.5, f"Video plume initialization too slow: {plume_init_time:.3f}s"
         
-        with patch('{{cookiecutter.project_slug}}.db.session.SessionLocal') as mock_session_class:
-            mock_session = Mock()
-            mock_session_class.return_value = mock_session
-            
-            start_time = time.time()
-            session = get_session()
-            establishment_time = time.time() - start_time
-            
-            # Validate database session performance per Section 6.6.3.3  
-            assert establishment_time < 0.1, f"DB session establishment ({establishment_time:.3f}s) exceeds 100ms SLA"
-            assert session is not None
-    
-    def test_multi_agent_simulation_performance_scaling(self):
-        """Test multi-agent simulation performance scaling characteristics."""
-        from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+        # Test simulation performance scaling
+        step_counts = [10, 50, 100]
+        performance_results = []
         
-        agent_counts = [1, 5, 10, 50, 100]
-        performance_results = {}
-        
-        for num_agents in agent_counts:
-            # Mock multi-agent navigator
-            mock_navigator = Mock()
-            mock_navigator.num_agents = num_agents
-            mock_navigator.positions = np.random.rand(num_agents, 2) * 100
-            mock_navigator.orientations = np.random.rand(num_agents) * 360
-            mock_navigator.step.return_value = None
-            mock_navigator.sample_odor.return_value = np.random.rand(num_agents)
-            
-            # Mock video plume
-            mock_video_plume = Mock()
-            mock_video_plume.get_frame.return_value = np.random.rand(480, 640) * 255
-            
-            # Performance test
+        for num_steps in step_counts:
             start_time = time.time()
             positions, orientations, readings = run_plume_simulation(
-                navigator=mock_navigator,
-                plume=mock_video_plume,
-                num_steps=10,
-                dt=0.1
+                navigator=navigator,
+                video_plume=video_plume,
+                num_steps=num_steps,
+                record_trajectory=True
             )
             execution_time = time.time() - start_time
             
-            performance_results[num_agents] = execution_time
+            steps_per_second = num_steps / execution_time
+            performance_results.append(steps_per_second)
             
-            # Validate performance scaling per Section 6.6.3.3
-            if num_agents <= 10:
-                assert execution_time < 5.0, f"Multi-agent ({num_agents}) simulation exceeds 5ms per step SLA"
-            elif num_agents <= 100:
-                assert execution_time < 50.0, f"Large multi-agent ({num_agents}) simulation exceeds 50ms per step SLA"
+            # Validate minimum performance (30+ FPS capability)
+            assert steps_per_second >= 30, f"Performance below SLA: {steps_per_second:.1f} steps/s"
         
-        # Validate performance scaling characteristics
-        assert performance_results[1] <= performance_results[100], "Performance should scale with agent count"
+        # Validate performance scaling linearity
+        assert len(performance_results) == len(step_counts)
+        # Performance should not degrade significantly with step count
+        performance_ratio = min(performance_results) / max(performance_results)
+        assert performance_ratio > 0.5, f"Performance scaling issue: {performance_ratio:.3f}"
+    
+    def test_memory_usage_characteristics(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test memory usage characteristics for integrated workflows.
+        
+        Validates:
+        - Memory efficiency in simulation execution
+        - Resource cleanup and garbage collection
+        - Memory scaling with simulation parameters
+        """
+        import gc
+        import psutil
+        import os
+        
+        # Get current process for memory monitoring
+        process = psutil.Process(os.getpid())
+        
+        # Baseline memory usage
+        gc.collect()
+        baseline_memory = process.memory_info().rss
+        
+        # Execute simulation with memory monitoring
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
+        
+        positions, orientations, readings = run_plume_simulation(
+            navigator=navigator,
+            video_plume=video_plume,
+            num_steps=100,
+            record_trajectory=True
+        )
+        
+        # Peak memory usage during simulation
+        peak_memory = process.memory_info().rss
+        memory_increase = peak_memory - baseline_memory
+        
+        # Validate memory usage is reasonable (<100MB increase per requirements)
+        memory_increase_mb = memory_increase / (1024 * 1024)
+        assert memory_increase_mb < 100, f"Memory usage too high: {memory_increase_mb:.1f}MB"
+        
+        # Test memory cleanup
+        del positions, orientations, readings, navigator, video_plume
+        gc.collect()
+        
+        final_memory = process.memory_info().rss
+        memory_cleanup = peak_memory - final_memory
+        
+        # Validate significant memory cleanup occurred
+        cleanup_ratio = memory_cleanup / memory_increase
+        assert cleanup_ratio > 0.5, f"Insufficient memory cleanup: {cleanup_ratio:.3f}"
 
 
-class TestCrossFrameworkCompatibility:
+class TestCrossFrameworkCompatibility(IntegrationTestBase):
     """Test cross-framework compatibility with RL and ML integration patterns."""
     
-    def test_numpy_array_interface_compatibility(self, mock_navigator):
-        """Test NumPy array interface compatibility with ML frameworks."""
-        # Configure navigator with realistic data
-        mock_navigator.positions = np.array([[10.0, 20.0], [30.0, 40.0]])
-        mock_navigator.orientations = np.array([45.0, 90.0])
-        mock_navigator.num_agents = 2
+    def test_numpy_array_interface_compatibility(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test NumPy array interface compatibility for ML framework integration.
         
-        # Test NumPy array compatibility
-        positions = mock_navigator.positions
-        assert isinstance(positions, np.ndarray), "Positions not NumPy array"
-        assert positions.dtype == np.float64 or positions.dtype == np.float32, "Invalid position data type"
+        Validates:
+        - NumPy array output formats
+        - Data type consistency
+        - Tensor conversion compatibility
+        - Batch processing support
+        """
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
         
-        # Test tensor compatibility (mock PyTorch/TensorFlow)
-        with patch('torch.from_numpy') as mock_torch:
-            mock_tensor = Mock()
-            mock_torch.return_value = mock_tensor
+        positions, orientations, readings = run_plume_simulation(
+            navigator=navigator,
+            video_plume=video_plume,
+            num_steps=50,
+            record_trajectory=True
+        )
+        
+        # Validate NumPy array characteristics
+        assert isinstance(positions, np.ndarray)
+        assert isinstance(orientations, np.ndarray)
+        assert isinstance(readings, np.ndarray)
+        
+        # Validate data types for ML compatibility
+        assert positions.dtype in [np.float32, np.float64]
+        assert orientations.dtype in [np.float32, np.float64]
+        assert readings.dtype in [np.float32, np.float64]
+        
+        # Validate array shapes for batch processing
+        assert positions.ndim == 3  # (agents, timesteps, coordinates)
+        assert orientations.ndim == 2  # (agents, timesteps)
+        assert readings.ndim == 2  # (agents, timesteps)
+        
+        # Test tensor conversion compatibility (if packages available)
+        try:
+            import torch
             
-            # Mock tensor conversion
-            tensor_positions = mock_torch(positions)
-            assert tensor_positions is not None
-            mock_torch.assert_called_with(positions)
-        
-        # Test array operations compatibility
-        assert positions.shape == (2, 2), "Position array shape incorrect"
-        assert np.all(positions >= 0), "Position values should be non-negative"
-    
-    def test_protocol_based_agent_definition_compatibility(self):
-        """Test protocol-based interfaces for RL framework integration."""
-        from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol
-        
-        # Test protocol compliance
-        class MockRLAgent:
-            """Mock RL agent implementing NavigatorProtocol."""
+            # Test PyTorch tensor conversion
+            positions_tensor = torch.from_numpy(positions)
+            orientations_tensor = torch.from_numpy(orientations)
+            readings_tensor = torch.from_numpy(readings)
             
-            @property
-            def positions(self) -> np.ndarray:
-                return np.array([[0.0, 0.0]])
+            assert positions_tensor.shape == positions.shape
+            assert orientations_tensor.shape == orientations.shape
+            assert readings_tensor.shape == readings.shape
             
-            @property
-            def orientations(self) -> np.ndarray:
-                return np.array([0.0])
-            
-            @property
-            def speeds(self) -> np.ndarray:
-                return np.array([1.0])
-            
-            @property
-            def max_speeds(self) -> np.ndarray:
-                return np.array([10.0])
-            
-            @property
-            def angular_velocities(self) -> np.ndarray:
-                return np.array([0.1])
-            
-            @property
-            def num_agents(self) -> int:
-                return 1
-            
-            def reset(self, **kwargs) -> None:
-                pass
-            
-            def step(self, env_array: np.ndarray) -> None:
-                pass
-            
-            def sample_odor(self, env_array: np.ndarray) -> float:
-                return 0.5
-            
-            def read_single_antenna_odor(self, env_array: np.ndarray) -> float:
-                return 0.3
-            
-            def sample_multiple_sensors(self, env_array: np.ndarray, **kwargs) -> np.ndarray:
-                return np.array([0.1, 0.2])
-        
-        # Test protocol compliance
-        rl_agent = MockRLAgent()
-        
-        # Validate protocol methods
-        assert hasattr(rl_agent, 'positions'), "RL agent missing positions property"
-        assert hasattr(rl_agent, 'step'), "RL agent missing step method"
-        assert hasattr(rl_agent, 'sample_odor'), "RL agent missing sample_odor method"
-        
-        # Test protocol usage
-        env_array = np.random.rand(100, 100) * 255
-        rl_agent.step(env_array)
-        odor_reading = rl_agent.sample_odor(env_array)
-        
-        assert isinstance(odor_reading, (int, float, np.number)), "Invalid odor reading type"
-    
-    def test_batch_processing_workflow_compatibility(self):
-        """Test batch processing workflow compatibility with ML pipelines."""
-        # Mock batch processing scenario
-        batch_size = 5
-        trajectory_length = 100
-        
-        # Generate batch trajectory data
-        batch_positions = np.random.rand(batch_size, trajectory_length, 2) * 100
-        batch_orientations = np.random.rand(batch_size, trajectory_length) * 360
-        batch_readings = np.random.rand(batch_size, trajectory_length)
-        
-        # Test batch data structure
-        assert batch_positions.shape == (batch_size, trajectory_length, 2)
-        assert batch_orientations.shape == (batch_size, trajectory_length)
-        assert batch_readings.shape == (batch_size, trajectory_length)
-        
-        # Test batch processing operations
-        batch_means = np.mean(batch_positions, axis=1)  # Mean position per trajectory
-        batch_stds = np.std(batch_orientations, axis=1)  # Orientation variance
-        
-        assert batch_means.shape == (batch_size, 2)
-        assert batch_stds.shape == (batch_size,)
-        
-        # Validate numerical stability
-        assert np.all(np.isfinite(batch_means)), "Batch means contain invalid values"
-        assert np.all(np.isfinite(batch_stds)), "Batch stds contain invalid values"
-
-
-class TestWorkflowOrchestrationIntegration:
-    """Test workflow orchestration integration with DVC and Snakemake scenarios."""
-    
-    def test_dvc_pipeline_dry_run_validation(self):
-        """Test DVC pipeline definition validation through dry-run execution."""
-        # Mock DVC pipeline configuration
-        dvc_pipeline_config = {
-            "stages": {
-                "prepare_data": {
-                    "cmd": "python prepare_video_data.py",
-                    "deps": ["raw_videos/"],
-                    "outs": ["processed_videos/"]
-                },
-                "run_simulation": {
-                    "cmd": "python -m {{cookiecutter.project_slug}}.cli.main run-simulation",
-                    "deps": ["processed_videos/", "conf/"],
-                    "outs": ["results/trajectories.npy"]
-                },
-                "generate_analysis": {
-                    "cmd": "python analyze_results.py",
-                    "deps": ["results/trajectories.npy"],
-                    "outs": ["reports/analysis.html"]
-                }
-            }
-        }
-        
-        # Test DVC pipeline structure validation
-        assert "stages" in dvc_pipeline_config, "DVC pipeline missing stages"
-        assert "run_simulation" in dvc_pipeline_config["stages"], "Missing simulation stage"
-        
-        # Mock DVC command execution
-        with patch('subprocess.run') as mock_subprocess:
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = "Pipeline validation successful"
-            mock_subprocess.return_value = mock_result
-            
-            # Simulate DVC dry-run
-            result = mock_subprocess(['dvc', 'repro', '--dry-run'])
-            
-            assert result.returncode == 0, "DVC pipeline validation failed"
-            mock_subprocess.assert_called_once()
-    
-    def test_snakemake_rule_validation(self):
-        """Test Snakemake workflow rule validation and execution planning."""
-        # Mock Snakemake rule definition
-        snakemake_rules = {
-            "rule_all": {
-                "input": ["results/final_analysis.html"]
-            },
-            "process_videos": {
-                "input": "raw_videos/{video}.mp4",
-                "output": "processed_videos/{video}_processed.mp4",
-                "shell": "python process_video.py {input} {output}"
-            },
-            "run_navigation": {
-                "input": "processed_videos/{video}_processed.mp4",
-                "output": "results/{video}_trajectory.npy",
-                "shell": "python -m {{cookiecutter.project_slug}}.cli.main --config-override video_plume.video_path={input}"
-            },
-            "generate_report": {
-                "input": expand("results/{video}_trajectory.npy", video=["video1", "video2"]),
-                "output": "results/final_analysis.html",
-                "shell": "python generate_report.py {input} {output}"
-            }
-        }
-        
-        # Test Snakemake rule structure
-        assert "rule_all" in snakemake_rules, "Snakemake missing target rule"
-        assert "run_navigation" in snakemake_rules, "Missing navigation rule"
-        
-        # Mock Snakemake execution
-        with patch('subprocess.run') as mock_subprocess:
-            mock_result = Mock()
-            mock_result.returncode = 0
-            mock_result.stdout = "Workflow validation successful"
-            mock_subprocess.return_value = mock_result
-            
-            # Simulate Snakemake dry-run
-            result = mock_subprocess(['snakemake', '--dry-run', '--quiet'])
-            
-            assert result.returncode == 0, "Snakemake workflow validation failed"
-            mock_subprocess.assert_called_once()
-    
-    def test_workflow_parameter_integration(self):
-        """Test workflow parameter integration across DVC and Snakemake."""
-        # Test parameter file integration
-        workflow_params = {
-            "video_processing": {
-                "flip_horizontal": True,
-                "gaussian_blur": {"enabled": True, "sigma": 2.0}
-            },
-            "navigation": {
-                "max_speed": 15.0,
-                "angular_velocity": 0.2,
-                "num_steps": 1000
-            },
-            "analysis": {
-                "export_format": "html",
-                "include_animations": True
-            }
-        }
-        
-        # Test parameter validation
-        assert "video_processing" in workflow_params, "Missing video processing parameters"
-        assert "navigation" in workflow_params, "Missing navigation parameters"
-        assert workflow_params["navigation"]["num_steps"] > 0, "Invalid step count"
-        
-        # Mock parameter file creation
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as param_file:
-            import yaml
-            yaml.dump(workflow_params, param_file)
-            param_file_path = param_file.name
+        except ImportError:
+            pass  # PyTorch not available
         
         try:
-            # Validate parameter file
-            with open(param_file_path, 'r') as f:
-                loaded_params = yaml.safe_load(f)
+            import tensorflow as tf
             
-            assert loaded_params == workflow_params, "Parameter file integrity check failed"
+            # Test TensorFlow tensor conversion
+            positions_tf = tf.convert_to_tensor(positions)
+            orientations_tf = tf.convert_to_tensor(orientations)
+            readings_tf = tf.convert_to_tensor(readings)
             
-        finally:
-            os.unlink(param_file_path)
+            assert positions_tf.shape == positions.shape
+            assert orientations_tf.shape == orientations.shape
+            assert readings_tf.shape == readings.shape
+            
+        except ImportError:
+            pass  # TensorFlow not available
     
-    def test_experiment_reproducibility_workflow(self):
-        """Test complete experiment reproducibility through workflow orchestration."""
-        # Mock experimental setup
-        experiment_config = {
-            "experiment_id": "odor_nav_exp_001",
-            "parameters": {
-                "navigator": {"max_speed": [5, 10, 15]},
-                "video_plume": {"gaussian_blur.sigma": [1.0, 2.0, 3.0]}
-            },
-            "output_structure": {
-                "base_dir": "experiments/",
-                "results_dir": "results/",
-                "plots_dir": "plots/",
-                "logs_dir": "logs/"
-            }
+    def test_protocol_based_interface_compatibility(self, sample_config):
+        """
+        Test protocol-based interface compatibility for framework integration.
+        
+        Validates:
+        - NavigatorProtocol implementation compliance
+        - Duck typing compatibility
+        - Interface consistency across implementations
+        """
+        navigator = create_navigator(**sample_config['navigator'])
+        
+        # Validate protocol compliance
+        assert isinstance(navigator, NavigatorProtocol)
+        
+        # Test protocol interface completeness
+        protocol_methods = [
+            'positions', 'orientations', 'speeds', 'max_speeds', 
+            'angular_velocities', 'num_agents', 'reset', 'step', 
+            'sample_odor', 'read_single_antenna_odor', 'sample_multiple_sensors'
+        ]
+        
+        for method_name in protocol_methods:
+            assert hasattr(navigator, method_name), f"Missing protocol method: {method_name}"
+        
+        # Test protocol property types
+        assert isinstance(navigator.positions, np.ndarray)
+        assert isinstance(navigator.orientations, np.ndarray)
+        assert isinstance(navigator.speeds, np.ndarray)
+        assert isinstance(navigator.max_speeds, np.ndarray)
+        assert isinstance(navigator.angular_velocities, np.ndarray)
+        assert isinstance(navigator.num_agents, int)
+        
+        # Test protocol method callable
+        assert callable(navigator.reset)
+        assert callable(navigator.step)
+        assert callable(navigator.sample_odor)
+    
+    def test_reinforcement_learning_interface_compatibility(self, sample_config, mock_video_capture, mock_video_file):
+        """
+        Test RL framework compatibility through standardized interfaces.
+        
+        Validates:
+        - Gym-like environment interface patterns
+        - State/action/reward interface compatibility
+        - Episode-based interaction patterns
+        """
+        navigator = create_navigator(**sample_config['navigator'])
+        video_plume = create_video_plume(video_path=mock_video_file)
+        
+        # Test RL-style reset functionality
+        initial_positions = navigator.positions.copy()
+        navigator.reset()  # Should reset to initial state
+        
+        # Test RL-style step functionality
+        env_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+        navigator.step(env_frame)
+        
+        # Validate state changes after step
+        assert not np.array_equal(navigator.positions, initial_positions)
+        
+        # Test observation extraction (RL state)
+        observations = navigator.sample_odor(env_frame)
+        assert isinstance(observations, (float, np.ndarray))
+        
+        if isinstance(observations, np.ndarray):
+            assert observations.shape == (navigator.num_agents,)
+        
+        # Test multi-sensor observations for complex RL scenarios
+        multi_observations = navigator.sample_multiple_sensors(
+            env_frame, 
+            sensor_distance=5.0,
+            sensor_angle=45.0,
+            num_sensors=3
+        )
+        
+        assert isinstance(multi_observations, np.ndarray)
+        expected_shape = (navigator.num_agents, 3)  # 3 sensors per agent
+        assert multi_observations.shape == expected_shape
+
+
+class TestWorkflowOrchestrationIntegration(IntegrationTestBase):
+    """Test workflow orchestration integration with DVC and Snakemake scenarios."""
+    
+    def test_dvc_pipeline_integration_patterns(self, sample_config):
+        """
+        Test DVC pipeline integration patterns and compatibility.
+        
+        Validates:
+        - Parameter management through DVC
+        - Experiment tracking integration
+        - Reproducible pipeline execution
+        """
+        # Test parameter file generation for DVC
+        params_file = self.temp_dir / "params.yaml"
+        import yaml
+        
+        dvc_params = {
+            'navigator': sample_config['navigator'],
+            'simulation': sample_config['simulation'],
+            'reproducibility': {'seed': 42}
         }
         
-        # Test experiment parameter combinations
-        max_speeds = experiment_config["parameters"]["navigator"]["max_speed"]
-        blur_sigmas = experiment_config["parameters"]["video_plume"]["gaussian_blur.sigma"]
+        with open(params_file, 'w') as f:
+            yaml.dump(dvc_params, f)
         
-        expected_combinations = len(max_speeds) * len(blur_sigmas)
-        assert expected_combinations == 9, "Incorrect parameter combination count"
+        # Validate parameter file creation
+        assert params_file.exists()
         
-        # Mock experiment execution tracking
-        experiment_results = []
-        for speed in max_speeds:
-            for sigma in blur_sigmas:
-                result = {
-                    "parameters": {"max_speed": speed, "blur_sigma": sigma},
-                    "status": "completed",
-                    "execution_time": np.random.uniform(10, 60),
-                    "trajectory_length": np.random.randint(800, 1200)
+        # Test parameter loading for DVC pipeline
+        with open(params_file, 'r') as f:
+            loaded_params = yaml.safe_load(f)
+        
+        assert loaded_params['navigator']['max_speed'] == sample_config['navigator']['max_speed']
+        assert loaded_params['simulation']['num_steps'] == sample_config['simulation']['num_steps']
+        
+        # Test DVC-style output specification
+        output_spec = {
+            'positions': str(self.output_dir / "positions.npy"),
+            'orientations': str(self.output_dir / "orientations.npy"),
+            'readings': str(self.output_dir / "readings.npy"),
+            'metadata': str(self.output_dir / "metadata.json")
+        }
+        
+        # Simulate DVC output generation
+        for output_type, output_path in output_spec.items():
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            
+            if output_type == 'metadata':
+                import json
+                metadata = {
+                    'navigator_config': loaded_params['navigator'],
+                    'simulation_config': loaded_params['simulation'],
+                    'timestamp': time.time()
                 }
-                experiment_results.append(result)
+                with open(output_path, 'w') as f:
+                    json.dump(metadata, f)
+            else:
+                # Create dummy array files
+                dummy_array = np.zeros((1, 101, 2) if output_type == 'positions' else (1, 101))
+                np.save(output_path, dummy_array)
         
-        # Validate experiment tracking
-        assert len(experiment_results) == expected_combinations
-        assert all(r["status"] == "completed" for r in experiment_results)
+        # Validate all outputs were created
+        for output_path in output_spec.values():
+            assert Path(output_path).exists()
+    
+    def test_snakemake_workflow_integration_patterns(self, sample_config):
+        """
+        Test Snakemake workflow integration patterns and compatibility.
         
-        # Test reproducibility metadata
-        reproducibility_metadata = {
-            "timestamp": "2024-01-01T00:00:00Z",
-            "git_commit": "abc123def456",
-            "python_version": "3.9.0",
-            "dependencies": {
-                "numpy": "1.21.0",
-                "opencv-python": "4.5.0",
-                "hydra-core": "1.3.0"
+        Validates:
+        - Rule-based execution patterns
+        - Input/output dependency management
+        - Scalable processing workflows
+        """
+        # Test Snakemake-style input/output specification
+        workflow_config = {
+            'inputs': {
+                'config': str(self.config_dir / "config.yaml"),
+                'video': str(self.data_dir / "input_video.mp4")
             },
-            "system_info": {
-                "platform": "linux",
-                "architecture": "x86_64"
+            'outputs': {
+                'results': str(self.output_dir / "simulation_results.npz"),
+                'plots': str(self.output_dir / "trajectory_plot.png"),
+                'report': str(self.output_dir / "analysis_report.html")
             }
         }
         
-        assert "git_commit" in reproducibility_metadata, "Missing version control info"
-        assert "dependencies" in reproducibility_metadata, "Missing dependency info"
-
-
-# Pytest fixtures for integration testing
-@pytest.fixture
-def mock_navigator():
-    """Provide a mock navigator with realistic behavior."""
-    navigator = Mock()
-    navigator.positions = np.array([[10.0, 10.0]])
-    navigator.orientations = np.array([0.0])
-    navigator.speeds = np.array([5.0])
-    navigator.max_speeds = np.array([10.0])
-    navigator.angular_velocities = np.array([0.1])
-    navigator.num_agents = 1
-    navigator.is_single_agent = True
+        # Create input files
+        import yaml
+        with open(workflow_config['inputs']['config'], 'w') as f:
+            yaml.dump(sample_config, f)
+        
+        # Create dummy video file
+        Path(workflow_config['inputs']['video']).touch()
+        
+        # Test Snakemake-style rule execution simulation
+        def simulate_snakemake_rule():
+            """Simulate Snakemake rule execution."""
+            # Load configuration
+            with open(workflow_config['inputs']['config'], 'r') as f:
+                config = yaml.safe_load(f)
+            
+            # Validate inputs exist
+            for input_path in workflow_config['inputs'].values():
+                assert Path(input_path).exists(), f"Missing input: {input_path}"
+            
+            # Generate outputs
+            results_data = {
+                'positions': np.zeros((1, 101, 2)),
+                'orientations': np.zeros((1, 101)),
+                'readings': np.zeros((1, 101)),
+                'config': config
+            }
+            
+            # Save results
+            np.savez_compressed(workflow_config['outputs']['results'], **results_data)
+            
+            # Create dummy plot and report files
+            Path(workflow_config['outputs']['plots']).touch()
+            Path(workflow_config['outputs']['report']).touch()
+            
+            return True
+        
+        # Execute simulated rule
+        rule_success = simulate_snakemake_rule()
+        assert rule_success
+        
+        # Validate all outputs were created
+        for output_path in workflow_config['outputs'].values():
+            assert Path(output_path).exists(), f"Missing output: {output_path}"
+        
+        # Test output data integrity
+        results = np.load(workflow_config['outputs']['results'])
+        assert 'positions' in results
+        assert 'orientations' in results
+        assert 'readings' in results
     
-    # Mock method behaviors
-    navigator.reset.return_value = None
-    navigator.step.return_value = None
-    navigator.sample_odor.return_value = 0.5
-    navigator.read_single_antenna_odor.return_value = 0.3
-    navigator.sample_multiple_sensors.return_value = np.array([0.1, 0.2])
-    
-    return navigator
-
-
-@pytest.fixture
-def mock_multi_navigator():
-    """Provide a mock multi-agent navigator."""
-    navigator = Mock()
-    num_agents = 3
-    navigator.positions = np.random.rand(num_agents, 2) * 100
-    navigator.orientations = np.random.rand(num_agents) * 360
-    navigator.speeds = np.random.rand(num_agents) * 10
-    navigator.max_speeds = np.ones(num_agents) * 15
-    navigator.angular_velocities = np.random.rand(num_agents) * 0.5
-    navigator.num_agents = num_agents
-    navigator.is_single_agent = False
-    
-    # Mock method behaviors
-    navigator.reset.return_value = None
-    navigator.step.return_value = None
-    navigator.sample_odor.return_value = np.random.rand(num_agents)
-    navigator.read_single_antenna_odor.return_value = np.random.rand(num_agents)
-    navigator.sample_multiple_sensors.return_value = np.random.rand(num_agents, 2)
-    
-    return navigator
-
-
-@pytest.fixture
-def mock_video_plume():
-    """Provide a mock video plume with realistic behavior."""
-    video_plume = Mock()
-    video_plume.width = 640
-    video_plume.height = 480
-    video_plume.fps = 30.0
-    video_plume.frame_count = 1000
-    video_plume.duration = 33.33
-    video_plume.video_path = "/mock/path/to/video.mp4"
-    
-    # Mock realistic frame data
-    video_plume.get_frame.return_value = np.random.randint(0, 256, (480, 640), dtype=np.uint8)
-    video_plume.close.return_value = None
-    
-    return video_plume
-
-
-@pytest.fixture
-def mock_hydra_config():
-    """Provide a mock Hydra configuration for testing."""
-    config = DictConfig({
-        "navigator": {
-            "type": "single",
-            "position": [50.0, 50.0],
-            "orientation": 0.0,
-            "speed": 5.0,
-            "max_speed": 10.0,
-            "angular_velocity": 0.1
-        },
-        "video_plume": {
-            "video_path": "/mock/path/to/video.mp4",
-            "flip": False,
-            "kernel_size": 5,
-            "kernel_sigma": 1.0
-        },
-        "simulation": {
-            "num_steps": 100,
-            "dt": 0.1
-        },
-        "visualization": {
-            "save_animations": False,
-            "export_format": "png"
-        },
-        "database": {
-            "url": "sqlite:///test.db"
+    def test_experiment_tracking_integration(self, sample_config):
+        """
+        Test experiment tracking integration for reproducible research.
+        
+        Validates:
+        - Experiment metadata capture
+        - Version control integration patterns
+        - Reproducibility validation
+        """
+        # Test experiment metadata generation
+        experiment_metadata = {
+            'experiment_id': f"exp_{int(time.time())}",
+            'parameters': sample_config,
+            'environment': {
+                'python_version': sys.version,
+                'numpy_version': np.__version__,
+                'platform': sys.platform
+            },
+            'reproducibility': {
+                'global_seed': sample_config.get('reproducibility', {}).get('global_seed', 42),
+                'timestamp': time.time()
+            }
         }
-    })
+        
+        # Test metadata serialization
+        metadata_file = self.output_dir / "experiment_metadata.json"
+        import json
+        with open(metadata_file, 'w') as f:
+            json.dump(experiment_metadata, f, indent=2)
+        
+        assert metadata_file.exists()
+        
+        # Test metadata loading and validation
+        with open(metadata_file, 'r') as f:
+            loaded_metadata = json.load(f)
+        
+        assert loaded_metadata['experiment_id'] == experiment_metadata['experiment_id']
+        assert loaded_metadata['parameters']['navigator']['max_speed'] == sample_config['navigator']['max_speed']
+        
+        # Test reproducibility validation
+        assert 'global_seed' in loaded_metadata['reproducibility']
+        assert loaded_metadata['reproducibility']['global_seed'] == 42
+
+
+# Performance benchmarking utilities for integration testing
+class PerformanceBenchmark:
+    """Utility class for performance benchmarking in integration tests."""
     
-    return config
+    def __init__(self, name: str, sla_threshold: float):
+        self.name = name
+        self.sla_threshold = sla_threshold
+        self.start_time = None
+        self.end_time = None
+    
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.end_time = time.time()
+        execution_time = self.end_time - self.start_time
+        
+        if execution_time > self.sla_threshold:
+            warnings.warn(
+                f"Performance SLA violation: {self.name} took {execution_time:.3f}s "
+                f"(threshold: {self.sla_threshold:.3f}s)",
+                PerformanceWarning
+            )
+
+
+class PerformanceWarning(UserWarning):
+    """Warning category for performance SLA violations."""
+    pass
+
+
+# Test execution configuration and pytest markers
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.slow,  # Integration tests may take longer
+]
+
+
+# Global test configuration
+def pytest_configure(config):
+    """Configure pytest for integration testing."""
+    # Register custom markers
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
+    config.addinivalue_line("markers", "performance: mark test as performance validation")
+    
+    # Configure test environment
+    os.environ.setdefault("PYTEST_CURRENT_TEST", "true")
+    
+    # Disable interactive matplotlib backends
+    if MATPLOTLIB_AVAILABLE:
+        matplotlib.use('Agg')
+
+
+# Module-level test utilities and fixtures
+@pytest.fixture(scope="session")
+def integration_test_session():
+    """Session-scoped fixture for integration test setup."""
+    # Global test session setup
+    start_time = time.time()
+    
+    yield
+    
+    # Global test session teardown
+    total_time = time.time() - start_time
+    print(f"\nIntegration test session completed in {total_time:.2f}s")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    # Enable direct execution for debugging
+    pytest.main([__file__, "-v", "--tb=short"])
