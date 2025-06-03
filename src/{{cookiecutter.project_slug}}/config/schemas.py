@@ -1,281 +1,257 @@
 """
-Unified Pydantic configuration schemas with Hydra ConfigStore integration.
+Unified Pydantic configuration schemas with Hydra integration.
 
-This module consolidates all configuration models for the odor plume navigation
-system, providing type-safe parameter validation, environment variable interpolation,
-and automatic Hydra registration for structured configuration composition.
+This module provides comprehensive configuration management through Pydantic BaseModel
+schemas integrated with Hydra's structured configuration system. It consolidates all
+configuration models from the original domain/models.py structure while adding 
+advanced Hydra capabilities including ConfigStore registration, environment variable
+interpolation, and hierarchical configuration composition.
 
-The schemas support hierarchical configuration through base.yaml → config.yaml → 
-local overrides with environment variable substitution via ${oc.env:VAR_NAME} syntax.
+The schemas support both backward compatibility with existing Pydantic validation
+and forward compatibility with modern Hydra-based configuration workflows.
 """
 
-from pathlib import Path
-from typing import List, Optional, Tuple, Union, Dict, Any
+from typing import List, Optional, Tuple, Union, Dict, Any, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from hydra.core.config_store import ConfigStore
+from hydra.core.defaults_list import create_defaults_list
+from hydra.types import ConfigGroup
+import logging
+from pathlib import Path
+import os
 
-# Hydra imports for ConfigStore integration
-try:
-    from hydra.core.config_store import ConfigStore
-    from omegaconf import MISSING, DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    # Fallback for environments without Hydra
-    ConfigStore = None
-    MISSING = "???"
-    DictConfig = dict
+# Set up module logger
+logger = logging.getLogger(__name__)
+
+# Initialize Hydra ConfigStore for automatic schema registration
+cs = ConfigStore.instance()
 
 
 class SingleAgentConfig(BaseModel):
     """
-    Configuration schema for single agent navigation with Hydra integration.
+    Configuration schema for single agent navigation parameters.
     
-    Supports environment variable interpolation through ${oc.env:VAR_NAME} syntax
-    for secure credential management and deployment flexibility.
-    
-    Examples:
-        Basic configuration:
-            position: [0.0, 0.0]
-            orientation: 0.0
-            speed: 1.0
-            max_speed: 2.0
-            
-        With environment variables:
-            max_speed: ${oc.env:AGENT_MAX_SPEED,1.0}
-            angular_velocity: ${oc.env:AGENT_ANGULAR_VEL,0.0}
+    This model defines the complete parameter set for single-agent scenarios
+    including position, orientation, speed, and angular velocity parameters.
+    Supports Hydra environment variable interpolation for deployment flexibility.
     """
     
-    # Position coordinates [x, y]
+    # Core navigation parameters
     position: Optional[Tuple[float, float]] = Field(
         default=None,
-        description="Initial agent position coordinates [x, y]"
+        description="Initial [x, y] position coordinates. Supports ${oc.env:AGENT_START_X,50.0} interpolation"
     )
-    
-    # Orientation in degrees (0 = right, 90 = up)
     orientation: Optional[float] = Field(
         default=0.0,
-        description="Initial orientation in degrees (0 = right, 90 = up)"
+        ge=0.0,
+        le=360.0,
+        description="Initial orientation in degrees (0=right, 90=up). Supports ${oc.env:AGENT_ORIENTATION,0.0}"
     )
-    
-    # Movement parameters
     speed: Optional[float] = Field(
         default=0.0,
         ge=0.0,
-        description="Initial speed in units per time step"
+        description="Initial speed in units per timestep. Supports ${oc.env:AGENT_SPEED,0.0}"
     )
-    
     max_speed: Optional[float] = Field(
         default=1.0,
         gt=0.0,
-        description="Maximum allowed speed in units per time step"
+        description="Maximum allowed speed constraint. Supports ${oc.env:AGENT_MAX_SPEED,1.0}"
     )
-    
     angular_velocity: Optional[float] = Field(
         default=0.0,
-        description="Angular velocity in degrees per second"
+        description="Angular velocity in degrees per timestep. Supports ${oc.env:AGENT_ANGULAR_VEL,0.0}"
     )
-
-    model_config = ConfigDict(
-        extra="allow",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        # Support for Hydra interpolation
-        arbitrary_types_allowed=True
+    
+    # Hydra-specific configuration metadata
+    _target_: str = Field(
+        default="{{cookiecutter.project_slug}}.core.controllers.SingleAgentController",
+        description="Hydra target for automatic instantiation"
     )
-
-    @field_validator('orientation')
+    
+    @field_validator('speed', 'max_speed')
     @classmethod
-    def normalize_orientation(cls, v):
-        """Normalize orientation to [0, 360) range."""
-        if v is not None:
-            return v % 360.0
+    def validate_speed_constraints(cls, v, info):
+        """Validate speed parameters are non-negative."""
+        if v is not None and v < 0:
+            raise ValueError(f"{info.field_name} must be non-negative")
         return v
-
+    
     @model_validator(mode="after")
-    def validate_speed_constraints(self):
-        """Ensure speed does not exceed max_speed."""
+    def validate_speed_relationship(self):
+        """Ensure speed does not exceed max_speed when both are specified."""
         if (self.speed is not None and 
             self.max_speed is not None and 
             self.speed > self.max_speed):
-            raise ValueError(
-                f"speed ({self.speed}) cannot exceed max_speed ({self.max_speed})"
-            )
+            raise ValueError(f"Initial speed ({self.speed}) cannot exceed max_speed ({self.max_speed})")
         return self
+    
+    model_config = ConfigDict(
+        extra="allow",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "position": [25.0, 50.0],
+                    "orientation": 90.0,
+                    "speed": 0.5,
+                    "max_speed": 2.0,
+                    "angular_velocity": 0.1
+                }
+            ]
+        }
+    )
 
 
 class MultiAgentConfig(BaseModel):
     """
-    Configuration schema for multi-agent navigation with enhanced validation.
+    Configuration schema for multi-agent navigation scenarios.
     
-    Supports environment variable interpolation for scalable deployment scenarios
-    and hierarchical configuration composition through Hydra config groups.
-    
-    Examples:
-        Basic multi-agent setup:
-            num_agents: 3
-            positions: [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]
-            orientations: [0.0, 45.0, 90.0]
-            speeds: [1.0, 1.0, 1.0]
-            
-        With environment scaling:
-            num_agents: ${oc.env:SWARM_SIZE,5}
-            max_speeds: ${oc.env:AGENT_MAX_SPEEDS,[1.0,1.0,1.0,1.0,1.0]}
+    Defines parameters for coordinated multi-agent simulations with vectorized
+    operations support. All list parameters must have consistent lengths equal
+    to num_agents when specified.
     """
     
-    # Agent positions as list of [x, y] coordinates
+    # Multi-agent parameters with length validation
     positions: Optional[List[List[float]]] = Field(
         default=None,
-        description="List of initial agent positions as [x, y] coordinates"
+        description="List of [x, y] positions for each agent. Length must match num_agents"
     )
-    
-    # Per-agent orientations in degrees
     orientations: Optional[List[float]] = Field(
         default=None,
         description="List of initial orientations in degrees for each agent"
     )
-    
-    # Per-agent speeds
     speeds: Optional[List[float]] = Field(
         default=None,
         description="List of initial speeds for each agent"
     )
-    
-    # Per-agent maximum speeds
     max_speeds: Optional[List[float]] = Field(
         default=None,
-        description="List of maximum speeds for each agent"
+        description="List of maximum speed constraints for each agent"
     )
-    
-    # Per-agent angular velocities
     angular_velocities: Optional[List[float]] = Field(
         default=None,
-        description="List of angular velocities in degrees per second"
+        description="List of angular velocities in degrees per timestep for each agent"
     )
-    
-    # Number of agents (for validation)
     num_agents: Optional[int] = Field(
         default=None,
         gt=0,
-        description="Total number of agents in the simulation"
+        le=100,
+        description="Total number of agents in simulation. Supports ${oc.env:NUM_AGENTS,10}"
     )
-
-    model_config = ConfigDict(
-        extra="allow",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        arbitrary_types_allowed=True
+    
+    # Hydra-specific configuration metadata
+    _target_: str = Field(
+        default="{{cookiecutter.project_slug}}.core.controllers.MultiAgentController",
+        description="Hydra target for automatic instantiation"
     )
-
+    
     @field_validator('positions')
     @classmethod
-    def validate_positions_structure(cls, v):
-        """Validate that positions is a list of [x, y] coordinates."""
+    def validate_positions_format(cls, v):
+        """Validate that positions is a properly formatted list of [x, y] coordinates."""
         if v is None:
             return v
         if not isinstance(v, list):
-            raise ValueError("positions must be a list")
+            raise ValueError("positions must be a list of coordinate pairs")
+        
         for i, pos in enumerate(v):
             if not isinstance(pos, (list, tuple)) or len(pos) != 2:
-                raise ValueError(
-                    f"Position {i} must be a list/tuple of [x, y] coordinates"
-                )
+                raise ValueError(f"Position {i} must be a [x, y] coordinate pair")
             if not all(isinstance(coord, (int, float)) for coord in pos):
-                raise ValueError(
-                    f"Position {i} coordinates must be numeric"
-                )
+                raise ValueError(f"Position {i} coordinates must be numeric")
         return v
-
-    @field_validator('orientations')
+    
+    @field_validator('orientations', 'speeds', 'max_speeds', 'angular_velocities')
     @classmethod
-    def normalize_orientations(cls, v):
-        """Normalize all orientations to [0, 360) range."""
-        if v is not None:
-            return [orientation % 360.0 for orientation in v]
+    def validate_numeric_lists(cls, v, info):
+        """Validate that numeric list parameters contain only valid numbers."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError(f"{info.field_name} must be a list")
+        
+        for i, val in enumerate(v):
+            if not isinstance(val, (int, float)):
+                raise ValueError(f"{info.field_name}[{i}] must be numeric")
+            
+            # Additional validation for specific fields
+            if info.field_name == 'orientations' and not (0 <= val <= 360):
+                raise ValueError(f"Orientation {i} must be between 0 and 360 degrees")
+            elif info.field_name in ['speeds', 'max_speeds'] and val < 0:
+                raise ValueError(f"{info.field_name}[{i}] must be non-negative")
+        
         return v
-
-    @field_validator('speeds', 'max_speeds')
-    @classmethod
-    def validate_positive_speeds(cls, v):
-        """Ensure all speeds are non-negative."""
-        if v is not None:
-            for i, speed in enumerate(v):
-                if speed < 0:
-                    raise ValueError(f"Speed at index {i} must be non-negative")
-        return v
-
+    
     @model_validator(mode="after")
     def validate_agent_parameter_consistency(self):
         """Ensure all agent parameter lists have consistent lengths."""
         if self.positions is not None:
             n_agents = len(self.positions)
             
-            # Validate number of agents matches positions
-            if self.num_agents is not None and self.num_agents != n_agents:
-                raise ValueError(
-                    f"num_agents ({self.num_agents}) does not match "
-                    f"number of positions ({n_agents})"
-                )
+            # Validate or set num_agents
+            if self.num_agents is None:
+                self.num_agents = n_agents
+            elif self.num_agents != n_agents:
+                raise ValueError(f"num_agents ({self.num_agents}) does not match positions length ({n_agents})")
             
-            # Validate all parameter lists have matching lengths
-            param_lists = {
-                'orientations': self.orientations,
-                'speeds': self.speeds,
-                'max_speeds': self.max_speeds,
-                'angular_velocities': self.angular_velocities
-            }
-            
-            for param_name, param_list in param_lists.items():
-                if param_list is not None and len(param_list) != n_agents:
-                    raise ValueError(
-                        f"{param_name} length ({len(param_list)}) does not match "
-                        f"number of agents ({n_agents})"
-                    )
+            # Validate all other list parameters have matching lengths
+            for field_name in ['orientations', 'speeds', 'max_speeds', 'angular_velocities']:
+                field_value = getattr(self, field_name)
+                if field_value is not None and len(field_value) != n_agents:
+                    raise ValueError(f"{field_name} length ({len(field_value)}) does not match number of agents ({n_agents})")
         
         # Validate speed constraints for each agent
         if self.speeds is not None and self.max_speeds is not None:
             for i, (speed, max_speed) in enumerate(zip(self.speeds, self.max_speeds)):
                 if speed > max_speed:
-                    raise ValueError(
-                        f"Agent {i}: speed ({speed}) cannot exceed "
-                        f"max_speed ({max_speed})"
-                    )
+                    raise ValueError(f"Agent {i} speed ({speed}) exceeds max_speed ({max_speed})")
         
         return self
+    
+    model_config = ConfigDict(
+        extra="allow",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "num_agents": 3,
+                    "positions": [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]],
+                    "orientations": [0.0, 90.0, 180.0],
+                    "speeds": [1.0, 1.5, 0.8],
+                    "max_speeds": [2.0, 2.0, 2.0],
+                    "angular_velocities": [0.1, 0.1, 0.1]
+                }
+            ]
+        }
+    )
 
 
 class NavigatorConfig(BaseModel):
     """
-    Unified configuration schema for navigator supporting both single and multi-agent modes.
+    Unified configuration schema for navigation that supports both single and multi-agent scenarios.
     
-    This schema automatically detects the navigation mode based on provided parameters
-    and delegates to appropriate validation logic. Supports environment variable 
-    interpolation and hierarchical Hydra configuration composition.
-    
-    Examples:
-        Single agent mode:
-            position: [0.0, 0.0]
-            orientation: 0.0
-            speed: 1.0
-            max_speed: 2.0
-            
-        Multi-agent mode:
-            positions: [[0.0, 0.0], [1.0, 0.0]]
-            orientations: [0.0, 90.0]
-            speeds: [1.0, 1.2]
-            num_agents: 2
-            
-        With environment variables:
-            max_speed: ${oc.env:NAVIGATOR_MAX_SPEED,1.0}
-            num_agents: ${oc.env:SWARM_SIZE,1}
+    This is the primary configuration model that consolidates single and multi-agent
+    parameters with intelligent mode detection. It supports Hydra environment variable
+    interpolation and hierarchical configuration composition.
     """
     
-    # Single agent parameters
+    # Navigation mode specification
+    mode: Literal["single", "multi", "auto"] = Field(
+        default="auto",
+        description="Navigation mode: 'single', 'multi', or 'auto' for automatic detection"
+    )
+    
+    # Single agent parameters (when mode="single" or auto-detected)
     position: Optional[Tuple[float, float]] = Field(
         default=None,
-        description="Single agent initial position [x, y]"
+        description="Single agent initial position. Supports ${oc.env:AGENT_POSITION} interpolation"
     )
     orientation: Optional[float] = Field(
         default=0.0,
+        ge=0.0,
+        le=360.0,
         description="Single agent initial orientation in degrees"
     )
     speed: Optional[float] = Field(
@@ -286,312 +262,589 @@ class NavigatorConfig(BaseModel):
     max_speed: Optional[float] = Field(
         default=1.0,
         gt=0.0,
-        description="Single agent maximum speed"
+        description="Single agent maximum speed constraint"
     )
     angular_velocity: Optional[float] = Field(
         default=0.0,
-        description="Single agent angular velocity in degrees per second"
+        description="Single agent angular velocity in degrees per timestep"
     )
     
-    # Multi-agent parameters
+    # Multi-agent parameters (when mode="multi" or auto-detected)
     positions: Optional[List[List[float]]] = Field(
         default=None,
-        description="Multi-agent initial positions as [x, y] coordinates"
+        description="Multi-agent positions list. Presence triggers multi-agent mode"
     )
     orientations: Optional[List[float]] = Field(
         default=None,
-        description="Multi-agent initial orientations in degrees"
+        description="Multi-agent orientations list"
     )
     speeds: Optional[List[float]] = Field(
         default=None,
-        description="Multi-agent initial speeds"
+        description="Multi-agent speeds list"
     )
     max_speeds: Optional[List[float]] = Field(
         default=None,
-        description="Multi-agent maximum speeds"
+        description="Multi-agent maximum speeds list"
     )
     angular_velocities: Optional[List[float]] = Field(
         default=None,
-        description="Multi-agent angular velocities in degrees per second"
+        description="Multi-agent angular velocities list"
     )
     num_agents: Optional[int] = Field(
         default=None,
         gt=0,
-        description="Total number of agents (multi-agent mode)"
+        le=100,
+        description="Number of agents for multi-agent mode"
     )
-
-    model_config = ConfigDict(
-        extra="allow",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        arbitrary_types_allowed=True
+    
+    # Hydra-specific configuration metadata
+    _target_: str = Field(
+        default="{{cookiecutter.project_slug}}.api.navigation.create_navigator",
+        description="Hydra target for factory instantiation"
     )
-
-    @field_validator('orientation')
-    @classmethod
-    def normalize_single_orientation(cls, v):
-        """Normalize single agent orientation to [0, 360) range."""
-        if v is not None:
-            return v % 360.0
-        return v
-
-    @field_validator('orientations')
-    @classmethod
-    def normalize_multi_orientations(cls, v):
-        """Normalize all multi-agent orientations to [0, 360) range."""
-        if v is not None:
-            return [orientation % 360.0 for orientation in v]
-        return v
-
-    @field_validator('positions')
-    @classmethod
-    def validate_multi_positions(cls, v):
-        """Validate multi-agent positions structure."""
-        if v is None:
-            return v
-        if not isinstance(v, list):
-            raise ValueError("positions must be a list")
-        for i, pos in enumerate(v):
-            if not isinstance(pos, (list, tuple)) or len(pos) != 2:
-                raise ValueError(
-                    f"Position {i} must be a list/tuple of [x, y] coordinates"
-                )
-        return v
-
+    
     @model_validator(mode="after")
     def validate_navigation_mode_consistency(self):
         """
-        Validate consistency between single-agent and multi-agent parameters.
-        Ensures only one navigation mode is specified.
+        Validate configuration consistency and automatically detect navigation mode.
+        
+        This validator implements intelligent mode detection and ensures parameter
+        consistency between single and multi-agent configurations.
         """
-        # Check for multi-agent indicators
-        has_multi = any([
-            self.positions is not None,
-            self.num_agents is not None and self.num_agents > 1,
-            isinstance(self.orientations, list),
-            isinstance(self.speeds, list),
-            isinstance(self.max_speeds, list),
-            isinstance(self.angular_velocities, list)
-        ])
+        has_multi_params = self.positions is not None
+        has_single_params = self.position is not None
         
-        # Check for single-agent indicators
-        has_single = self.position is not None
+        # Automatic mode detection when mode="auto"
+        if self.mode == "auto":
+            if has_multi_params and has_single_params:
+                raise ValueError("Cannot specify both single-agent and multi-agent parameters simultaneously")
+            elif has_multi_params:
+                self.mode = "multi"
+            else:
+                self.mode = "single"
         
-        # Validate mode exclusivity
-        if has_multi and has_single:
-            raise ValueError(
-                "Cannot specify both single-agent (position) and "
-                "multi-agent (positions, num_agents > 1) parameters"
-            )
-        
-        # Multi-agent validation
-        if has_multi:
-            if self.positions is not None:
-                n_agents = len(self.positions)
-                
-                # Validate num_agents consistency
-                if self.num_agents is not None and self.num_agents != n_agents:
-                    raise ValueError(
-                        f"num_agents ({self.num_agents}) does not match "
-                        f"number of positions ({n_agents})"
-                    )
-                
-                # Validate parameter list lengths
-                param_lists = {
-                    'orientations': self.orientations,
-                    'speeds': self.speeds,
-                    'max_speeds': self.max_speeds,
-                    'angular_velocities': self.angular_velocities
-                }
-                
-                for param_name, param_list in param_lists.items():
-                    if (isinstance(param_list, list) and 
-                        len(param_list) != n_agents):
-                        raise ValueError(
-                            f"{param_name} length ({len(param_list)}) does not "
-                            f"match number of agents ({n_agents})"
-                        )
-            
-            # Validate multi-agent speed constraints
-            if (isinstance(self.speeds, list) and 
-                isinstance(self.max_speeds, list)):
-                for i, (speed, max_speed) in enumerate(
-                    zip(self.speeds, self.max_speeds)
-                ):
-                    if speed > max_speed:
-                        raise ValueError(
-                            f"Agent {i}: speed ({speed}) cannot exceed "
-                            f"max_speed ({max_speed})"
-                        )
-        
-        # Single-agent validation
-        elif has_single or not has_multi:
+        # Validate mode-specific parameter consistency
+        if self.mode == "single":
+            if has_multi_params:
+                raise ValueError("Single-agent mode cannot have multi-agent parameters (positions, etc.)")
+            # Validate single-agent speed constraints
             if (self.speed is not None and 
                 self.max_speed is not None and 
                 self.speed > self.max_speed):
-                raise ValueError(
-                    f"speed ({self.speed}) cannot exceed "
-                    f"max_speed ({self.max_speed})"
-                )
+                raise ValueError(f"Single agent speed ({self.speed}) cannot exceed max_speed ({self.max_speed})")
+        
+        elif self.mode == "multi":
+            if has_single_params:
+                logger.warning("Multi-agent mode specified but single-agent parameters present. Multi-agent parameters will take precedence.")
+            
+            if not has_multi_params:
+                raise ValueError("Multi-agent mode requires positions parameter")
+            
+            # Apply multi-agent validation logic
+            n_agents = len(self.positions)
+            if self.num_agents is None:
+                self.num_agents = n_agents
+            elif self.num_agents != n_agents:
+                raise ValueError(f"num_agents ({self.num_agents}) does not match positions length ({n_agents})")
+            
+            # Validate list parameter lengths
+            for param_name in ['orientations', 'speeds', 'max_speeds', 'angular_velocities']:
+                param_value = getattr(self, param_name)
+                if param_value is not None and len(param_value) != n_agents:
+                    raise ValueError(f"{param_name} length ({len(param_value)}) does not match number of agents ({n_agents})")
+            
+            # Validate multi-agent speed constraints
+            if self.speeds is not None and self.max_speeds is not None:
+                for i, (speed, max_speed) in enumerate(zip(self.speeds, self.max_speeds)):
+                    if speed > max_speed:
+                        raise ValueError(f"Agent {i} speed ({speed}) exceeds max_speed ({max_speed})")
         
         return self
+    
+    def get_single_agent_config(self) -> SingleAgentConfig:
+        """Extract single agent configuration parameters."""
+        if self.mode != "single":
+            raise ValueError("Cannot extract single agent config from multi-agent mode")
+        
+        return SingleAgentConfig(
+            position=self.position,
+            orientation=self.orientation,
+            speed=self.speed,
+            max_speed=self.max_speed,
+            angular_velocity=self.angular_velocity
+        )
+    
+    def get_multi_agent_config(self) -> MultiAgentConfig:
+        """Extract multi-agent configuration parameters."""
+        if self.mode != "multi":
+            raise ValueError("Cannot extract multi-agent config from single-agent mode")
+        
+        return MultiAgentConfig(
+            positions=self.positions,
+            orientations=self.orientations,
+            speeds=self.speeds,
+            max_speeds=self.max_speeds,
+            angular_velocities=self.angular_velocities,
+            num_agents=self.num_agents
+        )
+    
+    model_config = ConfigDict(
+        extra="allow",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "mode": "single",
+                    "position": [50.0, 50.0],
+                    "orientation": 0.0,
+                    "speed": 1.0,
+                    "max_speed": 2.0,
+                    "angular_velocity": 0.1
+                },
+                {
+                    "mode": "multi",
+                    "num_agents": 2,
+                    "positions": [[20.0, 30.0], [70.0, 80.0]],
+                    "orientations": [45.0, 135.0],
+                    "speeds": [1.2, 0.8],
+                    "max_speeds": [2.0, 2.0],
+                    "angular_velocities": [0.1, 0.1]
+                }
+            ]
+        }
+    )
 
 
 class VideoPlumeConfig(BaseModel):
     """
-    Unified configuration schema for video-based plume environment processing.
+    Comprehensive configuration schema for video-based plume environment processing.
     
-    Consolidates video processing parameters with enhanced validation and 
-    environment variable interpolation support. Integrates with Hydra 
-    structured configuration for flexible video source management.
-    
-    Examples:
-        Basic video configuration:
-            video_path: "data/plume_video.mp4"
-            flip: false
-            grayscale: true
-            kernel_size: 5
-            kernel_sigma: 1.0
-            
-        With environment variables:
-            video_path: ${oc.env:PLUME_VIDEO_PATH}
-            flip: ${oc.env:VIDEO_FLIP,false}
-            threshold: ${oc.env:PLUME_THRESHOLD,0.5}
-            
-        Advanced preprocessing:
-            video_path: "data/turbulent_plume.avi"
-            flip: true
-            grayscale: true
-            kernel_size: 7
-            kernel_sigma: 2.0
-            threshold: 0.3
-            normalize: true
+    Defines parameters for video file loading, preprocessing transformations,
+    and frame analysis. Supports Hydra environment variable interpolation for
+    secure path and credential management.
     """
     
-    # Video source path (supports environment variable interpolation)
+    # Core video file configuration
     video_path: Union[str, Path] = Field(
-        description="Path to the video file containing plume data"
+        description="Path to video file. Supports ${oc.env:VIDEO_PATH} interpolation for deployment flexibility"
     )
     
-    # Video preprocessing options
+    # Video preprocessing parameters
     flip: bool = Field(
         default=False,
-        description="Whether to flip video frames horizontally"
+        description="Apply horizontal flip transformation to video frames"
     )
-    
     grayscale: bool = Field(
         default=True,
-        description="Convert video frames to grayscale"
+        description="Convert video frames to grayscale for processing"
     )
     
-    # Gaussian smoothing parameters
+    # Gaussian filtering configuration
     kernel_size: Optional[int] = Field(
         default=None,
-        description="Gaussian kernel size for smoothing (must be odd and positive)"
+        description="Gaussian kernel size for smoothing (must be odd and positive, or None to disable)"
     )
-    
     kernel_sigma: Optional[float] = Field(
         default=None,
         gt=0.0,
-        description="Gaussian kernel sigma for smoothing"
+        description="Gaussian kernel sigma parameter for smoothing intensity"
     )
     
-    # Threshold and normalization
+    # Advanced processing parameters
     threshold: Optional[float] = Field(
         default=None,
         ge=0.0,
         le=1.0,
-        description="Threshold value for binary plume detection"
+        description="Threshold value for binary frame processing (0.0-1.0 range)"
     )
-    
     normalize: bool = Field(
         default=True,
-        description="Normalize frame values to [0, 1] range"
+        description="Apply frame normalization for consistent value ranges"
     )
     
-    # Internal validation control
-    _skip_validation: bool = Field(
-        default=False,
-        description="Skip file existence validation (for testing)"
+    # Frame selection and sampling
+    frame_skip: int = Field(
+        default=0,
+        ge=0,
+        description="Number of frames to skip between processing steps"
     )
-
-    model_config = ConfigDict(
-        extra="allow",
-        str_strip_whitespace=True,
-        validate_assignment=True,
-        arbitrary_types_allowed=True
+    start_frame: int = Field(
+        default=0,
+        ge=0,
+        description="Starting frame index for video processing"
     )
-
+    end_frame: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Ending frame index (None for entire video)"
+    )
+    
+    # Video format and codec parameters
+    fourcc: Optional[str] = Field(
+        default=None,
+        max_length=4,
+        description="Four-character code for video codec specification"
+    )
+    fps_override: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        description="Override video FPS for simulation timing"
+    )
+    
+    # Hydra-specific configuration metadata
+    _target_: str = Field(
+        default="{{cookiecutter.project_slug}}.data.video_plume.VideoPlume",
+        description="Hydra target for automatic instantiation"
+    )
+    
     @field_validator('video_path')
     @classmethod
     def validate_video_path(cls, v):
-        """Validate video path format and convert to Path object."""
+        """Validate video path format and perform basic existence checking."""
         if isinstance(v, str):
-            # Handle environment variable interpolation placeholder
-            if v.startswith('${') and v.endswith('}'):
-                return v  # Return as-is for Hydra to resolve
-            v = Path(v)
-        return v
-
+            # Handle Hydra environment variable interpolation patterns
+            if v.startswith('${oc.env:'):
+                return v  # Skip validation for interpolated paths
+            
+            path = Path(v)
+        else:
+            path = v
+        
+        # Validate file extension for supported formats
+        supported_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'}
+        if path.suffix.lower() not in supported_extensions:
+            logger.warning(f"Video file extension '{path.suffix}' may not be supported. Supported: {supported_extensions}")
+        
+        return str(path)
+    
     @field_validator('kernel_size')
     @classmethod
     def validate_kernel_size(cls, v):
-        """Validate that kernel_size is odd and positive if provided."""
-        if v is not None:
-            if v <= 0:
-                raise ValueError("kernel_size must be positive")
-            if v % 2 == 0:
-                raise ValueError("kernel_size must be odd")
+        """Validate Gaussian kernel size is odd and positive."""
+        if v is None:
+            return v
+        
+        if v <= 0:
+            raise ValueError("kernel_size must be positive")
+        if v % 2 == 0:
+            raise ValueError("kernel_size must be odd for proper Gaussian filtering")
+        
         return v
-
-    @model_validator(mode="after")
-    def validate_video_file_exists(self):
-        """Validate video file existence unless validation is skipped."""
-        if not self._skip_validation and not isinstance(self.video_path, str):
-            # Only check existence for resolved paths
-            if isinstance(self.video_path, Path):
-                video_path = Path(self.video_path)
-                if not video_path.exists():
-                    raise ValueError(f"Video file not found: {video_path}")
-                if not video_path.is_file():
-                    raise ValueError(f"Video path is not a file: {video_path}")
-        return self
-
+    
     @model_validator(mode="after")
     def validate_gaussian_parameters(self):
-        """Ensure Gaussian parameters are consistent."""
-        if self.kernel_size is not None and self.kernel_sigma is None:
-            raise ValueError(
-                "kernel_sigma must be specified when kernel_size is provided"
-            )
-        if self.kernel_sigma is not None and self.kernel_size is None:
-            raise ValueError(
-                "kernel_size must be specified when kernel_sigma is provided"
-            )
+        """Validate consistency of Gaussian filtering parameters."""
+        has_kernel_size = self.kernel_size is not None
+        has_kernel_sigma = self.kernel_sigma is not None
+        
+        if has_kernel_size and not has_kernel_sigma:
+            logger.warning("kernel_size specified without kernel_sigma. Using default sigma=1.0")
+            self.kernel_sigma = 1.0
+        elif has_kernel_sigma and not has_kernel_size:
+            logger.warning("kernel_sigma specified without kernel_size. Using default size=5")
+            self.kernel_size = 5
+        
         return self
+    
+    @model_validator(mode="after")
+    def validate_frame_range(self):
+        """Validate frame selection parameters are consistent."""
+        if self.end_frame is not None and self.end_frame <= self.start_frame:
+            raise ValueError(f"end_frame ({self.end_frame}) must be greater than start_frame ({self.start_frame})")
+        
+        return self
+    
+    model_config = ConfigDict(
+        extra="allow",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "video_path": "/path/to/plume_video.mp4",
+                    "flip": False,
+                    "grayscale": True,
+                    "kernel_size": 5,
+                    "kernel_sigma": 1.0,
+                    "normalize": True,
+                    "frame_skip": 0
+                },
+                {
+                    "video_path": "${oc.env:VIDEO_PATH,./data/default_plume.mp4}",
+                    "flip": True,
+                    "grayscale": True,
+                    "threshold": 0.5,
+                    "start_frame": 100,
+                    "end_frame": 1000
+                }
+            ]
+        }
+    )
+
+
+class SimulationConfig(BaseModel):
+    """
+    Configuration schema for simulation execution parameters and output settings.
+    
+    Defines comprehensive simulation behavior including performance settings,
+    output configuration, and experiment tracking parameters.
+    """
+    
+    # Core simulation parameters
+    max_steps: int = Field(
+        default=1000,
+        gt=0,
+        description="Maximum number of simulation steps to execute"
+    )
+    step_size: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Time step size for simulation progression"
+    )
+    
+    # Performance and optimization settings
+    enable_gpu: bool = Field(
+        default=False,
+        description="Enable GPU acceleration for computations when available"
+    )
+    batch_size: int = Field(
+        default=1,
+        gt=0,
+        description="Batch size for parallel processing operations"
+    )
+    num_workers: int = Field(
+        default=1,
+        ge=1,
+        description="Number of worker processes for parallel execution"
+    )
+    
+    # Output and recording configuration
+    record_trajectory: bool = Field(
+        default=True,
+        description="Enable trajectory data recording during simulation"
+    )
+    output_format: Literal["numpy", "csv", "hdf5", "json"] = Field(
+        default="numpy",
+        description="Output format for trajectory and results data"
+    )
+    output_directory: Union[str, Path] = Field(
+        default="./outputs",
+        description="Directory for simulation output files. Supports ${oc.env:OUTPUT_DIR} interpolation"
+    )
+    
+    # Visualization settings
+    enable_visualization: bool = Field(
+        default=True,
+        description="Enable real-time visualization during simulation"
+    )
+    visualization_fps: float = Field(
+        default=30.0,
+        gt=0.0,
+        le=120.0,
+        description="Target FPS for visualization rendering"
+    )
+    save_animation: bool = Field(
+        default=False,
+        description="Save simulation animation to video file"
+    )
+    
+    # Experiment tracking and reproducibility
+    experiment_name: Optional[str] = Field(
+        default=None,
+        description="Name for experiment tracking and output organization"
+    )
+    random_seed: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Random seed for reproducible simulations. Supports ${oc.env:RANDOM_SEED}"
+    )
+    
+    # Advanced simulation features
+    checkpoint_interval: int = Field(
+        default=100,
+        gt=0,
+        description="Number of steps between simulation checkpoints"
+    )
+    enable_logging: bool = Field(
+        default=True,
+        description="Enable detailed simulation logging"
+    )
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO",
+        description="Logging verbosity level"
+    )
+    
+    # Hydra-specific configuration metadata
+    _target_: str = Field(
+        default="{{cookiecutter.project_slug}}.api.navigation.run_simulation",
+        description="Hydra target for simulation execution"
+    )
+    
+    @field_validator('output_directory')
+    @classmethod
+    def validate_output_directory(cls, v):
+        """Validate and normalize output directory path."""
+        if isinstance(v, str):
+            # Handle Hydra environment variable interpolation
+            if v.startswith('${oc.env:'):
+                return v
+            
+            path = Path(v)
+        else:
+            path = v
+        
+        return str(path.resolve())
+    
+    @model_validator(mode="after")
+    def validate_performance_settings(self):
+        """Validate performance configuration consistency."""
+        if self.enable_gpu and self.num_workers > 1:
+            logger.warning("GPU acceleration with multiple workers may cause resource conflicts")
+        
+        if self.batch_size > 1 and self.enable_visualization:
+            logger.warning("Batch processing with real-time visualization may impact performance")
+        
+        return self
+    
+    model_config = ConfigDict(
+        extra="allow",
+        validate_assignment=True,
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "max_steps": 500,
+                    "step_size": 1.0,
+                    "record_trajectory": True,
+                    "output_format": "numpy",
+                    "enable_visualization": True,
+                    "random_seed": 42
+                }
+            ]
+        }
+    )
 
 
 # Hydra ConfigStore registration for structured configuration
-if HYDRA_AVAILABLE:
-    cs = ConfigStore.instance()
+def register_config_schemas():
+    """
+    Register all configuration schemas with Hydra ConfigStore.
     
-    # Register configuration schemas for automatic discovery
-    cs.store(name="single_agent_config", node=SingleAgentConfig)
-    cs.store(name="multi_agent_config", node=MultiAgentConfig) 
-    cs.store(name="navigator_config", node=NavigatorConfig)
-    cs.store(name="video_plume_config", node=VideoPlumeConfig)
+    This function enables automatic schema discovery and validation within
+    Hydra's configuration composition system. It should be called during
+    module initialization to ensure schemas are available for use.
+    """
     
-    # Register configuration groups for hierarchical composition
-    cs.store(group="navigator", name="single_agent", node=SingleAgentConfig)
-    cs.store(group="navigator", name="multi_agent", node=MultiAgentConfig)
-    cs.store(group="navigator", name="unified", node=NavigatorConfig)
-    cs.store(group="environment", name="video_plume", node=VideoPlumeConfig)
+    try:
+        # Register individual component schemas
+        cs.store(
+            group="navigator",
+            name="single_agent",
+            node=SingleAgentConfig,
+            package="navigator"
+        )
+        
+        cs.store(
+            group="navigator", 
+            name="multi_agent",
+            node=MultiAgentConfig,
+            package="navigator"
+        )
+        
+        cs.store(
+            group="navigator",
+            name="unified",
+            node=NavigatorConfig,
+            package="navigator"
+        )
+        
+        cs.store(
+            group="video_plume",
+            name="default",
+            node=VideoPlumeConfig,
+            package="video_plume"
+        )
+        
+        cs.store(
+            group="simulation",
+            name="standard",
+            node=SimulationConfig,
+            package="simulation"
+        )
+        
+        # Register base configuration schema combining all components
+        cs.store(
+            name="base_config",
+            node={
+                "navigator": NavigatorConfig,
+                "video_plume": VideoPlumeConfig, 
+                "simulation": SimulationConfig
+            }
+        )
+        
+        logger.info("Successfully registered all configuration schemas with Hydra ConfigStore")
+        
+    except Exception as e:
+        logger.error(f"Failed to register configuration schemas: {e}")
+        raise
 
 
-# Re-export all configuration models for public API
+# Environment variable interpolation helpers
+def validate_env_interpolation(value: str) -> bool:
+    """
+    Validate Hydra environment variable interpolation syntax.
+    
+    Args:
+        value: String value that may contain ${oc.env:} interpolation
+        
+    Returns:
+        True if interpolation syntax is valid
+    """
+    import re
+    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
+    return bool(re.match(pattern, value))
+
+
+def resolve_env_value(value: str, default: Any = None) -> Any:
+    """
+    Resolve environment variable interpolation for testing and validation.
+    
+    Args:
+        value: String value with potential ${oc.env:} interpolation
+        default: Default value if environment variable not found
+        
+    Returns:
+        Resolved value from environment or default
+    """
+    import re
+    
+    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
+    match = re.match(pattern, value)
+    
+    if match:
+        env_var = match.group(1)
+        env_default = match.group(2)[1:] if match.group(2) else default
+        return os.getenv(env_var, env_default)
+    
+    return value
+
+
+# Backward compatibility exports
 __all__ = [
     "NavigatorConfig",
     "SingleAgentConfig", 
     "MultiAgentConfig",
     "VideoPlumeConfig",
+    "SimulationConfig",
+    "register_config_schemas",
+    "validate_env_interpolation",
+    "resolve_env_value"
 ]
+
+# Automatic schema registration on module import
+if cs is not None:
+    try:
+        register_config_schemas()
+    except Exception as e:
+        logger.warning(f"Schema registration deferred due to initialization order: {e}")
