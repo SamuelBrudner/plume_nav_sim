@@ -44,7 +44,7 @@
 # Hydra structured configuration annotations for enhanced type safety
 # and automatic schema validation integration with Pydantic models
 
-_target_: "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig"
+_target_: "odor_plume_nav.config.schemas.NavigatorConfig"
 _partial_: false
 _convert_: "object"
 
@@ -595,14 +595,14 @@ _metadata_:
   
   # Configuration validation schema references
   validation:
-    navigator_schema: "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig"
-    video_plume_schema: "{{cookiecutter.project_slug}}.config.schemas.VideoPlumeConfig"
+    navigator_schema: "odor_plume_nav.config.schemas.NavigatorConfig"
+    video_plume_schema: "odor_plume_nav.config.schemas.VideoPlumeConfig"
     
   # Documentation and support references
   documentation:
     technical_spec: "Technical Specification Sections 3.2, 5.2, 7.2"
     configuration_guide: "conf/config.yaml for usage examples and customization patterns"
-    schema_reference: "src/{{cookiecutter.project_slug}}/config/schemas.py for validation details"
+    schema_reference: "src/odor_plume_nav/config/schemas.py for validation details"
 
 # ============================================================================
 # END OF FOUNDATIONAL CONFIGURATION
@@ -626,9 +626,9 @@ _metadata_:
 #   export ENVIRONMENT_TYPE="production"
 #
 # CLI OVERRIDE EXAMPLES:
-#   python -m {{cookiecutter.project_slug}}.cli.main navigator.max_speed=2.0
-#   python -m {{cookiecutter.project_slug}}.cli.main video_plume.flip=true
-#   python -m {{cookiecutter.project_slug}}.cli.main --multirun navigator.speed=0.5,1.0,1.5
+#   python -m odor_plume_nav.cli.main navigator.max_speed=2.0
+#   python -m odor_plume_nav.cli.main video_plume.flip=true
+#   python -m odor_plume_nav.cli.main --multirun navigator.speed=0.5,1.0,1.5
 #
 # CONFIGURATION COMPOSITION EXAMPLES:
 #   from hydra import compose, initialize
