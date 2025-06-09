@@ -30,28 +30,28 @@ The Odor Plume Navigation library provides a comprehensive toolkit for research-
 
 ```bash
 # Install from PyPI
-poetry add {{cookiecutter.project_slug}}
+poetry add odor_plume_nav
 
 # For development with all optional dependencies
-poetry add {{cookiecutter.project_slug}} --group dev,docs,viz
+poetry add odor_plume_nav --group dev,docs,viz
 ```
 
 #### Pip Installation
 
 ```bash
 # Standard installation
-pip install {{cookiecutter.project_slug}}
+pip install odor_plume_nav
 
 # Development installation with optional dependencies
-pip install "{{cookiecutter.project_slug}}[dev,docs,viz]"
+pip install "odor_plume_nav[dev,docs,viz]"
 ```
 
 #### Development Installation
 
 ```bash
 # Clone repository
-git clone https://github.com/organization/{{cookiecutter.project_slug}}.git
-cd {{cookiecutter.project_slug}}
+git clone https://github.com/organization/odor_plume_nav.git
+cd odor_plume_nav
 
 # Poetry development setup (recommended)
 poetry install --with dev,docs,viz
@@ -68,8 +68,8 @@ pip install -e ".[dev,docs,viz]"
 docker-compose up --build
 
 # Library container only
-docker build -t {{cookiecutter.project_slug}} .
-docker run -it {{cookiecutter.project_slug}}
+docker build -t odor_plume_nav .
+docker run -it odor_plume_nav
 ```
 
 ## Library Usage Patterns
@@ -77,8 +77,8 @@ docker run -it {{cookiecutter.project_slug}}
 ### For Kedro Projects
 
 ```python
-from {{cookiecutter.project_slug}} import Navigator, VideoPlume
-from {{cookiecutter.project_slug}}.config import NavigatorConfig
+from odor_plume_nav import Navigator, VideoPlume
+from odor_plume_nav.config import NavigatorConfig
 from hydra import compose, initialize
 
 # Kedro pipeline integration
@@ -102,9 +102,9 @@ def navigation_node(navigator: Navigator, video_plume: VideoPlume) -> dict:
 ### For Reinforcement Learning Projects
 
 ```python
-from {{cookiecutter.project_slug}}.core import NavigatorProtocol
-from {{cookiecutter.project_slug}}.api import create_navigator
-from {{cookiecutter.project_slug}}.utils import set_global_seed
+from odor_plume_nav.core import NavigatorProtocol
+from odor_plume_nav.api import create_navigator
+from odor_plume_nav.utils import set_global_seed
 
 # RL environment integration
 class OdorPlumeRLEnv(gym.Env):
@@ -138,9 +138,9 @@ class OdorPlumeRLEnv(gym.Env):
 ### For ML/Neural Network Analyses
 
 ```python
-from {{cookiecutter.project_slug}}.utils import set_global_seed
-from {{cookiecutter.project_slug}}.data import VideoPlume
-from {{cookiecutter.project_slug}}.api.navigation import run_plume_simulation
+from odor_plume_nav.utils import set_global_seed
+from odor_plume_nav.data import VideoPlume
+from odor_plume_nav.api.navigation import run_plume_simulation
 import torch
 import numpy as np
 
@@ -261,7 +261,7 @@ conf/
 
 ```python
 from hydra import compose, initialize
-from {{cookiecutter.project_slug}}.api import create_navigator
+from odor_plume_nav.api import create_navigator
 
 # Basic configuration loading
 with initialize(config_path="../conf", version_base=None):
@@ -339,7 +339,7 @@ conf/
 4. **Update imports**: Change from:
    ```python
    # Old approach
-   from {{cookiecutter.project_slug}}.services.config_loader import load_config
+   from odor_plume_nav.services.config_loader import load_config
    config = load_config("configs/default.yaml")
    ```
    
@@ -366,8 +366,8 @@ conf/
 
 ```bash
 # Clone and setup
-git clone https://github.com/organization/{{cookiecutter.project_slug}}.git
-cd {{cookiecutter.project_slug}}
+git clone https://github.com/organization/odor_plume_nav.git
+cd odor_plume_nav
 
 # Poetry setup (recommended)
 poetry install --with dev,docs,viz
@@ -442,7 +442,7 @@ repos:
 pytest
 
 # Run with coverage
-pytest --cov={{cookiecutter.project_slug}} --cov-report=html
+pytest --cov=odor_plume_nav --cov-report=html
 
 # Run specific test categories
 pytest -m "not slow"          # Skip slow tests
@@ -479,7 +479,7 @@ The library includes a complete development infrastructure:
 # docker-compose.yml
 version: '3.8'
 services:
-  {{cookiecutter.project_slug}}:
+  odor_plume_nav:
     build: .
     volumes:
       - ./src:/app/src
@@ -521,7 +521,7 @@ volumes:
 
 ```python
 # Configure for high-performance computation
-from {{cookiecutter.project_slug}}.utils import configure_performance
+from odor_plume_nav.utils import configure_performance
 
 # Optimize NumPy and OpenCV for multi-core systems
 configure_performance(
@@ -539,8 +539,8 @@ export MATPLOTLIB_BACKEND=Agg  # Headless mode for batch processing
 ## Project Structure
 
 ```
-{{cookiecutter.project_slug}}/
-├── src/{{cookiecutter.project_slug}}/           # Main library package
+odor_plume_nav/
+├── src/odor_plume_nav/           # Main library package
 │   ├── __init__.py                   # Public API exports
 │   ├── api/                          # Public interfaces
 │   │   ├── __init__.py
@@ -593,8 +593,8 @@ export MATPLOTLIB_BACKEND=Agg  # Headless mode for batch processing
 ```python
 # notebook_example.ipynb
 from hydra import compose, initialize
-from {{cookiecutter.project_slug}} import Navigator, VideoPlume
-from {{cookiecutter.project_slug}}.utils import set_global_seed
+from odor_plume_nav import Navigator, VideoPlume
+from odor_plume_nav.utils import set_global_seed
 
 # Setup reproducible environment
 set_global_seed(42)
@@ -620,7 +620,7 @@ results.plot_trajectory(interactive=True)
 ```python
 # kedro_pipeline_example.py
 from kedro.pipeline import Pipeline, node
-from {{cookiecutter.project_slug}}.api import create_navigator, run_plume_simulation
+from odor_plume_nav.api import create_navigator, run_plume_simulation
 
 def create_navigation_pipeline(**kwargs) -> Pipeline:
     """Create Kedro pipeline for odor plume navigation."""
@@ -678,16 +678,16 @@ If you use this library in your research, please cite:
   title={Odor Plume Navigation Library},
   author={Samuel Brudner},
   year={2024},
-  url={https://github.com/organization/{{cookiecutter.project_slug}}},
+  url={https://github.com/organization/odor_plume_nav},
   version={0.1.0}
 }
 ```
 
 ## Support and Documentation
 
-- **Documentation**: [https://{{cookiecutter.project_slug}}.readthedocs.io](https://{{cookiecutter.project_slug}}.readthedocs.io)
-- **Issues**: [GitHub Issues](https://github.com/organization/{{cookiecutter.project_slug}}/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/organization/{{cookiecutter.project_slug}}/discussions)
+- **Documentation**: [https://odor-plume-nav.readthedocs.io](https://odor-plume-nav.readthedocs.io)
+- **Issues**: [GitHub Issues](https://github.com/organization/odor_plume_nav/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/organization/odor_plume_nav/discussions)
 - **API Reference**: Generated automatically from docstrings
 
 ## Changelog
