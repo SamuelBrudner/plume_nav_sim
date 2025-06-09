@@ -22,20 +22,20 @@
 #
 # Usage Examples:
 #   Basic execution:
-#     python -m project_slug.cli.main
+#     python -m odor_plume_nav.cli.main
 #
 #   Parameter override examples:
-#     python -m project_slug.cli.main navigator.max_speed=2.0
-#     python -m project_slug.cli.main video_plume.flip=true simulation.fps=60
-#     python -m project_slug.cli.main environment.type=production
+#     python -m odor_plume_nav.cli.main navigator.max_speed=2.0
+#     python -m odor_plume_nav.cli.main video_plume.flip=true simulation.fps=60
+#     python -m odor_plume_nav.cli.main environment.type=production
 #
 #   Multi-run execution for parameter sweeps:
-#     python -m project_slug.cli.main --multirun navigator.max_speed=1.0,2.0,3.0
-#     python -m project_slug.cli.main --multirun video_plume.kernel_size=3,5,7
+#     python -m odor_plume_nav.cli.main --multirun navigator.max_speed=1.0,2.0,3.0
+#     python -m odor_plume_nav.cli.main --multirun video_plume.kernel_size=3,5,7
 #
 #   Configuration group selection:
-#     python -m project_slug.cli.main +navigator=multi_agent
-#     python -m project_slug.cli.main +environment=development
+#     python -m odor_plume_nav.cli.main +navigator=multi_agent
+#     python -m odor_plume_nav.cli.main +environment=development
 #
 # Environment Variables:
 #   This configuration demonstrates secure environment variable integration
@@ -568,12 +568,12 @@ hydra:
 #   - conf/base.yaml for foundational system defaults
 #   - conf/local/ directory for environment-specific templates
 #   - Technical specification sections 3.2, 5.2, and 7.2
-#   - src/{{cookiecutter.project_slug}}/config/schemas.py for validation schemas
+#   - src/odor_plume_nav/config/schemas.py for validation schemas
 #
 # CLI Override Examples:
-#   python -m project_slug.cli.main navigator.max_speed=2.0 simulation.fps=60
-#   python -m project_slug.cli.main --multirun navigator.speed=0.5,1.0,1.5
-#   python -m project_slug.cli.main video_plume.kernel_size=5 +environment=production
+#   python -m odor_plume_nav.cli.main navigator.max_speed=2.0 simulation.fps=60
+#   python -m odor_plume_nav.cli.main --multirun navigator.speed=0.5,1.0,1.5
+#   python -m odor_plume_nav.cli.main video_plume.kernel_size=5 +environment=production
 #
 # Compose API Examples:
 #   from hydra import compose, initialize
@@ -583,5 +583,5 @@ hydra:
 # Environment Integration:
 #   export ENVIRONMENT_TYPE=production
 #   export DATABASE_URL=postgresql://localhost/experiments
-#   python -m project_slug.cli.main
+#   python -m odor_plume_nav.cli.main
 # ============================================================================
