@@ -114,6 +114,72 @@ except ImportError:
     # Testing utilities not available
     pass
 
+# RL integration features - conditional imports for optional RL capabilities per F-011 and F-015
+try:
+    from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
+    from odor_plume_nav.environments.spaces import (
+        ActionSpace,
+        ObservationSpace,
+    )
+    from odor_plume_nav.environments.wrappers import (
+        NormalizationWrapper,
+        FrameStackWrapper,
+        RewardShapingWrapper,
+    )
+    _gymnasium_available = True
+except ImportError:
+    # Gymnasium environment not available - requires gymnasium and stable-baselines3
+    GymnasiumEnv = None
+    ActionSpace = None
+    ObservationSpace = None
+    NormalizationWrapper = None
+    FrameStackWrapper = None
+    RewardShapingWrapper = None
+    _gymnasium_available = False
+
+# Enhanced API functions with RL integration per F-015 factory function requirements
+try:
+    from odor_plume_nav.api.navigation import create_gymnasium_environment
+    _gymnasium_factory_available = True
+except ImportError:
+    # Gymnasium environment factory not available
+    create_gymnasium_environment = None
+    _gymnasium_factory_available = False
+
+# RL training utilities from odor_plume_nav.rl submodule per Section 0.1.2 new components
+try:
+    from odor_plume_nav.rl.training import (
+        train_policy,
+        evaluate_policy,
+        create_vectorized_env,
+        save_trained_model,
+        load_trained_model,
+    )
+    from odor_plume_nav.rl.policies import (
+        CustomPolicy,
+        MultiModalPolicy,
+        create_policy_network,
+    )
+    _rl_training_available = True
+except ImportError:
+    # RL training utilities not available - requires stable-baselines3
+    train_policy = None
+    evaluate_policy = None
+    create_vectorized_env = None
+    save_trained_model = None
+    load_trained_model = None
+    CustomPolicy = None
+    MultiModalPolicy = None
+    create_policy_network = None
+    _rl_training_available = False
+
+# Check for stable-baselines3 availability for vectorized training per Section 0.2.4 dependencies
+try:
+    import stable_baselines3
+    _stable_baselines3_available = True
+except ImportError:
+    _stable_baselines3_available = False
+
 # Feature availability flags for backward compatibility and runtime checks
 FEATURES = {
     'cli': cli is not None,
@@ -121,6 +187,11 @@ FEATURES = {
     'enhanced_api': True,  # Always available in unified package
     'enhanced_data': True,  # Always available in unified package
     'testing_utils': True,  # Always available in unified package
+    # RL integration feature flags per Section 0.1.3 API surface changes
+    'rl_integration': _gymnasium_available and _gymnasium_factory_available and _rl_training_available,
+    'gymnasium_env': _gymnasium_available,
+    'stable_baselines3': _stable_baselines3_available,
+    'vectorized_training': _stable_baselines3_available and _rl_training_available,
 }
 
 def get_available_features():
@@ -144,8 +215,8 @@ def is_feature_available(feature_name):
     """
     return FEATURES.get(feature_name, False)
 
-# Define public API for wildcard imports
-__all__ = [
+# Build dynamic __all__ list based on available features
+_base_exports = [
     # Version and metadata
     '__version__',
     
@@ -194,3 +265,33 @@ __all__ = [
     'is_feature_available',
     'FEATURES',
 ]
+
+# Add RL-specific exports when available per public API requirements
+_rl_exports = []
+if _gymnasium_available:
+    _rl_exports.extend([
+        'GymnasiumEnv',
+        'ActionSpace',
+        'ObservationSpace',
+        'NormalizationWrapper',
+        'FrameStackWrapper',
+        'RewardShapingWrapper',
+    ])
+
+if _gymnasium_factory_available:
+    _rl_exports.append('create_gymnasium_environment')
+
+if _rl_training_available:
+    _rl_exports.extend([
+        'train_policy',
+        'evaluate_policy',
+        'create_vectorized_env',
+        'save_trained_model',
+        'load_trained_model',
+        'CustomPolicy',
+        'MultiModalPolicy',
+        'create_policy_network',
+    ])
+
+# Define public API for wildcard imports
+__all__ = _base_exports + _rl_exports

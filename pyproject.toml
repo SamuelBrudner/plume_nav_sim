@@ -21,6 +21,12 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Intended Audience :: Education",
+    "Topic :: Scientific/Engineering",
+    "Environment :: Console",
+    "Framework :: Robot Framework :: Library",
 ]
 requires-python = ">=3.9,<4.0"
 dependencies = [
@@ -47,6 +53,9 @@ dev = [
     "isort>=5.13.0",
     "flake8>=6.0.0",
     "mypy>=1.5.0",
+    # RL-specific testing and validation tools for Gymnasium API compliance
+    "gymnasium[classic-control]>=0.29.0",
+    "stable-baselines3[extra]>=2.0.0",
 ]
 docs = [
     "sphinx>=8.0.0",
@@ -57,9 +66,17 @@ viz = [
     "plotly>=5.17.0",
     "seaborn>=0.12.0",
 ]
+rl = [
+    # Core RL dependencies for Gymnasium API compatibility
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.0.0",
+    "shimmy>=1.0.0",
+]
 
 [project.scripts]
 plume-nav-sim = "odor_plume_nav.cli.main:main"
+# RL training console script entry points for enhanced training capabilities
+plume-nav-train = "odor_plume_nav.cli.main:train_main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -82,6 +99,12 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Intended Audience :: Education",
+    "Topic :: Scientific/Engineering",
+    "Environment :: Console",
+    "Framework :: Robot Framework :: Library",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -111,6 +134,9 @@ black = ">=23.12.0"
 isort = ">=5.13.0"
 flake8 = ">=6.0.0"
 mypy = ">=1.5.0"
+# RL-specific testing and validation tools for Gymnasium API compliance
+gymnasium = {version = ">=0.29.0", extras = ["classic-control"]}
+stable-baselines3 = {version = ">=2.0.0", extras = ["extra"]}
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=8.0.0"
@@ -121,13 +147,22 @@ sphinx-rtd-theme = ">=2.0.0"
 plotly = ">=5.17.0"
 seaborn = ">=0.12.0"
 
+[tool.poetry.group.rl.dependencies]
+# Core RL dependencies for Gymnasium API compatibility per Section 0.2.4
+gymnasium = ">=0.29.0"
+stable-baselines3 = ">=2.0.0"
+shimmy = ">=1.0.0"
+
 [tool.poetry.scripts]
 plume-nav-sim = "odor_plume_nav.cli.main:main"
+# RL training console script entry points for enhanced training capabilities
+plume-nav-train = "odor_plume_nav.cli.main:train_main"
 
 [tool.poetry.extras]
-dev = ["pytest", "pytest-cov", "pre-commit", "black", "isort", "flake8", "mypy"]
+dev = ["pytest", "pytest-cov", "pre-commit", "black", "isort", "flake8", "mypy", "gymnasium", "stable-baselines3"]
 docs = ["sphinx", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
 viz = ["plotly", "seaborn"]
+rl = ["gymnasium", "stable-baselines3", "shimmy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -139,6 +174,8 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "rl: marks tests as reinforcement learning tests",
+    "gymnasium: marks tests as Gymnasium API compliance tests",
 ]
 
 [tool.mypy]
@@ -166,6 +203,9 @@ module = [
     "cv2.*",
     "opencv.*",
     "loguru.*",
+    "gymnasium.*",
+    "stable_baselines3.*",
+    "shimmy.*",
 ]
 ignore_missing_imports = true
 
@@ -205,6 +245,9 @@ known_third_party = [
     "pydantic",
     "loguru",
     "pytest",
+    "gymnasium",
+    "stable_baselines3",
+    "shimmy",
 ]
 sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 default_section = "THIRDPARTY"
