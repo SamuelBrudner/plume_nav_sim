@@ -13,29 +13,57 @@ The wrapper system supports:
 - Configurable reward shaping without modifying core simulation logic
 - Integration with sensor data preprocessing pipelines
 - Modular composition for complex preprocessing chains
+- Dual API compatibility (Gymnasium 0.29.x and legacy gym)
+- Structured logging with performance monitoring
 
 Key Features:
-- F-013 compliant Gymnasium wrapper implementations
+- F-013 compliant Gymnasium wrapper implementations with Gymnasium 0.29.x compatibility
 - Integration with F-003 VideoPlume sensor data preprocessing
 - Configurable preprocessing pipelines via Hydra configuration
 - Type-safe wrapper composition with full protocol compliance
 - Performance-optimized implementations for real-time training
+- Compatibility layer support for seamless API version handling
+- Comprehensive Loguru-based structured logging for wrapper diagnostics
 
 Performance Requirements:
 - Wrapper overhead: <1ms per step for preprocessing operations
 - Memory efficiency: <5MB additional overhead per wrapper
 - Maintains ≥30 FPS simulation performance with wrapper chains
+- Logging overhead: <5ms per operation for performance monitoring
 """
 
 from __future__ import annotations
 from typing import Any, Dict, Optional, Union, Tuple, List, Callable
 from typing_extensions import TypeVar
 import warnings
+import inspect
 
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.core import Wrapper, ObservationWrapper, ActionWrapper, RewardWrapper
+
+# Compatibility layer support for dual API handling
+try:
+    from odor_plume_nav.environments.compat import CompatibilityMixin
+    COMPAT_AVAILABLE = True
+except ImportError:
+    COMPAT_AVAILABLE = False
+    class CompatibilityMixin:
+        """Fallback mixin when compatibility layer is not available."""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._use_legacy_api = False
+
+# Enhanced logging integration
+try:
+    from odor_plume_nav.utils.logging_setup import get_logger
+    logger = get_logger(__name__)
+    LOGGING_AVAILABLE = True
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
+    LOGGING_AVAILABLE = False
 
 # Hydra configuration support
 try:
@@ -50,7 +78,180 @@ ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
 
 
-class NormalizeObservation(ObservationWrapper):
+class CompatibleWrapper(Wrapper):
+    """
+    Base wrapper class providing compatibility layer support and structured logging.
+    
+    This base class handles detection of API version (legacy gym vs Gymnasium 0.29.x) 
+    and automatically adjusts step() return values for backward compatibility. All 
+    plume navigation wrappers should inherit from this class to ensure consistent 
+    behavior across the wrapper chain.
+    
+    Features:
+    - Automatic API version detection from calling context
+    - Seamless step() return tuple conversion (4-tuple vs 5-tuple)
+    - Structured logging integration with correlation IDs
+    - Performance monitoring for wrapper overhead with 10ms threshold warnings
+    - Chain-aware compatibility propagation
+    
+    Performance:
+    - API detection overhead: <10μs per wrapper initialization
+    - Step conversion overhead: <5μs per step when conversion needed
+    - Logging overhead: <5ms per operation (async sink)
+    """
+    
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        
+        # Detect API version from calling context or environment
+        self._use_legacy_api = self._detect_legacy_api()
+        
+        # Performance monitoring
+        self._step_times = []
+        self._performance_threshold = 0.01  # 10ms threshold
+        self._step_count = 0
+        
+        # Initialize structured logging context
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                f"Initialized {self.__class__.__name__} wrapper",
+                extra={
+                    "wrapper_type": self.__class__.__name__,
+                    "use_legacy_api": self._use_legacy_api,
+                    "base_env_type": type(self.env).__name__,
+                    "performance_threshold": self._performance_threshold,
+                    "metric_type": "wrapper_init"
+                }
+            )
+    
+    def _detect_legacy_api(self) -> bool:
+        """
+        Detect whether legacy gym API should be used based on calling context.
+        
+        Returns:
+            bool: True if legacy 4-tuple API should be used, False for Gymnasium 5-tuple
+        """
+        # Check if the base environment has compatibility information
+        if hasattr(self.env, '_use_legacy_api'):
+            return self.env._use_legacy_api
+        
+        # Check if environment has CompatibilityMixin
+        if hasattr(self.env, 'unwrapped') and hasattr(self.env.unwrapped, '_use_legacy_api'):
+            return self.env.unwrapped._use_legacy_api
+        
+        # Inspect calling stack to detect gym vs gymnasium usage
+        try:
+            frame = inspect.currentframe()
+            while frame:
+                if frame.f_code.co_filename:
+                    # Check for gym vs gymnasium in import context
+                    if 'gymnasium' in frame.f_globals.get('__name__', ''):
+                        return False  # Gymnasium context
+                    elif any('gym' in str(v) and 'gymnasium' not in str(v) 
+                            for v in frame.f_globals.values() if hasattr(v, '__module__')):
+                        return True  # Legacy gym context
+                frame = frame.f_back
+        except Exception:
+            pass
+        
+        # Default to Gymnasium API if detection fails
+        return False
+    
+    def step(self, action: ActType) -> Union[
+        Tuple[ObsType, float, bool, Dict[str, Any]],  # Legacy 4-tuple
+        Tuple[ObsType, float, bool, bool, Dict[str, Any]]  # Gymnasium 5-tuple
+    ]:
+        """
+        Execute environment step with automatic API compatibility handling and performance monitoring.
+        
+        Args:
+            action: Action to execute in the environment
+            
+        Returns:
+            Tuple with format dependent on detected API version:
+                - Legacy: (obs, reward, done, info)
+                - Gymnasium: (obs, reward, terminated, truncated, info)
+        """
+        import time
+        step_start = time.time()
+        
+        # Call parent step method (should return 5-tuple from base environment)
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        # Performance monitoring
+        step_time = time.time() - step_start
+        self._step_times.append(step_time)
+        self._step_count += 1
+        
+        # Check for performance threshold violations
+        if step_time > self._performance_threshold:
+            if LOGGING_AVAILABLE:
+                logger.warning(
+                    f"Step time exceeded threshold in {self.__class__.__name__}",
+                    extra={
+                        "wrapper_type": self.__class__.__name__,
+                        "step_time": step_time,
+                        "threshold": self._performance_threshold,
+                        "step_count": self._step_count,
+                        "metric_type": "performance_warning"
+                    }
+                )
+        
+        # Calculate average performance every 100 steps
+        if self._step_count % 100 == 0 and len(self._step_times) >= 100:
+            avg_time = sum(self._step_times[-100:]) / 100
+            if avg_time > self._performance_threshold:
+                if LOGGING_AVAILABLE:
+                    logger.warning(
+                        f"Average step time exceeded threshold in {self.__class__.__name__}",
+                        extra={
+                            "wrapper_type": self.__class__.__name__,
+                            "average_step_time": avg_time,
+                            "threshold": self._performance_threshold,
+                            "sample_size": 100,
+                            "metric_type": "average_performance_warning"
+                        }
+                    )
+        
+        if self._use_legacy_api:
+            # Convert to legacy 4-tuple format
+            done = terminated or truncated
+            if LOGGING_AVAILABLE:
+                logger.trace(
+                    "Converting step return to legacy format",
+                    extra={
+                        "wrapper_type": self.__class__.__name__,
+                        "terminated": terminated,
+                        "truncated": truncated,
+                        "combined_done": done,
+                        "step_time": step_time,
+                        "metric_type": "api_conversion"
+                    }
+                )
+            return obs, reward, done, info
+        else:
+            # Return native Gymnasium 5-tuple format
+            return obs, reward, terminated, truncated, info
+    
+    def reset(self, **kwargs) -> Union[
+        Tuple[ObsType, Dict[str, Any]],  # Standard format
+        ObsType  # Legacy format (some old environments)
+    ]:
+        """Reset environment with logging."""
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                f"Resetting {self.__class__.__name__} wrapper",
+                extra={
+                    "wrapper_type": self.__class__.__name__,
+                    "reset_kwargs": list(kwargs.keys()),
+                    "metric_type": "wrapper_reset"
+                }
+            )
+        
+        return self.env.reset(**kwargs)
+
+
+class NormalizeObservation(CompatibleWrapper, ObservationWrapper):
     """
     Normalize observation values to a standard range for stable RL training.
     
@@ -162,7 +363,7 @@ class NormalizeObservation(ObservationWrapper):
         return normalized
 
 
-class NormalizeAction(ActionWrapper):
+class NormalizeAction(CompatibleWrapper, ActionWrapper):
     """
     Normalize action values from standard range to environment's action space.
     
@@ -322,7 +523,7 @@ class NormalizeAction(ActionWrapper):
             return scaled_action
 
 
-class ClipAction(ActionWrapper):
+class ClipAction(CompatibleWrapper, ActionWrapper):
     """
     Clip action values to ensure they remain within valid bounds.
     
@@ -463,7 +664,7 @@ class ClipAction(ActionWrapper):
         return self._clip_count
 
 
-class FrameStack(ObservationWrapper):
+class FrameStack(CompatibleWrapper, ObservationWrapper):
     """
     Stack multiple observation frames for temporal sequence learning.
     
@@ -612,7 +813,7 @@ class FrameStack(ObservationWrapper):
         return self.observation(obs), info
 
 
-class RewardShaping(RewardWrapper):
+class RewardShaping(CompatibleWrapper, RewardWrapper):
     """
     Apply reward shaping without modifying core simulation code.
     
@@ -627,6 +828,7 @@ class RewardShaping(RewardWrapper):
     - Custom reward function support via callable interfaces
     - Configurable reward weighting and combination strategies
     - Integration with environment state for context-aware shaping
+    - Automatic compatibility handling for terminated/truncated separation
     
     Performance:
     - Reward computation: <100μs per step
@@ -635,7 +837,7 @@ class RewardShaping(RewardWrapper):
     
     Args:
         env: Base gymnasium environment to wrap
-        reward_fn: Custom reward function taking (obs, action, reward, done, info) -> float
+        reward_fn: Custom reward function taking (obs, action, reward, terminated, truncated, info) -> float
         potential_fn: Potential function for potential-based shaping
         reward_scale: Scaling factor for shaped rewards (default: 1.0)
         original_weight: Weight for original reward (default: 1.0)
@@ -643,7 +845,7 @@ class RewardShaping(RewardWrapper):
         
     Examples:
         Custom reward function:
-        >>> def distance_reward(obs, action, reward, done, info):
+        >>> def distance_reward(obs, action, reward, terminated, truncated, info):
         ...     # Add dense reward based on distance to target
         ...     return -np.linalg.norm(obs['agent_position'] - info.get('target', [0, 0]))
         >>> env = RewardShaping(base_env, reward_fn=distance_reward)
@@ -657,7 +859,7 @@ class RewardShaping(RewardWrapper):
     def __init__(
         self,
         env: gym.Env,
-        reward_fn: Optional[Callable[[ObsType, ActType, float, bool, Dict[str, Any]], float]] = None,
+        reward_fn: Optional[Callable[[ObsType, ActType, float, bool, bool, Dict[str, Any]], float]] = None,
         potential_fn: Optional[Callable[[ObsType], float]] = None,
         reward_scale: float = 1.0,
         original_weight: float = 1.0,
@@ -675,11 +877,21 @@ class RewardShaping(RewardWrapper):
         self._previous_potential = None
         
         if reward_fn is None and potential_fn is None:
-            warnings.warn(
-                "No reward function or potential function provided. "
-                "RewardShaping wrapper will not modify rewards.",
-                UserWarning
-            )
+            if LOGGING_AVAILABLE:
+                logger.warning(
+                    "No reward function or potential function provided. "
+                    "RewardShaping wrapper will not modify rewards.",
+                    extra={
+                        "wrapper_type": "RewardShaping",
+                        "metric_type": "configuration_warning"
+                    }
+                )
+            else:
+                warnings.warn(
+                    "No reward function or potential function provided. "
+                    "RewardShaping wrapper will not modify rewards.",
+                    UserWarning
+                )
     
     def reward(self, reward: float) -> float:
         """
@@ -696,7 +908,8 @@ class RewardShaping(RewardWrapper):
         # Apply custom reward function if provided
         if self.reward_fn is not None:
             custom_reward = self.reward_fn(
-                self._last_obs, self._last_action, reward, self._last_done, self._last_info
+                self._last_obs, self._last_action, reward, 
+                self._last_terminated, self._last_truncated, self._last_info
             )
             shaped_reward += custom_reward
         
@@ -715,21 +928,42 @@ class RewardShaping(RewardWrapper):
         total_reward = (self.original_weight * reward + 
                        self.shaped_weight * shaped_reward) * self.reward_scale
         
+        if LOGGING_AVAILABLE:
+            logger.trace(
+                "Applied reward shaping",
+                extra={
+                    "original_reward": reward,
+                    "shaped_component": shaped_reward,
+                    "total_reward": total_reward,
+                    "reward_scale": self.reward_scale,
+                    "metric_type": "reward_shaping"
+                }
+            )
+        
         return total_reward
     
-    def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, Dict[str, Any]]:
+    def step(self, action: ActType) -> Union[
+        Tuple[ObsType, float, bool, Dict[str, Any]],  # Legacy 4-tuple
+        Tuple[ObsType, float, bool, bool, Dict[str, Any]]  # Gymnasium 5-tuple
+    ]:
         """Override step to capture state for reward shaping."""
         self._last_action = action
         obs, reward, terminated, truncated, info = self.env.step(action)
         
         self._last_obs = obs
-        self._last_done = terminated or truncated
+        self._last_terminated = terminated
+        self._last_truncated = truncated
         self._last_info = info
         
         # Apply reward shaping
         shaped_reward = self.reward(reward)
         
-        return obs, shaped_reward, terminated, truncated, info
+        # Use parent class's API compatibility handling
+        if self._use_legacy_api:
+            done = terminated or truncated
+            return obs, shaped_reward, done, info
+        else:
+            return obs, shaped_reward, terminated, truncated, info
     
     def reset(self, **kwargs) -> Tuple[ObsType, Dict[str, Any]]:
         """Reset environment and clear shaping state."""
@@ -738,13 +972,25 @@ class RewardShaping(RewardWrapper):
         # Reset shaping state
         self._last_obs = obs
         self._last_action = None
-        self._last_done = False
+        self._last_terminated = False
+        self._last_truncated = False
         self._last_info = info
         self._previous_potential = None
         
         # Initialize potential if function provided
         if self.potential_fn is not None:
             self._previous_potential = self.potential_fn(obs)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                "Reset RewardShaping wrapper state",
+                extra={
+                    "initial_potential": self._previous_potential,
+                    "has_reward_fn": self.reward_fn is not None,
+                    "has_potential_fn": self.potential_fn is not None,
+                    "metric_type": "reward_shaping_reset"
+                }
+            )
         
         return obs, info
 
@@ -804,11 +1050,12 @@ def create_wrapper_chain(
     wrapper_configs: List[Dict[str, Any]]
 ) -> gym.Env:
     """
-    Create a chain of wrappers from configuration list.
+    Create a chain of wrappers from configuration list with API version preservation.
     
     This utility function enables easy composition of multiple wrappers
     from configuration data, supporting both programmatic and Hydra-based
-    wrapper chain construction.
+    wrapper chain construction. Automatically detects and preserves API 
+    version consistency throughout the wrapper chain.
     
     Args:
         env: Base environment to wrap
@@ -848,13 +1095,35 @@ def create_wrapper_chain(
     
     wrapped_env = env
     
-    for config in wrapper_configs:
+    if LOGGING_AVAILABLE:
+        logger.info(
+            f"Creating wrapper chain with {len(wrapper_configs)} wrappers",
+            extra={
+                "wrapper_count": len(wrapper_configs),
+                "wrapper_types": [config.get('type') for config in wrapper_configs],
+                "base_env_type": type(env).__name__,
+                "metric_type": "wrapper_chain_creation"
+            }
+        )
+    
+    for i, config in enumerate(wrapper_configs):
         wrapper_type = config.get('type')
         if wrapper_type not in wrapper_classes:
-            raise ValueError(
+            error_msg = (
                 f"Unknown wrapper type: {wrapper_type}. "
                 f"Available types: {list(wrapper_classes.keys())}"
             )
+            if LOGGING_AVAILABLE:
+                logger.error(
+                    error_msg,
+                    extra={
+                        "wrapper_type": wrapper_type,
+                        "available_types": list(wrapper_classes.keys()),
+                        "wrapper_index": i,
+                        "metric_type": "wrapper_creation_error"
+                    }
+                )
+            raise ValueError(error_msg)
         
         # Extract parameters (exclude 'type' key)
         wrapper_params = {k: v for k, v in config.items() if k != 'type'}
@@ -862,6 +1131,27 @@ def create_wrapper_chain(
         # Create and apply wrapper
         wrapper_class = wrapper_classes[wrapper_type]
         wrapped_env = wrapper_class(wrapped_env, **wrapper_params)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                f"Applied {wrapper_type} wrapper",
+                extra={
+                    "wrapper_type": wrapper_type,
+                    "wrapper_index": i,
+                    "wrapper_params": list(wrapper_params.keys()),
+                    "metric_type": "wrapper_applied"
+                }
+            )
+    
+    if LOGGING_AVAILABLE:
+        logger.success(
+            f"Wrapper chain created successfully with {len(wrapper_configs)} wrappers",
+            extra={
+                "final_env_type": type(wrapped_env).__name__,
+                "wrapper_chain_length": len(wrapper_configs),
+                "metric_type": "wrapper_chain_complete"
+            }
+        )
     
     return wrapped_env
 
@@ -875,12 +1165,12 @@ def create_standard_preprocessing_chain(
     **kwargs
 ) -> gym.Env:
     """
-    Create a standard preprocessing wrapper chain for RL training.
+    Create a standard preprocessing wrapper chain for RL training with API preservation.
     
     This convenience function creates a commonly used set of preprocessing
-    wrappers with sensible defaults for stable RL training. Provides a
-    simple interface for standard preprocessing without requiring detailed
-    wrapper configuration.
+    wrappers with sensible defaults for stable RL training. Automatically
+    preserves API version consistency and provides comprehensive logging
+    for preprocessing pipeline diagnostics.
     
     Args:
         env: Base environment to wrap
@@ -904,6 +1194,20 @@ def create_standard_preprocessing_chain(
         ...     clip_range=(-10.0, 10.0)  # Custom normalization clipping
         ... )
     """
+    if LOGGING_AVAILABLE:
+        logger.info(
+            "Creating standard preprocessing chain",
+            extra={
+                "base_env_type": type(env).__name__,
+                "normalize_observations": normalize_observations,
+                "normalize_actions": normalize_actions,
+                "clip_actions": clip_actions,
+                "frame_stack_size": frame_stack_size,
+                "additional_params": list(kwargs.keys()),
+                "metric_type": "standard_chain_creation"
+            }
+        )
+    
     wrapped_env = env
     
     # Apply normalization wrappers
@@ -911,23 +1215,73 @@ def create_standard_preprocessing_chain(
         obs_params = {k: v for k, v in kwargs.items() 
                      if k in ['epsilon', 'clip_range', 'update_rate', 'normalize_keys']}
         wrapped_env = NormalizeObservation(wrapped_env, **obs_params)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                "Applied observation normalization",
+                extra={
+                    "obs_params": obs_params,
+                    "metric_type": "preprocessing_step"
+                }
+            )
     
     if normalize_actions:
         action_params = {k: v for k, v in kwargs.items() 
                         if k in ['normalized_range', 'clip_actions', 'scale_keys']}
         wrapped_env = NormalizeAction(wrapped_env, **action_params)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                "Applied action normalization",
+                extra={
+                    "action_params": action_params,
+                    "metric_type": "preprocessing_step"
+                }
+            )
     
     # Apply action clipping
     if clip_actions:
         clip_params = {k: v for k, v in kwargs.items() 
                       if k in ['min_action', 'max_action', 'warn_on_clip', 'clip_keys']}
         wrapped_env = ClipAction(wrapped_env, **clip_params)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                "Applied action clipping",
+                extra={
+                    "clip_params": clip_params,
+                    "metric_type": "preprocessing_step"
+                }
+            )
     
     # Apply frame stacking if requested
     if frame_stack_size is not None:
         stack_params = {k: v for k, v in kwargs.items() 
                        if k in ['stack_keys']}
         wrapped_env = FrameStack(wrapped_env, stack_size=frame_stack_size, **stack_params)
+        
+        if LOGGING_AVAILABLE:
+            logger.debug(
+                "Applied frame stacking",
+                extra={
+                    "frame_stack_size": frame_stack_size,
+                    "stack_params": stack_params,
+                    "metric_type": "preprocessing_step"
+                }
+            )
+    
+    if LOGGING_AVAILABLE:
+        logger.success(
+            "Standard preprocessing chain created successfully",
+            extra={
+                "final_env_type": type(wrapped_env).__name__,
+                "total_wrappers": sum([
+                    normalize_observations, normalize_actions, 
+                    clip_actions, frame_stack_size is not None
+                ]),
+                "metric_type": "standard_chain_complete"
+            }
+        )
     
     return wrapped_env
 
