@@ -58,7 +58,7 @@ from odor_plume_nav.environments.spaces import (
     ActionSpace, ObservationSpace, SpaceFactory,
     ActionType, ObservationType
 )
-from odor_plume_nav.utils.seed_manager import (
+from odor_plume_nav.utils.seed_utils import (
     set_global_seed, get_seed_context, scoped_seed, SeedConfig
 )
 
@@ -72,11 +72,16 @@ except ImportError:
 
 # Enhanced logging and performance monitoring
 try:
-    from odor_plume_nav.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
+    from odor_plume_nav.utils.logging_setup import (
+        get_enhanced_logger, PerformanceMetrics, correlation_context
+    )
     logger = get_enhanced_logger(__name__)
 except ImportError:
     import logging
     logger = logging.getLogger(__name__)
+    
+# Version detection for API compatibility
+import inspect
 
 # Optional imports for advanced features
 try:
@@ -91,6 +96,38 @@ ConfigType = Union[DictConfig, Dict[str, Any]]
 InfoType = Dict[str, Any]
 RenderModeType = Optional[str]
 SeedType = Optional[int]
+
+
+def _detect_legacy_gym_caller() -> bool:
+    """
+    Detect if environment is being created via legacy gym interface.
+    
+    Returns:
+        bool: True if legacy gym is detected, False for modern Gymnasium
+    """
+    try:
+        # Inspect call stack to detect caller context
+        frame = inspect.currentframe()
+        while frame:
+            frame = frame.f_back
+            if frame and frame.f_globals:
+                module_name = frame.f_globals.get('__name__', '')
+                
+                # Check for legacy gym imports or usage patterns
+                if 'gym' in module_name and 'gymnasium' not in module_name:
+                    return True
+                
+                # Check for legacy gym package in frame globals
+                if 'gym' in frame.f_globals and 'gymnasium' not in frame.f_globals:
+                    # Further validate it's the legacy gym
+                    gym_module = frame.f_globals.get('gym')
+                    if hasattr(gym_module, 'make') and not hasattr(gym_module, 'version'):
+                        return True
+                        
+        return False
+    except Exception:
+        # If detection fails, default to modern Gymnasium API
+        return False
 
 
 class GymnasiumEnv(gym.Env):
@@ -145,14 +182,17 @@ class GymnasiumEnv(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array", "headless"],
         "render_fps": 30,
-        "spec_id": "OdorPlumeNavigation-v1",
+        "spec_id": "PlumeNavSim-v0",  # New Gymnasium 0.29.x compliant environment ID
+        "legacy_spec_id": "OdorPlumeNavigation-v1",  # Legacy compatibility
         "max_episode_steps": 1000,
         "reward_threshold": 100.0,
         "nondeterministic": False,
         "author": "Blitzy Platform",
         "environment_type": "continuous_control",
         "action_type": "continuous",
-        "observation_type": "multi_modal_dict"
+        "observation_type": "multi_modal_dict",
+        "gymnasium_version": "0.29.*",
+        "api_compliance": "dual_mode"  # Supports both legacy and modern APIs
     }
     
     def __init__(
@@ -171,6 +211,7 @@ class GymnasiumEnv(gym.Env):
         render_mode: Optional[str] = None,
         seed: Optional[int] = None,
         performance_monitoring: bool = True,
+        _force_legacy_api: bool = False,
         **kwargs
     ):
         """
@@ -218,6 +259,10 @@ class GymnasiumEnv(gym.Env):
         self.render_mode = render_mode
         self.performance_monitoring = performance_monitoring
         
+        # Detect API compatibility mode for legacy gym support
+        self._use_legacy_api = _force_legacy_api or _detect_legacy_gym_caller()
+        self._correlation_id = None
+        
         # Validate video file existence
         if not self.video_path.exists():
             raise FileNotFoundError(f"Video file not found: {self.video_path}")
@@ -231,45 +276,56 @@ class GymnasiumEnv(gym.Env):
         
         logger.info(f"Initializing GymnasiumEnv with video: {self.video_path}")
         
+        # Use correlation context for structured logging and performance monitoring
         try:
-            # Initialize video plume environment
-            self._init_video_plume()
-            
-            # Configure reward function parameters
-            self._init_reward_config(reward_config)
-            
-            # Initialize navigator with specified parameters
-            self._init_navigator(
-                initial_position, initial_orientation, 
-                max_speed, max_angular_velocity
-            )
-            
-            # Configure action and observation spaces
-            self._init_spaces(
-                include_multi_sensor, num_sensors, 
-                sensor_distance, sensor_layout
-            )
-            
-            # Set up rendering system
-            self._init_rendering()
-            
-            # Apply seed if provided
-            if seed is not None:
-                self.seed(seed)
-            
-            # Initialize episode state
-            self._reset_episode_state()
-            
-            logger.info(
-                f"GymnasiumEnv initialized successfully",
-                extra={
-                    "video_dims": f"{self.video_width}x{self.video_height}",
-                    "action_space": str(self.action_space),
-                    "obs_space_keys": list(self.observation_space.spaces.keys()),
-                    "max_episode_steps": self.max_episode_steps
-                }
-            )
-            
+            with correlation_context(
+                "gymnasium_env_init", 
+                video_path=str(self.video_path),
+                legacy_api=self._use_legacy_api,
+                performance_monitoring=self.performance_monitoring
+            ) as ctx:
+                self._correlation_id = ctx.correlation_id
+                
+                # Initialize video plume environment
+                self._init_video_plume()
+                
+                # Configure reward function parameters
+                self._init_reward_config(reward_config)
+                
+                # Initialize navigator with specified parameters
+                self._init_navigator(
+                    initial_position, initial_orientation, 
+                    max_speed, max_angular_velocity
+                )
+                
+                # Configure action and observation spaces
+                self._init_spaces(
+                    include_multi_sensor, num_sensors, 
+                    sensor_distance, sensor_layout
+                )
+                
+                # Set up rendering system
+                self._init_rendering()
+                
+                # Apply seed if provided
+                if seed is not None:
+                    self.seed(seed)
+                
+                # Initialize episode state
+                self._reset_episode_state()
+                
+                logger.info(
+                    f"GymnasiumEnv initialized successfully",
+                    extra={
+                        "video_dims": f"{self.video_width}x{self.video_height}",
+                        "action_space": str(self.action_space),
+                        "obs_space_keys": list(self.observation_space.spaces.keys()),
+                        "max_episode_steps": self.max_episode_steps,
+                        "api_mode": "legacy" if self._use_legacy_api else "gymnasium",
+                        "metric_type": "environment_initialization"
+                    }
+                )
+                
         except Exception as e:
             logger.error(f"Failed to initialize GymnasiumEnv: {e}")
             raise RuntimeError(f"Environment initialization failed: {e}") from e
@@ -578,11 +634,28 @@ class GymnasiumEnv(gym.Env):
         if self.performance_monitoring:
             reset_start = time.time()
         
-        logger.debug(f"Resetting environment (episode {self._episode_count + 1})")
+        logger.debug(f"Resetting environment (episode {self._episode_count + 1})", extra={
+            "correlation_id": self._correlation_id,
+            "episode": self._episode_count + 1,
+            "metric_type": "environment_reset"
+        })
         
-        # Handle seeding if provided
+        # Handle seeding if provided using centralized seed management
         if seed is not None:
-            self.seed(seed)
+            try:
+                set_global_seed(seed)
+                self._last_seed = seed
+                logger.debug(f"Environment reset with seed {seed}", extra={
+                    "correlation_id": self._correlation_id,
+                    "seed": seed,
+                    "metric_type": "seed_set"
+                })
+            except Exception as e:
+                logger.warning(f"Failed to set seed {seed}: {e}", extra={
+                    "correlation_id": self._correlation_id
+                })
+                # Fall back to environment's seed method
+                self.seed(seed)
         
         # Process reset options
         reset_position = self.initial_position
@@ -624,7 +697,7 @@ class GymnasiumEnv(gym.Env):
             # Generate initial observation
             observation = self._get_observation()
             
-            # Prepare info dictionary
+            # Prepare info dictionary with correlation tracking
             info = {
                 "episode": self._episode_count + 1,
                 "step": 0,
@@ -633,7 +706,9 @@ class GymnasiumEnv(gym.Env):
                 "current_frame": self.current_frame_index,
                 "video_metadata": self.video_plume.get_metadata(),
                 "seed": getattr(self, "_last_seed", None),
-                "reset_options": options or {}
+                "reset_options": options or {},
+                "correlation_id": self._correlation_id,
+                "api_mode": "legacy" if self._use_legacy_api else "gymnasium"
             }
             
             # Update episode counter
@@ -643,10 +718,18 @@ class GymnasiumEnv(gym.Env):
                 reset_time = time.time() - reset_start
                 info["reset_time"] = reset_time
                 
+                # Log performance threshold violations
                 if reset_time > 0.01:  # 10ms target
-                    logger.warning(f"Reset took {reset_time:.3f}s, exceeding 10ms target")
+                    logger.log_threshold_violation(
+                        "environment_reset", reset_time, 0.01, "seconds"
+                    )
             
-            logger.debug(f"Environment reset completed in episode {self._episode_count}")
+            logger.debug(f"Environment reset completed in episode {self._episode_count}", extra={
+                "correlation_id": self._correlation_id,
+                "episode": self._episode_count,
+                "reset_time": reset_time if self.performance_monitoring else None,
+                "metric_type": "reset_complete"
+            })
             
             return observation, info
             
@@ -657,7 +740,8 @@ class GymnasiumEnv(gym.Env):
     def step(
         self, 
         action: ActionType
-    ) -> Tuple[ObservationType, SupportsFloat, bool, bool, InfoType]:
+    ) -> Union[Tuple[ObservationType, SupportsFloat, bool, InfoType], 
+               Tuple[ObservationType, SupportsFloat, bool, bool, InfoType]]:
         """
         Execute one environment step with the given action.
         
@@ -670,23 +754,33 @@ class GymnasiumEnv(gym.Env):
                    Values are automatically clipped to valid action space bounds
                    
         Returns:
-            Tuple containing:
-                - observation: Next state observation dictionary
-                - reward: Scalar reward for the transition  
-                - terminated: Whether episode ended due to success/failure
-                - truncated: Whether episode ended due to time/step limits
-                - info: Step metadata and diagnostics
+            Union[4-tuple, 5-tuple]: API-compatible return based on caller context:
+                - Legacy gym API: (obs, reward, done, info)
+                - Modern Gymnasium API: (obs, reward, terminated, truncated, info)
                 
         Raises:
             ValueError: If action format is invalid
             RuntimeError: If step execution fails
             
         Note:
-            Step execution is performance-critical and targets <1ms completion
-            time for ≥30 FPS simulation performance.
+            Step execution is performance-critical and targets <33ms completion
+            time for ≥30 FPS simulation performance with correlation tracking.
         """
+        # Use performance monitoring with correlation context
         if self.performance_monitoring:
-            step_start = time.time()
+            with logger.performance_timer(
+                "environment_step", 
+                threshold=0.033,  # 33ms target for 30 FPS
+                correlation_id=self._correlation_id,
+                step_count=self._step_count
+            ) as perf_metrics:
+                return self._execute_step_with_monitoring(action, perf_metrics)
+        else:
+            return self._execute_step_without_monitoring(action)
+    
+    def _execute_step_with_monitoring(self, action: ActionType, perf_metrics: PerformanceMetrics) -> Union[Tuple, Tuple]:
+        """Execute step with performance monitoring enabled."""
+        step_start = time.time()
         
         # Validate and clip action
         action = np.asarray(action, dtype=np.float32)
@@ -737,26 +831,111 @@ class GymnasiumEnv(gym.Env):
             # Update exploration tracking
             self._update_exploration_tracking(self.navigator.positions[0])
             
-            # Prepare detailed info dictionary
+            # Prepare detailed info dictionary with performance metrics
+            step_time = time.time() - step_start
+            self._step_times.append(step_time)
+            
             info = self._prepare_step_info(
-                action, reward, prev_position, prev_orientation, 
-                step_start if self.performance_monitoring else None
+                action, reward, prev_position, prev_orientation, step_start
+            )
+            info["step_time"] = step_time
+            info["correlation_id"] = self._correlation_id
+            
+            # Log performance threshold violations
+            if step_time > 0.033:  # 33ms target for 30 FPS
+                logger.log_threshold_violation(
+                    "environment_step", step_time, 0.033, "seconds"
+                )
+            
+            # Return appropriate tuple based on API compatibility
+            return self._format_step_return(observation, reward, terminated, truncated, info)
+            
+        except Exception as e:
+            logger.error(f"Step execution failed: {e}", extra={
+                "correlation_id": self._correlation_id,
+                "step_count": self._step_count
+            })
+            raise RuntimeError(f"Environment step failed: {e}") from e
+
+    def _execute_step_without_monitoring(self, action: ActionType) -> Union[Tuple, Tuple]:
+        """Execute step without performance monitoring for maximum performance."""
+        # Validate and clip action
+        action = np.asarray(action, dtype=np.float32)
+        if action.shape != (2,):
+            raise ValueError(f"Action must have shape (2,), got {action.shape}")
+        
+        action = ActionSpace.clip_action(action, self.action_space)
+        speed, angular_velocity = action
+        
+        # Store previous state for reward computation
+        prev_position = self.navigator.positions[0].copy()
+        prev_orientation = self.navigator.orientations[0]
+        prev_odor = self._previous_odor
+        
+        try:
+            # Apply action to navigator
+            self.navigator.speeds[0] = speed
+            self.navigator.angular_velocities[0] = angular_velocity
+            
+            # Get current environment frame
+            current_frame = self.video_plume.get_frame(self.current_frame_index)
+            if current_frame is None:
+                # Handle end of video by cycling or terminating
+                self.current_frame_index = 0
+                current_frame = self.video_plume.get_frame(0)
+            
+            # Execute navigator step
+            self.navigator.step(current_frame, dt=1.0)
+            
+            # Advance frame index for next step
+            self.current_frame_index = (self.current_frame_index + 1) % self.video_frame_count
+            
+            # Get new state observation
+            observation = self._get_observation()
+            
+            # Compute reward based on transition
+            reward = self._compute_reward(
+                action, prev_position, prev_orientation, prev_odor, observation
             )
             
-            if self.performance_monitoring:
-                step_time = time.time() - step_start
-                self._step_times.append(step_time)
-                info["step_time"] = step_time
-                
-                # Warn if step time exceeds performance target
-                if step_time > 0.001:  # 1ms target for ≥30 FPS
-                    logger.warning(f"Step took {step_time:.3f}s, exceeding 1ms target")
+            # Update step counter and tracking
+            self._step_count += 1
+            self._total_reward += reward
             
-            return observation, float(reward), terminated, truncated, info
+            # Check termination conditions
+            terminated, truncated = self._check_termination(observation)
+            
+            # Update exploration tracking
+            self._update_exploration_tracking(self.navigator.positions[0])
+            
+            # Prepare basic info dictionary
+            info = self._prepare_step_info(
+                action, reward, prev_position, prev_orientation, None
+            )
+            
+            # Return appropriate tuple based on API compatibility
+            return self._format_step_return(observation, reward, terminated, truncated, info)
             
         except Exception as e:
             logger.error(f"Step execution failed: {e}")
             raise RuntimeError(f"Environment step failed: {e}") from e
+    
+    def _format_step_return(
+        self, 
+        observation: ObservationType, 
+        reward: float, 
+        terminated: bool, 
+        truncated: bool, 
+        info: InfoType
+    ) -> Union[Tuple, Tuple]:
+        """Format step return based on API compatibility mode."""
+        if self._use_legacy_api:
+            # Return 4-tuple for legacy gym API compatibility
+            done = terminated or truncated
+            return observation, reward, done, info
+        else:
+            # Return 5-tuple for modern Gymnasium API
+            return observation, reward, terminated, truncated, info
     
     def _get_observation(self) -> ObservationType:
         """
@@ -1136,7 +1315,11 @@ class GymnasiumEnv(gym.Env):
         Closes video files, clears rendering resources, and performs cleanup
         operations to prevent resource leaks.
         """
-        logger.debug("Closing GymnasiumEnv")
+        logger.debug("Closing GymnasiumEnv", extra={
+            "correlation_id": getattr(self, "_correlation_id", None),
+            "episodes_completed": getattr(self, "_episode_count", 0),
+            "metric_type": "environment_close"
+        })
         
         try:
             # Close video plume
@@ -1160,12 +1343,17 @@ class GymnasiumEnv(gym.Env):
                         "total_steps": len(self._step_times),
                         "avg_step_time": avg_step_time,
                         "avg_fps": avg_fps,
-                        "total_runtime": time.time() - self._start_time
+                        "total_runtime": time.time() - self._start_time,
+                        "correlation_id": getattr(self, "_correlation_id", None),
+                        "metric_type": "performance_summary"
                     }
                 )
             
         except Exception as e:
-            logger.error(f"Error during environment cleanup: {e}")
+            logger.error(f"Error during environment cleanup: {e}", extra={
+                "correlation_id": getattr(self, "_correlation_id", None),
+                "metric_type": "cleanup_error"
+            })
     
     def seed(self, seed: Optional[int] = None) -> List[int]:
         """
@@ -1184,28 +1372,42 @@ class GymnasiumEnv(gym.Env):
             if not (0 <= seed <= 2**32 - 1):
                 raise ValueError(f"Seed must be between 0 and 2^32-1, got {seed}")
         
-        # Use seed manager for comprehensive seeding
+        # Use centralized seed management for comprehensive seeding
         try:
             if seed is not None:
                 set_global_seed(seed)
                 self._last_seed = seed
-                logger.debug(f"Environment seed set to {seed}")
+                logger.debug(f"Environment seed set to {seed}", extra={
+                    "correlation_id": getattr(self, "_correlation_id", None),
+                    "seed": seed,
+                    "metric_type": "seed_set"
+                })
             else:
                 # Generate random seed
                 import random
                 seed = random.randint(0, 2**32 - 1)
                 set_global_seed(seed)
                 self._last_seed = seed
-                logger.debug(f"Environment auto-seeded with {seed}")
+                logger.debug(f"Environment auto-seeded with {seed}", extra={
+                    "correlation_id": getattr(self, "_correlation_id", None),
+                    "seed": seed,
+                    "metric_type": "auto_seed"
+                })
             
             return [seed]
             
         except Exception as e:
-            logger.error(f"Failed to set seed: {e}")
+            logger.error(f"Failed to set seed via centralized management: {e}", extra={
+                "correlation_id": getattr(self, "_correlation_id", None),
+                "attempted_seed": seed
+            })
             # Fallback to basic NumPy seeding
             if seed is not None:
                 np.random.seed(seed)
                 self._last_seed = seed
+                logger.warning(f"Fallback to NumPy seeding with seed {seed}", extra={
+                    "correlation_id": getattr(self, "_correlation_id", None)
+                })
             return [seed] if seed is not None else [0]
     
     def get_attr(self, attr_name: str) -> Any:
@@ -1253,6 +1455,68 @@ class GymnasiumEnv(gym.Env):
         """
         method = getattr(self, method_name)
         return method(*args, **kwargs)
+    
+    def validate_api_compliance(self) -> Dict[str, Any]:
+        """
+        Validate environment compliance with Gymnasium 0.29.x API using env_checker.
+        
+        Returns:
+            Dict[str, Any]: Validation results including compliance status and any issues
+            
+        Examples:
+            >>> env = GymnasiumEnv(video_path="test.mp4")
+            >>> results = env.validate_api_compliance()
+            >>> assert results["compliant"], f"API validation failed: {results['errors']}"
+        """
+        try:
+            from gymnasium.utils.env_checker import check_env
+            
+            logger.info("Validating Gymnasium API compliance", extra={
+                "correlation_id": getattr(self, "_correlation_id", None),
+                "metric_type": "api_validation"
+            })
+            
+            validation_results = {
+                "compliant": False,
+                "errors": [],
+                "warnings": [],
+                "api_mode": "legacy" if self._use_legacy_api else "gymnasium",
+                "validation_time": 0.0
+            }
+            
+            start_time = time.time()
+            
+            try:
+                # Run comprehensive API validation
+                check_env(self, warn=True, skip_render_check=False)
+                validation_results["compliant"] = True
+                
+                logger.success("Environment passed Gymnasium API validation", extra={
+                    "correlation_id": getattr(self, "_correlation_id", None),
+                    "metric_type": "validation_success"
+                })
+                
+            except Exception as e:
+                validation_results["errors"].append(str(e))
+                logger.error(f"Environment API validation failed: {e}", extra={
+                    "correlation_id": getattr(self, "_correlation_id", None),
+                    "metric_type": "validation_failure"
+                })
+            
+            validation_results["validation_time"] = time.time() - start_time
+            
+            return validation_results
+            
+        except ImportError:
+            logger.error("gymnasium.utils.env_checker not available for validation", extra={
+                "correlation_id": getattr(self, "_correlation_id", None)
+            })
+            return {
+                "compliant": False,
+                "errors": ["gymnasium.utils.env_checker not available"],
+                "warnings": [],
+                "validation_time": 0.0
+            }
     
     def __str__(self) -> str:
         """String representation of environment."""
@@ -1324,40 +1588,25 @@ def validate_gymnasium_environment(env: GymnasiumEnv) -> Dict[str, Any]:
         >>> results = validate_gymnasium_environment(env)
         >>> assert results["is_valid"], f"Validation failed: {results['errors']}"
     """
-    try:
-        from gymnasium.utils.env_checker import check_env
-        
-        logger.info("Validating Gymnasium environment compliance")
-        
-        validation_results = {
-            "is_valid": False,
-            "errors": [],
-            "warnings": [],
-            "validation_time": 0.0
-        }
-        
-        start_time = time.time()
-        
-        try:
-            # Run comprehensive API validation
-            check_env(env, warn=True, skip_render_check=False)
-            validation_results["is_valid"] = True
-            logger.info("Environment validation passed")
-            
-        except Exception as e:
-            validation_results["errors"].append(str(e))
-            logger.error(f"Environment validation failed: {e}")
-        
-        validation_results["validation_time"] = time.time() - start_time
-        
-        return validation_results
-        
-    except ImportError:
-        raise ImportError(
-            "gymnasium.utils.env_checker is required for validation. "
-            "Install with: pip install 'gymnasium[other]'"
-        )
+    # Delegate to the environment's built-in validation method
+    validation_results = env.validate_api_compliance()
+    
+    # Convert to legacy format for backward compatibility
+    return {
+        "is_valid": validation_results["compliant"],
+        "errors": validation_results["errors"],
+        "warnings": validation_results["warnings"],
+        "validation_time": validation_results["validation_time"],
+        "api_mode": validation_results.get("api_mode", "unknown")
+    }
 
+
+# Module-level initialization for enhanced logging
+logger.bind_experiment_metadata(
+    module="gymnasium_env",
+    gymnasium_version="0.29.*",
+    api_support="dual_mode"
+)
 
 # Public API exports
 __all__ = [
@@ -1365,3 +1614,22 @@ __all__ = [
     "create_gymnasium_environment", 
     "validate_gymnasium_environment"
 ]
+
+# Environment registration information for Gymnasium
+ENVIRONMENT_SPECS = {
+    "PlumeNavSim-v0": {
+        "entry_point": "odor_plume_nav.environments.gymnasium_env:GymnasiumEnv",
+        "max_episode_steps": 1000,
+        "reward_threshold": 100.0,
+        "nondeterministic": False,
+        "kwargs": {}
+    },
+    # Legacy compatibility registration
+    "OdorPlumeNavigation-v1": {
+        "entry_point": "odor_plume_nav.environments.gymnasium_env:GymnasiumEnv",
+        "max_episode_steps": 1000,
+        "reward_threshold": 100.0,
+        "nondeterministic": False,
+        "kwargs": {"_force_legacy_api": True}
+    }
+}
