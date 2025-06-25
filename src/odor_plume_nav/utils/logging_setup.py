@@ -11,9 +11,42 @@ Key Features:
 - Environment-specific logging configurations (development, testing, production)
 - Performance monitoring and diagnostic logging for real-time simulation monitoring
 - Enhanced module logger creation with automatic context binding
-- Correlation ID generation for experiment traceability
+- Correlation ID generation for experiment traceability (request_id/episode_id support)
 - Multiple format patterns for different use cases
 - Automatic performance threshold monitoring and alerting
+- Environment step() latency monitoring with ≤10ms threshold warnings
+- Structured JSON logging with distributed tracing support
+- Legacy gym API deprecation detection and warnings
+- Comprehensive performance timing integration (frame rate, memory, database)
+
+Enhanced Performance Monitoring:
+- Environment step() latency tracking with automatic WARN logging when ≤10ms threshold exceeded
+- Frame rate measurement with automatic warnings below 30 FPS target
+- Memory usage delta tracking with warnings for significant increases
+- Database operation timing with latency violation detection
+- Structured JSON output with correlation IDs for distributed analysis
+
+Legacy API Deprecation Support:
+- Automatic detection of legacy gym imports vs gymnasium
+- Structured DeprecationWarning messages via logger.warning
+- Migration guidance with specific code examples and resources
+
+Example Usage:
+    >>> # Enhanced correlation context with distributed tracing
+    >>> with correlation_context("rl_training", episode_id="ep_001") as ctx:
+    ...     logger.info("Starting RL episode")
+    ...     with create_step_timer() as step_metrics:
+    ...         obs, reward, done, info = env.step(action)
+    ...     # Automatic warning if step() > 10ms
+    
+    >>> # Legacy API monitoring
+    >>> monitor_environment_creation("CartPole-v1", "gym.make")  # Triggers deprecation warning
+    
+    >>> # Comprehensive performance monitoring
+    >>> logger = get_enhanced_logger(__name__)
+    >>> with logger.performance_timer("training_batch") as metrics:
+    ...     model.train(batch_data)
+    >>> logger.log_step_latency_violation(0.015)  # >10ms step warning
 """
 
 import sys
@@ -116,6 +149,9 @@ PERFORMANCE_THRESHOLDS = {
     "simulation_fps_min": 30.0,  # FPS, not seconds
     "video_frame_processing": 0.033,  # 33ms per frame
     "db_operation": 0.1,  # 100ms for typical operations
+    "environment_step": 0.010,  # 10ms per step - critical RL performance requirement
+    "frame_rate_measurement": 0.033,  # 33ms target frame rate
+    "memory_usage_delta": 0.050,  # 50ms for memory measurement operations
 }
 
 # Environment-specific logging defaults
@@ -394,23 +430,34 @@ class CorrelationContext:
     
     Maintains correlation IDs and context metadata across function calls within
     the same thread, enabling comprehensive experiment tracking and debugging.
+    Enhanced with request_id/episode_id support for distributed tracing.
     """
     
-    def __init__(self):
+    def __init__(self, request_id: Optional[str] = None, episode_id: Optional[str] = None):
         self.correlation_id = str(uuid.uuid4())
+        self.request_id = request_id or str(uuid.uuid4())
+        self.episode_id = episode_id
         self.experiment_metadata = {}
         self.performance_stack = []
         self.start_time = time.time()
+        self.step_count = 0  # Track environment steps for performance monitoring
     
     def bind_context(self, **kwargs) -> Dict[str, Any]:
-        """Get context dictionary for binding to loggers."""
+        """Get context dictionary for binding to loggers with enhanced distributed tracing."""
         context = {
             "correlation_id": self.correlation_id,
+            "request_id": self.request_id,
             "thread_id": threading.current_thread().ident,
             "process_id": os.getpid(),
+            "step_count": self.step_count,
             **self.experiment_metadata,
             **kwargs
         }
+        
+        # Add episode_id if available (for RL environments)
+        if self.episode_id is not None:
+            context["episode_id"] = self.episode_id
+            
         return context
     
     def add_metadata(self, **metadata):
@@ -443,6 +490,19 @@ class CorrelationContext:
         
         metrics = self.performance_stack.pop()
         return metrics.complete()
+    
+    def increment_step(self):
+        """Increment step counter for environment step tracking."""
+        self.step_count += 1
+    
+    def set_episode_id(self, episode_id: str):
+        """Set episode ID for RL environment tracking."""
+        self.episode_id = episode_id
+    
+    def reset_episode(self, new_episode_id: Optional[str] = None):
+        """Reset episode tracking with optional new episode ID."""
+        self.episode_id = new_episode_id or str(uuid.uuid4())
+        self.step_count = 0
 
 
 def get_correlation_context() -> CorrelationContext:
@@ -457,34 +517,95 @@ def set_correlation_context(context: CorrelationContext):
     _context_storage.context = context
 
 
+def create_step_timer() -> ContextManager[PerformanceMetrics]:
+    """
+    Create a context manager for timing environment step() operations.
+    
+    Automatically logs WARN messages when step() exceeds the 10ms threshold
+    as required by Section 5.4 performance requirements.
+    
+    Returns:
+        Context manager that tracks step timing and issues warnings
+        
+    Example:
+        >>> with create_step_timer() as metrics:
+        ...     obs, reward, done, info = env.step(action)
+        >>> # Automatic warning if step took >10ms
+    """
+    return step_performance_timer()
+
+
+@contextmanager
+def step_performance_timer() -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for environment step() performance monitoring.
+    
+    Tracks step latency and automatically logs structured warnings when
+    the ≤10ms threshold is exceeded per Section 5.4.5.1 requirements.
+    """
+    context = get_correlation_context()
+    metrics = context.push_performance("environment_step")
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        context.increment_step()
+        
+        if completed_metrics and completed_metrics.is_slow(PERFORMANCE_THRESHOLDS["environment_step"]):
+            bound_logger = logger.bind(**context.bind_context())
+            bound_logger.warning(
+                f"Environment step() latency exceeded threshold: {completed_metrics.duration:.3f}s > {PERFORMANCE_THRESHOLDS['environment_step']:.3f}s",
+                extra={
+                    "metric_type": "step_latency_violation",
+                    "operation": "environment_step",
+                    "actual_latency_ms": completed_metrics.duration * 1000,
+                    "threshold_latency_ms": PERFORMANCE_THRESHOLDS["environment_step"] * 1000,
+                    "performance_metrics": completed_metrics.to_dict(),
+                    "step_count": context.step_count,
+                    "overage_percent": ((completed_metrics.duration - PERFORMANCE_THRESHOLDS["environment_step"]) / PERFORMANCE_THRESHOLDS["environment_step"]) * 100
+                }
+            )
+
+
 @contextmanager
 def correlation_context(
     operation_name: str = "operation",
     correlation_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    episode_id: Optional[str] = None,
     **metadata
 ) -> ContextManager[CorrelationContext]:
     """
-    Context manager for correlation tracking with automatic cleanup.
+    Context manager for correlation tracking with automatic cleanup and distributed tracing.
+    
+    Enhanced with request_id/episode_id support for distributed tracing per Section 5.4.2.1.
     
     Args:
         operation_name: Name of the operation for logging and performance tracking
         correlation_id: Optional explicit correlation ID (generates new if None)
+        request_id: Optional request ID for distributed tracing
+        episode_id: Optional episode ID for RL environment tracking
         **metadata: Additional metadata to bind to the correlation context
         
     Yields:
         CorrelationContext: Context object for the operation
         
     Example:
-        >>> with correlation_context("simulation_execution", agent_count=5) as ctx:
+        >>> with correlation_context("simulation_execution", episode_id="ep_001", agent_count=5) as ctx:
         ...     logger.info("Starting simulation")
-        ...     # All logs within this context will include correlation_id and metadata
+        ...     # All logs within this context will include correlation_id, request_id, episode_id and metadata
     """
     # Create new context or get existing
-    if correlation_id:
-        context = CorrelationContext()
-        context.correlation_id = correlation_id
+    if correlation_id or request_id or episode_id:
+        context = CorrelationContext(request_id=request_id, episode_id=episode_id)
+        if correlation_id:
+            context.correlation_id = correlation_id
     else:
         context = get_correlation_context()
+        # Update episode_id if provided
+        if episode_id:
+            context.set_episode_id(episode_id)
     
     # Add operation metadata
     context.add_metadata(**metadata)
@@ -510,6 +631,210 @@ def correlation_context(
                     "metric_type": "slow_operation"
                 }
             )
+
+
+@contextmanager
+def frame_rate_timer() -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for frame rate measurement timing.
+    
+    Tracks frame processing performance and logs warnings when
+    frame rate falls below 30 FPS target.
+    """
+    context = get_correlation_context()
+    metrics = context.push_performance("frame_rate_measurement")
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        
+        if completed_metrics and completed_metrics.duration:
+            fps = 1.0 / completed_metrics.duration
+            target_fps = PERFORMANCE_THRESHOLDS["simulation_fps_min"]
+            
+            if fps < target_fps:
+                bound_logger = logger.bind(**context.bind_context())
+                bound_logger.warning(
+                    f"Frame rate below target: {fps:.1f} FPS < {target_fps:.1f} FPS",
+                    extra={
+                        "metric_type": "frame_rate_violation",
+                        "operation": "frame_rate_measurement",
+                        "actual_fps": fps,
+                        "target_fps": target_fps,
+                        "frame_time_ms": completed_metrics.duration * 1000,
+                        "performance_metrics": completed_metrics.to_dict()
+                    }
+                )
+
+
+@contextmanager  
+def memory_usage_timer(operation_name: str = "memory_operation") -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for memory usage delta tracking.
+    
+    Monitors memory usage changes during operations and logs
+    warnings for excessive memory growth.
+    
+    Args:
+        operation_name: Name of the operation being monitored
+    """
+    context = get_correlation_context()
+    metrics = context.push_performance(operation_name)
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        
+        if completed_metrics and completed_metrics.memory_delta and completed_metrics.memory_delta > 0:
+            # Log warning for significant memory increases (>100MB)
+            if completed_metrics.memory_delta > 100.0:
+                bound_logger = logger.bind(**context.bind_context())
+                bound_logger.warning(
+                    f"Significant memory usage increase: +{completed_metrics.memory_delta:.1f}MB during {operation_name}",
+                    extra={
+                        "metric_type": "memory_usage_warning",
+                        "operation": operation_name,
+                        "memory_delta_mb": completed_metrics.memory_delta,
+                        "memory_before_mb": completed_metrics.memory_before,
+                        "memory_after_mb": completed_metrics.memory_after,
+                        "performance_metrics": completed_metrics.to_dict()
+                    }
+                )
+
+
+@contextmanager
+def database_operation_timer(operation_name: str = "db_operation") -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for database operation performance monitoring.
+    
+    Tracks database operation duration and logs warnings when
+    operations exceed the 100ms threshold.
+    
+    Args:
+        operation_name: Name of the database operation
+    """
+    context = get_correlation_context()
+    metrics = context.push_performance(operation_name)
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        
+        if completed_metrics and completed_metrics.is_slow(PERFORMANCE_THRESHOLDS["db_operation"]):
+            bound_logger = logger.bind(**context.bind_context())
+            bound_logger.warning(
+                f"Slow database operation: {operation_name} took {completed_metrics.duration:.3f}s",
+                extra={
+                    "metric_type": "db_latency_violation", 
+                    "operation": operation_name,
+                    "actual_latency_ms": completed_metrics.duration * 1000,
+                    "threshold_latency_ms": PERFORMANCE_THRESHOLDS["db_operation"] * 1000,
+                    "performance_metrics": completed_metrics.to_dict()
+                }
+            )
+
+
+def detect_legacy_gym_import() -> bool:
+    """
+    Detect if legacy gym package is being used instead of gymnasium.
+    
+    Inspects the call stack to determine if legacy gym.make() or
+    similar legacy API calls are being used.
+    
+    Returns:
+        True if legacy gym usage is detected
+    """
+    import inspect
+    
+    # Check if 'gym' module (not 'gymnasium') is in the current stack
+    for frame_info in inspect.stack():
+        frame = frame_info.frame
+        frame_globals = frame.f_globals
+        
+        # Check if 'gym' module is imported (but not gymnasium)
+        if ('gym' in frame_globals and 
+            hasattr(frame_globals.get('gym'), 'make') and
+            'gymnasium' not in str(frame_globals.get('gym', ''))):
+            return True
+            
+        # Check for direct gym imports in the module
+        module_name = frame_globals.get('__name__', '')
+        if module_name and 'gym' in module_name and 'gymnasium' not in module_name:
+            return True
+    
+    return False
+
+
+def log_legacy_api_deprecation(
+    operation: str,
+    legacy_call: str,
+    recommended_call: str,
+    migration_guide: Optional[str] = None
+):
+    """
+    Log structured deprecation warning for legacy gym API usage.
+    
+    Per Section 5.4.3.2, triggers DeprecationWarning messages via
+    logger.warning with structured guidance for migration to Gymnasium API.
+    
+    Args:
+        operation: Name of the deprecated operation
+        legacy_call: The legacy API call being used
+        recommended_call: The recommended new API call
+        migration_guide: Optional URL or text with migration instructions
+    """
+    import warnings
+    
+    context = get_correlation_context()
+    bound_logger = logger.bind(**context.bind_context())
+    
+    # Create structured deprecation message
+    message = (
+        f"Legacy gym API usage detected: {legacy_call}. "
+        f"Please migrate to: {recommended_call}"
+    )
+    
+    if migration_guide:
+        message += f". Migration guide: {migration_guide}"
+    
+    # Issue Python warning
+    warnings.warn(message, DeprecationWarning, stacklevel=3)
+    
+    # Log structured warning via Loguru
+    bound_logger.warning(
+        f"Legacy API deprecation: {operation}",
+        extra={
+            "metric_type": "legacy_api_deprecation",
+            "operation": operation,
+            "legacy_call": legacy_call,
+            "recommended_call": recommended_call,
+            "migration_guide": migration_guide or "https://gymnasium.farama.org/introduction/migration_guide/",
+            "deprecation_category": "gym_to_gymnasium_migration"
+        }
+    )
+
+
+def monitor_environment_creation(env_id: str, make_function: str = "gym.make"):
+    """
+    Monitor environment creation for legacy API usage.
+    
+    Automatically detects and logs deprecation warnings when legacy
+    gym.make() is used instead of gymnasium.make().
+    
+    Args:
+        env_id: Environment identifier being created
+        make_function: The make function being used
+    """
+    if detect_legacy_gym_import() or make_function == "gym.make":
+        log_legacy_api_deprecation(
+            operation="environment_creation",
+            legacy_call=f"gym.make('{env_id}')",
+            recommended_call=f"gymnasium.make('{env_id}')",
+            migration_guide="Replace 'import gym' with 'import gymnasium as gym' for drop-in compatibility"
+        )
         
         # Restore previous context
         if old_context:
@@ -671,6 +996,123 @@ class EnhancedLogger:
             "status": status,
             **details
         })
+    
+    def log_step_latency_violation(self, actual_latency: float, threshold_latency: float = 0.010):
+        """
+        Log environment step() latency violation per Section 5.4 requirements.
+        
+        Args:
+            actual_latency: Measured step latency in seconds
+            threshold_latency: Threshold latency in seconds (default 10ms)
+        """
+        self.warning(
+            f"Environment step() latency exceeded: {actual_latency*1000:.1f}ms > {threshold_latency*1000:.1f}ms",
+            extra={
+                "metric_type": "step_latency_violation",
+                "actual_latency_ms": actual_latency * 1000,
+                "threshold_latency_ms": threshold_latency * 1000,
+                "overage_percent": ((actual_latency - threshold_latency) / threshold_latency) * 100
+            }
+        )
+    
+    def log_frame_rate_measurement(self, fps: float, target_fps: float = 30.0):
+        """
+        Log frame rate measurements with warnings for low performance.
+        
+        Args:
+            fps: Measured frames per second
+            target_fps: Target FPS threshold
+        """
+        if fps < target_fps:
+            self.warning(
+                f"Frame rate below target: {fps:.1f} FPS < {target_fps:.1f} FPS",
+                extra={
+                    "metric_type": "frame_rate_violation",
+                    "actual_fps": fps,
+                    "target_fps": target_fps,
+                    "performance_degradation_percent": ((target_fps - fps) / target_fps) * 100
+                }
+            )
+        else:
+            self.debug(
+                f"Frame rate measurement: {fps:.1f} FPS",
+                extra={
+                    "metric_type": "frame_rate_measurement",
+                    "actual_fps": fps,
+                    "target_fps": target_fps
+                }
+            )
+    
+    def log_memory_usage_delta(self, memory_delta: float, operation: str = "unknown"):
+        """
+        Log memory usage changes during operations.
+        
+        Args:
+            memory_delta: Memory change in MB
+            operation: Operation name causing memory change
+        """
+        if memory_delta > 100.0:  # Warning for >100MB increases
+            self.warning(
+                f"Significant memory increase: +{memory_delta:.1f}MB during {operation}",
+                extra={
+                    "metric_type": "memory_usage_warning",
+                    "memory_delta_mb": memory_delta,
+                    "operation": operation
+                }
+            )
+        else:
+            self.debug(
+                f"Memory usage delta: {memory_delta:+.1f}MB for {operation}",
+                extra={
+                    "metric_type": "memory_usage_measurement",
+                    "memory_delta_mb": memory_delta,
+                    "operation": operation
+                }
+            )
+    
+    def log_database_operation_latency(self, operation: str, latency: float, threshold: float = 0.1):
+        """
+        Log database operation performance with warnings for slow operations.
+        
+        Args:
+            operation: Database operation name
+            latency: Operation latency in seconds
+            threshold: Warning threshold in seconds
+        """
+        if latency > threshold:
+            self.warning(
+                f"Slow database operation: {operation} took {latency:.3f}s",
+                extra={
+                    "metric_type": "db_latency_violation",
+                    "operation": operation,
+                    "actual_latency_ms": latency * 1000,
+                    "threshold_latency_ms": threshold * 1000
+                }
+            )
+        else:
+            self.debug(
+                f"Database operation: {operation} completed in {latency:.3f}s",
+                extra={
+                    "metric_type": "db_operation_measurement",
+                    "operation": operation,
+                    "latency_ms": latency * 1000
+                }
+            )
+    
+    def log_legacy_api_usage(self, operation: str, legacy_call: str, recommended_call: str):
+        """
+        Log legacy API usage deprecation warnings per Section 5.4.3.2.
+        
+        Args:
+            operation: Operation name
+            legacy_call: Legacy API call being used
+            recommended_call: Recommended modern API call
+        """
+        log_legacy_api_deprecation(
+            operation=operation,
+            legacy_call=legacy_call, 
+            recommended_call=recommended_call
+        )
 
 
 def setup_logger(
@@ -773,11 +1215,13 @@ def setup_logger(
     # Get format pattern
     format_pattern = config.get_format_pattern()
     
-    # Prepare default context for all logs
+    # Prepare default context for all logs with enhanced correlation tracking
     default_context = {
         "correlation_id": "none",
+        "request_id": "none",
         "module": "system",
         "config_hash": "unknown",
+        "step_count": 0,
         **config.default_context
     }
     
@@ -857,9 +1301,9 @@ def _create_context_filter(default_context: Dict[str, Any]):
 
 
 def _create_json_formatter():
-    """Create a JSON formatter function for structured logging."""
+    """Create a JSON formatter function for structured logging with enhanced correlation tracking."""
     def json_formatter(record):
-        # Extract relevant fields for JSON output
+        # Extract relevant fields for JSON output with enhanced correlation support
         json_record = {
             "timestamp": record["time"].isoformat(),
             "level": record["level"].name,
@@ -868,16 +1312,37 @@ def _create_json_formatter():
             "line": record["line"],
             "message": record["message"],
             "correlation_id": record["extra"].get("correlation_id", "none"),
+            "request_id": record["extra"].get("request_id", "none"),
             "module": record["extra"].get("module", "unknown"),
             "thread_id": record["extra"].get("thread_id"),
             "process_id": record["extra"].get("process_id"),
+            "step_count": record["extra"].get("step_count", 0),
         }
+        
+        # Add episode_id for RL environment tracking
+        if "episode_id" in record["extra"]:
+            json_record["episode_id"] = record["extra"]["episode_id"]
         
         # Add performance metrics if present
         if "performance_metrics" in record["extra"]:
             json_record["performance"] = record["extra"]["performance_metrics"]
         
-        # Add any additional extra fields
+        # Add metric type for structured analysis
+        if "metric_type" in record["extra"]:
+            json_record["metric_type"] = record["extra"]["metric_type"]
+        
+        # Add performance timing fields for automatic capture
+        performance_fields = [
+            "actual_latency_ms", "threshold_latency_ms", "actual_fps", "target_fps",
+            "memory_delta_mb", "memory_before_mb", "memory_after_mb",
+            "overage_percent", "performance_degradation_percent"
+        ]
+        
+        for field in performance_fields:
+            if field in record["extra"]:
+                json_record[field] = record["extra"][field]
+        
+        # Add any additional extra fields (excluding internal fields)
         for key, value in record["extra"].items():
             if key not in json_record and not key.startswith("_"):
                 json_record[key] = value
@@ -1127,6 +1592,18 @@ __all__ = [
     "get_correlation_context",
     "set_correlation_context",
     
+    # Performance monitoring context managers
+    "create_step_timer",
+    "step_performance_timer",
+    "frame_rate_timer",
+    "memory_usage_timer",
+    "database_operation_timer",
+    
+    # Legacy API detection and deprecation
+    "detect_legacy_gym_import",
+    "log_legacy_api_deprecation",
+    "monitor_environment_creation",
+    
     # Hydra integration
     "create_configuration_from_hydra",
     "register_logging_config_schema",
@@ -1152,74 +1629,4 @@ __all__ = [
 ]
 
 
-def setup_logger(
-    sink: Union[str, Path, None] = None,
-    level: str = "INFO",
-    format: str = DEFAULT_FORMAT,
-    rotation: Optional[str] = "10 MB",
-    retention: Optional[str] = "1 week",
-    enqueue: bool = True,
-    backtrace: bool = True,
-    diagnose: bool = True,
-) -> None:
-    """
-    Configure the logger with the specified settings.
-    
-    Args:
-        sink: Output path for log file, or None for console only
-        level: Minimum log level to display
-        format: Log message format
-        rotation: When to rotate log files (e.g., "10 MB" or "1 day")
-        retention: How long to keep log files
-        enqueue: Whether to enqueue log messages (better for multiprocessing)
-        backtrace: Whether to include a backtrace for exceptions
-        diagnose: Whether to diagnose exceptions with better tracebacks
-    """
-    # Remove default logger
-    logger.remove()
-    
-    # Add console logger
-    logger.add(
-        sys.stderr,
-        format=format,
-        level=level,
-        backtrace=backtrace,
-        diagnose=diagnose,
-    )
-    
-    # Add file logger if sink is provided
-    if sink:
-        # Make sure directory exists
-        if isinstance(sink, str):
-            directory = os.path.dirname(sink)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
-        
-        logger.add(
-            str(sink),  # Ensure sink is a string
-            format=format,
-            level=level,
-            rotation=rotation,
-            retention=retention,
-            enqueue=enqueue,
-            backtrace=backtrace,
-            diagnose=diagnose,
-        )
-
-
-def get_module_logger(name: str) -> logger:
-    """
-    Get a logger for a specific module.
-    
-    Args:
-        name: Module name (typically __name__)
-        
-    Returns:
-        Loguru logger instance
-    """
-    # Create a logger that has the module name as extra context
-    return logger.bind(module=name)
-
-
-# Default setup for console logging
-setup_logger()
+# Remove duplicate function definitions - using enhanced versions above
