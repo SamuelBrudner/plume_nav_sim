@@ -600,6 +600,289 @@ class CustomPlumeWrapper(Wrapper):
         return reward + self.compute_bonus(obs)
 ```
 
+## Migration Guide: Gym to Gymnasium API
+
+### Overview
+
+The Odor Plume Navigation library has been refactored to support the modern Gymnasium API while maintaining full backward compatibility with existing gym-based code. This migration guide helps you understand the changes and provides clear paths for updating your code.
+
+### API Compatibility Matrix
+
+| API Version | Step Return Signature | Environment ID | Import Statement |
+|-------------|----------------------|----------------|-----------------|
+| **Legacy Gym** | `(obs, reward, done, info)` | `OdorPlumeNavigation-v1` | `import gym` |
+| **New Gymnasium** | `(obs, reward, terminated, truncated, info)` | `PlumeNavSim-v0` | `import gymnasium` |
+
+### Dual API Support
+
+The library automatically detects which API you're using and returns the appropriate tuple format:
+
+#### Legacy Gym API (4-tuple) - Maintained for Backward Compatibility
+
+```python
+import gym
+from odor_plume_nav.environments import register_environments
+
+# Register environments for gym usage
+register_environments()
+
+# Legacy gym usage continues to work unchanged
+env = gym.make('OdorPlumeNavigation-v1')
+obs = env.reset()
+
+for step in range(1000):
+    action = env.action_space.sample()
+    # Returns 4-tuple: (obs, reward, done, info)
+    obs, reward, done, info = env.step(action)
+    
+    if done:
+        obs = env.reset()
+        
+env.close()
+```
+
+#### New Gymnasium API (5-tuple) - Recommended for New Projects
+
+```python
+import gymnasium as gym
+from odor_plume_nav.environments import register_environments
+
+# Register environments for gymnasium usage
+register_environments()
+
+# New gymnasium environment with enhanced API
+env = gym.make('PlumeNavSim-v0')
+obs, info = env.reset(seed=42)
+
+for step in range(1000):
+    action = env.action_space.sample()
+    # Returns 5-tuple: (obs, reward, terminated, truncated, info)
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    if terminated or truncated:
+        obs, info = env.reset()
+        
+env.close()
+```
+
+### Environment Registration Details
+
+#### New PlumeNavSim-v0 Environment
+
+The new `PlumeNavSim-v0` environment provides enhanced features and full Gymnasium compliance:
+
+**Key Features:**
+- **Gymnasium 0.29.x API compliance** with 5-tuple step returns
+- **Enhanced observation space** with structured dictionary observations
+- **Improved reward shaping** with separated termination conditions
+- **Seed support** for deterministic episode initialization
+- **Performance optimizations** maintaining ≤10ms step() execution time
+
+**Environment Specification:**
+```python
+from odor_plume_nav.api.navigation import create_gymnasium_environment
+import gymnasium as gym
+
+# Create environment with factory function
+env = create_gymnasium_environment(config_path="conf/config.yaml")
+
+# Or use gymnasium.make() with registration
+env = gym.make('PlumeNavSim-v0', 
+               max_episode_steps=1000,
+               render_mode="human")
+
+# Environment information
+print(f"Action space: {env.action_space}")
+print(f"Observation space: {env.observation_space}")
+```
+
+**Action Space:**
+```python
+# Continuous control: Box(2,) with range [-1.0, 1.0]
+action_space = gymnasium.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+# action[0]: Linear velocity control
+# action[1]: Angular velocity control
+```
+
+**Observation Space:**
+```python
+# Dictionary observation space with multiple components
+observation_space = gymnasium.spaces.Dict({
+    'odor_concentration': gymnasium.spaces.Box(
+        shape=(1,), low=0.0, high=1.0, dtype=np.float32
+    ),
+    'agent_position': gymnasium.spaces.Box(
+        shape=(2,), low=0.0, high=100.0, dtype=np.float32
+    ),
+    'agent_orientation': gymnasium.spaces.Box(
+        shape=(1,), low=-np.pi, high=np.pi, dtype=np.float32
+    ),
+    'plume_gradient': gymnasium.spaces.Box(
+        shape=(2,), low=-1.0, high=1.0, dtype=np.float32
+    )
+})
+```
+
+### Migration Strategies
+
+#### Strategy 1: Gradual Migration (Recommended)
+
+Maintain both APIs during transition period:
+
+```python
+# Phase 1: Test new API alongside existing code
+def create_environment(use_gymnasium=False):
+    if use_gymnasium:
+        import gymnasium as gym
+        env = gym.make('PlumeNavSim-v0')
+        return env, "gymnasium"
+    else:
+        import gym
+        env = gym.make('OdorPlumeNavigation-v1')
+        return env, "gym"
+
+# Phase 2: Validate consistency between APIs
+def validate_api_consistency():
+    gym_env, _ = create_environment(use_gymnasium=False)
+    gymnasium_env, _ = create_environment(use_gymnasium=True)
+    
+    # Compare observation and action spaces
+    assert gym_env.action_space == gymnasium_env.action_space
+    # Note: observation spaces may differ due to enhanced features
+    
+    gym_env.close()
+    gymnasium_env.close()
+
+# Phase 3: Switch to Gymnasium for new development
+env, api_type = create_environment(use_gymnasium=True)
+obs, info = env.reset(seed=42)
+
+for step in range(1000):
+    action = env.action_space.sample()
+    if api_type == "gymnasium":
+        obs, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+    else:
+        obs, reward, done, info = env.step(action)
+    
+    if done:
+        if api_type == "gymnasium":
+            obs, info = env.reset()
+        else:
+            obs = env.reset()
+```
+
+#### Strategy 2: Direct Migration
+
+For new projects or major refactoring:
+
+```python
+# Before: Legacy gym implementation
+"""
+import gym
+env = gym.make('OdorPlumeNavigation-v1')
+obs = env.reset()
+obs, reward, done, info = env.step(action)
+"""
+
+# After: Modern gymnasium implementation
+import gymnasium as gym
+env = gym.make('PlumeNavSim-v0')
+obs, info = env.reset(seed=42)
+obs, reward, terminated, truncated, info = env.step(action)
+done = terminated or truncated  # Convert to legacy done flag if needed
+```
+
+### Stable-Baselines3 Integration Updates
+
+#### Legacy Integration
+```python
+from stable_baselines3 import PPO
+import gym
+
+env = gym.make('OdorPlumeNavigation-v1')
+model = PPO("MlpPolicy", env)
+model.learn(total_timesteps=100000)
+```
+
+#### Updated Gymnasium Integration
+```python
+from stable_baselines3 import PPO
+import gymnasium as gym
+
+env = gym.make('PlumeNavSim-v0')
+model = PPO("MlpPolicy", env)
+model.learn(total_timesteps=100000)
+```
+
+### Troubleshooting Common Migration Issues
+
+#### Issue 1: Import Errors
+```python
+# Problem: ModuleNotFoundError for gymnasium
+# Solution: Install RL dependencies
+pip install "odor_plume_nav[rl]"
+# or
+poetry add "odor_plume_nav[rl]"
+```
+
+#### Issue 2: Step Return Tuple Length
+```python
+# Problem: Unpacking wrong number of values
+# Solution: Use detection wrapper
+def step_with_compatibility(env, action):
+    result = env.step(action)
+    if len(result) == 4:
+        # Legacy gym API
+        obs, reward, done, info = result
+        return obs, reward, done, False, info  # Convert to 5-tuple
+    else:
+        # Modern gymnasium API
+        return result
+
+# Usage
+obs, reward, terminated, truncated, info = step_with_compatibility(env, action)
+done = terminated or truncated
+```
+
+#### Issue 3: Reset Method Signature
+```python
+# Problem: Different reset signatures
+# Solution: Use compatibility wrapper
+def reset_with_compatibility(env, seed=None):
+    if hasattr(env, 'seed') and seed is not None:
+        env.seed(seed)
+        return env.reset()
+    else:
+        # Modern gymnasium reset with seed parameter
+        if seed is not None:
+            return env.reset(seed=seed)
+        else:
+            return env.reset()
+
+# Usage works with both APIs
+result = reset_with_compatibility(env, seed=42)
+if isinstance(result, tuple):
+    obs, info = result  # Gymnasium
+else:
+    obs = result  # Legacy gym
+    info = {}
+```
+
+### Deprecation Warnings
+
+When using legacy gym imports, you'll see helpful deprecation warnings:
+
+```python
+import gym
+# UserWarning: You are using the legacy gym API. Consider migrating to gymnasium
+# for enhanced features and future compatibility. See migration guide in README.md
+
+env = gym.make('OdorPlumeNavigation-v1')
+# UserWarning: Environment 'OdorPlumeNavigation-v1' is deprecated. 
+# Use 'PlumeNavSim-v0' with gymnasium for new features and improvements.
+```
+
 ### Migration from Legacy Simulation API
 
 #### Migration Guide: Simulation to Gymnasium
@@ -624,7 +907,7 @@ positions, orientations, readings = run_plume_simulation(
 from odor_plume_nav.api.navigation import create_gymnasium_environment
 
 env = create_gymnasium_environment(cfg)
-obs, info = env.reset()
+obs, info = env.reset(seed=42)
 
 positions, orientations, readings = [], [], []
 for step in range(1000):
@@ -797,6 +1080,420 @@ def parallel_training():
     return model
 ```
 
+## Structured Logging with Loguru
+
+### Overview
+
+The library features a modern structured logging system built on Loguru, replacing traditional print statements and basic logging with comprehensive JSON-formatted logs, correlation IDs, and performance monitoring integration.
+
+### Basic Logging Configuration
+
+#### Default Setup
+
+The logging system is automatically configured when importing the library:
+
+```python
+from odor_plume_nav.utils.logging_setup import setup_logging
+from loguru import logger
+
+# Automatic setup with default configuration
+setup_logging()
+
+# Use structured logging throughout your code
+logger.info("Starting odor plume navigation simulation")
+logger.debug("Navigator initialized", position=[10.0, 15.0], orientation=45.0)
+```
+
+#### Custom Logging Configuration
+
+```python
+from odor_plume_nav.utils.logging_setup import setup_logging
+from loguru import logger
+
+# Custom logging configuration
+setup_logging(
+    level="DEBUG",
+    format_type="json",
+    file_rotation="50 MB",
+    retention="2 weeks",
+    compression="gzip",
+    correlation_id=True
+)
+
+# Structured logging with context
+logger.bind(
+    component="navigator",
+    experiment_id="exp_001",
+    agent_count=5
+).info("Multi-agent simulation started")
+```
+
+### Configuration Examples
+
+#### Development Environment Configuration
+
+```python
+# conf/config.yaml - Development logging setup
+logging:
+  # Core logging configuration
+  level: "DEBUG"
+  console_enabled: true
+  file_enabled: true
+  
+  # Loguru-specific configuration
+  loguru:
+    format: "json"  # Options: text, json
+    colorize: true  # Colorize console output
+    diagnose: true  # Include detailed exception information
+    
+    # File logging configuration
+    file:
+      path: "logs/odor_plume_nav_{time:YYYY-MM-DD}.log"
+      rotation: "10 MB"
+      retention: "1 week"
+      compression: "gzip"
+      level: "DEBUG"
+    
+    # Console logging configuration  
+    console:
+      level: "INFO"
+      colorize: true
+      format: "text"  # Human-readable for development
+    
+    # Performance monitoring integration
+    performance:
+      enabled: true
+      slow_threshold: 0.033  # 33ms (30 FPS target)
+      memory_tracking: true
+      step_timing: true
+    
+    # Correlation ID tracking
+    correlation:
+      enabled: true
+      auto_generate: true
+      propagate_context: true
+```
+
+#### Production Environment Configuration
+
+```python
+# conf/local/production.yaml - Production logging setup
+logging:
+  level: "INFO"
+  console_enabled: false  # Reduce noise in production
+  file_enabled: true
+  
+  loguru:
+    format: "json"  # Structured logs for analysis
+    colorize: false
+    diagnose: false  # Security: don't expose stack traces
+    
+    # Centralized logging configuration
+    file:
+      path: "/var/log/odor_plume_nav/app_{time:YYYY-MM-DD}.log"
+      rotation: "100 MB"
+      retention: "30 days"
+      compression: "gzip"
+      level: "INFO"
+    
+    # Syslog integration for centralized logging
+    syslog:
+      enabled: true
+      address: "localhost"
+      port: 514
+      facility: "local0"
+      format: "json"
+    
+    # Performance monitoring for production
+    performance:
+      enabled: true
+      slow_threshold: 0.010  # Stricter production threshold
+      memory_tracking: false  # Reduce overhead
+      alert_on_degradation: true
+    
+    # Request correlation tracking
+    correlation:
+      enabled: true
+      header_name: "X-Correlation-ID"
+      propagate_downstream: true
+```
+
+### Usage Patterns
+
+#### Basic Structured Logging
+
+```python
+from loguru import logger
+
+# Simple structured logging
+logger.info("Simulation started")
+logger.debug("Configuration loaded", config_path="conf/config.yaml")
+logger.warning("Performance degradation detected", fps=25.5, threshold=30.0)
+logger.error("Navigation failed", error="obstacle_collision", position=[15.2, 22.1])
+
+# Exception logging with context
+try:
+    navigator.update_position(invalid_position)
+except ValueError as e:
+    logger.exception("Invalid position update", 
+                    position=invalid_position, 
+                    component="navigator")
+```
+
+#### Component-Specific Logging
+
+```python
+from loguru import logger
+
+class Navigator:
+    def __init__(self, config):
+        # Component-specific logger with context binding
+        self.logger = logger.bind(component="navigator", id=id(self))
+        self.logger.info("Navigator initialized", config=config.dict())
+    
+    def update_position(self, position):
+        self.logger.debug("Position update", 
+                         old_position=self.position,
+                         new_position=position,
+                         timestamp=time.time())
+        self.position = position
+
+class VideoPlume:
+    def __init__(self, video_path):
+        self.logger = logger.bind(component="video_plume", video=video_path)
+        self.logger.info("Video plume loaded", 
+                        path=video_path,
+                        frame_count=self.frame_count,
+                        resolution=self.resolution)
+    
+    def get_frame(self, frame_idx):
+        start_time = time.perf_counter()
+        frame = self._load_frame(frame_idx)
+        duration = time.perf_counter() - start_time
+        
+        self.logger.debug("Frame retrieved",
+                         frame_idx=frame_idx,
+                         duration_ms=duration * 1000,
+                         frame_shape=frame.shape)
+        return frame
+```
+
+#### Performance Monitoring Integration
+
+```python
+from loguru import logger
+from odor_plume_nav.utils.performance import performance_monitor
+import time
+
+class SimulationRunner:
+    def __init__(self):
+        self.logger = logger.bind(component="simulation")
+    
+    @performance_monitor
+    def step(self, action):
+        """Simulation step with automatic performance logging."""
+        start_time = time.perf_counter()
+        
+        # Execute simulation step
+        obs, reward, terminated, truncated, info = self._internal_step(action)
+        
+        # Automatic performance logging via decorator
+        duration = time.perf_counter() - start_time
+        
+        # Structured step logging
+        self.logger.debug("Simulation step completed",
+                         step=self.step_count,
+                         duration_ms=duration * 1000,
+                         fps=1.0 / duration if duration > 0 else float('inf'),
+                         agent_position=obs['agent_position'],
+                         reward=reward,
+                         terminated=terminated)
+        
+        return obs, reward, terminated, truncated, info
+```
+
+#### Correlation ID Tracking
+
+```python
+from loguru import logger
+from odor_plume_nav.utils.logging_setup import generate_correlation_id
+import contextvars
+
+# Correlation context for request tracking
+correlation_id = contextvars.ContextVar('correlation_id')
+
+def run_experiment(experiment_config):
+    # Generate unique correlation ID for experiment
+    corr_id = generate_correlation_id()
+    correlation_id.set(corr_id)
+    
+    # All logging within this context includes correlation ID
+    with logger.contextualize(correlation_id=corr_id, experiment=experiment_config.name):
+        logger.info("Experiment started", config=experiment_config.dict())
+        
+        try:
+            # Run simulation components
+            navigator = create_navigator(experiment_config.navigator)
+            results = run_simulation(navigator, experiment_config.simulation)
+            
+            logger.info("Experiment completed successfully", 
+                       total_steps=results.step_count,
+                       duration=results.duration,
+                       final_reward=results.total_reward)
+            
+        except Exception as e:
+            logger.exception("Experiment failed", 
+                           error=str(e),
+                           error_type=type(e).__name__)
+            raise
+```
+
+### Advanced Logging Features
+
+#### Custom Log Formatters
+
+```python
+from loguru import logger
+import json
+
+def custom_json_formatter(record):
+    """Custom JSON formatter with additional metadata."""
+    log_entry = {
+        "timestamp": record["time"].isoformat(),
+        "level": record["level"].name,
+        "message": record["message"],
+        "module": record["module"],
+        "function": record["function"],
+        "line": record["line"],
+        # Add custom fields
+        "service": "odor_plume_nav",
+        "version": "0.2.0",
+        "environment": os.getenv("ENVIRONMENT_TYPE", "development")
+    }
+    
+    # Include extra fields from structured logging
+    if record["extra"]:
+        log_entry["extra"] = record["extra"]
+    
+    # Include exception information if present
+    if record["exception"]:
+        log_entry["exception"] = {
+            "type": record["exception"].type.__name__,
+            "value": str(record["exception"].value),
+            "traceback": record["exception"].traceback.format()
+        }
+    
+    return json.dumps(log_entry)
+
+# Configure custom formatter
+logger.add("logs/structured.log", 
+          format=custom_json_formatter,
+          rotation="50 MB",
+          retention="2 weeks")
+```
+
+#### Log Filtering and Sampling
+
+```python
+from loguru import logger
+
+def filter_performance_logs(record):
+    """Filter out high-frequency performance logs in production."""
+    if record["extra"].get("component") == "performance":
+        # Only log every 100th performance record
+        return record["extra"].get("step", 0) % 100 == 0
+    return True
+
+def filter_debug_in_production(record):
+    """Suppress debug logs in production environment."""
+    if os.getenv("ENVIRONMENT_TYPE") == "production":
+        return record["level"].no >= logger.level("INFO").no
+    return True
+
+# Apply filters
+logger.add("logs/filtered.log", 
+          filter=lambda record: filter_performance_logs(record) and 
+                               filter_debug_in_production(record))
+```
+
+#### Integration with External Logging Systems
+
+```python
+from loguru import logger
+import logging
+
+# Integration with standard Python logging
+class InterceptHandler(logging.Handler):
+    """Intercept standard logging and redirect to Loguru."""
+    
+    def emit(self, record):
+        # Get corresponding Loguru level
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        
+        # Find caller from where logging was called
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+        
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+# Configure integration
+logging.basicConfig(handlers=[InterceptHandler()], level=0)
+
+# Configure third-party library logging
+for library in ["matplotlib", "stable_baselines3", "gymnasium"]:
+    logging.getLogger(library).handlers = [InterceptHandler()]
+```
+
+### Environment Variable Configuration
+
+Set up logging through environment variables for deployment flexibility:
+
+```bash
+# .env file for development
+LOG_LEVEL=DEBUG
+LOG_FORMAT=text
+LOG_FILE_ENABLED=true
+LOG_CONSOLE_COLORIZE=true
+LOG_CORRELATION_ENABLED=true
+LOG_PERFORMANCE_TRACKING=true
+
+# Production environment variables
+export LOG_LEVEL=INFO
+export LOG_FORMAT=json
+export LOG_FILE_PATH=/var/log/odor_plume_nav/app.log
+export LOG_ROTATION=100MB
+export LOG_RETENTION=30days
+export LOG_COMPRESSION=gzip
+export LOG_SYSLOG_ENABLED=true
+```
+
+Use in configuration:
+
+```python
+# Automatic environment variable integration
+logging:
+  level: ${oc.env:LOG_LEVEL,"INFO"}
+  console_enabled: ${oc.env:LOG_CONSOLE_ENABLED,"true"}
+  file_enabled: ${oc.env:LOG_FILE_ENABLED,"true"}
+  
+  loguru:
+    format: ${oc.env:LOG_FORMAT,"json"}
+    colorize: ${oc.env:LOG_CONSOLE_COLORIZE,"false"}
+    
+    file:
+      path: ${oc.env:LOG_FILE_PATH,"logs/odor_plume_nav.log"}
+      rotation: ${oc.env:LOG_ROTATION,"10 MB"}
+      retention: ${oc.env:LOG_RETENTION,"1 week"}
+      compression: ${oc.env:LOG_COMPRESSION,"gzip"}
+```
+
 ## Command-Line Interface
 
 The library provides comprehensive CLI commands for automation and batch processing.
@@ -911,51 +1608,513 @@ plume-nav-sim train --algorithm PPO \
 
 ## Configuration System
 
-The library uses a sophisticated Hydra-based configuration hierarchy that supports environment variable integration, parameter sweeps, and multi-environment deployment.
+The library uses a sophisticated Hydra-based configuration hierarchy with dataclass-based structured configs, supporting environment variable integration, parameter sweeps, and multi-environment deployment with full type safety and validation.
+
+### Modern Structured Configuration Architecture
+
+The refactored configuration system replaces unstructured YAML with Pydantic-validated dataclasses, providing:
+
+- **Type Safety**: Automatic validation of all configuration parameters
+- **IDE Support**: Full autocomplete and type hints in development
+- **Runtime Validation**: Configuration errors caught at startup, not runtime
+- **Schema Evolution**: Backward-compatible configuration upgrades
+- **Documentation**: Self-documenting configuration through type annotations
 
 ### Configuration Structure
 
 ```
 conf/
-├── base.yaml          # Foundation defaults and core parameters
-├── config.yaml        # User customizations and environment-specific overrides
-├── rl/                # RL-specific configurations
-│   ├── algorithms/    # Algorithm-specific hyperparameters
-│   │   ├── ppo.yaml
-│   │   ├── sac.yaml
-│   │   └── td3.yaml
-│   ├── environments/  # Environment configurations
-│   │   ├── basic.yaml
-│   │   ├── advanced.yaml
-│   │   └── multi_agent.yaml
-│   └── training.yaml  # Training pipeline configuration
-└── local/             # Local development and deployment-specific settings
+├── base.yaml          # Foundation defaults with dataclass annotations
+├── config.yaml        # User customizations with structured config composition
+├── rl/                # RL-specific structured configurations
+│   ├── algorithms/    # Algorithm-specific hyperparameters with validation
+│   │   ├── ppo.yaml   # PPO algorithm dataclass configuration
+│   │   ├── sac.yaml   # SAC algorithm dataclass configuration
+│   │   └── td3.yaml   # TD3 algorithm dataclass configuration
+│   ├── environments/  # Environment configurations with type enforcement
+│   │   ├── basic.yaml      # Basic environment dataclass config
+│   │   ├── advanced.yaml   # Advanced environment dataclass config
+│   │   └── multi_agent.yaml # Multi-agent dataclass config
+│   └── training.yaml  # Training pipeline structured configuration
+└── local/             # Local development with secret management
     ├── credentials.yaml.template
     ├── development.yaml
     ├── production.yaml
     └── paths.yaml.template
 ```
 
+### Dataclass-Based Configuration Examples
+
+#### Structured Configuration Models
+
+The library defines comprehensive dataclass models with automatic validation:
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional, List, Union
+from hydra.core.config_store import ConfigStore
+from omegaconf import MISSING
+import numpy as np
+
+@dataclass
+class NavigatorConfig:
+    """Structured configuration for navigator parameters with validation."""
+    
+    # Core navigation parameters with type enforcement
+    position: Optional[List[float]] = None
+    orientation: float = 0.0
+    speed: float = 0.0
+    max_speed: float = 1.0
+    angular_velocity: float = 0.0
+    
+    # Multi-agent configuration with structured defaults
+    positions: Optional[List[List[float]]] = None
+    orientations: Optional[List[float]] = None
+    speeds: Optional[List[float]] = None
+    max_speeds: Optional[List[float]] = None
+    angular_velocities: Optional[List[float]] = None
+    num_agents: Optional[int] = None
+    
+    # Control parameters with validation constraints
+    control: ControlConfig = field(default_factory=lambda: ControlConfig())
+    formation: FormationConfig = field(default_factory=lambda: FormationConfig())
+    
+    def __post_init__(self):
+        """Post-initialization validation."""
+        # Validate speed constraints
+        if self.speed > self.max_speed:
+            raise ValueError(f"Speed {self.speed} cannot exceed max_speed {self.max_speed}")
+        
+        # Validate multi-agent consistency
+        if self.positions is not None:
+            if self.num_agents is None:
+                self.num_agents = len(self.positions)
+            elif len(self.positions) != self.num_agents:
+                raise ValueError("Number of positions must match num_agents")
+
+@dataclass
+class ControlConfig:
+    """Control system configuration with performance constraints."""
+    acceleration: float = 0.1
+    turning_rate: float = 30.0
+    sensor_range: float = 10.0
+    sensor_noise: float = 0.0
+    sensor_resolution: float = 1.0
+    
+    def __post_init__(self):
+        """Validate control parameters."""
+        if self.acceleration <= 0:
+            raise ValueError("Acceleration must be positive")
+        if self.sensor_range <= 0:
+            raise ValueError("Sensor range must be positive")
+
+@dataclass 
+class FormationConfig:
+    """Formation control configuration for multi-agent scenarios."""
+    type: str = "grid"  # Options: grid, line, circle, custom
+    spacing: float = 5.0
+    maintain_formation: bool = False
+    communication_range: float = 15.0
+    
+    def __post_init__(self):
+        """Validate formation parameters."""
+        valid_types = {"grid", "line", "circle", "custom"}
+        if self.type not in valid_types:
+            raise ValueError(f"Formation type must be one of {valid_types}")
+
+@dataclass
+class VideoPlumeConfig:
+    """Video plume processing configuration with OpenCV integration."""
+    video_path: str = MISSING  # Required field
+    flip: bool = False
+    grayscale: bool = True
+    kernel_size: int = 0
+    kernel_sigma: float = 1.0
+    threshold: Optional[float] = None
+    normalize: bool = True
+    
+    # Preprocessing configuration with structured validation
+    preprocessing: PreprocessingConfig = field(default_factory=lambda: PreprocessingConfig())
+    sampling: SamplingConfig = field(default_factory=lambda: SamplingConfig())
+    
+    def __post_init__(self):
+        """Validate video processing parameters."""
+        if self.kernel_size < 0:
+            raise ValueError("Kernel size must be non-negative")
+        if self.kernel_size > 0 and self.kernel_size % 2 == 0:
+            raise ValueError("Kernel size must be odd when > 0")
+        if self.threshold is not None and not 0.0 <= self.threshold <= 1.0:
+            raise ValueError("Threshold must be between 0.0 and 1.0")
+
+@dataclass
+class GymnasiumEnvironmentConfig:
+    """Structured configuration for Gymnasium environment with type safety."""
+    max_episode_steps: int = 1000
+    render_mode: Optional[str] = None
+    
+    # Action space configuration with validation
+    action_space: ActionSpaceConfig = field(default_factory=lambda: ActionSpaceConfig())
+    
+    # Observation space with structured components
+    observation_space: ObservationSpaceConfig = field(default_factory=lambda: ObservationSpaceConfig())
+    
+    # Reward shaping with performance optimization
+    reward_shaping: RewardShapingConfig = field(default_factory=lambda: RewardShapingConfig())
+    
+    # Termination conditions with clear criteria
+    termination: TerminationConfig = field(default_factory=lambda: TerminationConfig())
+
+@dataclass
+class RewardShapingConfig:
+    """Reward shaping configuration with algorithm optimization."""
+    odor_weight: float = 1.0
+    distance_weight: float = 0.5
+    control_penalty: float = 0.1
+    efficiency_bonus: float = 0.2
+    success_reward: float = 10.0
+    
+    def __post_init__(self):
+        """Validate reward parameters."""
+        if self.odor_weight < 0:
+            raise ValueError("Odor weight must be non-negative")
+
+@dataclass
+class LoguruLoggingConfig:
+    """Structured logging configuration with Loguru integration."""
+    level: str = "INFO"
+    format: str = "json"  # Options: text, json
+    colorize: bool = True
+    diagnose: bool = True
+    
+    # File logging configuration
+    file: FileLoggingConfig = field(default_factory=lambda: FileLoggingConfig())
+    
+    # Console logging configuration  
+    console: ConsoleLoggingConfig = field(default_factory=lambda: ConsoleLoggingConfig())
+    
+    # Performance monitoring integration
+    performance: PerformanceLoggingConfig = field(default_factory=lambda: PerformanceLoggingConfig())
+    
+    # Correlation ID tracking
+    correlation: CorrelationConfig = field(default_factory=lambda: CorrelationConfig())
+
+# Register structured configurations with Hydra ConfigStore
+cs = ConfigStore.instance()
+cs.store(name="navigator_config", node=NavigatorConfig)
+cs.store(name="video_plume_config", node=VideoPlumeConfig)
+cs.store(name="gymnasium_env_config", node=GymnasiumEnvironmentConfig)
+cs.store(name="logging_config", node=LoguruLoggingConfig)
+```
+
+#### Structured Configuration Usage
+
+##### Loading and Validation
+
+```python
+from hydra import compose, initialize
+from hydra.core.global_hydra import GlobalHydra
+from odor_plume_nav.config.models import NavigatorConfig, VideoPlumeConfig
+
+# Initialize Hydra with structured config support
+with initialize(config_path="../conf", version_base=None):
+    # Compose configuration with automatic validation
+    cfg = compose(config_name="config")
+    
+    # Access structured configurations with full type safety
+    navigator_config: NavigatorConfig = cfg.navigator
+    video_plume_config: VideoPlumeConfig = cfg.video_plume
+    
+    # Configuration automatically validated at load time
+    print(f"Navigator max speed: {navigator_config.max_speed}")
+    print(f"Video path: {video_plume_config.video_path}")
+    
+    # Type errors caught by IDE and runtime validation
+    # navigator_config.max_speed = "invalid"  # TypeError caught immediately
+```
+
+##### Configuration Composition and Overrides
+
+```python
+# Configuration composition with structured validation
+with initialize(config_path="../conf"):
+    # Base configuration with overrides
+    cfg = compose(
+        config_name="config",
+        overrides=[
+            "navigator.max_speed=2.0",  # Validated against NavigatorConfig
+            "video_plume.grayscale=false",  # Type-checked boolean
+            "logging.level=DEBUG",  # Validated against allowed levels
+            "+gymnasium=advanced_env"  # Add structured environment config
+        ]
+    )
+    
+    # All overrides automatically validated against dataclass schemas
+    assert isinstance(cfg.navigator.max_speed, float)
+    assert isinstance(cfg.video_plume.grayscale, bool)
+```
+
+##### Factory Pattern with Structured Configs
+
+```python
+from odor_plume_nav.config.models import NavigatorConfig
+from odor_plume_nav.core import Navigator
+
+def create_navigator_from_structured_config(config: NavigatorConfig) -> Navigator:
+    """Create navigator with full type safety and validation."""
+    
+    # Configuration already validated by dataclass post_init
+    navigator = Navigator(
+        position=config.position,
+        orientation=config.orientation,
+        max_speed=config.max_speed,
+        control_config=config.control
+    )
+    
+    # Multi-agent configuration handling
+    if config.positions is not None:
+        navigator.configure_multi_agent(
+            positions=config.positions,
+            orientations=config.orientations,
+            formation=config.formation
+        )
+    
+    return navigator
+
+# Usage with automatic validation
+navigator_config = NavigatorConfig(
+    position=[10.0, 15.0],
+    max_speed=2.5,
+    control=ControlConfig(acceleration=0.2, turning_rate=45.0)
+)
+
+navigator = create_navigator_from_structured_config(navigator_config)
+```
+
+#### Development vs. Production Configuration
+
+```python
+# Development configuration with enhanced debugging
+@dataclass
+class DevelopmentConfig:
+    """Development environment structured configuration."""
+    environment: str = "development"
+    debug_mode: bool = True
+    verbose_output: bool = True
+    
+    navigator: NavigatorConfig = field(default_factory=lambda: NavigatorConfig(
+        max_speed=1.0,  # Conservative speed for debugging
+        control=ControlConfig(sensor_noise=0.0)  # No noise for reproducibility
+    ))
+    
+    logging: LoguruLoggingConfig = field(default_factory=lambda: LoguruLoggingConfig(
+        level="DEBUG",
+        format="text",  # Human-readable for development
+        colorize=True,
+        performance=PerformanceLoggingConfig(enabled=True, step_timing=True)
+    ))
+
+# Production configuration with performance optimization
+@dataclass  
+class ProductionConfig:
+    """Production environment structured configuration."""
+    environment: str = "production"
+    debug_mode: bool = False
+    verbose_output: bool = False
+    
+    navigator: NavigatorConfig = field(default_factory=lambda: NavigatorConfig(
+        max_speed=2.0,  # Higher performance in production
+        control=ControlConfig(sensor_noise=0.1)  # Realistic noise
+    ))
+    
+    logging: LoguruLoggingConfig = field(default_factory=lambda: LoguruLoggingConfig(
+        level="INFO",
+        format="json",  # Structured logs for analysis
+        colorize=False,
+        performance=PerformanceLoggingConfig(
+            enabled=True,
+            slow_threshold=0.010,  # Stricter production threshold
+            alert_on_degradation=True
+        )
+    ))
+
+# Register environment-specific configurations
+cs.store(name="development_config", node=DevelopmentConfig)
+cs.store(name="production_config", node=ProductionConfig)
+```
+
+#### Configuration Validation and Error Handling
+
+```python
+from pydantic import ValidationError
+from hydra.errors import ConfigCompositionException
+
+def load_validated_config(config_name: str = "config"):
+    """Load configuration with comprehensive validation and error handling."""
+    
+    try:
+        with initialize(config_path="../conf", version_base=None):
+            cfg = compose(config_name=config_name)
+            
+            # Additional business logic validation
+            validate_configuration_constraints(cfg)
+            
+            return cfg
+            
+    except ValidationError as e:
+        print(f"Configuration validation error: {e}")
+        print("Please check your configuration files for type errors.")
+        raise
+        
+    except ConfigCompositionException as e:
+        print(f"Configuration composition error: {e}")
+        print("Please check your configuration file structure.")
+        raise
+
+def validate_configuration_constraints(config):
+    """Additional validation beyond dataclass constraints."""
+    
+    # Cross-component validation
+    if config.navigator.max_speed > 5.0 and config.environment.debug_mode:
+        logger.warning(
+            "High speed in debug mode may affect debugging",
+            max_speed=config.navigator.max_speed
+        )
+    
+    # Performance constraint validation
+    if config.video_plume.kernel_size > 7:
+        estimated_fps = estimate_processing_fps(config.video_plume)
+        if estimated_fps < 30:
+            raise ValueError(
+                f"Configuration may not meet 30 FPS requirement. "
+                f"Estimated FPS: {estimated_fps}"
+            )
+    
+    # Resource availability validation
+    if config.navigator.num_agents and config.navigator.num_agents > 100:
+        available_memory = get_available_memory()
+        required_memory = estimate_memory_usage(config.navigator.num_agents)
+        if required_memory > available_memory:
+            raise ValueError(
+                f"Insufficient memory for {config.navigator.num_agents} agents. "
+                f"Required: {required_memory}MB, Available: {available_memory}MB"
+            )
+```
+
 ### RL Configuration Examples
 
-#### Algorithm Configuration
+#### Structured Algorithm Configuration
+
+Using dataclass-based RL algorithm configuration with automatic validation:
+
+```python
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any
+from hydra.core.config_store import ConfigStore
+
+@dataclass
+class PPOAlgorithmConfig:
+    """Structured PPO algorithm configuration with hyperparameter validation."""
+    algorithm: str = "PPO"
+    
+    # Core PPO hyperparameters with validation
+    learning_rate: float = 3e-4
+    n_steps: int = 2048
+    batch_size: int = 64
+    n_epochs: int = 10
+    gamma: float = 0.99
+    gae_lambda: float = 0.95
+    clip_range: float = 0.2
+    clip_range_vf: Optional[float] = None
+    entropy_coef: float = 0.0
+    vf_coef: float = 0.5
+    max_grad_norm: float = 0.5
+    
+    # Training configuration with type safety
+    training: PPOTrainingConfig = field(default_factory=lambda: PPOTrainingConfig())
+    
+    def __post_init__(self):
+        """Validate PPO hyperparameters."""
+        if not 0 < self.learning_rate < 1:
+            raise ValueError("Learning rate must be between 0 and 1")
+        if self.n_steps <= 0:
+            raise ValueError("Number of steps must be positive")
+        if self.batch_size <= 0:
+            raise ValueError("Batch size must be positive")
+        if not 0 <= self.gamma <= 1:
+            raise ValueError("Gamma must be between 0 and 1")
+
+@dataclass
+class PPOTrainingConfig:
+    """PPO training pipeline configuration."""
+    total_timesteps: int = 1000000
+    eval_freq: int = 10000
+    eval_episodes: int = 20
+    save_freq: int = 50000
+    tensorboard_log: str = "./tensorboard_logs"
+    verbose: int = 1
+    
+    def __post_init__(self):
+        """Validate training parameters."""
+        if self.total_timesteps <= 0:
+            raise ValueError("Total timesteps must be positive")
+        if self.eval_freq <= 0:
+            raise ValueError("Evaluation frequency must be positive")
+
+@dataclass
+class SACAlgorithmConfig:
+    """Structured SAC algorithm configuration with parameter constraints."""
+    algorithm: str = "SAC"
+    
+    # SAC-specific hyperparameters
+    learning_rate: float = 3e-4
+    buffer_size: int = 1000000
+    learning_starts: int = 10000
+    batch_size: int = 256
+    tau: float = 0.005
+    gamma: float = 0.99
+    train_freq: int = 1
+    gradient_steps: int = 1
+    ent_coef: str = "auto"  # or float value
+    target_update_interval: int = 1
+    target_entropy: str = "auto"  # or float value
+    
+    training: SACTrainingConfig = field(default_factory=lambda: SACTrainingConfig())
+
+@dataclass
+class SACTrainingConfig:
+    """SAC training configuration with off-policy optimization."""
+    total_timesteps: int = 500000
+    eval_freq: int = 5000
+    eval_episodes: int = 10
+    save_freq: int = 25000
+    verbose: int = 1
+
+# Register algorithm configurations
+cs.store(group="rl/algorithms", name="ppo", node=PPOAlgorithmConfig)
+cs.store(group="rl/algorithms", name="sac", node=SACAlgorithmConfig)
+```
+
+#### YAML Configuration with Structured Config Integration
 
 ```yaml
-# conf/rl/algorithms/ppo.yaml
+# conf/rl/algorithms/ppo.yaml - now with structured config annotations
+# @package rl.algorithm
+_target_: odor_plume_nav.config.models.PPOAlgorithmConfig
+
+# All parameters automatically validated against dataclass
 algorithm: PPO
-hyperparameters:
-  learning_rate: 3e-4
-  n_steps: 2048
-  batch_size: 64
-  n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  clip_range_vf: null
-  entropy_coef: 0.0
-  vf_coef: 0.5
-  max_grad_norm: 0.5
-  
+learning_rate: 3e-4
+n_steps: 2048
+batch_size: 64
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+clip_range_vf: null
+entropy_coef: 0.0
+vf_coef: 0.5
+max_grad_norm: 0.5
+
 training:
   total_timesteps: 1000000
   eval_freq: 10000
@@ -989,13 +2148,142 @@ training:
   verbose: 1
 ```
 
-#### Environment Configuration
+#### Structured Environment Configuration
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
+import numpy as np
+
+@dataclass
+class ActionSpaceConfig:
+    """Action space configuration with automatic Gymnasium space creation."""
+    type: str = "Box"
+    low: List[float] = field(default_factory=lambda: [-1.0, -1.0])
+    high: List[float] = field(default_factory=lambda: [1.0, 1.0])
+    dtype: str = "float32"
+    
+    def create_space(self):
+        """Create Gymnasium action space from configuration."""
+        import gymnasium as gym
+        return gym.spaces.Box(
+            low=np.array(self.low, dtype=self.dtype),
+            high=np.array(self.high, dtype=self.dtype)
+        )
+
+@dataclass
+class ObservationComponentConfig:
+    """Individual observation component configuration."""
+    type: str = "Box"
+    shape: List[int] = field(default_factory=list)
+    low: float = 0.0
+    high: float = 1.0
+    dtype: str = "float32"
+
+@dataclass
+class ObservationSpaceConfig:
+    """Structured observation space with component validation."""
+    odor_concentration: ObservationComponentConfig = field(
+        default_factory=lambda: ObservationComponentConfig(
+            shape=[1], low=0.0, high=1.0
+        )
+    )
+    agent_position: ObservationComponentConfig = field(
+        default_factory=lambda: ObservationComponentConfig(
+            shape=[2], low=0.0, high=100.0
+        )
+    )
+    agent_orientation: ObservationComponentConfig = field(
+        default_factory=lambda: ObservationComponentConfig(
+            shape=[1], low=-np.pi, high=np.pi
+        )
+    )
+    plume_gradient: ObservationComponentConfig = field(
+        default_factory=lambda: ObservationComponentConfig(
+            shape=[2], low=-1.0, high=1.0
+        )
+    )
+    
+    def create_space(self):
+        """Create Gymnasium Dict observation space."""
+        import gymnasium as gym
+        
+        components = {}
+        for name, component in self.__dict__.items():
+            components[name] = gym.spaces.Box(
+                low=component.low,
+                high=component.high,
+                shape=component.shape,
+                dtype=getattr(np, component.dtype)
+            )
+        
+        return gym.spaces.Dict(components)
+
+@dataclass
+class AdvancedEnvironmentConfig:
+    """Advanced environment configuration with full validation."""
+    max_episode_steps: int = 2000
+    render_mode: Optional[str] = None  # 'human', 'rgb_array', or None
+    
+    # Structured space configurations
+    action_space: ActionSpaceConfig = field(default_factory=ActionSpaceConfig)
+    observation_space: ObservationSpaceConfig = field(default_factory=ObservationSpaceConfig)
+    
+    # Reward and termination with validation
+    reward_shaping: RewardShapingConfig = field(default_factory=lambda: RewardShapingConfig(
+        odor_weight=1.0,
+        distance_weight=0.5,
+        control_penalty=0.1,
+        efficiency_bonus=0.2,
+        success_reward=10.0
+    ))
+    
+    termination: TerminationConfig = field(default_factory=lambda: TerminationConfig(
+        max_distance_from_start=150.0,
+        min_odor_threshold=0.01,
+        success_odor_threshold=0.8
+    ))
+    
+    def __post_init__(self):
+        """Validate environment configuration."""
+        if self.max_episode_steps <= 0:
+            raise ValueError("Max episode steps must be positive")
+        
+        valid_render_modes = {None, 'human', 'rgb_array'}
+        if self.render_mode not in valid_render_modes:
+            raise ValueError(f"Render mode must be one of {valid_render_modes}")
+
+@dataclass
+class TerminationConfig:
+    """Termination condition configuration with clear criteria."""
+    max_distance_from_start: float = 150.0
+    min_odor_threshold: float = 0.01
+    success_odor_threshold: float = 0.8
+    max_steps_without_progress: Optional[int] = None
+    
+    def __post_init__(self):
+        """Validate termination parameters."""
+        if not 0 <= self.min_odor_threshold <= 1:
+            raise ValueError("Min odor threshold must be between 0 and 1")
+        if not 0 <= self.success_odor_threshold <= 1:
+            raise ValueError("Success odor threshold must be between 0 and 1")
+        if self.min_odor_threshold >= self.success_odor_threshold:
+            raise ValueError("Min threshold must be less than success threshold")
+
+# Register environment configurations
+cs.store(group="rl/environments", name="advanced", node=AdvancedEnvironmentConfig)
+```
+
+#### YAML Configuration with Structured Config Integration
 
 ```yaml
-# conf/rl/environments/advanced.yaml
+# conf/rl/environments/advanced.yaml - with dataclass validation
+# @package rl.environment
+_target_: odor_plume_nav.config.models.AdvancedEnvironmentConfig
+
 environment:
   max_episode_steps: 2000
-  render_mode: null  # 'human', 'rgb_array', or null
+  render_mode: null  # Automatically validated against allowed values
   
 action_space:
   type: Box
@@ -1013,8 +2301,8 @@ observation_space:
   agent_position:
     type: Box
     shape: [2]
-    low: [0.0, 0.0]
-    high: [100.0, 100.0]
+    low: 0.0  # Broadcast to [0.0, 0.0] automatically
+    high: 100.0  # Broadcast to [100.0, 100.0] automatically
     dtype: float32
   agent_orientation:
     type: Box
@@ -1145,6 +2433,254 @@ WANDB_API_KEY=your_wandb_api_key
 ```
 
 ### Migration from Legacy Configuration
+
+#### Migration Guide: Unstructured YAML to Dataclass Configuration
+
+The library has evolved from unstructured YAML configuration to Pydantic-validated dataclass configuration, providing type safety, IDE support, and runtime validation.
+
+#### Legacy vs. Modern Configuration Comparison
+
+**Legacy Unstructured Configuration (v0.1.x):**
+```yaml
+# configs/default.yaml - Old approach
+navigator:
+  position: [10.0, 15.0]  # No type validation
+  max_speed: "2.0"        # String accepted, potential runtime errors
+  invalid_field: "value" # Unknown fields silently ignored
+
+video_plume:
+  video_path: null        # Missing required field not caught
+  kernel_size: 2          # Even numbers allowed, causes OpenCV errors
+  threshold: 1.5          # Invalid range not validated
+```
+
+**Modern Structured Configuration (v0.2.x):**
+```yaml
+# conf/config.yaml - New approach with validation
+# @package _global_
+_target_: odor_plume_nav.config.models.NavigatorConfig
+
+navigator:
+  position: [10.0, 15.0]  # Type-validated as List[float]
+  max_speed: 2.0          # Must be float, validated at load time
+  # invalid_field: "value" # Rejected with clear error message
+
+video_plume:
+  video_path: "data/example.mp4"  # Required field enforced
+  kernel_size: 3          # Must be odd, validated in __post_init__
+  threshold: 0.8          # Range [0.0, 1.0] enforced automatically
+```
+
+#### Step-by-Step Migration Process
+
+##### Step 1: Install Updated Dependencies
+
+```bash
+# Ensure you have the latest version with structured config support
+pip install "odor_plume_nav[rl]>=0.2.0"
+# or
+poetry add "odor_plume_nav[rl]>=0.2.0"
+```
+
+##### Step 2: Update Configuration Directory Structure
+
+```bash
+# Old structure
+configs/
+├── default.yaml
+├── example_user_config.yaml
+└── README.md
+
+# New structure
+conf/
+├── base.yaml          # Replaces default.yaml
+├── config.yaml        # Replaces example_user_config.yaml  
+├── rl/                # New: RL-specific configurations
+│   ├── algorithms/
+│   ├── environments/
+│   └── training.yaml
+└── local/             # New: environment-specific overrides
+    ├── development.yaml
+    └── production.yaml
+```
+
+##### Step 3: Convert Configuration Loading Code
+
+**Legacy Loading Approach:**
+```python
+# Old approach - error-prone manual loading
+from odor_plume_nav.services.config_loader import load_config
+import yaml
+
+config = load_config("configs/default.yaml")
+# No validation, runtime errors possible
+navigator = create_navigator(
+    position=config["navigator"]["position"],  # Dictionary access
+    max_speed=float(config["navigator"]["max_speed"])  # Manual type conversion
+)
+```
+
+**Modern Structured Loading:**
+```python
+# New approach - type-safe with automatic validation
+from hydra import compose, initialize
+from odor_plume_nav.config.models import NavigatorConfig
+from odor_plume_nav.core import Navigator
+
+with initialize(config_path="../conf", version_base=None):
+    cfg = compose(config_name="config")
+    
+    # Fully typed configuration object
+    navigator_config: NavigatorConfig = cfg.navigator
+    
+    # Type safety and IDE autocomplete
+    navigator = Navigator.from_config(navigator_config)
+    # All validation happened at cfg composition time
+```
+
+##### Step 4: Update Parameter Override Patterns
+
+**Legacy Override Pattern:**
+```python
+# Old approach - manual dictionary manipulation
+config = load_config("configs/default.yaml")
+config["navigator"]["max_speed"] = 2.5  # No validation
+config["video_plume"]["nonexistent"] = "value"  # Silently accepted
+```
+
+**Modern Override Pattern:**
+```python
+# New approach - validated overrides
+with initialize(config_path="../conf"):
+    cfg = compose(
+        config_name="config",
+        overrides=[
+            "navigator.max_speed=2.5",  # Validated against NavigatorConfig
+            # "navigator.nonexistent=value"  # Rejected with clear error
+        ]
+    )
+```
+
+##### Step 5: Update CLI Integration
+
+**Legacy CLI Usage:**
+```bash
+# Old approach - manual parameter passing
+python scripts/run_simulation.py \
+    --config configs/my_config.yaml \
+    --max-speed 2.0 \
+    --video-path data/video.mp4
+```
+
+**Modern CLI Usage:**
+```bash
+# New approach - Hydra integration with validation
+plume-nav-sim run \
+    navigator.max_speed=2.0 \
+    video_plume.video_path=data/video.mp4 \
+    --config-name my_config
+```
+
+#### Configuration Validation Benefits
+
+##### Immediate Error Detection
+
+```python
+# Example validation errors caught at startup:
+
+# Type validation
+navigator:
+  max_speed: "invalid"  # ValidationError: Input should be a valid number
+
+# Range validation  
+video_plume:
+  threshold: 1.5        # ValidationError: Threshold must be between 0.0 and 1.0
+
+# Required field validation
+video_plume:
+  # video_path missing   # ValidationError: Field required
+
+# Custom business logic validation
+navigator:
+  speed: 3.0
+  max_speed: 2.0        # ValidationError: Speed cannot exceed max_speed
+
+# Cross-component validation
+gymnasium:
+  max_episode_steps: -100  # ValidationError: Max episode steps must be positive
+```
+
+##### IDE Integration Benefits
+
+```python
+from odor_plume_nav.config.models import NavigatorConfig
+
+# Full IDE autocomplete and type hints
+config = NavigatorConfig(
+    position=[10.0, 15.0],  # IDE knows this is List[float]
+    max_speed=2.0,          # IDE knows this is float
+    # IDE will suggest valid field names and types
+)
+
+# Type checking with mypy
+def create_navigator(config: NavigatorConfig) -> Navigator:
+    # mypy verifies all attribute access
+    return Navigator(
+        position=config.position,      # Validated List[float]
+        max_speed=config.max_speed,    # Validated float
+    )
+```
+
+#### Backward Compatibility Strategy
+
+The library maintains backward compatibility during the transition period:
+
+```python
+# Compatibility loading function for legacy configurations
+from odor_plume_nav.config.legacy import load_legacy_config
+from odor_plume_nav.config.models import migrate_legacy_config
+
+def load_config_with_migration(config_path: str):
+    """Load configuration with automatic migration from legacy format."""
+    
+    if config_path.endswith('configs/'):  # Legacy path pattern
+        # Load legacy configuration
+        legacy_config = load_legacy_config(config_path)
+        
+        # Migrate to structured format with validation
+        structured_config = migrate_legacy_config(legacy_config)
+        
+        # Warn user about deprecated usage
+        logger.warning(
+            "Using legacy configuration format. "
+            "Consider migrating to structured configuration in conf/ directory.",
+            legacy_path=config_path
+        )
+        
+        return structured_config
+    
+    else:
+        # Load modern structured configuration
+        with initialize(config_path=config_path):
+            return compose(config_name="config")
+
+# Usage supports both formats during migration
+config = load_config_with_migration("configs/")  # Legacy support
+# config = load_config_with_migration("conf/")   # Modern approach
+```
+
+#### Migration Checklist
+
+- [ ] **Install updated dependencies** with dataclass support
+- [ ] **Create new `conf/` directory** structure  
+- [ ] **Migrate configuration files** from `configs/` to `conf/`
+- [ ] **Add structured config annotations** to YAML files
+- [ ] **Update configuration loading code** to use Hydra compose()
+- [ ] **Replace manual parameter access** with typed configuration objects
+- [ ] **Update CLI usage** to use new Hydra integration
+- [ ] **Test configuration validation** with intentional errors
+- [ ] **Update documentation** and examples to use structured configs
+- [ ] **Remove legacy configuration files** after validation
 
 If migrating from the old `configs/` structure to the new Hydra-based `conf/` system:
 
@@ -1565,13 +3101,56 @@ If you use this library in your research, please cite:
 
 ## Changelog
 
-### Version 0.2.0 (Gymnasium Integration Release)
+### Version 0.2.0 (API Consistency and Integration Hardening Release)
 
-- **Gymnasium API Integration**: Full compliance with Gymnasium environment interface
-- **RL Training Workflows**: CLI commands for PPO, SAC, and TD3 algorithm training
-- **Environment Wrappers**: Preprocessing and reward shaping capabilities
-- **Migration Support**: Backward compatibility with existing simulation APIs
-- **Enhanced Documentation**: Comprehensive RL integration examples and best practices
+#### Core Refactoring and Modernization
+
+- **Gymnasium 0.29.x API Compliance**: Full upgrade from legacy gym to modern Gymnasium with pinned 0.29.x dependency for stability
+- **Dual API Support**: Automatic detection and compatibility layer supporting both 4-tuple legacy gym and 5-tuple Gymnasium APIs without breaking changes
+- **New Environment ID**: Introduced `PlumeNavSim-v0` environment alongside existing `OdorPlumeNavigation-v1` for enhanced features
+- **Backward Compatibility**: Zero breaking changes - all existing gym-based code continues to work unchanged
+
+#### Structured Configuration Revolution
+
+- **Dataclass-Based Configuration**: Complete migration from unstructured YAML to Pydantic-validated dataclass configuration
+- **Type Safety**: Full type validation with IDE autocomplete and mypy support throughout configuration system
+- **Runtime Validation**: Configuration errors caught at startup rather than runtime, improving reliability
+- **Hydra 1.3+ Integration**: Enhanced structured config support with ConfigStore registration and automatic schema validation
+
+#### Centralized Logging Architecture
+
+- **Loguru Integration**: Replaced ad-hoc print statements and basic logging with structured JSON logging system
+- **Correlation ID Tracking**: Cross-component request correlation for distributed debugging and analysis
+- **Performance Monitoring**: Integrated logging with performance threshold monitoring and automatic alerting
+- **Structured Output**: JSON-formatted logs with configurable sinks for development and production environments
+
+#### Enhanced Developer Experience
+
+- **Migration Guides**: Comprehensive documentation for gym→gymnasium and unstructured→structured config transitions
+- **Configuration Examples**: Extensive examples of dataclass configuration patterns for all components
+- **Logging Configuration**: Detailed examples of Loguru setup for development and production environments
+- **API Documentation**: Updated examples showing dual API support and best practices
+
+#### Performance and Quality Improvements
+
+- **Test Coverage Enhancement**: Expanded test coverage targeting ≥70% overall, ≥80% for new code
+- **Cross-Repository Integration**: CI verification against `place_mem_rl` main branch and v0.2.0 tag
+- **Performance Preservation**: Maintained ≤10ms average step() time on Intel i7-9700K single thread
+- **Memory Efficiency**: Optimized memory usage patterns for large-scale multi-agent scenarios
+
+#### Integration and Compatibility
+
+- **stable-baselines3 Compatibility**: Seamless integration with latest stable-baselines3 versions
+- **Gymnasium Ecosystem**: Full compatibility with gymnasium wrappers and utilities
+- **Legacy Support**: Comprehensive backward compatibility layer with deprecation warnings
+- **Environment Registration**: Enhanced registration system supporting both legacy and modern environment IDs
+
+#### Documentation and Examples
+
+- **Migration Documentation**: Step-by-step guides for API and configuration transitions
+- **Structured Config Examples**: Comprehensive examples of dataclass-based configuration patterns
+- **Logging Examples**: Detailed Loguru configuration and usage patterns
+- **Best Practices**: Updated recommendations for modern development workflows
 
 ### Version 0.1.0 (Initial Release)
 

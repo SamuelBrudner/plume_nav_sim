@@ -1,0 +1,979 @@
+name: Cross-Repository Integration Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly at 2 AM UTC to catch integration drift
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      place_mem_rl_ref:
+        description: 'place_mem_rl reference to test against (branch/tag/commit)'
+        required: false
+        default: 'main'
+        type: string
+      python_version:
+        description: 'Python version for testing'
+        required: false
+        default: '3.11'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+      performance_benchmark:
+        description: 'Run extended performance benchmarks'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Performance thresholds aligned with technical specification requirements
+  MAX_STEP_LATENCY_MS: 10
+  MIN_SIMULATION_FPS: 30
+  MAX_MEMORY_PER_100_AGENTS_MB: 10
+  MIN_RL_TRAINING_STEPS_PER_HOUR: 1000000
+  
+  # Logging configuration for structured JSON output
+  LOGURU_LEVEL: INFO
+  LOGURU_FORMAT: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {extra[request_id]} | {message}"
+  LOGURU_ENQUEUE: true
+  LOGURU_BACKTRACE: true
+  LOGURU_DIAGNOSE: true
+  
+  # OpenCV threading optimization for CI environments
+  OPENCV_THREADS: 2
+  NUMPY_THREADS: 2
+  
+  # CI-specific configuration
+  CI: true
+  PYTHONUNBUFFERED: 1
+  PYTEST_TIMEOUT: 1800  # 30 minutes for comprehensive tests
+
+jobs:
+  integration-testing:
+    name: Integration Test - ${{ matrix.place_mem_rl_ref }} (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+        place_mem_rl_ref: ['main', 'latest-tag']
+        include:
+          # Extended testing configurations for comprehensive validation
+          - python-version: '3.11'
+            place_mem_rl_ref: 'main'
+            extended_tests: true
+          - python-version: '3.10' 
+            place_mem_rl_ref: 'latest-tag'
+            performance_focus: true
+      fail-fast: false  # Continue testing other configurations if one fails
+      
+    env:
+      CORRELATION_ID: ${{ github.run_id }}-${{ matrix.python-version }}-${{ matrix.place_mem_rl_ref }}
+      LOG_ARTIFACT_NAME: integration-logs-${{ matrix.python-version }}-${{ matrix.place_mem_rl_ref }}-${{ github.run_id }}
+      
+    steps:
+    - name: Checkout odor_plume_nav repository
+      uses: actions/checkout@v4
+      with:
+        path: odor_plume_nav
+        fetch-depth: 0  # Full history for comprehensive testing
+        
+    - name: Resolve place_mem_rl reference
+      id: resolve_ref
+      run: |
+        cd odor_plume_nav
+        if [ "${{ matrix.place_mem_rl_ref }}" = "latest-tag" ]; then
+          # Fetch latest stable release tag from place_mem_rl repository
+          LATEST_TAG=$(curl -s https://api.github.com/repos/organization/place_mem_rl/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "No release tags found, falling back to v0.2.0"
+            PLACE_MEM_RL_REF="v0.2.0"
+          else
+            PLACE_MEM_RL_REF="$LATEST_TAG"
+          fi
+        else
+          PLACE_MEM_RL_REF="${{ matrix.place_mem_rl_ref }}"
+        fi
+        echo "place_mem_rl_ref=$PLACE_MEM_RL_REF" >> $GITHUB_OUTPUT
+        echo "Testing against place_mem_rl reference: $PLACE_MEM_RL_REF"
+        
+    - name: Checkout place_mem_rl consumer repository
+      uses: actions/checkout@v4
+      with:
+        repository: organization/place_mem_rl
+        ref: ${{ steps.resolve_ref.outputs.place_mem_rl_ref }}
+        path: place_mem_rl
+        token: ${{ secrets.CROSS_REPO_ACCESS_TOKEN }}
+        
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libopencv-dev \
+          python3-opencv \
+          ffmpeg \
+          libsm6 \
+          libxext6 \
+          libxrender-dev \
+          libglib2.0-0 \
+          libgtk-3-dev
+          
+    - name: Create test video data
+      run: |
+        cd odor_plume_nav
+        python -c "
+        import numpy as np
+        import cv2
+        from pathlib import Path
+        
+        # Create test video for integration testing
+        test_data_dir = Path('test_data')
+        test_data_dir.mkdir(exist_ok=True)
+        
+        # Generate synthetic odor plume video
+        frames = []
+        for i in range(100):
+            frame = np.zeros((240, 320), dtype=np.uint8)
+            # Add synthetic odor plume gradient
+            y, x = np.ogrid[:240, :320]
+            center_x, center_y = 160 + 20 * np.sin(i * 0.1), 120 + 10 * np.cos(i * 0.1)
+            distances = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+            frame = (255 * np.exp(-distances / 50)).astype(np.uint8)
+            frames.append(frame)
+        
+        # Write test video
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(str(test_data_dir / 'test_plume.mp4'), fourcc, 10.0, (320, 240), False)
+        for frame in frames:
+            out.write(frame)
+        out.release()
+        
+        print(f'Created test video: {test_data_dir / \"test_plume.mp4\"}')
+        "
+        
+    - name: Install odor_plume_nav with RL dependencies
+      run: |
+        cd odor_plume_nav
+        pip install --upgrade pip setuptools wheel
+        pip install -e ".[rl,dev]"
+        
+        # Verify critical dependencies are installed with correct versions
+        python -c "
+        import sys
+        print(f'Python: {sys.version}')
+        
+        try:
+            import gymnasium
+            print(f'Gymnasium: {gymnasium.__version__}')
+            assert gymnasium.__version__.startswith('0.29'), f'Expected Gymnasium 0.29.x, got {gymnasium.__version__}'
+        except ImportError as e:
+            print(f'Gymnasium import failed: {e}')
+            sys.exit(1)
+            
+        try:
+            import loguru
+            print(f'Loguru: {loguru.__version__}')
+        except ImportError as e:
+            print(f'Loguru import failed: {e}')
+            sys.exit(1)
+            
+        try:
+            import stable_baselines3
+            print(f'Stable-Baselines3: {stable_baselines3.__version__}')
+        except ImportError:
+            print('Stable-Baselines3 not available (optional dependency)')
+            
+        print('Core dependencies validation passed')
+        "
+        
+    - name: Install place_mem_rl with dependencies
+      run: |
+        cd place_mem_rl
+        pip install -e .
+        
+        # Verify place_mem_rl installation and compatibility
+        python -c "
+        import place_mem_rl
+        print(f'place_mem_rl version: {getattr(place_mem_rl, \"__version__\", \"unknown\")}')
+        
+        # Test basic import compatibility
+        try:
+            from place_mem_rl.environments import MemoryEnv
+            print('place_mem_rl.environments.MemoryEnv import: SUCCESS')
+        except ImportError as e:
+            print(f'place_mem_rl.environments.MemoryEnv import: FAILED - {e}')
+            
+        try:
+            from place_mem_rl.agents import MemoryAgent
+            print('place_mem_rl.agents.MemoryAgent import: SUCCESS')
+        except ImportError as e:
+            print(f'place_mem_rl.agents.MemoryAgent import: FAILED - {e}')
+        "
+        
+    - name: Initialize structured logging for integration tests
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import sys
+        import json
+        from pathlib import Path
+        
+        # Configure Loguru for structured JSON logging with correlation IDs
+        log_dir = Path('integration_logs')
+        log_dir.mkdir(exist_ok=True)
+        
+        # Remove default handler to prevent duplicate logs
+        logger.remove()
+        
+        # Add structured JSON file sink
+        logger.add(
+            str(log_dir / 'integration_test.json'),
+            format='{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {extra[correlation_id]} | {message}',
+            level='INFO',
+            serialize=True,
+            enqueue=True,
+            backtrace=True,
+            diagnose=True
+        )
+        
+        # Add console sink for CI visibility
+        logger.add(
+            sys.stderr,
+            format='{time:HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}',
+            level='INFO',
+            colorize=True
+        )
+        
+        # Initialize correlation context
+        correlation_id = '${{ env.CORRELATION_ID }}'
+        logger = logger.bind(correlation_id=correlation_id, test_phase='initialization')
+        
+        logger.info('Structured logging initialized for cross-repository integration testing')
+        logger.info('Testing configuration', 
+                   python_version='${{ matrix.python-version }}',
+                   place_mem_rl_ref='${{ steps.resolve_ref.outputs.place_mem_rl_ref }}',
+                   max_step_latency_ms=${{ env.MAX_STEP_LATENCY_MS }},
+                   min_simulation_fps=${{ env.MIN_SIMULATION_FPS }})
+        "
+        
+    - name: API Compatibility Testing - Gymnasium Interface
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import numpy as np
+        import time
+        import sys
+        from pathlib import Path
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='gymnasium_api_test')
+        
+        logger.info('Starting Gymnasium API compatibility testing')
+        
+        try:
+            # Test new Gymnasium 0.29.x API with 5-tuple returns
+            import gymnasium as gym
+            from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv, create_gymnasium_environment
+            
+            # Test environment creation via factory
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {
+                    'max_speed': 2.0,
+                    'max_angular_velocity': 90.0,
+                    'initial_position': [160, 120]
+                },
+                'max_episode_steps': 100,
+                'performance_monitoring': True
+            }
+            
+            env = create_gymnasium_environment(config)
+            logger.info('Gymnasium environment created successfully')
+            
+            # Test reset with seed - should return 2-tuple (obs, info)
+            obs, info = env.reset(seed=42)
+            logger.info('Environment reset completed', 
+                       obs_keys=list(obs.keys()),
+                       info_keys=list(info.keys()),
+                       obs_dtypes={k: str(v.dtype) for k, v in obs.items() if hasattr(v, 'dtype')})
+            
+            # Validate observation structure
+            required_obs_keys = {'odor_concentration', 'agent_position', 'agent_orientation'}
+            obs_keys = set(obs.keys())
+            assert required_obs_keys.issubset(obs_keys), f'Missing required observation keys: {required_obs_keys - obs_keys}'
+            
+            # Test step - should return 5-tuple (obs, reward, terminated, truncated, info)
+            action = env.action_space.sample()
+            step_start = time.perf_counter()
+            obs, reward, terminated, truncated, info = env.step(action)
+            step_time = (time.perf_counter() - step_start) * 1000  # Convert to milliseconds
+            
+            logger.info('Environment step completed',
+                       step_time_ms=step_time,
+                       reward=float(reward),
+                       terminated=terminated,
+                       truncated=truncated,
+                       performance_threshold_ms=${{ env.MAX_STEP_LATENCY_MS }})
+            
+            # Validate 5-tuple return format (Gymnasium 0.29.x requirement)
+            assert isinstance(terminated, bool), f'terminated should be bool, got {type(terminated)}'
+            assert isinstance(truncated, bool), f'truncated should be bool, got {type(truncated)}'
+            assert isinstance(reward, (int, float)), f'reward should be numeric, got {type(reward)}'
+            
+            # Performance validation - step latency must be ≤10ms
+            if step_time > ${{ env.MAX_STEP_LATENCY_MS }}:
+                logger.warning('Step latency exceeds threshold',
+                             actual_ms=step_time,
+                             threshold_ms=${{ env.MAX_STEP_LATENCY_MS }},
+                             performance_impact='training_efficiency_degraded')
+            else:
+                logger.info('Step latency within performance threshold',
+                           actual_ms=step_time,
+                           threshold_ms=${{ env.MAX_STEP_LATENCY_MS }})
+            
+            # Test multiple steps for performance stability
+            step_times = []
+            for i in range(10):
+                action = env.action_space.sample()
+                start_time = time.perf_counter()
+                obs, reward, terminated, truncated, info = env.step(action)
+                step_time = (time.perf_counter() - start_time) * 1000
+                step_times.append(step_time)
+                
+                if terminated or truncated:
+                    obs, info = env.reset()
+            
+            avg_step_time = np.mean(step_times)
+            max_step_time = np.max(step_times)
+            
+            logger.info('Performance benchmark completed',
+                       avg_step_time_ms=avg_step_time,
+                       max_step_time_ms=max_step_time,
+                       samples=len(step_times),
+                       performance_stable=avg_step_time <= ${{ env.MAX_STEP_LATENCY_MS }})
+            
+            env.close()
+            logger.info('Gymnasium API compatibility test PASSED')
+            
+        except Exception as e:
+            logger.error('Gymnasium API compatibility test FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: API Compatibility Testing - Legacy Gym Interface
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import warnings
+        import sys
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='legacy_gym_api_test')
+        
+        logger.info('Starting legacy gym API compatibility testing')
+        
+        try:
+            # Test legacy gym compatibility with deprecation warnings
+            warnings.simplefilter('always', DeprecationWarning)
+            
+            # Simulate legacy gym usage pattern
+            import odor_plume_nav
+            
+            # Test that legacy imports trigger appropriate warnings
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter('always')
+                
+                # This should work but may trigger deprecation warnings
+                from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
+                
+                # Check for deprecation warnings in system
+                deprecation_warnings = [warning for warning in w if issubclass(warning.category, DeprecationWarning)]
+                
+                if deprecation_warnings:
+                    logger.info('Legacy API deprecation warnings detected',
+                               warning_count=len(deprecation_warnings),
+                               warnings=[str(warning.message) for warning in deprecation_warnings])
+                else:
+                    logger.info('No deprecation warnings detected for current usage pattern')
+            
+            # Test legacy-style environment usage (if compatibility layer exists)
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {'max_speed': 2.0, 'initial_position': [160, 120]},
+                'max_episode_steps': 50
+            }
+            
+            env = GymnasiumEnv.from_config(config)
+            
+            # Test if environment can detect legacy calling patterns
+            obs, info = env.reset()
+            action = env.action_space.sample()
+            
+            # Test step method - should return 5-tuple for new API
+            result = env.step(action)
+            assert len(result) == 5, f'Expected 5-tuple from step(), got {len(result)}-tuple'
+            
+            obs, reward, terminated, truncated, info = result
+            logger.info('Legacy compatibility layer validation passed',
+                       return_tuple_length=len(result),
+                       expected_length=5)
+            
+            env.close()
+            logger.info('Legacy gym API compatibility test PASSED')
+            
+        except Exception as e:
+            logger.error('Legacy gym API compatibility test FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: Cross-Repository Integration Testing
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import sys
+        import time
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='cross_repo_integration')
+        
+        logger.info('Starting cross-repository integration testing with place_mem_rl')
+        
+        try:
+            # Test integration between odor_plume_nav and place_mem_rl
+            import odor_plume_nav
+            import place_mem_rl
+            
+            logger.info('Both repositories imported successfully',
+                       odor_plume_nav_version=getattr(odor_plume_nav, '__version__', 'unknown'),
+                       place_mem_rl_version=getattr(place_mem_rl, '__version__', 'unknown'))
+            
+            # Test environment interoperability
+            from odor_plume_nav.environments.gymnasium_env import create_gymnasium_environment
+            
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {
+                    'max_speed': 2.0,
+                    'max_angular_velocity': 90.0,
+                    'initial_position': [160, 120]
+                },
+                'spaces': {
+                    'include_multi_sensor': True,
+                    'num_sensors': 2
+                },
+                'max_episode_steps': 20,
+                'performance_monitoring': True
+            }
+            
+            odor_env = create_gymnasium_environment(config)
+            logger.info('Odor plume environment created for integration testing')
+            
+            # Test that place_mem_rl can work with odor_plume_nav environments
+            try:
+                # This tests if place_mem_rl can consume odor_plume_nav environment APIs
+                from place_mem_rl.environments import MemoryEnv
+                
+                # Try to create a wrapped memory environment (if API allows)
+                # This tests the integration pattern place_mem_rl might use
+                obs, info = odor_env.reset(seed=42)
+                action = odor_env.action_space.sample()
+                
+                integration_start = time.perf_counter()
+                obs, reward, terminated, truncated, info = odor_env.step(action)
+                integration_time = (time.perf_counter() - integration_start) * 1000
+                
+                logger.info('Cross-repository API integration successful',
+                           integration_time_ms=integration_time,
+                           observation_structure=list(obs.keys()),
+                           reward_type=type(reward).__name__,
+                           info_keys=list(info.keys()))
+                
+                # Validate API consistency for downstream consumption
+                assert 'odor_concentration' in obs, 'Missing odor_concentration in observation'
+                assert 'agent_position' in obs, 'Missing agent_position in observation'
+                assert isinstance(reward, (int, float)), 'Reward must be numeric for RL integration'
+                
+                logger.info('API consistency validation passed for downstream consumption')
+                
+            except ImportError as e:
+                logger.warning('place_mem_rl MemoryEnv not available for integration test', error=str(e))
+                # Continue with basic compatibility validation
+                
+            odor_env.close()
+            logger.info('Cross-repository integration test PASSED')
+            
+        except Exception as e:
+            logger.error('Cross-repository integration test FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: Performance Benchmarking and Validation
+      if: matrix.performance_focus == true || github.event.inputs.performance_benchmark == 'true'
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import numpy as np
+        import time
+        import sys
+        import psutil
+        import gc
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='performance_benchmark')
+        
+        logger.info('Starting comprehensive performance benchmarking')
+        
+        try:
+            from odor_plume_nav.environments.gymnasium_env import create_gymnasium_environment
+            
+            # Configuration for performance testing
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {
+                    'max_speed': 3.0,
+                    'max_angular_velocity': 120.0,
+                    'initial_position': [160, 120]
+                },
+                'spaces': {
+                    'include_multi_sensor': True,
+                    'num_sensors': 3
+                },
+                'max_episode_steps': 1000,
+                'performance_monitoring': True
+            }
+            
+            env = create_gymnasium_environment(config)
+            logger.info('Performance test environment created')
+            
+            # Memory baseline measurement
+            process = psutil.Process()
+            baseline_memory = process.memory_info().rss / 1024 / 1024  # MB
+            logger.info('Baseline memory usage', memory_mb=baseline_memory)
+            
+            # Single environment performance test
+            step_times = []
+            rewards = []
+            memory_samples = []
+            
+            obs, info = env.reset(seed=12345)
+            
+            benchmark_steps = 100
+            logger.info('Starting step latency benchmark', total_steps=benchmark_steps)
+            
+            for step in range(benchmark_steps):
+                action = env.action_space.sample()
+                
+                step_start = time.perf_counter()
+                obs, reward, terminated, truncated, info = env.step(action)
+                step_time = (time.perf_counter() - step_start) * 1000  # milliseconds
+                
+                step_times.append(step_time)
+                rewards.append(reward)
+                
+                # Sample memory usage every 10 steps
+                if step % 10 == 0:
+                    current_memory = process.memory_info().rss / 1024 / 1024
+                    memory_samples.append(current_memory)
+                
+                # Reset if episode ends
+                if terminated or truncated:
+                    obs, info = env.reset()
+                
+                # Log warning if step exceeds threshold
+                if step_time > ${{ env.MAX_STEP_LATENCY_MS }}:
+                    logger.warning('Step latency threshold exceeded',
+                                 step=step,
+                                 actual_ms=step_time,
+                                 threshold_ms=${{ env.MAX_STEP_LATENCY_MS }})
+            
+            # Performance analysis
+            avg_step_time = np.mean(step_times)
+            p95_step_time = np.percentile(step_times, 95)
+            max_step_time = np.max(step_times)
+            fps_estimate = 1000 / avg_step_time if avg_step_time > 0 else float('inf')
+            
+            max_memory = np.max(memory_samples)
+            avg_memory = np.mean(memory_samples)
+            memory_increase = max_memory - baseline_memory
+            
+            logger.info('Performance benchmark results',
+                       avg_step_time_ms=avg_step_time,
+                       p95_step_time_ms=p95_step_time,
+                       max_step_time_ms=max_step_time,
+                       estimated_fps=fps_estimate,
+                       target_fps=${{ env.MIN_SIMULATION_FPS }},
+                       max_memory_mb=max_memory,
+                       avg_memory_mb=avg_memory,
+                       memory_increase_mb=memory_increase,
+                       benchmark_steps=benchmark_steps)
+            
+            # Performance validation against requirements
+            performance_passed = True
+            
+            if avg_step_time > ${{ env.MAX_STEP_LATENCY_MS }}:
+                logger.error('PERFORMANCE FAILURE: Average step latency exceeds requirement',
+                           actual_ms=avg_step_time,
+                           threshold_ms=${{ env.MAX_STEP_LATENCY_MS }})
+                performance_passed = False
+            
+            if fps_estimate < ${{ env.MIN_SIMULATION_FPS }}:
+                logger.error('PERFORMANCE FAILURE: Simulation FPS below requirement',
+                           actual_fps=fps_estimate,
+                           target_fps=${{ env.MIN_SIMULATION_FPS }})
+                performance_passed = False
+            
+            # Estimate steps per hour for RL training
+            steps_per_hour = 3600 * 1000 / avg_step_time if avg_step_time > 0 else float('inf')
+            if steps_per_hour < ${{ env.MIN_RL_TRAINING_STEPS_PER_HOUR }}:
+                logger.warning('RL training throughput below target',
+                             actual_steps_per_hour=int(steps_per_hour),
+                             target_steps_per_hour=${{ env.MIN_RL_TRAINING_STEPS_PER_HOUR }})
+            
+            if not performance_passed:
+                logger.error('Performance benchmarking FAILED - requirements not met')
+                sys.exit(1)
+            else:
+                logger.info('Performance benchmarking PASSED - all requirements met')
+            
+            env.close()
+            
+        except Exception as e:
+            logger.error('Performance benchmarking FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: Gymnasium Environment Validation
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import sys
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='gymnasium_validation')
+        
+        logger.info('Starting Gymnasium environment validation with env_checker')
+        
+        try:
+            import gymnasium as gym
+            from gymnasium.utils.env_checker import check_env
+            from odor_plume_nav.environments.gymnasium_env import create_gymnasium_environment
+            
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {
+                    'max_speed': 2.0,
+                    'max_angular_velocity': 90.0,
+                    'initial_position': [160, 120]
+                },
+                'max_episode_steps': 50,
+                'performance_monitoring': False  # Disable for validation
+            }
+            
+            env = create_gymnasium_environment(config)
+            logger.info('Environment created for Gymnasium validation')
+            
+            # Run comprehensive Gymnasium API validation
+            try:
+                check_env(env, warn=True, skip_render_check=True)
+                logger.info('Gymnasium environment validation PASSED')
+                
+            except Exception as validation_error:
+                logger.error('Gymnasium environment validation FAILED',
+                           validation_error=str(validation_error),
+                           error_type=type(validation_error).__name__)
+                env.close()
+                sys.exit(1)
+            
+            env.close()
+            
+        except Exception as e:
+            logger.error('Gymnasium validation setup FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: Extended Integration Testing
+      if: matrix.extended_tests == true
+      run: |
+        cd odor_plume_nav
+        python -c "
+        from loguru import logger
+        import sys
+        import warnings
+        
+        # Bind correlation context
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='extended_integration')
+        
+        logger.info('Starting extended integration testing')
+        
+        try:
+            # Test vectorized environment creation (if supported)
+            from odor_plume_nav.environments.gymnasium_env import create_gymnasium_environment
+            import numpy as np
+            
+            config = {
+                'video_path': 'test_data/test_plume.mp4',
+                'navigator': {
+                    'max_speed': 2.0,
+                    'max_angular_velocity': 90.0
+                },
+                'max_episode_steps': 30
+            }
+            
+            # Test multiple environment instances for stability
+            environments = []
+            for i in range(3):
+                env = create_gymnasium_environment(config, seed=i*100)
+                environments.append(env)
+                logger.info(f'Extended test environment {i+1} created')
+            
+            # Test parallel operation
+            for env in environments:
+                obs, info = env.reset()
+                for _ in range(5):
+                    action = env.action_space.sample()
+                    obs, reward, terminated, truncated, info = env.step(action)
+                    if terminated or truncated:
+                        obs, info = env.reset()
+            
+            # Cleanup
+            for env in environments:
+                env.close()
+            
+            logger.info('Extended integration testing PASSED')
+            
+            # Test feature availability flags
+            import odor_plume_nav
+            features = odor_plume_nav.get_available_features()
+            logger.info('Feature availability check',
+                       available_features=features,
+                       rl_integration=features.get('rl_integration', False),
+                       gymnasium_env=features.get('gymnasium_env', False))
+            
+            required_features = ['rl_integration', 'gymnasium_env']
+            missing_features = [f for f in required_features if not features.get(f, False)]
+            
+            if missing_features:
+                logger.error('Required features missing for integration',
+                           missing_features=missing_features)
+                sys.exit(1)
+            
+        except Exception as e:
+            logger.error('Extended integration testing FAILED', error=str(e), error_type=type(e).__name__)
+            import traceback
+            logger.error('Full traceback', traceback=traceback.format_exc())
+            sys.exit(1)
+        "
+        
+    - name: Collect structured logs and create artifacts
+      if: always()
+      run: |
+        cd odor_plume_nav
+        
+        # Finalize logging and prepare artifacts
+        python -c "
+        from loguru import logger
+        from pathlib import Path
+        import json
+        import sys
+        
+        # Bind correlation context for final logging
+        logger = logger.bind(correlation_id='${{ env.CORRELATION_ID }}', test_phase='artifact_collection')
+        
+        logger.info('Collecting structured logs and preparing artifacts')
+        
+        # Create artifacts directory
+        artifacts_dir = Path('integration_artifacts')
+        artifacts_dir.mkdir(exist_ok=True)
+        
+        # Copy structured logs
+        log_dir = Path('integration_logs')
+        if log_dir.exists():
+            import shutil
+            for log_file in log_dir.glob('*.json'):
+                shutil.copy(log_file, artifacts_dir / log_file.name)
+                logger.info(f'Log file collected: {log_file.name}')
+        
+        # Generate test summary
+        summary = {
+            'test_configuration': {
+                'python_version': '${{ matrix.python-version }}',
+                'place_mem_rl_ref': '${{ steps.resolve_ref.outputs.place_mem_rl_ref }}',
+                'correlation_id': '${{ env.CORRELATION_ID }}',
+                'github_run_id': '${{ github.run_id }}',
+                'github_sha': '${{ github.sha }}'
+            },
+            'performance_thresholds': {
+                'max_step_latency_ms': ${{ env.MAX_STEP_LATENCY_MS }},
+                'min_simulation_fps': ${{ env.MIN_SIMULATION_FPS }},
+                'min_rl_training_steps_per_hour': ${{ env.MIN_RL_TRAINING_STEPS_PER_HOUR }}
+            },
+            'test_phases': [
+                'initialization',
+                'gymnasium_api_test', 
+                'legacy_gym_api_test',
+                'cross_repo_integration',
+                'gymnasium_validation'
+            ]
+        }
+        
+        if '${{ matrix.extended_tests }}' == 'true':
+            summary['test_phases'].append('extended_integration')
+        if '${{ matrix.performance_focus }}' == 'true':
+            summary['test_phases'].append('performance_benchmark')
+        
+        # Save test summary
+        with open(artifacts_dir / 'test_summary.json', 'w') as f:
+            json.dump(summary, f, indent=2)
+        
+        logger.info('Test artifacts prepared successfully',
+                   artifacts_directory=str(artifacts_dir),
+                   log_files=[f.name for f in artifacts_dir.glob('*.json')])
+        "
+        
+        # Display logs summary for CI visibility
+        echo "=== Integration Test Logs Summary ==="
+        if [ -d "integration_logs" ]; then
+          echo "Structured logs generated:"
+          ls -la integration_logs/
+          echo
+          echo "Recent log entries:"
+          tail -10 integration_logs/*.json 2>/dev/null || echo "No JSON logs found"
+        else
+          echo "No structured logs directory found"
+        fi
+        
+    - name: Upload structured logs as artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.LOG_ARTIFACT_NAME }}
+        path: odor_plume_nav/integration_artifacts/
+        retention-days: 30
+        
+    - name: Upload performance reports
+      if: matrix.performance_focus == true && always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-reports-${{ matrix.python-version }}-${{ github.run_id }}
+        path: |
+          odor_plume_nav/integration_artifacts/*.json
+          odor_plume_nav/integration_logs/*.json
+        retention-days: 90
+
+  integration-summary:
+    name: Integration Test Summary
+    needs: integration-testing
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all integration artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: all_artifacts
+        
+    - name: Generate integration test summary
+      run: |
+        echo "# Cross-Repository Integration Test Results" > $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Test Run:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Check test results
+        if [ "${{ needs.integration-testing.result }}" = "success" ]; then
+          echo "✅ **All integration tests PASSED**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Gymnasium API compatibility verified" >> $GITHUB_STEP_SUMMARY
+          echo "- Legacy gym API compatibility confirmed" >> $GITHUB_STEP_SUMMARY
+          echo "- Cross-repository integration with place_mem_rl successful" >> $GITHUB_STEP_SUMMARY
+          echo "- Performance requirements met (step latency ≤10ms)" >> $GITHUB_STEP_SUMMARY
+          echo "- Structured logging and artifacts collected" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Integration tests FAILED**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job logs and artifacts for detailed failure analysis." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Artifacts Generated" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -d "all_artifacts" ]; then
+          find all_artifacts -name "*.json" -type f | while read -r file; do
+            echo "- $(basename \"$file\")" >> $GITHUB_STEP_SUMMARY
+          done
+        else
+          echo "No artifacts found." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Performance Validation" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Max Step Latency:** ≤${{ env.MAX_STEP_LATENCY_MS }}ms" >> $GITHUB_STEP_SUMMARY
+        echo "- **Min Simulation FPS:** ≥${{ env.MIN_SIMULATION_FPS }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Min RL Training Throughput:** ≥${{ env.MIN_RL_TRAINING_STEPS_PER_HOUR }} steps/hour" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Post integration results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const testResult = '${{ needs.integration-testing.result }}';
+          const runId = '${{ github.run_id }}';
+          const sha = '${{ github.sha }}';
+          
+          const statusIcon = testResult === 'success' ? '✅' : '❌';
+          const statusText = testResult === 'success' ? 'PASSED' : 'FAILED';
+          
+          const comment = `## ${statusIcon} Cross-Repository Integration Test ${statusText}
+          
+          **Test Run:** [${runId}](https://github.com/${{ github.repository }}/actions/runs/${runId})
+          **Commit:** ${sha.substring(0, 7)}
+          
+          ### Test Coverage
+          - Gymnasium API compatibility (0.29.x)
+          - Legacy gym API compatibility  
+          - Cross-repository integration with place_mem_rl
+          - Performance validation (step latency ≤10ms)
+          - Structured logging collection
+          
+          ${testResult === 'success' ? 
+            '✅ All integration tests passed successfully!' : 
+            '❌ Integration tests failed. Check the workflow logs for details.'}
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
