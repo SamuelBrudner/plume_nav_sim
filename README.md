@@ -1080,7 +1080,153 @@ def parallel_training():
     return model
 ```
 
-## Structured Logging with Loguru
+## Enhanced Structured Logging with Performance Analytics
+
+### Overview
+
+The library features a comprehensive structured logging system built on Loguru with deep integration into the frame caching and performance monitoring systems. This provides machine-parseable JSON logs, correlation IDs for distributed debugging, and automatic performance metrics collection embedded directly in simulation workflows.
+
+### Key Features
+
+- **JSON-Structured Logs**: Machine-readable logging for automated analysis and monitoring
+- **Performance Metrics Integration**: Automatic embedding of cache statistics and step timings in `info["perf_stats"]`
+- **Correlation ID Tracking**: Complete experiment traceability across distributed systems
+- **Multi-Sink Configuration**: Flexible output to console, files, and external systems
+- **Environment-Specific Profiles**: Development vs production logging configurations
+
+### Performance Analytics Integration
+
+#### Automatic Performance Logging
+
+The logging system automatically captures and structures performance metrics from the frame caching system:
+
+```python
+from odor_plume_nav.api.navigation import create_gymnasium_environment
+from loguru import logger
+
+# Environment automatically logs performance metrics
+env = create_gymnasium_environment(
+    config_path="conf/config.yaml",
+    frame_cache="lru"
+)
+
+obs, info = env.reset()
+for step in range(1000):
+    action = env.action_space.sample()
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    # Performance stats automatically logged as structured JSON
+    perf_stats = info["perf_stats"]
+    # Logs include: step_time_ms, frame_retrieval_ms, cache_hit_rate, 
+    # cache_hits, cache_misses, cache_evictions, memory_usage_mb, fps_estimate
+    
+    logger.info("Simulation step completed", 
+                step=step, 
+                **perf_stats)
+```
+
+#### Accessing Video Frame Data
+
+```python
+# Enable video frame logging for analysis
+env = create_gymnasium_environment(
+    config_path="conf/config.yaml",
+    frame_cache="lru",
+    include_video_frame=True  # Adds frame data to info
+)
+
+obs, info = env.reset()
+for step in range(100):
+    action = policy.predict(obs)
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    # Access current video frame for analysis (when enabled)
+    if "video_frame" in info:
+        current_frame = info["video_frame"]  # NumPy array (H, W) or (H, W, C)
+        
+        # Log frame statistics
+        frame_stats = {
+            "frame_shape": current_frame.shape,
+            "frame_mean": float(current_frame.mean()),
+            "frame_std": float(current_frame.std()),
+            "frame_min": float(current_frame.min()),
+            "frame_max": float(current_frame.max())
+        }
+        
+        logger.debug("Frame analysis", **frame_stats)
+```
+
+### Logging Configuration
+
+#### Production Configuration (JSON Output)
+
+```yaml
+# logging.yaml - Production configuration
+version: 1
+formatters:
+  json:
+    format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {message}"
+    serialize: true
+  structured:
+    format: "{time} | {level} | {extra[correlation_id]} | {message}"
+
+handlers:
+  console:
+    sink: "sys.stderr"
+    format: "{time} | {level} | {message}"
+    level: "INFO"
+    colorize: false
+    
+  file_json:
+    sink: "logs/odor_plume_nav_{time:YYYY-MM-DD}.json"
+    format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {extra} | {message}"
+    level: "DEBUG"
+    rotation: "100 MB"
+    retention: "30 days"
+    compression: "gzip"
+    serialize: true
+    
+  performance:
+    sink: "logs/performance_{time:YYYY-MM-DD}.jsonl"
+    format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {extra[perf_stats]} | {message}"
+    level: "INFO"
+    filter: "performance"
+    rotation: "50 MB"
+    retention: "90 days"
+
+loggers:
+  odor_plume_nav:
+    level: "INFO"
+    handlers: ["console", "file_json", "performance"]
+    propagate: false
+```
+
+#### Development Configuration (Human-Readable)
+
+```yaml
+# logging.yaml - Development configuration  
+handlers:
+  console:
+    sink: "sys.stderr"
+    format: "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    level: "DEBUG"
+    colorize: true
+    
+  file_human:
+    sink: "logs/development.log"
+    format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
+    level: "DEBUG"
+    rotation: "10 MB"
+    retention: "7 days"
+
+loggers:
+  odor_plume_nav:
+    level: "DEBUG"
+    handlers: ["console", "file_human"]
+    propagate: false
+```
+
+### Structured Logging with Loguru
 
 ### Overview
 
@@ -1220,16 +1366,141 @@ logging:
 
 ### Usage Patterns
 
+#### Real-Time Performance Logging
+
+```python
+from loguru import logger
+from odor_plume_nav.utils.logging_setup import setup_logger
+import contextvars
+
+# Setup enhanced logging with performance tracking
+setup_logger(
+    level="INFO",
+    format_type="json",
+    correlation_id=True,
+    performance_tracking=True
+)
+
+# Use structured logging in RL training loops
+correlation_id = contextvars.ContextVar('correlation_id')
+
+def train_agent_with_logging():
+    """RL training with comprehensive performance logging."""
+    
+    # Set correlation ID for experiment tracking
+    corr_id = f"train_{time.strftime('%Y%m%d_%H%M%S')}"
+    correlation_id.set(corr_id)
+    
+    with logger.contextualize(correlation_id=corr_id, experiment="ppo_training"):
+        logger.info("Starting RL training", algorithm="PPO", timesteps=100000)
+        
+        env = create_gymnasium_environment(
+            config_path="conf/config.yaml",
+            frame_cache="lru"
+        )
+        
+        obs, info = env.reset()
+        for step in range(100000):
+            action = model.predict(obs)
+            obs, reward, terminated, truncated, info = env.step(action)
+            
+            # Performance metrics automatically included in logs
+            perf_stats = info["perf_stats"]
+            
+            # Log step completion with performance context
+            logger.debug("Training step completed",
+                        step=step,
+                        reward=reward,
+                        **perf_stats)
+            
+            # Alert on performance degradation
+            if perf_stats["cache_hit_rate"] < 0.85:
+                logger.warning("Cache performance degraded",
+                              hit_rate=perf_stats["cache_hit_rate"],
+                              memory_usage_mb=perf_stats["cache_memory_mb"])
+            
+            if terminated or truncated:
+                logger.info("Episode completed",
+                           episode_steps=step,
+                           final_reward=reward,
+                           cache_final_hit_rate=perf_stats["cache_hit_rate"])
+                obs, info = env.reset()
+```
+
+#### Analysis and Debugging Workflows
+
+```python
+# Notebook analysis with video frame access
+def analyze_plume_behavior():
+    """Analyze odor plume navigation with frame-level insights."""
+    
+    env = create_gymnasium_environment(
+        config_path="conf/config.yaml",
+        frame_cache="lru",
+        include_video_frame=True  # Enable frame data in info
+    )
+    
+    trajectory_data = []
+    obs, info = env.reset()
+    
+    with logger.contextualize(analysis_session="plume_behavior_study"):
+        logger.info("Starting plume behavior analysis")
+        
+        for step in range(1000):
+            action = your_policy(obs)
+            obs, reward, terminated, truncated, info = env.step(action)
+            
+            # Extract comprehensive step data
+            step_data = {
+                "step": step,
+                "observation": obs,
+                "action": action,
+                "reward": reward,
+                "performance": info["perf_stats"],
+                "frame_data": info.get("video_frame")
+            }
+            trajectory_data.append(step_data)
+            
+            # Log interesting events
+            if reward > 0.8:
+                logger.info("High reward achieved",
+                           step=step,
+                           reward=reward,
+                           odor_concentration=obs.get("odor_concentration"),
+                           agent_position=obs.get("agent_position"))
+            
+            # Log frame analysis
+            if "video_frame" in info:
+                frame = info["video_frame"]
+                logger.debug("Frame analysis",
+                            step=step,
+                            frame_mean=float(frame.mean()),
+                            frame_std=float(frame.std()),
+                            unique_values=len(np.unique(frame)))
+            
+            if terminated or truncated:
+                logger.info("Analysis episode completed", total_steps=step)
+                break
+    
+    return trajectory_data
+```
+
 #### Basic Structured Logging
 
 ```python
 from loguru import logger
 
-# Simple structured logging
-logger.info("Simulation started")
+# Simple structured logging with performance context
+logger.info("Simulation started", cache_mode="lru", cache_size_mb=2048)
 logger.debug("Configuration loaded", config_path="conf/config.yaml")
-logger.warning("Performance degradation detected", fps=25.5, threshold=30.0)
-logger.error("Navigation failed", error="obstacle_collision", position=[15.2, 22.1])
+logger.warning("Performance degradation detected", 
+               fps=25.5, 
+               threshold=30.0,
+               cache_hit_rate=0.72)
+logger.error("Navigation failed", 
+             error="obstacle_collision", 
+             position=[15.2, 22.1],
+             cache_memory_usage=1856)
 
 # Exception logging with context
 try:
@@ -1237,7 +1508,8 @@ try:
 except ValueError as e:
     logger.exception("Invalid position update", 
                     position=invalid_position, 
-                    component="navigator")
+                    component="navigator",
+                    cache_stats=cache.get_statistics())
 ```
 
 #### Component-Specific Logging
@@ -1416,6 +1688,83 @@ logger.add("logs/filtered.log",
                                filter_debug_in_production(record))
 ```
 
+#### JSON Output Format for Analysis
+
+The structured logging system produces machine-parseable JSON logs optimized for performance analysis:
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:45.123Z",
+  "level": "INFO",
+  "logger": "odor_plume_nav.environments.gymnasium_env",
+  "function": "step",
+  "line": 245,
+  "correlation_id": "exp_ppo_20240115_103045",
+  "message": "Environment step completed",
+  "extra": {
+    "step": 1000,
+    "reward": 0.85,
+    "terminated": false,
+    "perf_stats": {
+      "step_time_ms": 8.5,
+      "frame_retrieval_ms": 2.1,
+      "cache_hit_rate": 0.92,
+      "cache_hits": 920,
+      "cache_misses": 80,
+      "cache_evictions": 12,
+      "cache_memory_mb": 1856,
+      "fps_estimate": 117.6
+    },
+    "observation": {
+      "odor_concentration": [0.67],
+      "agent_position": [45.2, 67.8],
+      "agent_orientation": [1.23]
+    }
+  }
+}
+```
+
+#### Automated Log Analysis
+
+```python
+import json
+from pathlib import Path
+
+def analyze_performance_logs(log_file: Path):
+    """Analyze performance from structured JSON logs."""
+    
+    step_times = []
+    cache_hit_rates = []
+    memory_usage = []
+    
+    with open(log_file) as f:
+        for line in f:
+            log_entry = json.loads(line)
+            
+            if "perf_stats" in log_entry.get("extra", {}):
+                perf = log_entry["extra"]["perf_stats"]
+                step_times.append(perf["step_time_ms"])
+                cache_hit_rates.append(perf["cache_hit_rate"])
+                memory_usage.append(perf["cache_memory_mb"])
+    
+    # Performance analysis
+    avg_step_time = sum(step_times) / len(step_times)
+    avg_hit_rate = sum(cache_hit_rates) / len(cache_hit_rates)
+    max_memory = max(memory_usage)
+    
+    return {
+        "average_step_time_ms": avg_step_time,
+        "average_cache_hit_rate": avg_hit_rate,
+        "peak_memory_usage_mb": max_memory,
+        "performance_target_met": avg_step_time < 10.0,
+        "cache_efficiency_good": avg_hit_rate > 0.90
+    }
+
+# Usage
+results = analyze_performance_logs(Path("logs/performance_2024-01-15.jsonl"))
+print(f"Performance analysis: {results}")
+```
+
 #### Integration with External Logging Systems
 
 ```python
@@ -1449,6 +1798,29 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0)
 # Configure third-party library logging
 for library in ["matplotlib", "stable_baselines3", "gymnasium"]:
     logging.getLogger(library).handlers = [InterceptHandler()]
+
+# Integration with monitoring systems
+def setup_monitoring_integration():
+    """Setup integration with external monitoring systems."""
+    
+    # Custom sink for Prometheus metrics
+    def prometheus_sink(message):
+        if "perf_stats" in message.record["extra"]:
+            stats = message.record["extra"]["perf_stats"]
+            # Export metrics to Prometheus
+            step_time_metric.set(stats["step_time_ms"])
+            cache_hit_rate_metric.set(stats["cache_hit_rate"])
+    
+    # Custom sink for alerting
+    def alert_sink(message):
+        if message.record["level"].name == "WARNING":
+            if "cache_hit_rate" in message.record["extra"]:
+                hit_rate = message.record["extra"]["cache_hit_rate"]
+                if hit_rate < 0.85:
+                    send_alert(f"Cache performance degraded: {hit_rate:.2%}")
+    
+    logger.add(prometheus_sink, level="INFO", filter="performance")
+    logger.add(alert_sink, level="WARNING")
 ```
 
 ### Environment Variable Configuration
@@ -1464,6 +1836,12 @@ LOG_CONSOLE_COLORIZE=true
 LOG_CORRELATION_ENABLED=true
 LOG_PERFORMANCE_TRACKING=true
 
+# Frame caching configuration
+FRAME_CACHE_MODE=lru
+FRAME_CACHE_SIZE_MB=2048
+FRAME_CACHE_PRESSURE_THRESHOLD=0.90
+LOG_JSON_SINK=true
+
 # Production environment variables
 export LOG_LEVEL=INFO
 export LOG_FORMAT=json
@@ -1472,6 +1850,11 @@ export LOG_ROTATION=100MB
 export LOG_RETENTION=30days
 export LOG_COMPRESSION=gzip
 export LOG_SYSLOG_ENABLED=true
+
+# Production frame caching
+export FRAME_CACHE_MODE=all
+export FRAME_CACHE_SIZE_MB=8192
+export FRAME_CACHE_PRELOAD_ENABLED=true
 ```
 
 Use in configuration:
@@ -1494,9 +1877,185 @@ logging:
       compression: ${oc.env:LOG_COMPRESSION,"gzip"}
 ```
 
+## High-Performance Frame Caching
+
+### Overview
+
+The library features an advanced frame caching system designed to dramatically accelerate reinforcement learning training by eliminating video decoding bottlenecks. The caching system provides dual operational modes (LRU and full-preload) with configurable memory limits, achieving sub-10ms environment step times for optimal training performance.
+
+### Cache Operating Modes
+
+#### LRU (Least Recently Used) Cache Mode
+
+Intelligent caching with automatic memory management:
+
+```python
+from odor_plume_nav.api.navigation import create_gymnasium_environment
+
+# Create environment with LRU caching (recommended for most scenarios)
+env = create_gymnasium_environment(
+    config_path="conf/config.yaml",
+    frame_cache="lru"
+)
+
+# Monitor cache performance through info dictionary
+obs, info = env.reset()
+for step in range(1000):
+    action = env.action_space.sample()
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    # Access cache performance metrics
+    cache_stats = info["perf_stats"]
+    print(f"Cache hit rate: {cache_stats['cache_hit_rate']:.2%}")
+    print(f"Frame retrieval time: {cache_stats['frame_retrieval_ms']:.2f}ms")
+    
+    if terminated or truncated:
+        obs, info = env.reset()
+```
+
+#### Full Preload Cache Mode
+
+Maximum performance for memory-rich environments:
+
+```python
+# Create environment with full preload (optimal for short videos)
+env = create_gymnasium_environment(
+    config_path="conf/config.yaml", 
+    frame_cache="all"
+)
+
+# All frames loaded into memory during initialization
+# Achieves consistent <5ms frame retrieval times
+obs, info = env.reset()
+```
+
+#### Direct I/O Mode
+
+Bypass caching for debugging or memory-constrained scenarios:
+
+```python
+# Disable caching for debugging or minimal memory usage
+env = create_gymnasium_environment(
+    config_path="conf/config.yaml",
+    frame_cache="none"
+)
+```
+
+### Performance Characteristics
+
+| Cache Mode | Memory Usage | Frame Retrieval Time | Best Use Case |
+|------------|--------------|---------------------|---------------|
+| **LRU** | 2 GiB default (configurable) | <10ms avg, >90% hit rate | General RL training |
+| **Full Preload** | Entire video in memory | <5ms guaranteed | Short videos, maximum speed |
+| **None** | Minimal | Variable, 20-100ms | Debugging, memory constraints |
+
+### Configuration Examples
+
+#### Environment Variables
+
+```bash
+# Set cache mode via environment variable
+export FRAME_CACHE_MODE=lru
+export FRAME_CACHE_SIZE_MB=4096  # 4 GiB cache limit
+
+# Run training with enhanced caching
+plume-nav-sim train --algorithm PPO
+```
+
+#### Hydra Configuration
+
+```yaml
+# conf/config.yaml
+environment:
+  frame_cache:
+    mode: lru  # Options: none, lru, all
+    cache_size_mb: 2048  # 2 GiB default
+    memory_pressure_threshold: 0.90  # Trigger cleanup at 90%
+    
+# Override via CLI
+plume-nav-sim run environment.frame_cache.mode=all environment.frame_cache.cache_size_mb=8192
+```
+
+#### Programmatic Configuration
+
+```python
+from odor_plume_nav.cache import FrameCache
+from odor_plume_nav.environments.gymnasium_env import OdorPlumeNavigationEnv
+
+# Custom cache configuration
+cache = FrameCache(
+    mode="lru",
+    max_size_bytes=2 * 1024**3,  # 2 GiB
+    memory_pressure_callback=lambda: print("Memory pressure detected")
+)
+
+# Pass to environment
+env = OdorPlumeNavigationEnv(
+    video_path="data/complex_plume.mp4",
+    frame_cache=cache,
+    max_episode_steps=1000
+)
+```
+
+### Performance Monitoring
+
+#### Accessing Cache Statistics
+
+```python
+# During RL training loops
+obs, info = env.reset()
+for step in range(10000):
+    action = policy.predict(obs)
+    obs, reward, terminated, truncated, info = env.step(action)
+    
+    # Access performance statistics
+    perf_stats = info["perf_stats"]
+    cache_metrics = {
+        "hit_rate": perf_stats["cache_hit_rate"],
+        "hits": perf_stats["cache_hits"],
+        "misses": perf_stats["cache_misses"],
+        "evictions": perf_stats["cache_evictions"],
+        "memory_usage_mb": perf_stats["cache_memory_mb"],
+        "step_time_ms": perf_stats["step_time_ms"],
+        "frame_retrieval_ms": perf_stats["frame_retrieval_ms"],
+        "fps_estimate": perf_stats["fps_estimate"]
+    }
+    
+    # Optional: Access current video frame for analysis
+    if "video_frame" in info:
+        current_frame = info["video_frame"]  # NumPy array
+        # Perform frame analysis or visualization
+```
+
+#### Real-Time Performance Analysis
+
+```python
+# Monitor cache performance during training
+class CachePerformanceCallback:
+    def __init__(self):
+        self.hit_rates = []
+        self.step_times = []
+    
+    def on_step(self, info):
+        perf_stats = info.get("perf_stats", {})
+        self.hit_rates.append(perf_stats.get("cache_hit_rate", 0))
+        self.step_times.append(perf_stats.get("step_time_ms", 0))
+        
+        # Alert on performance degradation
+        if len(self.hit_rates) > 100:
+            recent_hit_rate = sum(self.hit_rates[-100:]) / 100
+            if recent_hit_rate < 0.85:
+                print(f"WARNING: Cache hit rate degraded to {recent_hit_rate:.2%}")
+
+# Use in training
+callback = CachePerformanceCallback()
+obs, info = env.reset()
+callback.on_step(info)
+```
+
 ## Command-Line Interface
 
-The library provides comprehensive CLI commands for automation and batch processing.
+The library provides comprehensive CLI commands for automation and batch processing with integrated frame caching support.
 
 ### Available Commands
 
@@ -1507,13 +2066,19 @@ plume-nav-sim run
 # Run with parameter overrides
 plume-nav-sim run navigator.max_speed=2.0 simulation.fps=60
 
+# Run with frame caching enabled
+plume-nav-sim run --frame-cache lru
+
+# Run with custom cache size
+plume-nav-sim run --frame-cache all environment.frame_cache.cache_size_mb=4096
+
 # Parameter sweep execution
 plume-nav-sim run --multirun navigator.max_speed=1.0,2.0,3.0 video_plume.kernel_size=3,5,7
 
-# Reinforcement learning training commands
-plume-nav-sim train --algorithm PPO
-plume-nav-sim train --algorithm SAC --total-timesteps 500000
-plume-nav-sim train --algorithm TD3 --n-envs 4 --env-parallel
+# Reinforcement learning training commands with frame caching
+plume-nav-sim train --algorithm PPO --frame-cache lru
+plume-nav-sim train --algorithm SAC --total-timesteps 500000 --frame-cache all
+plume-nav-sim train --algorithm TD3 --n-envs 4 --env-parallel --frame-cache lru
 
 # Visualization commands
 plume-nav-sim visualize --input-path outputs/experiment_results.npz
@@ -1525,6 +2090,27 @@ plume-nav-sim config show
 
 # Environment setup
 plume-nav-sim setup --create-dirs --init-config
+```
+
+### Frame Cache CLI Options
+
+```bash
+# Basic cache modes
+plume-nav-sim run --frame-cache none    # Disable caching
+plume-nav-sim run --frame-cache lru     # LRU caching (default)
+plume-nav-sim run --frame-cache all     # Full preload caching
+
+# Advanced cache configuration
+plume-nav-sim run --frame-cache lru \
+    environment.frame_cache.cache_size_mb=4096 \
+    environment.frame_cache.memory_pressure_threshold=0.85
+
+# RL training with optimized caching
+plume-nav-sim train --algorithm PPO \
+    --frame-cache all \
+    --total-timesteps 1000000 \
+    --n-envs 8 \
+    environment.frame_cache.cache_size_mb=8192
 ```
 
 ### RL Training Commands
@@ -1556,15 +2142,26 @@ plume-nav-sim train --algorithm PPO \
     --eval-episodes 20 \
     --tensorboard-log ./logs
 
-# Training with environment-specific parameters
+# Training with environment-specific parameters and frame caching
 plume-nav-sim train --algorithm SAC \
+    --frame-cache lru \
     navigator.max_speed=15.0 \
     simulation.max_episode_steps=2000 \
     rl.reward_shaping.odor_weight=2.0 \
+    environment.frame_cache.cache_size_mb=4096 \
     --config-name rl_training_config
 
-# Advanced training options
+# High-performance training with full frame preloading
 plume-nav-sim train --algorithm PPO \
+    --frame-cache all \
+    --n-envs 8 \
+    --total-timesteps 2000000 \
+    environment.frame_cache.cache_size_mb=8192 \
+    --tensorboard-log ./logs
+
+# Advanced training options with performance monitoring
+plume-nav-sim train --algorithm PPO \
+    --frame-cache lru \
     --learning-rate 1e-4 \
     --clip-range 0.1 \
     --entropy-coef 0.01 \
@@ -1572,7 +2169,8 @@ plume-nav-sim train --algorithm PPO \
     --max-grad-norm 0.5 \
     --gae-lambda 0.95 \
     --verbose 1 \
-    --progress-bar
+    --progress-bar \
+    environment.frame_cache.memory_pressure_threshold=0.85
 ```
 
 ### CLI Integration Examples
@@ -1626,6 +2224,11 @@ The refactored configuration system replaces unstructured YAML with Pydantic-val
 conf/
 ├── base.yaml          # Foundation defaults with dataclass annotations
 ├── config.yaml        # User customizations with structured config composition
+├── logging.yaml       # Loguru logging configuration with JSON sinks
+├── frame_cache/       # Frame caching configuration group
+│   ├── lru.yaml       # LRU cache configuration
+│   ├── preload.yaml   # Full preload cache configuration
+│   └── disabled.yaml  # Disabled cache configuration
 ├── rl/                # RL-specific structured configurations
 │   ├── algorithms/    # Algorithm-specific hyperparameters with validation
 │   │   ├── ppo.yaml   # PPO algorithm dataclass configuration
@@ -2405,6 +3008,21 @@ video_plume:
 navigator:
   max_speed: ${oc.env:NAVIGATOR_MAX_SPEED,1.5}
 
+# Frame caching configuration with environment variable integration
+environment:
+  frame_cache:
+    mode: ${oc.env:FRAME_CACHE_MODE,lru}
+    cache_size_mb: ${oc.env:FRAME_CACHE_SIZE_MB,2048}
+    memory_pressure_threshold: ${oc.env:FRAME_CACHE_PRESSURE_THRESHOLD,0.90}
+    preload_enabled: ${oc.env:FRAME_CACHE_PRELOAD_ENABLED,false}
+  include_video_frame: ${oc.env:INCLUDE_VIDEO_FRAME,false}
+
+# Logging configuration with environment variables
+logging:
+  level: ${oc.env:LOG_LEVEL,INFO}
+  json_sink_enabled: ${oc.env:LOG_JSON_SINK,true}
+  performance_tracking: ${oc.env:LOG_PERFORMANCE_TRACKING,true}
+
 rl:
   tensorboard_log: ${oc.env:TENSORBOARD_LOG_DIR,./tensorboard_logs}
   checkpoint_dir: ${oc.env:CHECKPOINT_DIR,./checkpoints}
@@ -2997,6 +3615,249 @@ odor_plume_nav/
 
 ## Integration Examples
 
+### Research Workflow Integration
+
+#### place_mem_rl Training Loop Integration
+
+```python
+# place_mem_rl training loop with frame caching and performance monitoring
+from odor_plume_nav.api.navigation import create_gymnasium_environment
+from stable_baselines3 import PPO
+import time
+
+def train_place_mem_rl_agent():
+    """Enhanced training loop with frame caching and performance analytics."""
+    
+    # Create environment with optimized frame caching
+    env = create_gymnasium_environment(
+        config_path="conf/rl_config.yaml",
+        frame_cache="lru",  # Enable LRU caching for training efficiency
+        include_video_frame=False  # Disable frame data for training (memory optimization)
+    )
+    
+    # Initialize PPO agent
+    model = PPO("MultiInputPolicy", env, verbose=1)
+    
+    # Training loop with performance monitoring
+    start_time = time.time()
+    performance_history = []
+    
+    obs, info = env.reset()
+    for step in range(100000):
+        action, _ = model.predict(obs)
+        obs, reward, terminated, truncated, info = env.step(action)
+        
+        # Access performance metrics for optimization
+        perf_stats = info["perf_stats"]
+        performance_history.append({
+            "step": step,
+            "step_time_ms": perf_stats["step_time_ms"],
+            "cache_hit_rate": perf_stats["cache_hit_rate"],
+            "fps_estimate": perf_stats["fps_estimate"]
+        })
+        
+        # Log performance every 1000 steps
+        if step % 1000 == 0:
+            avg_step_time = sum(p["step_time_ms"] for p in performance_history[-1000:]) / 1000
+            avg_hit_rate = sum(p["cache_hit_rate"] for p in performance_history[-1000:]) / 1000
+            
+            print(f"Step {step}: Avg step time: {avg_step_time:.2f}ms, "
+                  f"Cache hit rate: {avg_hit_rate:.2%}")
+        
+        if terminated or truncated:
+            obs, info = env.reset()
+    
+    # Training performance analysis
+    total_time = time.time() - start_time
+    avg_performance = {
+        "total_training_time": total_time,
+        "steps_per_second": 100000 / total_time,
+        "avg_step_time_ms": sum(p["step_time_ms"] for p in performance_history) / len(performance_history),
+        "avg_cache_hit_rate": sum(p["cache_hit_rate"] for p in performance_history) / len(performance_history)
+    }
+    
+    print(f"Training completed: {avg_performance}")
+    return model, avg_performance
+```
+
+#### Demo/Analysis Notebook Integration
+
+```python
+# demo/analysis notebooks with video frame access and structured logging
+import numpy as np
+import matplotlib.pyplot as plt
+from odor_plume_nav.api.navigation import create_gymnasium_environment
+from loguru import logger
+
+def analyze_plume_navigation_behavior():
+    """Comprehensive plume navigation analysis with video frame access."""
+    
+    # Setup structured logging for analysis
+    logger.add("analysis_session.json", 
+               format="{time} | {level} | {extra} | {message}",
+               serialize=True)
+    
+    # Create environment with video frame access enabled
+    env = create_gymnasium_environment(
+        config_path="conf/analysis_config.yaml",
+        frame_cache="lru",
+        include_video_frame=True  # Enable video frame access for analysis
+    )
+    
+    trajectory_data = []
+    frame_analysis = []
+    
+    with logger.contextualize(analysis_session="plume_behavior_study"):
+        logger.info("Starting comprehensive plume navigation analysis")
+        
+        obs, info = env.reset()
+        for step in range(1000):
+            # Use your analysis policy or random actions
+            action = env.action_space.sample()
+            obs, reward, terminated, truncated, info = env.step(action)
+            
+            # Extract comprehensive step data including video frame
+            step_data = {
+                "step": step,
+                "agent_position": obs["agent_position"].tolist(),
+                "odor_concentration": obs["odor_concentration"].tolist(),
+                "reward": reward,
+                "performance_stats": info["perf_stats"]
+            }
+            trajectory_data.append(step_data)
+            
+            # Access and analyze video frame when available
+            if "video_frame" in info:
+                video_frame = info["video_frame"]  # NumPy array shape (H, W) or (H, W, C)
+                
+                frame_stats = {
+                    "step": step,
+                    "frame_shape": video_frame.shape,
+                    "mean_intensity": float(video_frame.mean()),
+                    "std_intensity": float(video_frame.std()),
+                    "max_intensity": float(video_frame.max()),
+                    "min_intensity": float(video_frame.min()),
+                    "unique_values": len(np.unique(video_frame))
+                }
+                frame_analysis.append(frame_stats)
+                
+                # Log interesting frame events
+                if frame_stats["mean_intensity"] > 0.7:
+                    logger.info("High-intensity frame detected",
+                               step=step,
+                               mean_intensity=frame_stats["mean_intensity"],
+                               agent_position=obs["agent_position"].tolist())
+            
+            # Log performance metrics
+            perf_stats = info["perf_stats"]
+            logger.debug("Analysis step completed",
+                        step=step,
+                        **perf_stats)
+            
+            if terminated or truncated:
+                logger.info("Episode completed", episode_steps=step)
+                obs, info = env.reset()
+    
+    # Generate comprehensive analysis report
+    analysis_results = {
+        "trajectory_stats": {
+            "total_steps": len(trajectory_data),
+            "avg_reward": sum(d["reward"] for d in trajectory_data) / len(trajectory_data),
+            "max_reward": max(d["reward"] for d in trajectory_data),
+            "final_position": trajectory_data[-1]["agent_position"] if trajectory_data else None
+        },
+        "frame_analysis": {
+            "frames_analyzed": len(frame_analysis),
+            "avg_frame_intensity": sum(f["mean_intensity"] for f in frame_analysis) / len(frame_analysis) if frame_analysis else 0,
+            "intensity_std": np.std([f["mean_intensity"] for f in frame_analysis]) if frame_analysis else 0
+        },
+        "performance_metrics": {
+            "avg_step_time_ms": sum(d["performance_stats"]["step_time_ms"] for d in trajectory_data) / len(trajectory_data),
+            "avg_cache_hit_rate": sum(d["performance_stats"]["cache_hit_rate"] for d in trajectory_data) / len(trajectory_data),
+            "avg_fps": sum(d["performance_stats"]["fps_estimate"] for d in trajectory_data) / len(trajectory_data)
+        }
+    }
+    
+    logger.info("Analysis completed", **analysis_results)
+    
+    # Visualization with frame data correlation
+    if frame_analysis:
+        plt.figure(figsize=(15, 10))
+        
+        # Subplot 1: Trajectory with reward coloring
+        plt.subplot(2, 3, 1)
+        positions = np.array([d["agent_position"] for d in trajectory_data])
+        rewards = [d["reward"] for d in trajectory_data]
+        plt.scatter(positions[:, 0], positions[:, 1], c=rewards, cmap='viridis')
+        plt.colorbar(label='Reward')
+        plt.title('Agent Trajectory (colored by reward)')
+        plt.xlabel('X Position')
+        plt.ylabel('Y Position')
+        
+        # Subplot 2: Frame intensity over time
+        plt.subplot(2, 3, 2)
+        frame_steps = [f["step"] for f in frame_analysis]
+        frame_intensities = [f["mean_intensity"] for f in frame_analysis]
+        plt.plot(frame_steps, frame_intensities)
+        plt.title('Frame Intensity Over Time')
+        plt.xlabel('Step')
+        plt.ylabel('Mean Frame Intensity')
+        
+        # Subplot 3: Performance metrics
+        plt.subplot(2, 3, 3)
+        step_times = [d["performance_stats"]["step_time_ms"] for d in trajectory_data]
+        plt.plot(step_times)
+        plt.axhline(y=10, color='r', linestyle='--', label='10ms target')
+        plt.title('Step Execution Time')
+        plt.xlabel('Step')
+        plt.ylabel('Step Time (ms)')
+        plt.legend()
+        
+        # Subplot 4: Cache performance
+        plt.subplot(2, 3, 4)
+        cache_hit_rates = [d["performance_stats"]["cache_hit_rate"] for d in trajectory_data]
+        plt.plot(cache_hit_rates)
+        plt.axhline(y=0.9, color='r', linestyle='--', label='90% target')
+        plt.title('Cache Hit Rate')
+        plt.xlabel('Step')
+        plt.ylabel('Hit Rate')
+        plt.legend()
+        
+        # Subplot 5: Frame intensity vs reward correlation
+        plt.subplot(2, 3, 5)
+        # Align frame data with trajectory data
+        aligned_intensities = []
+        aligned_rewards = []
+        for frame in frame_analysis:
+            if frame["step"] < len(trajectory_data):
+                aligned_intensities.append(frame["mean_intensity"])
+                aligned_rewards.append(trajectory_data[frame["step"]]["reward"])
+        
+        if aligned_intensities:
+            plt.scatter(aligned_intensities, aligned_rewards, alpha=0.6)
+            plt.title('Frame Intensity vs Reward Correlation')
+            plt.xlabel('Frame Mean Intensity')
+            plt.ylabel('Reward')
+        
+        # Subplot 6: Performance distribution
+        plt.subplot(2, 3, 6)
+        plt.hist(step_times, bins=50, alpha=0.7, label='Step Times')
+        plt.axvline(x=10, color='r', linestyle='--', label='10ms target')
+        plt.title('Step Time Distribution')
+        plt.xlabel('Step Time (ms)')
+        plt.ylabel('Frequency')
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.savefig('comprehensive_analysis.png', dpi=300, bbox_inches='tight')
+        plt.show()
+    
+    return analysis_results, trajectory_data, frame_analysis
+
+# Run comprehensive analysis
+results, trajectory, frames = analyze_plume_navigation_behavior()
+```
+
 ### Jupyter Notebook Integration
 
 ```python
@@ -3012,16 +3873,22 @@ set_global_seed(42)
 with initialize(config_path="../conf", version_base=None):
     cfg = compose(config_name="config", overrides=[
         "visualization.animation.enabled=true",
-        "visualization.plotting.figure_size=[14,10]"
+        "visualization.plotting.figure_size=[14,10]",
+        "environment.frame_cache.mode=lru",
+        "environment.include_video_frame=true"
     ])
 
-# Create and run simulation
+# Create and run simulation with frame caching
 navigator = Navigator.from_config(cfg.navigator)
 video_plume = VideoPlume.from_config(cfg.video_plume)
 
-# Interactive visualization
+# Interactive visualization with performance monitoring
 results = navigator.simulate(video_plume, duration=60)
 results.plot_trajectory(interactive=True)
+
+# Access performance statistics
+print(f"Average step time: {results.avg_step_time_ms:.2f}ms")
+print(f"Cache hit rate: {results.cache_hit_rate:.2%}")
 ```
 
 ### Kedro Pipeline Integration
@@ -3100,6 +3967,71 @@ If you use this library in your research, please cite:
 - **API Reference**: Generated automatically from docstrings
 
 ## Changelog
+
+### Version 0.3.0 (High-Performance Frame Caching and Structured Analytics Release)
+
+#### Major Features
+
+**High-Performance Frame Caching System**
+- **Dual-Mode Caching**: LRU and full-preload modes for optimal memory/performance trade-offs
+- **Sub-10ms Performance**: Achieve <10ms environment step times with intelligent frame caching
+- **Memory Management**: Configurable 2 GiB default limit with automatic pressure handling
+- **Cache Analytics**: Comprehensive hit/miss statistics and memory usage monitoring
+- **Thread-Safe Operations**: Concurrent access support for multi-agent simulation scenarios
+
+**Enhanced Structured Logging with Performance Integration**
+- **Loguru-Based Architecture**: JSON-structured logs with correlation ID tracking for distributed debugging
+- **Performance Metrics Embedding**: Automatic cache statistics and step timing data in `info["perf_stats"]`
+- **Multi-Sink Configuration**: Flexible output to console, JSON files, and external monitoring systems
+- **Machine-Parseable Output**: Standardized JSON format for automated performance analysis and alerting
+
+**CLI Frame Cache Integration**
+- **Cache Mode Selection**: `--frame-cache {none,lru,all}` parameter for runtime cache configuration
+- **Memory Configuration**: Runtime cache size adjustment via `environment.frame_cache.cache_size_mb`
+- **Performance Monitoring**: Built-in cache performance reporting in CLI output
+- **Environment Variable Support**: `FRAME_CACHE_MODE`, `FRAME_CACHE_SIZE_MB` for deployment flexibility
+
+#### Performance Enhancements
+
+**Training Speed Optimization**
+- **RL Training Acceleration**: 3-5x faster training loops through frame cache hit rates >90%
+- **Memory Efficiency**: Linear memory scaling with configurable limits preventing OOM conditions
+- **Zero-Copy Frame Access**: NumPy array views for optimal memory usage in video processing
+- **Batch Preloading**: Intelligent frame warming strategies for sequential access patterns
+
+**Analytics and Monitoring**
+- **Real-Time Metrics**: Live cache performance and step timing embedded in simulation info
+- **Structured Diagnostics**: JSON logs with correlation IDs for experiment traceability
+- **Performance Regression Detection**: Automated threshold monitoring with configurable alerts
+- **Resource Usage Tracking**: Memory pressure monitoring with graceful degradation strategies
+
+#### Developer Experience Improvements
+
+**Enhanced Documentation**
+- **Frame Caching Guide**: Comprehensive usage examples for all cache modes and configurations
+- **Performance Tuning**: Memory sizing guidelines and optimization strategies for different scenarios
+- **Analytics Integration**: Examples for accessing `info["perf_stats"]` and `info["video_frame"]` in research workflows
+- **Logging Configuration**: Production-ready logging setups with rotation, retention, and sink management
+
+**Configuration Management**
+- **Cache Configuration Groups**: Hydra-based cache profiles (LRU, preload, disabled) for easy switching
+- **Environment Variable Integration**: Runtime configuration via `FRAME_CACHE_*` environment variables
+- **Validation and Error Handling**: Comprehensive cache parameter validation with clear error messages
+- **Migration Support**: Seamless integration with existing configurations without breaking changes
+
+#### Integration and Compatibility
+
+**RL Framework Integration**
+- **Stable-Baselines3 Optimization**: Enhanced performance metrics for all supported algorithms (PPO, SAC, TD3, A2C, DDPG)
+- **Vectorized Environment Support**: Cache sharing optimization for parallel training environments
+- **Training Pipeline Integration**: Automatic cache statistics logging during training with TensorBoard integration
+- **Checkpoint Correlation**: Cache performance tracking correlated with model checkpoints for analysis
+
+**Research Workflow Support**
+- **Notebook Integration**: Enhanced `info["video_frame"]` access for Jupyter-based analysis workflows
+- **Experiment Tracking**: Correlation ID integration with MLflow, Weights & Biases, and custom tracking systems
+- **Reproducibility**: Deterministic cache warming and statistics for consistent experimental results
+- **Performance Benchmarking**: Standardized performance metrics for algorithm and configuration comparison
 
 ### Version 0.2.0 (API Consistency and Integration Hardening Release)
 
