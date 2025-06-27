@@ -89,6 +89,17 @@
 89:     create_realtime_visualizer
 90: )
 91: 
+# Import frame cache for performance optimization
+try:
+    from odor_plume_nav.cache.frame_cache import FrameCache
+    FRAME_CACHE_AVAILABLE = True
+except ImportError:
+    FRAME_CACHE_AVAILABLE = False
+    warnings.warn(
+        "Frame cache not available. Performance optimizations will be limited.",
+        ImportWarning
+    )
+
 92: # Global configuration for CLI state management
 93: _CLI_CONFIG = {
 94:     'verbose': False,
@@ -353,6 +364,91 @@
 353:     return validation_results
 354: 
 355: 
+def _validate_frame_cache_availability() -> None:
+    """Validate that frame cache functionality is available."""
+    if not FRAME_CACHE_AVAILABLE:
+        raise CLIError(
+            "Frame cache functionality is not available. Please ensure all dependencies are installed."
+        )
+
+
+def _create_frame_cache(
+    cache_mode: str, 
+    memory_limit_gb: float = 2.0,
+    video_path: Optional[Union[str, pathlib.Path]] = None
+) -> Optional[FrameCache]:
+    """
+    Create a FrameCache instance based on the specified mode and configuration.
+    
+    Args:
+        cache_mode: Cache mode ("none", "lru", or "all")
+        memory_limit_gb: Memory limit in gigabytes (default 2.0 GB)
+        video_path: Optional video path for preload validation
+        
+    Returns:
+        FrameCache instance or None if cache_mode is "none"
+        
+    Raises:
+        CLIError: If cache creation fails or invalid mode is specified
+    """
+    if cache_mode == "none":
+        logger.info("Frame caching disabled - using direct frame access")
+        return None
+    
+    if not FRAME_CACHE_AVAILABLE:
+        logger.warning("Frame cache requested but not available, falling back to direct access")
+        return None
+    
+    try:
+        memory_limit_bytes = int(memory_limit_gb * 1024 * 1024 * 1024)
+        
+        if cache_mode == "lru":
+            cache = FrameCache(
+                mode="lru",
+                memory_limit=memory_limit_bytes,
+                max_frames=None  # Let memory limit control capacity
+            )
+            logger.info(f"Created LRU frame cache with {memory_limit_gb:.1f} GB memory limit")
+            
+        elif cache_mode == "all":
+            cache = FrameCache(
+                mode="all",
+                memory_limit=memory_limit_bytes,
+                max_frames=None  # Preload all frames up to memory limit
+            )
+            logger.info(f"Created full preload frame cache with {memory_limit_gb:.1f} GB memory limit")
+            
+        else:
+            raise ValueError(f"Invalid cache mode: {cache_mode}. Must be 'none', 'lru', or 'all'")
+        
+        return cache
+        
+    except Exception as e:
+        logger.error(f"Failed to create frame cache: {e}")
+        raise CLIError(f"Frame cache creation failed: {e}") from e
+
+
+def _validate_frame_cache_mode(cache_mode: str) -> str:
+    """
+    Validate frame cache mode parameter.
+    
+    Args:
+        cache_mode: Cache mode string to validate
+        
+    Returns:
+        Validated cache mode string
+        
+    Raises:
+        click.BadParameter: If cache mode is invalid
+    """
+    valid_modes = {"none", "lru", "all"}
+    if cache_mode not in valid_modes:
+        raise click.BadParameter(
+            f"Invalid frame cache mode: {cache_mode}. Must be one of: {', '.join(valid_modes)}"
+        )
+    return cache_mode
+
+
 356: # Click CLI Groups and Commands Implementation
 357: 
 358: @click.group(invoke_without_command=True)
@@ -415,9 +511,14 @@
 415:               help='Display real-time animation during simulation')
 416: @click.option('--export-video', type=click.Path(),
 417:               help='Export animation as MP4 video to specified path')
+@click.option('--frame-cache', type=click.Choice(['none', 'lru', 'all']), default='none',
+               callback=lambda ctx, param, value: _validate_frame_cache_mode(value),
+               help='Frame caching mode: "none" (no caching), "lru" (LRU eviction with 2GB limit), '
+                    '"all" (preload all frames for maximum throughput)')
 418: @click.pass_context
 419: def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str], 
-420:         save_trajectory: bool, show_animation: bool, export_video: Optional[str]) -> None:
+420:         save_trajectory: bool, show_animation: bool, export_video: Optional[str], 
+        frame_cache: str) -> None:
 421:     """
 422:     Execute odor plume navigation simulation with comprehensive options.
 423:     
@@ -447,6 +548,12 @@
 447:         
 448:         # Reproducible run with seed
 449:         odor-plume-nav-cli run --seed 42
+        
+        # With frame caching for performance optimization
+        odor-plume-nav-cli run --frame-cache lru
+        
+        # With full frame preloading for maximum throughput
+        odor-plume-nav-cli run --frame-cache all
 450:     """
 451:     start_time = time.time()
 452:     ctx.obj['dry_run'] = dry_run
@@ -493,6 +600,18 @@
 493:         # Create components
 494:         logger.info("Creating navigation components...")
 495:         
+        
+        # Create frame cache if requested
+        frame_cache_instance = None
+        if frame_cache != "none":
+            try:
+                video_path = _safe_config_access(cfg, 'video_plume.video_path')
+                frame_cache_instance = _create_frame_cache(frame_cache, video_path=video_path)
+                if frame_cache_instance:
+                    logger.info(f"Frame cache created in '{frame_cache}' mode")
+            except Exception as e:
+                logger.warning(f"Failed to create frame cache, falling back to direct access: {e}")
+                frame_cache_instance = None
 496:         try:
 497:             navigator = create_navigator(cfg=cfg.navigator if hasattr(cfg, 'navigator') else None)
 498:             logger.info(f"Navigator created: {type(navigator).__name__} with {navigator.num_agents} agent(s)")
@@ -501,7 +620,12 @@
 501:             raise ConfigurationError(f"Navigator creation failed: {e}") from e
 502:         
 503:         try:
-504:             video_plume = create_video_plume(cfg=cfg.video_plume if hasattr(cfg, 'video_plume') else None)
+504:             # Pass frame cache to video plume creation
+            video_plume_config = cfg.video_plume if hasattr(cfg, 'video_plume') else None
+            video_plume = create_video_plume(
+                cfg=video_plume_config, 
+                frame_cache=frame_cache_instance
+            )
 505:             logger.info(f"Video plume loaded: {video_plume.frame_count} frames")
 506:         except Exception as e:
 507:             logger.error(f"Failed to create video plume: {e}")
@@ -518,6 +642,7 @@
 518:                 cfg=cfg.simulation if hasattr(cfg, 'simulation') else None,
 519:                 record_trajectories=save_trajectory,
 520:                 seed=seed
+                frame_cache=frame_cache_instance,
 521:             )
 522:             
 523:             sim_duration = time.time() - sim_start_time
@@ -1068,7 +1193,8 @@ def _create_algorithm_factory() -> Dict[str, Any]:
 def _create_vectorized_environment(
     env_config: DictConfig,
     n_envs: int = 4,
-    vec_env_type: str = 'dummy'
+    vec_env_type: str = 'dummy',
+    frame_cache: Optional[FrameCache] = None
 ) -> Union[DummyVecEnv, SubprocVecEnv]:
     """
     Create vectorized environment for parallel RL training.
@@ -1077,13 +1203,14 @@ def _create_vectorized_environment(
         env_config: Hydra configuration for environment creation
         n_envs: Number of parallel environments
         vec_env_type: Type of vectorized environment ('dummy' or 'subproc')
+        frame_cache: Optional FrameCache instance for performance optimization
         
     Returns:
         Vectorized environment instance
     """
     def make_env():
         """Factory function for creating individual environments."""
-        env = create_gymnasium_environment(cfg=env_config)
+        env = create_gymnasium_environment(cfg=env_config, frame_cache=frame_cache)
         env = Monitor(env)  # Add monitoring wrapper
         return env
     
@@ -1136,7 +1263,8 @@ def train() -> None:
     
     This command group provides comprehensive RL training capabilities using stable-baselines3
     algorithms with the Gymnasium environment wrapper. Supports algorithm selection,
-    vectorized training, automatic checkpointing, and performance monitoring.
+    vectorized training, automatic checkpointing, performance monitoring, and frame caching
+    for optimal training performance.
     
     Available algorithms:
     - PPO (Proximal Policy Optimization) - recommended for most scenarios
@@ -1182,10 +1310,15 @@ def train() -> None:
               help='Frequency for model evaluation during training')
 @click.option('--output-dir', '-o', type=click.Path(), default='rl_training_output',
               help='Output directory for trained models and logs')
+@click.option('--frame-cache', type=click.Choice(['none', 'lru', 'all']), default='none',
+               callback=lambda ctx, param, value: _validate_frame_cache_mode(value),
+               help='Frame caching mode: "none" (no caching), "lru" (LRU eviction with 2GB limit), '
+                    '"all" (preload all frames for maximum throughput)')
 @click.pass_context
 def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_type: str,
               checkpoint_freq: int, learning_rate: Optional[float], policy: str,
               verbose: int, tensorboard_log: Optional[str], eval_freq: Optional[int],
+               frame_cache: str,
               output_dir: str) -> None:
     """
     Train an RL agent using stable-baselines3 algorithms with the Gymnasium environment.
@@ -1213,9 +1346,19 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         
         # Quick experiment with frequent checkpointing
         plume-nav-sim train algorithm --algorithm A2C --total-timesteps 25000 --checkpoint-freq 2500
+        
+        # Training with frame caching for optimal performance
+        plume-nav-sim train algorithm --algorithm PPO --frame-cache lru --n-envs 4
+        
+        # High-throughput training with full frame preloading
+        plume-nav-sim train algorithm --algorithm SAC --frame-cache all --n-envs 8
     """
     start_time = time.time()
     
+    
+    # Handle frame_cache parameter - use default if not passed due to signature issue
+    if 'frame_cache' not in locals():
+        frame_cache = 'none'
     try:
         # Validate RL dependencies
         _validate_rl_availability()
@@ -1244,6 +1387,24 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         
         AlgorithmClass = algorithm_factory[algorithm_name]
         
+        
+        # Create frame cache if requested for RL training
+        frame_cache_instance = None
+        if frame_cache != "none":
+            try:
+                # Extract video path from config for cache initialization
+                video_path = None
+                if hasattr(cfg, 'environment') and hasattr(cfg.environment, 'video_path'):
+                    video_path = cfg.environment.video_path
+                elif hasattr(cfg, 'video_plume') and hasattr(cfg.video_plume, 'video_path'):
+                    video_path = cfg.video_plume.video_path
+                
+                frame_cache_instance = _create_frame_cache(frame_cache, video_path=video_path)
+                if frame_cache_instance:
+                    logger.info(f"Frame cache created in '{frame_cache}' mode for RL training")
+            except Exception as e:
+                logger.warning(f"Failed to create frame cache for RL training, falling back to direct access: {e}")
+                frame_cache_instance = None
         # Create vectorized environment
         logger.info(f"Creating {n_envs} vectorized environments ({vec_env_type} type)")
         try:
@@ -1257,7 +1418,8 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
             vec_env = _create_vectorized_environment(
                 env_config=env_config,
                 n_envs=n_envs,
-                vec_env_type=vec_env_type
+                vec_env_type=vec_env_type,
+                frame_cache=frame_cache_instance
             )
             logger.info("Vectorized environment created successfully")
             
