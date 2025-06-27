@@ -283,6 +283,114 @@ video_plume:
     temporal_method: "mean"  # Temporal aggregation method (mean, median, max)
 
 # ============================================================================
+# FRAME CACHING SYSTEM FOUNDATION DEFAULTS
+# ============================================================================
+# High-performance frame caching configuration for accelerated reinforcement
+# learning training workflows with sub-10ms step execution targets and
+# comprehensive performance monitoring integration.
+
+frame_cache:
+  # Core cache mode configuration for flexible deployment optimization
+  # LRU default providing memory-efficient operation for research workflows
+  # Options: none (disabled), lru (memory-efficient), all (full-preload)
+  mode: "lru"  # Cache strategy (none, lru, all) - override with FRAME_CACHE_MODE
+  
+  # Memory management configuration for predictable resource utilization
+  # 2 GiB default limit ensuring stable operation on research workstations
+  # Production deployments should adjust based on available system memory
+  memory_limit_mb: 2048  # Maximum cache memory usage (MB) - override with FRAME_CACHE_SIZE_MB
+  
+  # Cache performance and capacity configuration
+  # Research-appropriate defaults balancing memory efficiency with hit rates
+  capacity:
+    # Maximum number of cached frames for LRU mode operation
+    # Conservative default providing good hit rates for typical video lengths
+    max_frames: 1000  # Maximum cached frame count (LRU mode)
+    
+    # Preload configuration for maximum performance scenarios
+    # Disabled by default to preserve memory for general research use
+    preload_enabled: false  # Full video preload activation (all mode)
+    
+    # Cache warming configuration for predictable initial performance
+    # Conservative default providing immediate performance benefits
+    warmup_frames: 50  # Initial frame preload count during initialization
+  
+  # Performance monitoring and statistics tracking configuration
+  # Comprehensive metrics collection for performance analysis and optimization
+  statistics:
+    # Statistics collection activation for research and debugging
+    # Enabled by default for comprehensive performance visibility
+    enabled: true  # Cache statistics tracking activation
+    
+    # Performance metrics reporting interval for structured logging
+    # Balanced interval providing visibility without excessive overhead
+    reporting_interval: 100  # Statistics reporting frequency (frames)
+    
+    # Memory usage monitoring for resource management and alerting
+    # Enabled by default for proactive memory pressure detection
+    memory_monitoring: true  # Memory usage tracking and reporting
+    
+    # Cache hit rate threshold for performance validation
+    # Research-appropriate threshold ensuring effective caching performance
+    target_hit_rate: 0.9  # Minimum acceptable cache hit rate (0.0-1.0)
+  
+  # Thread safety and concurrency configuration
+  # Conservative defaults ensuring stable multi-agent operation
+  concurrency:
+    # Thread-safe access control for multi-agent scenarios
+    # Enabled by default for broad compatibility with parallel training
+    thread_safe: true  # Thread-safe cache access protection
+    
+    # Lock timeout configuration for deadlock prevention
+    # Conservative timeout providing stability under high concurrency
+    lock_timeout_ms: 1000  # Maximum lock acquisition timeout (milliseconds)
+  
+  # Cache validation and integrity configuration
+  # Development-friendly defaults ensuring cache correctness
+  validation:
+    # Frame data integrity checking during cache operations
+    # Disabled by default for production performance optimization
+    checksum_validation: false  # Frame data integrity verification
+    
+    # Cache consistency checking for debugging and development
+    # Disabled by default to minimize computational overhead
+    consistency_checks: false  # Internal cache state validation
+  
+  # Environment variable integration for deployment flexibility
+  # Comprehensive environment variable support for containerized deployments
+  environment_overrides:
+    # Core cache configuration via environment variables
+    # Enables flexible deployment without configuration file modifications
+    mode_env_var: "FRAME_CACHE_MODE"  # Cache mode environment variable
+    memory_limit_env_var: "FRAME_CACHE_SIZE_MB"  # Memory limit environment variable
+    statistics_env_var: "FRAME_CACHE_STATS"  # Statistics activation environment variable
+    
+    # Advanced configuration environment variables for specialized deployments
+    # Optional overrides for fine-tuned performance optimization
+    capacity_env_var: "FRAME_CACHE_CAPACITY"  # Cache capacity environment variable
+    warmup_env_var: "FRAME_CACHE_WARMUP"  # Warmup frame count environment variable
+    thread_safe_env_var: "FRAME_CACHE_THREAD_SAFE"  # Thread safety environment variable
+  
+  # Integration configuration for system component compatibility
+  # Foundational settings ensuring seamless integration with existing components
+  integration:
+    # Video processing integration configuration
+    # Conservative defaults maintaining compatibility with existing video workflows
+    video_plume_integration: true  # VideoPlume component integration activation
+    
+    # Gymnasium environment integration for RL training acceleration
+    # Enabled by default for comprehensive RL workflow optimization
+    gymnasium_integration: true  # GymnasiumEnv component integration activation
+    
+    # Performance metrics integration with structured logging
+    # Enabled by default for comprehensive performance analysis capability
+    logging_integration: true  # Loguru structured logging integration activation
+    
+    # CLI parameter integration for runtime configuration
+    # Enabled by default for flexible deployment and experimentation
+    cli_integration: true  # CLI parameter support activation
+
+# ============================================================================
 # SIMULATION EXECUTION FOUNDATION DEFAULTS
 # ============================================================================
 # Core simulation parameters optimized for research workflows with
