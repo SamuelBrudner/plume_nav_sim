@@ -150,6 +150,14 @@ except ImportError:
     GymnasiumEnv = None
     _create_gymnasium_env = None
 
+# Frame caching system imports for high-performance environments
+try:
+    from ..cache.frame_cache import FrameCache
+    FRAME_CACHE_AVAILABLE = True
+except ImportError:
+    FRAME_CACHE_AVAILABLE = False
+    FrameCache = None
+
 # Compatibility layer for dual API support
 try:
     from ..environments.compat import (
@@ -1310,6 +1318,7 @@ def create_gymnasium_environment(
     render_mode: Optional[str] = None,
     seed: Optional[int] = None,
     performance_monitoring: bool = True,
+    frame_cache: Optional['FrameCache'] = None,
     **kwargs: Any
 ) -> "GymnasiumEnv":
     """
@@ -1363,6 +1372,11 @@ def create_gymnasium_environment(
         Random seed for reproducible experiments, by default None
     performance_monitoring : bool, optional
         Enable performance tracking with ≤10ms step threshold monitoring, by default True
+    frame_cache : Optional['FrameCache'], optional
+        FrameCache instance for high-performance frame retrieval, enabling sub-10ms step() 
+        execution. Supports LRU and full-preload modes with configurable memory limits.
+        When provided, cache statistics are embedded in step() info["perf_stats"] and 
+        cached frames are available via info["video_frame"], by default None
     **kwargs : Any
         Additional configuration parameters
 
@@ -1392,6 +1406,20 @@ def create_gymnasium_environment(
         ...     include_multi_sensor=True,
         ...     render_mode="human"
         ... )
+
+    Create high-performance environment with frame caching:
+        >>> from odor_plume_nav.cache.frame_cache import FrameCache
+        >>> cache = FrameCache(mode="lru", max_size_mb=1024)
+        >>> env = create_gymnasium_environment(
+        ...     video_path="data/plume_experiment.mp4",
+        ...     frame_cache=cache,
+        ...     performance_monitoring=True
+        ... )
+        >>> # Access performance metrics and cached frames
+        >>> obs, reward, done, truncated, info = env.step(env.action_space.sample())
+        >>> step_time = info["perf_stats"]["step_time_ms"]  # <10ms target
+        >>> cache_hit_rate = info["perf_stats"]["cache_hit_rate"]
+        >>> cached_frame = info["video_frame"]  # NumPy array
 
     Create environment with Hydra configuration:
         >>> from hydra import compose, initialize
@@ -1462,7 +1490,9 @@ def create_gymnasium_environment(
             "request_id": request_id,
             "environment_id": environment_id,
             "cfg_provided": cfg is not None,
-            "video_path_provided": video_path is not None
+            "video_path_provided": video_path is not None,
+            "frame_cache_provided": frame_cache is not None,
+            "frame_cache_available": FRAME_CACHE_AVAILABLE
         }
         
         with correlation_context("create_gymnasium_environment", **context_data):
@@ -1474,7 +1504,9 @@ def create_gymnasium_environment(
             correlation_id=correlation_id,
             environment_id=environment_id,
             cfg_provided=cfg is not None,
-            video_path_provided=video_path is not None
+            video_path_provided=video_path is not None,
+            frame_cache_provided=frame_cache is not None,
+            frame_cache_available=FRAME_CACHE_AVAILABLE
         )
 
     # Performance monitoring for environment creation
@@ -1485,6 +1517,8 @@ def create_gymnasium_environment(
                 extra={
                     "environment_id": environment_id,
                     "performance_monitoring": performance_monitoring,
+                    "frame_cache_requested": frame_cache is not None,
+                    "frame_cache_system_available": FRAME_CACHE_AVAILABLE,
                     "correlation_id": correlation_id
                 }
             )
@@ -1527,6 +1561,7 @@ def create_gymnasium_environment(
                 "render_mode": render_mode or config_params.get("render_mode"),
                 "seed": seed or config_params.get("seed"),
                 "performance_monitoring": performance_monitoring if performance_monitoring else config_params.get("performance_monitoring", True),
+                "frame_cache": frame_cache or config_params.get("frame_cache"),
             }
 
             # Add any additional config parameters
@@ -1540,6 +1575,37 @@ def create_gymnasium_environment(
             # Validate required video_path parameter
             if "video_path" not in constructor_params or constructor_params["video_path"] is None:
                 raise ValueError("video_path is required for Gymnasium environment creation")
+
+            # Validate and configure frame cache if provided
+            cache_instance = constructor_params.get("frame_cache")
+            if cache_instance is not None:
+                if not FRAME_CACHE_AVAILABLE:
+                    func_logger.warning(
+                        "FrameCache provided but cache module not available. "
+                        "Cache will be ignored. Install cache dependencies to enable caching.",
+                        extra={"correlation_id": correlation_id}
+                    )
+                    constructor_params["frame_cache"] = None
+                elif not hasattr(cache_instance, 'get') or not hasattr(cache_instance, 'hit_rate'):
+                    func_logger.error(
+                        f"Invalid FrameCache instance: missing required methods. "
+                        f"Expected FrameCache with 'get' and 'hit_rate' methods, "
+                        f"got {type(cache_instance).__name__}",
+                        extra={"correlation_id": correlation_id}
+                    )
+                    raise ValueError(
+                        f"frame_cache must be a valid FrameCache instance with required interface. "
+                        f"Got {type(cache_instance).__name__} which is missing required methods."
+                    )
+                else:
+                    func_logger.info(
+                        f"Frame cache validation successful",
+                        extra={
+                            "cache_type": type(cache_instance).__name__,
+                            "cache_available": FRAME_CACHE_AVAILABLE,
+                            "correlation_id": correlation_id
+                        }
+                    )
 
             # Detect API compatibility requirements
             api_compatibility_mode = None
@@ -1610,6 +1676,9 @@ def create_gymnasium_environment(
                     "config_source": "hydra" if cfg is not None else "direct",
                     "api_compatibility": api_compatibility_mode.use_legacy_api if api_compatibility_mode else None,
                     "performance_monitoring": performance_monitoring,
+                    "frame_cache_enabled": constructor_params.get("frame_cache") is not None,
+                    "frame_cache_type": type(constructor_params.get("frame_cache")).__name__ if constructor_params.get("frame_cache") else None,
+                    "cache_initialization_status": "enabled" if constructor_params.get("frame_cache") else "disabled",
                     "correlation_id": correlation_id,
                     "performance_duration": perf_metrics.duration if hasattr(perf_metrics, 'duration') else None
                 }
@@ -1629,6 +1698,7 @@ def from_legacy(
     reward_config: Optional[Dict[str, float]] = None,
     max_episode_steps: Optional[int] = None,
     render_mode: Optional[str] = None,
+    frame_cache: Optional['FrameCache'] = None,
     **env_kwargs: Any
 ) -> "GymnasiumEnv":
     """
@@ -1657,6 +1727,10 @@ def from_legacy(
         Maximum steps per episode (default: derived from simulation config), by default None
     render_mode : Optional[str], optional
         Rendering mode for the Gymnasium environment, by default None
+    frame_cache : Optional['FrameCache'], optional
+        FrameCache instance for high-performance frame retrieval, enabling sub-10ms step()
+        execution during RL training. When provided, enables intelligent frame caching
+        and performance metrics tracking, by default None
     **env_kwargs : Any
         Additional environment configuration parameters
 
@@ -1689,6 +1763,17 @@ def from_legacy(
         >>> # Now use with stable-baselines3
         >>> from stable_baselines3 import PPO
         >>> model = PPO("MultiInputPolicy", env)
+
+    Migrate with high-performance frame caching:
+        >>> from odor_plume_nav.cache.frame_cache import FrameCache
+        >>> # Traditional workflow with existing components
+        >>> navigator = create_navigator(position=(100, 100), max_speed=2.0)
+        >>> plume = create_video_plume(video_path="experiment.mp4")
+        >>> # Create cache for performance optimization
+        >>> cache = FrameCache(mode="lru", max_size_mb=512)
+        >>> # Migrate to high-performance RL environment
+        >>> env = from_legacy(navigator, plume, frame_cache=cache)
+        >>> # Training will now benefit from sub-10ms step() performance
 
     Preserve existing configuration:
         >>> # With existing simulation config
@@ -1761,7 +1846,9 @@ def from_legacy(
             "request_id": request_id,
             "navigator_type": type(navigator).__name__,
             "num_agents": navigator.num_agents,
-            "video_path": str(video_plume.video_path) if hasattr(video_plume, 'video_path') else "unknown"
+            "video_path": str(video_plume.video_path) if hasattr(video_plume, 'video_path') else "unknown",
+            "frame_cache_provided": frame_cache is not None,
+            "frame_cache_type": type(frame_cache).__name__ if frame_cache else None
         }
         
         with correlation_context("from_legacy", **context_data):
@@ -1773,7 +1860,9 @@ def from_legacy(
             correlation_id=correlation_id,
             navigator_type=type(navigator).__name__,
             num_agents=navigator.num_agents,
-            video_path=str(video_plume.video_path) if hasattr(video_plume, 'video_path') else "unknown"
+            video_path=str(video_plume.video_path) if hasattr(video_plume, 'video_path') else "unknown",
+            frame_cache_provided=frame_cache is not None,
+            frame_cache_type=type(frame_cache).__name__ if frame_cache else None
         )
 
     # Performance monitoring for legacy migration
@@ -1781,7 +1870,11 @@ def from_legacy(
         try:
             func_logger.info(
                 "Migrating legacy simulation components to Gymnasium environment",
-                extra={"correlation_id": correlation_id}
+                extra={
+                    "correlation_id": correlation_id,
+                    "frame_cache_integration": frame_cache is not None,
+                    "cache_type": type(frame_cache).__name__ if frame_cache else "none"
+                }
             )
 
             # Validate input components
@@ -1826,6 +1919,36 @@ def from_legacy(
             # Extract video plume configuration
             video_path = video_plume.video_path
 
+            # Validate frame cache if provided for legacy migration
+            if frame_cache is not None:
+                if not FRAME_CACHE_AVAILABLE:
+                    func_logger.warning(
+                        "FrameCache provided for legacy migration but cache module not available. "
+                        "Cache will be ignored. Install cache dependencies to enable caching.",
+                        extra={"correlation_id": correlation_id}
+                    )
+                    frame_cache = None
+                elif not hasattr(frame_cache, 'get') or not hasattr(frame_cache, 'hit_rate'):
+                    func_logger.error(
+                        f"Invalid FrameCache instance in legacy migration: missing required methods. "
+                        f"Expected FrameCache with 'get' and 'hit_rate' methods, "
+                        f"got {type(frame_cache).__name__}",
+                        extra={"correlation_id": correlation_id}
+                    )
+                    raise ValueError(
+                        f"frame_cache must be a valid FrameCache instance with required interface. "
+                        f"Got {type(frame_cache).__name__} which is missing required methods."
+                    )
+                else:
+                    func_logger.info(
+                        f"Frame cache validation successful for legacy migration",
+                        extra={
+                            "cache_type": type(frame_cache).__name__,
+                            "cache_available": FRAME_CACHE_AVAILABLE,
+                            "correlation_id": correlation_id
+                        }
+                    )
+
             # Determine episode length from simulation config or use default
             if max_episode_steps is None:
                 max_episode_steps = (
@@ -1844,11 +1967,16 @@ def from_legacy(
                 "reward_config": reward_config,
                 "max_episode_steps": max_episode_steps,
                 "render_mode": render_mode,
-                "performance_monitoring": True
+                "performance_monitoring": True,
+                "frame_cache": frame_cache
             }
 
             # Apply any additional overrides
             env_params.update(env_kwargs)
+            
+            # Remove None frame_cache to let GymnasiumEnv use its defaults
+            if env_params.get("frame_cache") is None:
+                env_params.pop("frame_cache", None)
 
             # Create Gymnasium environment using the enhanced factory function
             env = create_gymnasium_environment(**env_params)
@@ -1864,6 +1992,9 @@ def from_legacy(
                         "max_speed": max_speed,
                         "max_episode_steps": max_episode_steps
                     },
+                    "frame_cache_enabled": frame_cache is not None,
+                    "frame_cache_type": type(frame_cache).__name__ if frame_cache else None,
+                    "cache_migration_status": "enabled" if frame_cache else "disabled",
                     "correlation_id": correlation_id,
                     "performance_duration": perf_metrics.duration if hasattr(perf_metrics, 'duration') else None
                 }

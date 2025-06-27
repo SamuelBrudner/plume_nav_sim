@@ -1,0 +1,541 @@
+# Loguru Structured Logging Configuration
+# 
+# This configuration file defines the comprehensive logging infrastructure for the 
+# Odor Plume Navigation system, implementing high-performance frame caching and 
+# structured observability requirements per Section 6.5 Monitoring and Observability.
+#
+# Key Features:
+# - Dual sink architecture: JSON for machine parsing + Console for human readability
+# - Correlation ID context injection for distributed tracing and request tracking
+# - Performance metrics integration with cache statistics and step execution timing
+# - Environment-specific configurations with appropriate rotation and retention policies
+# - Production-ready structured output supporting automated analysis workflows
+#
+# Integration Points:
+# - Loaded by src/odor_plume_nav/utils/logging_setup.py via setup_logger()
+# - Provides sink definitions for info["perf_stats"] serialization
+# - Enables machine-parseable debugging for RL training acceleration
+# - Supports deployment scenarios: development, production, CI/CD, HPC clusters
+
+# =============================================================================
+# CORE SINK DEFINITIONS
+# =============================================================================
+
+# Primary sinks configuration - supports dual output architecture
+sinks:
+  
+  # Console Sink - Human-readable output for development and interactive use
+  console:
+    # Enable console output for immediate feedback during development
+    enabled: true
+    
+    # Output target configuration
+    sink: "sys.stderr"
+    
+    # Human-readable format with correlation context and color support
+    format: >
+      <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | 
+      <level>{level: <8}</level> | 
+      <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | 
+      <magenta>correlation_id={extra[correlation_id]}</magenta> | 
+      <blue>module={extra[module]}</blue> - 
+      <level>{message}</level>
+    
+    # Logging level configuration with environment variable support
+    level: "${LOG_LEVEL:INFO}"
+    
+    # Performance and reliability settings
+    enqueue: true
+    backtrace: true
+    diagnose: true
+    
+    # Environment-specific filtering
+    filter:
+      # Include all log records in development/debug modes
+      min_level: "TRACE"
+      
+      # Performance threshold filtering - log all performance violations
+      performance_violations: true
+      
+      # Cache-specific filtering
+      cache_events: true
+      frame_cache_statistics: true
+    
+    # Color configuration for terminal output
+    colorize: true
+    
+    # Context enrichment
+    serialize: false
+    
+  # JSON Sink - Machine-parseable output for automated analysis and monitoring
+  json:
+    # Enable JSON structured logging for production and analysis
+    enabled: true
+    
+    # File output configuration with rotation
+    sink: "${LOG_PATH:./logs/odor_plume_nav.json}"
+    
+    # JSON structured format for machine parsing
+    format: |
+      {
+        "timestamp": "{time:YYYY-MM-DD HH:mm:ss.SSSZ}",
+        "level": "{level}",
+        "logger": "{name}",
+        "function": "{function}",
+        "line": {line},
+        "message": "{message}",
+        "correlation_id": "{extra[correlation_id]}",
+        "request_id": "{extra[request_id]}",
+        "module": "{extra[module]}",
+        "thread_id": "{extra[thread_id]}",
+        "process_id": "{extra[process_id]}",
+        "step_count": {extra[step_count]},
+        "episode_id": "{extra[episode_id]}",
+        "metric_type": "{extra[metric_type]}",
+        "performance_metrics": {extra[performance_metrics]},
+        "cache_statistics": {extra[cache_statistics]},
+        "perf_stats": {extra[perf_stats]},
+        "video_frame_metadata": {extra[video_frame_metadata]},
+        "system_info": {extra[system_info]},
+        "extra": {extra}
+      }
+    
+    # Production logging level
+    level: "${LOG_LEVEL:INFO}"
+    
+    # File rotation and retention policies for production deployment
+    rotation: "${LOG_ROTATION:10 MB}"
+    retention: "${LOG_RETENTION:30 days}"
+    compression: "gz"
+    
+    # Performance settings for high-throughput scenarios
+    enqueue: true
+    backtrace: true
+    diagnose: true
+    
+    # JSON serialization enabled
+    serialize: true
+    
+    # Enhanced filtering for production monitoring
+    filter:
+      # Include INFO level and above for production
+      min_level: "INFO"
+      
+      # Always log performance violations regardless of level
+      force_performance_violations: true
+      
+      # Cache performance monitoring
+      cache_hit_rate_threshold: 0.90
+      cache_memory_threshold_percent: 90
+      
+      # Step latency monitoring (10ms threshold per requirements)
+      step_latency_threshold_ms: 10
+      
+      # Frame rate monitoring (30 FPS threshold per requirements)
+      frame_rate_threshold: 30
+      
+      # Memory monitoring thresholds
+      memory_delta_threshold_mb: 100
+      
+    # Async processing for better performance
+    enqueue: true
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC CONFIGURATIONS
+# =============================================================================
+
+# Environment-specific overrides supporting deployment scenarios
+environments:
+  
+  # Development environment - enhanced debugging and immediate feedback
+  development:
+    console:
+      enabled: true
+      level: "DEBUG"
+      colorize: true
+      format: >
+        <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | 
+        <level>{level: <8}</level> | 
+        <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | 
+        <magenta>correlation_id={extra[correlation_id]}</magenta> | 
+        <blue>module={extra[module]}</blue> | 
+        <yellow>cache_hit_rate={extra[cache_hit_rate]:0.2f}</yellow> - 
+        <level>{message}</level>
+      
+    json:
+      enabled: true
+      level: "DEBUG"
+      rotation: "5 MB"
+      retention: "7 days"
+      
+  # Production environment - optimized for performance and long-term storage
+  production:
+    console:
+      enabled: true
+      level: "INFO"
+      format: >
+        {time:YYYY-MM-DD HH:mm:ss.SSS} | 
+        {level: <8} | 
+        {name}:{function}:{line} | 
+        correlation_id={extra[correlation_id]} | 
+        module={extra[module]} | 
+        {message}
+      colorize: false
+      
+    json:
+      enabled: true
+      level: "INFO"
+      rotation: "50 MB"
+      retention: "90 days"
+      compression: "gz"
+      
+  # CI/CD environment - structured output for automated processing
+  ci_cd:
+    console:
+      enabled: true
+      level: "WARNING"
+      format: "{time:HH:mm:ss} | {level: <8} | {message}"
+      colorize: false
+      
+    json:
+      enabled: true
+      level: "INFO"
+      sink: "${GITHUB_WORKSPACE:./}/logs/ci_performance.json"
+      rotation: false
+      retention: false
+      
+  # HPC environment - minimal overhead with distributed coordination
+  hpc:
+    console:
+      enabled: false
+      
+    json:
+      enabled: true
+      level: "WARNING"
+      sink: "${SLURM_SUBMIT_DIR:./logs}/node_${SLURM_NODEID:0}.json"
+      rotation: "100 MB"
+      retention: "30 days"
+      enqueue: true
+
+# =============================================================================
+# PERFORMANCE MONITORING CONFIGURATION
+# =============================================================================
+
+# Performance thresholds and monitoring configuration
+performance:
+  
+  # Enable performance monitoring and threshold checking
+  monitoring_enabled: true
+  
+  # Critical performance thresholds (values in seconds unless specified)
+  thresholds:
+    # Environment step execution threshold (10ms requirement per Section 0.1.2)
+    environment_step: 0.010
+    
+    # Frame processing threshold (30 FPS requirement = 33ms per frame)
+    frame_processing: 0.033
+    
+    # Simulation FPS threshold
+    simulation_fps_min: 30.0
+    
+    # Database operation threshold
+    database_operation: 0.100
+    
+    # CLI initialization threshold
+    cli_init: 2.0
+    
+    # Configuration validation threshold
+    config_validation: 0.500
+    
+    # Memory usage delta threshold (MB)
+    memory_delta_mb: 100.0
+    
+  # Frame cache specific monitoring
+  cache_monitoring:
+    # Cache hit rate threshold (90% per Section 6.5.2.1)
+    hit_rate_threshold: 0.90
+    
+    # Memory usage threshold (90% of configured limit)
+    memory_threshold_percent: 90
+    
+    # Performance violation detection window
+    violation_window_size: 100
+    
+    # Statistics collection interval (steps)
+    stats_collection_interval: 10
+    
+    # Enable cache performance alerting
+    alerting_enabled: true
+    
+  # Automatic threshold violation logging
+  violation_handling:
+    # Log level for performance violations
+    violation_log_level: "WARNING"
+    
+    # Include performance context in violations
+    include_performance_context: true
+    
+    # Include system resource information
+    include_system_context: true
+    
+    # Include cache statistics in violations
+    include_cache_context: true
+
+# =============================================================================
+# CORRELATION CONTEXT CONFIGURATION
+# =============================================================================
+
+# Correlation tracking and distributed tracing configuration
+correlation:
+  
+  # Enable correlation ID generation and injection
+  enabled: true
+  
+  # Default correlation context fields
+  default_context:
+    correlation_id: "none"
+    request_id: "none"
+    module: "system"
+    config_hash: "unknown"
+    step_count: 0
+    cache_hit_rate: 0.0
+    cache_size: 0
+    memory_usage_mb: 0.0
+    
+  # Experiment tracking integration
+  experiment_tracking:
+    # Enable episode ID tracking for RL environments
+    episode_tracking: true
+    
+    # Enable configuration hash tracking
+    config_hash_tracking: true
+    
+    # Enable random seed correlation
+    seed_correlation: true
+    
+    # Metadata fields to automatically capture
+    auto_capture_fields:
+      - "platform"
+      - "python_version"
+      - "git_commit"
+      - "git_branch"
+      - "experiment_config"
+      
+  # Request tracing configuration for distributed scenarios
+  tracing:
+    # Enable distributed tracing capabilities
+    distributed_tracing: true
+    
+    # Thread ID inclusion for multi-threaded scenarios
+    include_thread_id: true
+    
+    # Process ID inclusion for multi-process scenarios
+    include_process_id: true
+    
+    # Timing correlation for performance analysis
+    timing_correlation: true
+
+# =============================================================================
+# STRUCTURED DATA CONFIGURATION
+# =============================================================================
+
+# Configuration for structured data serialization and enrichment
+structured_data:
+  
+  # Performance metrics serialization
+  performance_metrics:
+    # Enable automatic performance metrics serialization
+    auto_serialize: true
+    
+    # Include timing breakdown in metrics
+    include_timing_breakdown: true
+    
+    # Include memory information in metrics
+    include_memory_info: true
+    
+    # Include cache statistics in metrics
+    include_cache_stats: true
+    
+    # Performance metrics format version
+    format_version: "1.0"
+    
+  # Cache statistics serialization
+  cache_statistics:
+    # Enable cache statistics in log records
+    enabled: true
+    
+    # Statistics fields to include
+    fields:
+      - "hit_count"
+      - "miss_count"
+      - "eviction_count"
+      - "hit_rate"
+      - "memory_usage_bytes"
+      - "memory_usage_percent"
+      - "cache_size"
+      - "max_cache_size"
+      
+    # Include cache configuration in statistics
+    include_config: true
+    
+  # System information enrichment
+  system_info:
+    # Enable system information capture
+    enabled: true
+    
+    # Information fields to capture
+    fields:
+      - "platform"
+      - "python_version"
+      - "cpu_count"
+      - "memory_total_gb"
+      - "gpu_available"
+      
+    # Capture frequency (every N log records)
+    capture_frequency: 1000
+
+# =============================================================================
+# INTEGRATION CONFIGURATION
+# =============================================================================
+
+# Integration settings for external systems and frameworks
+integration:
+  
+  # TensorBoard integration for ML experiment tracking
+  tensorboard:
+    # Enable TensorBoard log integration
+    enabled: false
+    
+    # TensorBoard log directory
+    log_dir: "${TENSORBOARD_LOG_DIR:./tensorboard_logs}"
+    
+    # Metrics to export to TensorBoard
+    export_metrics:
+      - "step_latency_ms"
+      - "frame_rate"
+      - "cache_hit_rate"
+      - "memory_usage_mb"
+      
+  # Weights & Biases integration
+  wandb:
+    # Enable W&B integration
+    enabled: false
+    
+    # Project name for W&B logging
+    project: "${WANDB_PROJECT:odor_plume_navigation}"
+    
+    # Tags for experiment organization
+    tags:
+      - "frame_caching"
+      - "performance_monitoring"
+      - "structured_logging"
+      
+  # GitHub Actions integration for CI/CD
+  github_actions:
+    # Enable GitHub Actions output formatting
+    enabled: "${GITHUB_ACTIONS:false}"
+    
+    # Performance report generation
+    generate_performance_report: true
+    
+    # Artifact generation for build results
+    generate_artifacts: true
+    
+  # External monitoring systems integration
+  monitoring_systems:
+    # Enable external monitoring integration
+    enabled: false
+    
+    # Monitoring endpoints for log forwarding
+    endpoints: []
+    
+    # Authentication configuration
+    auth:
+      enabled: false
+
+# =============================================================================
+# QUALITY AND VALIDATION CONFIGURATION
+# =============================================================================
+
+# Configuration for log quality assurance and validation
+quality:
+  
+  # Schema validation for structured logs
+  schema_validation:
+    # Enable JSON schema validation
+    enabled: true
+    
+    # Validation strictness level
+    strictness: "warn"  # Options: "strict", "warn", "ignore"
+    
+    # Required fields validation
+    required_fields:
+      - "timestamp"
+      - "level"
+      - "logger"
+      - "message"
+      - "correlation_id"
+      - "module"
+      
+  # Performance quality gates
+  quality_gates:
+    # Maximum acceptable log processing latency (ms)
+    max_log_latency_ms: 5
+    
+    # Maximum log file size before forced rotation (MB)
+    max_file_size_mb: 1000
+    
+    # Maximum memory usage for log buffering (MB)
+    max_buffer_memory_mb: 50
+    
+  # Error handling and recovery
+  error_handling:
+    # Fallback configuration on initialization failure
+    fallback_to_console: true
+    
+    # Continue on individual sink failures
+    continue_on_sink_failure: true
+    
+    # Log configuration errors to stderr
+    log_config_errors: true
+
+# =============================================================================
+# VERSION AND METADATA
+# =============================================================================
+
+# Configuration metadata and versioning
+metadata:
+  # Configuration schema version for compatibility
+  schema_version: "1.0.0"
+  
+  # Configuration description
+  description: "Loguru structured logging configuration for Odor Plume Navigation frame caching system"
+  
+  # Creation timestamp
+  created: "2024-01-15T10:30:00Z"
+  
+  # Last modified timestamp
+  last_modified: "2024-01-15T10:30:00Z"
+  
+  # Configuration author/system
+  author: "Blitzy Platform"
+  
+  # Target system requirements
+  requirements:
+    loguru_version: ">=0.7.0"
+    python_version: ">=3.9"
+    psutil_version: ">=5.9.0"
+    
+  # Configuration purpose and scope
+  purpose: |
+    Provides comprehensive structured logging configuration for the Odor Plume Navigation
+    system with focus on frame caching performance monitoring, machine-parseable debugging
+    output, and production-ready observability infrastructure.
+    
+    Key capabilities:
+    - Dual sink architecture (JSON + Console)
+    - Correlation ID tracking for distributed tracing
+    - Performance metrics integration with cache statistics
+    - Environment-specific configuration profiles
+    - Production-ready rotation and retention policies
+    - Real-time performance threshold monitoring

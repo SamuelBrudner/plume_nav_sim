@@ -57,6 +57,12 @@ defaults:
   # - override visualization: publication    # Publication-quality plots
   # - override environment: development      # Development environment settings
   
+  # Frame caching configuration group for high-performance frame storage
+  # Uncomment and modify as needed for performance optimization
+  # - override frame_cache: lru          # LRU cache mode with intelligent eviction
+  # - override frame_cache: preload_all  # Full preload mode for maximum performance
+  # - override frame_cache: disabled     # Disable caching for debugging
+  
   # Enable this configuration file as the primary override source
   - _self_
 
@@ -96,6 +102,61 @@ environment:
     # Video directory with environment variable override capability
     # Set VIDEO_DIR=/path/to/videos for custom video storage
     video_dir: ${oc.env:VIDEO_DIR,"data/videos"}
+
+# ============================================================================
+# FRAME CACHE CONFIGURATION OVERRIDES
+# ============================================================================
+# High-performance frame caching system for accelerated reinforcement learning
+# training workflows with sub-10ms frame retrieval targets and intelligent
+# memory management supporting LRU eviction and full-preload strategies.
+
+frame_cache:
+  # Cache operation mode with environment variable override capability
+  # Set FRAME_CACHE_MODE=lru|all|none for deployment-specific cache behavior
+  # Options: "none" (disabled), "lru" (intelligent caching), "all" (full preload)
+  mode: ${oc.env:FRAME_CACHE_MODE,"lru"}  # Cache strategy selection
+  
+  # Memory management configuration with runtime override support
+  # Set FRAME_CACHE_SIZE_MB=4096 for custom memory limits in production
+  memory_limit_mb: ${oc.env:FRAME_CACHE_SIZE_MB,"2048"}  # Default 2 GiB memory limit
+  
+  # LRU cache behavior overrides for memory-efficient frame storage
+  lru:
+    # Maximum number of frames to cache before eviction starts
+    # Automatically calculated from memory_limit_mb and frame size if null
+    max_frames: null  # Auto-calculate based on memory limit
+    
+    # Cache preloading strategy for sequential access optimization
+    preload_sequential: true  # Preload next frames for sequential access
+    preload_count: 10  # Number of sequential frames to preload ahead
+    
+    # Eviction policy configuration for memory pressure management
+    eviction_batch_size: 5  # Number of frames to evict when memory threshold reached
+    memory_pressure_threshold: 0.9  # Memory usage threshold triggering eviction (0.0-1.0)
+  
+  # Full preload cache configuration for maximum performance scenarios
+  preload_all:
+    # Enable warming cache during environment initialization
+    warm_on_reset: true  # Preload all frames during environment reset
+    
+    # Memory protection settings for large video files
+    max_video_size_mb: 8192  # Maximum video size for full preload (8 GiB)
+    memory_check_enabled: true  # Verify available system memory before preload
+    fallback_to_lru: true  # Fall back to LRU mode if memory insufficient
+  
+  # Cache performance monitoring and optimization settings
+  monitoring:
+    # Performance threshold monitoring for cache effectiveness
+    target_hit_rate: 0.90  # Target cache hit rate for performance validation
+    
+    # Statistics collection and reporting configuration
+    collect_statistics: true  # Enable cache hit/miss statistics collection
+    statistics_window: 1000  # Rolling window size for hit rate calculation
+    log_performance_warnings: true  # Log warnings when hit rate falls below target
+    
+    # Memory usage monitoring for optimization guidance
+    memory_monitoring_enabled: true  # Enable memory usage tracking via psutil
+    memory_warning_threshold: 0.85  # Warning threshold for memory usage (0.0-1.0)
 
 # ============================================================================
 # NAVIGATOR CONFIGURATION OVERRIDES
@@ -284,6 +345,11 @@ logging:
   console_enabled: true  # Keep console output (base default: true)
   file_enabled: ${oc.env:LOG_TO_FILE,"true"}  # Enable file logging via environment
   file_path: ${oc.env:LOG_FILE_PATH,"logs/odor_plume_nav_user.log"}  # Custom log path
+  
+  # Structured logging configuration for machine-parseable output
+  # Set LOG_JSON_SINK=true to enable JSON-formatted logging for production
+  json_sink_enabled: ${oc.env:LOG_JSON_SINK,"false"}  # Enable structured JSON logging
+  json_sink_path: ${oc.env:LOG_JSON_PATH,"logs/odor_plume_nav_structured.jsonl"}  # JSON log location
   
   # File management overrides for production deployments
   file_rotation: "5 MB"  # Smaller rotation from base default ("10 MB")
@@ -474,7 +540,35 @@ hydra:
 #     font_size: 16
 #     title_size: 20
 
-# Example 4: Production Database Integration
+# Example 4: High-Performance Frame Caching Configuration
+# Uncomment for accelerated RL training with optimized frame caching
+# frame_cache:
+#   mode: "lru"  # Intelligent LRU caching for memory efficiency
+#   memory_limit_mb: 4096  # 4 GiB cache for large-scale experiments
+#   lru:
+#     preload_sequential: true
+#     preload_count: 20  # Aggressive preloading for sequential access
+#     memory_pressure_threshold: 0.95  # Higher memory utilization
+#   monitoring:
+#     target_hit_rate: 0.95  # Higher performance target for production
+#     log_performance_warnings: true
+#     memory_monitoring_enabled: true
+
+# Example 5: Maximum Performance Full-Preload Configuration
+# Uncomment for maximum throughput when memory permits
+# frame_cache:
+#   mode: "all"  # Full video preload for zero frame I/O latency
+#   memory_limit_mb: 8192  # 8 GiB cache limit for large videos
+#   preload_all:
+#     warm_on_reset: true  # Preload during environment initialization
+#     max_video_size_mb: 16384  # Support very large video files
+#     memory_check_enabled: true  # Verify system memory availability
+#     fallback_to_lru: true  # Graceful degradation if insufficient memory
+#   monitoring:
+#     target_hit_rate: 0.99  # Near-perfect hit rate expected
+#     collect_statistics: true
+
+# Example 6: Production Database Integration
 # Uncomment for full database persistence in production environments
 # database:
 #   enabled: true
@@ -511,6 +605,14 @@ hydra:
 #
 # Video Processing:
 #   PLUME_THRESHOLD       - binary detection threshold value
+#
+# Frame Caching:
+#   FRAME_CACHE_MODE      - cache strategy (none|lru|all)
+#   FRAME_CACHE_SIZE_MB   - cache memory limit in megabytes
+#
+# Structured Logging:
+#   LOG_JSON_SINK         - enable JSON logging (true|false)
+#   LOG_JSON_PATH         - JSON log file location
 #
 # Performance and System:
 #   NUMPY_THREADS         - NumPy thread count for optimization
@@ -555,6 +657,9 @@ hydra:
 #   NUMPY_THREADS=8
 #   VIDEO_PATH=/data/experiments/plume_video.mp4
 #   RANDOM_SEED=42
+#   FRAME_CACHE_MODE=lru
+#   FRAME_CACHE_SIZE_MB=4096
+#   LOG_JSON_SINK=true
 #
 # ============================================================================
 # END OF USER CONFIGURATION
@@ -574,6 +679,9 @@ hydra:
 #   python -m odor_plume_nav.cli.main navigator.max_speed=2.0 simulation.fps=60
 #   python -m odor_plume_nav.cli.main --multirun navigator.speed=0.5,1.0,1.5
 #   python -m odor_plume_nav.cli.main video_plume.kernel_size=5 +environment=production
+#   python -m odor_plume_nav.cli.main frame_cache.mode=lru frame_cache.memory_limit_mb=4096
+#   python -m odor_plume_nav.cli.main frame_cache.mode=all logging.json_sink_enabled=true
+#   python -m odor_plume_nav.cli.main --multirun frame_cache.mode=none,lru,all
 #
 # Compose API Examples:
 #   from hydra import compose, initialize
@@ -583,5 +691,8 @@ hydra:
 # Environment Integration:
 #   export ENVIRONMENT_TYPE=production
 #   export DATABASE_URL=postgresql://localhost/experiments
+#   export FRAME_CACHE_MODE=lru
+#   export FRAME_CACHE_SIZE_MB=4096
+#   export LOG_JSON_SINK=true
 #   python -m odor_plume_nav.cli.main
 # ============================================================================

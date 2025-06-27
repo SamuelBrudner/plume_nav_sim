@@ -1,14 +1,16 @@
 """
-Enhanced Logging Configuration Module for Odor Plume Navigation.
+Enhanced Logging Configuration Module for Odor Plume Navigation with Frame Cache Integration.
 
 This module provides a comprehensive, configuration-driven logging setup across the application,
 using Loguru for advanced structured logging capabilities with Hydra and Pydantic integration.
-Supports environment-specific configurations, performance monitoring, and automatic correlation 
-tracking for research and production environments.
+Supports environment-specific configurations, performance monitoring, automatic correlation 
+tracking, and frame cache observability for research and production environments.
 
 Key Features:
 - Configuration-driven initialization with Hydra and Pydantic integration
 - Environment-specific logging configurations (development, testing, production)
+- YAML configuration loading with dual sink architecture (JSON + console)
+- Frame cache statistics integration and monitoring
 - Performance monitoring and diagnostic logging for real-time simulation monitoring
 - Enhanced module logger creation with automatic context binding
 - Correlation ID generation for experiment traceability (request_id/episode_id support)
@@ -17,14 +19,24 @@ Key Features:
 - Environment step() latency monitoring with ≤10ms threshold warnings
 - Structured JSON logging with distributed tracing support
 - Legacy gym API deprecation detection and warnings
-- Comprehensive performance timing integration (frame rate, memory, database)
+- Comprehensive performance timing integration (frame rate, memory, database, cache)
+- psutil-based memory pressure monitoring for cache management
 
 Enhanced Performance Monitoring:
 - Environment step() latency tracking with automatic WARN logging when ≤10ms threshold exceeded
 - Frame rate measurement with automatic warnings below 30 FPS target
 - Memory usage delta tracking with warnings for significant increases
 - Database operation timing with latency violation detection
+- Frame cache hit rate monitoring (>90% target) and memory pressure tracking
+- Cache memory consumption tracking (<=2 GiB default) via psutil integration
 - Structured JSON output with correlation IDs for distributed analysis
+
+Frame Cache Integration:
+- Automatic inclusion of cache statistics (hits, misses, evictions) in JSON log records
+- Cache memory pressure monitoring with ResourceError category logging
+- Cache performance metrics embedded in info["perf_stats"] for RL integration
+- Thread-safe cache operation tracking in correlation context
+- Configurable cache modes (none, lru, all) with performance monitoring
 
 Legacy API Deprecation Support:
 - Automatic detection of legacy gym imports vs gymnasium
@@ -32,21 +44,22 @@ Legacy API Deprecation Support:
 - Migration guidance with specific code examples and resources
 
 Example Usage:
-    >>> # Enhanced correlation context with distributed tracing
+    >>> # Enhanced correlation context with cache monitoring
     >>> with correlation_context("rl_training", episode_id="ep_001") as ctx:
     ...     logger.info("Starting RL episode")
     ...     with create_step_timer() as step_metrics:
     ...         obs, reward, done, info = env.step(action)
-    ...     # Automatic warning if step() > 10ms
+    ...     # Automatic warning if step() > 10ms, includes cache stats
     
-    >>> # Legacy API monitoring
-    >>> monitor_environment_creation("CartPole-v1", "gym.make")  # Triggers deprecation warning
+    >>> # YAML configuration with dual sinks
+    >>> setup_logger(logging_config_path="./logging.yaml")
     
-    >>> # Comprehensive performance monitoring
-    >>> logger = get_enhanced_logger(__name__)
-    >>> with logger.performance_timer("training_batch") as metrics:
-    ...     model.train(batch_data)
-    >>> logger.log_step_latency_violation(0.015)  # >10ms step warning
+    >>> # Cache statistics integration
+    >>> update_cache_metrics(cache_hit_count=150, cache_miss_count=25)
+    >>> logger.info("Cache operation completed")  # Includes cache stats in JSON
+    
+    >>> # Memory pressure monitoring
+    >>> log_cache_memory_pressure_violation(1800.0, 2048.0)  # >90% usage warning
 """
 
 import sys
@@ -55,6 +68,7 @@ import json
 import time
 import uuid
 import threading
+import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union, Literal, ContextManager
 from contextlib import contextmanager
@@ -73,6 +87,39 @@ try:
 except ImportError:
     # Fallback for cases where config models aren't available yet
     SimulationConfig = None
+
+
+@dataclass
+class FrameCacheConfig:
+    """
+    Configuration for frame caching system supporting dual-mode caching.
+    
+    Defines parameters for LRU and full-preload cache modes with memory management,
+    performance monitoring, and integration with structured logging for comprehensive
+    frame cache observability in reinforcement learning environments.
+    """
+    
+    # Cache mode configuration
+    mode: Literal["none", "lru", "all"] = "none"
+    
+    # Memory management parameters
+    memory_limit_gb: float = 2.0  # 2 GiB default memory limit
+    memory_pressure_threshold: float = 0.9  # 90% threshold for memory pressure warnings
+    
+    # Cache sizing parameters
+    max_entries: Optional[int] = None  # Maximum number of cache entries (auto-calculated if None)
+    preload_enabled: bool = False  # Enable preloading for 'all' mode
+    
+    # Performance monitoring
+    enable_statistics: bool = True  # Enable cache statistics tracking
+    log_cache_events: bool = True  # Log cache operations for monitoring
+    
+    def __post_init__(self):
+        """Post-initialization validation for cache configuration."""
+        if self.memory_limit_gb <= 0:
+            raise ValueError("memory_limit_gb must be positive")
+        if not (0.0 <= self.memory_pressure_threshold <= 1.0):
+            raise ValueError("memory_pressure_threshold must be between 0.0 and 1.0")
 
 
 # Preserved existing format constants for backward compatibility
@@ -197,7 +244,7 @@ ENVIRONMENT_DEFAULTS = {
 
 @dataclass
 class PerformanceMetrics:
-    """Performance metrics tracking structure for logging correlation."""
+    """Performance metrics tracking structure for logging correlation with frame cache monitoring."""
     operation_name: str
     start_time: float
     end_time: Optional[float] = None
@@ -208,6 +255,14 @@ class PerformanceMetrics:
     thread_id: Optional[str] = None
     correlation_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    
+    # Frame cache performance fields
+    cache_hit_count: Optional[int] = None
+    cache_miss_count: Optional[int] = None
+    cache_evictions: Optional[int] = None
+    cache_hit_rate: Optional[float] = None
+    cache_memory_usage_mb: Optional[float] = None
+    cache_memory_limit_mb: Optional[float] = None
 
     def complete(self) -> Self:
         """Mark performance measurement as complete and calculate metrics."""
@@ -443,7 +498,7 @@ class CorrelationContext:
         self.step_count = 0  # Track environment steps for performance monitoring
     
     def bind_context(self, **kwargs) -> Dict[str, Any]:
-        """Get context dictionary for binding to loggers with enhanced distributed tracing."""
+        """Get context dictionary for binding to loggers with enhanced distributed tracing and cache statistics."""
         context = {
             "correlation_id": self.correlation_id,
             "request_id": self.request_id,
@@ -457,6 +512,19 @@ class CorrelationContext:
         # Add episode_id if available (for RL environments)
         if self.episode_id is not None:
             context["episode_id"] = self.episode_id
+        
+        # Add cache statistics if available from current performance stack
+        if self.performance_stack:
+            latest_metrics = self.performance_stack[-1]
+            if latest_metrics.cache_hit_count is not None:
+                context.update({
+                    "cache_hit_count": latest_metrics.cache_hit_count,
+                    "cache_miss_count": latest_metrics.cache_miss_count,
+                    "cache_evictions": latest_metrics.cache_evictions,
+                    "cache_hit_rate": latest_metrics.cache_hit_rate,
+                    "cache_memory_usage_mb": latest_metrics.cache_memory_usage_mb,
+                    "cache_memory_limit_mb": latest_metrics.cache_memory_limit_mb
+                })
             
         return context
     
@@ -1126,6 +1194,7 @@ def setup_logger(
     backtrace: Optional[bool] = None,
     diagnose: Optional[bool] = None,
     environment: Optional[str] = None,
+    logging_config_path: Optional[Union[str, Path]] = None,
     **kwargs
 ) -> LoggingConfig:
     """
@@ -1133,7 +1202,8 @@ def setup_logger(
     
     Configures the global Loguru logger with comprehensive settings including
     environment-specific defaults, performance monitoring, correlation tracking,
-    and structured output formatting.
+    structured output formatting, and dual sink architecture supporting JSON and
+    console outputs via logging.yaml configuration files.
     
     Args:
         config: LoggingConfig object or dictionary with configuration settings
@@ -1146,12 +1216,16 @@ def setup_logger(
         backtrace: Whether to include a backtrace for exceptions (backward compatibility)
         diagnose: Whether to diagnose exceptions (backward compatibility)
         environment: Environment type for applying defaults
+        logging_config_path: Path to logging.yaml configuration file for dual sink architecture
         **kwargs: Additional configuration parameters
         
     Returns:
         LoggingConfig: The resolved configuration object
         
     Example:
+        >>> # Using logging.yaml configuration
+        >>> setup_logger(logging_config_path="./logging.yaml")
+        
         >>> # Using configuration object
         >>> config = LoggingConfig(environment="production", level="INFO")
         >>> setup_logger(config)
@@ -1162,12 +1236,21 @@ def setup_logger(
         >>> # Using environment-based defaults
         >>> setup_logger(environment="development")
     """
+    # Load configuration from logging.yaml if provided
+    yaml_config = None
+    if logging_config_path is not None:
+        yaml_config = _load_logging_yaml(logging_config_path)
+    
     # Handle different input types and backward compatibility
     if config is None:
         # Create config from individual parameters and environment defaults
         config_dict = {}
         
-        # Apply environment defaults first
+        # Apply YAML configuration first if available
+        if yaml_config:
+            config_dict.update(yaml_config)
+        
+        # Apply environment defaults second
         if environment:
             config_dict["environment"] = environment
             env_defaults = ENVIRONMENT_DEFAULTS.get(environment, {})
@@ -1268,6 +1351,10 @@ def setup_logger(
             serialize=(config.format == "json")
         )
     
+    # Configure dual sink architecture from YAML if available
+    if yaml_config and "sinks" in yaml_config:
+        _setup_yaml_sinks(yaml_config["sinks"], default_context)
+    
     # Configure performance monitoring if enabled
     if config.enable_performance:
         _setup_performance_monitoring(config)
@@ -1301,7 +1388,7 @@ def _create_context_filter(default_context: Dict[str, Any]):
 
 
 def _create_json_formatter():
-    """Create a JSON formatter function for structured logging with enhanced correlation tracking."""
+    """Create a JSON formatter function for structured logging with cache statistics and enhanced correlation tracking."""
     def json_formatter(record):
         # Extract relevant fields for JSON output with enhanced correlation support
         json_record = {
@@ -1331,6 +1418,20 @@ def _create_json_formatter():
         if "metric_type" in record["extra"]:
             json_record["metric_type"] = record["extra"]["metric_type"]
         
+        # Add cache statistics for frame cache monitoring
+        cache_fields = [
+            "cache_hit_count", "cache_miss_count", "cache_evictions",
+            "cache_hit_rate", "cache_memory_usage_mb", "cache_memory_limit_mb"
+        ]
+        
+        cache_stats = {}
+        for field in cache_fields:
+            if field in record["extra"]:
+                cache_stats[field] = record["extra"][field]
+        
+        if cache_stats:
+            json_record["cache_stats"] = cache_stats
+        
         # Add performance timing fields for automatic capture
         performance_fields = [
             "actual_latency_ms", "threshold_latency_ms", "actual_fps", "target_fps",
@@ -1344,7 +1445,7 @@ def _create_json_formatter():
         
         # Add any additional extra fields (excluding internal fields)
         for key, value in record["extra"].items():
-            if key not in json_record and not key.startswith("_"):
+            if key not in json_record and not key.startswith("_") and key not in cache_fields:
                 json_record[key] = value
         
         return json.dumps(json_record, default=str)
@@ -1352,8 +1453,152 @@ def _create_json_formatter():
     return json_formatter
 
 
+def _load_logging_yaml(config_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    """
+    Load logging configuration from YAML file with validation and error handling.
+    
+    Args:
+        config_path: Path to logging.yaml configuration file
+        
+    Returns:
+        Dictionary containing logging configuration or None if loading fails
+        
+    Example logging.yaml structure:
+        sinks:
+          console:
+            level: INFO
+            format: enhanced
+          json_file:
+            level: DEBUG
+            format: json
+            file_path: "./logs/structured.log"
+            rotation: "10 MB"
+            retention: "1 week"
+    """
+    try:
+        config_path = Path(config_path)
+        if not config_path.exists():
+            logger.warning(f"Logging configuration file not found: {config_path}")
+            return None
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            yaml_config = yaml.safe_load(f)
+        
+        # Validate required structure
+        if not isinstance(yaml_config, dict):
+            logger.error(f"Invalid YAML configuration structure in {config_path}")
+            return None
+        
+        logger.info(f"Successfully loaded logging configuration from {config_path}")
+        return yaml_config
+        
+    except yaml.YAMLError as e:
+        logger.error(f"Failed to parse YAML logging configuration: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to load logging configuration from {config_path}: {e}")
+        return None
+
+
+def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, Any]):
+    """
+    Setup dual sink architecture from YAML configuration for JSON and console outputs.
+    
+    Args:
+        sinks_config: Sink configuration dictionary from YAML
+        default_context: Default context fields for filtering
+    """
+    try:
+        for sink_name, sink_config in sinks_config.items():
+            if not isinstance(sink_config, dict):
+                logger.warning(f"Invalid sink configuration for {sink_name}")
+                continue
+            
+            # Extract sink parameters with defaults
+            level = sink_config.get("level", "INFO")
+            format_type = sink_config.get("format", "default")
+            
+            # Determine sink target
+            if sink_name == "console" or sink_config.get("target") == "console":
+                sink_target = sys.stderr
+            elif "file_path" in sink_config:
+                sink_target = sink_config["file_path"]
+                # Ensure directory exists
+                Path(sink_target).parent.mkdir(parents=True, exist_ok=True)
+            else:
+                logger.warning(f"No valid target specified for sink {sink_name}")
+                continue
+            
+            # Determine format
+            if format_type == "json":
+                format_func = _create_json_formatter()
+                serialize = True
+            else:
+                format_patterns = {
+                    "default": DEFAULT_FORMAT,
+                    "enhanced": ENHANCED_FORMAT,
+                    "minimal": MINIMAL_FORMAT,
+                    "production": PRODUCTION_FORMAT,
+                }
+                format_func = format_patterns.get(format_type, ENHANCED_FORMAT)
+                serialize = False
+            
+            # Add sink with configuration
+            logger.add(
+                sink_target,
+                format=format_func,
+                level=level,
+                rotation=sink_config.get("rotation", "10 MB"),
+                retention=sink_config.get("retention", "1 week"),
+                enqueue=sink_config.get("enqueue", True),
+                backtrace=sink_config.get("backtrace", True),
+                diagnose=sink_config.get("diagnose", True),
+                filter=_create_context_filter(default_context),
+                serialize=serialize
+            )
+            
+            logger.debug(f"Configured {sink_name} sink with format {format_type}")
+            
+    except Exception as e:
+        logger.error(f"Failed to setup YAML sinks: {e}")
+
+
+def _monitor_cache_memory_pressure():
+    """
+    Monitor cache memory pressure using psutil and log warnings when approaching limits.
+    
+    This function implements ResourceError category logging when memory usage approaches
+    the 2 GiB default limit, enabling proactive cache management and system stability.
+    """
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_usage_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
+        memory_limit_mb = 2048  # 2 GiB default limit
+        
+        memory_usage_ratio = memory_usage_mb / memory_limit_mb
+        
+        if memory_usage_ratio > 0.9:  # 90% threshold
+            logger.bind(
+                metric_type="memory_pressure_warning",
+                memory_usage_mb=memory_usage_mb,
+                memory_limit_mb=memory_limit_mb,
+                memory_usage_ratio=memory_usage_ratio,
+                resource_category="cache_memory"
+            ).warning(
+                f"Cache memory pressure detected: {memory_usage_mb:.1f}MB / {memory_limit_mb}MB ({memory_usage_ratio:.1%})"
+            )
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Failed to monitor memory pressure: {e}")
+        return False
+
+
 def _setup_performance_monitoring(config: LoggingConfig):
-    """Setup performance monitoring and threshold checking."""
+    """Setup performance monitoring and threshold checking with cache memory pressure tracking."""
     # Log system information for performance baseline
     system_info = {
         "platform": platform.platform(),
@@ -1364,13 +1609,17 @@ def _setup_performance_monitoring(config: LoggingConfig):
     
     perf_logger = logger.bind(correlation_id="system_init", module="performance")
     perf_logger.info(
-        "Performance monitoring enabled",
+        "Performance monitoring enabled with cache memory tracking",
         extra={
             "metric_type": "system_baseline",
             "system_info": system_info,
             "thresholds": PERFORMANCE_THRESHOLDS,
+            "cache_memory_monitoring": True,
         }
     )
+    
+    # Perform initial memory pressure check
+    _monitor_cache_memory_pressure()
 
 
 def _get_total_memory() -> Optional[float]:
@@ -1545,6 +1794,98 @@ except Exception:
 
 
 # Export the configuration creation function for Hydra integration
+def update_cache_metrics(
+    context: Optional[CorrelationContext] = None,
+    cache_hit_count: Optional[int] = None,
+    cache_miss_count: Optional[int] = None,
+    cache_evictions: Optional[int] = None,
+    cache_memory_usage_mb: Optional[float] = None,
+    cache_memory_limit_mb: Optional[float] = None
+) -> None:
+    """
+    Update cache metrics in the current correlation context for logging integration.
+    
+    This function enables cache implementations to report statistics that will be
+    automatically included in JSON log records and correlation context.
+    
+    Args:
+        context: Optional correlation context (uses current thread context if None)
+        cache_hit_count: Total number of cache hits
+        cache_miss_count: Total number of cache misses  
+        cache_evictions: Total number of cache evictions
+        cache_memory_usage_mb: Current cache memory usage in MB
+        cache_memory_limit_mb: Cache memory limit in MB
+        
+    Example:
+        >>> # Update cache statistics for logging
+        >>> update_cache_metrics(
+        ...     cache_hit_count=150,
+        ...     cache_miss_count=25,
+        ...     cache_memory_usage_mb=512.5
+        ... )
+        >>> logger.info("Cache operation completed")  # Will include cache stats
+    """
+    if context is None:
+        context = get_correlation_context()
+    
+    if context.performance_stack:
+        current_metrics = context.performance_stack[-1]
+        
+        if cache_hit_count is not None:
+            current_metrics.cache_hit_count = cache_hit_count
+        if cache_miss_count is not None:
+            current_metrics.cache_miss_count = cache_miss_count
+        if cache_evictions is not None:
+            current_metrics.cache_evictions = cache_evictions
+        if cache_memory_usage_mb is not None:
+            current_metrics.cache_memory_usage_mb = cache_memory_usage_mb
+        if cache_memory_limit_mb is not None:
+            current_metrics.cache_memory_limit_mb = cache_memory_limit_mb
+        
+        # Calculate hit rate if both hits and misses are available
+        if (current_metrics.cache_hit_count is not None and 
+            current_metrics.cache_miss_count is not None):
+            total_requests = current_metrics.cache_hit_count + current_metrics.cache_miss_count
+            if total_requests > 0:
+                current_metrics.cache_hit_rate = current_metrics.cache_hit_count / total_requests
+
+
+def log_cache_memory_pressure_violation(
+    current_usage_mb: float,
+    limit_mb: float,
+    threshold_ratio: float = 0.9
+) -> None:
+    """
+    Log cache memory pressure violation with ResourceError category.
+    
+    This function implements the specification requirement for ResourceError category
+    logging when cache memory usage approaches the 2 GiB limit.
+    
+    Args:
+        current_usage_mb: Current memory usage in MB
+        limit_mb: Memory limit in MB
+        threshold_ratio: Threshold ratio for pressure warnings (default 0.9 = 90%)
+    """
+    usage_ratio = current_usage_mb / limit_mb
+    
+    if usage_ratio >= threshold_ratio:
+        context = get_correlation_context()
+        bound_logger = logger.bind(**context.bind_context())
+        
+        bound_logger.warning(
+            f"Cache memory pressure violation: {current_usage_mb:.1f}MB / {limit_mb:.1f}MB ({usage_ratio:.1%})",
+            extra={
+                "metric_type": "memory_pressure_violation",
+                "resource_category": "cache_memory",
+                "current_usage_mb": current_usage_mb,
+                "limit_mb": limit_mb,
+                "usage_ratio": usage_ratio,
+                "threshold_ratio": threshold_ratio,
+                "requires_cache_clear": usage_ratio >= 0.95  # Suggest cache.clear() at 95%
+            }
+        )
+
+
 def register_logging_config_schema():
     """
     Register LoggingConfig with Hydra ConfigStore for structured configuration.
@@ -1563,7 +1904,15 @@ def register_logging_config_schema():
             package="logging"
         )
         
-        logger.info("Successfully registered LoggingConfig schema with Hydra ConfigStore")
+        # Register FrameCacheConfig for cache configuration support
+        cs.store(
+            group="cache",
+            name="frame_cache",
+            node=FrameCacheConfig,
+            package="cache"
+        )
+        
+        logger.info("Successfully registered LoggingConfig and FrameCacheConfig schemas with Hydra ConfigStore")
         
     except ImportError:
         logger.warning("Hydra not available, skipping ConfigStore registration")
@@ -1576,6 +1925,7 @@ __all__ = [
     # Configuration classes
     "LoggingConfig",
     "PerformanceMetrics",
+    "FrameCacheConfig",
     
     # Enhanced logger classes
     "EnhancedLogger",
@@ -1599,10 +1949,19 @@ __all__ = [
     "memory_usage_timer",
     "database_operation_timer",
     
+    # Cache monitoring and integration functions
+    "update_cache_metrics",
+    "log_cache_memory_pressure_violation",
+    
     # Legacy API detection and deprecation
     "detect_legacy_gym_import",
     "log_legacy_api_deprecation",
     "monitor_environment_creation",
+    
+    # YAML configuration support
+    "_load_logging_yaml",
+    "_setup_yaml_sinks",
+    "_monitor_cache_memory_pressure",
     
     # Hydra integration
     "create_configuration_from_hydra",

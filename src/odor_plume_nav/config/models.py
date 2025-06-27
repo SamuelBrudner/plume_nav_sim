@@ -98,6 +98,73 @@ def validate_output_directory(path_value: Union[str, Path]) -> str:
     return str(path.resolve())
 
 
+def validate_cache_mode(cache_mode: str) -> str:
+    """Validate frame cache mode enumeration values."""
+    valid_modes = {"none", "lru", "all"}
+    if cache_mode not in valid_modes:
+        raise ValueError(f"Cache mode must be one of {valid_modes}, got '{cache_mode}'")
+    return cache_mode
+
+
+def validate_memory_size(memory_size: Union[str, int, float]) -> str:
+    """
+    Validate and normalize memory size configuration with unit support.
+    
+    Args:
+        memory_size: Memory size specification (e.g., "2GiB", "1024MB", 2147483648)
+        
+    Returns:
+        Normalized memory size string with proper units
+        
+    Raises:
+        ValueError: If memory size format is invalid or value is negative
+    """
+    if isinstance(memory_size, (int, float)):
+        if memory_size < 0:
+            raise ValueError(f"Memory size must be non-negative, got {memory_size}")
+        return f"{int(memory_size)}B"
+    
+    if not isinstance(memory_size, str):
+        raise ValueError(f"Memory size must be string or numeric, got {type(memory_size)}")
+    
+    # Handle environment variable interpolation
+    if memory_size.startswith('${oc.env:'):
+        return memory_size
+    
+    # Validate memory size format with units
+    import re
+    pattern = r'^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|GiB|MiB|KiB|TB)?$'
+    match = re.match(pattern, memory_size.strip(), re.IGNORECASE)
+    
+    if not match:
+        raise ValueError(f"Invalid memory size format: {memory_size}. Use format like '2GiB', '1024MB', or numeric bytes")
+    
+    value, unit = match.groups()
+    value = float(value)
+    
+    if value < 0:
+        raise ValueError(f"Memory size must be non-negative, got {value}")
+    
+    # Normalize unit to standard format
+    if unit is None:
+        unit = "B"
+    else:
+        unit = unit.upper()
+        # Normalize binary units
+        if unit in ["GIB", "MIB", "KIB"]:
+            unit = unit.replace("IB", "iB")
+    
+    return f"{value:.0f}{unit}" if value.is_integer() else f"{value}{unit}"
+
+
+def validate_eviction_policy(policy: str) -> str:
+    """Validate cache eviction policy enumeration values."""
+    valid_policies = {"lru", "fifo", "random"}
+    if policy not in valid_policies:
+        raise ValueError(f"Eviction policy must be one of {valid_policies}, got '{policy}'")
+    return policy
+
+
 def __post_init_single_agent_config__(self):
     """Post-initialization validation for SingleAgentConfig."""
     if hasattr(self, 'speed') and hasattr(self, 'max_speed'):
@@ -206,6 +273,42 @@ def __post_init_simulation_config__(self):
     
     if self.batch_size > 1 and self.enable_visualization:
         logger.warning("Batch processing with real-time visualization may impact performance")
+
+
+def __post_init_frame_cache_config__(self):
+    """Post-initialization validation for FrameCacheConfig."""
+    # Validate cache mode specific constraints
+    if self.mode == "none" and (self.memory_limit_mb is not None or self.eviction_policy != "lru"):
+        logger.warning("Cache mode 'none' specified with cache-specific parameters. Parameters will be ignored.")
+    
+    if self.mode == "all" and self.eviction_policy != "lru":
+        logger.warning("Eviction policy is not applicable for 'all' cache mode (full preload)")
+    
+    # Validate memory limit for non-none modes
+    if self.mode in ["lru", "all"] and self.memory_limit_mb is not None:
+        try:
+            # Parse memory limit to ensure it's reasonable
+            if isinstance(self.memory_limit_mb, str) and not self.memory_limit_mb.startswith('${oc.env:'):
+                import re
+                pattern = r'^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|GiB|MiB|KiB|TB)?$'
+                match = re.match(pattern, self.memory_limit_mb.strip(), re.IGNORECASE)
+                if match:
+                    value = float(match.group(1))
+                    unit = (match.group(2) or "B").upper()
+                    
+                    # Convert to MB for validation
+                    multipliers = {
+                        "B": 1e-6, "KB": 1e-3, "MB": 1, "GB": 1e3, "GIB": 1073.741824,
+                        "MIB": 1.048576, "KIB": 1.024e-3, "TB": 1e6
+                    }
+                    mb_value = value * multipliers.get(unit.replace("IB", "iB"), 1)
+                    
+                    if mb_value < 10:  # Minimum 10MB
+                        logger.warning(f"Memory limit {self.memory_limit_mb} is very small (<10MB). Consider increasing for better performance.")
+                    elif mb_value > 32768:  # 32GB warning
+                        logger.warning(f"Memory limit {self.memory_limit_mb} is very large (>32GB). Ensure sufficient system memory.")
+        except Exception:
+            pass  # Validation will happen during runtime resolution
 
 
 @dataclass
@@ -750,6 +853,232 @@ class SimulationConfig:
         __post_init_simulation_config__(self)
 
 
+@dataclass
+class FrameCacheConfig:
+    """
+    Enhanced dataclass configuration schema for frame caching system in video processing.
+    
+    Defines comprehensive frame cache parameters supporting dual-mode operation (LRU/full-preload)
+    with intelligent memory management, performance optimization, and deployment-specific
+    configuration through environment variable interpolation.
+    
+    This configuration enables sub-10ms frame retrieval performance for RL training workflows
+    while providing flexible memory usage controls and cache behavior customization.
+    """
+    
+    # Core cache mode configuration with enhanced validation
+    mode: Literal["none", "lru", "all"] = field(
+        default="${oc.env:FRAME_CACHE_MODE,lru}",
+        metadata={
+            "description": "Frame cache mode: 'none' (disabled), 'lru' (memory-efficient), 'all' (full preload). Supports ${oc.env:FRAME_CACHE_MODE,lru}"
+        }
+    )
+    
+    # Memory management configuration with environment variable support
+    memory_limit_mb: Optional[Union[str, int, float]] = field(
+        default="${oc.env:FRAME_CACHE_SIZE_MB,2GiB}",
+        metadata={
+            "description": "Maximum cache memory usage. Supports units (B, KB, MB, GB, GiB, MiB). Supports ${oc.env:FRAME_CACHE_SIZE_MB,2GiB}"
+        }
+    )
+    
+    # Cache eviction policy for LRU mode
+    eviction_policy: Literal["lru", "fifo", "random"] = field(
+        default="lru",
+        metadata={
+            "description": "Cache eviction policy for LRU mode. Options: 'lru' (least recently used), 'fifo' (first in, first out), 'random'"
+        }
+    )
+    
+    # Performance optimization settings
+    preload_strategy: Literal["sequential", "random", "adaptive"] = field(
+        default="sequential",
+        metadata={
+            "description": "Preload strategy for 'all' mode: 'sequential' (ordered), 'random' (shuffled), 'adaptive' (usage-based)"
+        }
+    )
+    
+    # Memory pressure management
+    memory_pressure_threshold: float = field(
+        default=0.9,
+        metadata={
+            "ge": 0.1,
+            "le": 1.0,
+            "description": "Memory usage threshold (0.0-1.0) that triggers aggressive eviction or cache size reduction"
+        }
+    )
+    
+    # Cache warming and preload settings
+    enable_cache_warming: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable cache warming during environment initialization for predictable performance"
+        }
+    )
+    
+    warm_cache_percentage: float = field(
+        default=0.1,
+        metadata={
+            "ge": 0.0,
+            "le": 1.0,
+            "description": "Percentage of video frames to preload during cache warming (0.0-1.0)"
+        }
+    )
+    
+    # Performance monitoring and statistics
+    enable_statistics: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable cache hit/miss statistics collection and performance metrics tracking"
+        }
+    )
+    
+    statistics_update_interval: int = field(
+        default=100,
+        metadata={
+            "gt": 0,
+            "description": "Number of cache operations between statistics updates for performance logging"
+        }
+    )
+    
+    # Thread safety and concurrency settings
+    enable_thread_safety: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable thread-safe cache operations for multi-agent scenarios (slight performance overhead)"
+        }
+    )
+    
+    max_concurrent_access: int = field(
+        default=10,
+        metadata={
+            "gt": 0,
+            "le": 100,
+            "description": "Maximum number of concurrent cache access operations"
+        }
+    )
+    
+    # Advanced configuration options
+    enable_zero_copy: bool = field(
+        default=True,
+        metadata={
+            "description": "Enable zero-copy frame operations for minimal memory allocation overhead"
+        }
+    )
+    
+    compression_enabled: bool = field(
+        default=False,
+        metadata={
+            "description": "Enable frame compression in cache to reduce memory usage (CPU overhead trade-off)"
+        }
+    )
+    
+    compression_quality: float = field(
+        default=0.9,
+        metadata={
+            "ge": 0.1,
+            "le": 1.0,
+            "description": "Compression quality factor (0.1-1.0) when compression is enabled"
+        }
+    )
+    
+    # Debugging and development settings
+    enable_debug_logging: bool = field(
+        default=False,
+        metadata={
+            "description": "Enable detailed debug logging for cache operations (performance impact)"
+        }
+    )
+    
+    cache_validation_enabled: bool = field(
+        default=False,
+        metadata={
+            "description": "Enable cache integrity validation (significant performance impact, use for debugging)"
+        }
+    )
+    
+    # Hydra-specific _target_ metadata for factory-driven component instantiation
+    _target_: str = field(
+        default="odor_plume_nav.cache.frame_cache.FrameCache",
+        metadata={
+            "description": "Hydra target for automatic FrameCache instantiation"
+        }
+    )
+    
+    def __post_init__(self):
+        """Post-initialization validation for all field constraints."""
+        # Validate cache mode
+        if isinstance(self.mode, str) and not self.mode.startswith('${oc.env:'):
+            validate_cache_mode(self.mode)
+        
+        # Validate memory limit format
+        if (self.memory_limit_mb is not None and 
+            isinstance(self.memory_limit_mb, str) and 
+            not self.memory_limit_mb.startswith('${oc.env:')):
+            validate_memory_size(self.memory_limit_mb)
+        
+        # Validate eviction policy
+        if isinstance(self.eviction_policy, str):
+            validate_eviction_policy(self.eviction_policy)
+        
+        # Apply frame cache specific validation
+        __post_init_frame_cache_config__(self)
+    
+    def get_memory_limit_bytes(self) -> Optional[int]:
+        """
+        Convert memory limit to bytes for runtime use.
+        
+        Returns:
+            Memory limit in bytes, or None if not specified or using environment interpolation
+        """
+        if self.memory_limit_mb is None:
+            return None
+        
+        if isinstance(self.memory_limit_mb, str):
+            if self.memory_limit_mb.startswith('${oc.env:'):
+                # Cannot resolve environment variables in dataclass
+                return None
+            
+            # Parse memory size string
+            import re
+            pattern = r'^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|GiB|MiB|KiB|TB)?$'
+            match = re.match(pattern, self.memory_limit_mb.strip(), re.IGNORECASE)
+            
+            if not match:
+                return None
+            
+            value = float(match.group(1))
+            unit = (match.group(2) or "B").upper()
+            
+            # Convert to bytes
+            multipliers = {
+                "B": 1,
+                "KB": 1000, "MB": 1000**2, "GB": 1000**3, "TB": 1000**4,
+                "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3, "TIB": 1024**4
+            }
+            
+            unit = unit.replace("IB", "iB")  # Normalize binary units
+            multiplier = multipliers.get(unit, 1)
+            
+            return int(value * multiplier)
+        
+        if isinstance(self.memory_limit_mb, (int, float)):
+            return int(self.memory_limit_mb)
+        
+        return None
+    
+    def is_cache_enabled(self) -> bool:
+        """
+        Check if caching is enabled based on mode configuration.
+        
+        Returns:
+            True if cache mode is not 'none'
+        """
+        if isinstance(self.mode, str) and not self.mode.startswith('${oc.env:'):
+            return self.mode != "none"
+        return True  # Assume enabled if using environment interpolation
+
+
 # Environment variable interpolation utility functions
 def validate_env_interpolation(value: str) -> bool:
     """
@@ -862,6 +1191,50 @@ def create_default_simulation_config() -> SimulationConfig:
     return SimulationConfig()
 
 
+def create_default_frame_cache_config(mode: str = "lru") -> FrameCacheConfig:
+    """
+    Create a default FrameCacheConfig with sensible defaults for specified mode.
+    
+    Args:
+        mode: Cache mode ("none", "lru", "all")
+        
+    Returns:
+        FrameCacheConfig instance with appropriate defaults
+        
+    Examples:
+        >>> config = create_default_frame_cache_config("lru")
+        >>> config.mode
+        'lru'
+        >>> config.memory_limit_mb
+        '2GiB'
+    """
+    if mode == "none":
+        return FrameCacheConfig(
+            mode="none",
+            memory_limit_mb=None,
+            enable_cache_warming=False,
+            enable_statistics=False
+        )
+    elif mode == "all":
+        return FrameCacheConfig(
+            mode="all",
+            memory_limit_mb="4GiB",  # Larger default for full preload
+            preload_strategy="sequential",
+            enable_cache_warming=True,
+            warm_cache_percentage=1.0,  # Preload everything
+            eviction_policy="lru"  # Not used but kept for consistency
+        )
+    else:  # Default to LRU mode
+        return FrameCacheConfig(
+            mode="lru",
+            memory_limit_mb="2GiB",
+            eviction_policy="lru",
+            preload_strategy="sequential",
+            enable_cache_warming=True,
+            warm_cache_percentage=0.1
+        )
+
+
 def dataclass_to_dict(config_obj) -> Dict[str, Any]:
     """Convert a dataclass configuration to dictionary, handling nested structures."""
     from dataclasses import asdict, is_dataclass
@@ -948,13 +1321,60 @@ def register_config_schemas():
             package="simulation"
         )
         
+        # Register FrameCacheConfig schemas under frame_cache group
+        cs.store(
+            group="frame_cache",
+            name="none",
+            node=FrameCacheConfig(
+                mode="none",
+                memory_limit_mb=None,
+                enable_cache_warming=False,
+                enable_statistics=False
+            ),
+            package="frame_cache"
+        )
+        
+        cs.store(
+            group="frame_cache",
+            name="lru",
+            node=FrameCacheConfig(
+                mode="lru",
+                memory_limit_mb="2GiB",
+                eviction_policy="lru",
+                enable_cache_warming=True
+            ),
+            package="frame_cache"
+        )
+        
+        cs.store(
+            group="frame_cache",
+            name="all",
+            node=FrameCacheConfig(
+                mode="all",
+                memory_limit_mb="4GiB",
+                preload_strategy="sequential",
+                warm_cache_percentage=1.0,
+                enable_cache_warming=True
+            ),
+            package="frame_cache"
+        )
+        
+        # Register default FrameCacheConfig schema
+        cs.store(
+            group="frame_cache",
+            name="default",
+            node=FrameCacheConfig,
+            package="frame_cache"
+        )
+        
         # Register base configuration schema combining all dataclass components
         cs.store(
             name="base_config",
             node={
                 "navigator": NavigatorConfig,
                 "video_plume": VideoPlumeConfig, 
-                "simulation": SimulationConfig
+                "simulation": SimulationConfig,
+                "frame_cache": FrameCacheConfig
             }
         )
         
@@ -964,7 +1384,8 @@ def register_config_schemas():
             node={
                 "navigator": NavigatorConfig(),
                 "video_plume": VideoPlumeConfig(video_path="${oc.env:VIDEO_PATH,./data/default.mp4}"), 
-                "simulation": SimulationConfig()
+                "simulation": SimulationConfig(),
+                "frame_cache": FrameCacheConfig()
             }
         )
         
@@ -985,6 +1406,7 @@ __all__ = [
     "MultiAgentConfig", 
     "VideoPlumeConfig",
     "SimulationConfig",
+    "FrameCacheConfig",
     
     # Configuration registration and utilities
     "register_config_schemas",
@@ -997,6 +1419,9 @@ __all__ = [
     "validate_numeric_list",
     "validate_video_path",
     "validate_output_directory",
+    "validate_cache_mode",
+    "validate_memory_size",
+    "validate_eviction_policy",
     
     # Post-initialization validators
     "__post_init_single_agent_config__",
@@ -1004,6 +1429,7 @@ __all__ = [
     "__post_init_navigator_config__",
     "__post_init_video_plume_config__",
     "__post_init_simulation_config__",
+    "__post_init_frame_cache_config__",
     
     # Configuration factory functions for convenience
     "create_default_single_agent_config",
@@ -1011,6 +1437,7 @@ __all__ = [
     "create_default_navigator_config",
     "create_default_video_plume_config",
     "create_default_simulation_config",
+    "create_default_frame_cache_config",
     
     # Dataclass conversion utilities
     "dataclass_to_dict",
