@@ -13,10 +13,13 @@ Key Test Coverage:
 - Sub-10ms step execution requirement validation per Section 0.5.1
 - Cache hit rate >90% for sequential access patterns per Section 0.5.1
 - Memory usage within 2GiB limit under extended load per Section 0.5.1
-- Frame retrieval latency ≤1ms from cache per Section 6.6.5.4.1
-- Training throughput ≥1M steps/hour with cache optimization per Section 6.6.4.1.1
-- Performance regression detection with statistical significance per Section 6.6.5.3.3
+- Frame retrieval latency ≤1ms from cache per Feature F-004
+- Training throughput ≥1M steps/hour with cache optimization per Section 0.4.1
+- Performance regression detection with statistical significance per Section 0.5.1
 - Memory leak detection over 1M steps per Section 0.5.1
+- LRU cache mode validation per Section 0.4.1 enhancement requirement
+- Memory pressure monitoring using psutil per Section 0.3.1 frame cache optimization
+- Hydra configuration testing for frame cache modes per Section 0.3.4
 
 Architecture:
 - pytest-benchmark integration for microsecond-precision timing assertions
@@ -25,6 +28,8 @@ Architecture:
 - Cache performance analysis with hit rate and latency measurements
 - Load testing patterns simulating real RL training workflows
 - Reference hardware performance baseline validation
+- Enhanced frame caching system with LRU eviction policies
+- Hydra-configurable cache modes (none, lru, all) per enhanced system requirements
 
 Performance Targets (Section 0.1.2):
 - Environment step() execution: <10ms average on reference CPU
@@ -33,6 +38,8 @@ Performance Targets (Section 0.1.2):
 - Memory usage: ≤2GiB default limit
 - Training throughput: ≥1M steps/hour (≈278 steps/second)
 - No memory leaks over 1M steps
+- Cache pressure threshold: 0.9 (90%)
+- LRU eviction efficiency: >95% retention of frequently accessed frames
 """
 
 import gc
@@ -60,19 +67,34 @@ except ImportError:
     BENCHMARK_AVAILABLE = False
     pytest.skip("pytest-benchmark not available", allow_module_level=True)
 
-# Core environment imports
+# Core environment imports for plume_nav_sim
 try:
-    from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
-    from odor_plume_nav.cache.frame_cache import FrameCache, CacheMode, CacheStatistics
-    from odor_plume_nav.data.video_plume import VideoPlume
+    from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
+    from plume_nav_sim.utils.frame_cache import FrameCache, CacheMode, CacheStatistics
+    from plume_nav_sim.envs.spaces import SpacesFactory
     CORE_IMPORTS_AVAILABLE = True
 except ImportError as e:
     CORE_IMPORTS_AVAILABLE = False
-    pytest.skip(f"Core modules not available: {e}", allow_module_level=True)
+    pytest.skip(f"Core plume_nav_sim modules not available: {e}", allow_module_level=True)
+
+# Hydra configuration testing support
+try:
+    from hydra import initialize, compose, GlobalHydra
+    from hydra.core.config_store import ConfigStore
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    # Create mock implementations for non-Hydra environments
+    DictConfig = dict
+    def initialize(*args, **kwargs):
+        pass
+    def compose(*args, **kwargs):
+        return {}
 
 # Enhanced logging for performance metrics correlation
 try:
-    from odor_plume_nav.utils.logging_setup import (
+    from plume_nav_sim.utils.logging_setup import (
         get_enhanced_logger, correlation_context, PerformanceMetrics
     )
     logger = get_enhanced_logger(__name__)
@@ -89,6 +111,8 @@ CACHE_HIT_RATE_TARGET = 0.90  # >90% cache hit rate for sequential access
 MEMORY_LIMIT_GB = 2.0  # 2GiB default memory limit
 THROUGHPUT_TARGET_STEPS_PER_HOUR = 1_000_000  # ≥1M steps/hour
 THROUGHPUT_TARGET_STEPS_PER_SECOND = THROUGHPUT_TARGET_STEPS_PER_HOUR / 3600  # ≈278 steps/sec
+CACHE_PRESSURE_THRESHOLD = 0.9  # 90% memory pressure threshold per Section 0.3.4
+LRU_RETENTION_TARGET = 0.95  # 95% retention of frequently accessed frames
 
 # Statistical testing parameters for regression detection
 REGRESSION_SIGNIFICANCE_LEVEL = 0.05  # 5% significance level
@@ -119,7 +143,7 @@ def mock_video_file():
 @pytest.fixture
 def mock_video_plume_optimized():
     """Mock VideoPlume optimized for performance testing with deterministic frame generation."""
-    with patch('odor_plume_nav.environments.gymnasium_env.VideoPlume') as mock_class:
+    with patch('plume_nav_sim.envs.plume_navigation_env.VideoPlume') as mock_class:
         mock_instance = Mock()
         
         # Configure metadata for consistent testing
@@ -161,7 +185,7 @@ def mock_video_plume_optimized():
 @pytest.fixture
 def mock_navigator_optimized():
     """Mock Navigator optimized for performance testing with minimal overhead."""
-    with patch('odor_plume_nav.environments.gymnasium_env.NavigatorFactory') as mock_factory:
+    with patch('plume_nav_sim.envs.plume_navigation_env.NavigatorFactory') as mock_factory:
         mock_navigator = Mock()
         
         # Initialize with minimal state for performance
@@ -225,7 +249,7 @@ def frame_cache_lru():
     cache = FrameCache(
         mode=CacheMode.LRU,
         memory_limit_mb=512,  # Smaller limit for testing
-        memory_pressure_threshold=0.9,
+        memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
         enable_statistics=True,
         enable_logging=False  # Disable logging for pure performance
     )
@@ -240,7 +264,7 @@ def frame_cache_preload():
     cache = FrameCache(
         mode=CacheMode.ALL,
         memory_limit_mb=1024,  # Larger limit for preload mode
-        memory_pressure_threshold=0.9,
+        memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
         enable_statistics=True,
         enable_logging=False
     )
@@ -249,20 +273,67 @@ def frame_cache_preload():
 
 
 @pytest.fixture
-def gymnasium_env_cached(performance_test_config, mock_video_plume_optimized, 
-                        mock_navigator_optimized, frame_cache_lru):
-    """GymnasiumEnv with frame caching enabled for performance testing."""
+def frame_cache_none():
+    """Create disabled FrameCache instance for baseline testing."""
+    cache = FrameCache(
+        mode=CacheMode.NONE,
+        memory_limit_mb=0,  # No caching
+        memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
+        enable_statistics=True,
+        enable_logging=False
+    )
+    yield cache
+    cache.clear()
+
+
+@pytest.fixture
+def hydra_frame_cache_config():
+    """Create Hydra configuration for frame cache testing per Section 0.3.4."""
+    if not HYDRA_AVAILABLE:
+        pytest.skip("Hydra not available for configuration testing")
+    
+    config_dict = {
+        'frame_cache': {
+            'mode': 'lru',
+            'memory_limit_mb': 512,
+            'memory_pressure_threshold': CACHE_PRESSURE_THRESHOLD,
+            'enable_statistics': True,
+            'enable_logging': False
+        },
+        'flavors': {
+            'memory': {
+                'frame_cache': {
+                    'mode': 'all',
+                    'memory_limit_mb': 2048
+                }
+            },
+            'memoryless': {
+                'frame_cache': {
+                    'mode': 'none',
+                    'memory_limit_mb': 0
+                }
+            }
+        }
+    }
+    
+    return OmegaConf.create(config_dict)
+
+
+@pytest.fixture
+def plume_navigation_env_cached(performance_test_config, mock_video_plume_optimized, 
+                                mock_navigator_optimized, frame_cache_lru):
+    """PlumeNavigationEnv with frame caching enabled for performance testing."""
     config_with_cache = {**performance_test_config, 'frame_cache': frame_cache_lru}
-    env = GymnasiumEnv(**config_with_cache)
+    env = PlumeNavigationEnv(**config_with_cache)
     yield env
     env.close()
 
 
 @pytest.fixture
-def gymnasium_env_uncached(performance_test_config, mock_video_plume_optimized, 
-                          mock_navigator_optimized):
-    """GymnasiumEnv without caching for baseline performance comparison."""
-    env = GymnasiumEnv(**performance_test_config)
+def plume_navigation_env_uncached(performance_test_config, mock_video_plume_optimized, 
+                                 mock_navigator_optimized):
+    """PlumeNavigationEnv without caching for baseline performance comparison."""
+    env = PlumeNavigationEnv(**performance_test_config)
     yield env
     env.close()
 
@@ -270,7 +341,7 @@ def gymnasium_env_uncached(performance_test_config, mock_video_plume_optimized,
 class TestStepExecutionPerformance:
     """Test suite for step execution performance validation per Section 0.5.1."""
     
-    def test_step_execution_time_benchmark(self, benchmark, gymnasium_env_cached):
+    def test_step_execution_time_benchmark(self, benchmark, plume_navigation_env_cached):
         """
         Validate step() execution time meets <10ms requirement using pytest-benchmark.
         
@@ -279,12 +350,12 @@ class TestStepExecutionPerformance:
         required for real-time RL training workflows.
         """
         # Reset environment for consistent state
-        obs, info = gymnasium_env_cached.reset(seed=42)
-        action = gymnasium_env_cached.action_space.sample()
+        obs, info = plume_navigation_env_cached.reset(seed=42)
+        action = plume_navigation_env_cached.action_space.sample()
         
         # Benchmark single step execution
         def step_execution():
-            return gymnasium_env_cached.step(action)
+            return plume_navigation_env_cached.step(action)
         
         # Run benchmark with statistical analysis
         result = benchmark.pedantic(
@@ -323,7 +394,7 @@ class TestStepExecutionPerformance:
         assert p95_ms <= STEP_TARGET_MS * 1.5, f"P95 step time {p95_ms:.2f}ms too high"
         assert std_dev_ms <= STEP_TARGET_MS * 0.3, f"Step time variance {std_dev_ms:.2f}ms too high"
     
-    def test_step_execution_time_extended_load(self, gymnasium_env_cached):
+    def test_step_execution_time_extended_load(self, plume_navigation_env_cached):
         """
         Validate step execution performance under extended load scenarios.
         
@@ -331,7 +402,7 @@ class TestStepExecutionPerformance:
         cache degradation, or other performance regressions that may appear only
         under prolonged operation typical of RL training.
         """
-        obs, info = gymnasium_env_cached.reset(seed=42)
+        obs, info = plume_navigation_env_cached.reset(seed=42)
         
         step_times = []
         memory_usage = []
@@ -342,10 +413,10 @@ class TestStepExecutionPerformance:
         
         with correlation_context("extended_load_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             for step_idx in range(num_steps):
-                action = gymnasium_env_cached.action_space.sample()
+                action = plume_navigation_env_cached.action_space.sample()
                 
                 start_time = time.time()
-                obs, reward, terminated, truncated, info = gymnasium_env_cached.step(action)
+                obs, reward, terminated, truncated, info = plume_navigation_env_cached.step(action)
                 step_time = time.time() - start_time
                 
                 step_times.append(step_time * 1000)  # Convert to milliseconds
@@ -360,7 +431,7 @@ class TestStepExecutionPerformance:
                 
                 # Reset environment if terminated
                 if terminated or truncated:
-                    obs, info = gymnasium_env_cached.reset()
+                    obs, info = plume_navigation_env_cached.reset()
         
         # Statistical analysis
         mean_step_time = statistics.mean(step_times)
@@ -403,7 +474,7 @@ class TestStepExecutionPerformance:
             f"Potential memory leak detected: {memory_growth:.1f}MB growth over {num_steps} steps"
         )
     
-    def test_step_execution_performance_comparison(self, gymnasium_env_cached, gymnasium_env_uncached):
+    def test_step_execution_performance_comparison(self, plume_navigation_env_cached, plume_navigation_env_uncached):
         """
         Compare cached vs uncached performance to validate cache effectiveness.
         
@@ -414,30 +485,30 @@ class TestStepExecutionPerformance:
         num_steps = 200  # Sufficient for statistical comparison
         
         # Benchmark uncached performance
-        obs, info = gymnasium_env_uncached.reset(seed=42)
+        obs, info = plume_navigation_env_uncached.reset(seed=42)
         uncached_times = []
         
         for _ in range(num_steps):
-            action = gymnasium_env_uncached.action_space.sample()
+            action = plume_navigation_env_uncached.action_space.sample()
             start_time = time.time()
-            obs, reward, terminated, truncated, info = gymnasium_env_uncached.step(action)
+            obs, reward, terminated, truncated, info = plume_navigation_env_uncached.step(action)
             uncached_times.append(time.time() - start_time)
             
             if terminated or truncated:
-                obs, info = gymnasium_env_uncached.reset()
+                obs, info = plume_navigation_env_uncached.reset()
         
         # Benchmark cached performance
-        obs, info = gymnasium_env_cached.reset(seed=42)
+        obs, info = plume_navigation_env_cached.reset(seed=42)
         cached_times = []
         
         for _ in range(num_steps):
-            action = gymnasium_env_cached.action_space.sample()
+            action = plume_navigation_env_cached.action_space.sample()
             start_time = time.time()
-            obs, reward, terminated, truncated, info = gymnasium_env_cached.step(action)
+            obs, reward, terminated, truncated, info = plume_navigation_env_cached.step(action)
             cached_times.append(time.time() - start_time)
             
             if terminated or truncated:
-                obs, info = gymnasium_env_cached.reset()
+                obs, info = plume_navigation_env_cached.reset()
         
         # Statistical comparison
         uncached_mean = statistics.mean(uncached_times) * 1000
@@ -467,14 +538,14 @@ class TestStepExecutionPerformance:
         )
 
 
-class TestCachePerformance:
-    """Test suite for frame cache performance validation per Section 6.6.5.4.1."""
+class TestFrameCachePerformance:
+    """Test suite for frame cache performance validation per Feature F-004."""
     
-    def test_cache_hit_rate_sequential_access(self, frame_cache_lru):
+    def test_lru_cache_hit_rate_sequential_access(self, frame_cache_lru):
         """
-        Validate cache hit rate >90% for sequential access patterns per Section 0.5.1.
+        Validate LRU cache hit rate >90% for sequential access patterns per Section 0.5.1.
         
-        Tests the cache effectiveness for typical RL training access patterns where
+        Tests the LRU cache effectiveness for typical RL training access patterns where
         agents step through video frames sequentially. Validates the cache achieves
         the target >90% hit rate specified in performance requirements.
         """
@@ -494,7 +565,7 @@ class TestCachePerformance:
         hit_count = 0
         total_requests = 0
         
-        with correlation_context("cache_hit_rate_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
+        with correlation_context("lru_cache_hit_rate_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             for frame_id in access_pattern:
                 frame = frame_cache_lru.get(frame_id, mock_video_plume)
                 total_requests += 1
@@ -511,9 +582,9 @@ class TestCachePerformance:
         # Log cache performance metrics
         if ENHANCED_LOGGING:
             logger.info(
-                f"Cache hit rate test: {final_hit_rate:.3f} ({final_hit_rate*100:.1f}%)",
+                f"LRU cache hit rate test: {final_hit_rate:.3f} ({final_hit_rate*100:.1f}%)",
                 extra={
-                    "metric_type": "cache_hit_rate_validation",
+                    "metric_type": "lru_cache_hit_rate_validation",
                     "hit_rate": final_hit_rate,
                     "total_requests": total_requests,
                     "cache_size": len(frame_cache_lru._cache) if frame_cache_lru._cache else 0,
@@ -525,13 +596,13 @@ class TestCachePerformance:
         
         # Assert hit rate requirement
         assert final_hit_rate >= CACHE_HIT_RATE_TARGET, (
-            f"Cache hit rate {final_hit_rate:.3f} ({final_hit_rate*100:.1f}%) "
+            f"LRU cache hit rate {final_hit_rate:.3f} ({final_hit_rate*100:.1f}%) "
             f"below target {CACHE_HIT_RATE_TARGET:.3f} ({CACHE_HIT_RATE_TARGET*100:.1f}%)"
         )
     
     def test_frame_retrieval_latency_from_cache(self, benchmark, frame_cache_lru):
         """
-        Validate frame retrieval latency ≤1ms from cache per Section 6.6.5.4.1.
+        Validate frame retrieval latency ≤1ms from cache per Feature F-004.
         
         Benchmarks cached frame retrieval to ensure sub-millisecond access times
         required for high-performance RL training workflows. Uses pytest-benchmark
@@ -595,13 +666,12 @@ class TestCachePerformance:
             f"Cache retrieval P95 time {p95_ms:.3f}ms indicates inconsistent performance"
         )
     
-    def test_cache_memory_usage_compliance(self, frame_cache_lru):
+    def test_cache_memory_pressure_monitoring(self, frame_cache_lru):
         """
-        Validate memory usage stays within configured limits during operation.
+        Validate memory pressure monitoring using psutil per Section 0.3.1.
         
-        Tests that the frame cache respects memory limits and triggers appropriate
-        eviction policies to maintain compliance with the 2GiB default limit
-        specified in Section 0.5.1.
+        Tests that the frame cache correctly monitors memory usage and triggers
+        appropriate eviction policies when memory pressure threshold is reached.
         """
         # Mock video plume with realistic frame sizes
         mock_video_plume = Mock()
@@ -614,11 +684,12 @@ class TestCachePerformance:
         
         initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         max_memory_observed = initial_memory
+        pressure_violations = 0
         
         # Fill cache beyond memory limit to test eviction
         num_frames = 600  # Should exceed 512MB cache limit with ~1.2MB frames
         
-        with correlation_context("memory_usage_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
+        with correlation_context("memory_pressure_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             for frame_id in range(num_frames):
                 frame_cache_lru.get(frame_id, mock_video_plume)
                 
@@ -630,6 +701,10 @@ class TestCachePerformance:
                     cache_memory = frame_cache_lru.statistics.memory_usage_mb if frame_cache_lru.statistics else 0
                     
                     # Check cache-reported memory usage
+                    if cache_memory > frame_cache_lru.memory_limit_mb * CACHE_PRESSURE_THRESHOLD:
+                        pressure_violations += 1
+                    
+                    # Verify memory pressure monitoring
                     assert cache_memory <= frame_cache_lru.memory_limit_mb * 1.1, (  # 10% tolerance
                         f"Cache reports memory usage {cache_memory:.1f}MB exceeds "
                         f"limit {frame_cache_lru.memory_limit_mb}MB"
@@ -643,15 +718,18 @@ class TestCachePerformance:
         # Log memory usage analysis
         if ENHANCED_LOGGING:
             logger.info(
-                f"Memory usage test: growth={memory_growth:.1f}MB, "
+                f"Memory pressure test: growth={memory_growth:.1f}MB, "
                 f"cache_memory={cache_stats.memory_usage_mb if cache_stats else 0:.1f}MB, "
-                f"evictions={cache_stats.evictions if cache_stats else 0}",
+                f"evictions={cache_stats.evictions if cache_stats else 0}, "
+                f"pressure_violations={pressure_violations}",
                 extra={
-                    "metric_type": "cache_memory_usage_validation",
+                    "metric_type": "cache_memory_pressure_validation",
                     "memory_growth_mb": memory_growth,
                     "cache_memory_mb": cache_stats.memory_usage_mb if cache_stats else 0,
                     "cache_limit_mb": frame_cache_lru.memory_limit_mb,
                     "evictions": cache_stats.evictions if cache_stats else 0,
+                    "pressure_violations": pressure_violations,
+                    "pressure_threshold": CACHE_PRESSURE_THRESHOLD,
                     "correlation_id": TEST_CORRELATION_ID
                 }
             )
@@ -668,24 +746,270 @@ class TestCachePerformance:
                 "No evictions occurred despite exceeding cache capacity"
             )
         
+        # Validate memory pressure monitoring effectiveness
+        assert pressure_violations <= num_frames * 0.1, (  # Allow some tolerance
+            f"Excessive memory pressure violations: {pressure_violations}"
+        )
+        
         # Global memory usage should be reasonable
         assert memory_growth <= MEMORY_LIMIT_GB * 1024 * 1.2, (  # 20% tolerance for test overhead
             f"Total memory growth {memory_growth:.1f}MB exceeds reasonable bounds"
         )
+    
+    def test_cache_statistics_collection_validation(self, frame_cache_lru):
+        """
+        Validate cache statistics collection per enhanced caching system requirements.
+        
+        Tests that the cache correctly collects and reports performance statistics
+        including hit rates, memory usage, eviction counts, and timing metrics.
+        """
+        # Mock video plume for frame generation
+        mock_video_plume = Mock()
+        
+        def generate_test_frame(frame_id):
+            return np.random.rand(200, 200).astype(np.float32)
+        
+        mock_video_plume.get_frame.side_effect = generate_test_frame
+        
+        # Ensure statistics are enabled
+        assert frame_cache_lru.statistics is not None, "Cache statistics not enabled"
+        
+        # Perform operations to generate statistics
+        num_unique_frames = 100
+        num_repeat_accesses = 50
+        
+        # First pass - cache misses
+        for frame_id in range(num_unique_frames):
+            frame_cache_lru.get(frame_id, mock_video_plume)
+        
+        # Second pass - cache hits
+        for frame_id in range(num_repeat_accesses):
+            frame_cache_lru.get(frame_id, mock_video_plume)
+        
+        stats = frame_cache_lru.statistics
+        
+        # Validate statistics accuracy
+        expected_total_requests = num_unique_frames + num_repeat_accesses
+        expected_hits = num_repeat_accesses  # Second pass should be all hits
+        expected_misses = num_unique_frames  # First pass should be all misses
+        expected_hit_rate = expected_hits / expected_total_requests
+        
+        # Log statistics validation
+        if ENHANCED_LOGGING:
+            logger.info(
+                f"Cache statistics validation: hit_rate={stats.hit_rate:.3f}, "
+                f"total_requests={stats.total_requests}, hits={stats.hits}, misses={stats.misses}",
+                extra={
+                    "metric_type": "cache_statistics_validation",
+                    "actual_hit_rate": stats.hit_rate,
+                    "expected_hit_rate": expected_hit_rate,
+                    "actual_total_requests": stats.total_requests,
+                    "expected_total_requests": expected_total_requests,
+                    "actual_hits": stats.hits,
+                    "expected_hits": expected_hits,
+                    "actual_misses": stats.misses,
+                    "expected_misses": expected_misses,
+                    "memory_usage_mb": stats.memory_usage_mb,
+                    "evictions": stats.evictions,
+                    "correlation_id": TEST_CORRELATION_ID
+                }
+            )
+        
+        # Assert statistics accuracy
+        assert stats.total_requests == expected_total_requests, (
+            f"Total requests {stats.total_requests} != expected {expected_total_requests}"
+        )
+        assert stats.hits == expected_hits, (
+            f"Cache hits {stats.hits} != expected {expected_hits}"
+        )
+        assert stats.misses == expected_misses, (
+            f"Cache misses {stats.misses} != expected {expected_misses}"
+        )
+        assert abs(stats.hit_rate - expected_hit_rate) < 0.001, (
+            f"Hit rate {stats.hit_rate:.3f} != expected {expected_hit_rate:.3f}"
+        )
+        
+        # Validate memory usage reporting
+        assert stats.memory_usage_mb > 0, "Memory usage not being tracked"
+        assert stats.memory_usage_mb <= frame_cache_lru.memory_limit_mb, (
+            f"Reported memory usage {stats.memory_usage_mb}MB exceeds limit"
+        )
+        
+        # Validate timing metrics if available
+        if hasattr(stats, 'avg_hit_time_ms'):
+            assert stats.avg_hit_time_ms < CACHE_HIT_LATENCY_TARGET_MS, (
+                f"Average hit time {stats.avg_hit_time_ms}ms exceeds target"
+            )
+
+
+@pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
+class TestHydraFrameCacheConfiguration:
+    """Test suite for Hydra configuration testing per Section 0.3.4."""
+    
+    def test_hydra_frame_cache_mode_configuration(self, hydra_frame_cache_config):
+        """
+        Test Hydra configuration for frame cache modes (none, lru, all).
+        
+        Validates that frame cache can be configured through Hydra configuration
+        system with different modes and that configurations are properly applied.
+        """
+        # Test LRU mode configuration
+        lru_config = hydra_frame_cache_config.frame_cache
+        
+        lru_cache = FrameCache(
+            mode=getattr(CacheMode, lru_config.mode.upper()),
+            memory_limit_mb=lru_config.memory_limit_mb,
+            memory_pressure_threshold=lru_config.memory_pressure_threshold,
+            enable_statistics=lru_config.enable_statistics,
+            enable_logging=lru_config.enable_logging
+        )
+        
+        assert lru_cache.mode == CacheMode.LRU
+        assert lru_cache.memory_limit_mb == 512
+        assert lru_cache.memory_pressure_threshold == CACHE_PRESSURE_THRESHOLD
+        
+        # Test memory flavor configuration
+        memory_config = hydra_frame_cache_config.flavors.memory.frame_cache
+        
+        memory_cache = FrameCache(
+            mode=getattr(CacheMode, memory_config.mode.upper()),
+            memory_limit_mb=memory_config.memory_limit_mb,
+            memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
+            enable_statistics=True,
+            enable_logging=False
+        )
+        
+        assert memory_cache.mode == CacheMode.ALL
+        assert memory_cache.memory_limit_mb == 2048
+        
+        # Test memoryless flavor configuration
+        memoryless_config = hydra_frame_cache_config.flavors.memoryless.frame_cache
+        
+        memoryless_cache = FrameCache(
+            mode=getattr(CacheMode, memoryless_config.mode.upper()),
+            memory_limit_mb=memoryless_config.memory_limit_mb,
+            memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
+            enable_statistics=True,
+            enable_logging=False
+        )
+        
+        assert memoryless_cache.mode == CacheMode.NONE
+        assert memoryless_cache.memory_limit_mb == 0
+        
+        # Log configuration validation
+        if ENHANCED_LOGGING:
+            logger.info(
+                "Hydra frame cache configuration validation completed",
+                extra={
+                    "metric_type": "hydra_cache_configuration_validation",
+                    "lru_mode": lru_cache.mode.name,
+                    "memory_mode": memory_cache.mode.name,
+                    "memoryless_mode": memoryless_cache.mode.name,
+                    "lru_limit_mb": lru_cache.memory_limit_mb,
+                    "memory_limit_mb": memory_cache.memory_limit_mb,
+                    "memoryless_limit_mb": memoryless_cache.memory_limit_mb,
+                    "correlation_id": TEST_CORRELATION_ID
+                }
+            )
+        
+        # Cleanup
+        lru_cache.clear()
+        memory_cache.clear()
+        memoryless_cache.clear()
+    
+    def test_frame_cache_mode_performance_comparison(self, hydra_frame_cache_config):
+        """
+        Compare performance across different cache modes configured via Hydra.
+        
+        Tests the performance impact of different cache modes to validate
+        configuration choices and ensure optimal performance for different scenarios.
+        """
+        # Create caches for each mode
+        cache_configs = [
+            ('lru', hydra_frame_cache_config.frame_cache),
+            ('all', hydra_frame_cache_config.flavors.memory.frame_cache),
+            ('none', hydra_frame_cache_config.flavors.memoryless.frame_cache)
+        ]
+        
+        performance_results = {}
+        
+        for mode_name, config in cache_configs:
+            cache = FrameCache(
+                mode=getattr(CacheMode, config.mode.upper()),
+                memory_limit_mb=config.memory_limit_mb,
+                memory_pressure_threshold=CACHE_PRESSURE_THRESHOLD,
+                enable_statistics=True,
+                enable_logging=False
+            )
+            
+            # Mock video plume for performance testing
+            mock_video_plume = Mock()
+            mock_video_plume.get_frame.side_effect = lambda frame_id: np.random.rand(100, 100).astype(np.float32)
+            
+            # Performance test
+            num_frames = 200
+            access_pattern = list(range(num_frames)) * 2  # Access each frame twice
+            
+            start_time = time.time()
+            for frame_id in access_pattern:
+                cache.get(frame_id, mock_video_plume)
+            end_time = time.time()
+            
+            total_time = (end_time - start_time) * 1000  # Convert to milliseconds
+            avg_time_per_access = total_time / len(access_pattern)
+            
+            performance_results[mode_name] = {
+                'total_time_ms': total_time,
+                'avg_time_per_access_ms': avg_time_per_access,
+                'hit_rate': cache.statistics.hit_rate if cache.statistics else 0.0,
+                'memory_usage_mb': cache.statistics.memory_usage_mb if cache.statistics else 0.0
+            }
+            
+            cache.clear()
+        
+        # Log performance comparison
+        if ENHANCED_LOGGING:
+            logger.info(
+                "Frame cache mode performance comparison completed",
+                extra={
+                    "metric_type": "cache_mode_performance_comparison",
+                    "performance_results": performance_results,
+                    "correlation_id": TEST_CORRELATION_ID
+                }
+            )
+        
+        # Validate performance expectations
+        # LRU should provide good hit rate and reasonable performance
+        lru_results = performance_results['lru']
+        assert lru_results['hit_rate'] >= 0.4, f"LRU hit rate {lru_results['hit_rate']:.3f} too low"
+        assert lru_results['avg_time_per_access_ms'] <= CACHE_HIT_LATENCY_TARGET_MS * 2, (
+            f"LRU avg access time {lru_results['avg_time_per_access_ms']:.3f}ms too high"
+        )
+        
+        # ALL mode should provide the best hit rate
+        all_results = performance_results['all']
+        assert all_results['hit_rate'] >= lru_results['hit_rate'], (
+            "ALL mode should have better or equal hit rate compared to LRU"
+        )
+        
+        # NONE mode should have zero hit rate but consistent performance
+        none_results = performance_results['none']
+        assert none_results['hit_rate'] == 0.0, "NONE mode should have zero hit rate"
+        assert none_results['memory_usage_mb'] == 0.0, "NONE mode should use no memory"
 
 
 class TestTrainingThroughputPerformance:
-    """Test suite for training throughput performance validation per Section 6.6.4.1.1."""
+    """Test suite for training throughput performance validation per Section 0.4.1."""
     
-    def test_training_throughput_target(self, gymnasium_env_cached):
+    def test_training_throughput_target(self, plume_navigation_env_cached):
         """
         Validate training throughput ≥1M steps/hour with cache optimization.
         
         Measures sustained step execution rate to ensure the environment can support
         the target training throughput of 1 million steps per hour specified in
-        Section 6.6.4.1.1 performance requirements.
+        Section 0.4.1 performance requirements.
         """
-        obs, info = gymnasium_env_cached.reset(seed=42)
+        obs, info = plume_navigation_env_cached.reset(seed=42)
         
         # Measure throughput over sufficient duration for statistical accuracy
         test_duration_seconds = 10.0  # 10-second measurement window
@@ -695,17 +1019,17 @@ class TestTrainingThroughputPerformance:
         
         with correlation_context("throughput_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             while time.time() - start_time < test_duration_seconds:
-                action = gymnasium_env_cached.action_space.sample()
+                action = plume_navigation_env_cached.action_space.sample()
                 
                 step_start = time.time()
-                obs, reward, terminated, truncated, info = gymnasium_env_cached.step(action)
+                obs, reward, terminated, truncated, info = plume_navigation_env_cached.step(action)
                 step_time = time.time() - step_start
                 
                 step_times.append(step_time)
                 step_count += 1
                 
                 if terminated or truncated:
-                    obs, info = gymnasium_env_cached.reset()
+                    obs, info = plume_navigation_env_cached.reset()
         
         # Calculate throughput metrics
         actual_duration = time.time() - start_time
@@ -775,7 +1099,7 @@ class TestTrainingThroughputPerformance:
         environments = []
         for i in range(num_agents):
             config = {**performance_test_config, 'frame_cache': shared_cache}
-            env = GymnasiumEnv(**config)
+            env = PlumeNavigationEnv(**config)
             environments.append(env)
         
         try:
@@ -877,7 +1201,7 @@ class TestTrainingThroughputPerformance:
 class TestMemoryUsageCompliance:
     """Test suite for memory usage compliance validation per Section 0.5.1."""
     
-    def test_memory_usage_within_limits_extended_load(self, gymnasium_env_cached):
+    def test_memory_usage_within_limits_extended_load(self, plume_navigation_env_cached):
         """
         Test memory usage stays within 2GiB limit under extended load per Section 0.5.1.
         
@@ -885,7 +1209,7 @@ class TestMemoryUsageCompliance:
         extended operation, detecting potential memory leaks or excessive memory growth
         that could impact long-running training workflows.
         """
-        obs, info = gymnasium_env_cached.reset(seed=42)
+        obs, info = plume_navigation_env_cached.reset(seed=42)
         
         # Extended load test parameters
         target_steps = 5000  # Substantial load for memory analysis
@@ -899,8 +1223,8 @@ class TestMemoryUsageCompliance:
         
         with correlation_context("memory_compliance_test", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             for step in range(target_steps):
-                action = gymnasium_env_cached.action_space.sample()
-                obs, reward, terminated, truncated, info = gymnasium_env_cached.step(action)
+                action = plume_navigation_env_cached.action_space.sample()
+                obs, reward, terminated, truncated, info = plume_navigation_env_cached.step(action)
                 step_count += 1
                 
                 # Periodic memory monitoring
@@ -921,7 +1245,7 @@ class TestMemoryUsageCompliance:
                         break
                 
                 if terminated or truncated:
-                    obs, info = gymnasium_env_cached.reset()
+                    obs, info = plume_navigation_env_cached.reset()
         
         # Memory analysis
         final_memory_mb = psutil.Process().memory_info().rss / 1024 / 1024
@@ -933,8 +1257,8 @@ class TestMemoryUsageCompliance:
         
         # Cache statistics
         cache_stats = {}
-        if hasattr(gymnasium_env_cached, 'frame_cache') and gymnasium_env_cached.frame_cache:
-            cache = gymnasium_env_cached.frame_cache
+        if hasattr(plume_navigation_env_cached, 'frame_cache') and plume_navigation_env_cached.frame_cache:
+            cache = plume_navigation_env_cached.frame_cache
             if cache.statistics:
                 cache_stats = {
                     'memory_mb': cache.statistics.memory_usage_mb,
@@ -978,7 +1302,7 @@ class TestMemoryUsageCompliance:
             f"Potential memory leak detected: {memory_trend:.3f}MB growth per sample"
         )
     
-    def test_memory_leak_detection_over_episodes(self, gymnasium_env_cached):
+    def test_memory_leak_detection_over_episodes(self, plume_navigation_env_cached):
         """
         Detect memory leaks over multiple episode cycles.
         
@@ -994,12 +1318,12 @@ class TestMemoryUsageCompliance:
         
         with correlation_context("memory_leak_detection", correlation_id=TEST_CORRELATION_ID) if ENHANCED_LOGGING else nullcontext():
             for episode in range(num_episodes):
-                obs, info = gymnasium_env_cached.reset(seed=42 + episode)
+                obs, info = plume_navigation_env_cached.reset(seed=42 + episode)
                 
                 # Run episode
                 for step in range(steps_per_episode):
-                    action = gymnasium_env_cached.action_space.sample()
-                    obs, reward, terminated, truncated, info = gymnasium_env_cached.step(action)
+                    action = plume_navigation_env_cached.action_space.sample()
+                    obs, reward, terminated, truncated, info = plume_navigation_env_cached.step(action)
                     
                     if terminated or truncated:
                         break
@@ -1059,23 +1383,23 @@ class TestMemoryUsageCompliance:
 
 
 class TestPerformanceRegressionDetection:
-    """Test suite for performance regression detection per Section 6.6.5.3.3."""
+    """Test suite for performance regression detection per Section 0.5.1."""
     
-    def test_performance_regression_statistical_detection(self, gymnasium_env_cached):
+    def test_performance_regression_statistical_detection(self, plume_navigation_env_cached):
         """
         Implement performance regression detection with statistical significance testing.
         
         Uses statistical hypothesis testing to detect performance regressions with
         scientific rigor, implementing the statistical significance testing requirement
-        from Section 6.6.5.3.3.
+        from Section 0.5.1.
         """
         # Baseline performance measurement
-        baseline_measurements = self._collect_performance_baseline(gymnasium_env_cached)
+        baseline_measurements = self._collect_performance_baseline(plume_navigation_env_cached)
         
         # Simulate potential regression by adding artificial delay
         # In real scenarios, this would be comparison with previous performance data
         regression_measurements = self._collect_performance_with_potential_regression(
-            gymnasium_env_cached, artificial_delay=0.002  # 2ms delay simulation
+            plume_navigation_env_cached, artificial_delay=0.002  # 2ms delay simulation
         )
         
         # Statistical analysis
@@ -1105,6 +1429,91 @@ class TestPerformanceRegressionDetection:
                 f"Failed to detect significant performance regression: "
                 f"{statistics_results['performance_degradation_percent']:.1f}% degradation, "
                 f"p-value: {statistics_results['p_value']:.6f}"
+            )
+    
+    def test_cache_hit_rate_regression_detection(self, frame_cache_lru):
+        """
+        Add performance regression detection for cache hit rates >90% per Section 0.5.1.
+        
+        Validates that cache hit rate performance meets targets and detects regressions
+        in caching effectiveness that could impact overall system performance.
+        """
+        # Mock video plume for frame generation
+        mock_video_plume = Mock()
+        mock_video_plume.get_frame.side_effect = lambda frame_id: np.random.rand(100, 100).astype(np.float32)
+        
+        # Collect baseline cache hit rate measurements
+        baseline_hit_rates = []
+        for trial in range(10):  # Multiple trials for statistical significance
+            frame_cache_lru.clear()  # Reset cache for each trial
+            
+            # Standard access pattern
+            frame_range = range(0, 100)
+            access_pattern = list(frame_range) * 3  # Access each frame 3 times
+            
+            for frame_id in access_pattern:
+                frame_cache_lru.get(frame_id, mock_video_plume)
+            
+            baseline_hit_rates.append(frame_cache_lru.hit_rate)
+        
+        # Simulate regression scenario with less favorable access pattern
+        regression_hit_rates = []
+        for trial in range(10):
+            frame_cache_lru.clear()
+            
+            # Unfavorable access pattern (random access)
+            np.random.seed(trial)  # Reproducible randomness
+            access_pattern = np.random.randint(0, 500, 300).tolist()  # Wide spread, low reuse
+            
+            for frame_id in access_pattern:
+                frame_cache_lru.get(frame_id, mock_video_plume)
+            
+            regression_hit_rates.append(frame_cache_lru.hit_rate)
+        
+        # Statistical analysis
+        baseline_mean = statistics.mean(baseline_hit_rates)
+        regression_mean = statistics.mean(regression_hit_rates)
+        
+        # Regression detection using statistical testing
+        try:
+            import scipy.stats as stats
+            t_statistic, p_value = stats.ttest_ind(baseline_hit_rates, regression_hit_rates, alternative='greater')
+            statistical_significance = p_value < REGRESSION_SIGNIFICANCE_LEVEL
+        except ImportError:
+            # Fallback if scipy not available
+            statistical_significance = abs(baseline_mean - regression_mean) > 0.1
+            p_value = 0.01 if statistical_significance else 0.1
+        
+        hit_rate_degradation_percent = ((baseline_mean - regression_mean) / baseline_mean) * 100
+        
+        # Log cache hit rate analysis
+        if ENHANCED_LOGGING:
+            logger.info(
+                f"Cache hit rate regression analysis: baseline={baseline_mean:.3f}, "
+                f"regression={regression_mean:.3f}, degradation={hit_rate_degradation_percent:.1f}%",
+                extra={
+                    "metric_type": "cache_hit_rate_regression_detection",
+                    "baseline_hit_rate": baseline_mean,
+                    "regression_hit_rate": regression_mean,
+                    "hit_rate_degradation_percent": hit_rate_degradation_percent,
+                    "statistical_significance": statistical_significance,
+                    "p_value": p_value,
+                    "target_hit_rate": CACHE_HIT_RATE_TARGET,
+                    "baseline_above_target": baseline_mean >= CACHE_HIT_RATE_TARGET,
+                    "correlation_id": TEST_CORRELATION_ID
+                }
+            )
+        
+        # Validate baseline performance meets target
+        assert baseline_mean >= CACHE_HIT_RATE_TARGET, (
+            f"Baseline cache hit rate {baseline_mean:.3f} below target {CACHE_HIT_RATE_TARGET:.3f}"
+        )
+        
+        # Validate regression detection for significant degradation
+        if hit_rate_degradation_percent > 20.0:  # 20% degradation threshold
+            assert statistical_significance, (
+                f"Failed to detect significant cache hit rate regression: "
+                f"{hit_rate_degradation_percent:.1f}% degradation"
             )
     
     def _collect_performance_baseline(self, env) -> List[float]:
@@ -1156,7 +1565,11 @@ class TestPerformanceRegressionDetection:
         Uses Welch's t-test for unequal variances to detect statistically significant
         performance degradation between baseline and current measurements.
         """
-        import scipy.stats as stats
+        try:
+            import scipy.stats as stats
+            scipy_available = True
+        except ImportError:
+            scipy_available = False
         
         # Calculate descriptive statistics
         baseline_mean = statistics.mean(baseline)
@@ -1167,8 +1580,15 @@ class TestPerformanceRegressionDetection:
         # Calculate performance change
         performance_degradation_percent = ((current_mean - baseline_mean) / baseline_mean) * 100
         
-        # Perform Welch's t-test (assumes unequal variances)
-        t_statistic, p_value = stats.ttest_ind(current, baseline, equal_var=False, alternative='greater')
+        if scipy_available:
+            # Perform Welch's t-test (assumes unequal variances)
+            t_statistic, p_value = stats.ttest_ind(current, baseline, equal_var=False, alternative='greater')
+        else:
+            # Fallback statistical test if scipy not available
+            pooled_std = math.sqrt((baseline_std**2 + current_std**2) / 2)
+            t_statistic = (current_mean - baseline_mean) / (pooled_std * math.sqrt(2 / len(baseline)))
+            # Approximate p-value for t-distribution
+            p_value = 0.01 if abs(t_statistic) > 2.0 else 0.1
         
         # Detect regression based on statistical significance and practical significance
         statistical_significance = p_value < REGRESSION_SIGNIFICANCE_LEVEL
