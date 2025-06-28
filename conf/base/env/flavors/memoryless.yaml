@@ -1,0 +1,325 @@
+# ============================================================================
+# ODOR PLUME NAVIGATION: MEMORYLESS DEPLOYMENT FLAVOR (memoryless.yaml)
+# ============================================================================
+#
+# This flavor configuration provides optimized settings for memory-constrained
+# deployment environments by completely disabling frame caching and minimizing
+# system resource utilization. Designed for scenarios with strict memory
+# limitations such as containerized deployments, edge computing environments,
+# or resource-limited development systems.
+#
+# CONFIGURATION PURPOSE:
+#   - Disable all frame caching mechanisms to eliminate memory overhead
+#   - Minimize memory footprint for deployment environments with <2GB RAM
+#   - Reduce system resource monitoring and statistics collection overhead
+#   - Optimize for predictable, minimal memory usage patterns
+#
+# DEPLOYMENT SCENARIOS:
+#   - Docker containers with memory limits <1GB
+#   - Edge computing devices with constrained resources
+#   - Cloud environments with minimal memory allocations
+#   - Development systems with memory pressure
+#   - Batch processing with strict resource constraints
+#
+# PERFORMANCE IMPLICATIONS:
+#   - Increased frame I/O latency due to disabled caching
+#   - Higher disk I/O for repeated frame access
+#   - Reduced memory pressure and predictable resource usage
+#   - Lower CPU overhead from cache management operations
+#
+# USAGE INSTRUCTIONS:
+#   python -m plume_nav_sim +env/flavors=memoryless
+#   python -m plume_nav_sim +env/flavors=memoryless simulation.max_duration=60
+#   docker run --memory=512m plume_nav_sim +env/flavors=memoryless
+#
+# ============================================================================
+
+# @package _global_
+# Hydra package directive for global configuration scope override
+
+# ============================================================================
+# FRAME CACHE CONFIGURATION: MEMORY-CONSTRAINED DEPLOYMENT
+# ============================================================================
+# Complete frame caching system configuration optimized for minimal memory
+# usage in resource-constrained deployment environments with strict limits.
+
+frame_cache:
+  # ===== CORE CACHE MODE CONFIGURATION =====
+  # Disable all caching mechanisms to eliminate memory overhead entirely
+  # This forces all frame access to go directly to disk, reducing memory
+  # usage to absolute minimum at the cost of increased I/O latency
+  mode: "none"  # Completely disable frame caching for zero memory footprint
+  
+  # ===== MEMORY MANAGEMENT CONFIGURATION =====
+  # Minimal memory allocation for deployment environments with strict limits
+  # Set to absolute minimum required for basic frame processing operations
+  memory_limit_mb: 128  # Minimal memory allocation (128 MB) for constrained environments
+  
+  # ===== CACHE CAPACITY CONFIGURATION =====
+  # Minimal capacity settings to prevent any inadvertent memory allocation
+  # All caching mechanisms disabled but maintaining configuration structure
+  capacity:
+    # Zero cache capacity ensuring no frames are stored in memory
+    max_frames: 0  # No cached frames in memory (LRU mode disabled)
+    
+    # Disable all preloading mechanisms to prevent memory allocation
+    preload_enabled: false  # No frame preloading for memory conservation
+    
+    # Disable warmup phase to prevent initial memory allocation spikes
+    warmup_frames: 0  # No initial frame preload during environment reset
+  
+  # ===== PERFORMANCE MONITORING CONFIGURATION =====
+  # Disable statistics collection to reduce CPU and memory overhead
+  # Monitoring disabled to minimize computational resource utilization
+  statistics:
+    # Disable statistics tracking to eliminate monitoring overhead
+    enabled: false  # No cache statistics collection for minimal overhead
+    
+    # Minimal reporting configuration for disabled monitoring
+    reporting_interval: 0  # No statistics reporting (disabled)
+    
+    # Disable memory monitoring to reduce system resource overhead
+    memory_monitoring: false  # No memory usage tracking for reduced overhead
+    
+    # Minimal target hit rate (not applicable with caching disabled)
+    target_hit_rate: 0.0  # No cache hit rate target (caching disabled)
+  
+  # ===== CONCURRENCY CONFIGURATION =====
+  # Minimal thread safety configuration for reduced resource usage
+  # Simplified concurrency model appropriate for memory-constrained deployment
+  concurrency:
+    # Disable thread-safe caching mechanisms (no cache to protect)
+    thread_safe: false  # No thread-safe cache access (no cache exists)
+    
+    # Minimal lock timeout for simplified operation
+    lock_timeout_ms: 100  # Minimal lock timeout for reduced resource usage
+  
+  # ===== CACHE VALIDATION CONFIGURATION =====
+  # Disable all validation mechanisms to minimize computational overhead
+  # Validation disabled as no caching operations occur in memoryless mode
+  validation:
+    # Disable checksum validation for eliminated cache operations
+    checksum_validation: false  # No frame integrity checking (no cache)
+    
+    # Disable consistency checks for non-existent cache operations
+    consistency_checks: false  # No cache state validation (no cache)
+  
+  # ===== ENVIRONMENT VARIABLE OVERRIDES =====
+  # Environment variable configuration maintaining deployment flexibility
+  # Preserves override capability while enforcing memory-constrained defaults
+  environment_overrides:
+    # Core cache configuration environment variables
+    mode_env_var: "FRAME_CACHE_MODE"  # Allow override via environment
+    memory_limit_env_var: "FRAME_CACHE_SIZE_MB"  # Memory limit override capability
+    statistics_env_var: "FRAME_CACHE_STATS"  # Statistics control via environment
+    
+    # Advanced configuration overrides for specialized deployments
+    capacity_env_var: "FRAME_CACHE_CAPACITY"  # Cache capacity override
+    warmup_env_var: "FRAME_CACHE_WARMUP"  # Warmup configuration override
+    thread_safe_env_var: "FRAME_CACHE_THREAD_SAFE"  # Thread safety override
+  
+  # ===== INTEGRATION CONFIGURATION =====
+  # Component integration settings optimized for memory-constrained operation
+  # Maintains integration compatibility while minimizing resource usage
+  integration:
+    # VideoPlume integration with direct frame access (no caching)
+    video_plume_integration: true  # Direct frame access without caching layer
+    
+    # Gymnasium environment integration for RL compatibility
+    gymnasium_integration: true  # Standard RL environment integration
+    
+    # Minimal logging integration for reduced overhead
+    logging_integration: false  # Disabled cache logging for minimal overhead
+    
+    # CLI parameter integration for deployment flexibility
+    cli_integration: true  # Command-line parameter override support
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION: MEMORY-CONSTRAINED OPERATION
+# ============================================================================
+# Additional performance configurations optimized for minimal memory usage
+# and reduced computational overhead in resource-constrained environments.
+
+performance:
+  # ===== NUMPY OPTIMIZATION =====
+  # Conservative NumPy settings for memory-constrained environments
+  numpy:
+    # Minimal thread usage for reduced memory overhead
+    thread_count: 1  # Single-threaded operation for minimal memory usage
+    memory_policy: "minimal"  # Minimal memory allocation policy
+    precision: "float32"  # Reduced precision for memory conservation
+  
+  # ===== OPENCV OPTIMIZATION =====
+  # OpenCV settings optimized for direct frame access without caching
+  opencv:
+    # Minimal thread configuration for reduced resource usage
+    thread_count: 1  # Single-threaded OpenCV for minimal overhead
+    use_opencl: false  # Disable GPU acceleration for memory conservation
+    memory_limit: 64  # Minimal OpenCV memory allocation (64 MB)
+  
+  # ===== MATPLOTLIB OPTIMIZATION =====
+  # Visualization settings optimized for headless, memory-constrained operation
+  matplotlib:
+    # Headless backend for minimal memory usage
+    backend: "Agg"  # Non-interactive backend for memory efficiency
+    interactive: false  # Disable interactive features for memory conservation
+    figure_cache_size: 1  # Minimal figure caching for memory conservation
+
+# ============================================================================
+# LOGGING CONFIGURATION: MINIMAL OVERHEAD
+# ============================================================================
+# Logging configuration optimized for memory-constrained deployment with
+# reduced overhead and minimal disk I/O for resource conservation.
+
+logging:
+  # ===== CORE LOGGING CONFIGURATION =====
+  # Minimal logging level for reduced computational overhead
+  level: "WARNING"  # Higher threshold for minimal log generation
+  
+  # ===== OUTPUT DESTINATION CONFIGURATION =====
+  # Simplified output configuration for memory-constrained operation
+  console_enabled: false  # Disable console output for minimal overhead
+  file_enabled: false  # Disable file logging for minimal disk I/O
+  
+  # ===== STRUCTURED LOGGING CONFIGURATION =====
+  # Disable structured logging for minimal processing overhead
+  json_sink_enabled: false  # No JSON logging for minimal overhead
+  
+  # ===== PERFORMANCE MONITORING CONFIGURATION =====
+  # Disable performance monitoring for reduced computational overhead
+  performance:
+    enabled: false  # No performance tracking for minimal overhead
+    timing_precision: "seconds"  # Coarse timing for minimal overhead
+    memory_tracking: false  # No memory monitoring for reduced overhead
+    slow_operation_threshold: 10.0  # High threshold for minimal alerts
+  
+  # ===== COMPONENT-SPECIFIC LOGGING =====
+  # Minimal logging for all components to reduce overhead
+  components:
+    navigator: "ERROR"  # Minimal navigation logging
+    video_plume: "ERROR"  # Minimal video processing logging
+    visualization: "ERROR"  # Minimal visualization logging
+
+# ============================================================================
+# SIMULATION CONFIGURATION: MEMORY-OPTIMIZED EXECUTION
+# ============================================================================
+# Simulation parameters optimized for memory-constrained environments with
+# reduced computational overhead and minimal resource utilization.
+
+simulation:
+  # ===== EXECUTION CONFIGURATION =====
+  # Conservative execution parameters for memory-constrained operation
+  max_duration: 60.0  # Shorter duration for reduced memory pressure
+  fps: 15  # Reduced frame rate for minimal processing overhead
+  
+  # ===== INITIALIZATION CONFIGURATION =====
+  # Minimal initialization for reduced startup memory usage
+  initialization:
+    auto_start: true  # Maintain automatic startup
+    warmup_frames: 0  # No warmup period for minimal memory usage
+    random_start_positions: false  # Deterministic positioning for predictability
+  
+  # ===== DATA RECORDING CONFIGURATION =====
+  # Minimal data recording for memory-constrained operation
+  recording:
+    enabled: false  # Disable data recording for minimal memory usage
+    save_trajectories: false  # No trajectory recording for memory conservation
+    save_sensor_data: false  # No sensor data recording for memory conservation
+    save_metadata: false  # No metadata recording for memory conservation
+    recording_frequency: 0  # No recording frequency (disabled)
+
+# ============================================================================
+# VISUALIZATION CONFIGURATION: MINIMAL OVERHEAD
+# ============================================================================
+# Visualization settings completely disabled for memory-constrained deployment
+# environments prioritizing minimal resource usage over visual feedback.
+
+visualization:
+  # ===== ANIMATION CONFIGURATION =====
+  # Disable all animation features for minimal memory usage
+  animation:
+    enabled: false  # No real-time visualization for memory conservation
+    save_animation: false  # No animation export for minimal disk usage
+  
+  # ===== PLOTTING CONFIGURATION =====
+  # Disable static plotting for minimal memory overhead
+  plotting:
+    figure_size: [6, 4]  # Minimal figure dimensions if plotting required
+    dpi: 72  # Low resolution for minimal memory usage
+
+# ============================================================================
+# DEPLOYMENT CONFIGURATION EXAMPLES
+# ============================================================================
+# The following examples demonstrate common deployment scenarios for the
+# memoryless flavor in resource-constrained environments.
+
+# Example 1: Docker Container Deployment
+# Deploy in container with 512MB memory limit:
+#   docker run --memory=512m plume_nav_sim +env/flavors=memoryless
+#   docker run --memory=512m plume_nav_sim +env/flavors=memoryless simulation.max_duration=30
+
+# Example 2: Edge Computing Device
+# Deploy on edge device with minimal resources:
+#   python -m plume_nav_sim +env/flavors=memoryless navigator.max_speed=0.5
+#   python -m plume_nav_sim +env/flavors=memoryless simulation.fps=10
+
+# Example 3: Batch Processing Environment
+# Process multiple experiments with minimal memory per instance:
+#   python -m plume_nav_sim +env/flavors=memoryless --multirun navigator.speed=0.1,0.2,0.3
+#   python -m plume_nav_sim +env/flavors=memoryless video_plume.threshold=0.2,0.3,0.4
+
+# Example 4: Development Environment with Memory Pressure
+# Develop and test with minimal memory impact:
+#   python -m plume_nav_sim +env/flavors=memoryless logging.level=ERROR
+#   python -m plume_nav_sim +env/flavors=memoryless simulation.max_duration=15
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# The memoryless flavor supports environment variable overrides for deployment
+# flexibility while maintaining memory-constrained operation defaults.
+#
+# Supported Environment Variables:
+#   FRAME_CACHE_MODE=none          - Enforce no caching (override protection)
+#   FRAME_CACHE_SIZE_MB=64         - Further reduce memory limit if needed
+#   ENVIRONMENT_TYPE=production    - Set deployment environment type
+#   LOG_LEVEL=ERROR               - Further reduce logging overhead
+#   SIMULATION_DURATION=30        - Override simulation duration
+#   NUMPY_THREADS=1               - Enforce single-threaded operation
+#
+# Example Environment Variable Usage:
+#   export FRAME_CACHE_MODE=none
+#   export FRAME_CACHE_SIZE_MB=64
+#   export LOG_LEVEL=ERROR
+#   export SIMULATION_DURATION=30
+#   python -m plume_nav_sim +env/flavors=memoryless
+#
+# Container Environment Variable Configuration:
+#   docker run --memory=256m \
+#     -e FRAME_CACHE_MODE=none \
+#     -e LOG_LEVEL=ERROR \
+#     -e SIMULATION_DURATION=30 \
+#     plume_nav_sim +env/flavors=memoryless
+#
+# ============================================================================
+# COMPATIBILITY AND MIGRATION NOTES
+# ============================================================================
+# This memoryless flavor is designed for seamless integration with the
+# Gymnasium 0.29 migration while providing optimal resource utilization
+# for memory-constrained deployment environments.
+#
+# Migration Considerations:
+#   - Frame cache disabled but VideoPlume integration maintained
+#   - RL environment compatibility preserved with minimal resource usage
+#   - Backward compatibility with legacy Gym maintained through shims
+#   - Performance trade-offs: higher I/O latency for minimal memory usage
+#
+# Performance Expectations:
+#   - Memory usage: <200MB total (vs. 2GB+ with full caching)
+#   - Frame access time: 5-50ms (vs. <1ms with caching)
+#   - CPU overhead: minimal (no cache management)
+#   - Disk I/O: higher (direct frame access for each request)
+#
+# ============================================================================
+# END OF MEMORYLESS FLAVOR CONFIGURATION
+# ============================================================================
