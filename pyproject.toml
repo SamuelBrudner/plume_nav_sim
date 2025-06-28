@@ -3,8 +3,8 @@ requires = ["poetry-core>=1.8.0", "setuptools>=42", "wheel"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "odor_plume_nav"
-version = "0.1.0"
+name = "plume_nav_sim"
+version = "0.3.0"
 description = "A reusable library for simulating navigation of odor plumes with Hydra configuration management"
 readme = "README.md"
 authors = [
@@ -13,7 +13,6 @@ authors = [
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10", 
     "Programming Language :: Python :: 3.11",
     "License :: OSI Approved :: MIT License",
@@ -28,9 +27,10 @@ classifiers = [
     "Environment :: Console",
     "Framework :: Robot Framework :: Library",
 ]
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.10,<4.0"
 dependencies = [
-    "numpy>=1.24.0",
+    "numpy>=1.26.0",
+    "gymnasium==0.29.*",
     "matplotlib>=3.7.0",
     "opencv-python>=4.8.0",
     "pyyaml>=6.0",
@@ -52,7 +52,7 @@ dev = [
     "pre-commit>=3.6.0",
     "black>=23.12.0",
     "isort>=5.13.0",
-    "flake8>=6.0.0",
+    "ruff>=0.1.0",
     "mypy>=1.5.0",
     # RL-specific testing and validation tools for Gymnasium API compliance
     "gymnasium[classic-control]==0.29.*",
@@ -75,27 +75,27 @@ rl = [
 ]
 
 [project.scripts]
-plume-nav-sim = "odor_plume_nav.cli.main:main"
+plume-nav-sim = "plume_nav_sim.cli.main:main"
 # RL training console script entry points for enhanced training capabilities
-plume-nav-train = "odor_plume_nav.cli.main:train_main"
+plume-nav-train = "plume_nav_sim.cli.main:train_main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["odor_plume_nav*"]
+include = ["plume_nav_sim*"]
 
 [tool.poetry]
-name = "odor_plume_nav"
-version = "0.1.0"
+name = "plume_nav_sim"
+version = "0.3.0"
 description = "A reusable library for simulating navigation of odor plumes with Hydra configuration management"
 authors = ["Samuel Brudner <example@example.com>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/organization/odor_plume_nav"
-repository = "https://github.com/organization/odor_plume_nav"
-documentation = "https://odor_plume_nav.readthedocs.io"
+homepage = "https://github.com/organization/plume_nav_sim"
+repository = "https://github.com/organization/plume_nav_sim"
+documentation = "https://plume_nav_sim.readthedocs.io"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -106,15 +106,15 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Environment :: Console",
     "Framework :: Robot Framework :: Library",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-packages = [{include = "odor_plume_nav", from = "src"}]
+packages = [{include = "plume_nav_sim", from = "src"}]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
-numpy = ">=1.24.0"
+python = ">=3.10,<4.0"
+numpy = ">=1.26.0"
+gymnasium = "==0.29.*"
 matplotlib = ">=3.7.0"
 opencv-python = ">=4.8.0"
 pyyaml = ">=6.0"
@@ -134,7 +134,7 @@ pytest-cov = ">=4.1.0"
 pre-commit = ">=3.6.0"
 black = ">=23.12.0"
 isort = ">=5.13.0"
-flake8 = ">=6.0.0"
+ruff = ">=0.1.0"
 mypy = ">=1.5.0"
 # RL-specific testing and validation tools for Gymnasium API compliance
 gymnasium = {version = "==0.29.*", extras = ["classic-control"]}
@@ -156,12 +156,12 @@ stable-baselines3 = ">=2.0.0"
 shimmy = ">=1.0.0"
 
 [tool.poetry.scripts]
-plume-nav-sim = "odor_plume_nav.cli.main:main"
+plume-nav-sim = "plume_nav_sim.cli.main:main"
 # RL training console script entry points for enhanced training capabilities
-plume-nav-train = "odor_plume_nav.cli.main:train_main"
+plume-nav-train = "plume_nav_sim.cli.main:train_main"
 
 [tool.poetry.extras]
-dev = ["pytest", "pytest-cov", "pre-commit", "black", "isort", "flake8", "mypy", "gymnasium", "stable-baselines3"]
+dev = ["pytest", "pytest-cov", "pre-commit", "black", "isort", "ruff", "mypy", "gymnasium", "stable-baselines3"]
 docs = ["sphinx", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
 viz = ["plotly", "seaborn"]
 rl = ["gymnasium", "stable-baselines3", "shimmy"]
@@ -171,7 +171,7 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "--cov=odor_plume_nav --cov-report=term-missing --cov-report=xml --cov-report=html"
+addopts = "--cov=plume_nav_sim --cov-report=term-missing --cov-report=xml --cov-report=html"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -181,7 +181,7 @@ markers = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -206,7 +206,6 @@ module = [
     "opencv.*",
     "loguru.*",
     "psutil.*",
-    "gymnasium.*",
     "stable_baselines3.*",
     "shimmy.*",
 ]
@@ -214,7 +213,7 @@ ignore_missing_imports = true
 
 [tool.black]
 line-length = 88
-target-version = ["py39", "py310", "py311"]
+target-version = ["py310", "py311"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -234,7 +233,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["odor_plume_nav"]
+known_first_party = ["plume_nav_sim"]
 known_third_party = [
     "numpy",
     "matplotlib",
@@ -261,7 +260,7 @@ ensure_newline_before_comments = true
 include_trailing_comma = true
 
 [tool.coverage.run]
-source = ["src/odor_plume_nav"]
+source = ["src/plume_nav_sim"]
 omit = [
     "*/tests/*",
     "*/test_*",

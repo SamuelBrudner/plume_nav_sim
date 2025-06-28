@@ -1,0 +1,341 @@
+# ============================================================================
+# MEMORY-RICH DEPLOYMENT ENVIRONMENT FLAVOR (memory.yaml)
+# ============================================================================
+#
+# This configuration overlay optimizes the system for memory-abundant production
+# environments where maximum performance is the primary objective. It configures
+# the frame cache for full video preloading, enables comprehensive monitoring,
+# and implements aggressive caching strategies to achieve sub-millisecond frame
+# access times critical for high-throughput RL training workflows.
+#
+# INTENDED USE CASES:
+#   - Production RL training on high-memory servers (16+ GB RAM)
+#   - High-performance computing clusters with abundant memory resources
+#   - Research workstations optimized for maximum simulation throughput
+#   - Continuous integration environments with performance requirements
+#
+# RESOURCE REQUIREMENTS:
+#   - Minimum 12 GB system RAM (8 GB cache + 4 GB system overhead)
+#   - Recommended 16+ GB RAM for optimal performance
+#   - SSD storage for video assets to support fast initial loading
+#   - Multi-core CPU to handle concurrent cache operations
+#
+# PERFORMANCE TARGETS:
+#   - Frame access time: <0.5ms (target 0.1ms for cache hits)
+#   - Cache hit rate: >99% for typical video access patterns
+#   - Memory utilization: Up to 8 GB for frame cache storage
+#   - Initial warmup time: Acceptable trade-off for maximum runtime performance
+#
+# USAGE EXAMPLES:
+#   # Activate memory-rich flavor
+#   python -m plume_nav_sim --config-name=config +env/flavors=memory
+#
+#   # Override memory limit for specific deployment
+#   python -m plume_nav_sim +env/flavors=memory frame_cache.memory_limit_mb=12288
+#
+#   # Combine with other performance optimizations
+#   python -m plume_nav_sim +env/flavors=memory +navigator=multi_agent
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   FRAME_CACHE_MODE=all           # Force full preload mode
+#   FRAME_CACHE_SIZE_MB=8192       # Memory limit override
+#   FRAME_CACHE_WARMUP=true        # Enable aggressive warmup
+#   FRAME_CACHE_STATS=true         # Enable detailed statistics
+#
+# ============================================================================
+
+# @package _global_
+# Configuration metadata for deployment tracking and validation
+_config_:
+  flavor: "memory"
+  description: "Memory-rich deployment optimization for maximum performance"
+  target_environment: "production_high_memory"
+  resource_profile: "high_memory_high_performance"
+  last_modified: "2024-01-01"
+
+# ============================================================================
+# FRAME CACHE OPTIMIZATION FOR MEMORY-RICH ENVIRONMENTS
+# ============================================================================
+# Comprehensive frame cache configuration optimized for environments with
+# abundant memory resources, prioritizing maximum performance over memory
+# efficiency through full video preloading and aggressive caching strategies.
+
+frame_cache:
+  # Full preload mode for maximum performance in memory-rich environments
+  # Enables complete video preloading during environment initialization
+  # providing near-zero frame access latency for optimal RL training performance
+  mode: "all"  # Full video preload for maximum performance
+  
+  # High memory limit optimized for production servers with abundant RAM
+  # Supports large video files and multiple concurrent environment instances
+  # while maintaining predictable resource utilization patterns
+  memory_limit_mb: 8192  # 8 GiB cache limit for high-performance operation
+  
+  # Full preload configuration for maximum throughput scenarios
+  # Optimized for environments where initial loading time is acceptable
+  # in exchange for optimal runtime performance characteristics
+  preload_all:
+    # Aggressive cache warming during environment reset for immediate performance
+    # Eliminates frame I/O latency during episode execution by preloading
+    # all video frames during environment initialization phase
+    warm_on_reset: true  # Preload all frames during environment initialization
+    
+    # Extended video size support for high-resolution training scenarios
+    # Accommodates large video assets common in production training environments
+    # while maintaining memory management and fallback capabilities
+    max_video_size_mb: 16384  # Support very large video files (16 GiB)
+    
+    # Comprehensive memory validation before preload operations
+    # Prevents system memory exhaustion by validating available resources
+    # before attempting full video preload operations
+    memory_check_enabled: true  # Verify system memory availability before preload
+    
+    # Intelligent fallback to LRU mode if memory constraints detected
+    # Ensures system stability by gracefully degrading to memory-efficient
+    # caching when insufficient memory available for full preload
+    fallback_to_lru: true  # Graceful degradation if memory insufficient
+    
+    # Advanced preload optimization for sequential access patterns
+    # Enables intelligent frame preloading based on access pattern analysis
+    # optimizing for typical RL training sequential frame access workflows
+    sequential_optimization: true  # Optimize for sequential frame access
+    
+    # Parallel preload processing for faster initialization
+    # Utilizes multiple threads during video preload to minimize warmup time
+    # while maintaining system stability through controlled concurrency
+    parallel_preload_threads: 4  # Multi-threaded preload for faster initialization
+  
+  # Comprehensive performance monitoring for optimization analysis
+  # Detailed metrics collection supporting performance analysis and tuning
+  # in production environments with structured logging integration
+  monitoring:
+    # Aggressive performance targets for memory-rich deployment scenarios
+    # Near-perfect hit rates expected with full preload configuration
+    # providing validation of optimal cache performance achievement
+    target_hit_rate: 0.99  # Near-perfect hit rate with full preload
+    
+    # Comprehensive statistics collection for performance analysis
+    # Enables detailed cache behavior analysis and optimization guidance
+    # supporting continuous performance improvement in production environments
+    collect_statistics: true  # Enable detailed cache performance metrics
+    
+    # Real-time statistics reporting for operational monitoring
+    # Frequent reporting intervals supporting proactive performance management
+    # and immediate detection of performance degradation scenarios
+    statistics_window: 500  # High-frequency statistics for real-time monitoring
+    
+    # Performance warning system for proactive issue detection
+    # Automatic alerting when performance targets not achieved despite
+    # optimal configuration enabling rapid troubleshooting and optimization
+    log_performance_warnings: true  # Alert on performance degradation
+    
+    # Advanced memory monitoring for production resource management
+    # Comprehensive memory usage tracking supporting predictable resource
+    # utilization and capacity planning in production environments
+    memory_monitoring_enabled: true  # Enable detailed memory usage tracking
+    
+    # Conservative memory warning threshold for proactive management
+    # Early warning system preventing memory pressure before system limits
+    # ensuring stable operation under high-memory utilization scenarios
+    memory_warning_threshold: 0.80  # Early warning at 80% memory utilization
+    
+    # Detailed performance metrics collection for optimization analysis
+    # Comprehensive timing and efficiency metrics supporting continuous
+    # performance improvement and capacity planning activities
+    detailed_metrics:
+      # Frame access timing analysis for performance validation
+      access_timing_histogram: true  # Detailed frame access time distribution
+      
+      # Memory allocation pattern tracking for optimization guidance
+      memory_allocation_tracking: true  # Track memory usage patterns
+      
+      # Cache efficiency analysis for performance optimization
+      efficiency_analysis: true  # Analyze cache utilization effectiveness
+      
+      # System resource correlation for capacity planning
+      system_resource_correlation: true  # Correlate performance with system resources
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION FOR MEMORY-RICH DEPLOYMENTS
+# ============================================================================
+# System-wide performance optimizations leveraging abundant memory resources
+# for maximum throughput in production training environments.
+
+performance:
+  # NumPy optimization for memory-rich environments
+  # Enhanced threading and memory configuration supporting high-performance
+  # vectorized operations with abundant memory resources
+  numpy:
+    # Aggressive CPU thread utilization for vectorized operations
+    # Optimized for multi-core production systems with dedicated compute resources
+    thread_count: 8  # Increased thread count for production systems
+    
+    # Optimal memory allocation strategy for abundant memory scenarios
+    # Enables aggressive memory allocation patterns supporting maximum
+    # performance without memory pressure constraints
+    memory_policy: "aggressive"  # Aggressive memory allocation for performance
+    
+    # High precision maintained for scientific accuracy
+    # Ensures numerical precision requirements met despite performance focus
+    precision: "float64"  # Maintain scientific accuracy
+  
+  # OpenCV optimization for high-throughput video processing
+  # Enhanced threading and memory configuration for optimal video frame
+  # processing performance in memory-abundant environments
+  opencv:
+    # Increased thread count for parallel video processing operations
+    # Optimized for production systems with dedicated video processing workloads
+    thread_count: 8  # Aggressive threading for video processing
+    
+    # Enhanced memory allocation for video frame processing
+    # Supports high-resolution video processing without memory constraints
+    memory_limit: 2048  # Increased memory allocation for video processing
+  
+  # Matplotlib optimization for efficient visualization rendering
+  # Configured for production environments with visualization requirements
+  matplotlib:
+    # Increased figure cache for memory-rich environments
+    # Supports complex visualization workflows without memory pressure
+    figure_cache_size: 25  # Increased figure cache for complex visualizations
+
+# ============================================================================
+# LOGGING OPTIMIZATION FOR HIGH-PERFORMANCE MONITORING
+# ============================================================================
+# Enhanced logging configuration supporting comprehensive performance monitoring
+# in production environments without impacting simulation performance.
+
+logging:
+  # Enhanced performance monitoring for production optimization
+  # Comprehensive timing and resource tracking supporting continuous
+  # performance improvement and issue detection in production environments
+  performance:
+    # Enable comprehensive performance tracking for optimization analysis
+    enabled: true  # Enable detailed performance metrics collection
+    
+    # High-precision timing for accurate performance measurement
+    # Microsecond precision supporting detailed performance analysis
+    timing_precision: "microseconds"  # High-precision timing measurement
+    
+    # Memory tracking for resource utilization analysis
+    # Comprehensive memory monitoring supporting capacity planning
+    memory_tracking: true  # Enable detailed memory usage monitoring
+    
+    # Aggressive threshold for performance issue detection
+    # Early detection of performance degradation enabling proactive optimization
+    slow_operation_threshold: 0.1  # Aggressive threshold for performance warnings
+  
+  # Component-specific logging optimization for memory-rich environments
+  # Detailed logging configuration supporting comprehensive system monitoring
+  components:
+    # Detailed frame cache logging for optimization analysis
+    frame_cache: "DEBUG"  # Comprehensive frame cache operation logging
+    
+    # Performance monitoring logging for system optimization
+    performance: "INFO"  # Performance metrics and optimization guidance
+    
+    # Video processing logging for throughput analysis
+    video_plume: "INFO"  # Video processing performance and efficiency
+
+# ============================================================================
+# SIMULATION OPTIMIZATION FOR MAXIMUM THROUGHPUT
+# ============================================================================
+# Simulation execution parameters optimized for memory-rich environments
+# prioritizing maximum throughput and performance over resource efficiency.
+
+simulation:
+  # Aggressive simulation timing for maximum throughput
+  # Higher frame rate supporting detailed temporal analysis while leveraging
+  # optimized frame cache performance for sustained high-frequency operation
+  fps: 60  # Higher frame rate for detailed analysis with optimized caching
+  
+  # Performance optimization during initialization
+  initialization:
+    # Extended warmup period for comprehensive cache initialization
+    # Ensures optimal cache state before performance-critical operations
+    warmup_frames: 100  # Extended warmup for comprehensive cache preparation
+    
+    # Aggressive preload configuration for immediate optimal performance
+    # Eliminates performance ramp-up period through comprehensive initialization
+    aggressive_preload: true  # Enable aggressive initialization preloading
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION FOR DEPLOYMENT FLEXIBILITY
+# ============================================================================
+# Comprehensive environment variable overrides supporting flexible deployment
+# in containerized and cloud environments with dynamic resource allocation.
+
+# Advanced environment variable mappings for production deployment
+_env_overrides_:
+  # Core cache configuration overrides for deployment flexibility
+  frame_cache_mode: ${oc.env:FRAME_CACHE_MODE,"all"}
+  memory_limit: ${oc.env:FRAME_CACHE_SIZE_MB,"8192"}
+  warmup_enabled: ${oc.env:FRAME_CACHE_WARMUP,"true"}
+  
+  # Performance monitoring overrides for operational control
+  statistics_enabled: ${oc.env:FRAME_CACHE_STATS,"true"}
+  detailed_monitoring: ${oc.env:FRAME_CACHE_DETAILED_MONITORING,"true"}
+  
+  # Resource allocation overrides for capacity management
+  max_video_size: ${oc.env:FRAME_CACHE_MAX_VIDEO_MB,"16384"}
+  thread_count: ${oc.env:FRAME_CACHE_THREADS,"4"}
+
+# ============================================================================
+# DEPLOYMENT VALIDATION AND REQUIREMENTS
+# ============================================================================
+# Configuration validation and deployment requirements ensuring optimal
+# operation in memory-rich production environments.
+
+_deployment_validation_:
+  # Minimum system requirements for memory-rich deployment
+  minimum_requirements:
+    system_memory_gb: 12  # Minimum system RAM for stable operation
+    available_memory_gb: 10  # Required available memory for cache operations
+    cpu_cores: 4  # Minimum CPU cores for parallel operations
+    storage_type: "SSD"  # SSD storage recommended for optimal performance
+  
+  # Performance validation thresholds for deployment verification
+  performance_thresholds:
+    frame_access_time_ms: 0.5  # Maximum acceptable frame access time
+    cache_hit_rate: 0.95  # Minimum acceptable cache hit rate
+    initialization_time_s: 60  # Maximum acceptable initialization time
+    memory_efficiency: 0.85  # Minimum memory utilization efficiency
+  
+  # Operational monitoring requirements for production deployment
+  monitoring_requirements:
+    metrics_collection: true  # Mandatory metrics collection
+    performance_alerting: true  # Required performance alerting
+    resource_monitoring: true  # Mandatory resource monitoring
+    capacity_planning: true  # Required capacity planning data
+
+# ============================================================================
+# END OF MEMORY-RICH DEPLOYMENT CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive optimization for memory-abundant
+# production environments prioritizing maximum performance over resource
+# efficiency. All parameters can be overridden through environment variables
+# or CLI arguments while maintaining optimal performance characteristics.
+#
+# DEPLOYMENT CHECKLIST:
+#   □ Verify minimum 12 GB system RAM availability
+#   □ Confirm SSD storage for video assets
+#   □ Validate multi-core CPU availability (4+ cores recommended)
+#   □ Set appropriate environment variables for production
+#   □ Configure monitoring and alerting for performance metrics
+#   □ Test initialization time acceptable for deployment requirements
+#
+# PERFORMANCE VALIDATION:
+#   □ Frame access time <0.5ms achieved
+#   □ Cache hit rate >99% for typical workloads
+#   □ Memory utilization stable under high load
+#   □ No memory leaks detected over extended operation
+#   □ Performance metrics within acceptable thresholds
+#
+# MONITORING INTEGRATION:
+#   □ Structured logging configured for production analysis
+#   □ Performance metrics integrated with monitoring systems
+#   □ Alerting configured for performance threshold violations
+#   □ Capacity planning data collection active
+#
+# For additional configuration examples and advanced optimization patterns,
+# see conf/config.yaml and the technical specification documentation.
+# ============================================================================

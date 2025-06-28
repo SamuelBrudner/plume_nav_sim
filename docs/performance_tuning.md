@@ -2,7 +2,7 @@
 
 ## Overview
 
-This comprehensive guide provides detailed instructions for configuring and optimizing the Odor Plume Navigation system's high-performance frame caching mechanisms and structured logging infrastructure. The system is designed to achieve sub-10 millisecond environment step execution times through intelligent caching while providing machine-parseable performance monitoring.
+This comprehensive guide provides detailed instructions for configuring and optimizing the Plume Navigation Simulation system's high-performance frame caching mechanisms and structured logging infrastructure. The system is designed to achieve sub-10 millisecond environment step execution times through intelligent caching while providing machine-parseable performance monitoring.
 
 ## Table of Contents
 
@@ -26,11 +26,11 @@ Enable LRU frame caching for optimal performance:
 
 ```bash
 # CLI activation
-python -m odor_plume_nav.cli.main run --frame_cache lru
+python -m plume_nav_sim.cli.main run --frame_cache lru
 
 # Environment variable activation
 export FRAME_CACHE_MODE=lru
-python -m odor_plume_nav.cli.main run
+python -m plume_nav_sim.cli.main run
 ```
 
 ### Performance Verification
@@ -158,8 +158,8 @@ Validate your system performance:
 ```python
 import time
 import numpy as np
-from odor_plume_nav.cache.frame_cache import FrameCache
-from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
+from plume_nav_sim.cache.frame_cache import FrameCache
+from plume_nav_sim.environments.gymnasium_env import GymnasiumEnv
 
 def benchmark_environment(env, num_steps=1000):
     """Benchmark environment step performance."""
@@ -272,7 +272,7 @@ The cache system implements sophisticated memory management to prevent out-of-me
 #### Default Memory Configuration
 
 ```python
-# src/odor_plume_nav/cache/frame_cache.py - Default settings
+# src/plume_nav_sim/cache/frame_cache.py - Default settings
 DEFAULT_MEMORY_LIMIT_MB = 2048  # 2 GiB
 MEMORY_PRESSURE_THRESHOLD = 0.9  # 90% utilization
 OOM_PREVENTION_THRESHOLD = 0.95  # 95% critical threshold
@@ -349,7 +349,7 @@ sinks:
   - sink: "logs/cache_performance.json"
     format: "{message}"
     level: "INFO"
-    filter: "odor_plume_nav.cache"  # Cache-specific metrics
+    filter: "plume_nav_sim.cache"  # Cache-specific metrics
     serialize: true
     rotation: "50 MB"
 ```
@@ -475,19 +475,19 @@ The `--frame_cache` parameter enables cache mode selection:
 
 ```bash
 # Available cache modes
-python -m odor_plume_nav.cli.main run --frame_cache none  # Disable caching
-python -m odor_plume_nav.cli.main run --frame_cache lru   # LRU cache mode
-python -m odor_plume_nav.cli.main run --frame_cache all   # Full preload mode
+python -m plume_nav_sim.cli.main run --frame_cache none  # Disable caching
+python -m plume_nav_sim.cli.main run --frame_cache lru   # LRU cache mode
+python -m plume_nav_sim.cli.main run --frame_cache all   # Full preload mode
 
 # Combined with other parameters
-python -m odor_plume_nav.cli.main run \
+python -m plume_nav_sim.cli.main run \
     --frame_cache lru \
     navigator.max_speed=2.0 \
     simulation.fps=60 \
     logging.level=DEBUG
 
 # Multi-run with different cache modes
-python -m odor_plume_nav.cli.main run \
+python -m plume_nav_sim.cli.main run \
     --multirun \
     --frame_cache lru,all,none \
     navigator.max_speed=1.0,2.0
@@ -497,7 +497,7 @@ python -m odor_plume_nav.cli.main run \
 
 ```bash
 # View cache-related help
-python -m odor_plume_nav.cli.main run --help
+python -m plume_nav_sim.cli.main run --help
 
 # Output includes:
 #   --frame_cache {none,lru,all}
@@ -511,7 +511,7 @@ python -m odor_plume_nav.cli.main run --help
 ### Cache Initialization in CLI
 
 ```python
-# src/odor_plume_nav/cli/main.py - Cache integration
+# src/plume_nav_sim/cli/main.py - Cache integration
 @click.command()
 @click.option('--frame_cache', 
               type=click.Choice(['none', 'lru', 'all']),
@@ -617,15 +617,15 @@ frame_cache:
 
 ```bash
 # Override cache mode
-python -m odor_plume_nav.cli.main +frame_cache=preload
+python -m plume_nav_sim.cli.main +frame_cache=preload
 
 # Override specific cache parameters
-python -m odor_plume_nav.cli.main \
+python -m plume_nav_sim.cli.main \
     frame_cache.memory_limit_mb=4096 \
     frame_cache.lru.eviction_batch_size=50
 
 # Multi-run with different cache configurations
-python -m odor_plume_nav.cli.main \
+python -m plume_nav_sim.cli.main \
     --multirun \
     +frame_cache=lru,preload,disabled \
     frame_cache.memory_limit_mb=1024,2048,4096
@@ -693,8 +693,8 @@ ENV MATPLOTLIB_BACKEND=Agg
 # docker-compose.yml
 version: '3.8'
 services:
-  odor-plume-nav:
-    image: odor-plume-nav:latest
+  plume-nav-sim:
+    image: plume-nav-sim:latest
     environment:
       - FRAME_CACHE_MODE=lru
       - FRAME_CACHE_SIZE_MB=4096
@@ -865,7 +865,7 @@ logging:
     - sink: "logs/cache_debug.log"
       format: "{time} | {level} | {name} | {message} | {extra}"
       level: "DEBUG"
-      filter: "odor_plume_nav.cache"
+      filter: "plume_nav_sim.cache"
 ```
 
 #### Performance Profiling
@@ -1022,7 +1022,7 @@ monitoring:
   prometheus:
     enabled: ${oc.env:PROMETHEUS_ENABLED,false}
     port: ${oc.env:PROMETHEUS_PORT,8000}
-    metrics_prefix: "odor_plume_nav"
+    metrics_prefix: "plume_nav_sim"
     
   grafana:
     enabled: ${oc.env:GRAFANA_ENABLED,false}
@@ -1038,7 +1038,7 @@ monitoring:
 
 ## Conclusion
 
-This comprehensive guide provides the foundation for optimizing the Odor Plume Navigation system's performance through intelligent frame caching and monitoring. The dual-mode cache system (LRU and full-preload) enables achieving sub-10 millisecond step execution times while providing comprehensive observability through structured logging.
+This comprehensive guide provides the foundation for optimizing the Plume Navigation Simulation system's performance through intelligent frame caching and monitoring. The dual-mode cache system (LRU and full-preload) enables achieving sub-10 millisecond step execution times while providing comprehensive observability through structured logging.
 
 Key takeaways:
 - **LRU mode** for memory-efficient caching in resource-constrained environments
@@ -1047,4 +1047,4 @@ Key takeaways:
 - **Flexible configuration** via CLI, Hydra, and environment variables
 - **Production-ready** features including memory pressure handling and automatic recovery
 
-For additional support and advanced configuration examples, refer to the technical specification sections 3.2, 5.2, and the configuration schema documentation in `src/odor_plume_nav/config/schemas.py`.
+For additional support and advanced configuration examples, refer to the technical specification sections 3.2, 5.2, and the configuration schema documentation in `src/plume_nav_sim/config/schemas.py`.

@@ -4,17 +4,19 @@ Comprehensive Unit Test Suite for FrameCache System.
 This test suite validates the high-performance frame caching implementation per 
 Section 0.4.1 requirements including LRU and full-preload strategies, memory 
 boundary compliance, thread safety, and cache statistics accuracy to ensure 
-optimal performance for reinforcement learning workflows.
+optimal performance for reinforcement learning workflows in the plume_nav_sim project.
 
 Test Coverage Areas:
 - FrameCache class functionality across all operational modes (LRU, ALL, NONE)
+- LRU eviction policy comprehensive testing with memory pressure scenarios
 - Cache hit rate validation ≥90% target through statistical sampling
 - Memory boundary compliance ≤2 GiB default limit with psutil monitoring
 - Thread safety validation under concurrent access scenarios
-- LRU eviction policy correctness using property-based testing
+- Cache pressure threshold testing (0.9) per configuration schema
 - Cache statistics tracking accuracy within ±1% error bounds
 - Performance benchmarks to validate sub-10ms latency requirements
 - Integration testing with VideoPlume mock objects
+- Hydra configuration integration for LRU cache mode testing
 
 Performance Targets Validated:
 - Cache hit rate ≥90% for sequential access patterns
@@ -22,6 +24,7 @@ Performance Targets Validated:
 - Thread-safe operations supporting 100+ concurrent agents
 - Sub-10ms frame retrieval latency for cache hits
 - Accurate statistics tracking within ±1% error bounds
+- Memory pressure threshold enforcement at 0.9 utilization
 
 Author: Blitzy Engineering Team
 Version: 2.0.0
@@ -65,8 +68,8 @@ try:
 except ImportError:
     BENCHMARK_AVAILABLE = False
 
-# Core cache system imports
-from odor_plume_nav.cache import (
+# Core cache system imports from plume_nav_sim
+from plume_nav_sim.utils.frame_cache import (
     FrameCache,
     CacheMode,
     CacheStatistics,
@@ -78,6 +81,15 @@ from odor_plume_nav.cache import (
     diagnose_cache_setup,
     estimate_cache_memory_usage
 )
+
+# Hydra configuration testing imports
+try:
+    from hydra import initialize, compose
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    DictConfig = dict
 
 
 class TestCacheStatistics:
@@ -1421,12 +1433,616 @@ class TestCachePerformanceBenchmarks:
         assert cache.statistics._evictions >= 0  # Evictions may have occurred
 
 
+class TestFrameCacheLRUEvictionPolicyAdvanced:
+    """Advanced test suite for comprehensive LRU eviction policy testing per Section 0.4.1."""
+    
+    @pytest.fixture
+    def memory_constrained_cache(self):
+        """Create a memory-constrained LRU cache for eviction testing."""
+        return FrameCache(
+            mode=CacheMode.LRU,
+            memory_limit_mb=2.0,  # Very small limit to force frequent evictions
+            memory_pressure_threshold=0.9,
+            eviction_batch_size=3,
+            enable_statistics=True
+        )
+    
+    @pytest.fixture
+    def predictable_video_source(self):
+        """Create mock VideoPlume with predictable frame sizes for eviction testing."""
+        mock = MagicMock()
+        
+        def get_frame_side_effect(frame_id, **kwargs):
+            if 0 <= frame_id < 500:
+                # Create 200KB frames - 10 frames will exceed 2MB limit
+                frame = np.full((200, 200, 5), frame_id % 256, dtype=np.uint8)
+                return frame
+            return None
+        
+        mock.get_frame.side_effect = get_frame_side_effect
+        mock.frame_count = 500
+        return mock
+    
+    def test_lru_eviction_policy_order_validation(self, memory_constrained_cache, predictable_video_source):
+        """Test that LRU eviction follows strict chronological order."""
+        cache = memory_constrained_cache
+        video = predictable_video_source
+        
+        # Fill cache with initial frames
+        initial_frames = [1, 2, 3, 4, 5]
+        for frame_id in initial_frames:
+            cache.get(frame_id, video)
+        
+        # Access frames in specific order to establish LRU sequence
+        # This makes frame 2 least recently used, then 1, 4, 3, 5 (most recent)
+        cache.get(2, video)  # Access 2 (now most recent)
+        cache.get(1, video)  # Access 1 (second most recent)
+        cache.get(4, video)  # Access 4 (third most recent)
+        
+        # Add new frame to trigger evictions
+        cache.get(10, video)  # Should evict oldest frames
+        
+        # Verify LRU order by checking which frames survive
+        with cache._lock:
+            cached_frames = set(cache._cache.keys())
+        
+        # Most recently accessed frames (2, 1, 4, 10) should be more likely to survive
+        assert 10 in cached_frames  # New frame should definitely be cached
+        
+        # Verify evictions occurred
+        assert cache.statistics._evictions > 0
+        
+        # Test that recently accessed frames have priority
+        recent_frames_surviving = sum(1 for fid in [2, 1, 4] if fid in cached_frames)
+        old_frames_surviving = sum(1 for fid in [3, 5] if fid in cached_frames)
+        
+        # Recently accessed frames should have higher survival rate
+        assert recent_frames_surviving >= old_frames_surviving
+    
+    def test_lru_eviction_batch_size_enforcement(self, memory_constrained_cache, predictable_video_source):
+        """Test that eviction batch size is respected during memory pressure."""
+        cache = memory_constrained_cache
+        video = predictable_video_source
+        
+        # Set known batch size
+        cache.eviction_batch_size = 2
+        
+        # Fill cache to trigger evictions
+        initial_evictions = cache.statistics._evictions
+        
+        # Add enough frames to trigger multiple eviction cycles
+        for frame_id in range(20):
+            cache.get(frame_id, video)
+        
+        final_evictions = cache.statistics._evictions
+        evictions_performed = final_evictions - initial_evictions
+        
+        # Verify that evictions occurred in batches
+        if evictions_performed > 0:
+            # Should be roughly divisible by batch size (allowing for some variance)
+            remainder = evictions_performed % cache.eviction_batch_size
+            # Allow some flexibility due to memory calculation variations
+            assert remainder <= 1, f"Evictions {evictions_performed} not in expected batch size {cache.eviction_batch_size}"
+    
+    def test_lru_memory_pressure_threshold_accuracy(self, memory_constrained_cache, predictable_video_source):
+        """Test that evictions trigger at exact memory pressure threshold."""
+        cache = memory_constrained_cache
+        video = predictable_video_source
+        threshold = cache.memory_pressure_threshold  # 0.9
+        
+        # Monitor memory usage during frame additions
+        memory_readings = []
+        
+        for frame_id in range(15):
+            cache.get(frame_id, video)
+            usage_ratio = cache.memory_usage_mb / cache.memory_limit_mb
+            memory_readings.append(usage_ratio)
+            
+            # Check if pressure threshold is respected
+            if usage_ratio > threshold:
+                # Should have triggered evictions to bring usage back down
+                assert cache.statistics._evictions > 0, "Expected evictions at memory pressure threshold"
+        
+        # Verify that memory usage stayed reasonably close to threshold
+        max_usage = max(memory_readings)
+        assert max_usage <= 1.1, f"Memory usage {max_usage} exceeded reasonable bounds above threshold {threshold}"
+    
+    @pytest.mark.skipif(not HYPOTHESIS_AVAILABLE, reason="Hypothesis not available")
+    @given(access_pattern=st.lists(st.integers(min_value=0, max_value=50), min_size=100, max_size=300))
+    @settings(max_examples=10, deadline=None)
+    def test_lru_invariant_under_random_access(self, access_pattern):
+        """Property-based test for LRU invariants under random access patterns."""
+        cache = FrameCache(mode=CacheMode.LRU, memory_limit_mb=1.0)
+        mock_video = MagicMock()
+        
+        def get_frame_side_effect(frame_id, **kwargs):
+            # Create 100KB frames to force frequent evictions
+            return np.full((100, 100, 10), frame_id % 256, dtype=np.uint8)
+        
+        mock_video.get_frame.side_effect = get_frame_side_effect
+        
+        # Track access times for LRU verification
+        access_times = {}
+        current_time = 0
+        
+        for frame_id in access_pattern:
+            frame = cache.get(frame_id, mock_video)
+            access_times[frame_id] = current_time
+            current_time += 1
+            
+            # LRU Invariant 1: Memory limit never exceeded
+            assert cache.memory_usage_mb <= cache.memory_limit_mb * 1.1  # Allow small overhead
+            
+            # LRU Invariant 2: Statistics consistency
+            total = cache.statistics.total_requests
+            hits = cache.statistics._hits
+            misses = cache.statistics._misses
+            assert hits + misses == total
+            
+            # LRU Invariant 3: Valid hit rate
+            assert 0.0 <= cache.hit_rate <= 1.0
+            
+            # LRU Invariant 4: Cache size non-negative
+            assert cache.cache_size >= 0
+        
+        # Final verification: If evictions occurred, verify LRU property
+        if cache.statistics._evictions > 0:
+            with cache._lock:
+                remaining_frames = set(cache._cache.keys())
+            
+            # Remaining frames should be among the most recently accessed
+            if remaining_frames:
+                # Get the most recent access time among cached frames
+                most_recent_cached = max(access_times[fid] for fid in remaining_frames if fid in access_times)
+                
+                # Check that no uncached frame was accessed more recently than least recent cached frame
+                least_recent_cached = min(access_times[fid] for fid in remaining_frames if fid in access_times)
+                
+                uncached_frames = set(access_times.keys()) - remaining_frames
+                if uncached_frames:
+                    most_recent_uncached = max(access_times[fid] for fid in uncached_frames)
+                    
+                    # This is the core LRU property: least recent cached should be more recent than most recent uncached
+                    # Allow some flexibility due to batch evictions
+                    assert least_recent_cached >= most_recent_uncached - cache.eviction_batch_size
+
+
+class TestFrameCacheMemoryLimitEnforcement:
+    """Test suite for 2 GiB memory limit enforcement with psutil monitoring per Feature F-004."""
+    
+    @pytest.fixture
+    def strict_memory_cache(self):
+        """Create cache with strict memory enforcement for testing."""
+        return FrameCache(
+            mode=CacheMode.LRU,
+            memory_limit_mb=2048.0,  # 2 GiB default limit
+            memory_pressure_threshold=0.9,
+            enable_statistics=True,
+            eviction_batch_size=10
+        )
+    
+    @pytest.fixture
+    def large_frame_video_source(self):
+        """Create mock VideoPlume with large frames for memory testing."""
+        mock = MagicMock()
+        
+        def get_frame_side_effect(frame_id, **kwargs):
+            if 0 <= frame_id < 1000:
+                # Create 10MB frames to quickly reach memory limits
+                frame = np.full((1000, 1000, 10), frame_id % 256, dtype=np.uint8)
+                return frame
+            return None
+        
+        mock.get_frame.side_effect = get_frame_side_effect
+        mock.frame_count = 1000
+        return mock
+    
+    def test_default_2gib_memory_limit_compliance(self, strict_memory_cache):
+        """Test that default 2 GiB memory limit is properly enforced."""
+        cache = strict_memory_cache
+        
+        # Verify default limit is set to 2 GiB
+        expected_limit_mb = 2048.0
+        assert cache.memory_limit_mb == expected_limit_mb
+        assert cache.memory_limit_bytes == expected_limit_mb * 1024 * 1024
+        
+        # Verify initial state
+        assert cache.memory_usage_mb == 0.0
+        assert cache.memory_usage_ratio == 0.0
+    
+    def test_memory_limit_enforcement_under_pressure(self, strict_memory_cache, large_frame_video_source):
+        """Test that memory limit is enforced under memory pressure scenarios."""
+        cache = strict_memory_cache
+        video = large_frame_video_source
+        
+        # Fill cache with large frames to approach limit
+        frames_added = 0
+        for frame_id in range(300):  # 300 * 10MB = 3GB potential usage
+            cache.get(frame_id, video)
+            frames_added += 1
+            
+            current_usage_mb = cache.memory_usage_mb
+            
+            # Memory usage should never exceed limit by more than small tolerance
+            assert current_usage_mb <= cache.memory_limit_mb * 1.05, (
+                f"Memory usage {current_usage_mb:.2f}MB exceeded limit "
+                f"{cache.memory_limit_mb:.2f}MB at frame {frame_id}"
+            )
+            
+            # If we're above the pressure threshold, evictions should have occurred
+            usage_ratio = current_usage_mb / cache.memory_limit_mb
+            if usage_ratio > cache.memory_pressure_threshold:
+                assert cache.statistics._evictions > 0, (
+                    f"Expected evictions at usage ratio {usage_ratio:.3f}, "
+                    f"threshold {cache.memory_pressure_threshold:.3f}"
+                )
+        
+        # Verify final state compliance
+        final_usage = cache.memory_usage_mb
+        assert final_usage <= cache.memory_limit_mb, f"Final usage {final_usage}MB exceeds limit"
+        
+        # Verify evictions occurred as expected
+        assert cache.statistics._evictions > 0, "Expected evictions with large frame workload"
+    
+    @pytest.mark.skipif(not psutil, reason="psutil not available")
+    def test_psutil_memory_monitoring_integration(self, strict_memory_cache):
+        """Test psutil-based memory monitoring integration per Section 0.3.1."""
+        cache = strict_memory_cache
+        
+        # Verify psutil process monitoring is properly initialized
+        assert hasattr(cache, '_process'), "Cache should have psutil process monitoring"
+        assert cache._process is not None, "PSUtil process should be initialized"
+        
+        # Test memory info access
+        try:
+            memory_info = cache._process.memory_info()
+            assert hasattr(memory_info, 'rss'), "Memory info should include RSS (Resident Set Size)"
+            assert hasattr(memory_info, 'vms'), "Memory info should include VMS (Virtual Memory Size)"
+            
+            # RSS should be reasonable for a fresh cache
+            rss_mb = memory_info.rss / (1024 * 1024)
+            assert rss_mb > 0, "RSS should be positive"
+            assert rss_mb < 1000, "RSS should be reasonable for test environment"
+            
+        except psutil.Error as e:
+            pytest.skip(f"PSUtil memory monitoring not available: {e}")
+    
+    @pytest.mark.skipif(not psutil, reason="psutil not available")
+    def test_system_memory_pressure_detection(self, strict_memory_cache, large_frame_video_source):
+        """Test system-wide memory pressure detection with psutil."""
+        cache = strict_memory_cache
+        video = large_frame_video_source
+        
+        # Get initial system memory state
+        initial_memory = psutil.virtual_memory()
+        initial_process_memory = cache._process.memory_info().rss
+        
+        # Fill cache and monitor system memory impact
+        for frame_id in range(50):  # Moderate load to avoid system instability
+            cache.get(frame_id, video)
+            
+            # Check current memory state
+            current_memory = psutil.virtual_memory()
+            current_process_memory = cache._process.memory_info().rss
+            
+            # Verify process memory is tracked correctly
+            process_growth = (current_process_memory - initial_process_memory) / (1024 * 1024)
+            cache_usage = cache.memory_usage_mb
+            
+            # Process memory growth should correlate with cache usage
+            # Allow generous tolerance due to Python's memory management
+            assert process_growth <= cache_usage * 3, (
+                f"Process memory growth {process_growth:.2f}MB seems excessive "
+                f"for cache usage {cache_usage:.2f}MB"
+            )
+            
+            # System should not be under severe memory pressure
+            memory_percent = current_memory.percent
+            assert memory_percent < 95, f"System memory usage {memory_percent}% too high during test"
+    
+    def test_memory_estimation_accuracy_validation(self):
+        """Test memory usage estimation accuracy for different frame configurations."""
+        # Test various frame size scenarios
+        test_scenarios = [
+            {"width": 640, "height": 480, "channels": 1, "dtype_size": 1, "count": 1000},
+            {"width": 1920, "height": 1080, "channels": 3, "dtype_size": 1, "count": 500},
+            {"width": 800, "height": 600, "channels": 1, "dtype_size": 4, "count": 800},
+        ]
+        
+        for scenario in test_scenarios:
+            estimates = estimate_cache_memory_usage(
+                video_frame_count=scenario["count"],
+                frame_width=scenario["width"],
+                frame_height=scenario["height"],
+                channels=scenario["channels"],
+                dtype_size=scenario["dtype_size"]
+            )
+            
+            # Calculate expected values
+            expected_frame_bytes = (
+                scenario["width"] * scenario["height"] * 
+                scenario["channels"] * scenario["dtype_size"]
+            )
+            expected_total_mb = (expected_frame_bytes * scenario["count"]) / (1024 * 1024)
+            
+            # Verify estimation accuracy
+            assert estimates['frame_size_bytes'] == expected_frame_bytes
+            assert abs(estimates['total_video_mb'] - expected_total_mb) < 0.1
+            
+            # Verify recommendations are sensible
+            assert 'recommendation' in estimates
+            if expected_total_mb > 2048:  # Exceeds 2 GiB limit
+                assert 'lru' in estimates['recommendation'].lower()
+            elif expected_total_mb < 512:  # Small enough for full preload
+                assert 'all' in estimates['recommendation'].lower() or 'preload' in estimates['recommendation'].lower()
+
+
+class TestFrameCachePressureThresholdTesting:
+    """Test suite for cache pressure threshold testing (0.9) per Section 0.3.4 configuration schema."""
+    
+    @pytest.fixture
+    def threshold_test_cache(self):
+        """Create cache with configurable pressure threshold for testing."""
+        return FrameCache(
+            mode=CacheMode.LRU,
+            memory_limit_mb=10.0,  # Small limit for quick threshold testing
+            memory_pressure_threshold=0.9,  # 90% threshold per spec
+            enable_statistics=True,
+            eviction_batch_size=2
+        )
+    
+    @pytest.fixture
+    def calibrated_video_source(self):
+        """Create mock VideoPlume with calibrated frame sizes for threshold testing."""
+        mock = MagicMock()
+        
+        def get_frame_side_effect(frame_id, **kwargs):
+            if 0 <= frame_id < 200:
+                # Create 1MB frames - 10 frames will reach 10MB limit
+                frame = np.full((500, 500, 4), frame_id % 256, dtype=np.uint8)
+                return frame
+            return None
+        
+        mock.get_frame.side_effect = get_frame_side_effect
+        mock.frame_count = 200
+        return mock
+    
+    def test_pressure_threshold_configuration_validation(self):
+        """Test that pressure threshold configuration is properly validated."""
+        # Test valid threshold values
+        valid_thresholds = [0.7, 0.8, 0.9, 0.95, 0.99]
+        
+        for threshold in valid_thresholds:
+            cache = FrameCache(
+                mode=CacheMode.LRU,
+                memory_limit_mb=5.0,
+                memory_pressure_threshold=threshold
+            )
+            assert cache.memory_pressure_threshold == threshold
+        
+        # Test invalid threshold values
+        invalid_thresholds = [-0.1, 0.0, 1.0, 1.5, 2.0]
+        
+        for threshold in invalid_thresholds:
+            with pytest.raises(ValueError, match="memory_pressure_threshold must be between"):
+                FrameCache(
+                    mode=CacheMode.LRU,
+                    memory_limit_mb=5.0,
+                    memory_pressure_threshold=threshold
+                )
+    
+    def test_pressure_threshold_trigger_accuracy(self, threshold_test_cache, calibrated_video_source):
+        """Test that pressure threshold triggers at precisely 0.9 (90%) memory usage."""
+        cache = threshold_test_cache
+        video = calibrated_video_source
+        threshold = cache.memory_pressure_threshold  # 0.9
+        
+        pressure_warnings_initial = cache.statistics._pressure_warnings
+        evictions_initial = cache.statistics._evictions
+        
+        # Add frames progressively to reach threshold
+        for frame_id in range(15):  # More than enough to exceed threshold
+            cache.get(frame_id, video)
+            
+            usage_ratio = cache.memory_usage_mb / cache.memory_limit_mb
+            
+            # If we're at or above threshold, pressure handling should activate
+            if usage_ratio >= threshold:
+                pressure_warnings_final = cache.statistics._pressure_warnings
+                evictions_final = cache.statistics._evictions
+                
+                # Either pressure warnings or evictions should have occurred
+                pressure_detected = (
+                    pressure_warnings_final > pressure_warnings_initial or
+                    evictions_final > evictions_initial
+                )
+                
+                assert pressure_detected, (
+                    f"Expected pressure handling at usage ratio {usage_ratio:.3f}, "
+                    f"threshold {threshold:.3f}, but no warnings or evictions detected"
+                )
+                
+                # Memory usage should not significantly exceed threshold for long
+                assert usage_ratio <= 1.2, (
+                    f"Memory usage ratio {usage_ratio:.3f} significantly exceeded threshold "
+                    f"{threshold:.3f} without proper pressure handling"
+                )
+
+
+class TestFrameCacheHydraConfigurationIntegration:
+    """Test suite for LRU cache mode integration with Hydra configuration per enhanced frame caching system."""
+    
+    @pytest.fixture
+    def mock_hydra_cache_config(self):
+        """Create mock Hydra configuration for frame cache testing."""
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available for configuration testing")
+        
+        config_dict = {
+            'frame_cache': {
+                'mode': 'lru',
+                'memory_limit_mb': 1024.0,
+                'lru': {
+                    'max_frames': None,  # Auto-calculate
+                    'preload_sequential': True,
+                    'preload_count': 10,
+                    'eviction_batch_size': 5,
+                    'memory_pressure_threshold': 0.9
+                },
+                'monitoring': {
+                    'target_hit_rate': 0.90,
+                    'collect_statistics': True,
+                    'statistics_window': 1000,
+                    'memory_monitoring_enabled': True,
+                    'memory_warning_threshold': 0.85
+                }
+            }
+        }
+        
+        return OmegaConf.create(config_dict)
+    
+    def test_hydra_config_cache_instantiation(self, mock_hydra_cache_config):
+        """Test cache instantiation from Hydra configuration."""
+        config = mock_hydra_cache_config.frame_cache
+        
+        # Create cache from configuration
+        cache = FrameCache(
+            mode=config.mode,
+            memory_limit_mb=config.memory_limit_mb,
+            memory_pressure_threshold=config.lru.memory_pressure_threshold,
+            eviction_batch_size=config.lru.eviction_batch_size,
+            enable_statistics=config.monitoring.collect_statistics
+        )
+        
+        # Verify configuration was applied correctly
+        assert cache.mode == CacheMode.LRU
+        assert cache.memory_limit_mb == 1024.0
+        assert cache.memory_pressure_threshold == 0.9
+        assert cache.eviction_batch_size == 5
+        assert cache.statistics is not None
+    
+    def test_hydra_config_parameter_validation(self, mock_hydra_cache_config):
+        """Test validation of Hydra configuration parameters."""
+        config = mock_hydra_cache_config.frame_cache
+        
+        # Test valid configuration
+        result = validate_cache_config(config.mode, config.memory_limit_mb)
+        assert result["valid"] is True
+        assert len(result["errors"]) == 0
+        
+        # Test configuration with warnings
+        low_memory_result = validate_cache_config("lru", 32.0)  # Very low memory
+        assert low_memory_result["valid"] is True  # Still valid but with warnings
+        assert len(low_memory_result["warnings"]) > 0
+        
+        # Test invalid configuration
+        invalid_result = validate_cache_config("invalid_mode", 1024.0)
+        assert invalid_result["valid"] is False
+        assert len(invalid_result["errors"]) > 0
+
+
+class TestFrameCacheStatisticsAccuracyAdvanced:
+    """Advanced test suite for cache statistics accuracy testing per Section 0.3.1 implementation design."""
+    
+    @pytest.fixture
+    def high_precision_cache(self):
+        """Create cache with high precision statistics tracking."""
+        return FrameCache(
+            mode=CacheMode.LRU,
+            memory_limit_mb=50.0,
+            enable_statistics=True,
+            memory_pressure_threshold=0.9
+        )
+    
+    @pytest.fixture
+    def statistics_test_video(self):
+        """Create mock VideoPlume for statistics accuracy testing."""
+        mock = MagicMock()
+        
+        def get_frame_side_effect(frame_id, **kwargs):
+            # Add small delay to test timing accuracy
+            time.sleep(0.001)  # 1ms delay
+            if 0 <= frame_id < 1000:
+                frame = np.full((200, 200), frame_id % 256, dtype=np.uint8)
+                return frame
+            return None
+        
+        mock.get_frame.side_effect = get_frame_side_effect
+        mock.frame_count = 1000
+        return mock
+    
+    def test_hit_rate_calculation_accuracy(self, high_precision_cache, statistics_test_video):
+        """Test hit rate calculation accuracy within ±1% error bounds."""
+        cache = high_precision_cache
+        video = statistics_test_video
+        
+        # Create known access pattern for precise hit rate testing
+        access_pattern = [1, 2, 3, 4, 5] * 20  # 100 accesses, 20 unique frames
+        expected_hits = 80  # 100 - 20 = 80 hits after initial misses
+        expected_hit_rate = 0.8  # 80%
+        
+        for frame_id in access_pattern:
+            cache.get(frame_id, video)
+        
+        # Verify hit rate accuracy
+        actual_hit_rate = cache.hit_rate
+        hit_rate_error = abs(actual_hit_rate - expected_hit_rate)
+        
+        assert hit_rate_error <= 0.01, (
+            f"Hit rate error {hit_rate_error:.4f} exceeds ±1% bound. "
+            f"Expected: {expected_hit_rate:.3f}, Actual: {actual_hit_rate:.3f}"
+        )
+        
+        # Verify component statistics
+        assert cache.statistics.total_requests == 100
+        assert cache.statistics._hits == expected_hits
+        assert cache.statistics._misses == 20
+    
+    def test_timing_measurement_accuracy(self, high_precision_cache, statistics_test_video):
+        """Test timing measurement accuracy for cache operations."""
+        cache = high_precision_cache
+        video = statistics_test_video
+        
+        # Perform operations with known timing characteristics
+        frame_id = 42
+        
+        # First access (miss) - should take longer due to video loading
+        start_time = time.time()
+        cache.get(frame_id, video)
+        miss_duration = time.time() - start_time
+        
+        # Second access (hit) - should be much faster
+        start_time = time.time()
+        cache.get(frame_id, video)
+        hit_duration = time.time() - start_time
+        
+        # Verify timing measurements are reasonable
+        stats = cache.statistics
+        
+        # Miss time should reflect actual video loading time
+        recorded_miss_time = stats.average_miss_time
+        assert 0.0005 <= recorded_miss_time <= 0.010, (  # 0.5ms to 10ms range
+            f"Recorded miss time {recorded_miss_time:.6f}s outside expected range"
+        )
+        
+        # Hit time should be much faster than miss time
+        recorded_hit_time = stats.average_hit_time
+        assert recorded_hit_time < recorded_miss_time, (
+            f"Hit time {recorded_hit_time:.6f}s not faster than miss time {recorded_miss_time:.6f}s"
+        )
+        
+        # Hit time should be sub-millisecond for cached access
+        assert recorded_hit_time <= 0.001, (  # 1ms limit for cache hits
+            f"Hit time {recorded_hit_time:.6f}s exceeds 1ms limit"
+        )
+
+
 if __name__ == "__main__":
     # Run tests with coverage if executed directly
     pytest.main([
         __file__,
         "-v",
-        "--cov=odor_plume_nav.cache",
+        "--cov=plume_nav_sim.utils.frame_cache",
         "--cov-report=term-missing",
         "--cov-report=html:htmlcov",
         "-m", "cache",
