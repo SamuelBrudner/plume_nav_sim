@@ -50,6 +50,11 @@ defaults:
   # Inherit foundational parameters from base configuration
   - base
   
+  # Frame caching configuration group for high-performance frame storage
+  # LRU cache mode provides intelligent eviction with memory management
+  # Compatible with environment flavors: memoryless, memory
+  - override frame_cache: lru
+  
   # Optional configuration group overrides (prefix with + to add, - to remove)
   # Uncomment and modify as needed for specific use cases
   # - override navigator: multi_agent        # Switch to multi-agent navigation
@@ -57,11 +62,10 @@ defaults:
   # - override visualization: publication    # Publication-quality plots
   # - override environment: development      # Development environment settings
   
-  # Frame caching configuration group for high-performance frame storage
-  # Uncomment and modify as needed for performance optimization
-  # - override frame_cache: lru          # LRU cache mode with intelligent eviction
+  # Alternative frame cache modes for different performance scenarios
   # - override frame_cache: preload_all  # Full preload mode for maximum performance
   # - override frame_cache: disabled     # Disable caching for debugging
+  # - override frame_cache: none         # Memoryless mode for minimal memory usage
   
   # Enable this configuration file as the primary override source
   - _self_
@@ -109,6 +113,16 @@ environment:
 # High-performance frame caching system for accelerated reinforcement learning
 # training workflows with sub-10ms frame retrieval targets and intelligent
 # memory management supporting LRU eviction and full-preload strategies.
+#
+# Environment Flavor Compatibility:
+#   - memoryless.yaml: Uses mode="none" for minimal memory footprint
+#   - memory.yaml: Uses mode="lru" or mode="all" for optimized caching
+#   - Custom flavors: Full configurability via environment variables
+#
+# Gymnasium Migration Enhancement:
+#   - Compatible with new 5-tuple step returns
+#   - Supports enhanced performance requirements (mean step() < 10ms)
+#   - Memory limit enforcement per Section 0.3.1 (≤ 2 GiB RAM cap)
 
 frame_cache:
   # Cache operation mode with environment variable override capability
@@ -119,6 +133,17 @@ frame_cache:
   # Memory management configuration with runtime override support
   # Set FRAME_CACHE_SIZE_MB=4096 for custom memory limits in production
   memory_limit_mb: ${oc.env:FRAME_CACHE_SIZE_MB,"2048"}  # Default 2 GiB memory limit
+  
+  # Enable high-performance statistics collection for all cache modes
+  # Required for gymnasium compliance and performance monitoring
+  enable_statistics: true  # Collect cache hit/miss statistics per Section 0.3.3
+  
+  # Memoryless cache configuration for minimal memory usage (memoryless flavor)
+  none:
+    # Disable all caching for memory-constrained environments
+    bypass_cache: true  # Skip cache entirely for true memoryless operation
+    direct_frame_access: true  # Direct video frame access without buffering
+    minimal_metadata: true  # Reduce metadata overhead for minimal memory
   
   # LRU cache behavior overrides for memory-efficient frame storage
   lru:
@@ -606,9 +631,13 @@ hydra:
 # Video Processing:
 #   PLUME_THRESHOLD       - binary detection threshold value
 #
-# Frame Caching:
+# Frame Caching (Gymnasium Migration Enhanced):
 #   FRAME_CACHE_MODE      - cache strategy (none|lru|all)
-#   FRAME_CACHE_SIZE_MB   - cache memory limit in megabytes
+#                          none: memoryless flavor, minimal memory usage
+#                          lru: intelligent caching with eviction policy  
+#                          all: full preload for maximum performance
+#   FRAME_CACHE_SIZE_MB   - cache memory limit in megabytes (default: 2048)
+#                          automatically enforced per Section 0.3.1 requirements
 #
 # Structured Logging:
 #   LOG_JSON_SINK         - enable JSON logging (true|false)
@@ -657,8 +686,13 @@ hydra:
 #   NUMPY_THREADS=8
 #   VIDEO_PATH=/data/experiments/plume_video.mp4
 #   RANDOM_SEED=42
-#   FRAME_CACHE_MODE=lru
-#   FRAME_CACHE_SIZE_MB=4096
+#   
+#   # Frame cache configuration for Gymnasium migration
+#   FRAME_CACHE_MODE=lru              # Use LRU caching (memory flavor)
+#   FRAME_CACHE_SIZE_MB=4096          # 4 GiB cache limit for large experiments
+#   # FRAME_CACHE_MODE=none           # Alternative: memoryless flavor
+#   # FRAME_CACHE_SIZE_MB=0           # Alternative: minimal memory usage
+#   
 #   LOG_JSON_SINK=true
 #
 # ============================================================================
@@ -679,9 +713,17 @@ hydra:
 #   python -m odor_plume_nav.cli.main navigator.max_speed=2.0 simulation.fps=60
 #   python -m odor_plume_nav.cli.main --multirun navigator.speed=0.5,1.0,1.5
 #   python -m odor_plume_nav.cli.main video_plume.kernel_size=5 +environment=production
+#   
+#   # Frame cache configuration with environment flavors (Gymnasium migration)
 #   python -m odor_plume_nav.cli.main frame_cache.mode=lru frame_cache.memory_limit_mb=4096
 #   python -m odor_plume_nav.cli.main frame_cache.mode=all logging.json_sink_enabled=true
+#   python -m odor_plume_nav.cli.main frame_cache.mode=none  # Memoryless operation
 #   python -m odor_plume_nav.cli.main --multirun frame_cache.mode=none,lru,all
+#   
+#   # Environment flavor integration with frame cache
+#   python -m odor_plume_nav.cli.main +env/flavors=memoryless  # Minimal memory usage
+#   python -m odor_plume_nav.cli.main +env/flavors=memory     # Optimized caching
+#   python -m odor_plume_nav.cli.main +env/flavors=memory frame_cache.mode=all
 #
 # Compose API Examples:
 #   from hydra import compose, initialize
