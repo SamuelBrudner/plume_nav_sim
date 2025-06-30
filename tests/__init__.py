@@ -1,1 +1,1 @@
-"""Test package for {{cookiecutter.project_slug}}."""
+"""Test package for plume_nav_sim."""

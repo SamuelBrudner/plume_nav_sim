@@ -5,7 +5,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from unittest.mock import MagicMock
 
-from {{cookiecutter.project_slug}}.core import Navigator
+from plume_nav_sim.core import Navigator
 
 
 class TestSingleAntennaSensing:

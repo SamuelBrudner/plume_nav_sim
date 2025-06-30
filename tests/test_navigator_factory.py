@@ -18,15 +18,15 @@ from unittest.mock import patch, MagicMock
 from typing import Dict, Any
 
 # Import from new package structure
-from {{cookiecutter.project_slug}}.api.navigation import (
+from plume_nav_sim.api.navigation import (
     create_navigator,
     create_navigator_from_config,
     ConfigurationError,
     _validate_and_merge_config,
     _normalize_positions
 )
-from {{cookiecutter.project_slug}}.core.navigator import Navigator, NavigatorProtocol
-from {{cookiecutter.project_slug}}.config.schemas import NavigatorConfig, SingleAgentConfig
+from plume_nav_sim.core.navigator import Navigator, NavigatorProtocol
+from plume_nav_sim.config.schemas import NavigatorConfig, SingleAgentConfig
 
 try:
     from omegaconf import DictConfig, OmegaConf
@@ -195,7 +195,7 @@ class TestEnhancedNavigatorCreation:
 
     def test_create_navigator_with_seed(self):
         """Test creating navigator with seed for reproducibility."""
-        from {{cookiecutter.project_slug}}.utils.seed_manager import get_current_seed
+        from plume_nav_sim.utils.seed_manager import get_current_seed
         
         # Create navigator with seed
         navigator1 = create_navigator(

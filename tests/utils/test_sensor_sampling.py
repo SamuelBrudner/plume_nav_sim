@@ -36,8 +36,8 @@ from unittest.mock import MagicMock, patch
 from typing import Optional, Dict, Any
 
 # Updated imports for cookiecutter-based structure
-from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol, NavigatorFactory
-from {{cookiecutter.project_slug}}.utils.navigator_utils import (
+from plume_nav_sim.core.navigator import NavigatorProtocol, NavigatorFactory
+from plume_nav_sim.utils.navigator_utils import (
     define_sensor_offsets,
     rotate_offset,
     calculate_sensor_positions,
@@ -49,7 +49,7 @@ from {{cookiecutter.project_slug}}.utils.navigator_utils import (
 
 # Enhanced testing imports from conftest.py patterns
 try:
-    from {{cookiecutter.project_slug}}.utils.seed_manager import SeedManager
+    from plume_nav_sim.utils.seed_manager import SeedManager
     SEED_MANAGER_AVAILABLE = True
 except ImportError:
     SEED_MANAGER_AVAILABLE = False
@@ -60,7 +60,7 @@ class MockPlume:
     Mock plume for testing, updated for new data module organization patterns.
     
     Enhanced Features:
-    - Integration with new data module organization from src/{{cookiecutter.project_slug}}/data/
+    - Integration with new data module organization from src/plume_nav_sim/data/
     - Configuration-driven plume parameters through Hydra integration
     - Seed-managed pattern generation for reproducible testing
     - Enhanced logging integration for plume state tracking

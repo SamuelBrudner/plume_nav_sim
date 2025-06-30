@@ -4,7 +4,7 @@ Comprehensive tests for Hydra-based configuration utilities and validation.
 This module provides extensive testing for the enhanced configuration system including
 Hydra configuration composition, Pydantic schema validation, environment variable
 interpolation, ConfigStore integration, and security testing for the refactored
-{{cookiecutter.project_slug}} package structure.
+plume_nav_sim package structure.
 
 Testing focuses on:
 - Hydra hierarchical configuration composition from conf/base.yaml through conf/config.yaml
@@ -31,7 +31,7 @@ from omegaconf import DictConfig, OmegaConf
 from pydantic import ValidationError
 
 # Import from the new config module structure
-from {{cookiecutter.project_slug}}.config import (
+from plume_nav_sim.config import (
     NavigatorConfig,
     SingleAgentConfig,
     MultiAgentConfig,
@@ -47,7 +47,7 @@ from {{cookiecutter.project_slug}}.config import (
     validate_env_interpolation,
     resolve_env_value,
 )
-from {{cookiecutter.project_slug}}.config.schemas import cs
+from plume_nav_sim.config.schemas import cs
 
 
 class TestPydanticSchemaValidation:
@@ -563,7 +563,7 @@ class TestConfigStoreIntegration:
         conf_dir.mkdir()
         
         structured_config = {
-            "_target_": "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig",
+            "_target_": "plume_nav_sim.config.schemas.NavigatorConfig",
             "mode": "single",
             "position": [50.0, 50.0],
             "speed": 1.0,
@@ -579,7 +579,7 @@ class TestConfigStoreIntegration:
             cfg = compose(config_name="structured")
             
             # Verify structured config target is preserved
-            assert cfg._target_ == "{{cookiecutter.project_slug}}.config.schemas.NavigatorConfig"
+            assert cfg._target_ == "plume_nav_sim.config.schemas.NavigatorConfig"
             
             # Validate against actual schema
             config_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -739,7 +739,7 @@ class TestFactoryMethodIntegration:
             GlobalHydra.instance().clear()
         
         # Mock the config path resolution for testing
-        with patch('{{cookiecutter.project_slug}}.config.Path') as mock_path:
+        with patch('plume_nav_sim.config.Path') as mock_path:
             mock_path.return_value.parent.parent.parent.parent = conf_dir.parent
             mock_path.cwd.return_value = conf_dir.parent
             
@@ -794,7 +794,7 @@ class TestFactoryMethodIntegration:
         env_file.write_text("TEST_VAR=test_value\nANOTHER_VAR=another_value")
         
         # Test loading with explicit path
-        with patch('{{cookiecutter.project_slug}}.config.find_dotenv') as mock_find:
+        with patch('plume_nav_sim.config.find_dotenv') as mock_find:
             mock_find.return_value = str(env_file)
             
             result = load_environment_variables(

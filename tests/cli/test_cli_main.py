@@ -68,7 +68,7 @@ from tests.helpers.import_validator import (
 )
 
 # Import CLI components under test
-from {{cookiecutter.project_slug}}.cli.main import (
+from plume_nav_sim.cli.main import (
     cli,
     main,
     run,
@@ -86,7 +86,7 @@ from {{cookiecutter.project_slug}}.cli.main import (
     _CLI_CONFIG
 )
 
-from {{cookiecutter.project_slug}}.cli import (
+from plume_nav_sim.cli import (
     get_cli_version,
     is_cli_available,
     validate_cli_environment,
@@ -98,7 +98,7 @@ from {{cookiecutter.project_slug}}.cli import (
 )
 
 # Import dependencies for testing
-from {{cookiecutter.project_slug}}.api.navigation import (
+from plume_nav_sim.api.navigation import (
     create_navigator,
     create_video_plume,
     run_plume_simulation,
@@ -106,13 +106,13 @@ from {{cookiecutter.project_slug}}.api.navigation import (
     SimulationError
 )
 
-from {{cookiecutter.project_slug}}.config.schemas import (
+from plume_nav_sim.config.schemas import (
     NavigatorConfig,
     VideoPlumeConfig,
     SimulationConfig
 )
 
-from {{cookiecutter.project_slug}}.utils.seed_manager import (
+from plume_nav_sim.utils.seed_manager import (
     set_global_seed,
     get_current_seed,
     get_seed_manager
@@ -142,7 +142,7 @@ class TestCLIImportValidation:
         
         assert_all_imported_from(
             cli_imports,
-            '{{cookiecutter.project_slug}}.cli.main'
+            'plume_nav_sim.cli.main'
         )
 
     def test_cli_init_imports(self):
@@ -157,7 +157,7 @@ class TestCLIImportValidation:
         
         assert_all_imported_from(
             cli_module_imports,
-            '{{cookiecutter.project_slug}}.cli'
+            'plume_nav_sim.cli'
         )
 
     def test_api_navigation_imports(self):
@@ -170,7 +170,7 @@ class TestCLIImportValidation:
         
         assert_all_imported_from(
             api_imports,
-            '{{cookiecutter.project_slug}}.api.navigation'
+            'plume_nav_sim.api.navigation'
         )
 
     def test_config_schema_imports(self):
@@ -183,7 +183,7 @@ class TestCLIImportValidation:
         
         assert_all_imported_from(
             config_imports,
-            '{{cookiecutter.project_slug}}.config.schemas'
+            'plume_nav_sim.config.schemas'
         )
 
     def test_seed_manager_imports(self):
@@ -196,7 +196,7 @@ class TestCLIImportValidation:
         
         assert_all_imported_from(
             seed_imports,
-            '{{cookiecutter.project_slug}}.utils.seed_manager'
+            'plume_nav_sim.utils.seed_manager'
         )
 
 
@@ -247,7 +247,7 @@ class TestCLIFrameworkIntegration:
         assert '--log-level' in help_text
         
         # Test global option functionality
-        with patch('{{cookiecutter.project_slug}}.cli.main._setup_cli_logging') as mock_logging:
+        with patch('plume_nav_sim.cli.main._setup_cli_logging') as mock_logging:
             result = self.runner.invoke(cli, ['--verbose', '--help'])
             assert result.exit_code == 0
             mock_logging.assert_called_once()
@@ -283,7 +283,7 @@ class TestCLIFrameworkIntegration:
         assert hasattr(main, '__wrapped__') or hasattr(main, '_hydra_main_config_path')
         
         # Test that CLI can handle Hydra configuration
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra_config:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra_config:
             mock_hydra_config.initialized.return_value = False
             result = self.runner.invoke(cli, ['run', '--dry-run'])
             # Should handle gracefully when Hydra not initialized
@@ -307,7 +307,7 @@ class TestCLIPerformanceRequirements:
         start_time = time.time()
         
         # Import and initialize CLI (this tests module loading time)
-        from {{cookiecutter.project_slug}}.cli.main import cli
+        from plume_nav_sim.cli.main import cli
         
         initialization_time = time.time() - start_time
         assert initialization_time < self.performance_threshold, (
@@ -345,7 +345,7 @@ class TestCLIPerformanceRequirements:
         start_time = time.time()
         time.sleep(0.1)  # Simulate some work
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+        with patch('plume_nav_sim.cli.main.logger') as mock_logger:
             _measure_performance("test_function", start_time)
             
             # Should log debug message for normal performance
@@ -357,7 +357,7 @@ class TestCLIPerformanceRequirements:
         """Test performance warning when operations exceed 2s threshold."""
         past_time = time.time() - 3.0  # Simulate 3 second operation
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+        with patch('plume_nav_sim.cli.main.logger') as mock_logger:
             _measure_performance("slow_function", past_time)
             
             # Should log warning for slow performance
@@ -402,7 +402,7 @@ class TestCLICommandExecution:
         assert result.exit_code == 0
         assert 'Odor Plume Navigation CLI' in result.output
         assert 'Examples:' in result.output
-        assert '{{cookiecutter.project_slug}}-cli run' in result.output
+        assert 'plume_nav_sim-cli run' in result.output
         
         # Verify essential commands are listed
         assert 'run' in result.output
@@ -410,9 +410,9 @@ class TestCLICommandExecution:
         assert 'visualize' in result.output
         assert 'batch' in result.output
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
-    @patch('{{cookiecutter.project_slug}}.cli.main.create_navigator')
-    @patch('{{cookiecutter.project_slug}}.cli.main.create_video_plume')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.create_navigator')
+    @patch('plume_nav_sim.cli.main.create_video_plume')
     def test_run_command_dry_run_execution(self, mock_plume, mock_navigator, mock_hydra):
         """Test run command dry-run execution with validation."""
         # Mock Hydra configuration
@@ -424,7 +424,7 @@ class TestCLICommandExecution:
         mock_hydra.initialized.return_value = True
         mock_hydra.get.return_value.cfg = mock_cfg
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {
                 'valid': True,
                 'errors': [],
@@ -438,7 +438,7 @@ class TestCLICommandExecution:
             assert 'Dry-run mode: Simulation validation completed successfully' in result.output
             mock_validate.assert_called_once()
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_run_command_missing_hydra_config(self, mock_hydra):
         """Test run command error handling when Hydra config missing."""
         mock_hydra.initialized.return_value = False
@@ -518,7 +518,7 @@ class TestCLIParameterOverrideSupport:
         self.runner = CliRunner()
 
     @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_hydra_parameter_override_syntax(self, mock_hydra):
         """Test Hydra parameter override syntax handling."""
         mock_cfg = DictConfig({
@@ -529,7 +529,7 @@ class TestCLIParameterOverrideSupport:
         mock_hydra.get.return_value.cfg = mock_cfg
         
         # Test that override parameters are properly passed through
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {'valid': True, 'errors': [], 'warnings': [], 'summary': {}}
             
             result = self.runner.invoke(cli, [
@@ -559,7 +559,7 @@ class TestCLIParameterOverrideSupport:
     def test_command_specific_parameter_overrides(self):
         """Test command-specific parameter override handling."""
         # Test run command with seed override
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = False
             result = self.runner.invoke(cli, ['run', '--seed', '42', '--dry-run'])
             
@@ -617,7 +617,7 @@ class TestCLIMultiRunExecution:
         
         # The --multirun flag is handled by Hydra's @hydra.main decorator
         # We test that our CLI can handle it being passed
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = False
             result = self.runner.invoke(cli, ['--multirun', 'run', '--dry-run'])
             
@@ -634,7 +634,7 @@ class TestCLIMultiRunExecution:
         help_text = result.output
         assert 'navigator.max_speed=' in help_text or 'parameter override' in help_text.lower()
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_multirun_configuration_handling(self, mock_hydra):
         """Test multirun configuration handling and validation."""
         # Mock multirun configuration
@@ -645,7 +645,7 @@ class TestCLIMultiRunExecution:
         mock_hydra.initialized.return_value = True
         mock_hydra.get.return_value.cfg = mock_cfg
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {'valid': True, 'errors': [], 'warnings': [], 'summary': {}}
             
             # Test that multirun scenarios can be validated
@@ -682,7 +682,7 @@ class TestCLIConfigurationValidation:
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_config_validate_command_success(self, mock_hydra):
         """Test config validate command with valid configuration."""
         mock_cfg = DictConfig({
@@ -693,7 +693,7 @@ class TestCLIConfigurationValidation:
         mock_hydra.initialized.return_value = True
         mock_hydra.get.return_value.cfg = mock_cfg
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {
                 'valid': True,
                 'errors': [],
@@ -711,14 +711,14 @@ class TestCLIConfigurationValidation:
             assert 'Configuration is valid!' in result.output
             assert 'navigator: valid' in result.output
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_config_validate_command_failure(self, mock_hydra):
         """Test config validate command with invalid configuration."""
         mock_cfg = DictConfig({'invalid': 'config'})
         mock_hydra.initialized.return_value = True
         mock_hydra.get.return_value.cfg = mock_cfg
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {
                 'valid': False,
                 'errors': ['Navigator config invalid: missing position'],
@@ -732,14 +732,14 @@ class TestCLIConfigurationValidation:
             assert 'Configuration validation failed!' in result.output
             assert 'ERROR: Navigator config invalid' in result.output
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_config_validate_strict_mode(self, mock_hydra):
         """Test config validate command with strict validation mode."""
         mock_cfg = DictConfig({'test': 'config'})
         mock_hydra.initialized.return_value = True
         mock_hydra.get.return_value.cfg = mock_cfg
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {
                 'valid': False,
                 'errors': ['Strict validation failed'],
@@ -754,7 +754,7 @@ class TestCLIConfigurationValidation:
             args, kwargs = mock_validate.call_args
             assert kwargs['strict'] is True
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_config_export_yaml_format(self, mock_hydra):
         """Test config export command with YAML format."""
         mock_cfg = DictConfig({
@@ -766,7 +766,7 @@ class TestCLIConfigurationValidation:
         
         output_file = Path(self.temp_dir) / 'exported_config.yaml'
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf.save') as mock_save:
+        with patch('plume_nav_sim.cli.main.OmegaConf.save') as mock_save:
             result = self.runner.invoke(config, [
                 'export',
                 '--output', str(output_file),
@@ -777,7 +777,7 @@ class TestCLIConfigurationValidation:
             assert f'Configuration exported to: {output_file}' in result.output
             mock_save.assert_called_once()
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
     def test_config_export_json_format(self, mock_hydra):
         """Test config export command with JSON format."""
         mock_cfg = DictConfig({'test': 'config'})
@@ -802,7 +802,7 @@ class TestCLIConfigurationValidation:
         """Test config validate with export results functionality."""
         export_file = Path(self.temp_dir) / 'validation_results.json'
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = False
             
             result = self.runner.invoke(config, [
@@ -826,8 +826,8 @@ class TestCLIConfigurationValidation:
             }
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.NavigatorConfig') as mock_nav_config, \
-             patch('{{cookiecutter.project_slug}}.cli.main.SimulationConfig') as mock_sim_config:
+        with patch('plume_nav_sim.cli.main.NavigatorConfig') as mock_nav_config, \
+             patch('plume_nav_sim.cli.main.SimulationConfig') as mock_sim_config:
             
             # Mock successful validation
             mock_nav_config.model_validate.return_value = Mock()
@@ -940,7 +940,7 @@ class TestCLISecurityValidation:
         ]
         
         for injection in log_injection_attempts:
-            with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+            with patch('plume_nav_sim.cli.main.logger') as mock_logger:
                 result = self.runner.invoke(cli, ['--verbose', 'run', '--experiment-name', injection, '--dry-run'])
                 
                 # Verify logs don't contain unsanitized injection content
@@ -992,8 +992,8 @@ class TestCLIErrorHandling:
 
     def test_missing_dependencies_error_handling(self):
         """Test error handling when dependencies are missing."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HYDRA_AVAILABLE', False):
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_hydra_availability') as mock_validate:
+        with patch('plume_nav_sim.cli.main.HYDRA_AVAILABLE', False):
+            with patch('plume_nav_sim.cli.main._validate_hydra_availability') as mock_validate:
                 mock_validate.side_effect = CLIError("Hydra is required for CLI functionality")
                 
                 result = self.runner.invoke(cli, ['run'])
@@ -1002,12 +1002,12 @@ class TestCLIErrorHandling:
 
     def test_invalid_configuration_error_handling(self):
         """Test error handling for invalid configuration scenarios."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({'invalid': 'config'})
             mock_hydra.get.return_value.cfg = mock_cfg
             
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.return_value = {
                     'valid': False,
                     'errors': ['Invalid navigator configuration'],
@@ -1021,14 +1021,14 @@ class TestCLIErrorHandling:
     def test_file_not_found_error_handling(self):
         """Test error handling for missing files."""
         # Test missing video file
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({
                 'video_plume': {'video_path': '/nonexistent/file.mp4'}
             })
             mock_hydra.get.return_value.cfg = mock_cfg
             
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.return_value = {
                     'valid': False,
                     'errors': ['Video file not found: /nonexistent/file.mp4'],
@@ -1041,13 +1041,13 @@ class TestCLIErrorHandling:
 
     def test_keyboard_interrupt_handling(self):
         """Test graceful handling of keyboard interrupts."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({'test': 'config'})
             mock_hydra.get.return_value.cfg = mock_cfg
             
             # Mock KeyboardInterrupt during simulation
-            with patch('{{cookiecutter.project_slug}}.cli.main.run_plume_simulation') as mock_sim:
+            with patch('plume_nav_sim.cli.main.run_plume_simulation') as mock_sim:
                 mock_sim.side_effect = KeyboardInterrupt()
                 
                 result = self.runner.invoke(cli, ['run'])
@@ -1055,13 +1055,13 @@ class TestCLIErrorHandling:
 
     def test_unexpected_exception_handling(self):
         """Test handling of unexpected exceptions."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({'test': 'config'})
             mock_hydra.get.return_value.cfg = mock_cfg
             
             # Mock unexpected exception
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.side_effect = RuntimeError("Unexpected error")
                 
                 result = self.runner.invoke(cli, ['run'])
@@ -1070,14 +1070,14 @@ class TestCLIErrorHandling:
 
     def test_validation_error_recovery(self):
         """Test error recovery strategies for validation failures."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({
                 'navigator': {'max_speed': -5.0}  # Invalid negative speed
             })
             mock_hydra.get.return_value.cfg = mock_cfg
             
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.return_value = {
                     'valid': False,
                     'errors': ['max_speed must be positive'],
@@ -1091,12 +1091,12 @@ class TestCLIErrorHandling:
 
     def test_verbose_error_reporting(self):
         """Test verbose error reporting with detailed traceback."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_hydra.initialized.return_value = True
             mock_cfg = DictConfig({'test': 'config'})
             mock_hydra.get.return_value.cfg = mock_cfg
             
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.side_effect = RuntimeError("Detailed error")
                 
                 # Test verbose mode includes more error details
@@ -1113,7 +1113,7 @@ class TestCLIErrorHandling:
         ]
         
         for context in test_contexts:
-            with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+            with patch('plume_nav_sim.cli.main.logger') as mock_logger:
                 error = CLIError(f"Error in {context}")
                 
                 # Test that error context is logged
@@ -1288,8 +1288,8 @@ class TestCLIHelpTextValidation:
         assert 'Commands:' in help_text or 'Usage:' in help_text
         
         # Verify command examples are present
-        assert '{{cookiecutter.project_slug}}-cli run' in help_text
-        assert '{{cookiecutter.project_slug}}-cli config' in help_text
+        assert 'plume_nav_sim-cli run' in help_text
+        assert 'plume_nav_sim-cli config' in help_text
         
         # Verify global options documentation
         assert '--verbose' in help_text
@@ -1446,7 +1446,7 @@ class TestCLIHelpTextValidation:
             if 'Examples:' in line:
                 in_examples = True
                 continue
-            if in_examples and line.strip().startswith('{{cookiecutter.project_slug}}-cli'):
+            if in_examples and line.strip().startswith('plume_nav_sim-cli'):
                 examples.append(line.strip())
         
         # Verify examples are syntactically valid
@@ -1454,10 +1454,10 @@ class TestCLIHelpTextValidation:
         
         for example in examples:
             # Basic syntax validation
-            assert example.startswith('{{cookiecutter.project_slug}}-cli')
+            assert example.startswith('plume_nav_sim-cli')
             # Should contain valid command structure
             parts = example.split()
-            assert len(parts) >= 2  # At least "{{cookiecutter.project_slug}}-cli command"
+            assert len(parts) >= 2  # At least "plume_nav_sim-cli command"
 
 
 class TestCLIUtilityFunctions:
@@ -1487,7 +1487,7 @@ class TestCLIUtilityFunctions:
 
     def test_setup_cli_logging_function(self):
         """Test _setup_cli_logging utility function."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+        with patch('plume_nav_sim.cli.main.logger') as mock_logger:
             # Test verbose logging setup
             _setup_cli_logging(verbose=True, quiet=False, log_level='DEBUG')
             
@@ -1503,7 +1503,7 @@ class TestCLIUtilityFunctions:
             _validate_hydra_availability()
         
         # Test with Hydra unavailable
-        with patch('{{cookiecutter.project_slug}}.cli.main.HYDRA_AVAILABLE', False):
+        with patch('plume_nav_sim.cli.main.HYDRA_AVAILABLE', False):
             with pytest.raises(CLIError) as exc_info:
                 _validate_hydra_availability()
             assert 'Hydra is required' in str(exc_info.value)
@@ -1529,7 +1529,7 @@ class TestCLIUtilityFunctions:
         start_time = time.time()
         time.sleep(0.1)
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.logger') as mock_logger:
+        with patch('plume_nav_sim.cli.main.logger') as mock_logger:
             _measure_performance("test_function", start_time)
             mock_logger.debug.assert_called_once()
 
@@ -1575,7 +1575,7 @@ class TestCLIIntegrationScenarios:
     Integration test suite validating end-to-end CLI workflows.
     
     Tests complete CLI operation scenarios, real-world usage patterns,
-    and integration with the broader {{cookiecutter.project_slug}} system.
+    and integration with the broader plume_nav_sim system.
     """
 
     def setup_method(self):
@@ -1588,10 +1588,10 @@ class TestCLIIntegrationScenarios:
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
-    @patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig')
-    @patch('{{cookiecutter.project_slug}}.cli.main.create_navigator')
-    @patch('{{cookiecutter.project_slug}}.cli.main.create_video_plume')
-    @patch('{{cookiecutter.project_slug}}.cli.main.run_plume_simulation')
+    @patch('plume_nav_sim.cli.main.HydraConfig')
+    @patch('plume_nav_sim.cli.main.create_navigator')
+    @patch('plume_nav_sim.cli.main.create_video_plume')
+    @patch('plume_nav_sim.cli.main.run_plume_simulation')
     def test_complete_simulation_workflow(self, mock_sim, mock_plume, mock_nav, mock_hydra):
         """Test complete simulation workflow from CLI."""
         # Setup mocks
@@ -1617,7 +1617,7 @@ class TestCLIIntegrationScenarios:
             np.random.rand(1, 100)      # odor_readings
         )
         
-        with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
             mock_validate.return_value = {
                 'valid': True,
                 'errors': [],
@@ -1638,12 +1638,12 @@ class TestCLIIntegrationScenarios:
 
     def test_configuration_validation_workflow(self):
         """Test complete configuration validation workflow."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_cfg = DictConfig({'test': 'config'})
             mock_hydra.initialized.return_value = True
             mock_hydra.get.return_value.cfg = mock_cfg
             
-            with patch('{{cookiecutter.project_slug}}.cli.main._validate_configuration') as mock_validate:
+            with patch('plume_nav_sim.cli.main._validate_configuration') as mock_validate:
                 mock_validate.return_value = {
                     'valid': True,
                     'errors': [],
@@ -1661,13 +1661,13 @@ class TestCLIIntegrationScenarios:
         """Test configuration export and validation workflow."""
         export_file = Path(self.temp_dir) / 'config.yaml'
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.HydraConfig') as mock_hydra:
+        with patch('plume_nav_sim.cli.main.HydraConfig') as mock_hydra:
             mock_cfg = DictConfig({'test': 'config'})
             mock_hydra.initialized.return_value = True
             mock_hydra.get.return_value.cfg = mock_cfg
             
             # Export configuration
-            with patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf.save') as mock_save:
+            with patch('plume_nav_sim.cli.main.OmegaConf.save') as mock_save:
                 result = self.runner.invoke(config, [
                     'export',
                     '--output', str(export_file)
@@ -1679,7 +1679,7 @@ class TestCLIIntegrationScenarios:
     def test_cli_error_recovery_workflow(self):
         """Test CLI error recovery and graceful degradation."""
         # Test graceful handling of missing dependencies
-        with patch('{{cookiecutter.project_slug}}.cli.main.HYDRA_AVAILABLE', False):
+        with patch('plume_nav_sim.cli.main.HYDRA_AVAILABLE', False):
             result = self.runner.invoke(cli, ['run'])
             
             # Should handle missing Hydra gracefully
@@ -1712,8 +1712,8 @@ class TestCLICompatibilityAndLegacy:
     def test_module_import_compatibility(self):
         """Test that CLI modules can be imported without errors."""
         # Test direct module imports
-        from {{cookiecutter.project_slug}}.cli.main import cli, main
-        from {{cookiecutter.project_slug}}.cli import get_cli_version
+        from plume_nav_sim.cli.main import cli, main
+        from plume_nav_sim.cli import get_cli_version
         
         # Verify objects are properly accessible
         assert cli is not None
@@ -1724,7 +1724,7 @@ class TestCLICompatibilityAndLegacy:
         """Test CLI compatibility with configuration schemas."""
         # Test that CLI can handle standard configuration schemas
         try:
-            from {{cookiecutter.project_slug}}.config.schemas import NavigatorConfig
+            from plume_nav_sim.config.schemas import NavigatorConfig
             
             # Should be able to create config instance
             config = NavigatorConfig(position=[50, 50], max_speed=5.0)
@@ -1736,7 +1736,7 @@ class TestCLICompatibilityAndLegacy:
     def test_api_integration_compatibility(self):
         """Test CLI integration with navigation API."""
         try:
-            from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+            from plume_nav_sim.api.navigation import create_navigator
             
             # Should be able to import API functions
             assert create_navigator is not None
@@ -1748,8 +1748,8 @@ class TestCLICompatibilityAndLegacy:
         """Test CLI compliance with cookiecutter template structure."""
         # Validate that CLI follows expected module organization
         cli_modules = [
-            '{{cookiecutter.project_slug}}.cli.main',
-            '{{cookiecutter.project_slug}}.cli',
+            'plume_nav_sim.cli.main',
+            'plume_nav_sim.cli',
         ]
         
         for module_name in cli_modules:

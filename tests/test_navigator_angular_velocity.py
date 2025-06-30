@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from hydra import compose, initialize
 from omegaconf import DictConfig
-from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol
+from plume_nav_sim.core.navigator import NavigatorProtocol
 
 
 class TestNavigatorAngularVelocity:
@@ -120,7 +120,7 @@ class TestNavigatorAngularVelocity:
             )
         
         # Import the factory method for navigator creation
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.api.navigation import create_navigator
         navigator = create_navigator(cfg.navigator)
         
         return navigator
@@ -164,7 +164,7 @@ class TestNavigatorAngularVelocity:
             )
         
         # Import the factory method for navigator creation
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.api.navigation import create_navigator
         navigator = create_navigator(cfg.navigator)
         
         return navigator
@@ -312,7 +312,7 @@ class TestNavigatorAngularVelocity:
             Hydra configuration fixture with angular velocity settings
         """
         # Import the factory method for navigator creation
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.api.navigation import create_navigator
         
         # Create navigator from Hydra configuration
         navigator = create_navigator(hydra_config_fixture.navigator)
@@ -339,7 +339,7 @@ class TestNavigatorAngularVelocity:
             Multi-agent Hydra configuration with angular velocity arrays
         """
         # Import the factory method for navigator creation
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.api.navigation import create_navigator
         
         # Create multi-agent navigator from Hydra configuration
         navigator = create_navigator(multi_agent_hydra_config.navigator)
@@ -370,7 +370,7 @@ class TestNavigatorAngularVelocity:
             )
         
         # Import the factory method for navigator creation
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.api.navigation import create_navigator
         
         # Create navigator with overridden configuration
         navigator = create_navigator(cfg.navigator)
