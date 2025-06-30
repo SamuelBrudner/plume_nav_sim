@@ -5,8 +5,8 @@ import numpy as np
 from numpy.testing import assert_allclose
 from omegaconf import DictConfig, OmegaConf
 
-from {{cookiecutter.project_slug}}.core.navigator import Navigator
-from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+from plume_nav_sim.core.navigator import Navigator
+from plume_nav_sim.api.navigation import create_navigator
 
 
 # Create a mock plume for testing

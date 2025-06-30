@@ -149,7 +149,7 @@ def check_import_compliance() -> Tuple[bool, List[str]]:
 
 def enforce_import_compliance() -> None:
     """
-    Enforce compliance with the expected {{cookiecutter.project_slug}} package structure.
+    Enforce compliance with the expected plume_nav_sim package structure.
     
     Validates the cookiecutter template organization including new subdirectories
     and provides migration guidance for legacy odor_plume_nav imports.
@@ -161,7 +161,7 @@ def enforce_import_compliance() -> None:
     success, violations = check_import_compliance()
     if not success:
         error_msg = (
-            "{{cookiecutter.project_slug}} package structure violations detected:\n" + 
+            "plume_nav_sim package structure violations detected:\n" + 
             "\n".join(f"- {violation}" for violation in violations) +
             "\n\nRefer to Section 0.2.1 of the technical specification for "
             "comprehensive mapping from legacy odor_plume_nav to cookiecutter template structure."

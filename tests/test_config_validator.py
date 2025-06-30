@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Updated imports for new package structure
-from {{cookiecutter.project_slug}}.config.schemas import (
+from plume_nav_sim.config.schemas import (
     NavigatorConfig,
     SingleAgentConfig,
     MultiAgentConfig,

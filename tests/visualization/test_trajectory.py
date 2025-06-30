@@ -505,7 +505,7 @@ class TestVisualizationModuleIntegration:
     def test_unified_import_structure(self):
         """Test that both SimulationVisualization and visualize_trajectory are available from single module."""
         # Should be able to import both classes from utils.visualization
-        from src.{{cookiecutter.project_slug}}.utils.visualization import (
+        from src.plume_nav_sim.utils.visualization import (
             SimulationVisualization,
             visualize_trajectory,
             VisualizationConfig

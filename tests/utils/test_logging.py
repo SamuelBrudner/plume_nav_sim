@@ -92,7 +92,7 @@ except ImportError:
 
 # Import the enhanced logging module under test
 try:
-    from {{cookiecutter.project_slug}}.utils.logging import (
+    from plume_nav_sim.utils.logging import (
         EnhancedLogger,
         LoggingConfig,
         ExperimentContext,
@@ -340,7 +340,7 @@ class TestExperimentContext:
         context = ExperimentContext()
         
         # Mock HydraConfig.get() for testing
-        with patch('{{cookiecutter.project_slug}}.utils.logging.HydraConfig') as mock_hydra_class:
+        with patch('plume_nav_sim.utils.logging.HydraConfig') as mock_hydra_class:
             mock_hydra_instance = Mock()
             mock_hydra_instance.job.name = "test_job"
             mock_hydra_instance.runtime.output_dir = "/tmp/outputs/2023-01-01/12-00-00"
@@ -363,7 +363,7 @@ class TestExperimentContext:
         context = ExperimentContext()
         
         # Test with exception in HydraConfig.get()
-        with patch('{{cookiecutter.project_slug}}.utils.logging.HydraConfig') as mock_hydra_class:
+        with patch('plume_nav_sim.utils.logging.HydraConfig') as mock_hydra_class:
             mock_hydra_class.get.side_effect = Exception("Hydra not initialized")
             
             # Should not raise exception
@@ -519,7 +519,7 @@ class TestEnhancedLogger:
         enhanced_logger = EnhancedLogger(config)
         
         # Mock logger.remove and logger.add for testing
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1  # Mock sink ID
             
             result = enhanced_logger.setup()
@@ -559,7 +559,7 @@ class TestEnhancedLogger:
         enhanced_logger = EnhancedLogger(config)
         
         # Mock logger operations
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.side_effect = [1, 2]  # Two sink IDs
             
             result = enhanced_logger.setup()
@@ -585,7 +585,7 @@ class TestEnhancedLogger:
         enhanced_logger = EnhancedLogger(config)
         
         # Mock logger operations for controlled timing
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             
             start_time = time.perf_counter()
@@ -617,8 +617,8 @@ class TestEnhancedLogger:
             else:
                 return 0.15  # End time (150ms setup)
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.time.perf_counter', side_effect=mock_perf_counter):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.time.perf_counter', side_effect=mock_perf_counter):
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 mock_logger.add.return_value = 1
                 
                 enhanced_logger.setup()
@@ -686,7 +686,7 @@ class TestEnhancedLogger:
         enhanced_logger = EnhancedLogger(config)
         
         # Mock setup
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             enhanced_logger.setup()
             
@@ -708,7 +708,7 @@ class TestEnhancedLogger:
         config = LoggingConfig(console_enabled=True, file_enabled=False)
         enhanced_logger = EnhancedLogger(config)
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             enhanced_logger.setup(experiment_id="test_metrics")
             
@@ -749,8 +749,8 @@ class TestGlobalLoggingFunctions:
             pytest.skip("Enhanced logging module not available")
         
         # Mock the global logger to avoid actual setup
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', None):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', None):
+            with patch('plume_nav_sim.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
                 mock_instance = Mock()
                 mock_enhanced_logger_class.return_value = mock_instance
                 
@@ -768,8 +768,8 @@ class TestGlobalLoggingFunctions:
         
         custom_config = LoggingConfig(level="DEBUG", format="minimal")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', None):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', None):
+            with patch('plume_nav_sim.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
                 mock_instance = Mock()
                 mock_enhanced_logger_class.return_value = mock_instance
                 
@@ -790,8 +790,8 @@ class TestGlobalLoggingFunctions:
         # Mock existing global logger
         mock_existing_logger = Mock()
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', mock_existing_logger):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', mock_existing_logger):
+            with patch('plume_nav_sim.utils.logging.EnhancedLogger') as mock_enhanced_logger_class:
                 mock_new_instance = Mock()
                 mock_enhanced_logger_class.return_value = mock_new_instance
                 
@@ -819,7 +819,7 @@ class TestGlobalLoggingFunctions:
         }
         mock_hydra_config.logging = DictConfig(logging_config_dict) if HYDRA_AVAILABLE else logging_config_dict
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.setup_enhanced_logging') as mock_setup:
+        with patch('plume_nav_sim.utils.logging.setup_enhanced_logging') as mock_setup:
             mock_logger = Mock()
             mock_setup.return_value = mock_logger
             
@@ -843,8 +843,8 @@ class TestGlobalLoggingFunctions:
             pytest.skip("Enhanced logging module not available")
         
         # Mock HYDRA_AVAILABLE as False
-        with patch('{{cookiecutter.project_slug}}.utils.logging.HYDRA_AVAILABLE', False):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.setup_enhanced_logging') as mock_setup:
+        with patch('plume_nav_sim.utils.logging.HYDRA_AVAILABLE', False):
+            with patch('plume_nav_sim.utils.logging.setup_enhanced_logging') as mock_setup:
                 mock_setup.return_value = Mock()
                 
                 result = configure_from_hydra({}, experiment_id="fallback_test")
@@ -858,10 +858,10 @@ class TestGlobalLoggingFunctions:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.setup_enhanced_logging') as mock_setup:
+        with patch('plume_nav_sim.utils.logging.setup_enhanced_logging') as mock_setup:
             mock_setup.side_effect = Exception("Setup failed")
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 result = configure_from_hydra(mock_hydra_config)
                 
                 # Test exception handling
@@ -880,7 +880,7 @@ class TestGlobalLoggingFunctions:
         expected_context = {'experiment_id': 'test', 'custom_param': 'value'}
         mock_global_logger.bind_experiment_context.return_value = expected_context
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', mock_global_logger):
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', mock_global_logger):
             result = bind_experiment_context(custom_param='value')
             
             # Test context binding
@@ -892,8 +892,8 @@ class TestGlobalLoggingFunctions:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', None):
-            with patch('{{cookiecutter.project_slug}}.utils.logging.setup_enhanced_logging') as mock_setup:
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', None):
+            with patch('plume_nav_sim.utils.logging.setup_enhanced_logging') as mock_setup:
                 mock_logger = Mock()
                 expected_context = {'experiment_id': 'auto_created'}
                 mock_logger.bind_experiment_context.return_value = expected_context
@@ -911,11 +911,11 @@ class TestGlobalLoggingFunctions:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test', 'module': 'test_module'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 mock_bound_logger = Mock()
                 mock_logger.bind.return_value = mock_bound_logger
                 
@@ -931,11 +931,11 @@ class TestGlobalLoggingFunctions:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test', 'override_key': 'test.param'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 mock_bound_logger = Mock()
                 mock_logger.bind.return_value = mock_bound_logger
                 
@@ -975,7 +975,7 @@ class TestGlobalLoggingFunctions:
         mock_global_logger.config.seed_context_enabled = True
         mock_global_logger.config.cli_metrics_enabled = True
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', mock_global_logger):
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', mock_global_logger):
             metrics = get_logging_metrics()
             
             # Test metrics structure
@@ -1000,7 +1000,7 @@ class TestGlobalLoggingFunctions:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', None):
+        with patch('plume_nav_sim.utils.logging._global_enhanced_logger', None):
             metrics = get_logging_metrics()
             
             assert metrics == {'status': 'not_initialized'}
@@ -1030,11 +1030,11 @@ class TestCLICommandTracker:
         command_name = "test_command"
         parameters = {"param1": "value1", "param2": 42}
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test', 'cli_command': command_name}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 tracker = CLICommandTracker(
                     command_name=command_name,
                     parameters=parameters,
@@ -1063,11 +1063,11 @@ class TestCLICommandTracker:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 tracker = CLICommandTracker("test_cmd", track_performance=True)
                 
                 # Test metric logging
@@ -1085,11 +1085,11 @@ class TestCLICommandTracker:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger'):
+            with patch('plume_nav_sim.utils.logging.logger'):
                 tracker = CLICommandTracker("test_cmd", track_performance=True)
                 
                 # Test validation timing
@@ -1104,11 +1104,11 @@ class TestCLICommandTracker:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger'):
+            with patch('plume_nav_sim.utils.logging.logger'):
                 tracker = CLICommandTracker("test_cmd", track_performance=False)
                 
                 # Test metric logging is skipped
@@ -1122,16 +1122,16 @@ class TestCLICommandTracker:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.bind_experiment_context') as mock_bind:
+        with patch('plume_nav_sim.utils.logging.bind_experiment_context') as mock_bind:
             mock_context = {'experiment_id': 'test', 'cli_command': 'test_cmd'}
             mock_bind.return_value = mock_context
             
-            with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+            with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
                 # Mock timing for controlled test
                 start_time = 1000.0
                 end_time = 1000.5  # 500ms execution
                 
-                with patch('{{cookiecutter.project_slug}}.utils.logging.time.perf_counter', side_effect=[start_time, end_time]):
+                with patch('plume_nav_sim.utils.logging.time.perf_counter', side_effect=[start_time, end_time]):
                     tracker = CLICommandTracker("test_cmd")
                     tracker.log_metric("test_metric", 42.0)
                     
@@ -1156,7 +1156,7 @@ class TestCLICommandTracker:
         command_name = "test_context_cmd"
         parameters = {"test_param": "test_value"}
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.CLICommandTracker') as mock_tracker_class:
+        with patch('plume_nav_sim.utils.logging.CLICommandTracker') as mock_tracker_class:
             mock_tracker = Mock()
             mock_tracker_class.return_value = mock_tracker
             
@@ -1177,7 +1177,7 @@ class TestCLICommandTracker:
         if not LOGGING_MODULE_AVAILABLE:
             pytest.skip("Enhanced logging module not available")
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.CLICommandTracker') as mock_tracker_class:
+        with patch('plume_nav_sim.utils.logging.CLICommandTracker') as mock_tracker_class:
             mock_tracker = Mock()
             mock_tracker_class.return_value = mock_tracker
             
@@ -1366,7 +1366,7 @@ class TestLoggingIntegration:
         )
         
         # Mock logger operations for integration test
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.side_effect = [1, 2]  # Console and file sinks
             
             # Setup enhanced logging
@@ -1410,7 +1410,7 @@ class TestLoggingIntegration:
         }
         mock_hydra_config.logging = DictConfig(logging_config) if HYDRA_AVAILABLE else logging_config
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.side_effect = [1, 2]
             
             # Test Hydra configuration integration
@@ -1437,7 +1437,7 @@ class TestLoggingIntegration:
         )
         
         # Mock performance tracking
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             
             # Setup with performance monitoring
@@ -1471,7 +1471,7 @@ class TestLoggingIntegration:
         )
         
         # Mock logger.add to simulate file creation error
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.side_effect = [1, PermissionError("Cannot create file")]
             
             # Setup should handle error gracefully
@@ -1509,7 +1509,7 @@ class TestLoggingIntegration:
             performance_monitoring_enabled=True
         )
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.side_effect = [1, 2, 3]  # Multiple sink IDs
             
             # Test development setup
@@ -1540,7 +1540,7 @@ class TestLoggingIntegration:
         
         config = LoggingConfig(console_enabled=True, file_enabled=False)
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             
             enhanced_logger = EnhancedLogger(config)
@@ -1585,7 +1585,7 @@ class TestLoggingIntegration:
         
         config = LoggingConfig(console_enabled=True, file_enabled=False)
         
-        with patch('{{cookiecutter.project_slug}}.utils.logging.logger') as mock_logger:
+        with patch('plume_nav_sim.utils.logging.logger') as mock_logger:
             mock_logger.add.return_value = 1
             
             # Setup multiple loggers
@@ -1601,7 +1601,7 @@ class TestLoggingIntegration:
             assert len(logger1._sink_ids) == 0
             
             # Test global logger cleanup
-            with patch('{{cookiecutter.project_slug}}.utils.logging._global_enhanced_logger', logger2):
+            with patch('plume_nav_sim.utils.logging._global_enhanced_logger', logger2):
                 setup_enhanced_logging()  # Should cleanup existing logger
                 
             # Verify cleanup was called

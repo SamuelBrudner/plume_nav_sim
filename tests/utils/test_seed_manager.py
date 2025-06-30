@@ -38,7 +38,7 @@ from contextlib import contextmanager
 
 # Test imports with graceful fallbacks for enhanced architecture
 try:
-    from src.{{cookiecutter.project_slug}}.utils.seed_manager import (
+    from src.plume_nav_sim.utils.seed_manager import (
         SeedManager,
         RandomState,
         set_global_seed,
@@ -218,7 +218,7 @@ class TestSeedManagerCore:
     def reset_global_state(self):
         """Reset global seed manager state before each test."""
         # Clear any existing global manager
-        import src.{{cookiecutter.project_slug}}.utils.seed_manager as sm_module
+        import src.plume_nav_sim.utils.seed_manager as sm_module
         if hasattr(sm_module, '_global_manager'):
             sm_module._global_manager = None
         
@@ -416,7 +416,7 @@ class TestGlobalSeedFunctions:
     @pytest.fixture(autouse=True)
     def reset_global_state(self):
         """Reset global seed manager state before each test."""
-        import src.{{cookiecutter.project_slug}}.utils.seed_manager as sm_module
+        import src.plume_nav_sim.utils.seed_manager as sm_module
         if hasattr(sm_module, '_global_manager'):
             sm_module._global_manager = None
         yield
@@ -557,7 +557,7 @@ class TestHydraConfigurationIntegration:
     @pytest.fixture(autouse=True)
     def reset_global_state(self):
         """Reset global seed manager state before each test."""
-        import src.{{cookiecutter.project_slug}}.utils.seed_manager as sm_module
+        import src.plume_nav_sim.utils.seed_manager as sm_module
         if hasattr(sm_module, '_global_manager'):
             sm_module._global_manager = None
         yield
@@ -669,7 +669,7 @@ class TestErrorHandlingAndEdgeCases:
     @pytest.fixture(autouse=True)
     def reset_global_state(self):
         """Reset global seed manager state before each test."""
-        import src.{{cookiecutter.project_slug}}.utils.seed_manager as sm_module
+        import src.plume_nav_sim.utils.seed_manager as sm_module
         if hasattr(sm_module, '_global_manager'):
             sm_module._global_manager = None
         if SEED_MANAGER_AVAILABLE and SeedManager:
@@ -979,7 +979,7 @@ class TestSeedManagerIntegration:
     @pytest.fixture(autouse=True)
     def reset_global_state(self):
         """Reset global seed manager state before each test."""
-        import src.{{cookiecutter.project_slug}}.utils.seed_manager as sm_module
+        import src.plume_nav_sim.utils.seed_manager as sm_module
         if hasattr(sm_module, '_global_manager'):
             sm_module._global_manager = None
         if SEED_MANAGER_AVAILABLE and SeedManager:

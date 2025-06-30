@@ -42,18 +42,18 @@ from click.testing import CliRunner
 from omegaconf import DictConfig, OmegaConf
 
 # Import the CLI module under test
-from {{cookiecutter.project_slug}}.cli.main import (
+from plume_nav_sim.cli.main import (
     cli, run, config, validate, export, visualize, main,
     CLIError, handle_cli_exception, validate_configuration,
     initialize_system, cleanup_system, get_cli_config, set_cli_config
 )
 
 # Import dependencies for mocking
-from {{cookiecutter.project_slug}}.api.navigation import (
+from plume_nav_sim.api.navigation import (
     create_navigator, create_video_plume, run_plume_simulation,
     ConfigurationError, SimulationError
 )
-from {{cookiecutter.project_slug}}.config.schemas import (
+from plume_nav_sim.config.schemas import (
     NavigatorConfig, VideoPlumeConfig, SimulationConfig
 )
 
@@ -131,7 +131,7 @@ class TestCLIRunner:
         assert result.exit_code == 0
         assert 'Odor Plume Navigation System' in result.output
         assert 'Examples:' in result.output
-        assert '{{cookiecutter.project_slug}} run' in result.output
+        assert 'plume_nav_sim run' in result.output
         
         # Test run command help
         result = cli_runner.invoke(cli, ['run', '--help'])
@@ -166,7 +166,7 @@ class TestCLIRunner:
             result = cli_runner.invoke(cli, ['--config-dir', temp_dir, '--help'])
             assert result.exit_code == 0
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
     def test_cli_command_initialization_timing(self, mock_get_config, cli_runner):
         """
         Test command initialization timing validation (<2s) per Section 2.2.9.3.
@@ -216,7 +216,7 @@ class TestCLIParameterValidation:
     def mock_dependencies(self):
         """Mock all CLI dependencies for isolated parameter testing."""
         with patch.multiple(
-            '{{cookiecutter.project_slug}}.cli.main',
+            'plume_nav_sim.cli.main',
             create_navigator=Mock(),
             create_video_plume=Mock(),
             run_plume_simulation=Mock(return_value=(np.array([]), np.array([]), np.array([]))),
@@ -341,10 +341,10 @@ class TestCLIHydraIntegration:
             "database": {"enabled": False}
         })
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
-    @patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration')
-    @patch('{{cookiecutter.project_slug}}.cli.main.initialize_system')
-    @patch('{{cookiecutter.project_slug}}.cli.main.cleanup_system')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.validate_configuration')
+    @patch('plume_nav_sim.cli.main.initialize_system')
+    @patch('plume_nav_sim.cli.main.cleanup_system')
     def test_hydra_configuration_loading(
         self, 
         mock_cleanup,
@@ -372,8 +372,8 @@ class TestCLIHydraIntegration:
         mock_get_config.assert_called()
         mock_validate.assert_called_with(mock_hydra_config)
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
-    @patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.OmegaConf')
     def test_cli_parameter_override_integration(
         self,
         mock_omega_conf,
@@ -391,9 +391,9 @@ class TestCLIHydraIntegration:
         mock_omega_conf.set = Mock()
         
         # Test parameter overrides
-        with patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.initialize_system'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.cleanup_system'):
+        with patch('plume_nav_sim.cli.main.validate_configuration'), \
+             patch('plume_nav_sim.cli.main.initialize_system'), \
+             patch('plume_nav_sim.cli.main.cleanup_system'):
             
             result = cli_runner.invoke(cli, [
                 'run',
@@ -420,8 +420,8 @@ class TestCLIHydraIntegration:
         validation failures with clear error messages.
         """
         # Mock configuration validation failure
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config') as mock_get_config, \
-             patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main.get_cli_config') as mock_get_config, \
+             patch('plume_nav_sim.cli.main.validate_configuration') as mock_validate:
             
             # Setup mock to return config but validation fails
             mock_get_config.return_value = OmegaConf.create({"test": "config"})
@@ -432,7 +432,7 @@ class TestCLIHydraIntegration:
             # Should exit with error code from validation failure
             assert result.exit_code == 2
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
     def test_configuration_not_available_error(self, mock_get_config, cli_runner):
         """Test CLI behavior when Hydra configuration is not available."""
         mock_get_config.return_value = None
@@ -491,7 +491,7 @@ class TestCLICommandExecution:
         
         return mocks
     
-    @patch.multiple('{{cookiecutter.project_slug}}.cli.main', **{
+    @patch.multiple('plume_nav_sim.cli.main', **{
         'get_cli_config': Mock(),
         'validate_configuration': Mock(return_value=True),
         'initialize_system': Mock(return_value={'initialized': True}),
@@ -514,14 +514,14 @@ class TestCLICommandExecution:
             "simulation": {"num_steps": 10}
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config):
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config):
             result = cli_runner.invoke(cli, ['run', '--dry-run'])
             
             # Should succeed in dry-run mode
             assert result.exit_code == 0
             assert 'Dry run mode' in result.output or result.exit_code == 0
     
-    @patch.multiple('{{cookiecutter.project_slug}}.cli.main', **{
+    @patch.multiple('plume_nav_sim.cli.main', **{
         'get_cli_config': Mock(),
         'validate_configuration': Mock(return_value=True),
         'initialize_system': Mock(return_value={'initialized': True}),
@@ -544,8 +544,8 @@ class TestCLICommandExecution:
             "environment": {"debug_mode": False}
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config), \
-             patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf') as mock_omega_conf:
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config), \
+             patch('plume_nav_sim.cli.main.OmegaConf') as mock_omega_conf:
             
             result = cli_runner.invoke(cli, ['run', '--batch', '--dry-run'])
             
@@ -556,8 +556,8 @@ class TestCLICommandExecution:
             ]
             mock_omega_conf.set.assert_has_calls(expected_calls, any_order=True)
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
-    @patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.OmegaConf')
     def test_config_validate_command_execution(
         self,
         mock_omega_conf,
@@ -569,7 +569,7 @@ class TestCLICommandExecution:
         mock_get_config.return_value = mock_config
         mock_omega_conf.to_yaml.return_value = "test: config\n"
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration', return_value=True):
+        with patch('plume_nav_sim.cli.main.validate_configuration', return_value=True):
             # Test pretty format (default)
             result = cli_runner.invoke(cli, ['config', 'validate'])
             assert result.exit_code == 0
@@ -587,8 +587,8 @@ class TestCLICommandExecution:
         """Test config export command execution with different formats."""
         mock_config = OmegaConf.create({"test": "config", "nested": {"value": 42}})
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config), \
-             patch('{{cookiecutter.project_slug}}.cli.main.OmegaConf') as mock_omega_conf:
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config), \
+             patch('plume_nav_sim.cli.main.OmegaConf') as mock_omega_conf:
             
             mock_omega_conf.to_yaml.return_value = "test: config\nnested:\n  value: 42\n"
             mock_omega_conf.to_container.return_value = {"test": "config", "nested": {"value": 42}}
@@ -616,9 +616,9 @@ class TestCLICommandExecution:
                 config=b'test: config'
             )
             
-            with patch('{{cookiecutter.project_slug}}.cli.main.visualize_simulation_results') as mock_viz, \
-                 patch('{{cookiecutter.project_slug}}.cli.main.export_animation') as mock_export, \
-                 patch('{{cookiecutter.project_slug}}.cli.main.Path') as mock_path:
+            with patch('plume_nav_sim.cli.main.visualize_simulation_results') as mock_viz, \
+                 patch('plume_nav_sim.cli.main.export_animation') as mock_export, \
+                 patch('plume_nav_sim.cli.main.Path') as mock_path:
                 
                 # Mock Path operations
                 mock_path.return_value.parent.mkdir = Mock()
@@ -658,7 +658,7 @@ class TestCLIErrorHandling:
     def test_cli_configuration_errors(self, cli_runner):
         """Test CLI handling of configuration-related errors."""
         # Test missing configuration
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=None):
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=None):
             result = cli_runner.invoke(cli, ['run'])
             assert result.exit_code == 4  # Configuration not available error
     
@@ -666,8 +666,8 @@ class TestCLIErrorHandling:
         """Test CLI handling of validation errors."""
         mock_config = OmegaConf.create({"test": "config"})
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config), \
-             patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration') as mock_validate:
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config), \
+             patch('plume_nav_sim.cli.main.validate_configuration') as mock_validate:
             
             # Test configuration validation failure
             mock_validate.side_effect = CLIError("Validation failed", exit_code=2)
@@ -678,9 +678,9 @@ class TestCLIErrorHandling:
         """Test CLI handling of system initialization errors."""
         mock_config = OmegaConf.create({"test": "config"})
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config), \
-             patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration', return_value=True), \
-             patch('{{cookiecutter.project_slug}}.cli.main.initialize_system') as mock_init:
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config), \
+             patch('plume_nav_sim.cli.main.validate_configuration', return_value=True), \
+             patch('plume_nav_sim.cli.main.initialize_system') as mock_init:
             
             # Test system initialization failure
             mock_init.side_effect = CLIError("System init failed", exit_code=3)
@@ -695,12 +695,12 @@ class TestCLIErrorHandling:
             "simulation": {"num_steps": 10}
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config', return_value=mock_config), \
-             patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration', return_value=True), \
-             patch('{{cookiecutter.project_slug}}.cli.main.initialize_system', return_value={}), \
-             patch('{{cookiecutter.project_slug}}.cli.main.cleanup_system'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.create_navigator') as mock_nav, \
-             patch('{{cookiecutter.project_slug}}.cli.main.create_video_plume') as mock_plume:
+        with patch('plume_nav_sim.cli.main.get_cli_config', return_value=mock_config), \
+             patch('plume_nav_sim.cli.main.validate_configuration', return_value=True), \
+             patch('plume_nav_sim.cli.main.initialize_system', return_value={}), \
+             patch('plume_nav_sim.cli.main.cleanup_system'), \
+             patch('plume_nav_sim.cli.main.create_navigator') as mock_nav, \
+             patch('plume_nav_sim.cli.main.create_video_plume') as mock_plume:
             
             # Test navigator creation failure
             mock_nav.side_effect = ConfigurationError("Navigator creation failed")
@@ -716,7 +716,7 @@ class TestCLIErrorHandling:
     
     def test_cli_keyboard_interrupt_handling(self, cli_runner):
         """Test CLI handling of keyboard interrupts (Ctrl+C)."""
-        with patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config') as mock_config:
+        with patch('plume_nav_sim.cli.main.get_cli_config') as mock_config:
             mock_config.side_effect = KeyboardInterrupt()
             
             result = cli_runner.invoke(cli, ['run'])
@@ -793,14 +793,14 @@ class TestCLIPerformanceRequirements:
         assert initialization_time < 2.0, f"Run help took {initialization_time:.2f}s, exceeding 2s requirement"
         assert result.exit_code == 0
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
     def test_cli_command_response_time(self, mock_get_config, cli_runner):
         """Test CLI command response time for various operations."""
         # Mock quick configuration loading
         mock_config = OmegaConf.create({"test": "config"})
         mock_get_config.return_value = mock_config
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration', return_value=True):
+        with patch('plume_nav_sim.cli.main.validate_configuration', return_value=True):
             # Test config validate command performance
             start_time = time.time()
             result = cli_runner.invoke(cli, ['config', 'validate'])
@@ -875,13 +875,13 @@ class TestCLIInteractionAndUX:
         # In a real implementation, quiet mode might suppress non-error output
         # For now, we just verify the flag is accepted
     
-    @patch('{{cookiecutter.project_slug}}.cli.main.get_cli_config')
+    @patch('plume_nav_sim.cli.main.get_cli_config')
     def test_cli_progress_indication(self, mock_get_config, cli_runner):
         """Test CLI progress indication for long-running operations."""
         mock_config = OmegaConf.create({"test": "config"})
         mock_get_config.return_value = mock_config
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.validate_configuration', return_value=True):
+        with patch('plume_nav_sim.cli.main.validate_configuration', return_value=True):
             # Test config validation progress
             result = cli_runner.invoke(cli, ['config', 'validate', '--format', 'pretty'])
             
@@ -916,7 +916,7 @@ class TestCLIExceptionHandlers:
             raise CLIError("Test CLI error", exit_code=42)
         
         # Should catch CLIError and call sys.exit
-        with patch('{{cookiecutter.project_slug}}.cli.main.sys.exit') as mock_exit:
+        with patch('plume_nav_sim.cli.main.sys.exit') as mock_exit:
             test_function()
             mock_exit.assert_called_once_with(42)
     
@@ -927,7 +927,7 @@ class TestCLIExceptionHandlers:
             raise KeyboardInterrupt()
         
         # Should catch KeyboardInterrupt and call sys.exit with 130
-        with patch('{{cookiecutter.project_slug}}.cli.main.sys.exit') as mock_exit:
+        with patch('plume_nav_sim.cli.main.sys.exit') as mock_exit:
             test_function()
             mock_exit.assert_called_once_with(130)
     
@@ -938,7 +938,7 @@ class TestCLIExceptionHandlers:
             raise ValueError("Test error")
         
         # Should catch general exceptions and call sys.exit with 1
-        with patch('{{cookiecutter.project_slug}}.cli.main.sys.exit') as mock_exit:
+        with patch('plume_nav_sim.cli.main.sys.exit') as mock_exit:
             test_function()
             mock_exit.assert_called_once_with(1)
     
@@ -974,10 +974,10 @@ class TestCLIExceptionHandlers:
             }
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.NavigatorConfig'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.VideoPlumeConfig'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.SimulationConfig'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.Path') as mock_path:
+        with patch('plume_nav_sim.cli.main.NavigatorConfig'), \
+             patch('plume_nav_sim.cli.main.VideoPlumeConfig'), \
+             patch('plume_nav_sim.cli.main.SimulationConfig'), \
+             patch('plume_nav_sim.cli.main.Path') as mock_path:
             
             # Mock Path.exists() to return True for video file
             mock_path.return_value.exists.return_value = True
@@ -994,10 +994,10 @@ class TestCLIExceptionHandlers:
             "performance": {"numpy": {"thread_count": 4}}
         })
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.setup_logging'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.set_global_seed'), \
-             patch('{{cookiecutter.project_slug}}.cli.main.get_current_seed', return_value=42), \
-             patch('{{cookiecutter.project_slug}}.cli.main.os.environ') as mock_env:
+        with patch('plume_nav_sim.cli.main.setup_logging'), \
+             patch('plume_nav_sim.cli.main.set_global_seed'), \
+             patch('plume_nav_sim.cli.main.get_current_seed', return_value=42), \
+             patch('plume_nav_sim.cli.main.os.environ') as mock_env:
             
             result = initialize_system(test_config)
             
@@ -1014,7 +1014,7 @@ class TestCLIExceptionHandlers:
             'initialized_at': time.time() - 1.0  # 1 second ago
         }
         
-        with patch('{{cookiecutter.project_slug}}.cli.main.close_session') as mock_close:
+        with patch('plume_nav_sim.cli.main.close_session') as mock_close:
             cleanup_system(system_info)
             mock_close.assert_called_once_with(system_info['session'])
 

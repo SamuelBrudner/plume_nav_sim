@@ -33,7 +33,7 @@ from unittest.mock import Mock, MagicMock, patch
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Enhanced imports for cookiecutter-based architecture
-from {{cookiecutter.project_slug}}.utils import (
+from plume_nav_sim.utils import (
     # Parameter normalization utilities (backward compatibility)
     normalize_array_parameter,
     create_navigator_from_params,  # Deprecated but maintained for compatibility
@@ -57,7 +57,7 @@ from {{cookiecutter.project_slug}}.utils import (
 )
 
 # Core navigator imports for integration testing
-from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol, NavigatorFactory
+from plume_nav_sim.core.navigator import NavigatorProtocol, NavigatorFactory
 
 
 class TestParameterNormalization:
@@ -155,7 +155,7 @@ class TestDeprecatedNavigatorUtilities:
     @pytest.fixture
     def mock_navigator_factory(self):
         """Mock the new NavigatorFactory for testing deprecated functions."""
-        with patch('{{cookiecutter.project_slug}}.utils.create_navigator') as mock_create:
+        with patch('plume_nav_sim.utils.create_navigator') as mock_create:
             mock_navigator = MagicMock()
             mock_navigator.positions = np.array([[0.0, 0.0]])
             mock_navigator.orientations = np.array([0.0])
@@ -619,21 +619,21 @@ class TestAvailabilityManagement:
     def test_availability_based_imports(self):
         """Test that imports succeed based on availability flags."""
         if __availability__['logging']:
-            from {{cookiecutter.project_slug}}.utils import setup_enhanced_logging
+            from plume_nav_sim.utils import setup_enhanced_logging
             assert callable(setup_enhanced_logging)
         
         if __availability__['seed_manager']:
-            from {{cookiecutter.project_slug}}.utils import set_global_seed
+            from plume_nav_sim.utils import set_global_seed
             assert callable(set_global_seed)
         
         if __availability__['visualization']:
-            from {{cookiecutter.project_slug}}.utils import SimulationVisualization
+            from plume_nav_sim.utils import SimulationVisualization
             assert SimulationVisualization is not None
 
     def test_fallback_functions_exist(self):
         """Test that fallback functions are available when features unavailable."""
         # These should always be available even as fallbacks
-        from {{cookiecutter.project_slug}}.utils import (
+        from plume_nav_sim.utils import (
             setup_enhanced_logging,
             get_module_logger,
             set_global_seed

@@ -1,5 +1,5 @@
 """
-Shared fixtures for tests in the {{cookiecutter.project_slug}} package.
+Shared fixtures for tests in the plume_nav_sim package.
 
 This file contains pytest fixtures that are shared across multiple test files
 to reduce duplication and ensure consistency across the enhanced cookiecutter-based
@@ -99,7 +99,7 @@ except ImportError:
 
 # Core package imports with graceful fallbacks
 try:
-    from {{cookiecutter.project_slug}}.utils.seed_manager import SeedManager, SeedConfig
+    from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
     SEED_MANAGER_AVAILABLE = True
 except ImportError:
     SEED_MANAGER_AVAILABLE = False

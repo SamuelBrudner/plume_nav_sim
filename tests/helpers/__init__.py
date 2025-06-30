@@ -1,7 +1,7 @@
 """Helper utilities for testing the refactored module structure.
 
 This module provides comprehensive testing utilities for validating import compliance
-and module organization in the cookiecutter-based {{cookiecutter.project_slug}} package.
+and module organization in the cookiecutter-based plume_nav_sim package.
 The helpers support testing of the new hierarchical module structure while maintaining
 compatibility with the existing test validation infrastructure.
 
@@ -43,7 +43,7 @@ __all__ = [
 
 # Package metadata for testing infrastructure
 __version__ = "1.0.0"
-__package_name__ = "{{cookiecutter.project_slug}}"
+__package_name__ = "plume_nav_sim"
 
 def validate_new_import_structure():
     """

@@ -2,7 +2,7 @@
 Tests for VideoPlume factory functions with enhanced Hydra configuration support.
 
 This test module validates the video plume factory functionality within the new
-{{cookiecutter.project_slug}}.api.navigation module, including Hydra-based configuration
+plume_nav_sim.api.navigation module, including Hydra-based configuration
 composition, parameter validation, and factory method patterns for video plume creation.
 
 The tests cover:
@@ -20,13 +20,13 @@ from unittest.mock import patch, MagicMock
 from typing import Dict, Any
 
 # Import the new API structure
-from {{cookiecutter.project_slug}}.api.navigation import (
+from plume_nav_sim.api.navigation import (
     create_video_plume,
     create_video_plume_from_config, 
     ConfigurationError
 )
-from {{cookiecutter.project_slug}}.data.video_plume import VideoPlume
-from {{cookiecutter.project_slug}}.config.schemas import VideoPlumeConfig
+from plume_nav_sim.data.video_plume import VideoPlume
+from plume_nav_sim.config.schemas import VideoPlumeConfig
 
 # Try to import Hydra components for advanced testing
 try:
@@ -42,7 +42,7 @@ class TestCreateVideoPlume:
     
     def test_create_video_plume_basic(self, mock_exists):
         """Test creating a VideoPlume with basic parameters."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -68,7 +68,7 @@ class TestCreateVideoPlume:
     
     def test_create_video_plume_with_parameters(self, mock_exists):
         """Test creating a VideoPlume with custom parameters."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -119,7 +119,7 @@ class TestCreateVideoPlumeFromConfig:
     
     def test_create_video_plume_with_default_config(self, config_files, mock_exists):
         """Test creating a VideoPlume with default configuration."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -144,7 +144,7 @@ class TestCreateVideoPlumeFromConfig:
     
     def test_create_video_plume_with_user_config(self, config_files, mock_exists):
         """Test creating a VideoPlume with user configuration overrides."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -169,7 +169,7 @@ class TestCreateVideoPlumeFromConfig:
     
     def test_create_video_plume_with_parameter_overrides(self, config_files, mock_exists):
         """Test creating a VideoPlume with config and direct parameter overrides."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -203,7 +203,7 @@ class TestHydraConfigurationIntegration:
     
     def test_create_video_plume_with_dictconfig(self, mock_exists):
         """Test creating VideoPlume with Hydra DictConfig object."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -233,7 +233,7 @@ class TestHydraConfigurationIntegration:
     
     def test_create_video_plume_with_dictconfig_overrides(self, mock_exists):
         """Test DictConfig with parameter overrides."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -265,7 +265,7 @@ class TestHydraConfigurationIntegration:
     
     def test_create_video_plume_with_environment_interpolation(self, mock_exists, monkeypatch):
         """Test DictConfig with environment variable interpolation."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -301,7 +301,7 @@ class TestConfigurationValidationAndMerging:
     
     def test_configuration_schema_validation(self, mock_exists):
         """Test that configurations are validated using Pydantic schemas."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -336,7 +336,7 @@ class TestConfigurationValidationAndMerging:
     
     def test_parameter_merging_precedence(self, mock_exists):
         """Test that direct parameters take precedence over configuration."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -369,7 +369,7 @@ class TestConfigurationValidationAndMerging:
     
     def test_none_values_handling(self, mock_exists):
         """Test that None values in parameters don't override config."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -404,7 +404,7 @@ class TestErrorHandlingAndEdgeCases:
     
     def test_create_video_plume_opencv_failure(self, mock_exists):
         """Test handling of OpenCV VideoCapture failure."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up mock to simulate failure
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance
@@ -416,7 +416,7 @@ class TestErrorHandlingAndEdgeCases:
     
     def test_create_video_plume_with_additional_kwargs(self, mock_exists):
         """Test that additional kwargs are passed through to VideoPlume."""
-        with patch('{{cookiecutter.project_slug}}.data.video_plume.cv2.VideoCapture') as mock_cv:
+        with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture') as mock_cv:
             # Set up the mock video capture
             mock_instance = MagicMock()
             mock_cv.return_value = mock_instance

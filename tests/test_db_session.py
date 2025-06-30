@@ -1,5 +1,5 @@
 """
-Comprehensive pytest test suite for database session management (src/{{cookiecutter.project_slug}}/db/session.py)
+Comprehensive pytest test suite for database session management (src/plume_nav_sim/db/session.py)
 
 This test module validates SQLAlchemy session management, connection lifecycle, transaction management,
 and session security using in-memory SQLite for comprehensive database session testing. The test suite
@@ -62,7 +62,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 # Import the module under test
-from src.{{cookiecutter.project_slug}}.db.session import (
+from src.plume_nav_sim.db.session import (
     DatabaseBackend,
     DatabaseConfig,
     DatabaseConnectionInfo,
@@ -284,14 +284,14 @@ class TestDatabaseBackend:
 @pytest.fixture
 def mock_sqlalchemy_available():
     """Fixture to mock SQLAlchemy availability."""
-    with patch('src.{{cookiecutter.project_slug}}.db.session.SQLALCHEMY_AVAILABLE', True):
+    with patch('src.plume_nav_sim.db.session.SQLALCHEMY_AVAILABLE', True):
         yield
 
 
 @pytest.fixture
 def mock_sqlalchemy_unavailable():
     """Fixture to mock SQLAlchemy unavailability."""
-    with patch('src.{{cookiecutter.project_slug}}.db.session.SQLALCHEMY_AVAILABLE', False):
+    with patch('src.plume_nav_sim.db.session.SQLALCHEMY_AVAILABLE', False):
         yield
 
 
@@ -351,8 +351,8 @@ class TestSessionManagerInitialization:
     
     def test_session_manager_initialization_with_url(self, mock_sqlalchemy_available):
         """Test SessionManager initialization with database URL."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker') as mock_sessionmaker:
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker') as mock_sessionmaker:
             
             mock_engine.return_value = Mock()
             mock_sessionmaker.return_value = Mock()
@@ -366,8 +366,8 @@ class TestSessionManagerInitialization:
     
     def test_session_manager_initialization_with_config_dict(self, mock_sqlalchemy_available, in_memory_sqlite_config):
         """Test SessionManager initialization with configuration dictionary."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker') as mock_sessionmaker:
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker') as mock_sessionmaker:
             
             mock_engine.return_value = Mock()
             mock_sessionmaker.return_value = Mock()
@@ -381,8 +381,8 @@ class TestSessionManagerInitialization:
     
     def test_session_manager_initialization_with_config_object(self, mock_sqlalchemy_available, mock_database_config):
         """Test SessionManager initialization with configuration object."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker') as mock_sessionmaker:
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker') as mock_sessionmaker:
             
             mock_engine.return_value = Mock()
             mock_sessionmaker.return_value = Mock()
@@ -404,7 +404,7 @@ class TestSessionManagerInitialization:
     
     def test_session_manager_initialization_exception_handling(self, mock_sqlalchemy_available):
         """Test SessionManager initialization exception handling."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', side_effect=Exception("Database error")):
+        with patch('src.plume_nav_sim.db.session.create_engine', side_effect=Exception("Database error")):
             session_manager = SessionManager(database_url=TEST_DATABASE_URL_SQLITE, auto_configure=False)
             
             # Should gracefully handle initialization errors
@@ -422,8 +422,8 @@ class TestSessionManagerInitialization:
         try:
             os.chdir(temp_dir)
             
-            with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-                 patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker') as mock_sessionmaker:
+            with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+                 patch('src.plume_nav_sim.db.session.sessionmaker') as mock_sessionmaker:
                 
                 mock_engine.return_value = Mock()
                 mock_sessionmaker.return_value = Mock()
@@ -443,8 +443,8 @@ class TestSessionManagerFactoryMethods:
     
     def test_from_config_with_dict(self, mock_sqlalchemy_available, in_memory_sqlite_config):
         """Test SessionManager.from_config with dictionary configuration."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             session_manager = SessionManager.from_config(in_memory_sqlite_config)
             
@@ -470,8 +470,8 @@ class TestSessionManagerFactoryMethods:
         }
         hydra_config = DictConfig(config_dict)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             session_manager = SessionManager.from_config(hydra_config)
             
@@ -480,8 +480,8 @@ class TestSessionManagerFactoryMethods:
     
     def test_from_url_method(self, mock_sqlalchemy_available):
         """Test SessionManager.from_url factory method."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             session_manager = SessionManager.from_url(TEST_DATABASE_URL_SQLITE)
             
@@ -497,8 +497,8 @@ class TestSessionLifecycleAndCleanup:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -517,8 +517,8 @@ class TestSessionLifecycleAndCleanup:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -550,10 +550,10 @@ class TestSessionLifecycleAndCleanup:
         mock_async_session.close = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Create session manager with PostgreSQL URL to enable async
             async_config = in_memory_sqlite_config.copy()
@@ -580,10 +580,10 @@ class TestSessionLifecycleAndCleanup:
         mock_async_session.close = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Create session manager with PostgreSQL URL to enable async
             async_config = in_memory_sqlite_config.copy()
@@ -604,10 +604,10 @@ class TestSessionLifecycleAndCleanup:
         mock_engine = Mock()
         mock_async_engine = Mock()
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', return_value=mock_engine), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine', return_value=mock_async_engine), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine', return_value=mock_engine), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine', return_value=mock_async_engine), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker'):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -632,8 +632,8 @@ class TestConnectionEstablishmentTiming:
         """Test SQLite connection establishment timing under 500ms."""
         start_time = time.time()
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             
@@ -649,8 +649,8 @@ class TestConnectionEstablishmentTiming:
         """Test PostgreSQL connection establishment timing simulation."""
         start_time = time.time()
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             # Simulate realistic PostgreSQL connection time
             def delayed_engine_creation(*args, **kwargs):
@@ -672,8 +672,8 @@ class TestConnectionEstablishmentTiming:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -693,10 +693,10 @@ class TestConnectionEstablishmentTiming:
         mock_async_session.execute = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Create session manager with async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -722,8 +722,8 @@ class TestSQLInjectionPrevention:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -742,7 +742,7 @@ class TestSQLInjectionPrevention:
             # Most malicious URLs should be handled gracefully by SQLAlchemy
             # The session manager should either reject them or handle them safely
             try:
-                with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine:
+                with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine:
                     mock_engine.side_effect = Exception("Invalid URL")
                     
                     session_manager = SessionManager(database_url=malicious_url, auto_configure=False)
@@ -766,7 +766,7 @@ class TestSQLInjectionPrevention:
         for malicious_value in malicious_values:
             with patch.dict(os.environ, {'DATABASE_URL': malicious_value}):
                 try:
-                    with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine:
+                    with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine:
                         # SQLAlchemy should handle malicious URLs appropriately
                         mock_engine.side_effect = Exception("Invalid connection string")
                         
@@ -801,7 +801,7 @@ class TestSQLInjectionPrevention:
         
         for malicious_config in malicious_configs:
             try:
-                with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine:
+                with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine:
                     # Should handle invalid parameter types gracefully
                     mock_engine.side_effect = TypeError("Invalid parameter type")
                     
@@ -819,9 +819,9 @@ class TestSQLInjectionPrevention:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.text') as mock_text:
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker), \
+             patch('src.plume_nav_sim.db.session.text') as mock_text:
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -844,8 +844,8 @@ class TestDatabaseSessionIsolation:
         
         mock_sessionmaker = Mock(side_effect=session_instances)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -876,8 +876,8 @@ class TestDatabaseSessionIsolation:
         
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -906,8 +906,8 @@ class TestDatabaseSessionIsolation:
         
         mock_sessionmaker = Mock(side_effect=session_instances)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -941,8 +941,8 @@ class TestDatabaseSessionIsolation:
         # Mock connection pool behavior
         mock_engine.connect.side_effect = [mock_connection1, mock_connection2]
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', return_value=mock_engine), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine', return_value=mock_engine), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -959,8 +959,8 @@ class TestInMemoryDatabaseInfrastructure:
     
     def test_in_memory_sqlite_configuration(self, mock_sqlalchemy_available):
         """Test in-memory SQLite database configuration."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             
@@ -998,8 +998,8 @@ class TestInMemoryDatabaseInfrastructure:
             'enabled': True
         }
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=config, auto_configure=False)
             
@@ -1023,8 +1023,8 @@ class TestInMemoryDatabaseInfrastructure:
         
         session_managers = []
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             
@@ -1043,8 +1043,8 @@ class TestInMemoryDatabaseInfrastructure:
     
     def test_memory_database_performance_characteristics(self, mock_sqlalchemy_available):
         """Test in-memory database performance characteristics."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             
@@ -1071,8 +1071,8 @@ class TestGlobalSessionManager:
     
     def test_get_session_manager_singleton(self, mock_sqlalchemy_available):
         """Test global session manager singleton pattern."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             # First call creates instance
             manager1 = get_session_manager(database_url=TEST_DATABASE_URL_SQLITE)
@@ -1085,8 +1085,8 @@ class TestGlobalSessionManager:
     
     def test_get_session_manager_force_recreate(self, mock_sqlalchemy_available):
         """Test forcing recreation of global session manager."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             # Create initial instance
             manager1 = get_session_manager(database_url=TEST_DATABASE_URL_SQLITE)
@@ -1102,8 +1102,8 @@ class TestGlobalSessionManager:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             with get_session(config=in_memory_sqlite_config) as session:
                 assert session is not None
@@ -1122,10 +1122,10 @@ class TestGlobalSessionManager:
         mock_async_session.close = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1141,8 +1141,8 @@ class TestGlobalSessionManager:
     
     def test_is_database_enabled_function(self, mock_sqlalchemy_available, in_memory_sqlite_config):
         """Test is_database_enabled convenience function."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             # Initially disabled
             assert not is_database_enabled()
@@ -1158,8 +1158,8 @@ class TestGlobalSessionManager:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             # Set up database
             get_session_manager(config=in_memory_sqlite_config)
@@ -1177,10 +1177,10 @@ class TestGlobalSessionManager:
         mock_async_session.execute = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1199,8 +1199,8 @@ class TestGlobalSessionManager:
         """Test cleanup_database convenience function."""
         mock_engine = Mock()
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', return_value=mock_engine), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine', return_value=mock_engine), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             # Set up database
             manager = get_session_manager(config=in_memory_sqlite_config)
@@ -1231,8 +1231,8 @@ class TestPersistenceHooks:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             # Set up database
             get_session_manager(config=in_memory_sqlite_config)
@@ -1248,7 +1248,7 @@ class TestPersistenceHooks:
         """Test trajectory data persistence with provided session."""
         mock_session = Mock()
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.is_database_enabled', return_value=True):
+        with patch('src.plume_nav_sim.db.session.is_database_enabled', return_value=True):
             trajectory_data = {"agent_id": 1, "position": [0.0, 1.0]}
             
             result = PersistenceHooks.save_trajectory_data(trajectory_data, session=mock_session)
@@ -1270,8 +1270,8 @@ class TestPersistenceHooks:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             # Set up database
             get_session_manager(config=in_memory_sqlite_config)
@@ -1299,10 +1299,10 @@ class TestPersistenceHooks:
         mock_async_session = Mock()
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1320,8 +1320,8 @@ class TestPersistenceHooks:
     
     def test_persistence_hooks_error_handling(self, mock_sqlalchemy_available, in_memory_sqlite_config):
         """Test persistence hooks error handling."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.is_database_enabled', return_value=True), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.get_session') as mock_get_session:
+        with patch('src.plume_nav_sim.db.session.is_database_enabled', return_value=True), \
+             patch('src.plume_nav_sim.db.session.get_session') as mock_get_session:
             
             # Mock session that raises exception
             mock_session = Mock()
@@ -1344,7 +1344,7 @@ class TestErrorHandlingAndGracefulDegradation:
     
     def test_session_manager_with_missing_dependencies(self):
         """Test SessionManager behavior when dependencies are missing."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.SQLALCHEMY_AVAILABLE', False):
+        with patch('src.plume_nav_sim.db.session.SQLALCHEMY_AVAILABLE', False):
             session_manager = SessionManager(database_url=TEST_DATABASE_URL_SQLITE, auto_configure=False)
             
             # Should not be enabled when SQLAlchemy unavailable
@@ -1357,7 +1357,7 @@ class TestErrorHandlingAndGracefulDegradation:
     
     def test_session_manager_database_connection_failure(self, mock_sqlalchemy_available):
         """Test SessionManager behavior when database connection fails."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', side_effect=Exception("Connection failed")):
+        with patch('src.plume_nav_sim.db.session.create_engine', side_effect=Exception("Connection failed")):
             session_manager = SessionManager(database_url=TEST_DATABASE_URL_SQLITE, auto_configure=False)
             
             # Should handle connection failure gracefully
@@ -1371,8 +1371,8 @@ class TestErrorHandlingAndGracefulDegradation:
         """Test session context manager with session creation error."""
         mock_sessionmaker = Mock(side_effect=Exception("Session creation failed"))
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1383,7 +1383,7 @@ class TestErrorHandlingAndGracefulDegradation:
     
     def test_environment_loading_failure(self, mock_sqlalchemy_available):
         """Test graceful handling of environment loading failures."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.load_dotenv', side_effect=Exception("Env loading failed")):
+        with patch('src.plume_nav_sim.db.session.load_dotenv', side_effect=Exception("Env loading failed")):
             # Should not raise exception during initialization
             session_manager = SessionManager(auto_configure=True)
             
@@ -1392,9 +1392,9 @@ class TestErrorHandlingAndGracefulDegradation:
     
     def test_async_engine_creation_failure(self, mock_sqlalchemy_available, in_memory_sqlite_config):
         """Test handling of async engine creation failure."""
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine', side_effect=Exception("Async engine failed")):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine', side_effect=Exception("Async engine failed")):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1415,8 +1415,8 @@ class TestErrorHandlingAndGracefulDegradation:
         mock_session.execute.side_effect = Exception("Connection test failed")
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1431,10 +1431,10 @@ class TestErrorHandlingAndGracefulDegradation:
         mock_async_session.execute = Mock(side_effect=Exception("Async connection test failed"))
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1460,7 +1460,7 @@ class TestConfigurationValidationAndTypeSafety:
         
         for invalid_config in invalid_configs:
             try:
-                with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine', side_effect=TypeError("Invalid parameter type")):
+                with patch('src.plume_nav_sim.db.session.create_engine', side_effect=TypeError("Invalid parameter type")):
                     session_manager = SessionManager(config=invalid_config, auto_configure=False)
                     
                     # Should handle invalid types gracefully
@@ -1481,7 +1481,7 @@ class TestConfigurationValidationAndTypeSafety:
         
         for edge_config in edge_case_configs:
             try:
-                with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine:
+                with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine:
                     # SQLAlchemy should handle invalid parameter values
                     mock_engine.side_effect = ValueError("Invalid parameter value")
                     
@@ -1511,8 +1511,8 @@ class TestConfigurationValidationAndTypeSafety:
     def test_configuration_precedence_order(self, mock_sqlalchemy_available):
         """Test configuration parameter precedence order."""
         with patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///env.db'}):
-            with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-                 patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+            with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+                 patch('src.plume_nav_sim.db.session.sessionmaker'):
                 
                 mock_engine.return_value = Mock()
                 
@@ -1537,8 +1537,8 @@ class TestPerformanceAndResourceManagement:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1556,8 +1556,8 @@ class TestPerformanceAndResourceManagement:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1579,8 +1579,8 @@ class TestPerformanceAndResourceManagement:
             'enabled': True
         }
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             
@@ -1605,8 +1605,8 @@ class TestPerformanceAndResourceManagement:
         
         mock_sessionmaker = Mock(side_effect=create_mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1634,8 +1634,8 @@ class TestPerformanceAndResourceManagement:
         
         mock_sessionmaker = Mock(side_effect=create_mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             session_manager = SessionManager(config=in_memory_sqlite_config, auto_configure=False)
             
@@ -1680,8 +1680,8 @@ class TestIntegrationScenarios:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             mock_engine.return_value = Mock()
             
@@ -1711,8 +1711,8 @@ class TestIntegrationScenarios:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             # 1. Check initial state
             assert not is_database_enabled()
@@ -1742,10 +1742,10 @@ class TestIntegrationScenarios:
         mock_async_session.execute = Mock(return_value=asyncio.coroutine(lambda: None)())
         mock_async_sessionmaker = Mock(return_value=mock_async_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.create_async_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker'), \
+             patch('src.plume_nav_sim.db.session.create_async_engine'), \
+             patch('src.plume_nav_sim.db.session.async_sessionmaker', return_value=mock_async_sessionmaker):
             
             # Use async-capable URL
             async_config = in_memory_sqlite_config.copy()
@@ -1780,8 +1780,8 @@ class TestIntegrationScenarios:
         mock_session = Mock()
         mock_sessionmaker = Mock(return_value=mock_session)
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine'), \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker', return_value=mock_sessionmaker):
+        with patch('src.plume_nav_sim.db.session.create_engine'), \
+             patch('src.plume_nav_sim.db.session.sessionmaker', return_value=mock_sessionmaker):
             
             # Initialize system
             session_manager = SessionManager.from_config(in_memory_sqlite_config)
@@ -1815,8 +1815,8 @@ class TestIntegrationScenarios:
             {'url': 'mysql://user:pass@localhost/db', 'backend': DatabaseBackend.MYSQL},
         ]
         
-        with patch('src.{{cookiecutter.project_slug}}.db.session.create_engine') as mock_engine, \
-             patch('src.{{cookiecutter.project_slug}}.db.session.sessionmaker'):
+        with patch('src.plume_nav_sim.db.session.create_engine') as mock_engine, \
+             patch('src.plume_nav_sim.db.session.sessionmaker'):
             
             mock_engine.return_value = Mock()
             

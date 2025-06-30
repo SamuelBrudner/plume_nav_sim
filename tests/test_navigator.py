@@ -13,9 +13,9 @@ from typing import Dict, Any
 import warnings
 
 # Import new navigator structure
-from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol
-from {{cookiecutter.project_slug}}.core.controllers import SingleAgentController, MultiAgentController
-from {{cookiecutter.project_slug}}.api.navigation import (
+from plume_nav_sim.core.navigator import NavigatorProtocol
+from plume_nav_sim.core.controllers import SingleAgentController, MultiAgentController
+from plume_nav_sim.api.navigation import (
     create_navigator,
     create_navigator_from_config,
     ConfigurationError
@@ -553,8 +553,8 @@ class TestBackwardCompatibility:
     def test_legacy_import_compatibility(self):
         """Test that legacy import patterns work."""
         # This test ensures that the refactored structure maintains API compatibility
-        from {{cookiecutter.project_slug}}.core.navigator import NavigatorProtocol
-        from {{cookiecutter.project_slug}}.api.navigation import create_navigator
+        from plume_nav_sim.core.navigator import NavigatorProtocol
+        from plume_nav_sim.api.navigation import create_navigator
         
         # Should be able to create and use navigator
         navigator = create_navigator()

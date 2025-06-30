@@ -653,7 +653,7 @@ class TestSimulationExecution:
             "num_steps": 25
         }
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.run_plume_simulation') as mock_sim:
+        with patch('plume_nav_sim.api.navigation.run_plume_simulation') as mock_sim:
             positions = np.array([[[0, 0]]])
             orientations = np.array([[0]])
             readings = np.array([[0.1]])
@@ -704,7 +704,7 @@ class TestSimulationExecution:
         """Output arrays have correct shapes for multi-agent."""
         multi_navigator = create_navigator(positions=[(0, 0), (1, 1)])
         
-        with patch('{{cookiecutter.project_slug}}.api.navigation.run_plume_simulation') as mock_sim:
+        with patch('plume_nav_sim.api.navigation.run_plume_simulation') as mock_sim:
             positions = np.array([[[0, 0], [1, 1]], [[2, 2], [3, 3]]])  # 2 agents, 2 steps
             orientations = np.array([[0, 45], [90, 135]])
             readings = np.array([[0.1, 0.2], [0.3, 0.4]])
@@ -793,7 +793,7 @@ class TestVisualizationIntegration:
         positions = np.array([[[0, 0], [1, 1]]])
         orientations = np.array([[0, 45]])
         
-        with patch('{{cookiecutter.project_slug}}.utils.visualization.visualize_trajectory') as mock_viz:
+        with patch('plume_nav_sim.utils.visualization.visualize_trajectory') as mock_viz:
             visualize_plume_simulation(
                 positions, orientations, cfg=viz_config
             )
