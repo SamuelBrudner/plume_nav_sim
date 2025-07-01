@@ -1,9 +1,9 @@
 """
-Environments module for plume navigation simulation.
+Environments module for plume navigation simulation with modular architecture support.
 
 This module contains environment classes for Gymnasium 0.29.x-compliant RL simulation,
 including VideoPlume and modern Gymnasium environments for reinforcement learning integration
-with enhanced extensibility hooks and frame caching capabilities.
+with enhanced extensibility hooks, frame caching capabilities, and pluggable component support.
 
 Features modern Gymnasium 0.29.x API with dual compatibility support for legacy gym usage
 through the compatibility shim layer. Includes centralized Loguru logging, structured
@@ -16,6 +16,13 @@ Key Components:
 - SpacesFactory: Type-safe observation and action space creation utilities
 - CompatibilityWrapper: Legacy gym API support with automatic format conversion
 - Environment wrappers: Normalization, frame stacking, clipping, reward shaping
+
+Modular Architecture Components:
+- PlumeModelProtocol: Pluggable plume modeling (Gaussian, Turbulent, Video-based)
+- WindFieldProtocol: Environmental wind dynamics with configurable complexity
+- SensorProtocol: Flexible sensing modalities (Binary, Concentration, Gradient)
+- ModularEnvironmentFactory: Configuration-driven component instantiation
+- Component diagnostics: Availability reporting for all modular simulation components
 """
 
 import warnings
@@ -246,8 +253,165 @@ except ImportError as e:
         }
     ) if LOGGING_AVAILABLE else None
 
+# Import modular component protocols for pluggable architecture
+try:
+    from plume_nav_sim.core.protocols import (
+        PlumeModelProtocol,
+        WindFieldProtocol,
+        SensorProtocol,
+        AgentObservationProtocol,
+        AgentActionProtocol,
+        NavigatorFactory
+    )
+    __all__.extend([
+        "PlumeModelProtocol",
+        "WindFieldProtocol",
+        "SensorProtocol",
+        "AgentObservationProtocol", 
+        "AgentActionProtocol",
+        "NavigatorFactory"
+    ])
+    PROTOCOLS_AVAILABLE = True
+    logger.info(
+        "Modular component protocols available for pluggable architecture",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "protocols",
+            "protocols": ["plume_model", "wind_field", "sensor", "observation", "action"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    PlumeModelProtocol = None
+    WindFieldProtocol = None
+    SensorProtocol = None
+    AgentObservationProtocol = None
+    AgentActionProtocol = None
+    NavigatorFactory = None
+    PROTOCOLS_AVAILABLE = False
+    logger.warning(
+        f"Modular component protocols not available: {e}",
+        extra={
+            "metric_type": "environment_limitation",
+            "missing_component": "protocols",
+            "error": str(e)
+        }
+    ) if LOGGING_AVAILABLE else None
+
+# Import plume model implementations
+try:
+    from plume_nav_sim.models.plume import (
+        GaussianPlumeModel,
+        TurbulentPlumeModel,
+        VideoPlumeAdapter
+    )
+    __all__.extend([
+        "GaussianPlumeModel",
+        "TurbulentPlumeModel", 
+        "VideoPlumeAdapter"
+    ])
+    PLUME_MODELS_AVAILABLE = True
+    logger.info(
+        "Plume model implementations available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "plume_models",
+            "models": ["gaussian", "turbulent", "video_adapter"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    GaussianPlumeModel = None
+    TurbulentPlumeModel = None
+    VideoPlumeAdapter = None
+    PLUME_MODELS_AVAILABLE = False
+    logger.info(
+        f"Plume model implementations not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "plume_models",
+            "note": "Models will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+# Import wind field implementations  
+try:
+    from plume_nav_sim.models.wind import (
+        ConstantWindField,
+        TurbulentWindField,
+        TimeVaryingWindField
+    )
+    __all__.extend([
+        "ConstantWindField",
+        "TurbulentWindField",
+        "TimeVaryingWindField"
+    ])
+    WIND_FIELDS_AVAILABLE = True
+    logger.info(
+        "Wind field implementations available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "wind_fields",
+            "fields": ["constant", "turbulent", "time_varying"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    ConstantWindField = None
+    TurbulentWindField = None
+    TimeVaryingWindField = None
+    WIND_FIELDS_AVAILABLE = False
+    logger.info(
+        f"Wind field implementations not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "wind_fields",
+            "note": "Wind fields will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+# Import sensor implementations
+try:
+    from plume_nav_sim.core.sensors import (
+        BinarySensor,
+        ConcentrationSensor,
+        GradientSensor,
+        HistoricalSensor
+    )
+    __all__.extend([
+        "BinarySensor",
+        "ConcentrationSensor",
+        "GradientSensor",
+        "HistoricalSensor"
+    ])
+    SENSORS_AVAILABLE = True
+    logger.info(
+        "Sensor implementations available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "sensors",
+            "sensors": ["binary", "concentration", "gradient", "historical"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    BinarySensor = None
+    ConcentrationSensor = None
+    GradientSensor = None
+    HistoricalSensor = None
+    SENSORS_AVAILABLE = False
+    logger.info(
+        f"Sensor implementations not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "sensors",
+            "note": "Sensors will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
 # Overall RL environment availability check
 RL_ENV_AVAILABLE = PLUME_ENV_AVAILABLE and GYMNASIUM_AVAILABLE
+
+# Modular architecture availability summary
+MODULAR_ARCHITECTURE_AVAILABLE = PROTOCOLS_AVAILABLE
+MODULAR_COMPONENTS_PARTIAL = PLUME_MODELS_AVAILABLE or WIND_FIELDS_AVAILABLE or SENSORS_AVAILABLE
+MODULAR_COMPONENTS_COMPLETE = PLUME_MODELS_AVAILABLE and WIND_FIELDS_AVAILABLE and SENSORS_AVAILABLE
 
 # Environment registration functionality
 def register_environments() -> Dict[str, bool]:
@@ -257,6 +421,7 @@ def register_environments() -> Dict[str, bool]:
     Implements dual registration strategy per Section 0.2.2 requirements:
     1. New PlumeNavSim-v0 for Gymnasium 0.29.x API compliance  
     2. Maintains OdorPlumeNavigation-v1 for backward compatibility
+    3. Modular PlumeNavSim-v1 for new pluggable architecture support
     
     Returns:
         Dict mapping environment IDs to registration success status
@@ -366,6 +531,54 @@ def register_environments() -> Dict[str, bool]:
                 }
             ) if LOGGING_AVAILABLE else None
     
+    # Register new modular environment with pluggable architecture support
+    if GYMNASIUM_AVAILABLE and MODULAR_ARCHITECTURE_AVAILABLE:
+        try:
+            gym_modern.register(
+                id='PlumeNavSim-v1',
+                entry_point='plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv',
+                max_episode_steps=1000,
+                reward_threshold=100.0,
+                nondeterministic=False,
+                kwargs={
+                    'use_gymnasium_api': True,  # Explicit Gymnasium API mode
+                    'api_version': '0.29.x',
+                    'enable_extensibility_hooks': True,
+                    'frame_cache_mode': 'lru',  # Default to LRU caching
+                    'modular_architecture': True,  # Enable modular component support
+                    'support_plume_models': PLUME_MODELS_AVAILABLE,
+                    'support_wind_fields': WIND_FIELDS_AVAILABLE,
+                    'support_sensors': SENSORS_AVAILABLE
+                }
+            )
+            registration_results['PlumeNavSim-v1'] = True
+            logger.info(
+                "Successfully registered PlumeNavSim-v1 for modular architecture",
+                extra={
+                    "metric_type": "environment_registration",
+                    "env_id": "PlumeNavSim-v1",
+                    "api_type": "gymnasium",
+                    "api_version": "0.29.x",
+                    "compliance": "5-tuple",
+                    "modular_architecture": True,
+                    "plume_models_available": PLUME_MODELS_AVAILABLE,
+                    "wind_fields_available": WIND_FIELDS_AVAILABLE,
+                    "sensors_available": SENSORS_AVAILABLE,
+                    "protocols_available": PROTOCOLS_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+        except Exception as e:
+            registration_results['PlumeNavSim-v1'] = False
+            logger.error(
+                f"Failed to register PlumeNavSim-v1: {e}",
+                extra={
+                    "metric_type": "registration_error",
+                    "env_id": "PlumeNavSim-v1",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            ) if LOGGING_AVAILABLE else None
+    
     return registration_results
 
 
@@ -381,7 +594,7 @@ def make_environment(
     with enhanced configuration management and automatic API adaptation.
     
     Args:
-        env_id: Environment identifier ('PlumeNavSim-v0' or 'OdorPlumeNavigation-v1')
+        env_id: Environment identifier ('PlumeNavSim-v0', 'PlumeNavSim-v1', or 'OdorPlumeNavigation-v1')
         config: Optional configuration dictionary or DictConfig with frame cache settings
         **kwargs: Additional parameters for environment creation
         
@@ -419,6 +632,8 @@ def make_environment(
     # Determine which gym implementation to use
     target_gym = None
     if env_id == 'PlumeNavSim-v0' and GYMNASIUM_AVAILABLE:
+        target_gym = gym_modern
+    elif env_id == 'PlumeNavSim-v1' and GYMNASIUM_AVAILABLE:
         target_gym = gym_modern
     elif env_id == 'OdorPlumeNavigation-v1':
         target_gym = gym_modern if GYMNASIUM_AVAILABLE else (gym if LEGACY_GYM_AVAILABLE else None)
@@ -471,6 +686,190 @@ def make_environment(
         return None
 
 
+def create_modular_environment(
+    navigator_config: Optional[Dict[str, Any]] = None,
+    plume_model_config: Optional[Dict[str, Any]] = None,
+    wind_field_config: Optional[Dict[str, Any]] = None,
+    sensor_configs: Optional[List[Dict[str, Any]]] = None,
+    **env_kwargs
+) -> Optional["PlumeNavigationEnv"]:
+    """
+    Factory function for creating environments with modular component support.
+    
+    Creates a fully configured environment using the new modular architecture with
+    pluggable plume models, wind fields, and sensor systems. Automatically handles
+    component instantiation and integration based on configuration.
+    
+    Args:
+        navigator_config: Navigator configuration for agent behavior
+        plume_model_config: Plume model configuration (Gaussian, Turbulent, Video)
+        wind_field_config: Wind field configuration (Constant, Turbulent, TimeVarying)
+        sensor_configs: List of sensor configurations (Binary, Concentration, Gradient)
+        **env_kwargs: Additional environment parameters
+        
+    Returns:
+        Configured modular environment instance or None if creation fails
+        
+    Examples:
+        >>> # Create environment with Gaussian plume and constant wind
+        >>> env = create_modular_environment(
+        ...     plume_model_config={'type': 'GaussianPlumeModel', 'source_position': (50, 50)},
+        ...     wind_field_config={'type': 'ConstantWindField', 'velocity': (1.0, 0.0)},
+        ...     sensor_configs=[{'type': 'ConcentrationSensor', 'dynamic_range': (0, 1)}]
+        ... )
+        
+        >>> # Advanced turbulent environment
+        >>> env = create_modular_environment(
+        ...     plume_model_config={
+        ...         'type': 'TurbulentPlumeModel',
+        ...         'filament_count': 500,
+        ...         'turbulence_intensity': 0.3
+        ...     },
+        ...     wind_field_config={
+        ...         'type': 'TurbulentWindField',
+        ...         'mean_velocity': (3.0, 1.0),
+        ...         'turbulence_intensity': 0.2
+        ...     },
+        ...     sensor_configs=[
+        ...         {'type': 'BinarySensor', 'threshold': 0.1},
+        ...         {'type': 'GradientSensor', 'spatial_resolution': (0.5, 0.5)}
+        ...     ]
+        ... )
+    """
+    if not MODULAR_ARCHITECTURE_AVAILABLE:
+        logger.error(
+            "Modular architecture not available for environment creation",
+            extra={
+                "protocols_available": PROTOCOLS_AVAILABLE,
+                "recommendation": "Ensure core protocols are available"
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use NavigatorFactory to create modular environment if available
+        if NavigatorFactory and hasattr(NavigatorFactory, 'create_modular_environment'):
+            return NavigatorFactory.create_modular_environment(
+                navigator_config=navigator_config or {},
+                plume_model_config=plume_model_config or {'type': 'GaussianPlumeModel'},
+                wind_field_config=wind_field_config,
+                sensor_configs=sensor_configs,
+                **env_kwargs
+            )
+        else:
+            # Fallback to standard environment creation with modular support
+            env_config = {
+                'modular_architecture': True,
+                'plume_model': plume_model_config,
+                'wind_field': wind_field_config,
+                'sensors': sensor_configs,
+                'navigator': navigator_config,
+                **env_kwargs
+            }
+            return make_environment('PlumeNavSim-v1', env_config)
+            
+    except Exception as e:
+        logger.error(f"Failed to create modular environment: {e}")
+        return None
+
+
+def create_plume_model(config: Dict[str, Any]):
+    """
+    Factory function for creating plume model instances.
+    
+    Args:
+        config: Configuration dictionary with 'type' key and model parameters
+        
+    Returns:
+        Plume model instance implementing PlumeModelProtocol
+        
+    Examples:
+        >>> gaussian_model = create_plume_model({
+        ...     'type': 'GaussianPlumeModel',
+        ...     'source_position': (50, 50),
+        ...     'source_strength': 1000.0
+        ... })
+        
+        >>> turbulent_model = create_plume_model({
+        ...     'type': 'TurbulentPlumeModel',
+        ...     'filament_count': 500,
+        ...     'turbulence_intensity': 0.3
+        ... })
+    """
+    if NavigatorFactory and hasattr(NavigatorFactory, 'create_plume_model'):
+        try:
+            return NavigatorFactory.create_plume_model(config)
+        except Exception as e:
+            logger.error(f"Failed to create plume model: {e}")
+            return None
+    
+    model_type = config.get('type', 'GaussianPlumeModel')
+    logger.warning(f"NavigatorFactory not available, cannot create {model_type}")
+    return None
+
+
+def create_wind_field(config: Dict[str, Any]):
+    """
+    Factory function for creating wind field instances.
+    
+    Args:
+        config: Configuration dictionary with 'type' key and field parameters
+        
+    Returns:
+        Wind field instance implementing WindFieldProtocol
+        
+    Examples:
+        >>> constant_wind = create_wind_field({
+        ...     'type': 'ConstantWindField',
+        ...     'velocity': (2.0, 0.5)
+        ... })
+        
+        >>> turbulent_wind = create_wind_field({
+        ...     'type': 'TurbulentWindField',
+        ...     'mean_velocity': (3.0, 1.0),
+        ...     'turbulence_intensity': 0.2
+        ... })
+    """
+    if NavigatorFactory and hasattr(NavigatorFactory, 'create_wind_field'):
+        try:
+            return NavigatorFactory.create_wind_field(config)
+        except Exception as e:
+            logger.error(f"Failed to create wind field: {e}")
+            return None
+    
+    field_type = config.get('type', 'ConstantWindField')
+    logger.warning(f"NavigatorFactory not available, cannot create {field_type}")
+    return None
+
+
+def create_sensors(sensor_configs: List[Dict[str, Any]]):
+    """
+    Factory function for creating sensor instances.
+    
+    Args:
+        sensor_configs: List of sensor configuration dictionaries
+        
+    Returns:
+        List of sensor instances implementing SensorProtocol
+        
+    Examples:
+        >>> sensors = create_sensors([
+        ...     {'type': 'BinarySensor', 'threshold': 0.1},
+        ...     {'type': 'ConcentrationSensor', 'dynamic_range': (0, 1)},
+        ...     {'type': 'GradientSensor', 'spatial_resolution': (0.5, 0.5)}
+        ... ])
+    """
+    if NavigatorFactory and hasattr(NavigatorFactory, 'create_sensors'):
+        try:
+            return NavigatorFactory.create_sensors(sensor_configs)
+        except Exception as e:
+            logger.error(f"Failed to create sensors: {e}")
+            return []
+    
+    logger.warning("NavigatorFactory not available, cannot create sensors")
+    return []
+
+
 def get_available_environments() -> Dict[str, Dict[str, Any]]:
     """
     Get information about all available environment IDs and their capabilities.
@@ -492,10 +891,38 @@ def get_available_environments() -> Dict[str, Dict[str, Any]]:
             'supports_terminated_truncated': True,
             'extensibility_hooks': ['compute_additional_obs', 'compute_extra_reward', 'on_episode_end'],
             'frame_cache_modes': ['none', 'lru', 'all'],
+            'modular_architecture': False,
             'available': GYMNASIUM_AVAILABLE,
             'description': 'Modern Gymnasium API compliant environment with extensibility hooks',
-            'recommended': True,
+            'recommended': not MODULAR_ARCHITECTURE_AVAILABLE,
             'performance_target': '<10ms step time'
+        }
+        
+        environments['PlumeNavSim-v1'] = {
+            'api_type': 'gymnasium',
+            'api_version': '0.29.x',
+            'step_returns': '5-tuple',
+            'reset_signature': 'reset(seed=None, options=None)',
+            'supports_terminated_truncated': True,
+            'extensibility_hooks': ['compute_additional_obs', 'compute_extra_reward', 'on_episode_end'],
+            'frame_cache_modes': ['none', 'lru', 'all'],
+            'modular_architecture': True,
+            'pluggable_components': {
+                'plume_models': ['gaussian', 'turbulent', 'video_adapter'],
+                'wind_fields': ['constant', 'turbulent', 'time_varying'],
+                'sensors': ['binary', 'concentration', 'gradient', 'historical']
+            },
+            'component_availability': {
+                'plume_models': PLUME_MODELS_AVAILABLE,
+                'wind_fields': WIND_FIELDS_AVAILABLE,  
+                'sensors': SENSORS_AVAILABLE,
+                'protocols': PROTOCOLS_AVAILABLE
+            },
+            'available': GYMNASIUM_AVAILABLE and MODULAR_ARCHITECTURE_AVAILABLE,
+            'description': 'Advanced modular environment with pluggable plume models, wind fields, and sensors',
+            'recommended': MODULAR_ARCHITECTURE_AVAILABLE,
+            'performance_target': '<10ms step time',
+            'configuration_driven': True
         }
         
         environments['OdorPlumeNavigation-v1'] = {
@@ -506,11 +933,12 @@ def get_available_environments() -> Dict[str, Dict[str, Any]]:
             'supports_terminated_truncated': False,
             'extensibility_hooks': ['compute_additional_obs', 'compute_extra_reward', 'on_episode_end'],
             'frame_cache_modes': ['none', 'lru', 'all'],
+            'modular_architecture': False,
             'available': GYMNASIUM_AVAILABLE or LEGACY_GYM_AVAILABLE,
             'description': 'Backward compatible environment for legacy code with automatic format conversion',
             'recommended': False,
             'deprecated': LEGACY_GYM_AVAILABLE and not GYMNASIUM_AVAILABLE,
-            'migration_note': 'Use PlumeNavSim-v0 for new projects'
+            'migration_note': 'Use PlumeNavSim-v1 for new projects with modular architecture'
         }
     
     return environments
@@ -558,8 +986,8 @@ def diagnose_environment_setup() -> Dict[str, Any]:
     """
     Comprehensive diagnostic information about environment setup and capabilities.
     
-    Enhanced with frame cache diagnostics and extensibility hook information
-    per Section 0.2.2 requirements.
+    Enhanced with frame cache diagnostics, extensibility hook information, and
+    modular component availability per Section 0.2.2 requirements.
     
     Returns:
         Dictionary containing diagnostic information for troubleshooting
@@ -576,6 +1004,33 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             'wrappers_available': WRAPPERS_AVAILABLE,
             'rl_env_available': RL_ENV_AVAILABLE
         },
+        'modular_architecture': {
+            'protocols_available': PROTOCOLS_AVAILABLE,
+            'plume_models_available': PLUME_MODELS_AVAILABLE,
+            'wind_fields_available': WIND_FIELDS_AVAILABLE,
+            'sensors_available': SENSORS_AVAILABLE,
+            'modular_architecture_available': MODULAR_ARCHITECTURE_AVAILABLE,
+            'components_partial': MODULAR_COMPONENTS_PARTIAL,
+            'components_complete': MODULAR_COMPONENTS_COMPLETE
+        },
+        'component_implementations': {
+            'plume_models': {
+                'gaussian': GaussianPlumeModel is not None,
+                'turbulent': TurbulentPlumeModel is not None,
+                'video_adapter': VideoPlumeAdapter is not None
+            },
+            'wind_fields': {
+                'constant': ConstantWindField is not None,
+                'turbulent': TurbulentWindField is not None,
+                'time_varying': TimeVaryingWindField is not None
+            },
+            'sensors': {
+                'binary': BinarySensor is not None,
+                'concentration': ConcentrationSensor is not None,
+                'gradient': GradientSensor is not None,
+                'historical': HistoricalSensor is not None
+            }
+        },
         'environments': get_available_environments(),
         'flavors': get_environment_flavors(),
         'capabilities': {
@@ -583,7 +1038,11 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             'frame_caching': PLUME_ENV_AVAILABLE,
             'dual_api_support': COMPAT_LAYER_AVAILABLE,
             'space_validation': SPACES_AVAILABLE,
-            'environment_wrappers': WRAPPERS_AVAILABLE
+            'environment_wrappers': WRAPPERS_AVAILABLE,
+            'modular_components': MODULAR_ARCHITECTURE_AVAILABLE,
+            'pluggable_plume_models': PLUME_MODELS_AVAILABLE,
+            'configurable_wind_fields': WIND_FIELDS_AVAILABLE,
+            'flexible_sensors': SENSORS_AVAILABLE
         },
         'recommendations': []
     }
@@ -624,6 +1083,33 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             "Install environment wrappers for enhanced functionality"
         )
     
+    # Modular architecture recommendations
+    if not PROTOCOLS_AVAILABLE:
+        diagnostics['recommendations'].append(
+            "Core protocols not available - modular architecture features disabled"
+        )
+    elif PROTOCOLS_AVAILABLE and not MODULAR_COMPONENTS_COMPLETE:
+        missing_components = []
+        if not PLUME_MODELS_AVAILABLE:
+            missing_components.append("plume models")
+        if not WIND_FIELDS_AVAILABLE:
+            missing_components.append("wind fields")
+        if not SENSORS_AVAILABLE:
+            missing_components.append("sensors")
+        
+        diagnostics['recommendations'].append(
+            f"Modular architecture partially available - missing: {', '.join(missing_components)}"
+        )
+    elif MODULAR_COMPONENTS_COMPLETE:
+        diagnostics['recommendations'].append(
+            "Full modular architecture available - use PlumeNavSim-v1 for advanced features"
+        )
+    
+    if MODULAR_ARCHITECTURE_AVAILABLE and MODULAR_COMPONENTS_COMPLETE:
+        diagnostics['recommendations'].append(
+            "Consider using create_modular_environment() for configuration-driven component selection"
+        )
+    
     return diagnostics
 
 
@@ -633,7 +1119,12 @@ __all__.extend([
     "make_environment", 
     "get_available_environments",
     "get_environment_flavors",
-    "diagnose_environment_setup"
+    "diagnose_environment_setup",
+    # Modular architecture factory functions
+    "create_modular_environment",
+    "create_plume_model",
+    "create_wind_field", 
+    "create_sensors"
 ])
 
 # Module initialization: Automatically register environments on import
@@ -662,7 +1153,13 @@ try:
                 "extensibility_hooks_available": PLUME_ENV_AVAILABLE,
                 "frame_cache_available": PLUME_ENV_AVAILABLE,
                 "spaces_factory_available": SPACES_AVAILABLE,
-                "wrappers_available": WRAPPERS_AVAILABLE
+                "wrappers_available": WRAPPERS_AVAILABLE,
+                "modular_architecture_available": MODULAR_ARCHITECTURE_AVAILABLE,
+                "protocols_available": PROTOCOLS_AVAILABLE,
+                "plume_models_available": PLUME_MODELS_AVAILABLE,
+                "wind_fields_available": WIND_FIELDS_AVAILABLE,
+                "sensors_available": SENSORS_AVAILABLE,
+                "modular_components_complete": MODULAR_COMPONENTS_COMPLETE
             }
         )
         
@@ -678,15 +1175,33 @@ try:
     
     # Provide user-friendly summary for common import scenarios
     if successful_registrations:
-        if 'PlumeNavSim-v0' in successful_registrations:
-            # Modern setup - recommend new environment
+        if 'PlumeNavSim-v1' in successful_registrations:
+            # Advanced modular setup - recommend new environment
+            if LOGGING_AVAILABLE:
+                logger.info(
+                    "Advanced modular Gymnasium environment available",
+                    extra={
+                        "metric_type": "setup_success",
+                        "recommended_env_id": "PlumeNavSim-v1",
+                        "api_version": "0.29.x",
+                        "modular_architecture": True,
+                        "component_availability": {
+                            "plume_models": PLUME_MODELS_AVAILABLE,
+                            "wind_fields": WIND_FIELDS_AVAILABLE,
+                            "sensors": SENSORS_AVAILABLE
+                        }
+                    }
+                )
+        elif 'PlumeNavSim-v0' in successful_registrations:
+            # Modern setup - recommend standard environment
             if LOGGING_AVAILABLE:
                 logger.info(
                     "Modern Gymnasium environment available",
                     extra={
                         "metric_type": "setup_success",
                         "recommended_env_id": "PlumeNavSim-v0",
-                        "api_version": "0.29.x"
+                        "api_version": "0.29.x",
+                        "note": "For modular architecture features, ensure protocols are available"
                     }
                 )
         elif 'OdorPlumeNavigation-v1' in successful_registrations:
@@ -725,7 +1240,13 @@ except Exception as e:
 
 # Module provides the following environment IDs for registration:
 #
-# Modern Gymnasium API (recommended):
+# Advanced Modular Architecture (recommended):
+#   PlumeNavSim-v1 - Returns 5-tuple (obs, reward, terminated, truncated, info)
+#   Usage: env = gymnasium.make('PlumeNavSim-v1', plume_model={'type': 'GaussianPlumeModel'})
+#   Features: Pluggable plume models, wind fields, sensors, configuration-driven component selection
+#   Components: GaussianPlumeModel, TurbulentPlumeModel, ConstantWindField, BinarySensor, etc.
+#
+# Modern Gymnasium API (standard):
 #   PlumeNavSim-v0 - Returns 5-tuple (obs, reward, terminated, truncated, info)
 #   Usage: env = gymnasium.make('PlumeNavSim-v0', video_path='plume.mp4', frame_cache_mode='lru')
 #   Features: Extensibility hooks, configurable frame caching, performance monitoring
@@ -735,21 +1256,34 @@ except Exception as e:
 #   Usage: env = gym.make('OdorPlumeNavigation-v1', video_path='plume.mp4')
 #   Features: Backward compatibility, automatic format detection, deprecation guidance
 #
-# Factory Functions:
+# Modular Component Factory Functions:
+#   create_modular_environment() - Create environment with pluggable components
+#   create_plume_model() - Instantiate plume models (Gaussian, Turbulent, Video)
+#   create_wind_field() - Instantiate wind fields (Constant, Turbulent, TimeVarying)
+#   create_sensors() - Instantiate sensors (Binary, Concentration, Gradient, Historical)
+#
+# Standard Factory Functions:
 #   make_environment() - Recommended factory with enhanced configuration support
 #   get_available_environments() - Discovery of available environment IDs with capabilities
 #   get_environment_flavors() - Available configuration flavors (memory, memoryless, balanced)
-#   diagnose_environment_setup() - Comprehensive troubleshooting and setup validation
+#   diagnose_environment_setup() - Comprehensive troubleshooting and modular component validation
 #
-# Extensibility Hooks (available in both environments):
+# Extensibility Hooks (available in all environments):
 #   compute_additional_obs(base_obs: dict) -> dict  # Add custom observations
 #   compute_extra_reward(base_reward: float, info: dict) -> float  # Reward shaping
 #   on_episode_end(final_info: dict) -> None  # Episode-level processing
+#
+# Modular Component Protocols:
+#   PlumeModelProtocol: concentration_at(), step(), reset()
+#   WindFieldProtocol: velocity_at(), step(), reset()
+#   SensorProtocol: detect(), measure(), compute_gradient()
+#   AgentObservationProtocol: construct_observation(), get_observation_space()
+#   AgentActionProtocol: validate_action(), process_action(), get_action_space()
 #
 # Frame Cache Modes:
 #   'none' - No caching, minimal memory usage
 #   'lru' - LRU caching with configurable memory limits (default)
 #   'all' - Full preload caching for maximum performance
 #
-# For detailed usage examples, migration guidance, and performance tuning,
-# see the project documentation at docs/migration_guide.md
+# For detailed usage examples, modular architecture guide, and component development,
+# see the project documentation at docs/extending_plume_nav_sim.md

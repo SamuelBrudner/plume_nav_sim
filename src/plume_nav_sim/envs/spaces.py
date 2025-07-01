@@ -92,6 +92,28 @@ from plume_nav_sim.utils.logging_setup import (
     log_legacy_api_deprecation
 )
 
+# Import sensor protocol for dynamic space construction
+try:
+    from ..core.protocols import SensorProtocol
+    SENSOR_PROTOCOL_AVAILABLE = True
+except ImportError:
+    # Handle case where protocols don't exist yet
+    SensorProtocol = object
+    SENSOR_PROTOCOL_AVAILABLE = False
+
+# Import sensor implementations for type checking
+try:
+    from ..core.sensors.binary_sensor import BinarySensor
+    from ..core.sensors.concentration_sensor import ConcentrationSensor
+    from ..core.sensors.gradient_sensor import GradientSensor
+    SENSOR_IMPLEMENTATIONS_AVAILABLE = True
+except ImportError:
+    # Handle case where sensor implementations don't exist yet
+    BinarySensor = None
+    ConcentrationSensor = None
+    GradientSensor = None
+    SENSOR_IMPLEMENTATIONS_AVAILABLE = False
+
 # Module logger for structured logging integration
 logger = get_logger(__name__)
 
@@ -153,6 +175,65 @@ class SpaceDefinition:
                 self.dtype = np.dtype(self.dtype)
             except TypeError as e:
                 raise ValueError(f"Invalid dtype specification: {e}")
+
+
+@dataclass
+class SensorSpaceDefinition:
+    """
+    Configuration for sensor-specific observation space components.
+    
+    Defines how different sensor types contribute to the overall observation space,
+    enabling dynamic space construction based on active sensor configurations.
+    
+    Attributes:
+        sensor_type: Type of sensor (binary, concentration, gradient)
+        sensor_id: Unique identifier for the sensor instance
+        output_shape: Expected shape of sensor output
+        value_range: Range of sensor output values
+        dtype: Data type for sensor outputs
+        metadata: Additional sensor-specific metadata
+    """
+    sensor_type: str
+    sensor_id: str
+    output_shape: Tuple[int, ...]
+    value_range: Tuple[float, float]
+    dtype: np.dtype = np.float32
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class WindDataConfig:
+    """
+    Configuration for wind data integration in observation spaces.
+    
+    Defines how wind field information is incorporated into observations
+    when environmental dynamics are enabled.
+    
+    Attributes:
+        enabled: Whether wind data should be included in observations
+        velocity_components: Number of wind velocity components (2D or 3D)
+        velocity_range: Range of wind velocity values
+        include_direction: Include wind direction as separate observation
+        include_magnitude: Include wind magnitude as separate observation
+        temporal_history: Number of previous wind states to include
+        coordinate_system: Wind coordinate system ('cartesian' or 'polar')
+    """
+    enabled: bool = False
+    velocity_components: int = 2
+    velocity_range: Tuple[float, float] = (-10.0, 10.0)
+    include_direction: bool = False
+    include_magnitude: bool = False
+    temporal_history: int = 0
+    coordinate_system: str = "cartesian"
+    
+    def __post_init__(self):
+        """Validate wind data configuration."""
+        if self.velocity_components not in [2, 3]:
+            raise ValueError("velocity_components must be 2 or 3")
+        if self.coordinate_system not in ["cartesian", "polar"]:
+            raise ValueError("coordinate_system must be 'cartesian' or 'polar'")
+        if self.temporal_history < 0:
+            raise ValueError("temporal_history must be non-negative")
 
 
 class SpaceValidator:
@@ -328,6 +409,144 @@ class SpaceValidator:
             
         except Exception as e:
             logger.error(f"Step return validation failed: {e}")
+            return False
+    
+    @staticmethod
+    def validate_sensor_aware_space(
+        observation_space: DictSpace,
+        sensor_configs: List[Dict[str, Any]],
+        wind_enabled: bool = False
+    ) -> bool:
+        """
+        Validate sensor-aware observation space for configuration compliance.
+        
+        Performs comprehensive validation of observation space structure to ensure
+        it matches the expected sensor configuration and wind data settings.
+        
+        Args:
+            observation_space: Observation space to validate
+            sensor_configs: List of sensor configuration dicts
+            wind_enabled: Whether wind data should be present
+            
+        Returns:
+            bool: True if space matches sensor configuration
+            
+        Example:
+            Validate sensor space:
+                >>> space = create_sensor_observation_space(sensors)
+                >>> configs = [{"type": "binary"}, {"type": "concentration"}]
+                >>> is_valid = SpaceValidator.validate_sensor_aware_space(space, configs)
+        """
+        try:
+            with correlation_context("validate_sensor_aware_space") as ctx:
+                logger.debug("Validating sensor-aware observation space")
+                
+                if not isinstance(observation_space, DictSpace):
+                    logger.error("Expected DictSpace for sensor-aware observations")
+                    return False
+                
+                space_keys = set(observation_space.spaces.keys())
+                
+                # Validate sensor components
+                for i, sensor_config in enumerate(sensor_configs):
+                    sensor_type = sensor_config.get('type', 'unknown')
+                    sensor_prefix = f"sensor_{i}_{sensor_type}"
+                    
+                    sensor_keys = [key for key in space_keys if sensor_prefix in key.lower()]
+                    if not sensor_keys:
+                        logger.error(f"No space components found for sensor {i} (type: {sensor_type})")
+                        return False
+                
+                # Validate wind components
+                wind_keys = [key for key in space_keys if key.startswith("wind_")]
+                if wind_enabled and not wind_keys:
+                    logger.error("Wind data enabled but no wind components found")
+                    return False
+                elif not wind_enabled and wind_keys:
+                    logger.warning(f"Wind components found but wind not enabled: {wind_keys}")
+                
+                # Validate space component types
+                for key, space in observation_space.spaces.items():
+                    if not SpaceValidator.validate_gymnasium_compliance(space):
+                        logger.error(f"Space component '{key}' failed Gymnasium compliance")
+                        return False
+                
+                logger.info("Sensor-aware space validation successful")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Sensor-aware space validation failed: {e}")
+            return False
+    
+    @staticmethod
+    def validate_multi_modal_observation_data(
+        observation: Dict[str, Any],
+        observation_space: DictSpace
+    ) -> bool:
+        """
+        Validate multi-modal observation data against observation space.
+        
+        Ensures observation data conforms to the expected space structure
+        and value ranges for all components.
+        
+        Args:
+            observation: Observation data to validate
+            observation_space: Expected observation space
+            
+        Returns:
+            bool: True if observation data is valid
+            
+        Example:
+            Validate observation data:
+                >>> obs = {"sensor_0_binary": True, "agent_position": [0.0, 0.0]}
+                >>> space = create_observation_space()
+                >>> is_valid = SpaceValidator.validate_multi_modal_observation_data(obs, space)
+        """
+        try:
+            with correlation_context("validate_multi_modal_observation") as ctx:
+                logger.debug("Validating multi-modal observation data")
+                
+                if not isinstance(observation, dict):
+                    logger.error("Observation must be a dictionary")
+                    return False
+                
+                if not isinstance(observation_space, DictSpace):
+                    logger.error("Expected DictSpace for validation")
+                    return False
+                
+                # Check all required keys are present
+                space_keys = set(observation_space.spaces.keys())
+                obs_keys = set(observation.keys())
+                
+                missing_keys = space_keys - obs_keys
+                if missing_keys:
+                    logger.error(f"Missing observation keys: {missing_keys}")
+                    return False
+                
+                extra_keys = obs_keys - space_keys
+                if extra_keys:
+                    logger.warning(f"Extra observation keys (ignored): {extra_keys}")
+                
+                # Validate each component
+                for key in space_keys:
+                    if key in observation:
+                        component_space = observation_space.spaces[key]
+                        component_value = observation[key]
+                        
+                        # Convert to numpy array if needed
+                        if not isinstance(component_value, np.ndarray):
+                            component_value = np.array(component_value)
+                        
+                        # Check if value is within space
+                        if not component_space.contains(component_value):
+                            logger.error(f"Observation component '{key}' out of bounds: {component_value}")
+                            return False
+                
+                logger.debug("Multi-modal observation data validation successful")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Multi-modal observation validation failed: {e}")
             return False
 
 
@@ -658,6 +877,337 @@ class ActionSpaceFactory:
             return action_space
 
 
+class SensorAwareSpaceFactory:
+    """
+    Advanced factory for creating dynamic observation spaces based on sensor configurations.
+    
+    This factory enables observation space construction that adapts to the specific
+    sensor suite and environmental dynamics configuration, providing flexible
+    multi-modal observation spaces with optimal type safety and performance.
+    
+    Key Features:
+    - Dynamic space construction based on active SensorProtocol list
+    - Wind data integration when environmental dynamics are enabled
+    - Sensor-aware validation ensuring space-data compatibility
+    - Gymnasium 0.29.x compliance with comprehensive type validation
+    - Performance optimization for multi-agent scenarios
+    
+    Examples:
+        Create space from sensor list:
+            >>> sensors = [BinarySensor(), ConcentrationSensor()]
+            >>> space = SensorAwareSpaceFactory.create_sensor_observation_space(sensors)
+            
+        Include wind data:
+            >>> wind_config = WindDataConfig(enabled=True, velocity_components=2)
+            >>> space = SensorAwareSpaceFactory.create_sensor_observation_space(
+            ...     sensors, wind_config=wind_config
+            ... )
+    """
+    
+    @staticmethod
+    def create_sensor_observation_space(
+        sensors: List[Any],
+        wind_config: Optional[WindDataConfig] = None,
+        include_agent_state: bool = True,
+        agent_state_bounds: Optional[Dict[str, Tuple[float, float]]] = None,
+        dtype: np.dtype = np.float32
+    ) -> DictSpace:
+        """
+        Create observation space dynamically based on active sensor configuration.
+        
+        Constructs a Dict observation space with components for each active sensor,
+        optional wind data, and agent state information. The space automatically
+        adapts to the sensor suite configuration without requiring code changes.
+        
+        Args:
+            sensors: List of active sensor instances implementing SensorProtocol
+            wind_config: Configuration for wind data integration (optional)
+            include_agent_state: Include agent position/velocity in observations
+            agent_state_bounds: Custom bounds for agent state components
+            dtype: NumPy dtype for observation values
+            
+        Returns:
+            DictSpace: Multi-modal observation space with sensor-specific components
+            
+        Raises:
+            ValueError: If sensor list is empty or contains invalid sensors
+            TypeError: If sensors don't implement SensorProtocol interface
+            
+        Examples:
+            Multi-sensor configuration:
+                >>> sensors = [
+                ...     BinarySensor(threshold=0.1),
+                ...     ConcentrationSensor(dynamic_range=(0, 1)),
+                ...     GradientSensor()
+                ... ]
+                >>> space = SensorAwareSpaceFactory.create_sensor_observation_space(sensors)
+                
+            With wind data:
+                >>> wind_config = WindDataConfig(
+                ...     enabled=True, 
+                ...     velocity_components=2,
+                ...     include_direction=True
+                ... )
+                >>> space = SensorAwareSpaceFactory.create_sensor_observation_space(
+                ...     sensors, wind_config=wind_config
+                ... )
+        """
+        with correlation_context("create_sensor_observation_space") as ctx:
+            logger.debug(f"Creating sensor-aware observation space for {len(sensors)} sensors")
+            
+            if not sensors:
+                raise ValueError("At least one sensor must be provided")
+            
+            # Validate sensors implement SensorProtocol
+            if SENSOR_PROTOCOL_AVAILABLE:
+                for i, sensor in enumerate(sensors):
+                    if not hasattr(sensor, 'detect') or not callable(getattr(sensor, 'detect')):
+                        raise TypeError(f"Sensor {i} does not implement SensorProtocol.detect method")
+            
+            spaces_dict = {}
+            
+            # Add agent state components
+            if include_agent_state:
+                state_bounds = agent_state_bounds or {}
+                
+                # Agent position
+                pos_bounds = state_bounds.get('position', (-100.0, 100.0))
+                spaces_dict["agent_position"] = Box(
+                    low=pos_bounds[0], high=pos_bounds[1], shape=(2,), dtype=dtype
+                )
+                
+                # Agent velocity
+                vel_bounds = state_bounds.get('velocity', (-10.0, 10.0))
+                spaces_dict["agent_velocity"] = Box(
+                    low=vel_bounds[0], high=vel_bounds[1], shape=(2,), dtype=dtype
+                )
+                
+                # Agent orientation
+                orient_bounds = state_bounds.get('orientation', (0.0, 360.0))
+                spaces_dict["agent_orientation"] = Box(
+                    low=orient_bounds[0], high=orient_bounds[1], shape=(1,), dtype=dtype
+                )
+            
+            # Add sensor-specific components
+            for i, sensor in enumerate(sensors):
+                sensor_spaces = SensorAwareSpaceFactory._create_sensor_component_space(
+                    sensor, i, dtype
+                )
+                spaces_dict.update(sensor_spaces)
+            
+            # Add wind data components if enabled
+            if wind_config and wind_config.enabled:
+                wind_spaces = SensorAwareSpaceFactory._create_wind_data_space(wind_config, dtype)
+                spaces_dict.update(wind_spaces)
+            
+            # Create Dict space
+            observation_space = DictSpace(spaces_dict)
+            
+            # Add comprehensive metadata
+            observation_space.metadata = {
+                "sensor_count": len(sensors),
+                "sensor_types": [type(sensor).__name__ for sensor in sensors],
+                "wind_enabled": wind_config.enabled if wind_config else False,
+                "agent_state_included": include_agent_state,
+                "space_type": "sensor_aware_navigation",
+                "created_by": "SensorAwareSpaceFactory",
+                "components": list(spaces_dict.keys())
+            }
+            
+            logger.info(f"Created sensor-aware observation space with {len(spaces_dict)} components")
+            return observation_space
+    
+    @staticmethod
+    def _create_sensor_component_space(
+        sensor: Any, 
+        sensor_index: int, 
+        dtype: np.dtype
+    ) -> Dict[str, Box]:
+        """
+        Create observation space components for a specific sensor.
+        
+        Args:
+            sensor: Sensor instance to create space for
+            sensor_index: Index of sensor in sensor list
+            dtype: NumPy dtype for observation values
+            
+        Returns:
+            Dict[str, Box]: Space components for this sensor
+        """
+        spaces = {}
+        sensor_name = type(sensor).__name__.lower()
+        
+        if SENSOR_IMPLEMENTATIONS_AVAILABLE:
+            if isinstance(sensor, type(BinarySensor)) if BinarySensor else False:
+                # Binary sensor returns boolean detection
+                spaces[f"sensor_{sensor_index}_{sensor_name}_detection"] = Box(
+                    low=0, high=1, shape=(1,), dtype=bool
+                )
+                
+            elif isinstance(sensor, type(ConcentrationSensor)) if ConcentrationSensor else False:
+                # Concentration sensor returns float concentration value
+                # Try to get dynamic range from sensor config
+                try:
+                    config = getattr(sensor, 'config', None)
+                    if config and hasattr(config, 'dynamic_range'):
+                        low, high = config.dynamic_range
+                    else:
+                        low, high = 0.0, 1.0
+                except:
+                    low, high = 0.0, 1.0
+                    
+                spaces[f"sensor_{sensor_index}_{sensor_name}_concentration"] = Box(
+                    low=low, high=high, shape=(1,), dtype=dtype
+                )
+                
+            elif isinstance(sensor, type(GradientSensor)) if GradientSensor else False:
+                # Gradient sensor returns 2D gradient vector
+                spaces[f"sensor_{sensor_index}_{sensor_name}_gradient"] = Box(
+                    low=-10.0, high=10.0, shape=(2,), dtype=dtype
+                )
+                # Also include gradient magnitude and direction
+                spaces[f"sensor_{sensor_index}_{sensor_name}_magnitude"] = Box(
+                    low=0.0, high=10.0, shape=(1,), dtype=dtype
+                )
+                spaces[f"sensor_{sensor_index}_{sensor_name}_direction"] = Box(
+                    low=0.0, high=360.0, shape=(1,), dtype=dtype
+                )
+                
+            else:
+                # Generic sensor - assume float output
+                spaces[f"sensor_{sensor_index}_{sensor_name}_output"] = Box(
+                    low=0.0, high=1.0, shape=(1,), dtype=dtype
+                )
+        else:
+            # Fallback when sensor implementations not available
+            spaces[f"sensor_{sensor_index}_{sensor_name}_output"] = Box(
+                low=0.0, high=1.0, shape=(1,), dtype=dtype
+            )
+        
+        return spaces
+    
+    @staticmethod
+    def _create_wind_data_space(
+        wind_config: WindDataConfig, 
+        dtype: np.dtype
+    ) -> Dict[str, Box]:
+        """
+        Create observation space components for wind data.
+        
+        Args:
+            wind_config: Wind data configuration
+            dtype: NumPy dtype for observation values
+            
+        Returns:
+            Dict[str, Box]: Wind data space components
+        """
+        spaces = {}
+        
+        if wind_config.coordinate_system == "cartesian":
+            # Wind velocity components (vx, vy) or (vx, vy, vz)
+            spaces["wind_velocity"] = Box(
+                low=wind_config.velocity_range[0],
+                high=wind_config.velocity_range[1],
+                shape=(wind_config.velocity_components,),
+                dtype=dtype
+            )
+        else:  # polar
+            # Wind magnitude and direction
+            spaces["wind_magnitude"] = Box(
+                low=0.0, high=wind_config.velocity_range[1], shape=(1,), dtype=dtype
+            )
+            spaces["wind_direction"] = Box(
+                low=0.0, high=360.0, shape=(1,), dtype=dtype
+            )
+        
+        # Optional additional wind components
+        if wind_config.include_direction and wind_config.coordinate_system == "cartesian":
+            spaces["wind_direction"] = Box(
+                low=0.0, high=360.0, shape=(1,), dtype=dtype
+            )
+        
+        if wind_config.include_magnitude and wind_config.coordinate_system == "cartesian":
+            spaces["wind_magnitude"] = Box(
+                low=0.0, high=wind_config.velocity_range[1], shape=(1,), dtype=dtype
+            )
+        
+        # Temporal history if configured
+        if wind_config.temporal_history > 0:
+            history_shape = (wind_config.temporal_history, wind_config.velocity_components)
+            spaces["wind_velocity_history"] = Box(
+                low=wind_config.velocity_range[0],
+                high=wind_config.velocity_range[1],
+                shape=history_shape,
+                dtype=dtype
+            )
+        
+        return spaces
+    
+    @staticmethod
+    def validate_sensor_space_compatibility(
+        observation_space: DictSpace,
+        sensors: List[Any],
+        wind_config: Optional[WindDataConfig] = None
+    ) -> bool:
+        """
+        Validate that observation space matches sensor configuration.
+        
+        Ensures that the observation space contains appropriate components
+        for each configured sensor and wind data configuration.
+        
+        Args:
+            observation_space: Observation space to validate
+            sensors: List of sensor instances
+            wind_config: Wind data configuration (optional)
+            
+        Returns:
+            bool: True if space is compatible with sensor configuration
+            
+        Raises:
+            ValueError: If critical compatibility issues are found
+        """
+        with correlation_context("validate_sensor_space_compatibility") as ctx:
+            logger.debug("Validating sensor-space compatibility")
+            
+            if not isinstance(observation_space, DictSpace):
+                raise ValueError("Expected DictSpace for sensor-aware observations")
+            
+            space_keys = set(observation_space.spaces.keys())
+            expected_keys = set()
+            
+            # Check agent state components
+            if any(key.startswith("agent_") for key in space_keys):
+                expected_keys.update(["agent_position", "agent_velocity", "agent_orientation"])
+            
+            # Check sensor components
+            for i, sensor in enumerate(sensors):
+                sensor_name = type(sensor).__name__.lower()
+                sensor_keys = [key for key in space_keys if f"sensor_{i}_{sensor_name}" in key]
+                
+                if not sensor_keys:
+                    logger.error(f"No space components found for sensor {i} ({sensor_name})")
+                    return False
+                    
+                expected_keys.update(sensor_keys)
+            
+            # Check wind components
+            if wind_config and wind_config.enabled:
+                wind_keys = [key for key in space_keys if key.startswith("wind_")]
+                if not wind_keys:
+                    logger.error("Wind data enabled but no wind components in space")
+                    return False
+                expected_keys.update(wind_keys)
+            
+            # Validate all expected keys are present
+            missing_keys = expected_keys - space_keys
+            if missing_keys:
+                logger.error(f"Missing space components: {missing_keys}")
+                return False
+            
+            logger.info("Sensor-space compatibility validation successful")
+            return True
+
+
 class ObservationSpaceFactory:
     """
     Factory for creating multi-modal observation spaces for plume navigation.
@@ -665,6 +1215,9 @@ class ObservationSpaceFactory:
     Constructs standardized observation spaces combining odor concentration readings,
     agent state information, and environmental context with proper type validation
     and Gymnasium compliance for RL training workflows.
+    
+    Note: This class provides backward compatibility. For new implementations,
+    consider using SensorAwareSpaceFactory for more flexible sensor-based spaces.
     """
     
     @staticmethod
@@ -825,6 +1378,239 @@ class ObservationSpaceFactory:
             
             logger.info(f"Created odor field observation space: {field_size}")
             return observation_space
+    
+    @staticmethod
+    def create_dynamic_sensor_observation_space(
+        sensors: List[Any],
+        wind_config: Optional[WindDataConfig] = None,
+        include_position: bool = True,
+        include_velocity: bool = True,
+        include_orientation: bool = True,
+        position_bounds: Tuple[float, float] = (-10.0, 10.0),
+        velocity_bounds: Tuple[float, float] = (-5.0, 5.0),
+        dtype: np.dtype = np.float32
+    ) -> DictSpace:
+        """
+        Create observation space dynamically based on sensor configuration.
+        
+        Extended version of create_navigation_observation_space that supports
+        dynamic sensor configuration and wind data integration. This method
+        bridges backward compatibility with new sensor-aware functionality.
+        
+        Args:
+            sensors: List of sensor instances implementing SensorProtocol
+            wind_config: Configuration for wind data integration
+            include_position: Include agent position in observations
+            include_velocity: Include agent velocity in observations
+            include_orientation: Include agent orientation in observations
+            position_bounds: Bounds for position components
+            velocity_bounds: Bounds for velocity components
+            dtype: NumPy dtype for observation values
+            
+        Returns:
+            DictSpace: Multi-modal observation space with sensor components
+            
+        Examples:
+            Basic sensor-aware space:
+                >>> sensors = [BinarySensor(), ConcentrationSensor()]
+                >>> space = ObservationSpaceFactory.create_dynamic_sensor_observation_space(sensors)
+                
+            With wind data:
+                >>> wind_config = WindDataConfig(enabled=True)
+                >>> space = ObservationSpaceFactory.create_dynamic_sensor_observation_space(
+                ...     sensors, wind_config=wind_config
+                ... )
+        """
+        # Delegate to SensorAwareSpaceFactory for implementation
+        agent_state_bounds = {}
+        if include_position:
+            agent_state_bounds['position'] = position_bounds
+        if include_velocity:
+            agent_state_bounds['velocity'] = velocity_bounds
+        if include_orientation:
+            agent_state_bounds['orientation'] = (0.0, 360.0)
+        
+        include_agent_state = include_position or include_velocity or include_orientation
+        
+        return SensorAwareSpaceFactory.create_sensor_observation_space(
+            sensors=sensors,
+            wind_config=wind_config,
+            include_agent_state=include_agent_state,
+            agent_state_bounds=agent_state_bounds,
+            dtype=dtype
+        )
+    
+    @staticmethod
+    def create_wind_integrated_observation_space(
+        base_observation_components: Dict[str, Any],
+        wind_config: WindDataConfig,
+        dtype: np.dtype = np.float32
+    ) -> DictSpace:
+        """
+        Integrate wind data into existing observation space components.
+        
+        Takes an existing set of observation components and adds wind data
+        according to the specified configuration. Useful for upgrading
+        existing observation spaces with environmental dynamics.
+        
+        Args:
+            base_observation_components: Dict of existing observation components
+            wind_config: Wind data configuration
+            dtype: NumPy dtype for wind data
+            
+        Returns:
+            DictSpace: Enhanced observation space with wind components
+            
+        Example:
+            Add wind to existing space:
+                >>> base_components = {
+                ...     "odor_concentration": Box(low=0, high=1, shape=(1,)),
+                ...     "position": Box(low=-10, high=10, shape=(2,))
+                ... }
+                >>> wind_config = WindDataConfig(enabled=True, velocity_components=2)
+                >>> space = ObservationSpaceFactory.create_wind_integrated_observation_space(
+                ...     base_components, wind_config
+                ... )
+        """
+        with correlation_context("create_wind_integrated_observation_space") as ctx:
+            logger.debug("Creating wind-integrated observation space")
+            
+            if not wind_config.enabled:
+                logger.warning("Wind config indicates disabled - returning base components only")
+                return DictSpace(base_observation_components)
+            
+            # Copy base components
+            enhanced_components = base_observation_components.copy()
+            
+            # Add wind components
+            wind_spaces = SensorAwareSpaceFactory._create_wind_data_space(wind_config, dtype)
+            enhanced_components.update(wind_spaces)
+            
+            # Create enhanced space
+            observation_space = DictSpace(enhanced_components)
+            
+            # Add metadata
+            observation_space.metadata = {
+                "base_components": list(base_observation_components.keys()),
+                "wind_components": list(wind_spaces.keys()),
+                "wind_enabled": True,
+                "wind_coordinate_system": wind_config.coordinate_system,
+                "space_type": "wind_integrated_navigation",
+                "created_by": "ObservationSpaceFactory"
+            }
+            
+            logger.info(f"Created wind-integrated space with {len(enhanced_components)} total components")
+            return observation_space
+    
+    @staticmethod
+    def validate_observation_space_sensor_compatibility(
+        observation_space: DictSpace,
+        sensor_list: List[Any],
+        wind_enabled: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Validate observation space compatibility with sensor configuration.
+        
+        Performs comprehensive validation of observation space structure
+        against the provided sensor configuration, returning detailed
+        compatibility analysis and recommendations.
+        
+        Args:
+            observation_space: Observation space to validate
+            sensor_list: List of sensor instances
+            wind_enabled: Whether wind data should be present
+            
+        Returns:
+            Dict[str, Any]: Validation results with compatibility status and details
+            
+        Example:
+            Validate space compatibility:
+                >>> sensors = [BinarySensor(), ConcentrationSensor()]
+                >>> space = create_some_observation_space()
+                >>> results = ObservationSpaceFactory.validate_observation_space_sensor_compatibility(
+                ...     space, sensors, wind_enabled=True
+                ... )
+                >>> if results['compatible']:
+                ...     print("Space is compatible")
+                ... else:
+                ...     print(f"Issues: {results['issues']}")
+        """
+        with correlation_context("validate_observation_space_sensor_compatibility") as ctx:
+            logger.debug("Validating observation space sensor compatibility")
+            
+            validation_results = {
+                "compatible": True,
+                "issues": [],
+                "warnings": [],
+                "recommendations": [],
+                "space_analysis": {},
+                "sensor_analysis": {}
+            }
+            
+            if not isinstance(observation_space, DictSpace):
+                validation_results["compatible"] = False
+                validation_results["issues"].append("Observation space must be DictSpace for sensor compatibility")
+                return validation_results
+            
+            space_keys = set(observation_space.spaces.keys())
+            validation_results["space_analysis"]["component_count"] = len(space_keys)
+            validation_results["space_analysis"]["component_names"] = list(space_keys)
+            
+            # Analyze sensor requirements
+            expected_sensor_components = []
+            for i, sensor in enumerate(sensor_list):
+                sensor_name = type(sensor).__name__.lower()
+                sensor_components = [key for key in space_keys if f"sensor_{i}_{sensor_name}" in key]
+                
+                if not sensor_components:
+                    validation_results["issues"].append(
+                        f"No components found for sensor {i} ({sensor_name})"
+                    )
+                    validation_results["compatible"] = False
+                else:
+                    expected_sensor_components.extend(sensor_components)
+            
+            validation_results["sensor_analysis"]["expected_components"] = expected_sensor_components
+            validation_results["sensor_analysis"]["sensor_count"] = len(sensor_list)
+            validation_results["sensor_analysis"]["sensor_types"] = [type(s).__name__ for s in sensor_list]
+            
+            # Check wind components
+            wind_components = [key for key in space_keys if key.startswith("wind_")]
+            if wind_enabled and not wind_components:
+                validation_results["issues"].append("Wind data enabled but no wind components found in space")
+                validation_results["compatible"] = False
+            elif not wind_enabled and wind_components:
+                validation_results["warnings"].append(
+                    f"Wind components present but wind not enabled: {wind_components}"
+                )
+            
+            validation_results["space_analysis"]["wind_components"] = wind_components
+            validation_results["space_analysis"]["wind_component_count"] = len(wind_components)
+            
+            # Check for extra components
+            known_prefixes = ["agent_", "sensor_", "wind_", "odor_"]
+            unknown_components = [
+                key for key in space_keys 
+                if not any(key.startswith(prefix) for prefix in known_prefixes)
+            ]
+            if unknown_components:
+                validation_results["warnings"].append(f"Unknown components found: {unknown_components}")
+            
+            # Generate recommendations
+            if not validation_results["compatible"]:
+                validation_results["recommendations"].append(
+                    "Use SensorAwareSpaceFactory.create_sensor_observation_space() for automatic sensor-space compatibility"
+                )
+            
+            if wind_enabled and not wind_components:
+                validation_results["recommendations"].append(
+                    "Add wind_config parameter to space creation for wind data integration"
+                )
+            
+            logger.info(f"Validation complete: compatible={validation_results['compatible']}, "
+                       f"issues={len(validation_results['issues'])}, warnings={len(validation_results['warnings'])}")
+            
+            return validation_results
 
 
 class SpaceFactory:
@@ -1016,6 +1802,101 @@ def get_standard_observation_space() -> DictSpace:
     )
 
 
+def get_sensor_aware_observation_space(
+    sensors: List[Any],
+    wind_config: Optional[WindDataConfig] = None,
+    cache_key: Optional[str] = None
+) -> DictSpace:
+    """
+    Get cached sensor-aware observation space for improved performance.
+    
+    Creates and caches observation spaces based on sensor configuration
+    to avoid repeated space construction overhead in multi-environment scenarios.
+    
+    Args:
+        sensors: List of sensor instances
+        wind_config: Wind data configuration (optional)
+        cache_key: Custom cache key (auto-generated if None)
+        
+    Returns:
+        DictSpace: Cached sensor-aware observation space
+        
+    Example:
+        Get cached sensor space:
+            >>> sensors = [BinarySensor(), ConcentrationSensor()]
+            >>> space = get_sensor_aware_observation_space(sensors)
+            >>> # Subsequent calls return cached instance
+    """
+    if cache_key is None:
+        # Generate cache key from sensor configuration
+        sensor_types = [type(sensor).__name__ for sensor in sensors]
+        wind_suffix = f"_wind_{wind_config.coordinate_system}" if wind_config and wind_config.enabled else ""
+        cache_key = f"sensor_space_{'_'.join(sensor_types)}{wind_suffix}"
+    
+    return get_cached_space(
+        cache_key,
+        SensorAwareSpaceFactory.create_sensor_observation_space,
+        sensors,
+        wind_config
+    )
+
+
+def validate_sensor_observation_compatibility(
+    observation: Dict[str, Any],
+    sensors: List[Any],
+    wind_config: Optional[WindDataConfig] = None
+) -> bool:
+    """
+    Validate that observation data matches sensor configuration.
+    
+    Checks that the provided observation dict contains appropriate
+    data for each configured sensor and wind configuration.
+    
+    Args:
+        observation: Observation data to validate
+        sensors: List of sensor instances
+        wind_config: Wind data configuration (optional)
+        
+    Returns:
+        bool: True if observation is compatible with sensor configuration
+        
+    Raises:
+        ValueError: If critical compatibility issues are found
+        
+    Example:
+        Validate observation:
+            >>> obs = {"sensor_0_binarysensor_detection": True, "agent_position": [0, 0]}
+            >>> sensors = [BinarySensor()]
+            >>> is_valid = validate_sensor_observation_compatibility(obs, sensors)
+    """
+    with correlation_context("validate_sensor_observation_compatibility") as ctx:
+        logger.debug("Validating sensor observation compatibility")
+        
+        if not isinstance(observation, dict):
+            raise ValueError("Observation must be a dictionary")
+        
+        obs_keys = set(observation.keys())
+        
+        # Check sensor components
+        for i, sensor in enumerate(sensors):
+            sensor_name = type(sensor).__name__.lower()
+            sensor_keys = [key for key in obs_keys if f"sensor_{i}_{sensor_name}" in key]
+            
+            if not sensor_keys:
+                logger.error(f"No observation data found for sensor {i} ({sensor_name})")
+                return False
+        
+        # Check wind components if enabled
+        if wind_config and wind_config.enabled:
+            wind_keys = [key for key in obs_keys if key.startswith("wind_")]
+            if not wind_keys:
+                logger.error("Wind data enabled but no wind observations found")
+                return False
+        
+        logger.debug("Sensor observation compatibility validation successful")
+        return True
+
+
 # Backward compatibility functions for legacy code
 def create_gym_spaces() -> Tuple[Box, DictSpace]:
     """
@@ -1045,10 +1926,13 @@ def create_gym_spaces() -> Tuple[Box, DictSpace]:
 __all__ = [
     # Core classes
     "SpaceDefinition",
+    "SensorSpaceDefinition",
+    "WindDataConfig",
     "SpaceValidator", 
     "ReturnFormatConverter",
     "ActionSpaceFactory",
     "ObservationSpaceFactory",
+    "SensorAwareSpaceFactory",
     "SpaceFactory",
     
     # Utility functions
@@ -1056,6 +1940,8 @@ __all__ = [
     "clear_space_cache",
     "get_standard_action_space",
     "get_standard_observation_space",
+    "get_sensor_aware_observation_space",
+    "validate_sensor_observation_compatibility",
     
     # Legacy compatibility (deprecated)
     "create_gym_spaces",

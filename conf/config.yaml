@@ -55,12 +55,37 @@ defaults:
   # Compatible with environment flavors: memoryless, memory
   - override frame_cache: lru
   
+  # MODULAR ARCHITECTURE: Pluggable component configuration groups
+  # Enable configuration-driven switching between different implementations
+  # without code modifications, supporting diverse research scenarios
+  
+  # Plume model selection for different simulation fidelity levels
+  # Switch between fast analytical models and realistic turbulent physics
+  - plume_models: ${oc.env:PLUME_MODEL_TYPE,"gaussian"}  # Options: gaussian, turbulent, video_adapter
+  
+  # Wind field dynamics configuration for environmental realism
+  # Control atmospheric conditions affecting plume transport
+  - wind_fields: ${oc.env:WIND_FIELD_TYPE,"constant"}  # Options: constant, turbulent, time_varying
+  
+  # Sensor configuration for flexible perception modeling
+  # Support different sensing modalities for navigation research
+  - sensors: ${oc.env:SENSOR_TYPE,"concentration"}  # Options: binary, concentration, gradient
+  
   # Optional configuration group overrides (prefix with + to add, - to remove)
   # Uncomment and modify as needed for specific use cases
   # - override navigator: multi_agent        # Switch to multi-agent navigation
   # - override video_plume: high_resolution  # Use high-resolution processing
   # - override visualization: publication    # Publication-quality plots
   # - override environment: development      # Development environment settings
+  
+  # Alternative modular component configurations for research scenarios
+  # - override plume_models: turbulent      # Switch to realistic turbulent physics
+  # - override wind_fields: turbulent       # Enable gusty, time-varying wind
+  # - override sensors: gradient            # Use gradient-based navigation cues
+  
+  # Multi-sensor configuration examples (use + prefix to add multiple)
+  # - +sensors: binary                      # Add binary detection to existing sensors
+  # - +sensors: gradient                    # Add gradient computation for multi-modal perception
   
   # Alternative frame cache modes for different performance scenarios
   # - override frame_cache: preload_all  # Full preload mode for maximum performance
@@ -274,6 +299,166 @@ video_plume:
     roi_y: 50   # ROI top-left y coordinate (base default: 0)
     roi_width: 300  # ROI width override (base default: null = full width)
     roi_height: 200  # ROI height override (base default: null = full height)
+
+# ============================================================================
+# MODULAR PLUME MODEL CONFIGURATION OVERRIDES
+# ============================================================================
+# Configure pluggable plume model implementations for different research
+# scenarios, from fast analytical models to realistic turbulent physics.
+
+plume_models:
+  # Plume model selection with environment variable override
+  # Set PLUME_MODEL_TYPE=gaussian|turbulent|video_adapter for different simulation fidelity
+  type: ${oc.env:PLUME_MODEL_TYPE,"gaussian"}  # Model implementation selection
+  
+  # Common plume parameters applicable across all model types
+  source_strength: ${oc.env:PLUME_SOURCE_STRENGTH,"1000.0"}  # Odor release rate
+  source_position: [50.0, 50.0]  # Source location (x, y) coordinates
+  
+  # Gaussian plume model configuration (fast analytical model)
+  gaussian:
+    # Dispersion coefficients controlling plume spread
+    dispersion_coeffs: [0.1, 0.05]  # [sigma_x, sigma_y] in spatial units
+    background_concentration: 0.01  # Baseline odor concentration
+    decay_rate: 0.001  # Temporal concentration decay
+    
+    # Advanced Gaussian parameters for research flexibility
+    gaussian_kernel_size: 5  # Convolution kernel size for smoothing
+    anisotropic_dispersion: false  # Enable directional dispersion differences
+    
+  # Turbulent plume model configuration (realistic physics simulation)
+  turbulent:
+    # Filament-based modeling parameters
+    num_filaments: ${oc.env:TURBULENT_FILAMENTS,"500"}  # Number of odor packets
+    filament_lifetime: 30.0  # Maximum filament age (seconds)
+    
+    # Turbulence parameters for realistic dispersion
+    turbulence_intensity: 0.15  # Turbulent velocity fluctuation magnitude
+    eddy_scale: 5.0  # Characteristic turbulent eddy size
+    intermittency_factor: 0.7  # Spatial intermittency (0.0-1.0)
+    
+    # Advanced turbulent physics (optional Numba acceleration)
+    enable_numba_acceleration: ${oc.env:ENABLE_NUMBA,"false"}  # JIT compilation for performance
+    stochastic_transport: true  # Enable random walk transport
+    
+  # Video adapter configuration (existing video-based plume data)
+  video_adapter:
+    # Inherit video_plume configuration for backward compatibility
+    inherit_video_plume_config: true  # Use existing video_plume parameters
+    spatial_interpolation: "bilinear"  # Interpolation method for spatial sampling
+    temporal_interpolation: "linear"  # Interpolation between video frames
+
+# ============================================================================
+# WIND FIELD DYNAMICS CONFIGURATION
+# ============================================================================
+# Configure environmental wind dynamics affecting plume transport and
+# agent perception for realistic atmospheric simulation.
+
+wind_fields:
+  # Wind field model selection with environment variable override
+  # Set WIND_FIELD_TYPE=constant|turbulent|time_varying for different dynamics
+  type: ${oc.env:WIND_FIELD_TYPE,"constant"}  # Wind model implementation
+  
+  # Constant wind field configuration (simple directional flow)
+  constant:
+    # Wind velocity vector in simulation coordinates
+    velocity: [2.0, 0.0]  # [u, v] wind components (m/s or spatial units/s)
+    direction: 0.0  # Wind direction (degrees, 0=East, 90=North)
+    speed: 2.0  # Wind speed magnitude
+    
+    # Vertical wind profile (optional 2.5D effects)
+    enable_vertical_profile: false  # Enable height-dependent wind
+    surface_roughness: 0.1  # Surface roughness parameter (m)
+    
+  # Turbulent wind field configuration (gusty, realistic conditions)
+  turbulent:
+    # Base wind parameters
+    mean_velocity: [2.0, 0.3]  # Mean wind velocity components
+    turbulence_intensity: [0.2, 0.15]  # Turbulence intensity [u, v] directions
+    
+    # Gust modeling parameters
+    gust_frequency: 0.1  # Average gust frequency (Hz)
+    gust_duration: 5.0  # Typical gust duration (seconds)
+    max_gust_factor: 2.0  # Maximum wind speed multiplier during gusts
+    
+    # Spatial correlation parameters
+    correlation_length: 10.0  # Spatial correlation scale (spatial units)
+    temporal_correlation: 0.9  # Temporal correlation coefficient
+    
+  # Time-varying wind field configuration (data-driven or scheduled changes)
+  time_varying:
+    # Wind variation parameters
+    base_wind: [1.5, 0.0]  # Base wind velocity
+    variation_amplitude: [0.5, 0.3]  # Wind variation magnitude
+    variation_period: 60.0  # Wind variation period (seconds)
+    
+    # Scheduled wind changes (optional)
+    enable_wind_schedule: ${oc.env:ENABLE_WIND_SCHEDULE,"false"}  # Use scheduled changes
+    wind_schedule_file: ${oc.env:WIND_SCHEDULE_PATH,"data/wind_schedule.yaml"}  # Wind schedule data
+
+# ============================================================================
+# SENSOR CONFIGURATION SYSTEMS
+# ============================================================================
+# Configure agent perception through pluggable sensor implementations
+# supporting different sensing modalities and research requirements.
+
+sensors:
+  # Sensor type selection with environment variable override
+  # Set SENSOR_TYPE=binary|concentration|gradient for different perception modes
+  type: ${oc.env:SENSOR_TYPE,"concentration"}  # Primary sensor implementation
+  
+  # Multi-sensor configuration (enable multiple sensing modalities)
+  enable_multi_sensor: ${oc.env:ENABLE_MULTI_SENSOR,"false"}  # Support multiple sensor types
+  sensor_fusion_method: "concatenation"  # Options: concatenation, weighted_average, max
+  
+  # Binary sensor configuration (threshold-based detection)
+  binary:
+    # Detection threshold parameters
+    detection_threshold: ${oc.env:BINARY_THRESHOLD,"0.1"}  # Odor detection threshold
+    hysteresis: 0.02  # Hysteresis band to prevent oscillation
+    
+    # Noise modeling for realistic sensor behavior
+    false_positive_rate: 0.05  # Probability of false positive detection
+    false_negative_rate: 0.03  # Probability of false negative (miss)
+    
+    # Response characteristics
+    response_time: 0.1  # Sensor response time (seconds)
+    recovery_time: 0.5  # Time to clear detection after odor removal
+    
+  # Concentration sensor configuration (quantitative measurement)
+  concentration:
+    # Measurement range and precision
+    dynamic_range: [0.0, 1.0]  # [min, max] measurable concentrations
+    resolution: 0.001  # Measurement precision
+    saturation_level: 0.95  # Saturation threshold (fraction of max range)
+    
+    # Noise and calibration parameters
+    measurement_noise: ${oc.env:CONCENTRATION_NOISE,"0.02"}  # Additive noise std dev
+    calibration_drift: 0.001  # Long-term calibration drift rate
+    
+    # Temporal filtering for realistic sensor dynamics
+    temporal_filtering: true  # Enable temporal response filtering
+    filter_time_constant: 0.2  # First-order filter time constant
+    
+  # Gradient sensor configuration (directional navigation cues)
+  gradient:
+    # Spatial differentiation parameters
+    spatial_resolution: [0.5, 0.5]  # [dx, dy] finite difference spacing
+    finite_difference_method: "central"  # Options: forward, backward, central
+    differentiation_order: 2  # Finite difference accuracy order
+    
+    # Multi-point sampling configuration
+    sampling_points: 4  # Number of points for gradient computation
+    sampling_radius: 1.0  # Radius for multi-point sampling
+    
+    # Gradient filtering and processing
+    enable_gradient_smoothing: true  # Apply smoothing to computed gradients
+    smoothing_kernel_size: 3  # Spatial smoothing kernel size
+    min_gradient_magnitude: 0.001  # Minimum reportable gradient magnitude
+    
+    # Advanced gradient features
+    compute_higher_derivatives: false  # Enable Hessian matrix computation
+    normalize_gradients: true  # Normalize gradient vectors to unit magnitude
 
 # ============================================================================
 # SIMULATION EXECUTION OVERRIDES
@@ -516,10 +701,77 @@ hydra:
 # ============================================================================
 # CONFIGURATION EXAMPLES AND TEMPLATES
 # ============================================================================
-# The following examples demonstrate common research scenarios and can be
-# uncommented and modified for specific experiments.
+# The following examples demonstrate common research scenarios using the new
+# modular architecture. Uncomment and modify for specific experiments.
 
-# Example 1: High-Performance Multi-Agent Swarm Study
+# Example 1: Fast Analytical Plume with Memory-Less Agent Study
+# Uncomment for rapid prototyping with simple Gaussian plume physics
+# plume_models:
+#   type: "gaussian"
+#   gaussian:
+#     dispersion_coeffs: [0.15, 0.08]
+#     source_strength: 500.0
+# wind_fields:
+#   type: "constant"
+#   constant:
+#     velocity: [1.5, 0.0]
+# sensors:
+#   type: "binary"
+#   binary:
+#     detection_threshold: 0.2
+#     false_positive_rate: 0.02
+
+# Example 2: Realistic Turbulent Plume with Memory-Based Navigation
+# Uncomment for high-fidelity research with complex environmental dynamics
+# plume_models:
+#   type: "turbulent"
+#   turbulent:
+#     num_filaments: 1000
+#     turbulence_intensity: 0.2
+#     enable_numba_acceleration: true
+# wind_fields:
+#   type: "turbulent"
+#   turbulent:
+#     mean_velocity: [2.5, 0.5]
+#     turbulence_intensity: [0.25, 0.18]
+#     gust_frequency: 0.15
+# sensors:
+#   type: "gradient"
+#   enable_multi_sensor: true
+#   gradient:
+#     spatial_resolution: [0.3, 0.3]
+#     compute_higher_derivatives: true
+
+# Example 3: Multi-Sensor Perception Study
+# Uncomment for research on sensor fusion and multi-modal perception
+# sensors:
+#   enable_multi_sensor: true
+#   sensor_fusion_method: "weighted_average"
+#   concentration:
+#     dynamic_range: [0.0, 2.0]
+#     measurement_noise: 0.05
+#   binary:
+#     detection_threshold: 0.15
+#     hysteresis: 0.03
+#   gradient:
+#     spatial_resolution: [0.4, 0.4]
+#     normalize_gradients: true
+
+# Example 4: Video-Based Plume with Environmental Dynamics
+# Uncomment for experiments using real plume data with synthetic wind
+# plume_models:
+#   type: "video_adapter"
+#   video_adapter:
+#     spatial_interpolation: "cubic"
+#     temporal_interpolation: "linear"
+# wind_fields:
+#   type: "time_varying"
+#   time_varying:
+#     base_wind: [1.8, 0.2]
+#     variation_amplitude: [0.8, 0.4]
+#     variation_period: 45.0
+
+# Example 5: High-Performance Multi-Agent Swarm Study
 # Uncomment to activate comprehensive multi-agent navigation research
 # navigator:
 #   positions: [[0.0, 0.0], [10.0, 0.0], [20.0, 0.0], [30.0, 0.0], [40.0, 0.0]]
@@ -631,6 +883,34 @@ hydra:
 # Video Processing:
 #   PLUME_THRESHOLD       - binary detection threshold value
 #
+# Modular Architecture - Component Selection:
+#   PLUME_MODEL_TYPE      - plume model implementation (gaussian|turbulent|video_adapter)
+#                          gaussian: fast analytical dispersion model
+#                          turbulent: realistic filament-based physics
+#                          video_adapter: backward-compatible video processing
+#   WIND_FIELD_TYPE       - wind dynamics model (constant|turbulent|time_varying)
+#                          constant: uniform directional flow
+#                          turbulent: gusty atmospheric conditions
+#                          time_varying: scheduled or periodic wind changes
+#   SENSOR_TYPE           - primary sensor implementation (binary|concentration|gradient)
+#                          binary: threshold-based odor detection
+#                          concentration: quantitative measurement
+#                          gradient: directional navigation cues
+#
+# Plume Model Configuration:
+#   PLUME_SOURCE_STRENGTH - odor release rate for analytical models (default: 1000.0)
+#   TURBULENT_FILAMENTS   - number of filaments for turbulent model (default: 500)
+#   ENABLE_NUMBA          - JIT acceleration for turbulent physics (true|false)
+#
+# Sensor Configuration:
+#   ENABLE_MULTI_SENSOR   - enable multiple sensor modalities (true|false)
+#   BINARY_THRESHOLD      - binary sensor detection threshold (default: 0.1)
+#   CONCENTRATION_NOISE   - concentration sensor noise level (default: 0.02)
+#
+# Wind Field Configuration:
+#   ENABLE_WIND_SCHEDULE  - use scheduled wind changes (true|false)
+#   WIND_SCHEDULE_PATH    - path to wind schedule data file
+#
 # Frame Caching (Gymnasium Migration Enhanced):
 #   FRAME_CACHE_MODE      - cache strategy (none|lru|all)
 #                          none: memoryless flavor, minimal memory usage
@@ -679,7 +959,7 @@ hydra:
 #   3. Use Hydra CLI overrides for dynamic parameter modification
 #   4. Combine environment variables with CLI overrides for maximum flexibility
 #
-# Example .env file:
+# Example .env file (Traditional Configuration):
 #   ENVIRONMENT_TYPE=production
 #   DEBUG=false
 #   DATABASE_URL=postgresql://user:pass@host:port/db
@@ -694,6 +974,86 @@ hydra:
 #   # FRAME_CACHE_SIZE_MB=0           # Alternative: minimal memory usage
 #   
 #   LOG_JSON_SINK=true
+#
+# Example .env file (Modular Architecture - Fast Research):
+#   ENVIRONMENT_TYPE=development
+#   DEBUG=true
+#   
+#   # Fast analytical simulation configuration
+#   PLUME_MODEL_TYPE=gaussian         # Simple Gaussian dispersion model
+#   WIND_FIELD_TYPE=constant          # Uniform wind field
+#   SENSOR_TYPE=binary                # Threshold-based detection
+#   
+#   # Plume configuration
+#   PLUME_SOURCE_STRENGTH=750.0       # Moderate source strength
+#   BINARY_THRESHOLD=0.15             # Sensitive detection threshold
+#   
+#   # Performance optimization
+#   FRAME_CACHE_MODE=lru
+#   NUMPY_THREADS=4
+#   
+# Example .env file (Modular Architecture - High-Fidelity Research):
+#   ENVIRONMENT_TYPE=production
+#   DEBUG=false
+#   
+#   # Realistic turbulent simulation configuration
+#   PLUME_MODEL_TYPE=turbulent        # Filament-based turbulent physics
+#   WIND_FIELD_TYPE=turbulent         # Gusty atmospheric conditions
+#   SENSOR_TYPE=gradient              # Directional navigation cues
+#   
+#   # Advanced turbulent physics
+#   TURBULENT_FILAMENTS=1500          # High-resolution filament field
+#   ENABLE_NUMBA=true                 # JIT acceleration for performance
+#   
+#   # Multi-sensor perception
+#   ENABLE_MULTI_SENSOR=true          # Enable sensor fusion
+#   CONCENTRATION_NOISE=0.025         # Realistic sensor noise
+#   
+#   # High-performance caching
+#   FRAME_CACHE_MODE=lru
+#   FRAME_CACHE_SIZE_MB=8192          # 8 GiB for complex simulations
+#   NUMPY_THREADS=16                  # Multi-core optimization
+#   
+#   # Structured logging for analysis
+#   LOG_JSON_SINK=true
+#   LOG_LEVEL=INFO
+#
+# ============================================================================
+# MODULAR ARCHITECTURE SUMMARY
+# ============================================================================
+# The enhanced configuration system supports pluggable components enabling
+# configuration-driven switching between simulation approaches without code changes.
+#
+# Key Modular Components:
+#   1. Plume Models: Switch between analytical (gaussian), realistic (turbulent), 
+#      and video-based (video_adapter) odor dispersion physics
+#   2. Wind Fields: Configure environmental dynamics from simple (constant) to 
+#      complex (turbulent) atmospheric conditions
+#   3. Sensors: Support different perception modalities (binary, concentration, gradient)
+#      with optional multi-sensor fusion capabilities
+#
+# Configuration-Driven Research Scenarios:
+#   - Memory vs Memoryless Agent Studies: Use simple models for memoryless agents,
+#     complex physics for memory-based navigation strategies
+#   - Sensor Fusion Research: Enable multiple sensors simultaneously and configure
+#     fusion methods (concatenation, weighted_average, max)
+#   - Environmental Realism Studies: Switch from analytical models to turbulent
+#     physics with realistic wind dynamics for varying fidelity levels
+#   - Performance vs Accuracy Trade-offs: Use environment variables to select
+#     fast analytical models for prototyping, realistic physics for final experiments
+#
+# Benefits of Modular Architecture:
+#   - No code changes required to switch between simulation approaches
+#   - Environment variable control enables automated parameter sweeps
+#   - Backward compatibility with existing video-based workflows
+#   - Configurable complexity scaling from simple (sub-ms steps) to realistic (research-grade)
+#   - Multi-run experiments comparing different component combinations
+#
+# Research Example Workflows:
+#   1. Rapid Prototyping: gaussian plume + constant wind + binary sensor
+#   2. Algorithm Validation: turbulent plume + turbulent wind + gradient sensor  
+#   3. Sensor Studies: any plume + any wind + multi-sensor configuration
+#   4. Comparative Analysis: multirun with different component combinations
 #
 # ============================================================================
 # END OF USER CONFIGURATION
@@ -714,6 +1074,20 @@ hydra:
 #   python -m odor_plume_nav.cli.main --multirun navigator.speed=0.5,1.0,1.5
 #   python -m odor_plume_nav.cli.main video_plume.kernel_size=5 +environment=production
 #   
+#   # Modular architecture configuration examples (NEW)
+#   python -m odor_plume_nav.cli.main plume_models=gaussian wind_fields=constant sensors=binary
+#   python -m odor_plume_nav.cli.main plume_models=turbulent sensors=gradient
+#   python -m odor_plume_nav.cli.main plume_models.type=video_adapter wind_fields.type=turbulent
+#   
+#   # Multi-run experiments with different component combinations
+#   python -m odor_plume_nav.cli.main --multirun plume_models=gaussian,turbulent sensors=binary,concentration
+#   python -m odor_plume_nav.cli.main --multirun wind_fields=constant,turbulent,time_varying
+#   python -m odor_plume_nav.cli.main --multirun plume_models=gaussian plume_models.gaussian.dispersion_coeffs="[0.1,0.05],[0.2,0.1]"
+#   
+#   # Memory-based vs memoryless agent comparison with modular components
+#   python -m odor_plume_nav.cli.main plume_models=gaussian sensors=concentration  # Memoryless compatible
+#   python -m odor_plume_nav.cli.main plume_models=turbulent sensors=gradient     # Memory-enabled navigation
+#   
 #   # Frame cache configuration with environment flavors (Gymnasium migration)
 #   python -m odor_plume_nav.cli.main frame_cache.mode=lru frame_cache.memory_limit_mb=4096
 #   python -m odor_plume_nav.cli.main frame_cache.mode=all logging.json_sink_enabled=true
@@ -724,6 +1098,11 @@ hydra:
 #   python -m odor_plume_nav.cli.main +env/flavors=memoryless  # Minimal memory usage
 #   python -m odor_plume_nav.cli.main +env/flavors=memory     # Optimized caching
 #   python -m odor_plume_nav.cli.main +env/flavors=memory frame_cache.mode=all
+#   
+#   # Advanced modular component configuration examples
+#   python -m odor_plume_nav.cli.main plume_models=turbulent plume_models.turbulent.num_filaments=1000
+#   python -m odor_plume_nav.cli.main sensors=gradient sensors.gradient.spatial_resolution="[0.3,0.3]"
+#   python -m odor_plume_nav.cli.main wind_fields=turbulent wind_fields.turbulent.gust_frequency=0.2
 #
 # Compose API Examples:
 #   from hydra import compose, initialize
@@ -736,5 +1115,33 @@ hydra:
 #   export FRAME_CACHE_MODE=lru
 #   export FRAME_CACHE_SIZE_MB=4096
 #   export LOG_JSON_SINK=true
+#   python -m odor_plume_nav.cli.main
+#
+# Modular Architecture Environment Integration:
+#   # Fast analytical simulation for rapid prototyping
+#   export PLUME_MODEL_TYPE=gaussian
+#   export WIND_FIELD_TYPE=constant
+#   export SENSOR_TYPE=binary
+#   python -m odor_plume_nav.cli.main
+#   
+#   # High-fidelity turbulent simulation for research
+#   export PLUME_MODEL_TYPE=turbulent
+#   export WIND_FIELD_TYPE=turbulent
+#   export SENSOR_TYPE=gradient
+#   export TURBULENT_FILAMENTS=1000
+#   export ENABLE_NUMBA=true
+#   python -m odor_plume_nav.cli.main
+#   
+#   # Multi-sensor perception study
+#   export SENSOR_TYPE=concentration
+#   export ENABLE_MULTI_SENSOR=true
+#   export CONCENTRATION_NOISE=0.03
+#   python -m odor_plume_nav.cli.main sensors=gradient +sensors=binary
+#   
+#   # Video-based plume with dynamic wind
+#   export PLUME_MODEL_TYPE=video_adapter
+#   export WIND_FIELD_TYPE=time_varying
+#   export ENABLE_WIND_SCHEDULE=true
+#   export VIDEO_PATH=/data/experiments/realistic_plume.mp4
 #   python -m odor_plume_nav.cli.main
 # ============================================================================

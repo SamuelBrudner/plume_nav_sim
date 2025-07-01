@@ -1,0 +1,398 @@
+# ============================================================================
+# TIME-VARYING WIND FIELD CONFIGURATION (time_varying.yaml)
+# ============================================================================
+#
+# This configuration defines dynamic temporal wind patterns with configurable 
+# temporal evolution profiles supporting complex experimental scenarios requiring
+# time-dependent environmental conditions. The TimeVaryingWindField implements
+# sophisticated wind pattern sequences and temporal interpolation methods for
+# enhanced environmental realism in plume navigation research.
+#
+# INTENDED USE CASES:
+#   - Research scenarios requiring dynamic environmental conditions
+#   - Temporal wind pattern studies with realistic atmospheric dynamics
+#   - Complex experimental protocols with time-dependent transport effects
+#   - Realistic plume dispersion modeling with varying wind conditions
+#   - Training scenarios with temporal environmental challenges
+#
+# SCIENTIFIC BASIS:
+#   - Temporal evolution patterns based on atmospheric boundary layer dynamics
+#   - Mathematical functions supporting sinusoidal, random, and measured patterns
+#   - SciPy-based temporal interpolation for smooth wind field evolution
+#   - Configurable turbulence intensity and atmospheric stability modeling
+#   - Optional seasonal variation support for long-term experiments
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - Single position velocity query: <0.5ms (WindFieldProtocol compliance)
+#   - Temporal evolution step: <2ms for real-time simulation compatibility
+#   - Memory usage: <50MB for typical temporal wind field representations
+#   - Zero-copy NumPy operations for memory efficiency and performance
+#   - Configurable temporal resolution with adaptive interpolation
+#
+# USAGE EXAMPLES:
+#   # Basic sinusoidal wind variation
+#   python -m plume_nav_sim +wind_field=time_varying wind_field.temporal_pattern=sinusoidal
+#
+#   # Data-driven wind from measurements  
+#   python -m plume_nav_sim +wind_field=time_varying wind_field.data_file=wind_data.csv
+#
+#   # Complex atmospheric dynamics with turbulence
+#   python -m plume_nav_sim +wind_field=time_varying wind_field.turbulence_intensity=0.3
+#
+#   # Combine with advanced plume models
+#   python -m plume_nav_sim +wind_field=time_varying +plume_model=turbulent
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   WIND_BASE_VELOCITY_U=2.0           # Base eastward velocity component
+#   WIND_BASE_VELOCITY_V=0.5           # Base northward velocity component  
+#   WIND_TEMPORAL_PATTERN=sinusoidal   # Temporal variation pattern
+#   WIND_AMPLITUDE_U=1.0               # U-component variation amplitude
+#   WIND_AMPLITUDE_V=0.3               # V-component variation amplitude
+#   WIND_PERIOD=60.0                   # Temporal period in time units
+#   WIND_TURBULENCE_INTENSITY=0.1      # Turbulence strength [0, 1]
+#   WIND_DATA_FILE=wind_data.csv       # Measurement data file path
+#
+# ============================================================================
+
+# @package _global_
+
+# Configuration metadata for temporal wind field tracking and validation
+_config_:
+  wind_field_type: "time_varying"
+  description: "Dynamic temporal wind patterns with configurable evolution profiles"
+  target_capability: "time_dependent_environmental_conditions" 
+  complexity_level: "advanced_atmospheric_dynamics"
+  last_modified: "2024-01-01"
+
+# ============================================================================
+# TIME-VARYING WIND FIELD COMPONENT CONFIGURATION
+# ============================================================================
+# Comprehensive TimeVaryingWindField configuration implementing the WindFieldProtocol
+# interface with dynamic temporal patterns supporting configurable temporal evolution,
+# periodic variations, and complex atmospheric dynamics for enhanced environmental
+# realism in plume navigation research scenarios.
+
+# Core TimeVaryingWindField instantiation with Hydra factory pattern
+_target_: "plume_nav_sim.models.wind.time_varying_wind.TimeVaryingWindField"
+
+# ============================================================================
+# BASIC WIND DYNAMICS PARAMETERS
+# ============================================================================
+# Fundamental wind field characteristics providing the foundation for temporal
+# evolution patterns and environmental transport dynamics.
+
+# Base wind velocity vector components in environment units per time step
+# Forms the foundation for all temporal variation patterns
+# Environment variable support: ${oc.env:WIND_BASE_VELOCITY_U,2.0} and ${oc.env:WIND_BASE_VELOCITY_V,0.5}
+base_velocity: [2.0, 0.5]  # [u_x (eastward), u_y (northward)] in units/time
+
+# ============================================================================
+# TEMPORAL PATTERN CONFIGURATION
+# ============================================================================
+# Dynamic temporal evolution parameters supporting multiple variation patterns
+# for realistic atmospheric dynamics and complex experimental scenarios.
+
+# Primary temporal variation pattern controlling wind field evolution
+# Options: 'constant', 'sinusoidal', 'random', 'measured'
+# Environment variable override: ${oc.env:WIND_TEMPORAL_PATTERN,sinusoidal}
+temporal_pattern: "sinusoidal"  # Smooth periodic wind variation
+
+# Velocity variation amplitude for periodic patterns as [u_amplitude, v_amplitude]
+# Controls the strength of temporal variations around base velocity
+# Environment variable support: configurable via WIND_AMPLITUDE_U, WIND_AMPLITUDE_V
+amplitude: [1.0, 0.3]  # Moderate variation amplitude for realistic dynamics
+
+# Temporal period for periodic patterns in simulation time units
+# Defines the fundamental frequency of wind field oscillations
+# Environment variable override: ${oc.env:WIND_PERIOD,60.0}
+period: 60.0  # One-minute period for typical atmospheric variations
+
+# Phase offset for periodic patterns in degrees
+# Allows synchronization with other temporal phenomena or experimental protocols
+phase_offset: 0.0  # No phase shift from simulation start
+
+# ============================================================================
+# STOCHASTIC DYNAMICS PARAMETERS  
+# ============================================================================
+# Advanced stochastic modeling parameters for realistic turbulent wind variations
+# and atmospheric boundary layer effects.
+
+# Scale factor for random wind variations in stochastic patterns
+# Controls the magnitude of random fluctuations relative to base velocity
+randomness_scale: 0.1  # 10% random variation for realistic turbulence
+
+# Turbulence intensity factor controlling stochastic fluctuation strength [0, 1]
+# Represents atmospheric instability and eddy formation intensity
+# Environment variable override: ${oc.env:WIND_TURBULENCE_INTENSITY,0.1}
+turbulence_intensity: 0.1  # Moderate turbulence for realistic atmospheric conditions
+
+# Atmospheric stability class affecting boundary layer dynamics
+# Options: 'stable', 'neutral', 'unstable'
+# Influences turbulent mixing and wind variation characteristics
+atmospheric_stability: "neutral"  # Standard atmospheric conditions
+
+# ============================================================================
+# DATA-DRIVEN WIND CONFIGURATION
+# ============================================================================
+# Parameters for measured wind patterns from meteorological data files
+# supporting research scenarios with realistic temporal wind sequences.
+
+# Path to wind measurement data file for 'measured' temporal pattern
+# Supports CSV and JSON formats with configurable column mapping
+# Environment variable override: ${oc.env:WIND_DATA_FILE,null}
+data_file: null  # No data file for default sinusoidal pattern
+
+# Column name for temporal data in measurement files
+# Enables flexible data file formats and temporal alignment
+temporal_column: "time"  # Standard time column identifier
+
+# Column names for velocity components in measurement data
+# Supports flexible data schemas and component naming conventions
+velocity_columns: ["u_wind", "v_wind"]  # Standard meteorological naming
+
+# Interpolation method for data-driven patterns
+# Options: 'linear', 'cubic', 'nearest' 
+# Controls smoothness and accuracy of temporal interpolation
+interpolation_method: "linear"  # Balance of performance and accuracy
+
+# Extrapolation strategy for times outside measurement data range
+# Options: 'constant', 'periodic', 'linear'
+# Handles simulation times beyond available measurement periods
+extrapolation_mode: "constant"  # Stable extrapolation for extended simulations
+
+# ============================================================================
+# ADVANCED TEMPORAL DYNAMICS
+# ============================================================================
+# Sophisticated temporal modeling parameters for enhanced atmospheric realism
+# and complex experimental scenario support.
+
+# Internal temporal resolution for wind evolution calculations
+# Controls the precision of temporal discretization and evolution accuracy
+time_step: 1.0  # Standard time step for balanced performance and accuracy
+
+# Enable spatial variation in wind field beyond uniform temporal patterns
+# Adds spatial gradients and boundary layer effects to temporal evolution
+spatial_variability: false  # Uniform spatial field for temporal focus
+
+# Enable seasonal wind pattern variations for long-term experiments
+# Adds annual cycles and seasonal atmospheric patterns to temporal evolution
+seasonal_variation: false  # Disabled for short-term experimental focus
+
+# Amplitude of seasonal variations when seasonal_variation is enabled
+# Controls the strength of seasonal modulation relative to base patterns
+seasonal_amplitude: 0.2  # 20% seasonal variation for moderate seasonal effects
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION PARAMETERS
+# ============================================================================
+# Configuration parameters optimizing temporal wind field performance while
+# maintaining realistic atmospheric dynamics and WindFieldProtocol compliance.
+
+# Number of time steps to cache for performance optimization
+# Balances memory usage with computation efficiency for repeated queries
+memory_length: 100  # Cache recent history for temporal correlation efficiency
+
+# Performance monitoring and validation settings for production deployment
+performance_monitoring:
+  # Enable detailed performance metrics collection for optimization analysis
+  enabled: true  # Monitor temporal evolution and query performance
+  
+  # Target performance thresholds for WindFieldProtocol compliance validation
+  velocity_query_threshold_ms: 0.5  # Maximum acceptable query time per protocol
+  temporal_step_threshold_ms: 2.0   # Maximum acceptable step time per protocol
+  
+  # Memory usage monitoring for temporal state management
+  memory_usage_monitoring: true  # Track memory efficiency of temporal caching
+  memory_warning_threshold_mb: 40  # Warning threshold below 50MB protocol limit
+
+# ============================================================================
+# EXPERIMENTAL SCENARIO CONFIGURATIONS
+# ============================================================================
+# Predefined configuration presets supporting common experimental scenarios
+# and research protocols with time-dependent environmental conditions.
+
+# Experimental presets for rapid configuration of common research scenarios
+experimental_presets:
+  # Gentle diurnal wind variation for circadian rhythm studies
+  diurnal_variation:
+    temporal_pattern: "sinusoidal"
+    period: 1440.0  # 24-hour period for diurnal cycle
+    amplitude: [0.5, 0.2]  # Gentle variation amplitude
+    atmospheric_stability: "neutral"
+    seasonal_variation: false
+  
+  # Gusty conditions for challenging navigation scenarios
+  gusty_conditions:
+    temporal_pattern: "random"
+    randomness_scale: 0.3  # Strong random variations
+    turbulence_intensity: 0.4  # High turbulence for gusty effects
+    atmospheric_stability: "unstable"  # Enhanced mixing and instability
+    spatial_variability: true  # Spatial wind gradients
+  
+  # Calm baseline conditions for controlled experiments
+  baseline_calm:
+    temporal_pattern: "constant"
+    amplitude: [0.0, 0.0]  # No temporal variation
+    turbulence_intensity: 0.0  # Minimal turbulence
+    atmospheric_stability: "stable"  # Stable atmospheric conditions
+    randomness_scale: 0.0  # No stochastic variations
+
+# ============================================================================
+# INTEGRATION WITH PLUME MODELS
+# ============================================================================
+# Configuration parameters ensuring optimal integration with plume transport
+# calculations and realistic time-varying transport dynamics.
+
+# Plume model integration settings for realistic transport dynamics
+plume_integration:
+  # Enable integration with plume models for realistic transport effects
+  # TimeVaryingWindField provides velocity fields for plume transport calculations
+  enable_transport_coupling: true  # Couple wind dynamics with plume physics
+  
+  # Wind field update frequency for plume transport calculations
+  # Balances temporal accuracy with computational efficiency
+  transport_update_frequency: 1  # Update every simulation step for accuracy
+  
+  # Advanced transport coupling for enhanced realism
+  advanced_coupling:
+    # Enable wind-dependent plume dispersion coefficient adjustments
+    adaptive_dispersion: false  # Standard dispersion for baseline experiments
+    
+    # Include wind shear effects in vertical mixing (future enhancement)
+    wind_shear_effects: false  # 2D focus for current implementation
+    
+    # Atmospheric boundary layer coupling for enhanced realism
+    boundary_layer_coupling: false  # Simplified dynamics for performance
+
+# ============================================================================
+# VALIDATION AND DIAGNOSTICS
+# ============================================================================
+# Configuration parameters supporting temporal wind field validation and
+# experimental quality assurance for research reproducibility.
+
+# Diagnostic and validation settings for experimental quality assurance
+diagnostics:
+  # Enable comprehensive validation of temporal patterns and statistical properties
+  enable_pattern_validation: true  # Validate temporal evolution characteristics
+  
+  # Statistical validation thresholds for quality assurance
+  statistical_validation:
+    # Maximum acceptable deviation from configured parameters
+    amplitude_tolerance: 0.1  # 10% tolerance for amplitude accuracy
+    period_tolerance: 0.05    # 5% tolerance for period accuracy
+    
+    # Statistical consistency checks for random patterns
+    random_distribution_validation: true  # Verify random pattern statistics
+    
+  # Real-time diagnostics for operational monitoring
+  real_time_diagnostics:
+    # Log temporal pattern statistics at regular intervals
+    log_statistics_interval: 100  # Log every 100 time steps
+    
+    # Enable performance deviation alerts for operational monitoring
+    performance_alerts: true  # Alert on performance threshold violations
+    
+    # Comprehensive state logging for debugging and analysis
+    detailed_state_logging: false  # Disabled for performance optimization
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# Comprehensive environment variable overrides supporting flexible deployment
+# in containerized and cloud environments with dynamic parameter specification.
+
+# Advanced environment variable mappings for production deployment flexibility
+_env_overrides_:
+  # Core wind dynamics overrides for deployment configuration
+  base_velocity_u: ${oc.env:WIND_BASE_VELOCITY_U,2.0}
+  base_velocity_v: ${oc.env:WIND_BASE_VELOCITY_V,0.5}
+  temporal_pattern: ${oc.env:WIND_TEMPORAL_PATTERN,sinusoidal}
+  
+  # Temporal variation parameter overrides for experimental control
+  amplitude_u: ${oc.env:WIND_AMPLITUDE_U,1.0}
+  amplitude_v: ${oc.env:WIND_AMPLITUDE_V,0.3}
+  period: ${oc.env:WIND_PERIOD,60.0}
+  phase_offset: ${oc.env:WIND_PHASE_OFFSET,0.0}
+  
+  # Atmospheric dynamics overrides for scenario configuration
+  turbulence_intensity: ${oc.env:WIND_TURBULENCE_INTENSITY,0.1}
+  atmospheric_stability: ${oc.env:WIND_ATMOSPHERIC_STABILITY,neutral}
+  randomness_scale: ${oc.env:WIND_RANDOMNESS_SCALE,0.1}
+  
+  # Data-driven wind overrides for measurement-based scenarios
+  data_file: ${oc.env:WIND_DATA_FILE,null}
+  interpolation_method: ${oc.env:WIND_INTERPOLATION_METHOD,linear}
+  extrapolation_mode: ${oc.env:WIND_EXTRAPOLATION_MODE,constant}
+  
+  # Performance optimization overrides for deployment tuning
+  memory_length: ${oc.env:WIND_MEMORY_LENGTH,100}
+  time_step: ${oc.env:WIND_TIME_STEP,1.0}
+
+# ============================================================================
+# DEPLOYMENT VALIDATION AND REQUIREMENTS
+# ============================================================================
+# Configuration validation and deployment requirements ensuring optimal
+# operation with time-dependent environmental conditions and research-grade accuracy.
+
+_deployment_validation_:
+  # Minimum system requirements for time-varying wind field deployment
+  minimum_requirements:
+    python_version: "3.8+"  # Modern Python for enhanced numerical libraries
+    numpy_version: "1.20+"  # Advanced array operations and mathematical functions
+    scipy_version: "1.10+"  # Required for interpolation and statistical functions
+    memory_mb: 128  # Minimum memory for temporal state management
+    
+  # Scientific accuracy validation thresholds for research compliance
+  accuracy_thresholds:
+    temporal_precision: 0.01  # 1% temporal accuracy for reliable patterns
+    velocity_precision: 0.001  # High precision for transport calculations
+    interpolation_accuracy: 0.05  # 5% interpolation error tolerance
+    statistical_validity: 0.95  # 95% confidence for stochastic patterns
+    
+  # Performance validation requirements for WindFieldProtocol compliance
+  performance_requirements:
+    velocity_query_max_ms: 0.5  # WindFieldProtocol requirement
+    temporal_step_max_ms: 2.0   # WindFieldProtocol requirement
+    memory_limit_mb: 50  # WindFieldProtocol memory efficiency requirement
+    cache_efficiency: 0.8  # 80% cache hit rate for temporal correlations
+    
+  # Integration compatibility requirements for plume model coupling
+  integration_requirements:
+    plume_model_compatibility: true  # Must integrate with all plume models
+    transport_coupling: true  # Required for realistic dispersion physics
+    sensor_integration: true  # Must work with all sensor protocols
+    multi_agent_support: true  # Vectorized operations for multi-agent scenarios
+
+# ============================================================================
+# END OF TIME-VARYING WIND FIELD CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive temporal wind dynamics supporting
+# complex experimental scenarios with time-dependent environmental conditions.
+# All parameters support environment variable overrides and Hydra composition
+# for flexible deployment across research and production environments.
+#
+# DEPLOYMENT CHECKLIST:
+#   □ Verify Python 3.8+ with NumPy 1.20+ and SciPy 1.10+ availability
+#   □ Configure temporal pattern parameters for experimental requirements
+#   □ Set appropriate environment variables for deployment-specific conditions
+#   □ Validate performance meets WindFieldProtocol requirements (<0.5ms queries)
+#   □ Test integration with target plume models and sensor configurations
+#   □ Verify temporal evolution accuracy for experimental validity
+#
+# EXPERIMENTAL VALIDATION:
+#   □ Temporal pattern accuracy within configured tolerances
+#   □ Wind field evolution matches expected atmospheric dynamics
+#   □ Performance metrics within WindFieldProtocol compliance thresholds
+#   □ Integration seamless with plume transport calculations
+#   □ Memory usage stable under extended temporal evolution
+#
+# RESEARCH INTEGRATION:
+#   □ Wind dynamics appropriate for experimental scenario complexity
+#   □ Temporal patterns support research hypotheses and protocols
+#   □ Performance sufficient for real-time or accelerated simulations
+#   □ Data logging and diagnostics support experimental analysis
+#   □ Configuration reproducibility for research reliability
+#
+# For additional configuration examples and advanced temporal pattern modeling,
+# see conf/base/wind_fields/ directory and technical specification documentation.
+# ============================================================================

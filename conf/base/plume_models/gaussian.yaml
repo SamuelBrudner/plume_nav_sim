@@ -1,0 +1,278 @@
+# ============================================================================
+# PLUME NAVIGATION SIMULATOR: GAUSSIAN PLUME MODEL CONFIGURATION (gaussian.yaml)  
+# ============================================================================
+#
+# This configuration enables fast mathematical plume modeling using analytical
+# Gaussian dispersion equations as an alternative to video-based plume data and
+# complex turbulent physics simulations. The GaussianPlumeModel provides real-time
+# concentration computation with sub-millisecond evaluation times, making it ideal
+# for rapid experimentation, algorithm development, and performance-critical
+# research scenarios requiring deterministic, repeatable plume physics.
+#
+# CONFIGURATION PURPOSE:
+#   - Enable pluggable plume model implementations through Hydra dependency injection
+#   - Provide fast analytical alternative to video-based and turbulent plume models
+#   - Support mathematical dispersion modeling with configurable parameters
+#   - Maintain performance targets of sub-10ms step latency for real-time applications
+#   - Enable runtime plume model selection without code modifications
+#
+# RESEARCH APPLICATIONS:
+#   - Algorithm prototyping and development with deterministic plume fields
+#   - Performance baseline testing for navigation strategies
+#   - Educational demonstrations of odor plume navigation principles
+#   - Multi-agent simulation scenarios requiring fast, consistent physics
+#   - Comparison studies between simple and complex plume modeling approaches
+#
+# TECHNICAL CHARACTERISTICS:
+#   - Analytical Gaussian dispersion equations for mathematical precision
+#   - Vectorized NumPy operations for efficient multi-agent processing
+#   - Configurable source strength and dispersion coefficients
+#   - Optional wind field integration for realistic transport dynamics
+#   - Sub-millisecond concentration queries for interactive performance
+#   - Zero-copy array operations for memory efficiency
+#
+# PERFORMANCE BENCHMARKS:
+#   - Single agent concentration query: <0.1ms typical execution time
+#   - 100+ agent batch processing: <1ms for vectorized operations
+#   - Memory footprint: <1MB for typical parameter configurations
+#   - Step execution: <0.5ms including wind advection effects
+#
+# USAGE INSTRUCTIONS:
+#   python -m plume_nav_sim plume_model=gaussian
+#   python -m plume_nav_sim plume_model=gaussian plume_model.source_strength=2000
+#   python -m plume_nav_sim plume_model=gaussian plume_model.sigma_x=10.0 plume_model.sigma_y=5.0
+#   python -m plume_nav_sim plume_model=gaussian plume_model.wind_speed=2.0 plume_model.wind_direction=45.0
+#
+# ============================================================================
+
+# @package plume_model
+# Hydra package directive for plume_model configuration scope
+
+# ============================================================================
+# HYDRA DEPENDENCY INJECTION CONFIGURATION
+# ============================================================================
+# Configure Hydra to instantiate GaussianPlumeModel class with structured
+# configuration validation and type-safe parameter management for seamless
+# integration with the modular plume simulation architecture.
+
+# Hydra target specification for automatic component instantiation
+_target_: plume_nav_sim.models.plume.gaussian_plume.GaussianPlumeModel
+
+# ============================================================================
+# SOURCE CONFIGURATION: EMISSION CHARACTERISTICS
+# ============================================================================
+# Define odor source parameters including location, emission strength, and
+# baseline concentration levels for mathematical plume field generation.
+
+# Source location in environment coordinates (x, y) with environment variable support
+# Default positioned at environment center for typical experimental setups
+source_position: 
+  - ${oc.env:PLUME_SOURCE_X,50.0}  # X-coordinate with environment override
+  - ${oc.env:PLUME_SOURCE_Y,50.0}  # Y-coordinate with environment override
+
+# Emission rate in arbitrary concentration units optimized for fast computation
+# Higher values create stronger concentration gradients for easier navigation
+source_strength: ${oc.env:PLUME_SOURCE_STRENGTH,1000.0}
+
+# Baseline concentration level present throughout environment
+# Represents background odor levels independent of source emissions
+background_concentration: ${oc.env:PLUME_BACKGROUND_CONCENTRATION,0.0}
+
+# Maximum concentration value for normalization and bounds checking
+# Ensures concentration values remain within expected ranges for navigation algorithms
+max_concentration: ${oc.env:PLUME_MAX_CONCENTRATION,1.0}
+
+# ============================================================================
+# DISPERSION CONFIGURATION: PLUME SPREAD CHARACTERISTICS  
+# ============================================================================
+# Configure Gaussian dispersion coefficients controlling plume width and shape
+# in both spatial dimensions. These parameters directly affect navigation difficulty
+# and concentration gradient steepness for agent guidance.
+
+# Dispersion coefficient in x-direction (horizontal spread)
+# Controls plume width perpendicular to wind direction
+# Smaller values create narrower, more concentrated plumes
+sigma_x: ${oc.env:PLUME_SIGMA_X,5.0}
+
+# Dispersion coefficient in y-direction (vertical spread)  
+# Controls plume height and cross-wind dispersion characteristics
+# Asymmetric values (sigma_x != sigma_y) create elliptical plume shapes
+sigma_y: ${oc.env:PLUME_SIGMA_Y,3.0}
+
+# ============================================================================
+# WIND DYNAMICS CONFIGURATION: ADVECTION AND TRANSPORT
+# ============================================================================
+# Configure wind field parameters for realistic plume transport dynamics.
+# Wind effects create time-dependent plume evolution and advection patterns
+# essential for biologically-inspired navigation strategies.
+
+# Wind speed for simple constant advection model
+# Controls rate of plume transport and temporal dynamics
+# Zero wind creates stationary plume fields for basic experiments
+wind_speed: ${oc.env:PLUME_WIND_SPEED,0.0}
+
+# Wind direction in degrees following meteorological convention
+# 0° = eastward (positive X), 90° = northward (positive Y)
+# 180° = westward, 270° = southward for full directional control
+wind_direction: ${oc.env:PLUME_WIND_DIRECTION,0.0}
+
+# Enable integration with advanced WindField implementations
+# When true, uses complex wind models instead of simple constant wind
+# Requires WindField component configuration for turbulent dynamics
+enable_wind_field: ${oc.env:PLUME_ENABLE_WIND_FIELD,false}
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION CONFIGURATION
+# ============================================================================
+# Configure computational efficiency parameters to maintain sub-10ms step
+# latency requirements for real-time simulation and multi-agent scenarios.
+
+# Minimum concentration threshold for computational efficiency
+# Values below threshold return zero to eliminate negligible concentration noise
+# Smaller thresholds increase precision but reduce computational performance
+concentration_cutoff: ${oc.env:PLUME_CONCENTRATION_CUTOFF,1e-6}
+
+# Temporal resolution for plume evolution and wind integration
+# Controls time step granularity for advection calculations
+# Smaller values improve accuracy but increase computational overhead
+time_step: ${oc.env:PLUME_TIME_STEP,1.0}
+
+# ============================================================================
+# SPATIAL BOUNDS CONFIGURATION: ENVIRONMENT CONSTRAINTS
+# ============================================================================
+# Define optional spatial boundaries for plume field computation and agent
+# movement constraints. Bounds checking optimizes performance by limiting
+# computation to relevant regions and handles boundary condition behavior.
+
+# Spatial bounds as [[x_min, x_max], [y_min, y_max]] or null for unlimited
+# When specified, positions outside bounds return background_concentration
+# Null value disables bounds checking for unlimited spatial domains
+spatial_bounds: ${oc.env:PLUME_SPATIAL_BOUNDS,null}
+
+# ============================================================================
+# EXPERIMENTAL VARIATIONS: PARAMETER OVERRIDE EXAMPLES
+# ============================================================================
+# The following commented configurations demonstrate common experimental
+# parameter variations for different research scenarios and optimization
+# requirements using Hydra's override system.
+
+# Example 1: High-resolution narrow plume for precision navigation
+# sigma_x: 2.0
+# sigma_y: 1.0  
+# source_strength: 2000.0
+# concentration_cutoff: 1e-8
+
+# Example 2: Wide diffuse plume for exploration algorithms
+# sigma_x: 15.0
+# sigma_y: 12.0
+# source_strength: 500.0
+# wind_speed: 1.0
+
+# Example 3: Strong wind advection for dynamic tracking
+# wind_speed: 3.0
+# wind_direction: 45.0
+# source_strength: 1500.0
+# time_step: 0.5
+
+# Example 4: Multi-source scenario (requires array inputs)
+# source_position: [[25.0, 25.0], [75.0, 75.0]]
+# source_strength: [800.0, 1200.0]
+# sigma_x: [4.0, 6.0]
+# sigma_y: [3.0, 4.0]
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# The gaussian plume model supports comprehensive environment variable
+# configuration for deployment flexibility and parameter sweep automation
+# while maintaining structured configuration validation.
+#
+# Supported Environment Variables:
+#   PLUME_SOURCE_X=25.0                    - Source X coordinate
+#   PLUME_SOURCE_Y=75.0                    - Source Y coordinate  
+#   PLUME_SOURCE_STRENGTH=1500.0           - Emission rate
+#   PLUME_SIGMA_X=8.0                      - X dispersion coefficient
+#   PLUME_SIGMA_Y=4.0                      - Y dispersion coefficient
+#   PLUME_WIND_SPEED=2.0                   - Wind velocity magnitude
+#   PLUME_WIND_DIRECTION=90.0              - Wind direction in degrees
+#   PLUME_BACKGROUND_CONCENTRATION=0.1     - Baseline concentration
+#   PLUME_MAX_CONCENTRATION=1.5            - Maximum concentration limit
+#   PLUME_CONCENTRATION_CUTOFF=1e-7        - Computational precision threshold
+#   PLUME_TIME_STEP=0.5                    - Temporal resolution
+#   PLUME_ENABLE_WIND_FIELD=true           - Enable advanced wind models
+#   PLUME_SPATIAL_BOUNDS="[[0,100],[0,100]]" - JSON spatial constraints
+#
+# Example Environment Variable Usage:
+#   export PLUME_SOURCE_X=30.0
+#   export PLUME_SOURCE_Y=70.0
+#   export PLUME_WIND_SPEED=2.5
+#   export PLUME_WIND_DIRECTION=135.0
+#   python -m plume_nav_sim plume_model=gaussian
+#
+# Container Environment Variable Configuration:
+#   docker run --rm \
+#     -e PLUME_SOURCE_STRENGTH=2000 \
+#     -e PLUME_SIGMA_X=10.0 \
+#     -e PLUME_WIND_SPEED=1.5 \
+#     plume_nav_sim:latest plume_model=gaussian
+#
+# ============================================================================
+# INTEGRATION WITH MODULAR ARCHITECTURE
+# ============================================================================
+# This configuration integrates seamlessly with the modular plume navigation
+# simulator architecture, enabling runtime component swapping and maintaining
+# compatibility with existing simulation workflows and RL training pipelines.
+#
+# Key Integration Points:
+#   - PlumeModelProtocol compliance for uniform interface
+#   - WindField integration through enable_wind_field parameter
+#   - Sensor abstraction compatibility for multi-modal observations
+#   - Episode management integration for experiment automation
+#   - Performance monitoring hooks for optimization analysis
+#
+# Component Interaction Examples:
+#   - NavigatorProtocol: Receives concentration values from concentration_at()
+#   - WindFieldProtocol: Provides velocity fields when enable_wind_field=true
+#   - SensorProtocol: Samples plume field through navigator interfaces
+#   - SimulationContext: Manages model lifecycle and parameter updates
+#
+# ============================================================================
+# PERFORMANCE MONITORING AND VALIDATION
+# ============================================================================
+# The GaussianPlumeModel includes comprehensive performance monitoring to
+# ensure sub-10ms step latency requirements are maintained across different
+# parameter configurations and usage scenarios.
+#
+# Performance Metrics Collected:
+#   - Concentration query execution time per agent
+#   - Batch processing efficiency for multi-agent scenarios  
+#   - Memory allocation and garbage collection overhead
+#   - Wind field integration computational cost
+#   - Cache hit rates for optimization validation
+#
+# Performance Validation Commands:
+#   python -m plume_nav_sim plume_model=gaussian simulation.benchmark_mode=true
+#   python -m plume_nav_sim plume_model=gaussian navigator.num_agents=100 simulation.profile_performance=true
+#
+# ============================================================================
+# COMPATIBILITY AND MIGRATION NOTES
+# ============================================================================
+# This Gaussian plume model configuration maintains backward compatibility
+# with existing video-based workflows while providing enhanced performance
+# and configurability for mathematical plume modeling research scenarios.
+#
+# Migration from VideoPlume:
+#   - Replace plume_model=video with plume_model=gaussian in command line
+#   - Adjust source_position to match video plume source locations
+#   - Tune sigma_x and sigma_y to approximate video plume dispersion characteristics
+#   - Set source_strength to achieve similar concentration ranges
+#
+# Compatibility Features:
+#   - Same concentration_at() interface as VideoPlume
+#   - Identical step() and reset() method signatures  
+#   - Compatible observation spaces for RL training continuity
+#   - Seamless integration with existing navigator implementations
+#
+# ============================================================================
+# END OF GAUSSIAN PLUME MODEL CONFIGURATION
+# ============================================================================

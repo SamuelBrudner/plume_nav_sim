@@ -1,0 +1,363 @@
+# ============================================================================
+# GRADIENT SENSOR CONFIGURATION (gradient.yaml)
+# ============================================================================
+#
+# This configuration defines the GradientSensor component for spatial gradient
+# computation providing directional navigation cues through finite difference
+# algorithms. The sensor enables adaptive navigation strategies by computing
+# spatial derivatives of concentration fields with configurable accuracy and
+# performance trade-offs while maintaining sub-10ms step execution targets.
+#
+# FUNCTIONALITY:
+#   - Spatial gradient computation using configurable finite difference methods
+#   - Multi-point sampling with adaptive spatial resolution for gradient quality control
+#   - Optimized computational kernels maintaining performance targets despite complexity
+#   - Comprehensive metadata reporting for navigation decision support
+#   - Integration with modular sensor architecture supporting protocol-based extensibility
+#
+# INTENDED USE CASES:
+#   - Gradient-following navigation algorithms requiring directional navigation cues
+#   - Uphill climbing strategies for odor source localization tasks
+#   - Multi-agent swarms with gradient-based coordination behaviors
+#   - Research scenarios comparing memory-based vs reactive navigation approaches
+#   - Performance optimization studies with configurable computational complexity
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - Gradient computation: <0.2ms per agent with multi-point sampling
+#   - Multi-agent scaling: Linear performance with agent count up to 100+ agents
+#   - Memory efficiency: <1KB per agent for gradient computation state
+#   - Numerical stability: Robust gradient estimation in noisy concentration fields
+#
+# ALGORITHM FEATURES:
+#   - Finite difference methods: central, forward, backward, adaptive selection
+#   - Derivative approximation orders: 2nd, 4th, 6th, 8th order accuracy
+#   - Adaptive step sizing: Automatic adjustment based on local concentration variation
+#   - Edge handling: Robust computation near domain boundaries
+#   - Caching system: Performance optimization for repeated queries
+#
+# CONFIGURATION EXAMPLES:
+#   # High-accuracy gradient computation
+#   python -m plume_nav_sim sensors=gradient sensors.method=central sensors.order=4
+#
+#   # Performance-optimized configuration
+#   python -m plume_nav_sim sensors=gradient sensors.adaptive_step_size=false sensors.enable_caching=true
+#
+#   # Multi-agent gradient-based navigation
+#   python -m plume_nav_sim navigator=multi_agent sensors=gradient sensors.spatial_resolution=[0.1,0.1]
+#
+#   # Research comparison: reactive vs memory-based agents
+#   python -m plume_nav_sim sensors=gradient agents.memory_enabled=false
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   GRADIENT_SENSOR_METHOD=central           # Force central difference method
+#   GRADIENT_SENSOR_RESOLUTION=0.5           # Override spatial resolution
+#   GRADIENT_SENSOR_ADAPTIVE=true            # Enable adaptive step sizing
+#   GRADIENT_SENSOR_CACHING=true             # Enable computation caching
+#   GRADIENT_SENSOR_ORDER=4                  # Set derivative approximation order
+#
+# ============================================================================
+
+# Hydra target specification for GradientSensor component instantiation
+# Points to the GradientSensor implementation with spatial gradient computation
+_target_: src.plume_nav_sim.core.sensors.gradient_sensor.GradientSensor
+
+# ============================================================================
+# FINITE DIFFERENCE ALGORITHM CONFIGURATION
+# ============================================================================
+# Core parameters controlling spatial derivative computation accuracy and method
+# selection. These settings determine the numerical approach used for gradient
+# calculation with trade-offs between accuracy and computational performance.
+
+# Finite difference method selection for gradient computation
+# Options: "central", "forward", "backward", "adaptive"
+# - central: Highest accuracy, symmetric stencil, best for smooth fields
+# - forward: Asymmetric stencil, suitable for boundary conditions
+# - backward: Asymmetric stencil, alternative boundary handling
+# - adaptive: Automatic method selection based on local conditions and boundaries
+method: "central"  # Default to central differences for maximum accuracy
+
+# Derivative approximation order controlling numerical accuracy
+# Options: 2, 4, 6, 8 (higher order = more accurate but computationally expensive)
+# - order=2: Standard finite differences, fastest computation
+# - order=4: Enhanced accuracy with moderate computational cost
+# - order=6: High accuracy for demanding applications
+# - order=8: Maximum precision for research-grade computations
+order: 2  # Balanced accuracy and performance for real-time applications
+
+# ============================================================================
+# SPATIAL RESOLUTION CONFIGURATION
+# ============================================================================
+# Parameters controlling the spatial sampling resolution for gradient computation
+# affecting both accuracy and computational requirements. Adaptive step sizing
+# provides automatic optimization based on local concentration field characteristics.
+
+# Spatial step sizes for finite difference stencil in environment coordinates
+# Tuple format: [dx, dy] where dx=x-direction step, dy=y-direction step
+# Smaller values provide higher spatial resolution but increased computation
+# Typical ranges: [0.1, 0.1] for high accuracy, [0.5, 0.5] for performance
+spatial_resolution: [0.5, 0.5]  # Balanced resolution for general applications
+
+# Enable adaptive step sizing for automatic resolution optimization
+# When enabled, step sizes adjust based on local concentration variation:
+# - High variation regions: smaller steps for accuracy
+# - Smooth regions: larger steps for computational efficiency
+adaptive_step_size: true  # Enable intelligent step size adaptation
+
+# Minimum step size for adaptive methods (prevents excessive refinement)
+# Controls lower bound of adaptive step sizing to maintain computational performance
+# Should be small enough to capture sharp concentration gradients accurately
+min_step_size: 0.1  # Minimum spatial resolution limit
+
+# Maximum step size for adaptive methods (prevents excessive coarsening)
+# Controls upper bound of adaptive step sizing for maintained gradient quality
+# Should be large enough to provide efficiency in smooth concentration regions
+max_step_size: 2.0  # Maximum spatial resolution limit
+
+# ============================================================================
+# NUMERICAL STABILITY AND EDGE HANDLING
+# ============================================================================
+# Configuration for robust gradient computation in challenging scenarios including
+# noisy concentration fields, domain boundaries, and numerical stability issues.
+
+# Concentration threshold for noise detection and gradient reliability assessment
+# Gradients computed in regions below this threshold are marked as low confidence
+# Helps distinguish signal from noise in weak concentration regions
+noise_threshold: 1.0e-6  # Scientific notation for precise threshold specification
+
+# Edge handling method for domain boundary conditions
+# Options: "zero_padding", "mirror", "extend", "wrap"
+# - zero_padding: Assume zero concentration outside domain (most conservative)
+# - mirror: Reflect boundary values for smooth edge transitions
+# - extend: Extrapolate boundary values using nearest neighbor
+# - wrap: Periodic boundary conditions for continuous domains
+edge_handling: "zero_padding"  # Conservative boundary handling for stability
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION CONFIGURATION
+# ============================================================================
+# Settings for computational performance optimization including caching systems,
+# memory management, and execution efficiency parameters maintaining sub-10ms
+# step execution targets for real-time simulation compatibility.
+
+# Enable gradient computation caching for performance optimization
+# Caches recently computed gradients to avoid redundant calculations
+# Particularly effective for scenarios with repeated position queries
+enable_caching: true  # Enable caching for performance optimization
+
+# Maximum number of cached gradient computations to maintain in memory
+# Larger cache sizes improve hit rates but increase memory usage
+# Automatic cache eviction based on LRU (Least Recently Used) policy
+max_cache_size: 1000  # Balanced cache size for performance and memory efficiency
+
+# Cache entry time-to-live in seconds for temporal invalidation
+# Ensures cached results remain valid for dynamic plume environments
+# Shorter TTL provides fresher data, longer TTL improves cache efficiency
+cache_ttl_seconds: 60.0  # One-minute cache validity for dynamic environments
+
+# ============================================================================
+# METADATA AND MONITORING CONFIGURATION
+# ============================================================================
+# Parameters controlling comprehensive metadata collection, performance monitoring,
+# and diagnostic information generation for navigation decision support and
+# system optimization analysis.
+
+# Enable comprehensive metadata collection for navigation support
+# Includes computation methods, confidence metrics, edge effect detection
+# Provides rich information for navigation algorithm decision making
+enable_metadata: true  # Enable detailed metadata for navigation algorithms
+
+# Sensor identification for logging correlation and performance tracking
+# Automatically generated unique identifier supporting multi-sensor scenarios
+# Format: gradient_sensor_{instance_id} for systematic identification
+sensor_id: null  # Auto-generated unique identifier
+
+# Enable structured logging for performance monitoring and debugging
+# Provides detailed operational metrics, computation timing, and efficiency data
+# Essential for performance optimization and troubleshooting activities
+enable_logging: true  # Enable comprehensive logging and performance tracking
+
+# ============================================================================
+# ADVANCED CONFIGURATION OPTIONS
+# ============================================================================
+# Extended parameters for specialized use cases, research applications, and
+# advanced performance tuning supporting complex experimental scenarios.
+
+# Configuration inheritance and composition support
+# Enables hierarchical configuration management with parameter overrides
+# Supports research workflows with systematic parameter exploration
+defaults:
+  - _self_  # Include this configuration as primary settings
+
+# Hydra configuration metadata for experiment tracking and reproducibility
+_config_metadata_:
+  component_type: "sensor"
+  sensor_type: "gradient"
+  performance_profile: "balanced_accuracy_performance"
+  target_applications: ["gradient_following", "source_localization", "multi_agent_navigation"]
+  computational_complexity: "moderate"  # Due to multi-point sampling requirements
+  memory_footprint: "low"  # <1KB per agent computation state
+  real_time_compatible: true  # Maintains sub-10ms step targets
+
+# Component validation and performance requirements
+_validation_requirements_:
+  gradient_computation_time_ms: 0.2  # Maximum per-agent computation time
+  multi_agent_scaling: "linear"  # Performance scaling characteristics
+  numerical_accuracy: "configurable"  # 2nd to 8th order finite differences
+  memory_efficiency: 1024  # Maximum bytes per agent (1KB limit)
+  cache_efficiency_target: 0.8  # Minimum cache hit rate for performance
+
+# Integration patterns with other system components
+_integration_patterns_:
+  compatible_plume_models: ["gaussian", "turbulent", "video_adapter"]
+  compatible_wind_fields: ["constant", "turbulent", "time_varying"]
+  navigation_strategies: ["reactive", "memory_based", "planning"]
+  multi_agent_coordination: ["independent", "coordinated", "swarm"]
+
+# ============================================================================
+# DEVELOPMENT AND DEBUGGING CONFIGURATION
+# ============================================================================
+# Parameters supporting development workflows, debugging activities, and
+# performance analysis with minimal impact on production performance.
+
+# Enable debug logging for detailed computation analysis (development only)
+# Provides step-by-step computation details, intermediate results, and timing
+# Should be disabled in production due to performance and storage overhead
+_debug_logging_enabled_: false  # Disable debug logging for production performance
+
+# Validation mode for gradient computation accuracy verification (testing only)
+# Compares multiple methods and validates numerical accuracy against analytical solutions
+# Significantly impacts performance and should only be used during development
+_validation_mode_enabled_: false  # Disable validation for production performance
+
+# Performance profiling mode for computation timing analysis (benchmarking only)
+# Collects detailed timing metrics for optimization and bottleneck identification
+# Adds measurement overhead and should be used only for performance analysis
+_profiling_mode_enabled_: false  # Disable profiling for normal operation
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# Advanced environment variable mappings supporting flexible deployment and
+# runtime configuration in containerized and cloud environments with dynamic
+# parameter adjustment capabilities.
+
+_environment_overrides_:
+  # Core algorithm configuration overrides
+  finite_difference_method: ${oc.env:GRADIENT_SENSOR_METHOD,"central"}
+  derivative_order: ${oc.env:GRADIENT_SENSOR_ORDER,"2"}
+  spatial_step_size: ${oc.env:GRADIENT_SENSOR_RESOLUTION,"0.5"}
+  
+  # Performance optimization overrides
+  adaptive_stepping: ${oc.env:GRADIENT_SENSOR_ADAPTIVE,"true"}
+  caching_enabled: ${oc.env:GRADIENT_SENSOR_CACHING,"true"}
+  cache_size_limit: ${oc.env:GRADIENT_SENSOR_CACHE_SIZE,"1000"}
+  
+  # Monitoring and logging overrides
+  logging_enabled: ${oc.env:GRADIENT_SENSOR_LOGGING,"true"}
+  metadata_collection: ${oc.env:GRADIENT_SENSOR_METADATA,"true"}
+  
+  # Numerical parameters overrides
+  noise_threshold_override: ${oc.env:GRADIENT_SENSOR_NOISE_THRESHOLD,"1.0e-6"}
+  edge_handling_override: ${oc.env:GRADIENT_SENSOR_EDGE_HANDLING,"zero_padding"}
+
+# ============================================================================
+# CONFIGURATION VALIDATION AND DEPLOYMENT REQUIREMENTS
+# ============================================================================
+# Validation parameters ensuring optimal configuration for gradient-based
+# navigation scenarios with performance and accuracy requirements satisfaction.
+
+_deployment_validation_:
+  # Performance validation thresholds
+  performance_requirements:
+    max_computation_time_per_agent_ms: 0.2  # Sub-millisecond per-agent target
+    max_multi_agent_batch_time_ms: 10.0  # Batch processing under 10ms
+    cache_hit_rate_minimum: 0.7  # Minimum cache efficiency requirement
+    memory_usage_per_agent_bytes: 1024  # Maximum memory footprint per agent
+  
+  # Accuracy validation parameters
+  accuracy_requirements:
+    numerical_precision: "float64"  # Required numerical precision
+    gradient_magnitude_range: [1.0e-8, 1.0e3]  # Supported gradient magnitude range
+    spatial_resolution_range: [0.01, 10.0]  # Valid spatial resolution limits
+    derivative_order_support: [2, 4, 6, 8]  # Supported finite difference orders
+  
+  # Integration validation requirements
+  integration_requirements:
+    sensor_protocol_compliance: true  # Must implement SensorProtocol interface
+    hydra_instantiation_support: true  # Must support configuration-driven instantiation
+    multi_agent_vectorization: true  # Must support efficient batch operations
+    plume_model_compatibility: ["gaussian", "turbulent", "video"]  # Compatible models
+
+# ============================================================================
+# USAGE EXAMPLES AND CONFIGURATION PATTERNS
+# ============================================================================
+# Comprehensive examples demonstrating different configuration patterns for
+# various research scenarios and performance optimization strategies.
+
+_usage_examples_:
+  # High-accuracy research configuration
+  high_accuracy_research:
+    method: "central"
+    order: 6
+    spatial_resolution: [0.1, 0.1]
+    adaptive_step_size: true
+    enable_metadata: true
+    
+  # Performance-optimized configuration
+  performance_optimized:
+    method: "forward"
+    order: 2
+    spatial_resolution: [0.5, 0.5]
+    adaptive_step_size: false
+    enable_caching: true
+    
+  # Multi-agent swarm configuration
+  multi_agent_swarm:
+    method: "adaptive"
+    order: 2
+    spatial_resolution: [0.3, 0.3]
+    adaptive_step_size: true
+    max_cache_size: 2000
+    
+  # Memory-limited embedded configuration
+  embedded_system:
+    method: "forward"
+    order: 2
+    spatial_resolution: [1.0, 1.0]
+    adaptive_step_size: false
+    enable_caching: false
+    enable_metadata: false
+
+# ============================================================================
+# END OF GRADIENT SENSOR CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive gradient sensor setup for spatial
+# derivative computation with configurable accuracy, performance optimization,
+# and integration patterns. All parameters support environment variable overrides
+# and runtime configuration updates while maintaining sub-10ms performance targets.
+#
+# INTEGRATION CHECKLIST:
+#   □ Verify GradientSensor implementation available at target path
+#   □ Confirm SensorProtocol compliance for modular sensor architecture
+#   □ Validate finite difference coefficients pre-computation
+#   □ Test adaptive step sizing with various concentration field patterns
+#   □ Benchmark multi-agent performance scaling with target agent counts
+#   □ Verify cache efficiency under realistic access patterns
+#
+# PERFORMANCE VALIDATION:
+#   □ Gradient computation time <0.2ms per agent achieved
+#   □ Multi-agent batch processing <10ms for 100 agents achieved
+#   □ Memory usage <1KB per agent maintained
+#   □ Cache hit rate >70% for typical navigation patterns
+#   □ Numerical stability verified across concentration field variations
+#
+# RESEARCH INTEGRATION:
+#   □ Memory-less reactive agents supported via configuration
+#   □ Memory-based agents supported via optional interface
+#   □ Multiple finite difference methods available for comparison studies
+#   □ Configurable accuracy vs performance trade-offs enabled
+#   □ Comprehensive metadata available for navigation algorithm development
+#
+# For additional configuration examples and advanced optimization patterns,
+# see the technical specification documentation and performance analysis guides.
+# ============================================================================

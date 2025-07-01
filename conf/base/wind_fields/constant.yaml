@@ -1,0 +1,302 @@
+# ============================================================================
+# PLUME NAVIGATION SIMULATOR: CONSTANT WIND FIELD CONFIGURATION (constant.yaml)
+# ============================================================================
+#
+# This configuration defines a ConstantWindField component implementing simple
+# uniform directional wind flow with configurable speed and direction parameters.
+# Designed for basic environmental transport scenarios requiring minimal
+# computational overhead while maintaining full integration with plume physics
+# models through the WindFieldProtocol interface.
+#
+# CONFIGURATION PURPOSE:
+#   - Provide uniform directional wind flow throughout the simulation domain
+#   - Enable configurable wind speed and direction for diverse experimental scenarios
+#   - Support minimal computational overhead for basic environmental transport
+#   - Maintain integration with PlumeModelProtocol for transport equation updates
+#   - Enable runtime component swapping through Hydra dependency injection
+#
+# USAGE SCENARIOS:
+#   - Basic plume navigation experiments requiring simple environmental dynamics
+#   - Baseline simulations for comparison with more complex wind models
+#   - Educational scenarios demonstrating wind effects on odor transport
+#   - Performance-critical applications requiring minimal computational overhead
+#   - Multi-agent scenarios where wind consistency across agents is important
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - Velocity query time: <0.1ms for single position, <1ms for 100+ positions
+#   - Memory usage: <1KB for wind field state representation
+#   - Zero computational overhead for spatial interpolation
+#   - Sub-millisecond temporal evolution updates when enabled
+#   - Thread-safe operations for vectorized multi-agent environments
+#
+# INTEGRATION EXAMPLES:
+#   python -m plume_nav_sim wind_field=constant
+#   python -m plume_nav_sim wind_field=constant wind_field.velocity=[3.0,1.5]
+#   python -m plume_nav_sim wind_field=constant wind_field.enable_temporal_evolution=true
+#
+# ============================================================================
+
+# @package _global_
+# Hydra package directive enabling this configuration to be referenced globally
+# as wind_field parameter in other configuration compositions
+
+# ============================================================================
+# CORE WIND FIELD CONFIGURATION: CONSTANT UNIFORM FLOW
+# ============================================================================
+# Primary ConstantWindField component configuration implementing WindFieldProtocol
+# with optimized defaults for basic environmental transport scenarios.
+
+# ===== COMPONENT INSTANTIATION =====
+# Hydra target specification for automatic component instantiation through
+# dependency injection system supporting modular architecture requirements
+_target_: plume_nav_sim.models.wind.constant_wind.ConstantWindField
+
+# ===== BASIC WIND VELOCITY CONFIGURATION =====
+# Core velocity parameters defining uniform wind flow characteristics
+# throughout the simulation domain with configurable speed and direction
+
+# Primary velocity vector as [u_x, u_y] in environment units per time step
+# Supports both eastward (u_x) and northward (u_y) wind components following
+# standard meteorological conventions for consistent environmental modeling
+velocity: [2.0, 0.0]  # [u_x=2.0 east, u_y=0.0 north] - moderate eastward wind
+
+# ===== TEMPORAL EVOLUTION CONFIGURATION =====
+# Optional parameters for gradual wind changes over time, enabling dynamic
+# environmental conditions while maintaining computational efficiency
+
+# Enable/disable temporal evolution for gradually changing wind conditions
+# False provides constant wind for predictable baseline experiments
+# True enables dynamic wind for more realistic environmental scenarios
+enable_temporal_evolution: false  # Disabled for minimal computational overhead
+
+# Rate of velocity change per time step for gradual wind evolution
+# Higher values create faster wind changes, lower values slower transitions
+# Only applicable when temporal evolution is enabled
+evolution_rate: 0.0  # No evolution by default (constant wind maintained)
+
+# Maximum amplitude of velocity variations during temporal evolution
+# Defines the range of wind speed fluctuations around the base velocity
+# Enables realistic wind variability when temporal evolution is active
+evolution_amplitude: 0.0  # No amplitude variation (constant wind maintained)
+
+# Period of sinusoidal velocity variations in simulation time steps
+# Controls the cyclical nature of wind changes during temporal evolution
+# Larger values create slower cycles, smaller values faster oscillations
+evolution_period: 100.0  # Default period for potential future evolution
+
+# Random noise amplitude for velocity fluctuations adding realism
+# Introduces stochastic variability to wind velocity for natural behavior
+# Small values add subtle turbulence, larger values significant randomness
+noise_intensity: 0.0  # No noise by default (smooth, predictable wind)
+
+# ===== SPATIAL DOMAIN CONFIGURATION =====
+# Optional spatial boundary conditions for constraining wind field effects
+# to specific regions within the simulation domain for experimental control
+
+# Spatial bounds as ((x_min, x_max), (y_min, y_max)) for domain constraints
+# null applies wind field throughout entire simulation domain
+# Defined bounds limit wind effects to specified rectangular region
+boundary_conditions: null  # Wind field active throughout entire domain
+
+# ===== PERFORMANCE AND MONITORING CONFIGURATION =====
+# Advanced settings for performance optimization and experimental monitoring
+# enabling detailed analysis of wind field computational characteristics
+
+# Enable detailed performance metrics collection for optimization analysis
+# Tracks query timing, batch size statistics, and computational overhead
+# Useful for performance analysis but adds minimal computational cost
+performance_monitoring: false  # Disabled for minimal overhead in production
+
+# ===== INTEGRATION PARAMETERS =====
+# Configuration parameters for seamless integration with simulation components
+# ensuring compatibility with plume models, sensors, and visualization systems
+
+# Component integration settings for modular architecture compatibility
+integration:
+  # PlumeModel integration for transport equation updates via step() calls
+  # Enables wind field to influence plume dispersion and transport dynamics
+  plume_model_integration: true  # Full integration with plume physics
+  
+  # Sensor integration for wind-aware observations in agent sensing
+  # Allows sensors to incorporate wind information in observation processing
+  sensor_integration: true  # Enable wind data in sensor observations
+  
+  # Visualization integration for wind field display in real-time rendering
+  # Supports quiver plots and vector field visualization during simulation
+  visualization_integration: true  # Enable wind field visualization
+  
+  # Navigator integration for wind-aware agent control and planning
+  # Provides wind information to navigation controllers for informed decisions
+  navigator_integration: false  # Optional wind data for navigation (disabled by default)
+
+# ===== ENVIRONMENT VARIABLE OVERRIDES =====
+# Environment variable configuration maintaining deployment flexibility
+# while preserving structured configuration defaults for different environments
+
+environment_overrides:
+  # Core wind velocity configuration environment variables
+  velocity_env_var: "WIND_VELOCITY"  # Override velocity via WIND_VELOCITY=[2.0,1.0]
+  evolution_env_var: "WIND_EVOLUTION"  # Override temporal evolution via WIND_EVOLUTION=true
+  
+  # Advanced configuration overrides for specialized deployment scenarios
+  noise_env_var: "WIND_NOISE"  # Noise intensity override via WIND_NOISE=0.1
+  boundary_env_var: "WIND_BOUNDS"  # Spatial boundary override capability
+  monitoring_env_var: "WIND_MONITORING"  # Performance monitoring control
+
+# ===== ADVANCED CONFIGURATION OPTIONS =====
+# Extended parameters for specialized research scenarios and advanced
+# environmental modeling requiring fine-grained wind field control
+
+advanced:
+  # Random seed for reproducible noise generation when noise is enabled
+  # Ensures consistent stochastic behavior across experimental runs
+  random_seed: 42  # Fixed seed for reproducible noise patterns
+  
+  # Velocity update frequency for temporal evolution when enabled
+  # Controls how often velocity changes are computed during evolution
+  update_frequency: 1.0  # Update every time step for smooth evolution
+  
+  # Maximum velocity magnitude for safety constraints and realistic limits
+  # Prevents unrealistic wind speeds that could destabilize simulations
+  max_velocity_magnitude: 10.0  # Maximum total wind speed (10 units/timestep)
+  
+  # Velocity smoothing factor for gradual changes during evolution
+  # Controls the smoothness of velocity transitions between time steps
+  velocity_smoothing: 0.1  # Moderate smoothing for natural transitions
+  
+  # Cache velocity computations for repeated queries at same positions
+  # Improves performance for scenarios with repeated position queries
+  enable_velocity_caching: false  # Disabled (constant velocity makes caching unnecessary)
+
+# ============================================================================
+# CONFIGURATION EXAMPLES AND USAGE PATTERNS
+# ============================================================================
+# The following examples demonstrate common usage patterns for constant wind
+# field configuration in various research and deployment scenarios.
+
+# Example 1: Basic Eastward Wind for Simple Transport
+# Configure moderate eastward wind for basic plume advection experiments:
+#   wind_field:
+#     velocity: [2.0, 0.0]  # 2 units/timestep eastward
+#     enable_temporal_evolution: false
+#     performance_monitoring: false
+
+# Example 2: Northeast Wind with Temporal Evolution
+# Configure diagonal wind with gradual evolution for dynamic scenarios:
+#   wind_field:
+#     velocity: [1.5, 1.5]  # Diagonal northeast wind
+#     enable_temporal_evolution: true
+#     evolution_rate: 0.05
+#     evolution_amplitude: 0.3
+#     evolution_period: 200.0
+
+# Example 3: Performance Monitoring for Optimization
+# Enable detailed performance tracking for computational analysis:
+#   wind_field:
+#     velocity: [3.0, 1.0]  # Strong northeast wind
+#     performance_monitoring: true
+#     advanced.enable_velocity_caching: true
+
+# Example 4: Bounded Wind Field for Regional Effects
+# Constrain wind effects to specific spatial region:
+#   wind_field:
+#     velocity: [2.5, 0.5]
+#     boundary_conditions: [[10.0, 90.0], [10.0, 90.0]]  # Central region only
+
+# Example 5: Noisy Wind for Realistic Turbulence
+# Add realistic wind fluctuations for natural behavior:
+#   wind_field:
+#     velocity: [1.8, 0.8]
+#     noise_intensity: 0.1  # 10% velocity noise
+#     advanced.random_seed: 123  # Reproducible noise
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION EXAMPLES
+# ============================================================================
+# The constant wind field configuration supports environment variable overrides
+# for deployment flexibility while maintaining structured defaults.
+#
+# Supported Environment Variables:
+#   WIND_VELOCITY="[3.0,1.5]"     - Override velocity vector
+#   WIND_EVOLUTION=true           - Enable temporal evolution
+#   WIND_NOISE=0.1               - Set noise intensity
+#   WIND_MONITORING=true         - Enable performance monitoring
+#   WIND_BOUNDS="[[0,100],[0,100]]" - Set spatial boundaries
+#
+# Example Environment Variable Usage:
+#   export WIND_VELOCITY="[2.5,1.2]"
+#   export WIND_EVOLUTION=true
+#   export WIND_MONITORING=true
+#   python -m plume_nav_sim wind_field=constant
+#
+# Container Environment Variable Configuration:
+#   docker run -e WIND_VELOCITY="[3.0,0.5]" \
+#              -e WIND_MONITORING=true \
+#              plume_nav_sim wind_field=constant
+
+# ============================================================================
+# INTEGRATION WITH PLUME MODELS
+# ============================================================================
+# The ConstantWindField integrates seamlessly with all PlumeModelProtocol
+# implementations to provide environmental transport dynamics:
+#
+# GaussianPlumeModel Integration:
+#   - Wind advection modifies analytical plume dispersion equations
+#   - Constant wind enables closed-form solutions for transport
+#   - Minimal computational overhead for real-time performance
+#
+# TurbulentPlumeModel Integration:
+#   - Wind field influences filament transport and dispersion
+#   - Constant background flow with superimposed turbulent fluctuations
+#   - Realistic plume structure with controllable mean transport
+#
+# VideoPlumeAdapter Integration:
+#   - Wind field provides transport velocities for frame-based plumes
+#   - Enables dynamic plume evolution beyond static video sequences
+#   - Maintains backward compatibility with existing video datasets
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION NOTES
+# ============================================================================
+# The ConstantWindField is optimized for minimal computational overhead
+# while providing essential environmental transport capabilities:
+#
+# Computational Complexity:
+#   - O(1) velocity queries regardless of domain size
+#   - O(n) scaling with number of query positions (vectorized)
+#   - Sub-millisecond step() execution for temporal updates
+#   - Zero interpolation overhead (uniform field)
+#
+# Memory Usage:
+#   - <1KB state representation for typical parameter ranges
+#   - Linear scaling with configured boundary complexity
+#   - No spatial grid storage required (analytical computation)
+#   - Minimal memory footprint for embedded deployments
+#
+# Threading Considerations:
+#   - Thread-safe velocity queries for multi-agent scenarios
+#   - Atomic updates during temporal evolution steps
+#   - No shared mutable state between query operations
+#   - Scalable to 100+ concurrent agents without performance degradation
+
+# ============================================================================
+# MIGRATION AND COMPATIBILITY NOTES
+# ============================================================================
+# This configuration is designed for seamless integration with the modular
+# plume navigation simulator architecture while maintaining flexibility:
+#
+# Protocol Compliance:
+#   - Full WindFieldProtocol implementation compatibility
+#   - Hydra structured configuration integration
+#   - Type-safe parameter validation and error handling
+#   - Backward compatibility with legacy configuration patterns
+#
+# Extensibility:
+#   - Configuration-driven parameter modification without code changes
+#   - Support for custom evolution patterns through parameter tuning
+#   - Integration hooks for advanced monitoring and logging
+#   - Foundation for extension to more complex wind models
+
+# ============================================================================
+# END OF CONSTANT WIND FIELD CONFIGURATION
+# ============================================================================
