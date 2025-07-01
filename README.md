@@ -8,9 +8,27 @@ The Plume Navigation Simulation library (v0.3.0) provides a comprehensive toolki
 
 ### Key Features
 
+#### Core Architecture
+- **Modular Protocol-Driven Plugin System**: Revolutionary architecture supporting pluggable plume models, wind fields, and sensors through Python protocols with runtime component swapping
+- **Agent-Agnostic Design**: Memory-based and memory-less navigation strategies supported through configuration without code changes
+- **Configuration-Driven Component Selection**: Complete simulation customization through Hydra configuration files
+- **Zero-Code Extensibility**: Add new plume models, sensing modalities, and environmental dynamics through protocol implementation
+
+#### Plume Modeling Capabilities
+- **GaussianPlumeModel**: Fast analytical plume modeling with mathematical precision for rapid prototyping and training
+- **TurbulentPlumeModel**: Realistic filament-based turbulent physics simulation with optional Numba acceleration
+- **FilamentBasedPlumeModel**: Biologically-accurate intermittent odor signals matching real-world plume dynamics  
+- **VideoPlumeAdapter**: Backward-compatible video-based plume processing with high-performance frame caching
+
+#### Environmental Dynamics
+- **Wind Field System**: Configurable wind dynamics (constant, turbulent, time-varying) integrated with plume transport
+- **Sensor Abstraction**: Binary, concentration, and gradient sensors with optional temporal history
+- **Multi-Modal Sensing**: Flexible perception systems supporting diverse research scenarios
+
+#### Framework Integration
 - **Reusable Library Architecture**: Import and use in any Python project
 - **Modern Gymnasium 0.29.x Compliance**: Full compatibility with modern RL frameworks and APIs, replacing legacy OpenAI Gym
-- **Backward Compatibility**: Legacy Gym support through compatibility shims with deprecation timeline to v1.0
+- **Backward Compatibility**: Legacy Gym support through compatibility shims with VideoPlumeAdapter preservation
 - **High-Performance Frame Caching**: Configurable LRU frame caching system with ≤2 GiB RAM constraints and sub-10ms step times
 - **Extensible Hook System**: Overridable hooks for custom observations, rewards, and episode handling
 - **Hydra Configuration Management**: Sophisticated hierarchical configuration with environment variable integration
@@ -19,6 +37,236 @@ The Plume Navigation Simulation library (v0.3.0) provides a comprehensive toolki
 - **Docker-Ready**: Containerized development and deployment environments
 - **Dual Workflow Support**: Poetry and pip installation methods
 - **Research-Grade Quality**: Type-safe, well-documented, and thoroughly tested
+
+## Modular Architecture Overview
+
+### Protocol-Driven Plugin System
+
+The Plume Navigation Simulation library features a revolutionary **protocol-driven plugin architecture** that transforms odor plume navigation research from rigid, single-implementation systems into a flexible, extensible framework supporting diverse research scenarios through configuration-driven component swapping.
+
+#### Core Architectural Principles
+
+**Plugin-Oriented Design**: Every major simulation component implements Python protocols, enabling seamless substitution without code modifications:
+
+```python
+# Switch between plume models purely through configuration
+from plume_nav_sim.api.navigation import create_gymnasium_environment
+
+# Mathematical modeling for fast experimentation
+env_gaussian = create_gymnasium_environment(plume_model="gaussian")
+
+# Realistic physics for publication-quality research
+env_turbulent = create_gymnasium_environment(plume_model="turbulent")
+
+# Video-based modeling for existing datasets
+env_video = create_gymnasium_environment(plume_model="video")
+```
+
+**Memory-Agnostic Navigation**: The enhanced `NavigatorProtocol` supports both memory-based and memory-less strategies through optional extensibility hooks:
+
+```python
+# Memory-less reactive agent (pure stimulus-response)
+navigator_config = {
+    "type": "reactive",
+    "memory_enabled": False,
+    "strategy": "gradient_following"
+}
+
+# Memory-based cognitive agent (with internal state)
+navigator_config = {
+    "type": "cognitive", 
+    "memory_enabled": True,
+    "strategy": "infotaxis",
+    "memory_size": 1000
+}
+```
+
+### Component Architecture
+
+#### Plume Model Ecosystem
+
+**GaussianPlumeModel** - Mathematical Precision
+- Analytical solutions for rapid prototyping and algorithm development
+- Sub-millisecond computation time for real-time applications  
+- Configurable source strength, diffusion coefficients, and wind integration
+- Perfect for initial research and high-speed training scenarios
+
+**TurbulentPlumeModel** - Realistic Physics  
+- Filament-based turbulent dispersion modeling
+- Intermittent, patchy odor signals matching biological observations
+- Optional Numba JIT acceleration for computationally intensive scenarios
+- Ideal for publication-quality research requiring environmental fidelity
+
+**FilamentBasedPlumeModel** - Biological Accuracy
+- Individual odor packets with age, concentration, and transport dynamics
+- Stochastic wind field integration for realistic temporal variations
+- Sparse, intermittent detection patterns observed in natural environments
+- Essential for biologically-inspired navigation algorithm validation
+
+**VideoPlumeAdapter** - Legacy Compatibility
+- Backward-compatible processing of existing video datasets
+- High-performance frame caching with LRU and preload strategies
+- Seamless integration with existing research workflows
+- Maintains all performance optimizations from previous versions
+
+#### Environmental Dynamics System
+
+**Wind Field Integration**: 
+```yaml
+# Configuration-driven wind field selection
+wind_field:
+  type: "turbulent"  # Options: constant, turbulent, time_varying
+  mean_velocity: [2.0, 0.5]  # Base wind vector
+  turbulence_intensity: 0.3  # Gust strength
+  correlation_time: 5.0      # Temporal coherence
+```
+
+**Sensor Abstraction Layer**:
+```python
+# Multiple sensing modalities through protocol implementation
+sensor_config = {
+    "primary": {"type": "concentration", "range": 10.0},
+    "secondary": {"type": "binary", "threshold": 0.1},
+    "gradient": {"type": "gradient", "spatial_resolution": 0.5}
+}
+```
+
+### Configuration-Driven Research Workflows
+
+#### Experiment Configuration Examples
+
+**Comparative Memory Studies**:
+```yaml
+# conf/experiments/memory_comparison.yaml
+defaults:
+  - base_experiment
+  - plume_models: gaussian  # Fast, consistent baseline
+  - _self_
+
+experiment:
+  name: "memory_vs_memoryless_navigation"
+  
+  agents:
+    memoryless:
+      memory_enabled: false
+      strategy: "gradient_following"
+      
+    memory_based:
+      memory_enabled: true
+      strategy: "infotaxis"
+      memory_size: 500
+
+  evaluation:
+    episodes: 1000
+    metrics: ["success_rate", "path_efficiency", "search_time"]
+```
+
+**Plume Model Validation Study**:
+```yaml
+# conf/experiments/plume_fidelity.yaml
+plume_models:
+  - type: "gaussian"
+    config: {source_strength: 1.0, diffusion_rate: 0.1}
+  - type: "turbulent" 
+    config: {filament_count: 1000, dispersion_model: "lagrangian"}
+  - type: "video"
+    config: {video_path: "data/experimental_plume.mp4"}
+
+comparison:
+  metrics: ["spatial_distribution", "temporal_correlation", "concentration_statistics"]
+  validation_data: "data/field_measurements.csv"
+```
+
+#### Command-Line Component Switching
+
+```bash
+# Run identical experiment with different plume models
+plume-nav-sim run --config-name memory_study plume_model=gaussian
+plume-nav-sim run --config-name memory_study plume_model=turbulent  
+plume-nav-sim run --config-name memory_study plume_model=video
+
+# Compare performance across environmental complexity
+plume-nav-sim train --algorithm PPO \
+    plume_model=gaussian \
+    wind_field=constant \
+    sensor_config=simple
+
+plume-nav-sim train --algorithm PPO \
+    plume_model=turbulent \
+    wind_field=turbulent \
+    sensor_config=multi_modal
+```
+
+### Performance Guarantees and Backward Compatibility
+
+#### Performance Standards
+- **Step Latency**: <10ms for all plume models in single-agent scenarios
+- **Memory Efficiency**: Linear scaling with agent count across all implementations
+- **Cache Hit Rates**: >90% frame cache efficiency for video-based models
+- **Deterministic Behavior**: Identical results across runs with fixed random seeds
+
+#### Backward Compatibility
+- **VideoPlume Integration**: Existing video-based workflows preserved through `VideoPlumeAdapter`
+- **API Compatibility**: All existing `VideoPlume` methods maintained with deprecation warnings
+- **Configuration Migration**: Automatic conversion from legacy configuration formats
+- **Performance Preservation**: Frame caching optimizations maintained for video models
+
+#### Migration Path
+```python
+# Legacy approach (still supported)
+from plume_nav_sim import VideoPlume, Navigator
+video_plume = VideoPlume("data/plume.mp4")
+navigator = Navigator(position=(0, 0))
+
+# Modern modular approach  
+from plume_nav_sim.api.navigation import create_gymnasium_environment
+env = create_gymnasium_environment(
+    plume_model="video",
+    plume_config={"video_path": "data/plume.mp4"}
+)
+```
+
+### Extensibility and Custom Development
+
+#### Creating Custom Plume Models
+
+```python
+from plume_nav_sim.core.protocols import PlumeModelProtocol
+import numpy as np
+
+class CustomPlumeModel:
+    """Custom plume implementation following protocol requirements."""
+    
+    def get_concentration_field(self, timestamp: float) -> np.ndarray:
+        """Generate plume concentration field for given timestamp."""
+        # Implement custom physics model
+        return concentration_field
+        
+    def update_dynamics(self, wind_field: np.ndarray, dt: float) -> None:
+        """Update plume evolution with wind integration."""
+        # Implement temporal dynamics
+        pass
+```
+
+#### Research Integration Patterns
+
+```python
+# Jupyter notebook integration with modular components
+from plume_nav_sim.models.plume import GaussianPlumeModel, TurbulentPlumeModel
+from plume_nav_sim.models.wind import TurbulentWindField
+
+# Compare plume models directly
+gaussian_model = GaussianPlumeModel(source_strength=1.0)
+turbulent_model = TurbulentPlumeModel(filament_count=500)
+
+# Analyze spatial correlation differences
+gaussian_field = gaussian_model.get_concentration_field(t=10.0)
+turbulent_field = turbulent_model.get_concentration_field(t=10.0)
+
+correlation_analysis = analyze_plume_differences(gaussian_field, turbulent_field)
+```
+
+This modular architecture enables researchers to focus on algorithm development rather than infrastructure, while maintaining the performance and reliability required for production research environments.
 
 ## Installation
 
@@ -89,32 +337,92 @@ docker run -it plume_nav_sim
 
 ### For Kedro Projects
 
+#### Modern Modular Approach
+
 ```python
-from plume_nav_sim import Navigator, VideoPlume
-from plume_nav_sim.config import NavigatorConfig
+from plume_nav_sim.api.navigation import create_gymnasium_environment, create_plume_model
+from plume_nav_sim.core.protocols import NavigatorFactory
 from hydra import compose, initialize
 
-# Kedro pipeline integration
+# Kedro pipeline with modular architecture
 def create_navigation_pipeline():
     with initialize(config_path="../conf", version_base=None):
         cfg = compose(config_name="config")
         
-        # Create components using Hydra configuration
-        navigator = Navigator.from_config(cfg.navigator)
-        video_plume = VideoPlume.from_config(cfg.video_plume)
+        # Create modular components with protocol-based architecture
+        plume_model = create_plume_model(cfg.plume_model)
+        navigator = NavigatorFactory.from_config(cfg.navigator)
+        
+        # Or create complete environment
+        env = create_gymnasium_environment(cfg)
+        
+        return navigator, plume_model, env
+
+# Kedro node supporting multiple plume models
+def navigation_node(config: dict) -> dict:
+    """Kedro node for modular plume navigation simulation."""
+    
+    # Support different research scenarios through configuration
+    if config["experiment_type"] == "memory_comparison":
+        results = run_memory_comparison_study(config)
+    elif config["experiment_type"] == "plume_fidelity":
+        results = run_plume_model_validation(config)
+    else:
+        results = run_standard_navigation(config)
+    
+    return {
+        "trajectory": results.trajectory, 
+        "sensor_data": results.sensor_data,
+        "plume_model_type": config["plume_model"]["type"],
+        "memory_enabled": config["navigator"]["memory_enabled"]
+    }
+
+def run_memory_comparison_study(config: dict) -> dict:
+    """Compare memory-based vs memory-less navigation strategies."""
+    
+    results = {}
+    
+    # Memory-less agent
+    memoryless_config = config.copy()
+    memoryless_config["navigator"]["memory_enabled"] = False
+    env_memoryless = create_gymnasium_environment(memoryless_config)
+    results["memoryless"] = run_agent_evaluation(env_memoryless)
+    
+    # Memory-based agent
+    memory_config = config.copy()
+    memory_config["navigator"]["memory_enabled"] = True
+    memory_config["navigator"]["memory_size"] = 1000
+    env_memory = create_gymnasium_environment(memory_config)
+    results["memory_based"] = run_agent_evaluation(env_memory)
+    
+    return results
+```
+
+#### Legacy Compatibility (Deprecated but Supported)
+
+```python
+from plume_nav_sim import Navigator, VideoPlume  # Legacy imports
+from plume_nav_sim.config import NavigatorConfig
+from hydra import compose, initialize
+import warnings
+
+# Legacy approach still supported with deprecation warnings
+def create_legacy_navigation_pipeline():
+    with initialize(config_path="../conf", version_base=None):
+        cfg = compose(config_name="config")
+        
+        # Legacy components with deprecation warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            navigator = Navigator.from_config(cfg.navigator)
+            video_plume = VideoPlume.from_config(cfg.video_plume)
         
         return navigator, video_plume
-
-# Use in Kedro nodes
-def navigation_node(navigator: Navigator, video_plume: VideoPlume) -> dict:
-    """Kedro node for plume navigation simulation."""
-    results = navigator.simulate(video_plume, duration=cfg.simulation.max_duration)
-    return {"trajectory": results.trajectory, "sensor_data": results.sensor_data}
 ```
 
 ### For Reinforcement Learning Projects
 
-#### Using the Modern Gymnasium Environment
+#### Using the Modern Modular Gymnasium Environment
 
 ```python
 from plume_nav_sim.api.navigation import create_gymnasium_environment
@@ -123,56 +431,148 @@ from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.vec_env import DummyVecEnv
 import gymnasium as gym
 
-# Create Gymnasium-compliant environment with the new PlumeNavSim-v0 environment ID
-def create_rl_environment(config_path: str = "conf/config.yaml"):
-    """Create a Gymnasium environment for RL training."""
+# Create modular environment with configurable components
+def create_rl_environment(
+    plume_model: str = "gaussian",
+    memory_enabled: bool = False,
+    config_path: str = "conf/config.yaml"
+):
+    """Create a Gymnasium environment with modular component selection."""
     
     # Set deterministic behavior for RL training
     set_global_seed(42)
     
-    # Create environment using the modern PlumeNavSim-v0 environment
-    env = gymnasium.make('PlumeNavSim-v0')
-    # Alternative: use factory function with configuration
-    # env = create_gymnasium_environment(config_path)
+    # Method 1: Direct component configuration
+    env = create_gymnasium_environment(
+        config_path=config_path,
+        plume_model=plume_model,
+        navigator_config={
+            "memory_enabled": memory_enabled,
+            "strategy": "gradient_following" if not memory_enabled else "infotaxis"
+        }
+    )
     
-    # Optional: wrap with additional preprocessors
-    # env = NormalizeObservation(env)
-    # env = ClipAction(env)
+    # Method 2: Use registered environment with overrides
+    env = gymnasium.make(
+        'PlumeNavSim-v0',
+        plume_model=plume_model,
+        memory_enabled=memory_enabled
+    )
     
     return env
 
-# Train with stable-baselines3
-def train_rl_agent():
-    """Train an RL agent using PPO algorithm with Gymnasium API."""
+# Research-oriented environment creation for different scenarios
+def create_research_environments():
+    """Create environments for systematic research comparison."""
     
-    # Create environment
-    env = create_rl_environment()
+    environments = {}
     
-    # Verify environment compatibility with Gymnasium API
+    # Fast training environment with mathematical plume model
+    environments["gaussian_memoryless"] = create_gymnasium_environment(
+        plume_model="gaussian",
+        navigator_config={"memory_enabled": False, "strategy": "reactive"},
+        wind_field="constant"
+    )
+    
+    # Realistic environment with turbulent physics
+    environments["turbulent_memory"] = create_gymnasium_environment(
+        plume_model="turbulent", 
+        navigator_config={"memory_enabled": True, "strategy": "infotaxis"},
+        wind_field="turbulent",
+        sensor_config={"type": "multi_modal", "noise_level": 0.1}
+    )
+    
+    # Legacy video-based environment for comparison
+    environments["video_baseline"] = create_gymnasium_environment(
+        plume_model="video",
+        plume_config={"video_path": "data/experimental_plume.mp4"},
+        navigator_config={"memory_enabled": False}
+    )
+    
+    return environments
+
+# Train with stable-baselines3 using modular architecture
+def train_rl_agent(
+    plume_model: str = "gaussian",
+    memory_enabled: bool = False,
+    algorithm: str = "PPO"
+):
+    """Train an RL agent with configurable plume model and memory settings."""
+    
+    # Create modular environment
+    env = create_rl_environment(
+        plume_model=plume_model,
+        memory_enabled=memory_enabled
+    )
+    
+    # Verify environment compatibility
     from gymnasium.utils.env_checker import check_env
     check_env(env)
     
     # Create vectorized environment for training
     vec_env = DummyVecEnv([lambda: env])
     
-    # Initialize PPO agent
-    model = PPO(
-        "MlpPolicy",
-        vec_env,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        verbose=1
-    )
+    # Algorithm selection based on research needs
+    if algorithm == "PPO":
+        model = PPO(
+            "MultiInputPolicy",  # Handle dict observations from modular system
+            vec_env,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            verbose=1
+        )
+    elif algorithm == "SAC":
+        model = SAC(
+            "MultiInputPolicy",
+            vec_env,
+            learning_rate=3e-4,
+            buffer_size=100000,
+            batch_size=256,
+            verbose=1
+        )
     
-    # Train the model
+    # Train the model with experiment tracking
     model.learn(total_timesteps=100000)
     
-    # Save trained model
-    model.save("ppo_plume_navigation")
+    # Save with descriptive naming
+    model_name = f"{algorithm.lower()}_{plume_model}_memory{memory_enabled}"
+    model.save(f"models/{model_name}")
     
     return model
+
+# Comparative training across different configurations
+def train_comparative_study():
+    """Train agents across different modular configurations for research comparison."""
+    
+    configurations = [
+        {"plume_model": "gaussian", "memory_enabled": False, "algorithm": "PPO"},
+        {"plume_model": "gaussian", "memory_enabled": True, "algorithm": "PPO"},
+        {"plume_model": "turbulent", "memory_enabled": False, "algorithm": "SAC"},
+        {"plume_model": "turbulent", "memory_enabled": True, "algorithm": "SAC"},
+        {"plume_model": "video", "memory_enabled": False, "algorithm": "PPO"}  # Baseline
+    ]
+    
+    results = {}
+    
+    for config in configurations:
+        print(f"Training {config['algorithm']} on {config['plume_model']} model "
+              f"with memory={'enabled' if config['memory_enabled'] else 'disabled'}")
+        
+        model = train_rl_agent(**config)
+        
+        # Evaluate trained model
+        evaluation_results = evaluate_agent(model, config)
+        
+        config_key = f"{config['plume_model']}_{config['memory_enabled']}_{config['algorithm']}"
+        results[config_key] = {
+            "model": model,
+            "evaluation": evaluation_results,
+            "config": config
+        }
+    
+    return results
 
 # Evaluate trained agent with Gymnasium 5-tuple API
 def evaluate_agent(model_path: str = "ppo_plume_navigation"):
@@ -2231,25 +2631,40 @@ The library provides comprehensive CLI commands for automation and batch process
 ### Available Commands
 
 ```bash
-# Run a simulation with default configuration
+# Run simulation with modular component selection
 plume-nav-sim run
 
-# Run with parameter overrides
-plume-nav-sim run navigator.max_speed=2.0 simulation.fps=60
+# Run with different plume models
+plume-nav-sim run plume_model=gaussian
+plume-nav-sim run plume_model=turbulent
+plume-nav-sim run plume_model=video plume_config.video_path=data/my_plume.mp4
 
-# Run with frame caching enabled
-plume-nav-sim run --frame-cache lru
+# Run with memory configurations
+plume-nav-sim run navigator.memory_enabled=true navigator.strategy=infotaxis
+plume-nav-sim run navigator.memory_enabled=false navigator.strategy=reactive
 
-# Run with custom cache size
-plume-nav-sim run --frame-cache all environment.frame_cache.cache_size_mb=4096
+# Run with environmental dynamics
+plume-nav-sim run plume_model=turbulent wind_field=turbulent sensor_config=multi_modal
 
-# Parameter sweep execution
-plume-nav-sim run --multirun navigator.max_speed=1.0,2.0,3.0 video_plume.kernel_size=3,5,7
+# Run with frame caching (video models only)
+plume-nav-sim run plume_model=video --frame-cache lru
 
-# Reinforcement learning training commands with frame caching
-plume-nav-sim train --algorithm PPO --frame-cache lru
-plume-nav-sim train --algorithm SAC --total-timesteps 500000 --frame-cache all
-plume-nav-sim train --algorithm TD3 --n-envs 4 --env-parallel --frame-cache lru
+# Comparative studies with parameter sweeps
+plume-nav-sim run --multirun \
+    plume_model=gaussian,turbulent,video \
+    navigator.memory_enabled=true,false \
+    navigator.max_speed=1.0,2.0,3.0
+
+# Memory comparison study
+plume-nav-sim run --multirun \
+    +experiment=memory_comparison \
+    plume_model=gaussian,turbulent \
+    navigator.memory_enabled=true,false
+
+# Reinforcement learning training with modular component selection
+plume-nav-sim train --algorithm PPO plume_model=gaussian navigator.memory_enabled=false
+plume-nav-sim train --algorithm SAC plume_model=turbulent navigator.memory_enabled=true
+plume-nav-sim train --algorithm TD3 plume_model=video --frame-cache lru
 
 # Visualization commands
 plume-nav-sim visualize --input-path outputs/experiment_results.npz
@@ -2313,14 +2728,29 @@ plume-nav-sim train --algorithm PPO \
     --eval-episodes 20 \
     --tensorboard-log ./logs
 
-# Training with environment-specific parameters and frame caching
+# Training with modular environment configuration
 plume-nav-sim train --algorithm SAC \
-    --frame-cache lru \
+    plume_model=turbulent \
+    wind_field=turbulent \
+    navigator.memory_enabled=true \
     navigator.max_speed=15.0 \
     simulation.max_episode_steps=2000 \
     rl.reward_shaping.odor_weight=2.0 \
-    environment.frame_cache.cache_size_mb=4096 \
     --config-name rl_training_config
+
+# Memory comparison training study
+plume-nav-sim train --algorithm PPO \
+    +experiment=memory_comparison \
+    plume_model=gaussian \
+    navigator.memory_enabled=true,false \
+    --total-timesteps 500000
+
+# Plume model validation training
+plume-nav-sim train --algorithm SAC \
+    +experiment=plume_fidelity \
+    plume_model=turbulent \
+    wind_field=turbulent \
+    --eval-freq 10000
 
 # High-performance training with full frame preloading
 plume-nav-sim train --algorithm PPO \
@@ -2772,6 +3202,201 @@ def validate_configuration_constraints(config):
                 f"Insufficient memory for {config.navigator.num_agents} agents. "
                 f"Required: {required_memory}MB, Available: {available_memory}MB"
             )
+```
+
+### Modular Configuration Examples
+
+#### Plume Model Configuration
+
+The new modular architecture supports multiple plume modeling approaches through configuration:
+
+```yaml
+# conf/plume_models/gaussian.yaml - Fast mathematical modeling
+_target_: plume_nav_sim.models.plume.GaussianPlumeModel
+
+# Core parameters for analytical plume modeling
+source_strength: 1.0
+diffusion_rate: 0.1
+source_position: [50.0, 50.0]
+
+# Environmental integration
+wind_integration: true
+decay_rate: 0.01
+
+# Performance optimizations
+use_analytical_solution: true
+cache_gradients: true
+```
+
+```yaml
+# conf/plume_models/turbulent.yaml - Realistic physics simulation
+_target_: plume_nav_sim.models.plume.TurbulentPlumeModel
+
+# Filament-based modeling parameters
+filament_count: 1000
+initial_concentration: 1.0
+source_position: [50.0, 50.0]
+
+# Physics parameters
+dispersion_model: "lagrangian"
+turbulence_intensity: 0.3
+correlation_length: 5.0
+
+# Performance options
+use_numba: true  # Optional JIT acceleration
+update_frequency: 1.0  # Time steps between physics updates
+```
+
+```yaml
+# conf/plume_models/video.yaml - Legacy video-based modeling
+_target_: plume_nav_sim.models.plume.VideoPlumeAdapter
+
+# Video source configuration
+video_path: "data/experimental_plume.mp4"
+grayscale: true
+normalize: true
+
+# Frame caching for performance
+frame_cache:
+  mode: "lru"
+  cache_size_mb: 2048
+  memory_pressure_threshold: 0.90
+```
+
+#### Navigator Memory Configuration
+
+```yaml
+# conf/navigator/memory_enabled.yaml - Cognitive navigation with memory
+_target_: plume_nav_sim.core.controllers.MemoryBasedController
+
+# Core navigation parameters
+position: [10.0, 10.0]
+orientation: 0.0
+max_speed: 2.0
+
+# Memory system configuration
+memory_enabled: true
+memory_size: 1000
+strategy: "infotaxis"
+
+# Cognitive modeling parameters
+exploration_noise: 0.1
+information_integration: "bayesian"
+decision_horizon: 10
+```
+
+```yaml
+# conf/navigator/memoryless.yaml - Reactive navigation without memory
+_target_: plume_nav_sim.core.controllers.ReactiveController
+
+# Core navigation parameters  
+position: [10.0, 10.0]
+orientation: 0.0
+max_speed: 2.0
+
+# Reactive behavior configuration
+memory_enabled: false
+strategy: "gradient_following"
+
+# Reactive response parameters
+response_gain: 1.0
+noise_level: 0.05
+```
+
+#### Environmental Dynamics Configuration
+
+```yaml
+# conf/wind_fields/turbulent.yaml - Realistic wind dynamics
+_target_: plume_nav_sim.models.wind.TurbulentWindField
+
+# Base wind parameters
+mean_velocity: [2.0, 0.5]  # [u, v] components
+turbulence_intensity: 0.3
+
+# Temporal correlation
+correlation_time: 5.0  # seconds
+update_frequency: 0.1  # 10 Hz updates
+
+# Spatial variation
+correlation_length: 10.0  # meters
+boundary_conditions: "periodic"
+```
+
+#### Sensor Configuration
+
+```yaml
+# conf/sensors/multi_modal.yaml - Multiple sensor types
+_target_: plume_nav_sim.core.sensors.MultiModalSensor
+
+sensors:
+  primary:
+    _target_: plume_nav_sim.core.sensors.ConcentrationSensor
+    range: 10.0
+    noise_level: 0.05
+    
+  binary:
+    _target_: plume_nav_sim.core.sensors.BinarySensor  
+    threshold: 0.1
+    response_time: 0.1
+    
+  gradient:
+    _target_: plume_nav_sim.core.sensors.GradientSensor
+    spatial_resolution: 0.5
+    temporal_smoothing: 0.2
+
+# Optional memory for temporal integration
+enable_history: true
+history_length: 10
+```
+
+#### Complete Research Configuration Example
+
+```yaml
+# conf/experiments/memory_comparison.yaml - Complete experiment setup
+defaults:
+  - base
+  - plume_models: gaussian  # Fast, consistent baseline
+  - wind_fields: constant   # Minimize confounding variables
+  - sensors: simple        # Single concentration sensor
+  - _self_
+
+experiment:
+  name: "memory_vs_memoryless_comparison" 
+  description: "Compare navigation strategies with and without memory"
+
+# Experimental conditions
+conditions:
+  memoryless:
+    navigator:
+      _target_: plume_nav_sim.core.controllers.ReactiveController
+      memory_enabled: false
+      strategy: "gradient_following"
+      
+  memory_based:
+    navigator:
+      _target_: plume_nav_sim.core.controllers.MemoryBasedController  
+      memory_enabled: true
+      strategy: "infotaxis"
+      memory_size: 500
+
+# Evaluation parameters
+evaluation:
+  episodes_per_condition: 1000
+  success_criteria:
+    odor_threshold: 0.8
+    max_episode_steps: 2000
+    
+  metrics:
+    - "success_rate"
+    - "path_efficiency" 
+    - "search_time"
+    - "exploration_coverage"
+
+# Analysis configuration
+analysis:
+  statistical_tests: ["t_test", "mann_whitney"]
+  significance_level: 0.05
+  effect_size_metrics: ["cohen_d", "cliff_delta"]
 ```
 
 ### RL Configuration Examples
@@ -4206,7 +4831,8 @@ If you use this library in your research, please cite:
   author={Samuel Brudner},
   year={2024},
   url={https://github.com/organization/plume_nav_sim},
-  version={0.3.0}
+  version={0.4.0},
+  note={Modular protocol-driven architecture for extensible plume navigation research}
 }
 ```
 
@@ -4218,6 +4844,115 @@ If you use this library in your research, please cite:
 - **API Reference**: Generated automatically from docstrings
 
 ## Changelog
+
+### Version 0.4.0 (Modular Architecture and Agent-Agnostic Design Release)
+
+#### Revolutionary Architecture Transformation
+
+**Protocol-Driven Plugin System**
+- **Modular Component Architecture**: Complete transformation from rigid VideoPlume-only system to flexible protocol-based plugin architecture
+- **Zero-Code Extensibility**: Add new plume models, wind fields, and sensors through protocol implementation without core system modification
+- **Runtime Component Swapping**: Switch between GaussianPlumeModel, TurbulentPlumeModel, and FilamentBasedPlumeModel purely through Hydra configuration
+- **Research Flexibility**: Enable diverse experimental scenarios through component composition rather than code modification
+
+**Agent-Agnostic Navigation System**
+- **Memory Configuration Toggle**: Support both memory-based and memory-less navigation strategies through `navigator.memory_enabled` flag
+- **Strategy Abstraction**: Configurable navigation strategies (reactive, gradient_following, infotaxis, casting) through protocol implementation
+- **Cognitive Modeling Support**: Optional memory hooks enable complex cognitive modeling without affecting baseline performance
+- **Fair Comparison Framework**: Identical environmental conditions for memory vs memory-less agent comparison studies
+
+**Environmental Dynamics Integration**
+- **Wind Field System**: Configurable wind dynamics with ConstantWindField, TurbulentWindField, and TimeVaryingWindField implementations
+- **Multi-Modal Sensing**: Flexible sensor abstraction with BinarySensor, ConcentrationSensor, and GradientSensor implementations
+- **Physics Integration**: Realistic environmental coupling between wind fields and plume transport dynamics
+- **Temporal Dynamics**: Support for time-varying environmental conditions and correlation modeling
+
+#### New Plume Modeling Capabilities
+
+**GaussianPlumeModel - Mathematical Precision**
+- **Analytical Solutions**: Sub-millisecond computation time with mathematical precision for rapid prototyping
+- **Wind Integration**: Automatic wind field coupling for realistic transport modeling
+- **Configurable Parameters**: Source strength, diffusion coefficients, and decay rates through configuration
+- **Performance Optimization**: Gradient caching and analytical solutions for real-time applications
+
+**TurbulentPlumeModel - Realistic Physics**
+- **Filament-Based Simulation**: Individual odor packets with age, concentration, and transport dynamics
+- **Stochastic Dispersion**: Lagrangian transport modeling with turbulent wind field integration
+- **Biological Accuracy**: Intermittent, patchy odor signals matching real-world plume observations
+- **Numba Acceleration**: Optional JIT compilation for computationally intensive scenarios
+
+**FilamentBasedPlumeModel - Research Fidelity**
+- **Intermittent Signals**: Sparse, realistic odor detection patterns observed in natural environments
+- **Temporal Correlation**: Realistic plume evolution with proper temporal coherence modeling
+- **Biological Validation**: Designed for biologically-inspired navigation algorithm validation
+- **Scientific Accuracy**: Publication-quality environmental modeling for research applications
+
+**VideoPlumeAdapter - Backward Compatibility**
+- **Legacy Preservation**: Complete backward compatibility with existing video-based workflows
+- **Performance Maintained**: All frame caching optimizations preserved through adapter pattern
+- **Seamless Migration**: Existing VideoPlume code continues working with deprecation warnings
+- **Configuration Integration**: Video models integrated into modular configuration system
+
+#### Configuration-Driven Research Workflows
+
+**Experimental Configuration Framework**
+- **Memory Comparison Studies**: Pre-configured experiment templates for memory vs memory-less navigation comparison
+- **Plume Model Validation**: Systematic comparison frameworks for different plume modeling approaches
+- **Environmental Complexity Studies**: Configurable complexity levels from simple mathematical models to realistic physics
+- **Multi-Condition Experiments**: Support for complex experimental designs through configuration composition
+
+**Component Selection Examples**
+```yaml
+# Mathematical modeling for fast experimentation
+plume_model: gaussian
+wind_field: constant
+navigator: {memory_enabled: false, strategy: gradient_following}
+
+# Realistic physics for publication research  
+plume_model: turbulent
+wind_field: turbulent
+navigator: {memory_enabled: true, strategy: infotaxis}
+```
+
+**Research Integration Patterns**
+- **Jupyter Notebook Support**: Direct access to modular components for interactive research
+- **Command-Line Flexibility**: Complete experiment configuration through CLI parameter overrides
+- **Kedro Pipeline Integration**: Modular components designed for complex research pipeline integration
+- **Version Control Friendly**: Configuration-based experiments enable reproducible research workflows
+
+#### Performance and Compatibility Guarantees
+
+**Performance Standards Maintained**
+- **Step Latency**: <10ms execution time preserved across all plume model implementations
+- **Memory Efficiency**: Linear scaling with agent count for all modular components
+- **Deterministic Behavior**: Identical results across runs with fixed random seeds for all models
+- **Cache Optimization**: Frame caching benefits preserved for video-based models through adapter pattern
+
+**Backward Compatibility Preservation**
+- **API Compatibility**: All existing NavigatorProtocol methods maintained with enhanced extensibility hooks
+- **Configuration Migration**: Automatic conversion from legacy configuration formats to modular system
+- **Video Workflow Support**: Existing video-based research workflows preserved through VideoPlumeAdapter
+- **Performance Preservation**: No performance regression for existing use cases
+
+**Migration Support**
+- **Gradual Adoption**: Modular components can be adopted incrementally without breaking existing code
+- **Legacy Deprecation**: Clear deprecation timeline with comprehensive migration documentation
+- **Tool Support**: Configuration conversion utilities for seamless migration to modular architecture
+- **Documentation Coverage**: Complete migration guides for all common usage patterns
+
+#### Developer Experience Enhancements
+
+**Enhanced Documentation**
+- **Modular Architecture Guide**: Comprehensive documentation of plugin system and component protocols
+- **Configuration Examples**: Extensive examples for all component combinations and research scenarios
+- **Migration Documentation**: Step-by-step guides for adopting modular architecture
+- **Protocol Reference**: Complete API documentation for extending the system with custom components
+
+**Research Workflow Integration**
+- **Example Implementations**: Reference implementations for common research scenarios and algorithm types
+- **Comparative Studies**: Pre-configured experimental frameworks for systematic research comparison
+- **Performance Benchmarking**: Standardized benchmarks for comparing different plume model approaches
+- **Extensibility Examples**: Clear examples of implementing custom plume models, sensors, and navigation strategies
 
 ### Version 0.3.0 (Gymnasium Migration and Performance Enhancement Release)
 
