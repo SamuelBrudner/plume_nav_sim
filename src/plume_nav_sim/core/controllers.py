@@ -1,20 +1,24 @@
 """
-Enhanced controller implementations for single-agent and multi-agent navigation with Gymnasium 0.29.x integration.
+Enhanced controller implementations for single-agent and multi-agent navigation with modular sensor architecture.
 
 This module provides consolidated navigation controllers that implement the NavigatorProtocol 
 interface with enhanced features for modern ML framework compatibility. Controllers support
 both single-agent and multi-agent scenarios with performance guarantees, extensibility hooks,
-and dual API compatibility for seamless migration from OpenAI Gym to Gymnasium.
+sensor-based perception, and memory management for flexible cognitive modeling approaches.
 
-Key enhancements for Gymnasium 0.29.x migration:
+Key enhancements for modular architecture:
+- SensorProtocol-based perception system replacing hard-coded odor sampling logic
+- Optional memory management hooks (load_memory, save_memory) without enforcing use
+- Agent-agnostic design supporting both reactive and planning navigation strategies
 - Extensibility hooks for custom observations, rewards, and episode handling
-- Dual API compatibility detection and automatic format conversion  
 - Integration with enhanced frame caching featuring LRU eviction and memory monitoring
 - Performance optimization with sub-33ms step execution guarantees
 - Vectorized operations supporting 100+ concurrent agents
 
 The controllers maintain full backward compatibility while providing modern API features:
 - Type-safe configuration with Hydra integration
+- Modular sensor system with configurable perception modalities
+- Optional memory persistence for cognitive modeling approaches
 - Comprehensive performance monitoring and metrics collection
 - Memory-efficient operations with configurable frame caching
 - Structured logging with contextual information
@@ -28,42 +32,69 @@ Performance Requirements:
 - Frame caching integration with ≤2 GiB memory limits
 
 Examples:
-    Single-agent controller with modern features:
+    Single-agent controller with sensor-based perception:
+        >>> from plume_nav_sim.core.controllers import DirectOdorSensor
         >>> controller = SingleAgentController(
         ...     position=(10.0, 20.0), 
         ...     speed=1.5,
+        ...     sensors=[DirectOdorSensor()],
         ...     enable_extensibility_hooks=True
         ... )
         >>> controller.step(env_array, dt=1.0)
         >>> metrics = controller.get_performance_metrics()
         
-    Multi-agent swarm with performance monitoring:
+    Multi-agent swarm with memory and custom sensors:
         >>> positions = [[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]]
         >>> controller = MultiAgentController(
         ...     positions=positions,
-        ...     enable_vectorized_ops=True
+        ...     enable_vectorized_ops=True,
+        ...     enable_memory=True,
+        ...     sensors=[DirectOdorSensor()]
         ... )
         >>> controller.step(env_array, dt=1.0)
         >>> throughput = controller.get_performance_metrics()['throughput_agents_fps']
         
-    Configuration-driven instantiation with Hydra:
+    Memory-based navigation with cognitive modeling:
+        >>> controller = SingleAgentController(
+        ...     position=(0.0, 0.0),
+        ...     enable_memory=True
+        ... )
+        >>> # Load previous episode memory
+        >>> memory = controller.load_memory(previous_episode_data)
+        >>> # Agent maintains internal state across episodes
+        >>> memory = controller.save_memory()
+        
+    Configuration-driven instantiation with sensors and memory:
         >>> from omegaconf import DictConfig
-        >>> cfg = DictConfig({"position": [5.0, 5.0], "max_speed": 2.0})
+        >>> cfg = DictConfig({
+        ...     "position": [5.0, 5.0], 
+        ...     "max_speed": 2.0,
+        ...     "enable_memory": True,
+        ...     "sensors": [DirectOdorSensor()]
+        ... })
         >>> controller = create_controller_from_config(cfg)
         
-    Extensibility hooks for custom navigation:
-        >>> class CustomController(SingleAgentController):
+    Custom navigation with sensor-based perception:
+        >>> class MemoryBasedController(SingleAgentController):
         ...     def compute_additional_obs(self, base_obs: dict) -> dict:
-        ...         return {"wind_direction": self.sample_wind_sensor()}
+        ...         # Custom sensor readings
+        ...         return {"gradient": self.compute_odor_gradient()}
         ...     
-        ...     def compute_extra_reward(self, base_reward: float, info: dict) -> float:
-        ...         return 0.1 * info.get('exploration_bonus', 0.0)
+        ...     def update_memory(self, obs: dict, action, reward: float, info: dict):
+        ...         # Update cognitive map
+        ...         self.update_belief_state(obs, action, reward)
 
 Notes:
     All controllers implement the NavigatorProtocol interface ensuring uniform API
     across algorithmic approaches. The protocol-based design enables research 
     extensibility while maintaining compatibility with existing simulation runners,
     visualization systems, and data recording infrastructure.
+    
+    The modular sensor architecture replaces hard-coded odor sampling with configurable
+    SensorProtocol implementations, enabling diverse sensing modalities (binary detection,
+    concentration measurement, gradient computation) without code changes. Memory management
+    hooks provide optional cognitive modeling capabilities for planning agents while
+    maintaining efficiency for reactive strategies.
     
     Frame caching integration is designed to work with the enhanced FrameCache system
     featuring configurable modes (none, LRU, preload), memory pressure monitoring,
@@ -80,6 +111,119 @@ import numpy as np
 
 # Core protocol import
 from .protocols import NavigatorProtocol
+
+# Sensor protocol definitions - basic implementations for modular architecture
+from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
+
+@runtime_checkable
+class SensorProtocol(Protocol):
+    """
+    Protocol defining the interface for sensor implementations.
+    
+    This protocol enables modular perception systems where agents can
+    perceive the environment through configurable sensors rather than
+    direct field access, supporting the agent-agnostic design.
+    """
+    
+    def sample(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
+        """
+        Sample sensor readings at specified positions.
+        
+        Args:
+            plume_state: Current environmental state (e.g., odor field)
+            positions: Agent positions to sample at, shape (n_agents, 2)
+            
+        Returns:
+            np.ndarray: Sensor readings for each position
+        """
+        ...
+    
+    def configure(self, **kwargs) -> None:
+        """Configure sensor parameters."""
+        ...
+    
+    def reset(self) -> None:
+        """Reset sensor state (e.g., clear history)."""
+        ...
+
+
+# Basic sensor implementations for interim use until full sensor system is available
+class DirectOdorSensor:
+    """
+    Basic sensor implementation that directly samples odor fields.
+    
+    This provides backward compatibility while transitioning to the new
+    sensor-based architecture. Used as the default sensor when no specific
+    sensors are configured.
+    """
+    
+    def __init__(self):
+        """Initialize direct odor sensor."""
+        self._enabled = True
+    
+    def sample(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
+        """Sample odor concentrations directly from the plume state."""
+        return _read_odor_values(plume_state, positions)
+    
+    def configure(self, **kwargs) -> None:
+        """Configure sensor parameters."""
+        self._enabled = kwargs.get('enabled', True)
+    
+    def reset(self) -> None:
+        """Reset sensor state."""
+        pass
+
+
+class MultiPointOdorSensor:
+    """
+    Sensor for multi-point odor sampling (e.g., bilateral antennae).
+    
+    Supports multiple sensor layouts and configurations for diverse
+    sensing strategies without hardcoded assumptions.
+    """
+    
+    def __init__(self, sensor_distance: float = 5.0, sensor_angle: float = 45.0, 
+                 num_sensors: int = 2, layout_name: Optional[str] = None):
+        """Initialize multi-point sensor."""
+        self.sensor_distance = sensor_distance
+        self.sensor_angle = sensor_angle 
+        self.num_sensors = num_sensors
+        self.layout_name = layout_name
+        self._enabled = True
+    
+    def sample(self, plume_state: np.ndarray, positions: np.ndarray, 
+               orientations: np.ndarray) -> np.ndarray:
+        """Sample odor at multiple sensor positions."""
+        if not self._enabled:
+            return np.zeros((len(positions), self.num_sensors))
+        
+        # Create a mock navigator object for compatibility with existing utility functions
+        mock_navigator = type('MockNavigator', (), {
+            'positions': positions,
+            'orientations': orientations,
+            'num_agents': len(positions)
+        })()
+        
+        return _sample_odor_at_sensors(
+            mock_navigator, plume_state,
+            sensor_distance=self.sensor_distance,
+            sensor_angle=self.sensor_angle,
+            num_sensors=self.num_sensors,
+            layout_name=self.layout_name
+        )
+    
+    def configure(self, **kwargs) -> None:
+        """Configure sensor parameters."""
+        self.sensor_distance = kwargs.get('sensor_distance', self.sensor_distance)
+        self.sensor_angle = kwargs.get('sensor_angle', self.sensor_angle)
+        self.num_sensors = kwargs.get('num_sensors', self.num_sensors)
+        self.layout_name = kwargs.get('layout_name', self.layout_name)
+        self._enabled = kwargs.get('enabled', True)
+    
+    def reset(self) -> None:
+        """Reset sensor state."""
+        pass
 
 # Hydra integration for configuration management
 try:
@@ -293,15 +437,26 @@ class BaseController:
         frame_cache_mode: Optional[str] = None,
         custom_observation_keys: Optional[List[str]] = None,
         reward_shaping: Optional[str] = None,
+        sensors: Optional[List[SensorProtocol]] = None,
+        enable_memory: bool = False,
         **kwargs: Any
     ) -> None:
-        """Initialize base controller with enhanced monitoring capabilities."""
+        """Initialize base controller with enhanced monitoring capabilities and sensor support."""
         self._enable_logging = enable_logging
         self._controller_id = controller_id or f"{self.__class__.__name__.lower()}_{id(self)}"
         self._enable_extensibility_hooks = enable_extensibility_hooks
         self._frame_cache_mode = frame_cache_mode or "none"
         self._custom_observation_keys = custom_observation_keys or []
         self._reward_shaping = reward_shaping
+        self._enable_memory = enable_memory
+        
+        # Initialize sensor system for agent-agnostic perception
+        self._sensors = sensors or [DirectOdorSensor()]
+        self._primary_sensor = self._sensors[0] if self._sensors else DirectOdorSensor()
+        
+        # Memory management hooks - optional for flexible cognitive modeling
+        self._memory_enabled = enable_memory
+        self._memory_state = None
         
         # Performance metrics tracking
         self._performance_metrics = {
@@ -486,7 +641,9 @@ class BaseController:
             'controller_id': self._controller_id,
             'total_steps': self._performance_metrics['total_steps'],
             'extensibility_hooks_enabled': self._enable_extensibility_hooks,
-            'frame_cache_mode': self._frame_cache_mode
+            'frame_cache_mode': self._frame_cache_mode,
+            'memory_enabled': self._memory_enabled,
+            'num_sensors': len(self._sensors)
         }
         
         # Step time statistics
@@ -519,6 +676,174 @@ class BaseController:
             })
         
         return metrics
+    
+    # Memory management hooks for flexible cognitive modeling
+    
+    def load_memory(self, memory_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Load memory state for memory-based navigation strategies.
+        
+        This optional memory hook enables flexible cognitive modeling approaches
+        without enforcing memory use. Implementations can override this method
+        to support planning agents, while reactive agents can ignore it entirely.
+        
+        Args:
+            memory_data: Optional memory state to load. If None, return current state.
+            
+        Returns:
+            Dict[str, Any]: Current memory state if memory is enabled, None otherwise
+            
+        Notes:
+            Default implementation provides simple memory storage without enforcing
+            any specific memory structure. Override in subclasses for domain-specific
+            memory models (e.g., occupancy grids, belief states, learned maps).
+            
+        Examples:
+            Load from previous episode:
+            >>> memory = navigator.load_memory(previous_episode_memory)
+            
+            Get current memory state:
+            >>> current_memory = navigator.load_memory()
+        """
+        if not self._memory_enabled:
+            return None
+        
+        if memory_data is not None:
+            self._memory_state = memory_data
+            if self._logger:
+                self._logger.debug(
+                    "Memory state loaded",
+                    memory_keys=list(memory_data.keys()) if isinstance(memory_data, dict) else "non-dict",
+                    memory_size=len(str(memory_data))
+                )
+        
+        return self._memory_state
+    
+    def save_memory(self) -> Optional[Dict[str, Any]]:
+        """
+        Save current memory state for persistence or transfer.
+        
+        This optional memory hook enables flexible cognitive modeling approaches
+        for agents that maintain internal state. Reactive agents can safely 
+        ignore this method, while planning agents can implement sophisticated
+        memory persistence.
+        
+        Returns:
+            Dict[str, Any]: Serializable memory state if memory is enabled, None otherwise
+            
+        Notes:
+            Default implementation returns current memory state without modification.
+            Override in subclasses to implement domain-specific memory serialization
+            (e.g., compress sparse maps, extract key features, filter old data).
+            
+        Examples:
+            Save memory between episodes:
+            >>> memory = navigator.save_memory()
+            >>> # Store memory for next episode initialization
+            
+            Transfer memory between agents:
+            >>> agent1_memory = agent1.save_memory()
+            >>> agent2.load_memory(agent1_memory)
+        """
+        if not self._memory_enabled:
+            return None
+        
+        if self._logger and self._memory_state is not None:
+            self._logger.debug(
+                "Memory state saved",
+                memory_keys=list(self._memory_state.keys()) if isinstance(self._memory_state, dict) else "non-dict",
+                memory_size=len(str(self._memory_state))
+            )
+        
+        return self._memory_state
+    
+    def update_memory(self, observation: Dict[str, Any], action: Any, reward: float, info: Dict[str, Any]) -> None:
+        """
+        Update memory state with new experience.
+        
+        This optional hook allows memory-based agents to accumulate experience
+        during navigation. Reactive agents can ignore this method entirely.
+        
+        Args:
+            observation: Current observation from environment
+            action: Action taken by agent
+            reward: Reward received
+            info: Additional environment info
+            
+        Notes:
+            Default implementation does nothing. Override in subclasses for
+            memory-based navigation strategies.
+        """
+        if not self._memory_enabled:
+            return
+        
+        # Initialize memory state if needed
+        if self._memory_state is None:
+            self._memory_state = {
+                'episode_count': 0,
+                'total_steps': 0,
+                'experience_buffer': []
+            }
+        
+        # Add experience to memory (basic implementation)
+        if isinstance(self._memory_state, dict):
+            self._memory_state['total_steps'] = self._memory_state.get('total_steps', 0) + 1
+            
+            # Maintain a simple experience buffer (limited size)
+            experience_buffer = self._memory_state.get('experience_buffer', [])
+            experience_buffer.append({
+                'observation': observation,
+                'action': action,
+                'reward': reward,
+                'info': info
+            })
+            
+            # Keep only recent experiences (prevent memory growth)
+            max_buffer_size = 1000
+            if len(experience_buffer) > max_buffer_size:
+                experience_buffer = experience_buffer[-max_buffer_size:]
+            
+            self._memory_state['experience_buffer'] = experience_buffer
+    
+    # Sensor management methods
+    
+    def add_sensor(self, sensor: SensorProtocol) -> None:
+        """Add a sensor to the active sensor list."""
+        if sensor not in self._sensors:
+            self._sensors.append(sensor)
+            if self._logger:
+                self._logger.debug(
+                    "Sensor added to controller",
+                    sensor_type=type(sensor).__name__,
+                    total_sensors=len(self._sensors)
+                )
+    
+    def remove_sensor(self, sensor: SensorProtocol) -> bool:
+        """Remove a sensor from the active sensor list."""
+        if sensor in self._sensors:
+            self._sensors.remove(sensor)
+            if self._logger:
+                self._logger.debug(
+                    "Sensor removed from controller",
+                    sensor_type=type(sensor).__name__,
+                    total_sensors=len(self._sensors)
+                )
+            return True
+        return False
+    
+    def get_active_sensors(self) -> List[SensorProtocol]:
+        """Get list of currently active sensors."""
+        return self._sensors.copy()
+    
+    def reset_sensors(self) -> None:
+        """Reset all sensors to initial state."""
+        for sensor in self._sensors:
+            sensor.reset()
+        if self._logger:
+            self._logger.debug(
+                "All sensors reset",
+                num_sensors=len(self._sensors)
+            )
 
 
 class SingleAgentController(BaseController):
@@ -578,6 +903,8 @@ class SingleAgentController(BaseController):
         speed: float = 0.0,
         max_speed: float = 1.0,
         angular_velocity: float = 0.0,
+        sensors: Optional[List[SensorProtocol]] = None,
+        enable_memory: bool = False,
         **kwargs: Any
     ) -> None:
         """
@@ -589,6 +916,8 @@ class SingleAgentController(BaseController):
             speed: Initial speed, defaults to 0.0
             max_speed: Maximum allowed speed, defaults to 1.0
             angular_velocity: Initial angular velocity in degrees/second, defaults to 0.0
+            sensors: List of SensorProtocol implementations for perception, defaults to [DirectOdorSensor()]
+            enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging (default: True)
                 - controller_id: Unique controller identifier
@@ -601,7 +930,7 @@ class SingleAgentController(BaseController):
             ValueError: If speed exceeds max_speed or parameters are invalid
         """
         # Initialize base controller with enhanced features
-        super().__init__(**kwargs)
+        super().__init__(sensors=sensors, enable_memory=enable_memory, **kwargs)
         
         # Validate parameters
         if speed > max_speed:
@@ -845,7 +1174,10 @@ class SingleAgentController(BaseController):
     
     def sample_odor(self, env_array: np.ndarray) -> float:
         """
-        Sample odor at the current agent position with enhanced error handling.
+        Sample odor at the current agent position using active sensors.
+        
+        This method now delegates to SensorProtocol implementations rather than
+        direct field access, supporting the modular sensor architecture.
         
         Args:
             env_array: Environment array containing odor data
@@ -860,7 +1192,10 @@ class SingleAgentController(BaseController):
     
     def read_single_antenna_odor(self, env_array: np.ndarray) -> float:
         """
-        Sample odor at the agent's single antenna with monitoring and caching.
+        Sample odor at the agent's single antenna using SensorProtocol.
+        
+        Updated to use sensor-based sampling through SensorProtocol abstraction
+        rather than direct field access, enabling flexible perception modeling.
         
         Args:
             env_array: Environment array containing odor data
@@ -874,17 +1209,18 @@ class SingleAgentController(BaseController):
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
-            # Use utility function to read odor value
-            odor_values = _read_odor_values(env_array, self._position)
+            # Use primary sensor for sampling instead of direct field access
+            odor_values = self._primary_sensor.sample(env_array, self._position)
             odor_value = float(odor_values[0])
             
             # Validate odor value
             if np.isnan(odor_value) or np.isinf(odor_value):
                 if self._logger:
                     self._logger.warning(
-                        "Invalid odor value detected",
+                        "Invalid odor value detected from sensor",
                         odor_value=odor_value,
                         position=self._position[0].tolist(),
+                        sensor_type=type(self._primary_sensor).__name__,
                         using_fallback=True
                     )
                 odor_value = 0.0
@@ -897,10 +1233,11 @@ class SingleAgentController(BaseController):
                 # Log detailed sampling for debugging (reduced frequency for performance)
                 if self._logger and self._performance_metrics['total_steps'] % 100 == 0:
                     self._logger.trace(
-                        "Odor sampling completed",
+                        "Sensor-based odor sampling completed",
                         sample_time_ms=sample_time,
                         odor_value=odor_value,
-                        position=self._position[0].tolist()
+                        position=self._position[0].tolist(),
+                        sensor_type=type(self._primary_sensor).__name__
                     )
             
             return odor_value
@@ -908,9 +1245,10 @@ class SingleAgentController(BaseController):
         except Exception as e:
             if self._logger:
                 self._logger.error(
-                    f"Odor sampling failed: {str(e)}",
+                    f"Sensor-based odor sampling failed: {str(e)}",
                     error_type=type(e).__name__,
                     position=self._position[0].tolist(),
+                    sensor_type=type(self._primary_sensor).__name__,
                     env_array_shape=getattr(env_array, 'shape', 'unknown')
                 )
             # Return safe default value
@@ -925,7 +1263,10 @@ class SingleAgentController(BaseController):
         layout_name: Optional[str] = None
     ) -> np.ndarray:
         """
-        Sample odor at multiple sensor positions with enhanced validation and caching.
+        Sample odor at multiple sensor positions using SensorProtocol implementations.
+        
+        Updated to use multi-point sensor through SensorProtocol abstraction
+        rather than direct utility function calls, enabling flexible sensor configurations.
         
         Args:
             env_array: Environment array
@@ -949,15 +1290,16 @@ class SingleAgentController(BaseController):
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
-            # Delegate to utility function and reshape result for a single agent
-            odor_values = _sample_odor_at_sensors(
-                self, 
-                env_array, 
+            # Create or use existing multi-point sensor for this request
+            multi_sensor = MultiPointOdorSensor(
                 sensor_distance=sensor_distance,
-                sensor_angle=sensor_angle, 
+                sensor_angle=sensor_angle,
                 num_sensors=num_sensors,
                 layout_name=layout_name
             )
+            
+            # Sample using the multi-point sensor
+            odor_values = multi_sensor.sample(env_array, self._position, self._orientation)
             
             # Return as a 1D array for single agent
             result = odor_values[0] if odor_values.ndim > 1 else odor_values
@@ -966,9 +1308,10 @@ class SingleAgentController(BaseController):
             if np.any(np.isnan(result)) or np.any(np.isinf(result)):
                 if self._logger:
                     self._logger.warning(
-                        "Invalid sensor readings detected",
+                        "Invalid multi-sensor readings detected",
                         invalid_count=np.sum(np.isnan(result) | np.isinf(result)),
                         sensor_layout=layout_name or "custom",
+                        sensor_type="MultiPointOdorSensor",
                         applying_cleanup=True
                     )
                 result = np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
@@ -978,10 +1321,11 @@ class SingleAgentController(BaseController):
                 sample_time = (time.perf_counter() - start_time) * 1000
                 if self._logger and self._performance_metrics['total_steps'] % 50 == 0:
                     self._logger.trace(
-                        "Multi-sensor sampling completed",
+                        "Sensor-based multi-sensor sampling completed",
                         sample_time_ms=sample_time,
                         num_sensors=num_sensors,
                         sensor_distance=sensor_distance,
+                        sensor_type="MultiPointOdorSensor",
                         mean_odor=float(np.mean(result)),
                         max_odor=float(np.max(result))
                     )
@@ -991,7 +1335,7 @@ class SingleAgentController(BaseController):
         except Exception as e:
             if self._logger:
                 self._logger.error(
-                    f"Multi-sensor sampling failed: {str(e)}",
+                    f"Sensor-based multi-sensor sampling failed: {str(e)}",
                     error_type=type(e).__name__,
                     num_sensors=num_sensors,
                     sensor_distance=sensor_distance,
@@ -1057,6 +1401,8 @@ class MultiAgentController(BaseController):
         max_speeds: Optional[Union[List[float], np.ndarray]] = None,
         angular_velocities: Optional[Union[List[float], np.ndarray]] = None,
         enable_vectorized_ops: bool = True,
+        sensors: Optional[List[SensorProtocol]] = None,
+        enable_memory: bool = False,
         **kwargs: Any
     ) -> None:
         """
@@ -1069,6 +1415,8 @@ class MultiAgentController(BaseController):
             max_speeds: Array of maximum speeds with shape (num_agents,)
             angular_velocities: Array of angular velocities with shape (num_agents,)
             enable_vectorized_ops: Enable vectorized operations for performance
+            sensors: List of SensorProtocol implementations for perception, defaults to [DirectOdorSensor()]
+            enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging
                 - controller_id: Unique controller identifier
@@ -1081,7 +1429,7 @@ class MultiAgentController(BaseController):
             ValueError: If array dimensions are inconsistent or constraints violated
         """
         # Initialize base controller with enhanced features
-        super().__init__(**kwargs)
+        super().__init__(sensors=sensors, enable_memory=enable_memory, **kwargs)
         
         self._enable_vectorized_ops = enable_vectorized_ops
         
@@ -1268,6 +1616,12 @@ class MultiAgentController(BaseController):
                 self._performance_metrics['sample_times'] = []
                 self._performance_metrics['agents_per_step'] = []
                 self._performance_metrics['vectorized_op_times'] = []
+            
+            # Reset sensors and memory for new episode
+            self.reset_sensors()
+            if self._memory_enabled and 'reset_memory' not in kwargs:
+                # Only reset memory if not explicitly preserving it
+                self._memory_state = None
             
             # Log successful reset
             if self._logger:
@@ -1468,7 +1822,10 @@ class MultiAgentController(BaseController):
     
     def sample_odor(self, env_array: np.ndarray) -> np.ndarray:
         """
-        Sample odor at all agent positions with batch optimization and error handling.
+        Sample odor at all agent positions using SensorProtocol implementations.
+        
+        Updated to use sensor-based sampling through SensorProtocol abstraction
+        rather than direct field access, enabling flexible perception modeling.
         
         Args:
             env_array: Environment array containing odor data
@@ -1483,7 +1840,10 @@ class MultiAgentController(BaseController):
     
     def read_single_antenna_odor(self, env_array: np.ndarray) -> np.ndarray:
         """
-        Sample odor at each agent's position with batch optimization and monitoring.
+        Sample odor at each agent's position using SensorProtocol with batch optimization.
+        
+        Updated to use sensor-based sampling through SensorProtocol abstraction
+        rather than direct field access, enabling flexible perception modeling.
         
         Args:
             env_array: Environment array containing odor data
@@ -1497,8 +1857,8 @@ class MultiAgentController(BaseController):
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
-            # Use utility function to read odor values
-            odor_values = _read_odor_values(env_array, self._positions)
+            # Use primary sensor for batch sampling instead of direct field access
+            odor_values = self._primary_sensor.sample(env_array, self._positions)
             
             # Validate odor values
             invalid_mask = np.isnan(odor_values) | np.isinf(odor_values)
@@ -1506,10 +1866,11 @@ class MultiAgentController(BaseController):
                 if self._logger:
                     invalid_count = np.sum(invalid_mask)
                     self._logger.warning(
-                        "Invalid odor values detected for multi-agent sampling",
+                        "Invalid odor values detected for multi-agent sensor sampling",
                         invalid_count=invalid_count,
                         total_agents=self.num_agents,
                         invalid_fraction=invalid_count / self.num_agents,
+                        sensor_type=type(self._primary_sensor).__name__,
                         applying_cleanup=True
                     )
                 odor_values = np.nan_to_num(odor_values, nan=0.0, posinf=1.0, neginf=0.0)
@@ -1522,9 +1883,10 @@ class MultiAgentController(BaseController):
                 # Log detailed sampling for debugging (reduced frequency for performance)
                 if self._logger and self._performance_metrics['total_steps'] % 100 == 0:
                     self._logger.trace(
-                        "Multi-agent odor sampling completed",
+                        "Multi-agent sensor-based odor sampling completed",
                         sample_time_ms=sample_time,
                         num_agents=self.num_agents,
+                        sensor_type=type(self._primary_sensor).__name__,
                         odor_stats={
                             'mean': float(np.mean(odor_values)),
                             'max': float(np.max(odor_values)),
@@ -1538,9 +1900,10 @@ class MultiAgentController(BaseController):
         except Exception as e:
             if self._logger:
                 self._logger.error(
-                    f"Multi-agent odor sampling failed: {str(e)}",
+                    f"Multi-agent sensor-based odor sampling failed: {str(e)}",
                     error_type=type(e).__name__,
                     num_agents=self.num_agents,
+                    sensor_type=type(self._primary_sensor).__name__,
                     env_array_shape=getattr(env_array, 'shape', 'unknown')
                 )
             # Return safe default values
@@ -1579,25 +1942,16 @@ class MultiAgentController(BaseController):
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
-            # Delegate to utility function with vectorized optimization
-            if self._enable_vectorized_ops:
-                odor_values = _sample_odor_at_sensors_vectorized(
-                    self, 
-                    env_array, 
-                    sensor_distance=sensor_distance,
-                    sensor_angle=sensor_angle, 
-                    num_sensors=num_sensors,
-                    layout_name=layout_name
-                )
-            else:
-                odor_values = _sample_odor_at_sensors(
-                    self, 
-                    env_array, 
-                    sensor_distance=sensor_distance,
-                    sensor_angle=sensor_angle, 
-                    num_sensors=num_sensors,
-                    layout_name=layout_name
-                )
+            # Create multi-point sensor for this request
+            multi_sensor = MultiPointOdorSensor(
+                sensor_distance=sensor_distance,
+                sensor_angle=sensor_angle,
+                num_sensors=num_sensors,
+                layout_name=layout_name
+            )
+            
+            # Sample using the multi-point sensor
+            odor_values = multi_sensor.sample(env_array, self._positions, self._orientations)
             
             # Validate sensor readings
             invalid_mask = np.isnan(odor_values) | np.isinf(odor_values)
@@ -1620,12 +1974,12 @@ class MultiAgentController(BaseController):
                 sample_time = (time.perf_counter() - start_time) * 1000
                 if self._logger and self._performance_metrics['total_steps'] % 50 == 0:
                     self._logger.trace(
-                        "Multi-agent multi-sensor sampling completed",
+                        "Multi-agent sensor-based multi-sensor sampling completed",
                         sample_time_ms=sample_time,
                         num_agents=self.num_agents,
                         num_sensors=num_sensors,
                         sensor_distance=sensor_distance,
-                        vectorized_ops=self._enable_vectorized_ops,
+                        sensor_type="MultiPointOdorSensor",
                         total_readings=odor_values.size,
                         odor_stats={
                             'mean': float(np.mean(odor_values)),
@@ -1639,11 +1993,12 @@ class MultiAgentController(BaseController):
         except Exception as e:
             if self._logger:
                 self._logger.error(
-                    f"Multi-agent multi-sensor sampling failed: {str(e)}",
+                    f"Multi-agent sensor-based multi-sensor sampling failed: {str(e)}",
                     error_type=type(e).__name__,
                     num_agents=self.num_agents,
                     num_sensors=num_sensors,
                     sensor_distance=sensor_distance,
+                    sensor_type="MultiPointOdorSensor",
                     layout_name=layout_name
                 )
             # Return safe default values
@@ -2177,6 +2532,8 @@ def create_controller_from_config(
                 max_speeds=config_dict.get('max_speeds'),
                 angular_velocities=config_dict.get('angular_velocities'),
                 enable_vectorized_ops=config_dict.get('enable_vectorized_ops', True),
+                sensors=config_dict.get('sensors'),
+                enable_memory=config_dict.get('enable_memory', False),
                 enable_logging=enable_logging,
                 controller_id=controller_id,
                 enable_extensibility_hooks=config_dict.get('enable_extensibility_hooks', False),
@@ -2193,6 +2550,8 @@ def create_controller_from_config(
                 speed=config_dict.get('speed', 0.0),
                 max_speed=config_dict.get('max_speed', 1.0),
                 angular_velocity=config_dict.get('angular_velocity', 0.0),
+                sensors=config_dict.get('sensors'),
+                enable_memory=config_dict.get('enable_memory', False),
                 enable_logging=enable_logging,
                 controller_id=controller_id,
                 enable_extensibility_hooks=config_dict.get('enable_extensibility_hooks', False),
@@ -2334,6 +2693,16 @@ def validate_controller_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]
         if config['reward_shaping'] not in valid_strategies + [None]:
             errors.append(f"reward_shaping must be one of {valid_strategies} or None")
     
+    # Validate sensor configuration
+    if 'sensors' in config:
+        if not isinstance(config['sensors'], list):
+            errors.append("sensors must be a list of SensorProtocol implementations")
+    
+    # Validate memory configuration
+    if 'enable_memory' in config:
+        if not isinstance(config['enable_memory'], bool):
+            errors.append("enable_memory must be a boolean value")
+    
     return len(errors) == 0, errors
 
 
@@ -2358,7 +2727,11 @@ def get_controller_info(controller: Union[SingleAgentController, MultiAgentContr
         'extensibility_hooks_enabled': getattr(controller, '_enable_extensibility_hooks', False),
         'frame_cache_mode': getattr(controller, '_frame_cache_mode', 'none'),
         'custom_observation_keys': getattr(controller, '_custom_observation_keys', []),
-        'reward_shaping': getattr(controller, '_reward_shaping', None)
+        'reward_shaping': getattr(controller, '_reward_shaping', None),
+        'memory_enabled': getattr(controller, '_memory_enabled', False),
+        'num_sensors': len(getattr(controller, '_sensors', [])),
+        'sensor_types': [type(sensor).__name__ for sensor in getattr(controller, '_sensors', [])],
+        'primary_sensor_type': type(getattr(controller, '_primary_sensor', None)).__name__ if hasattr(controller, '_primary_sensor') else None
     }
     
     # Add state information
@@ -2413,4 +2786,9 @@ __all__ = [
     # Utility functions with enhanced validation
     "validate_controller_config",
     "get_controller_info",
+    
+    # Sensor protocol and implementations for modular perception
+    "SensorProtocol",
+    "DirectOdorSensor",
+    "MultiPointOdorSensor",
 ]
