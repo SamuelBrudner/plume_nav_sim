@@ -1,0 +1,387 @@
+# ============================================================================
+# TURBULENT PLUME MODEL CONFIGURATION (turbulent.yaml)
+# ============================================================================
+#
+# This configuration implements realistic filament-based turbulent physics 
+# simulation for odor plume navigation research as specified in Summary of 
+# Changes Section 0.3.2. The turbulent plume model provides high-fidelity 
+# dispersion modeling using individual filament tracking with complex eddy 
+# interactions and intermittent plume structures matching real-world observations.
+#
+# INTENDED USE CASES:
+#   - Research-grade realistic turbulent plume physics simulation
+#   - Advanced biological navigation studies requiring environmental realism
+#   - Intermittent and patchy plume signal research scenarios
+#   - Complex transport phenomena investigation with wind field integration
+#   - Performance evaluation of navigation algorithms under realistic conditions
+#
+# SCIENTIFIC BACKGROUND:
+#   - Filament-based approach using individual odor packet tracking per user requirements
+#   - Lagrangian transport with stochastic differential equations for realistic physics
+#   - Advanced statistical modeling of turbulent transport phenomena via SciPy
+#   - Eddy diffusion tensor modeling with anisotropic turbulent mixing
+#   - Source emission with configurable release patterns and temporal variations
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - concentration_at(): <1ms for single query, <10ms for 100 concurrent agents
+#   - step(): <5ms per time step for real-time simulation compatibility
+#   - Memory efficiency: <100MB for typical scenarios with 1000+ active filaments
+#   - Optional Numba acceleration: 10-50x speedup for computational kernels
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   TURBULENT_SOURCE_STRENGTH=1000.0     # Source emission rate
+#   TURBULENT_INTENSITY=0.2              # Relative turbulence strength [0,1]
+#   TURBULENT_MAX_FILAMENTS=2000         # Maximum active filaments
+#   TURBULENT_ENABLE_NUMBA=true          # JIT acceleration toggle
+#   TURBULENT_INTERMITTENCY=0.3          # Patchy signal factor [0,1]
+#   TURBULENT_WIND_SPEED=2.0             # Mean wind velocity magnitude
+#   TURBULENT_DOMAIN_WIDTH=100.0         # Simulation domain width
+#   TURBULENT_RANDOM_SEED=42             # Reproducibility seed
+#
+# USAGE EXAMPLES:
+#   # Activate turbulent plume model
+#   python -m plume_nav_sim --config-name=config plume_model=turbulent
+#
+#   # High turbulence scenario for challenging navigation
+#   python -m plume_nav_sim plume_model=turbulent plume_model.turbulence_intensity=0.5
+#
+#   # Extended simulation with more filaments
+#   python -m plume_nav_sim plume_model=turbulent plume_model.max_filaments=5000
+#
+#   # Performance-optimized with Numba acceleration
+#   python -m plume_nav_sim plume_model=turbulent plume_model.enable_numba=true
+#
+# ============================================================================
+
+# @package plume_model
+# Hydra target specification for automatic instantiation via dependency injection
+_target_: src.plume_nav_sim.models.plume.turbulent_plume.TurbulentPlumeModel
+
+# ============================================================================
+# SOURCE CONFIGURATION FOR ODOR EMISSION CHARACTERISTICS
+# ============================================================================
+# Fundamental source parameters controlling the emission of odorous material
+# into the environment with realistic release patterns and strength variations.
+
+source_position: 
+  # Initial source location as [x, y] coordinates in environment units
+  # Supports environment variable override for deployment flexibility
+  - ${oc.env:TURBULENT_SOURCE_X,50.0}
+  - ${oc.env:TURBULENT_SOURCE_Y,50.0}
+
+source_strength: ${oc.env:TURBULENT_SOURCE_STRENGTH,1000.0}
+  # Emission rate in concentration units per time step
+  # Controls the intensity of odor release from the source
+  # Higher values create stronger plume signals for navigation
+  # Range: 100.0 (weak) to 10000.0 (very strong)
+
+# ============================================================================
+# TURBULENCE AND WIND DYNAMICS CONFIGURATION
+# ============================================================================
+# Advanced atmospheric parameters controlling realistic turbulent transport
+# phenomena including eddy interactions and complex dispersion patterns.
+
+mean_wind_velocity:
+  # Base wind vector as [u_x, u_y] in environment units per time step
+  # Provides the mean advection field for filament transport
+  - ${oc.env:TURBULENT_WIND_U,2.0}  # Eastward component (positive = rightward)
+  - ${oc.env:TURBULENT_WIND_V,0.5}  # Northward component (positive = upward)
+
+turbulence_intensity: ${oc.env:TURBULENT_INTENSITY,0.2}
+  # Relative turbulence strength [0, 1] controlling eddy generation
+  # 0.0 = purely laminar flow (no turbulent mixing)
+  # 0.2 = moderate turbulence (realistic atmospheric conditions)
+  # 0.5 = high turbulence (gusty conditions, complex plume structure)
+  # 1.0 = extreme turbulence (highly chaotic, research scenarios)
+
+eddy_dissipation_rate: ${oc.env:TURBULENT_DISSIPATION,0.01}
+  # Turbulent energy dissipation rate controlling mixing intensity
+  # Higher values increase turbulent mixing and concentration decay
+  # Typical atmospheric values: 0.001 (stable) to 0.1 (unstable)
+
+intermittency_factor: ${oc.env:TURBULENT_INTERMITTENCY,0.3}
+  # Controls patchy/intermittent signal characteristics [0, 1]
+  # 0.0 = continuous emission (steady plume)
+  # 0.3 = moderate intermittency (realistic atmospheric patchiness)
+  # 0.7 = high intermittency (very patchy, challenging navigation)
+  # 1.0 = extreme intermittency (sporadic signal bursts)
+
+# ============================================================================
+# COMPUTATIONAL AND DOMAIN CONFIGURATION
+# ============================================================================
+# Parameters controlling the computational domain, resolution, and performance
+# characteristics while maintaining physical realism and numerical accuracy.
+
+domain_bounds:
+  # Spatial simulation domain as [width, height] in environment units
+  # Defines the boundaries within which filaments are tracked and evolved
+  - ${oc.env:TURBULENT_DOMAIN_WIDTH,100.0}
+  - ${oc.env:TURBULENT_DOMAIN_HEIGHT,100.0}
+
+max_filaments: ${oc.env:TURBULENT_MAX_FILAMENTS,2000}
+  # Maximum number of active filaments for memory management
+  # Balance between realism and computational efficiency
+  # 500 = lightweight (faster, less detailed plume structure)
+  # 2000 = standard (good balance of detail and performance)
+  # 5000 = high-fidelity (detailed plume, higher memory usage)
+  # 10000 = research-grade (maximum detail, significant resources)
+
+filament_lifetime: ${oc.env:TURBULENT_LIFETIME,100.0}
+  # Maximum age before automatic filament pruning (time steps)
+  # Controls memory usage and simulation steady-state behavior
+  # Longer lifetimes create more persistent plume structures
+
+spatial_resolution: ${oc.env:TURBULENT_GRID_RESOLUTION,1.0}
+  # Grid resolution for concentration field interpolation
+  # Lower values provide higher accuracy at computational cost
+  # 0.5 = high resolution, 1.0 = standard, 2.0 = coarse
+
+# ============================================================================
+# PHYSICAL PROCESS PARAMETERS
+# ============================================================================
+# Advanced physics parameters controlling molecular diffusion, release patterns,
+# and boundary interactions for realistic environmental modeling.
+
+diffusion_coefficient: ${oc.env:TURBULENT_DIFFUSION,0.1}
+  # Base diffusion rate for Brownian motion component
+  # Controls molecular-scale spreading of filaments
+  # Higher values increase plume spreading rate
+  # Typical atmospheric values: 0.01 to 1.0
+
+release_rate: ${oc.env:TURBULENT_RELEASE_RATE,10}
+  # Number of new filaments released per time step from source
+  # Higher rates create denser plume structures
+  # Balance between detail and computational load
+  # 5 = sparse, 10 = standard, 20 = dense, 50 = very dense
+
+boundary_absorption: ${oc.env:TURBULENT_ABSORPTION,0.1}
+  # Absorption coefficient at domain boundaries [0, 1]
+  # 0.0 = perfect reflection (filaments bounce off boundaries)
+  # 0.1 = moderate absorption (realistic boundary losses)
+  # 1.0 = perfect absorption (filaments removed at boundaries)
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION CONFIGURATION
+# ============================================================================
+# Advanced settings controlling computational performance, JIT acceleration,
+# and memory usage optimization for production deployment scenarios.
+
+enable_numba: ${oc.env:TURBULENT_ENABLE_NUMBA,true}
+  # Enable Numba JIT compilation for performance-critical kernels
+  # Provides 10-50x speedup for concentration computation
+  # Requires numba package installation for full functionality
+  # false = pure Python (slower but no dependencies)
+  # true = JIT acceleration (faster, requires numba)
+
+numba_optimization:
+  # Advanced Numba compilation settings for maximum performance
+  nopython: true        # Enforce pure NumPy operations for speed
+  fastmath: true        # Enable aggressive mathematical optimizations
+  cache: true           # Cache compiled functions for faster startup
+  parallel: true        # Enable automatic parallelization where possible
+
+performance_monitoring:
+  # Comprehensive performance tracking and optimization guidance
+  enable_timing: true   # Track step() and concentration_at() execution times
+  warning_thresholds:
+    single_query_ms: 1.0      # Warning threshold for single concentration query
+    batch_query_ms: 10.0      # Warning threshold for multi-agent queries
+    step_execution_ms: 5.0    # Warning threshold for step() execution
+  memory_monitoring:
+    track_filament_count: true   # Monitor active filament population
+    memory_usage_alerts: true   # Alert on excessive memory usage
+
+# ============================================================================
+# WIND FIELD INTEGRATION CONFIGURATION
+# ============================================================================
+# Configuration for optional wind field integration providing enhanced
+# environmental realism through dynamic wind patterns and complex transport.
+
+wind_field_integration:
+  # Enable integration with WindFieldProtocol implementations
+  enabled: ${oc.env:TURBULENT_WIND_INTEGRATION,false}
+  
+  # Wind field type selection for automatic instantiation
+  # Options: "ConstantWindField", "TurbulentWindField", "TimeVaryingWindField"
+  type: ${oc.env:TURBULENT_WIND_TYPE,"ConstantWindField"}
+  
+  # Configuration passed to wind field implementation
+  config:
+    # ConstantWindField parameters (when type="ConstantWindField")
+    velocity: [${oc.env:TURBULENT_WIND_U,2.0}, ${oc.env:TURBULENT_WIND_V,0.5}]
+    
+    # TurbulentWindField parameters (when type="TurbulentWindField")  
+    mean_velocity: [${oc.env:TURBULENT_WIND_U,2.0}, ${oc.env:TURBULENT_WIND_V,0.5}]
+    turbulence_intensity: ${oc.env:WIND_TURBULENCE_INTENSITY,0.2}
+    correlation_length: ${oc.env:WIND_CORRELATION_LENGTH,10.0}
+    
+    # TimeVaryingWindField parameters (when type="TimeVaryingWindField")
+    base_velocity: [${oc.env:TURBULENT_WIND_U,2.0}, ${oc.env:TURBULENT_WIND_V,0.5}]
+    variation_amplitude: ${oc.env:WIND_VARIATION_AMPLITUDE,0.5}
+    temporal_frequency: ${oc.env:WIND_TEMPORAL_FREQ,0.1}
+
+# ============================================================================
+# STOCHASTIC MODELING AND REPRODUCIBILITY
+# ============================================================================
+# Parameters controlling random processes, statistical distributions, and
+# reproducibility for scientific research and algorithm evaluation.
+
+random_seed: ${oc.env:TURBULENT_RANDOM_SEED,42}
+  # Random seed for reproducible stochastic simulations
+  # null = use system time (non-reproducible)
+  # integer = fixed seed (reproducible across runs)
+  # Essential for scientific reproducibility and algorithm comparison
+
+stochastic_processes:
+  # Advanced configuration for statistical modeling components
+  
+  turbulent_velocity_model:
+    # Ornstein-Uhlenbeck process parameters for velocity fluctuations
+    correlation_time: 2.0          # Lagrangian correlation time scale
+    volatility_scaling: 1.0        # Stochastic volatility multiplier
+    spatial_correlation: true      # Enable spatial velocity correlations
+    
+  emission_statistics:
+    # Statistical model for realistic source emission patterns
+    poisson_emission: true         # Use Poisson process for filament release
+    burst_probability: 0.1         # Probability of emission bursts
+    burst_intensity: 3.0           # Intensity multiplier during bursts
+    
+  boundary_interactions:
+    # Stochastic boundary condition modeling
+    reflection_randomization: 0.5  # Random component in boundary reflections
+    absorption_variability: 0.1    # Stochastic variation in absorption
+
+# ============================================================================
+# SCIENTIFIC VALIDATION AND TESTING CONFIGURATION
+# ============================================================================
+# Parameters supporting scientific validation, algorithm testing, and research
+# scenarios requiring controlled experimental conditions.
+
+validation_settings:
+  # Scientific validation and testing support
+  enable_diagnostics: ${oc.env:TURBULENT_DIAGNOSTICS,false}
+  diagnostic_output_interval: 10    # Steps between diagnostic outputs
+  
+  concentration_field_analysis:
+    # Tools for analyzing plume structure and transport properties
+    enable_field_statistics: false   # Compute spatial concentration statistics
+    save_field_snapshots: false      # Save concentration field for analysis
+    snapshot_interval: 50            # Steps between field snapshots
+    
+  transport_validation:
+    # Validate transport physics against theoretical predictions
+    check_mass_conservation: false   # Verify total mass conservation
+    check_diffusion_scaling: false   # Validate diffusive spreading rates
+    transport_diagnostics: false     # Output transport analysis metrics
+
+research_scenarios:
+  # Predefined configurations for common research scenarios
+  
+  # High-fidelity biological realism
+  biological_realism:
+    turbulence_intensity: 0.25
+    intermittency_factor: 0.4
+    release_rate: 15
+    max_filaments: 3000
+    
+  # Challenging navigation scenario
+  challenging_navigation:
+    turbulence_intensity: 0.6
+    intermittency_factor: 0.7
+    release_rate: 8
+    eddy_dissipation_rate: 0.05
+    
+  # Performance benchmarking
+  performance_benchmark:
+    max_filaments: 1000
+    enable_numba: true
+    spatial_resolution: 2.0
+    release_rate: 5
+
+# ============================================================================
+# DEPLOYMENT AND INTEGRATION CONFIGURATION
+# ============================================================================
+# Settings for production deployment, integration with other components,
+# and compatibility with different simulation environments.
+
+deployment:
+  # Production deployment considerations
+  memory_optimization:
+    enable_filament_pooling: false    # Reuse filament objects for memory efficiency
+    aggressive_pruning: false        # More aggressive memory management
+    cache_concentration_fields: false # Cache computed fields for performance
+    
+  integration_compatibility:
+    # Compatibility settings for different simulation environments
+    legacy_api_support: false        # Support legacy interface conventions
+    thread_safety: false             # Enable thread-safe operations (overhead)
+    vectorized_operations: true      # Use vectorized NumPy operations
+    
+  logging_configuration:
+    # Detailed logging for production monitoring
+    log_performance_metrics: true    # Log timing and efficiency metrics
+    log_filament_statistics: false   # Log detailed filament population data
+    log_level: "INFO"                # Logging verbosity level
+
+# ============================================================================
+# EXPERT TUNING PARAMETERS (ADVANCED USERS ONLY)
+# ============================================================================
+# Advanced parameters for research applications requiring fine-tuned control
+# over turbulent physics and numerical methods. Modify with caution.
+
+expert_parameters:
+  # Advanced physics tuning (expert users only)
+  
+  lagrangian_integration:
+    # Numerical integration scheme parameters
+    time_step_adaptation: false      # Adaptive time stepping for stability
+    integration_order: 1             # Integration scheme order (1=Euler, 2=Heun)
+    stability_factor: 0.5            # CFL-like stability constraint
+    
+  turbulent_mixing:
+    # Advanced turbulent mixing model parameters
+    anisotropic_diffusion: false     # Enable anisotropic eddy diffusion
+    buoyancy_effects: false          # Include buoyancy-driven transport
+    stratification_effects: false    # Account for atmospheric stratification
+    
+  concentration_modeling:
+    # Advanced concentration field computation
+    kernel_bandwidth_adaptation: false  # Adaptive kernel sizes for concentration
+    high_order_interpolation: false     # Higher-order spatial interpolation
+    concentration_limiting: true        # Enforce physical concentration bounds
+
+# ============================================================================
+# END OF TURBULENT PLUME MODEL CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive control over realistic turbulent
+# plume physics simulation using filament-based approach with advanced
+# atmospheric modeling. All parameters support environment variable overrides
+# for flexible deployment in different research and production scenarios.
+#
+# CONFIGURATION VALIDATION CHECKLIST:
+#   □ Source position within domain bounds
+#   □ Turbulence intensity in valid range [0, 1]
+#   □ Maximum filaments appropriate for available memory
+#   □ Numba installation verified if enable_numba=true
+#   □ Random seed set for reproducible experiments
+#   □ Performance thresholds appropriate for hardware
+#
+# PERFORMANCE TUNING GUIDELINES:
+#   □ Start with default parameters for baseline performance
+#   □ Increase max_filaments for higher fidelity (more memory)
+#   □ Enable Numba for significant performance improvements
+#   □ Adjust spatial_resolution based on accuracy requirements
+#   □ Monitor performance metrics and adjust thresholds
+#   □ Use research_scenarios presets for common configurations
+#
+# SCIENTIFIC USAGE GUIDELINES:
+#   □ Set fixed random_seed for reproducible research
+#   □ Document parameter changes for scientific publications
+#   □ Validate transport physics using built-in diagnostics
+#   □ Compare results across different turbulence_intensity values
+#   □ Use intermittency_factor to study patchy signal navigation
+#
+# For additional configuration examples and advanced usage patterns,
+# see the technical specification documentation and example scenarios.
+# ============================================================================
