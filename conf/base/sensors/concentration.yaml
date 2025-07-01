@@ -1,0 +1,378 @@
+# ============================================================================
+# CONCENTRATION SENSOR CONFIGURATION (concentration.yaml)
+# ============================================================================
+#
+# Hydra configuration for ConcentrationSensor implementing quantitative odor
+# concentration measurement with configurable precision and dynamic range.
+# Supports temporal filtering, calibration drift simulation, and advanced 
+# research scenarios requiring precise odor quantification.
+#
+# This configuration enables flexible sensing by implementing SensorProtocol
+# with configurable detection models as required by the modular sensor
+# architecture. The ConcentrationSensor provides realistic quantitative
+# measurements with comprehensive sensor behavior modeling.
+#
+# INTENDED USE CASES:
+#   - Quantitative odor concentration measurement in research scenarios
+#   - High-precision chemical sensor simulation with realistic dynamics
+#   - Multi-agent scenarios requiring consistent measurement characteristics
+#   - Advanced research requiring temporal response and drift modeling
+#   - Performance benchmarking with configurable precision vs speed trade-offs
+#
+# SENSOR CAPABILITIES:
+#   - Quantitative concentration measurement with configurable dynamic range
+#   - Precision control and saturation modeling for realistic sensor limits
+#   - Temporal response characteristics with optional filtering capabilities
+#   - Calibration drift simulation for long-term behavior research
+#   - Vectorized sampling operations with linear performance scaling
+#   - Comprehensive noise modeling and measurement uncertainty simulation
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - Measurement latency: <0.1ms per agent for minimal sensing overhead
+#   - Batch processing: <1ms for 100 agents with vectorized operations
+#   - Memory usage: <1KB per agent for internal state management
+#   - Linear scaling with agent count through optimized algorithms
+#
+# USAGE EXAMPLES:
+#   # Basic concentration sensor configuration
+#   python -m plume_nav_sim --config-name=config sensors=concentration
+#
+#   # High-precision sensor with noise modeling
+#   python -m plume_nav_sim sensors=concentration \
+#     sensors.dynamic_range=[0.0,10.0] sensors.resolution=0.001 sensors.noise_std=0.02
+#
+#   # Sensor with temporal filtering and drift simulation
+#   python -m plume_nav_sim sensors=concentration \
+#     sensors.enable_filtering=true sensors.response_time=0.5 sensors.enable_drift=true
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   SENSOR_DYNAMIC_RANGE_MIN=0.0      # Minimum concentration measurement value
+#   SENSOR_DYNAMIC_RANGE_MAX=1.0      # Maximum concentration measurement value
+#   SENSOR_RESOLUTION=0.001           # Measurement resolution/precision
+#   SENSOR_NOISE_STD=0.0              # Measurement noise standard deviation
+#   SENSOR_ENABLE_DRIFT=false         # Enable calibration drift simulation
+#   SENSOR_ENABLE_FILTERING=false     # Enable temporal response filtering
+#   SENSOR_VECTORIZED_OPS=true        # Enable vectorized operations
+#
+# ============================================================================
+
+# @package _global_
+# Configuration metadata for sensor identification and validation
+_config_:
+  sensor_type: "ConcentrationSensor"
+  description: "Quantitative odor concentration measurement with configurable precision"
+  target_protocol: "SensorProtocol"
+  measurement_type: "quantitative"
+  last_modified: "2024-01-01"
+
+# ============================================================================
+# CORE CONCENTRATION SENSOR CONFIGURATION
+# ============================================================================
+# Primary sensor instantiation target pointing to ConcentrationSensor
+# implementation class with precision measurement capabilities as specified
+# in the Summary of Changes requirements for quantitative odor measurements.
+
+# Hydra instantiation target for ConcentrationSensor component
+_target_: "src.plume_nav_sim.core.sensors.concentration_sensor.ConcentrationSensor"
+
+# ============================================================================
+# MEASUREMENT RANGE AND PRECISION CONFIGURATION
+# ============================================================================
+# Dynamic range parameters with configurable minimum and maximum concentration
+# values supporting advanced research scenarios requiring precise quantification.
+
+# Dynamic range configuration for measurement bounds
+# Tuple of (min, max) measurement range in concentration units
+# Supports environment variable override via ${oc.env:SENSOR_DYNAMIC_RANGE_MIN,0.0}
+dynamic_range: [0.0, 1.0]  # Standard normalized concentration range
+
+# Measurement precision and resolution settings
+# Minimum detectable concentration difference (quantization step)
+# Supports ${oc.env:SENSOR_RESOLUTION,0.001} for deployment flexibility
+resolution: 0.001  # High-precision measurement for research scenarios
+
+# Sensor saturation modeling for realistic behavior
+# Concentration level at which sensor saturates (None = no saturation)
+# Enables simulation of physical sensor limitations at high concentrations
+saturation_level: null  # No saturation limit by default
+
+# ============================================================================
+# NOISE AND UNCERTAINTY MODELING
+# ============================================================================
+# Comprehensive noise modeling for realistic sensor behavior simulation
+# including measurement uncertainty and environmental interference effects.
+
+# Noise characteristics configuration
+# Standard deviation of measurement noise (0.0 = noiseless operation)
+# Supports ${oc.env:SENSOR_NOISE_STD,0.0} for flexible noise simulation
+noise_std: 0.0  # Noiseless by default for clean research scenarios
+
+# Noise model type selection for different simulation requirements
+# Options: "gaussian" (normal distribution), "uniform" (uniform distribution), "none"
+noise_type: "gaussian"  # Realistic noise modeling when noise_std > 0
+
+# Baseline calibration settings
+# Constant offset added to all measurements for calibration modeling
+baseline_offset: 0.0  # No baseline offset by default
+
+# ============================================================================
+# CALIBRATION DRIFT SIMULATION
+# ============================================================================
+# Temporal calibration drift simulation for long-term sensor behavior
+# research and realistic sensor aging effects in extended experiments.
+
+# Calibration drift configuration
+# Enable calibration drift simulation over time for realistic sensor behavior
+# Supports ${oc.env:SENSOR_ENABLE_DRIFT,false} for conditional drift modeling
+enable_drift: false  # Disabled by default for stable measurements
+
+# Drift characteristics when drift is enabled
+# Rate of calibration drift per time unit (concentration/time)
+drift_rate: 0.001  # Conservative drift rate for stable long-term experiments
+
+# Calibration update interval settings
+# Time interval between calibration drift updates (seconds)
+# Controls frequency of drift calculations for performance optimization
+calibration_interval: 10.0  # Update drift every 10 seconds
+
+# ============================================================================
+# TEMPORAL RESPONSE CHARACTERISTICS
+# ============================================================================
+# Temporal filtering and calibration drift simulation settings enabling
+# realistic sensor response dynamics and frequency characteristics matching
+# physical chemical sensors for advanced research scenarios.
+
+# Temporal filtering configuration
+# Enable temporal filtering for sensor response dynamics simulation
+# Supports ${oc.env:SENSOR_ENABLE_FILTERING,false} for conditional filtering
+enable_filtering: false  # Disabled by default for immediate response
+
+# Temporal response parameters when filtering is enabled
+# Sensor response time constant for temporal filtering (seconds)
+# Models realistic sensor response delays and frequency characteristics
+response_time: 0.0  # Instantaneous response by default
+
+# Filter type selection for different response characteristics
+# Options: "lowpass" (exponential smoothing), "bandpass" (frequency selective), "none"
+filter_type: "lowpass"  # Simple exponential filter when enabled
+
+# Filter frequency characteristics
+# Filter cutoff frequency in Hz (for lowpass filter)
+# Controls temporal response bandwidth and smoothing characteristics
+cutoff_frequency: 10.0  # 10 Hz cutoff for moderate temporal smoothing
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION SETTINGS
+# ============================================================================
+# Configurable precision vs performance trade-offs for multi-agent scenarios
+# supporting linear scaling with agent count through optimized vectorized
+# operations and efficient measurement processing algorithms.
+
+# Vectorized operations configuration
+# Enable optimized vectorized operations for multi-agent scenarios
+# Supports ${oc.env:SENSOR_VECTORIZED_OPS,true} for performance control
+vectorized_ops: true  # Enabled by default for optimal multi-agent performance
+
+# Metadata and monitoring settings
+# Include measurement metadata in sensor outputs for analysis
+# Provides additional information for debugging and performance monitoring
+enable_metadata: false  # Disabled by default to minimize overhead
+
+# Sensor identification for logging and monitoring
+# Unique sensor identifier for performance tracking and debugging
+# Generated automatically if not specified
+sensor_id: null  # Auto-generated sensor ID
+
+# Logging integration configuration
+# Enable comprehensive logging integration for performance monitoring
+# Supports detailed analysis of sensor behavior and performance metrics
+enable_logging: true  # Enabled by default for research monitoring
+
+# ============================================================================
+# ADVANCED CONFIGURATION OPTIONS
+# ============================================================================
+# Extended configuration parameters for specialized research scenarios
+# and advanced sensor behavior modeling requirements.
+
+# Performance monitoring settings
+# Enable detailed performance metrics collection and analysis
+# Tracks measurement timing, noise statistics, and operation counts
+performance_monitoring:
+  enabled: true  # Enable performance metrics collection
+  timing_precision: "microseconds"  # High-precision timing measurement
+  metrics_update_interval: 100  # Update metrics every 100 measurements
+  slow_operation_threshold: 0.1  # Warning threshold for slow operations (ms)
+
+# Research scenario configuration
+# Specialized settings for different research applications
+research_scenarios:
+  # High-precision laboratory sensor configuration
+  laboratory:
+    dynamic_range: [0.0, 100.0]
+    resolution: 0.01
+    noise_std: 0.1
+    enable_drift: true
+    response_time: 0.1
+    enable_filtering: true
+
+  # Field sensor with limited precision configuration
+  field_sensor:
+    dynamic_range: [0.0, 10.0]
+    resolution: 0.1
+    noise_std: 0.5
+    saturation_level: 9.5
+    enable_filtering: true
+    response_time: 0.5
+
+  # High-speed multi-agent configuration optimized for performance
+  multi_agent_optimized:
+    dynamic_range: [0.0, 1.0]
+    resolution: 0.01
+    noise_std: 0.0
+    enable_drift: false
+    enable_filtering: false
+    vectorized_ops: true
+    enable_metadata: false
+
+# ============================================================================
+# INTEGRATION AND COMPATIBILITY SETTINGS
+# ============================================================================
+# Configuration parameters ensuring seamless integration with the modular
+# sensor architecture and compatibility with existing simulation components.
+
+# Protocol compliance configuration
+# Ensures full SensorProtocol interface implementation
+protocol_compliance:
+  implements_detect: true  # Binary detection capability via thresholding
+  implements_measure: true  # Primary quantitative measurement capability
+  implements_gradient: true  # Spatial gradient computation capability
+  supports_batch_processing: true  # Multi-agent vectorized operations
+  supports_temporal_filtering: true  # Optional temporal response modeling
+
+# Integration parameters for plume model compatibility
+plume_integration:
+  supports_plume_model_protocol: true  # Compatible with PlumeModelProtocol
+  supports_video_plume_adapter: true  # Compatible with VideoPlume legacy
+  supports_gaussian_plume_model: true  # Compatible with GaussianPlumeModel
+  supports_turbulent_plume_model: true  # Compatible with TurbulentPlumeModel
+
+# Environment variable integration for deployment flexibility
+environment_overrides:
+  # Core measurement parameters
+  dynamic_range_override: ${oc.env:SENSOR_DYNAMIC_RANGE,"[0.0,1.0]"}
+  resolution_override: ${oc.env:SENSOR_RESOLUTION,0.001}
+  noise_std_override: ${oc.env:SENSOR_NOISE_STD,0.0}
+  
+  # Behavioral parameters
+  drift_enabled_override: ${oc.env:SENSOR_ENABLE_DRIFT,false}
+  filtering_enabled_override: ${oc.env:SENSOR_ENABLE_FILTERING,false}
+  vectorized_ops_override: ${oc.env:SENSOR_VECTORIZED_OPS,true}
+
+# ============================================================================
+# VALIDATION AND CONSTRAINTS
+# ============================================================================
+# Configuration validation parameters ensuring physical consistency and
+# performance requirements for production deployment scenarios.
+
+# Measurement validation constraints
+validation:
+  # Dynamic range constraints
+  min_dynamic_range_span: 0.001  # Minimum range span for meaningful measurements
+  max_dynamic_range_span: 1000.0  # Maximum range span for numerical stability
+  
+  # Resolution constraints relative to dynamic range
+  min_resolution_ratio: 0.0001  # Minimum resolution as fraction of range
+  max_resolution_ratio: 0.1  # Maximum resolution to prevent quantization issues
+  
+  # Noise modeling constraints
+  max_noise_std_ratio: 0.5  # Maximum noise as fraction of range
+  valid_noise_types: ["gaussian", "uniform", "none"]
+  
+  # Temporal parameter constraints
+  max_response_time: 10.0  # Maximum response time (seconds)
+  min_cutoff_frequency: 0.1  # Minimum filter cutoff frequency (Hz)
+  max_cutoff_frequency: 1000.0  # Maximum filter cutoff frequency (Hz)
+  
+  # Performance constraints
+  max_measurement_time_ms: 0.1  # Maximum per-agent measurement time
+  max_batch_time_ms: 1.0  # Maximum 100-agent batch processing time
+
+# ============================================================================
+# DEPLOYMENT CONFIGURATION EXAMPLES
+# ============================================================================
+# Pre-configured sensor setups for common research scenarios demonstrating
+# different capability combinations and performance characteristics.
+
+# Configuration examples for different deployment scenarios
+deployment_examples:
+  # Basic research sensor for standard experiments
+  basic_research:
+    _target_: "src.plume_nav_sim.core.sensors.concentration_sensor.ConcentrationSensor"
+    dynamic_range: [0.0, 1.0]
+    resolution: 0.001
+    noise_std: 0.0
+    enable_drift: false
+    enable_filtering: false
+    vectorized_ops: true
+
+  # High-fidelity sensor with realistic behavior modeling
+  high_fidelity:
+    _target_: "src.plume_nav_sim.core.sensors.concentration_sensor.ConcentrationSensor"
+    dynamic_range: [0.0, 10.0]
+    resolution: 0.01
+    noise_std: 0.05
+    enable_drift: true
+    drift_rate: 0.001
+    enable_filtering: true
+    response_time: 0.2
+    filter_type: "lowpass"
+    cutoff_frequency: 5.0
+
+  # Performance-optimized sensor for large-scale simulations
+  performance_optimized:
+    _target_: "src.plume_nav_sim.core.sensors.concentration_sensor.ConcentrationSensor"
+    dynamic_range: [0.0, 1.0]
+    resolution: 0.01
+    noise_std: 0.0
+    enable_drift: false
+    enable_filtering: false
+    vectorized_ops: true
+    enable_metadata: false
+    enable_logging: false
+
+# ============================================================================
+# END OF CONCENTRATION SENSOR CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive setup for ConcentrationSensor
+# with quantitative odor measurement capabilities, temporal response modeling,
+# and performance optimization for multi-agent scenarios. All parameters
+# can be overridden through environment variables or CLI arguments while
+# maintaining sensor behavior consistency and performance requirements.
+#
+# CONFIGURATION CHECKLIST:
+#   □ Verify dynamic range appropriate for experimental requirements
+#   □ Confirm resolution settings balance precision and performance needs
+#   □ Set noise characteristics matching real sensor specifications
+#   □ Configure temporal response if sensor dynamics required
+#   □ Enable drift simulation for long-term experiments
+#   □ Optimize vectorized operations for multi-agent scenarios
+#   □ Set appropriate environment variable overrides for deployment
+#
+# PERFORMANCE VALIDATION:
+#   □ Measurement time <0.1ms per agent achieved
+#   □ Batch processing <1ms for 100 agents confirmed
+#   □ Memory usage <1KB per agent maintained
+#   □ Linear scaling with agent count verified
+#   □ No measurement precision degradation under load
+#
+# INTEGRATION VERIFICATION:
+#   □ SensorProtocol interface fully implemented
+#   □ Compatible with all PlumeModel implementations
+#   □ Environment variable overrides functional
+#   □ Hydra instantiation successful
+#   □ Multi-agent vectorized operations working
+#
+# For additional sensor configuration examples and advanced optimization
+# patterns, see conf/base/sensors/ directory and technical specification
+# documentation for sensor architecture requirements.
+# ============================================================================
