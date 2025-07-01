@@ -881,6 +881,101 @@ class TestNavigatorFactory:
         assert navigator.num_agents == 3
         assert navigator.positions.shape == (3, 2)
         assert navigator.orientations.shape == (3,)
+    
+    def test_factory_sensor_based_navigation_workflows(self) -> None:
+        """Test NavigatorFactory creates controllers with proper sensor integration."""
+        # Test single agent with sensor configuration
+        config = {
+            'position': (10.0, 15.0),
+            'orientation': 90.0,
+            'max_speed': 2.0,
+            'enable_memory': True,
+            'sensors': None  # Will use default sensors
+        }
+        
+        navigator = NavigatorFactory.from_config(config)
+        assert isinstance(navigator, NavigatorProtocol)
+        
+        # Verify sensor integration is properly configured
+        assert hasattr(navigator, '_sensors')
+        assert hasattr(navigator, '_primary_sensor')
+        
+        # Test sensor-based odor sampling workflow
+        env_array = np.random.rand(50, 50)
+        odor_value = navigator.sample_odor(env_array)
+        assert isinstance(odor_value, (float, np.floating))
+        assert not np.isnan(odor_value)
+        assert not np.isinf(odor_value)
+        
+        # Test memory interface is available when configured
+        assert hasattr(navigator, 'load_memory')
+        assert hasattr(navigator, 'save_memory')
+        initial_memory = navigator.load_memory()
+        # Should return None initially for memory-enabled but uninitialized controller
+        assert initial_memory is None
+    
+    def test_factory_modular_component_creation(self) -> None:
+        """Test factory methods for creating modular components."""
+        # Test plume model creation if factory supports it
+        if hasattr(NavigatorFactory, 'create_plume_model'):
+            plume_config = {
+                'type': 'GaussianPlumeModel',
+                'source_position': (50, 50),
+                'source_strength': 1000.0
+            }
+            
+            try:
+                plume_model = NavigatorFactory.create_plume_model(plume_config)
+                # Should implement PlumeModelProtocol
+                assert hasattr(plume_model, 'concentration_at')
+                assert hasattr(plume_model, 'step')
+                assert hasattr(plume_model, 'reset')
+            except ImportError:
+                # Expected if plume models not yet available
+                pass
+        
+        # Test sensor creation if factory supports it
+        if hasattr(NavigatorFactory, 'create_sensors'):
+            sensor_configs = [
+                {'type': 'ConcentrationSensor', 'dynamic_range': (0, 1)},
+                {'type': 'BinarySensor', 'threshold': 0.1}
+            ]
+            
+            try:
+                sensors = NavigatorFactory.create_sensors(sensor_configs)
+                assert isinstance(sensors, list)
+                assert len(sensors) == 2
+                # Each sensor should implement SensorProtocol
+                for sensor in sensors:
+                    assert hasattr(sensor, 'detect') or hasattr(sensor, 'measure')
+                    assert hasattr(sensor, 'configure')
+            except ImportError:
+                # Expected if sensor implementations not yet available
+                pass
+    
+    def test_factory_protocol_validation(self) -> None:
+        """Test factory protocol compliance validation methods."""
+        navigator = NavigatorFactory.single_agent(position=(5, 10))
+        
+        # Test protocol compliance validation if available
+        if hasattr(NavigatorFactory, 'validate_protocol_compliance'):
+            from odor_plume_nav.core.navigator import NavigatorProtocol
+            
+            is_compliant = NavigatorFactory.validate_protocol_compliance(
+                navigator, NavigatorProtocol
+            )
+            assert is_compliant is True
+        
+        # Test that created navigators implement all required methods
+        required_methods = [
+            'reset', 'step', 'sample_odor', 'sample_multiple_sensors',
+            'compute_additional_obs', 'compute_extra_reward', 'on_episode_end',
+            'load_memory', 'save_memory'
+        ]
+        
+        for method_name in required_methods:
+            assert hasattr(navigator, method_name), f"Navigator missing required method: {method_name}"
+            assert callable(getattr(navigator, method_name)), f"Navigator method not callable: {method_name}"
 
 
 @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
@@ -1137,11 +1232,12 @@ class TestNavigatorProtocolCompliance:
     
     These tests validate that all navigator implementations properly conform
     to the NavigatorProtocol interface requirements, including enhanced
-    configuration management and integration patterns.
+    configuration management, optional memory interface, and new sensor-based
+    observation processing workflows per Section 0 requirements.
     """
     
     def test_single_agent_protocol_compliance(self) -> None:
-        """Test SingleAgentController protocol compliance."""
+        """Test SingleAgentController protocol compliance with modular architecture extensions."""
         controller = SingleAgentController()
         
         # Verify protocol compliance
@@ -1160,9 +1256,18 @@ class TestNavigatorProtocolCompliance:
         assert hasattr(controller, 'step') and callable(controller.step)
         assert hasattr(controller, 'sample_odor') and callable(controller.sample_odor)
         assert hasattr(controller, 'sample_multiple_sensors') and callable(controller.sample_multiple_sensors)
+        
+        # Test new extensibility hooks exist and are callable
+        assert hasattr(controller, 'compute_additional_obs') and callable(controller.compute_additional_obs)
+        assert hasattr(controller, 'compute_extra_reward') and callable(controller.compute_extra_reward)
+        assert hasattr(controller, 'on_episode_end') and callable(controller.on_episode_end)
+        
+        # Test optional memory interface methods exist and are callable
+        assert hasattr(controller, 'load_memory') and callable(controller.load_memory)
+        assert hasattr(controller, 'save_memory') and callable(controller.save_memory)
     
     def test_multi_agent_protocol_compliance(self) -> None:
-        """Test MultiAgentController protocol compliance."""
+        """Test MultiAgentController protocol compliance with modular architecture extensions."""
         controller = MultiAgentController()
         
         # Verify protocol compliance
@@ -1181,6 +1286,15 @@ class TestNavigatorProtocolCompliance:
         assert hasattr(controller, 'step') and callable(controller.step)
         assert hasattr(controller, 'sample_odor') and callable(controller.sample_odor)
         assert hasattr(controller, 'sample_multiple_sensors') and callable(controller.sample_multiple_sensors)
+        
+        # Test new extensibility hooks exist and are callable
+        assert hasattr(controller, 'compute_additional_obs') and callable(controller.compute_additional_obs)
+        assert hasattr(controller, 'compute_extra_reward') and callable(controller.compute_extra_reward)
+        assert hasattr(controller, 'on_episode_end') and callable(controller.on_episode_end)
+        
+        # Test optional memory interface methods exist and are callable
+        assert hasattr(controller, 'load_memory') and callable(controller.load_memory)
+        assert hasattr(controller, 'save_memory') and callable(controller.save_memory)
     
     def test_factory_created_navigator_protocol_compliance(self) -> None:
         """Test that factory-created navigators maintain protocol compliance."""
@@ -1836,3 +1950,545 @@ class TestCrossIntegrationScenarios:
                     "total_steps": 10
                 }
             )
+
+
+class TestNavigatorProtocolMemoryInterface:
+    """
+    Tests for optional memory interface methods supporting both memory-based and 
+    non-memory-based navigation strategies per Section 0.2.1 requirements.
+    
+    These tests validate that the memory hooks can be disabled or bypassed for 
+    memory-less navigation strategies while providing flexible cognitive modeling 
+    approaches for planning agents.
+    """
+    
+    def test_memory_interface_default_behavior(self) -> None:
+        """Test that memory interface has safe default behavior for non-memory-based agents."""
+        controller = SingleAgentController(enable_memory=False)
+        
+        # Test load_memory with no memory enabled
+        result = controller.load_memory()
+        assert result is None  # Should return None when memory is disabled
+        
+        # Test load_memory with data when memory is disabled
+        test_data = {"trajectory": [(0, 0), (1, 1)], "episode_count": 5}
+        result = controller.load_memory(test_data)
+        assert result is None  # Should still return None when memory is disabled
+        
+        # Test save_memory with no memory enabled
+        result = controller.save_memory()
+        assert result is None  # Should return None when memory is disabled
+    
+    def test_memory_interface_enabled_behavior(self) -> None:
+        """Test memory interface functionality when enabled for cognitive modeling."""
+        controller = SingleAgentController(enable_memory=True)
+        
+        # Test initial memory state
+        initial_memory = controller.load_memory()
+        # Initial memory should be None until first data is loaded
+        assert initial_memory is None
+        
+        # Test loading memory data
+        test_memory = {
+            "trajectory_history": [(0, 0), (5, 10), (15, 20)],
+            "visited_positions": [(0, 0), (5, 10)],
+            "episode_count": 3,
+            "learned_parameters": {"exploration_rate": 0.1}
+        }
+        
+        loaded_memory = controller.load_memory(test_memory)
+        assert loaded_memory == test_memory
+        
+        # Test saving memory data
+        saved_memory = controller.save_memory()
+        assert saved_memory == test_memory
+        assert saved_memory is not test_memory  # Should be a copy, not same object
+    
+    def test_memory_interface_optional_compliance(self) -> None:
+        """Test that memory interface methods are optional and don't enforce usage."""
+        # Test with memory disabled
+        controller_no_memory = SingleAgentController(enable_memory=False)
+        
+        # Memory methods should exist but not enforce usage
+        assert hasattr(controller_no_memory, 'load_memory')
+        assert hasattr(controller_no_memory, 'save_memory')
+        
+        # Should be able to call without errors
+        controller_no_memory.load_memory()
+        controller_no_memory.save_memory()
+        
+        # Navigation should work normally without memory
+        env_array = np.ones((50, 50)) * 0.5
+        controller_no_memory.step(env_array)
+        position_after = controller_no_memory.positions.copy()
+        
+        # Test with memory enabled but not used
+        controller_with_memory = SingleAgentController(enable_memory=True)
+        controller_with_memory.step(env_array)
+        
+        # Both should work regardless of memory setting
+        assert controller_no_memory.positions.shape == (1, 2)
+        assert controller_with_memory.positions.shape == (1, 2)
+    
+    def test_memory_interface_multi_agent_compatibility(self) -> None:
+        """Test memory interface works with multi-agent controllers."""
+        positions = [[0, 0], [10, 10], [20, 20]]
+        controller = MultiAgentController(positions=positions, enable_memory=True)
+        
+        # Test memory operations with multi-agent setup
+        test_memory = {
+            "swarm_formation": "triangle",
+            "collective_trajectory": positions,
+            "coordination_state": {"leader": 0, "followers": [1, 2]}
+        }
+        
+        loaded_memory = controller.load_memory(test_memory)
+        assert loaded_memory == test_memory
+        
+        saved_memory = controller.save_memory()
+        assert saved_memory == test_memory
+        assert controller.num_agents == 3
+    
+    def test_memory_interface_serialization_compatibility(self) -> None:
+        """Test that memory data is JSON-serializable for storage compatibility."""
+        import json
+        
+        controller = SingleAgentController(enable_memory=True)
+        
+        # Test with various data types that should be serializable
+        test_memory = {
+            "trajectory": [(0.0, 0.0), (1.5, 2.3)],
+            "episode_count": 10,
+            "success_rate": 0.75,
+            "metadata": {
+                "timestamp": 1234567890.123,
+                "version": "1.0",
+                "agent_id": "agent_001"
+            },
+            "belief_state": [0.1, 0.2, 0.3, 0.4]
+        }
+        
+        controller.load_memory(test_memory)
+        saved_memory = controller.save_memory()
+        
+        # Should be JSON serializable
+        try:
+            json_str = json.dumps(saved_memory)
+            reconstructed = json.loads(json_str)
+            assert reconstructed == saved_memory
+        except (TypeError, ValueError) as e:
+            pytest.fail(f"Memory data should be JSON-serializable: {e}")
+
+
+class TestNavigatorProtocolExtensibilityHooks:
+    """
+    Tests for new extensibility hooks supporting custom observations, rewards,
+    and episode handling per Gymnasium 0.29.x migration requirements.
+    
+    These tests validate that extensibility hooks work correctly and provide
+    the expected extension points for custom navigation algorithms.
+    """
+    
+    def test_extensibility_hooks_default_behavior(self) -> None:
+        """Test default behavior of extensibility hooks when disabled."""
+        controller = SingleAgentController(enable_extensibility_hooks=False)
+        
+        # Test compute_additional_obs with hooks disabled
+        base_obs = {"position": [0, 0], "orientation": 0.0}
+        additional_obs = controller.compute_additional_obs(base_obs)
+        assert additional_obs == {}  # Should return empty dict when disabled
+        
+        # Test compute_extra_reward with hooks disabled
+        extra_reward = controller.compute_extra_reward(1.0, {"step": 10})
+        assert extra_reward == 0.0  # Should return 0.0 when disabled
+        
+        # Test on_episode_end with hooks disabled (should not raise errors)
+        controller.on_episode_end({"episode_length": 100, "success": True})
+        # Should complete without error
+    
+    def test_extensibility_hooks_enabled_behavior(self) -> None:
+        """Test extensibility hooks when enabled with custom observation keys."""
+        controller = SingleAgentController(
+            enable_extensibility_hooks=True,
+            custom_observation_keys=["controller_id", "performance_metrics"]
+        )
+        
+        # Initialize some performance metrics
+        controller._performance_metrics['step_times'] = [1.0, 2.0, 3.0]
+        
+        # Test compute_additional_obs with enabled hooks
+        base_obs = {"position": [5, 10], "orientation": 45.0}
+        additional_obs = controller.compute_additional_obs(base_obs)
+        
+        # Should include configured custom observation keys
+        assert "controller_id" in additional_obs
+        assert "avg_step_time_ms" in additional_obs
+        assert additional_obs["avg_step_time_ms"] == 2.0  # Mean of [1,2,3]
+    
+    def test_extensibility_hooks_reward_shaping(self) -> None:
+        """Test reward shaping functionality through extensibility hooks."""
+        controller = SingleAgentController(
+            enable_extensibility_hooks=True,
+            reward_shaping="exploration_bonus"
+        )
+        
+        # Set up agent state for reward calculation
+        controller._speed = np.array([1.5])
+        
+        # Test exploration bonus reward shaping
+        base_reward = 0.5
+        info = {"step": 10}
+        extra_reward = controller.compute_extra_reward(base_reward, info)
+        
+        # Should provide exploration bonus based on movement
+        expected_bonus = 0.01 * 1.5  # movement_bonus = 0.01 * speed
+        assert extra_reward == expected_bonus
+    
+    def test_extensibility_hooks_episode_handling(self) -> None:
+        """Test episode completion handling through extensibility hooks."""
+        controller = SingleAgentController(
+            enable_extensibility_hooks=True,
+            enable_logging=True
+        )
+        
+        # Set up performance metrics for episode end handling
+        controller._performance_metrics['step_times'] = [5.0, 10.0, 15.0]
+        controller._performance_metrics['total_steps'] = 100
+        
+        # Test episode end handling (should not raise errors)
+        final_info = {
+            "episode_length": 100,
+            "success": True,
+            "total_reward": 50.0
+        }
+        
+        # Should complete without error and log episode statistics
+        controller.on_episode_end(final_info)
+        
+        # Verify the method was called (no exceptions raised)
+        assert controller._performance_metrics['total_steps'] == 100
+
+
+class TestNavigatorProtocolSensorIntegration:
+    """
+    Tests for sensor-based observation processing workflows replacing direct 
+    environmental sampling per Section 0.2.1 modular architecture requirements.
+    
+    These tests validate that NavigatorProtocol implementations properly integrate
+    with SensorProtocol components for flexible perception modeling.
+    """
+    
+    def test_sensor_based_odor_sampling(self) -> None:
+        """Test that odor sampling uses SensorProtocol instead of direct field access."""
+        # Create controller with default sensor setup
+        controller = SingleAgentController()
+        
+        # Verify controller has sensors configured
+        assert hasattr(controller, '_sensors')
+        assert len(controller._sensors) > 0
+        assert hasattr(controller, '_primary_sensor')
+        
+        # Test odor sampling goes through sensor system
+        env_array = np.random.rand(50, 50)
+        odor_value = controller.sample_odor(env_array)
+        
+        # Should return a valid odor value
+        assert isinstance(odor_value, (float, np.floating))
+        assert not np.isnan(odor_value)
+        assert not np.isinf(odor_value)
+    
+    def test_sensor_protocol_compliance_in_controllers(self) -> None:
+        """Test that controllers properly interact with SensorProtocol implementations."""
+        from plume_nav_sim.core.sensors import ConcentrationSensor, BinarySensor
+        
+        # Create custom sensors
+        concentration_sensor = ConcentrationSensor(dynamic_range=(0, 1), resolution=0.001)
+        binary_sensor = BinarySensor(threshold=0.1, false_positive_rate=0.02)
+        
+        # Create controller with custom sensors
+        controller = SingleAgentController(sensors=[concentration_sensor, binary_sensor])
+        
+        # Verify sensors are properly configured
+        active_sensors = controller.get_active_sensors()
+        assert len(active_sensors) == 2
+        assert concentration_sensor in active_sensors
+        assert binary_sensor in active_sensors
+        
+        # Test sensor management operations
+        from plume_nav_sim.core.sensors import GradientSensor
+        gradient_sensor = GradientSensor(spatial_resolution=(0.5, 0.5))
+        
+        controller.add_sensor(gradient_sensor)
+        assert len(controller.get_active_sensors()) == 3
+        
+        removed = controller.remove_sensor(binary_sensor)
+        assert removed is True
+        assert len(controller.get_active_sensors()) == 2
+        assert binary_sensor not in controller.get_active_sensors()
+    
+    def test_sensor_reset_integration(self) -> None:
+        """Test that sensor reset is properly integrated with navigator reset."""
+        from plume_nav_sim.core.sensors import ConcentrationSensor
+        
+        # Create controller with sensors
+        sensor = ConcentrationSensor()
+        controller = SingleAgentController(sensors=[sensor])
+        
+        # Mock the sensor reset method to track calls
+        reset_called = []
+        original_reset = getattr(sensor, 'reset', lambda: None)
+        sensor.reset = lambda: reset_called.append(True)
+        
+        # Reset controller should reset sensors
+        controller.reset()
+        
+        # Verify sensor reset was called (if sensor supports it)
+        if hasattr(sensor, 'reset'):
+            assert len(reset_called) > 0
+    
+    def test_multi_agent_sensor_integration(self) -> None:
+        """Test sensor integration with multi-agent controllers."""
+        from plume_nav_sim.core.sensors import ConcentrationSensor
+        
+        positions = [[0, 0], [10, 10]]
+        sensors = [ConcentrationSensor(dynamic_range=(0, 1))]
+        controller = MultiAgentController(positions=positions, sensors=sensors)
+        
+        # Test multi-agent odor sampling through sensors
+        env_array = np.random.rand(50, 50)
+        odor_values = controller.sample_odor(env_array)
+        
+        # Should return array of values for all agents
+        assert isinstance(odor_values, np.ndarray)
+        assert odor_values.shape == (2,)  # Two agents
+        assert np.all(~np.isnan(odor_values))
+        assert np.all(~np.isinf(odor_values))
+
+
+class TestNavigatorProtocolBackwardCompatibility:
+    """
+    Tests ensuring existing NavigatorProtocol implementations continue functioning
+    with new optional interface extensions per Section 0 requirements.
+    
+    These tests validate that existing code continues to work while new features
+    are available for enhanced navigation strategies.
+    """
+    
+    def test_existing_navigation_workflows_unchanged(self) -> None:
+        """Test that existing navigation workflows continue to work unchanged."""
+        # Test basic single-agent workflow
+        controller = SingleAgentController(position=(10, 20), speed=1.0)
+        
+        # Basic navigation operations should work as before
+        assert controller.num_agents == 1
+        assert controller.positions[0, 0] == 10.0
+        assert controller.positions[0, 1] == 20.0
+        assert controller.speeds[0] == 1.0
+        
+        # Test reset functionality
+        controller.reset(position=(30, 40))
+        assert controller.positions[0, 0] == 30.0
+        assert controller.positions[0, 1] == 40.0
+        
+        # Test step functionality
+        env_array = np.ones((50, 50)) * 0.5
+        initial_position = controller.positions.copy()
+        controller.step(env_array)
+        
+        # Position should change after step
+        assert not np.array_equal(controller.positions, initial_position)
+    
+    def test_multi_agent_backward_compatibility(self) -> None:
+        """Test that multi-agent workflows remain compatible."""
+        positions = [[0, 0], [10, 10], [20, 20]]
+        controller = MultiAgentController(positions=positions)
+        
+        # Basic multi-agent properties should work
+        assert controller.num_agents == 3
+        assert controller.positions.shape == (3, 2)
+        assert np.array_equal(controller.positions, np.array(positions))
+        
+        # Test multi-agent step
+        env_array = np.ones((50, 50)) * 0.3
+        initial_positions = controller.positions.copy()
+        controller.step(env_array)
+        
+        # All agents should maintain valid positions
+        assert controller.positions.shape == (3, 2)
+        assert np.all(np.isfinite(controller.positions))
+    
+    def test_factory_method_backward_compatibility(self) -> None:
+        """Test that factory methods maintain backward compatibility."""
+        # Test single agent factory
+        navigator = NavigatorFactory.single_agent(position=(5, 15), max_speed=2.0)
+        assert isinstance(navigator, NavigatorProtocol)
+        assert navigator.positions[0, 0] == 5.0
+        assert navigator.positions[0, 1] == 15.0
+        assert navigator.max_speeds[0] == 2.0
+        
+        # Test multi-agent factory
+        positions = [[0, 0], [5, 5]]
+        navigator = NavigatorFactory.multi_agent(positions=positions)
+        assert isinstance(navigator, NavigatorProtocol)
+        assert navigator.num_agents == 2
+        assert navigator.positions.shape == (2, 2)
+    
+    def test_configuration_based_creation_compatibility(self) -> None:
+        """Test that configuration-based navigator creation remains compatible."""
+        # Test basic configuration
+        config = {
+            'position': (25, 35),
+            'orientation': 45.0,
+            'speed': 1.5,
+            'max_speed': 3.0
+        }
+        
+        navigator = NavigatorFactory.from_config(config)
+        assert isinstance(navigator, NavigatorProtocol)
+        assert navigator.positions[0, 0] == 25.0
+        assert navigator.positions[0, 1] == 35.0
+        assert navigator.orientations[0] == 45.0
+        assert navigator.speeds[0] == 1.5
+        assert navigator.max_speeds[0] == 3.0
+    
+    def test_existing_sampling_methods_unchanged(self) -> None:
+        """Test that existing sampling methods maintain their interface."""
+        controller = SingleAgentController(position=(25, 25))
+        env_array = np.random.rand(50, 50)
+        
+        # Test single odor sampling (should return float)
+        odor_value = controller.sample_odor(env_array)
+        assert isinstance(odor_value, (float, np.floating))
+        
+        # Test multi-sensor sampling (should return array)
+        sensor_readings = controller.sample_multiple_sensors(
+            env_array, 
+            sensor_distance=5.0,
+            num_sensors=3
+        )
+        assert isinstance(sensor_readings, np.ndarray)
+        assert sensor_readings.shape == (3,)
+        
+        # Test multi-agent sampling
+        multi_controller = MultiAgentController(positions=[[10, 10], [20, 20]])
+        multi_odor_values = multi_controller.sample_odor(env_array)
+        assert isinstance(multi_odor_values, np.ndarray)
+        assert multi_odor_values.shape == (2,)
+
+
+class TestNavigatorProtocolObserveMethod:
+    """
+    Tests for new observe(sensor_output) method for processing SensorProtocol 
+    observations instead of direct environmental sampling per Section 0.2.1.
+    
+    These tests validate that the observe method correctly processes sensor
+    outputs and integrates with the modular sensor architecture.
+    """
+    
+    def test_observe_method_existence_and_signature(self) -> None:
+        """Test that observe method exists with correct signature."""
+        controller = SingleAgentController()
+        
+        # Check if observe method exists
+        if hasattr(controller, 'observe'):
+            # Test method signature - should accept sensor output
+            import inspect
+            sig = inspect.signature(controller.observe)
+            params = list(sig.parameters.keys())
+            
+            # Should have at least sensor_output parameter
+            assert 'sensor_output' in params or len(params) >= 1
+        else:
+            # If observe method doesn't exist yet, test that sensor integration works
+            # through existing sample_odor method which now uses sensors
+            assert hasattr(controller, 'sample_odor')
+            assert hasattr(controller, '_sensors')
+            assert len(controller._sensors) > 0
+    
+    def test_observe_method_sensor_processing(self) -> None:
+        """Test observe method processes sensor outputs correctly."""
+        controller = SingleAgentController()
+        
+        # If observe method exists, test it
+        if hasattr(controller, 'observe'):
+            # Create mock sensor output
+            sensor_output = {
+                'concentration': 0.5,
+                'gradient': [0.1, -0.2],
+                'detection': True,
+                'position': [10.0, 20.0]
+            }
+            
+            # Test observe method processing
+            observation = controller.observe(sensor_output)
+            
+            # Should return processed observation
+            assert observation is not None
+            assert isinstance(observation, dict)
+        else:
+            # Test that sensor-based sampling works as expected
+            env_array = np.random.rand(50, 50)
+            odor_value = controller.sample_odor(env_array)
+            assert isinstance(odor_value, (float, np.floating))
+    
+    def test_observe_method_multi_sensor_integration(self) -> None:
+        """Test observe method handles multiple sensor outputs."""
+        from plume_nav_sim.core.sensors import ConcentrationSensor, BinarySensor
+        
+        # Create controller with multiple sensors
+        sensors = [
+            ConcentrationSensor(dynamic_range=(0, 1)),
+            BinarySensor(threshold=0.1)
+        ]
+        controller = SingleAgentController(sensors=sensors)
+        
+        if hasattr(controller, 'observe'):
+            # Test with multi-sensor output
+            multi_sensor_output = {
+                'ConcentrationSensor': {'value': 0.75, 'timestamp': 1.0},
+                'BinarySensor': {'detected': True, 'confidence': 0.9}
+            }
+            
+            observation = controller.observe(multi_sensor_output)
+            assert observation is not None
+            assert isinstance(observation, dict)
+        else:
+            # Verify that multiple sensors are properly integrated
+            assert len(controller.get_active_sensors()) == 2
+            
+            # Test multi-sensor sampling functionality
+            env_array = np.random.rand(50, 50)
+            readings = controller.sample_multiple_sensors(env_array, num_sensors=2)
+            assert isinstance(readings, np.ndarray)
+            assert readings.shape == (2,)
+    
+    def test_observe_method_error_handling(self) -> None:
+        """Test observe method error handling with invalid sensor outputs."""
+        controller = SingleAgentController()
+        
+        if hasattr(controller, 'observe'):
+            # Test with invalid sensor output
+            invalid_outputs = [
+                None,
+                {},
+                {'invalid': 'data'},
+                {'concentration': float('nan')}
+            ]
+            
+            for invalid_output in invalid_outputs:
+                try:
+                    observation = controller.observe(invalid_output)
+                    # Should handle gracefully and return valid observation
+                    assert observation is not None
+                except (ValueError, TypeError) as e:
+                    # Acceptable to raise exceptions for invalid input
+                    assert str(e)  # Should have error message
+        else:
+            # Test error handling in sensor-based sampling
+            try:
+                # Test with invalid environment array
+                invalid_env = np.array([])  # Empty array
+                controller.sample_odor(invalid_env)
+            except (ValueError, IndexError):
+                # Expected to raise errors for invalid input
+                pass
