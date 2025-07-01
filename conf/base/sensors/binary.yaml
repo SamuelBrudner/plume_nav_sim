@@ -1,0 +1,289 @@
+# ============================================================================
+# PLUME NAVIGATION SIMULATOR: BINARY SENSOR CONFIGURATION (binary.yaml)
+# ============================================================================
+#
+# This configuration provides comprehensive settings for BinarySensor implementation
+# with threshold-based odor detection, hysteresis support, and realistic noise modeling.
+# Designed for agent-agnostic navigation scenarios supporting both memory-based and
+# memoryless agent strategies through standardized SensorProtocol interfaces.
+#
+# SENSOR PURPOSE:
+#   - Threshold-based odor detection with boolean presence indicators
+#   - Configurable detection thresholds with hysteresis for stable behavior
+#   - Realistic noise modeling including false positive/negative rate simulation
+#   - Sub-microsecond per-agent detection latency for high-performance multi-agent scenarios
+#   - Integration with modular plume simulation architecture
+#
+# AGENT STRATEGY COMPATIBILITY:
+#   - Memory-based agents: Supports historical detection tracking and confidence reporting
+#   - Memoryless agents: Provides immediate binary detection without state dependencies
+#   - Reactive agents: Enables instant threshold-based navigation decisions
+#   - Planning agents: Offers reliable detection signals for belief state updates
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - Detection latency: <1μs per agent for vectorized threshold operations
+#   - Multi-agent scaling: Linear performance up to 100+ agents
+#   - Memory efficiency: <1KB overhead per agent for detection state management
+#   - Noise modeling: Configurable false positive/negative rates with seed control
+#
+# USAGE SCENARIOS:
+#   - Binary chemotaxis navigation with simple on/off detection responses
+#   - Robust detection with hysteresis to prevent oscillation near thresholds
+#   - Realistic sensor noise simulation for research into detection reliability
+#   - High-throughput multi-agent simulations requiring minimal sensing overhead
+#
+# INTEGRATION EXAMPLES:
+#   python -m plume_nav_sim sensors=binary plume_model=gaussian
+#   python -m plume_nav_sim sensors=binary sensors.threshold=0.15 sensors.hysteresis=0.02
+#   python -m plume_nav_sim sensors=binary sensors.false_positive_rate=0.05
+#
+# ============================================================================
+
+# @package sensors
+# Hydra package directive for sensor configuration scope
+
+# ============================================================================
+# BINARY SENSOR CORE CONFIGURATION
+# ============================================================================
+# Factory target specification for automatic BinarySensor instantiation
+# through Hydra's structured configuration and dependency injection system
+
+# Hydra instantiation target pointing to BinarySensor implementation
+_target_: src.plume_nav_sim.core.sensors.binary_sensor.BinarySensor
+
+# ============================================================================
+# DETECTION THRESHOLD CONFIGURATION
+# ============================================================================
+# Core threshold parameters defining odor detection sensitivity and stability
+# characteristics with hysteresis support for robust switching behavior
+
+# Primary detection threshold for odor concentration (normalized 0.0-1.0 range)
+# Values closer to 0.0 increase sensitivity but may trigger false positives
+# Values closer to 1.0 reduce sensitivity but improve detection specificity
+threshold: 0.1  # Detection threshold for binary odor presence determination
+
+# Hysteresis band width for stable switching behavior (0.0-0.5 range)
+# Creates different thresholds for rising/falling edges to prevent oscillation:
+# - Rising threshold: threshold (detection onset)
+# - Falling threshold: threshold - hysteresis (detection offset)
+# Higher values increase stability but reduce sensitivity to concentration changes
+hysteresis: 0.02  # Hysteresis width for stable detection behavior near threshold
+
+# ============================================================================
+# NOISE MODELING CONFIGURATION
+# ============================================================================
+# Realistic sensor imperfection simulation including false positive/negative
+# rates to model real-world chemical sensor characteristics and limitations
+
+# False positive rate: Probability of detecting odor when none is present (0.0-1.0)
+# Simulates sensor noise, environmental interference, and detection artifacts
+# Higher values increase detection rate but reduce navigational accuracy
+false_positive_rate: 0.01  # 1% false positive rate for realistic noise modeling
+
+# False negative rate: Probability of missing odor when present (0.0-1.0)
+# Simulates sensor saturation, response delays, and detection failures
+# Higher values decrease detection rate and may impair navigation performance
+false_negative_rate: 0.005  # 0.5% false negative rate for reliable detection
+
+# Random seed for reproducible noise generation (null for non-deterministic)
+# Enables reproducible experiments with consistent noise patterns across runs
+# Set to specific integer for deterministic behavior or null for random seeds
+random_seed: 42  # Fixed seed for reproducible noise modeling
+
+# ============================================================================
+# PERFORMANCE MONITORING CONFIGURATION
+# ============================================================================
+# Logging and performance tracking settings for sensor operation analysis,
+# debugging support, and multi-agent performance optimization
+
+# Enable detailed logging and performance monitoring (impacts minimal overhead)
+# Provides detection timing, noise application statistics, and confidence metrics
+# Disable for maximum performance in large-scale multi-agent simulations
+enable_logging: true  # Enable sensor operation logging and performance tracking
+
+# Confidence reporting for detection quality assessment (minimal overhead)
+# Generates metadata including detection rates, consistency metrics, and noise impact
+# Useful for navigation algorithm analysis and sensor calibration validation
+confidence_reporting: true  # Enable detection confidence metrics and reporting
+
+# ============================================================================
+# HISTORICAL DATA CONFIGURATION
+# ============================================================================
+# Optional temporal integration settings for memory-based navigation strategies
+# and detection pattern analysis with configurable history buffer management
+
+# Number of past detection frames to maintain (0 disables history tracking)
+# Higher values enable temporal analysis but increase memory usage linearly
+# Memory usage: ~history_length * num_agents * sizeof(bool) bytes
+# Recommended: 0 for memoryless agents, 10-100 for memory-based strategies
+history_length: 10  # Maintain 10 detection frames for temporal pattern analysis
+
+# ============================================================================
+# ADVANCED SENSOR PARAMETERS
+# ============================================================================
+# Additional configuration options for specialized sensing scenarios and
+# performance optimization in resource-constrained environments
+
+# Sensor identification for multi-sensor scenarios and logging context
+# Automatically generated if not specified: "binary_sensor_{instance_id}"
+# sensor_id: "primary_binary"  # Optional unique sensor identifier
+
+# Custom detection mode for specialized threshold behavior (future extension)
+# detection_mode: "standard"  # Standard threshold-based detection
+
+# Temporal filtering for sensor response dynamics (future extension)
+# response_time_constant: 0.0  # Instantaneous response (no filtering)
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# Support for deployment-time configuration overrides through environment
+# variables while maintaining structured configuration benefits
+
+# Environment variable overrides for deployment flexibility
+# Supports runtime parameter adjustment without configuration file changes
+environment_overrides:
+  # Core detection parameters
+  threshold_env_var: "BINARY_SENSOR_THRESHOLD"  # Override detection threshold
+  hysteresis_env_var: "BINARY_SENSOR_HYSTERESIS"  # Override hysteresis width
+  
+  # Noise modeling parameters  
+  false_positive_env_var: "BINARY_SENSOR_FP_RATE"  # Override false positive rate
+  false_negative_env_var: "BINARY_SENSOR_FN_RATE"  # Override false negative rate
+  random_seed_env_var: "BINARY_SENSOR_SEED"  # Override random seed
+  
+  # Performance and monitoring
+  logging_env_var: "BINARY_SENSOR_LOGGING"  # Override logging enable
+  confidence_env_var: "BINARY_SENSOR_CONFIDENCE"  # Override confidence reporting
+  history_env_var: "BINARY_SENSOR_HISTORY"  # Override history length
+
+# ============================================================================
+# INTEGRATION CONFIGURATION
+# ============================================================================
+# Component integration settings for seamless operation with plume models,
+# navigation controllers, and environment management systems
+
+integration:
+  # PlumeModel integration for concentration field sampling
+  plume_model_integration: true  # Enable plume model concentration queries
+  
+  # NavigatorProtocol integration for standardized sensor interfaces
+  navigator_integration: true  # Support NavigatorProtocol sensor sampling
+  
+  # Performance monitoring integration for system-wide metrics
+  performance_integration: true  # Enable performance monitoring hooks
+  
+  # Gymnasium environment integration for RL compatibility
+  gymnasium_integration: true  # Support Gymnasium observation space integration
+
+# ============================================================================
+# VALIDATION AND CONSTRAINTS
+# ============================================================================
+# Parameter validation rules and physical constraints ensuring sensor
+# configuration remains within valid operational ranges
+
+validation:
+  # Threshold parameter constraints
+  threshold_range: [0.0, 1.0]  # Valid threshold range (inclusive)
+  hysteresis_range: [0.0, 0.5]  # Valid hysteresis range (inclusive)
+  
+  # Noise parameter constraints
+  false_positive_range: [0.0, 1.0]  # Valid false positive rate range
+  false_negative_range: [0.0, 1.0]  # Valid false negative rate range
+  
+  # Performance constraints
+  max_history_length: 1000  # Maximum detection history buffer size
+  min_detection_latency_us: 0.1  # Minimum acceptable detection latency
+  max_detection_latency_us: 10.0  # Maximum acceptable detection latency
+
+# ============================================================================
+# DEPLOYMENT EXAMPLES AND USE CASES
+# ============================================================================
+# The following examples demonstrate common deployment scenarios for binary
+# sensor configuration in various research and application contexts.
+
+# Example 1: High-Sensitivity Detection for Weak Plumes
+# Configure sensor for maximum sensitivity with minimal false negatives:
+#   python -m plume_nav_sim sensors=binary sensors.threshold=0.05 sensors.false_negative_rate=0.001
+
+# Example 2: Robust Detection with Hysteresis for Stable Navigation
+# Use hysteresis to prevent detection oscillation in noisy environments:
+#   python -m plume_nav_sim sensors=binary sensors.threshold=0.1 sensors.hysteresis=0.03
+
+# Example 3: Realistic Sensor Noise for Algorithm Robustness Testing
+# Add significant noise to test navigation algorithm resilience:
+#   python -m plume_nav_sim sensors=binary sensors.false_positive_rate=0.05 sensors.false_negative_rate=0.02
+
+# Example 4: High-Performance Multi-Agent Simulation
+# Optimize for minimal overhead in large-scale simulations:
+#   python -m plume_nav_sim sensors=binary sensors.enable_logging=false sensors.history_length=0
+
+# Example 5: Memory-Based Agent Support with Historical Tracking
+# Enable detection history for temporal pattern analysis:
+#   python -m plume_nav_sim sensors=binary sensors.history_length=50 sensors.confidence_reporting=true
+
+# Example 6: Reproducible Research with Fixed Random Seed
+# Ensure consistent results across experimental runs:
+#   python -m plume_nav_sim sensors=binary sensors.random_seed=12345
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION NOTES
+# ============================================================================
+# Guidelines for optimizing binary sensor performance in different scenarios:
+#
+# For Maximum Performance (Multi-Agent Simulations):
+#   - Set enable_logging=false to eliminate logging overhead
+#   - Set history_length=0 to disable temporal tracking
+#   - Set confidence_reporting=false to minimize metadata generation
+#   - Use moderate threshold values (0.05-0.2) for efficient vectorized operations
+#
+# For Research and Analysis:
+#   - Enable full logging and confidence reporting for detailed analysis
+#   - Use appropriate history_length (10-100) for temporal pattern studies
+#   - Set random_seed for reproducible noise characteristics
+#   - Configure realistic noise rates based on target sensor characteristics
+#
+# For Real-Time Applications:
+#   - Balance threshold sensitivity with detection stability using hysteresis
+#   - Monitor detection latency through performance metrics
+#   - Optimize false positive/negative rates for application requirements
+#   - Consider environmental deployment constraints for parameter selection
+#
+# Memory Usage Optimization:
+#   - Detection history: ~history_length * num_agents * 1 byte
+#   - Performance metrics: ~100 bytes + detection_times buffer
+#   - Total overhead: <1KB per agent for typical configurations
+#
+# ============================================================================
+# COMPATIBILITY AND MIGRATION NOTES
+# ============================================================================
+# This binary sensor configuration is designed for seamless integration with
+# the modular plume navigation architecture while maintaining backward
+# compatibility and forward extensibility.
+#
+# Agent Strategy Compatibility:
+#   - Memoryless agents: Use threshold and hysteresis for immediate decisions
+#   - Memory-based agents: Leverage history_length and confidence_reporting
+#   - Planning agents: Benefit from stable detection through noise modeling
+#   - Reactive agents: Achieve sub-microsecond response times
+#
+# Plume Model Integration:
+#   - GaussianPlumeModel: Analytical concentration queries with minimal overhead
+#   - TurbulentPlumeModel: Realistic detection in complex flow environments
+#   - VideoPlumeAdapter: Backward compatibility with existing video datasets
+#
+# Performance Scaling:
+#   - Single agent: <1μs detection latency typical
+#   - Multi-agent (10): <5μs total processing time
+#   - Multi-agent (100): <50μs total processing time
+#   - Memory usage: Linear scaling with agent count and history length
+#
+# Future Extension Points:
+#   - Temporal filtering for sensor response dynamics
+#   - Calibration drift modeling for long-duration experiments
+#   - Multi-modal sensor fusion with other sensor types
+#   - Adaptive threshold adjustment based on environmental conditions
+#
+# ============================================================================
+# END OF BINARY SENSOR CONFIGURATION
+# ============================================================================
