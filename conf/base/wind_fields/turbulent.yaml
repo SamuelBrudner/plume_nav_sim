@@ -1,0 +1,424 @@
+# ============================================================================
+# TURBULENT WIND FIELD CONFIGURATION (turbulent.yaml)
+# ============================================================================
+#
+# Hydra configuration for TurbulentWindField implementing realistic gusty wind
+# conditions with stochastic variations and eddy formations. This configuration
+# provides research-grade atmospheric boundary layer dynamics and statistical
+# modeling of environmental transport phenomena for advanced plume navigation
+# research scenarios.
+#
+# INTENDED USE CASES:
+#   - Research scenarios requiring realistic atmospheric boundary layer physics
+#   - Studies of turbulent plume transport and intermittent odor signals
+#   - Navigation experiments with complex environmental dynamics
+#   - Multi-scale turbulence modeling with eddy formation patterns
+#   - Statistical analysis of atmospheric transport phenomena
+#
+# ENVIRONMENTAL CONDITIONS MODELED:
+#   - Atmospheric boundary layer with stability effects
+#   - Gusty wind conditions with realistic temporal correlation
+#   - Anisotropic turbulence with directional characteristics
+#   - Eddy formations and spatial correlation structures
+#   - Surface roughness effects on wind shear profiles
+#
+# PERFORMANCE CHARACTERISTICS:
+#   - velocity_at(): <0.5ms for single query per protocol requirements
+#   - step(): <2ms per time step for real-time simulation compatibility
+#   - Memory usage: <50MB for typical domains with spatial correlation
+#   - Numba acceleration: 5-20x speedup when available
+#
+# USAGE EXAMPLES:
+#   # Basic turbulent wind simulation
+#   python -m plume_nav_sim --config-name=config wind_field=turbulent
+#
+#   # High-intensity atmospheric turbulence
+#   python -m plume_nav_sim wind_field=turbulent wind_field.turbulence_intensity=0.4
+#
+#   # Unstable atmospheric conditions (convective)
+#   python -m plume_nav_sim wind_field=turbulent wind_field.atmospheric_stability=-1.0
+#
+#   # Custom domain and resolution
+#   python -m plume_nav_sim wind_field=turbulent wind_field.domain_bounds=[200,150]
+#
+# ENVIRONMENT VARIABLE OVERRIDES:
+#   WIND_MEAN_VELOCITY_X=3.0          # Eastward wind component (m/s)
+#   WIND_MEAN_VELOCITY_Y=1.0          # Northward wind component (m/s)
+#   WIND_TURBULENCE_INTENSITY=0.2     # Relative turbulence strength [0,1]
+#   WIND_CORRELATION_LENGTH=10.0      # Spatial correlation scale
+#   WIND_ATMOSPHERIC_STABILITY=0.0    # Stability parameter [-2,2]
+#   WIND_ENABLE_NUMBA=true            # Enable JIT acceleration
+#
+# ============================================================================
+
+# @package wind_field
+# Configuration metadata for tracking and validation
+_config_:
+  component: "TurbulentWindField"
+  description: "Realistic turbulent wind field with atmospheric boundary layer dynamics"
+  physics_model: "stochastic_atmospheric_turbulence"
+  performance_target: "sub_2ms_step_latency"
+  research_grade: true
+  last_modified: "2024-01-01"
+
+# ============================================================================
+# CORE TURBULENT WIND FIELD CONFIGURATION
+# ============================================================================
+# Comprehensive atmospheric modeling configuration balancing research-grade
+# realism with computational performance for real-time simulation requirements.
+
+# Hydra target specification for TurbulentWindField instantiation
+_target_: src.plume_nav_sim.models.wind.TurbulentWindField
+
+# ============================================================================
+# BASE ATMOSPHERIC CONDITIONS
+# ============================================================================
+# Fundamental wind parameters establishing the mean flow characteristics
+# and turbulent intensity for realistic atmospheric boundary layer physics.
+
+# Mean wind velocity vector components in environment units per time step
+# Represents the base atmospheric flow before turbulent fluctuations
+# Eastward (u_x) and northward (u_y) components following meteorological conventions
+mean_velocity: [3.0, 1.0]  # Moderate east-northeast wind for typical research scenarios
+
+# Relative turbulence intensity controlling eddy amplitude and mixing strength
+# Represents the ratio of turbulent fluctuation magnitude to mean wind speed
+# Values: 0.0 (laminar flow) to 1.0 (fully turbulent conditions)
+turbulence_intensity: 0.2  # Moderate turbulence for balanced realism and stability
+
+# ============================================================================
+# SPATIAL AND TEMPORAL CORRELATION PARAMETERS
+# ============================================================================
+# Advanced correlation modeling for realistic eddy structure and temporal
+# evolution matching atmospheric boundary layer theory.
+
+# Spatial correlation length scale controlling eddy size and structure
+# Represents the characteristic distance over which wind velocities remain correlated
+# Larger values create smoother, more coherent flow patterns
+correlation_length: 10.0  # Intermediate scale for research scenarios
+
+# Temporal correlation time scale controlling velocity evolution smoothness
+# Represents the characteristic time for turbulent velocity decorrelation
+# Affects the rate of change in gusty conditions and eddy persistence
+correlation_time: 5.0  # Moderate temporal persistence for realistic dynamics
+
+# ============================================================================
+# COMPUTATIONAL DOMAIN AND RESOLUTION
+# ============================================================================
+# Spatial discretization parameters balancing accuracy with performance
+# for real-time simulation requirements and memory efficiency.
+
+# Simulation domain bounds as [width, height] in environment units
+# Defines the spatial extent of the turbulent wind field computation
+# Larger domains support more agents but increase computational cost
+domain_bounds: [100.0, 100.0]  # Standard domain for typical research scenarios
+
+# Spatial grid resolution controlling interpolation accuracy and memory usage
+# Represents the spacing between wind field computation nodes
+# Smaller values provide higher accuracy but increase computational cost
+grid_resolution: 2.0  # Balanced resolution for sub-0.5ms velocity queries
+
+# ============================================================================
+# ATMOSPHERIC BOUNDARY LAYER PHYSICS
+# ============================================================================
+# Advanced atmospheric modeling parameters for research-grade environmental
+# realism including stability effects and surface interactions.
+
+# Anisotropy ratio controlling directional turbulence characteristics
+# Ratio of cross-wind to along-wind turbulence strength [0, 1]
+# Models the tendency for turbulent structures to be elongated along wind direction
+anisotropy_ratio: 0.6  # Realistic atmospheric anisotropy
+
+# Atmospheric stability parameter affecting boundary layer structure
+# Range: -2.0 (highly unstable/convective) to +2.0 (highly stable/stratified)
+# Controls mixing characteristics and turbulent energy distribution
+atmospheric_stability: 0.0  # Neutral conditions for baseline research
+
+# Surface roughness parameter affecting wind shear and near-surface turbulence
+# Range: 0.0 (smooth surface) to 1.0 (very rough terrain)
+# Influences the wind profile and turbulent boundary layer development
+surface_roughness: 0.1  # Moderate roughness for typical research environments
+
+# Enable thermal stratification and convective processes
+# Adds temperature-driven buoyancy effects and thermal plume structures
+# Increases computational complexity but provides enhanced atmospheric realism
+thermal_effects: false  # Disabled for computational efficiency
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION SETTINGS
+# ============================================================================
+# Advanced configuration for computational performance and numerical stability
+# supporting research requirements and real-time simulation targets.
+
+# Enable Numba JIT compilation for computational kernels
+# Provides 5-20x performance improvement for velocity interpolation and evolution
+# Requires numba package installation but significantly improves step latency
+enable_numba: true  # Enable acceleration when available
+
+# Maximum velocity magnitude constraint for numerical stability
+# Prevents unrealistic wind speeds that could cause simulation instability
+# Applied as soft constraint with velocity field renormalization
+max_velocity_magnitude: 20.0  # Conservative limit for stable simulation
+
+# Boundary condition type for spatial domain edges
+# Options: 'periodic' (wrap-around), 'absorbing' (zero beyond), 'reflecting' (mirror)
+# Affects wind field behavior at simulation boundaries
+boundary_conditions: 'periodic'  # Wrap-around for unbounded atmosphere modeling
+
+# ============================================================================
+# STOCHASTIC PROCESS CONFIGURATION
+# ============================================================================
+# Random number generation and reproducibility settings for controlled
+# experimental conditions and statistical analysis.
+
+# Random seed for reproducible turbulent wind field generation
+# Enables deterministic stochastic processes for experiment repeatability
+# Set to null for non-deterministic turbulence patterns
+random_seed: 42  # Fixed seed for reproducible research scenarios
+
+# ============================================================================
+# ADVANCED ATMOSPHERIC MODELING (Optional)
+# ============================================================================
+# Research-grade extensions for specialized atmospheric boundary layer studies
+# and advanced turbulent transport phenomenon modeling.
+
+# Advanced turbulence modeling parameters
+turbulence:
+  # Energy cascade modeling for multi-scale eddy interactions
+  # Enables Kolmogorov energy spectrum representation
+  energy_cascade_enabled: true
+  
+  # Spectral cut-off for small-scale turbulent structures
+  # Controls the minimum resolved eddy size relative to grid resolution
+  spectral_cutoff: 2.0  # Conservative cut-off for numerical stability
+  
+  # Intermittency factor for realistic turbulent burst patterns
+  # Models the clustered nature of high-intensity turbulent events
+  intermittency_factor: 0.3  # Moderate intermittency for realistic dynamics
+
+# Wind shear modeling for vertical velocity profile effects
+wind_shear:
+  # Enable logarithmic wind profile modeling
+  # Applies realistic altitude-dependent wind speed variations
+  logarithmic_profile: true
+  
+  # Reference height for wind speed measurements
+  # Represents the height at which mean_velocity is specified
+  reference_height: 10.0  # Typical meteorological measurement height
+  
+  # Power law exponent for wind profile in stable conditions
+  # Controls the rate of wind speed increase with height
+  power_law_exponent: 0.2  # Typical atmospheric boundary layer value
+
+# ============================================================================
+# RESEARCH INTEGRATION FEATURES
+# ============================================================================
+# Enhanced capabilities for plume navigation research and sensor integration
+# supporting advanced experimental designs and multi-physics coupling.
+
+# Plume dispersion integration settings
+dispersion_coupling:
+  # Enable enhanced plume-wind coupling for realistic transport
+  # Improves accuracy of odor plume advection and dispersion calculations
+  enhanced_coupling: true
+  
+  # Wind field update frequency relative to plume model time steps
+  # Higher frequencies provide better coupling but increase computational cost
+  update_frequency: 1.0  # Update every plume time step for maximum accuracy
+  
+  # Spatial interpolation method for plume model integration
+  # Options: 'bilinear', 'bicubic', 'nearest' for different accuracy/speed trade-offs
+  interpolation_method: 'bilinear'  # Balanced accuracy and performance
+
+# Sensor response modeling integration
+sensor_integration:
+  # Enable wind-dependent sensor response characteristics
+  # Models the effect of wind speed and direction on sensor performance
+  wind_dependent_response: true
+  
+  # Wind shielding effects on sensor measurements
+  # Simulates the impact of wind patterns on sensor orientation and efficiency
+  wind_shielding_factor: 0.1  # Minimal shielding for exposed sensors
+  
+  # Temporal lag modeling for sensor response to wind changes
+  # Represents the finite response time of sensors to environmental changes
+  sensor_lag_time: 0.5  # Conservative lag for typical chemical sensors
+
+# ============================================================================
+# PERFORMANCE MONITORING AND VALIDATION
+# ============================================================================
+# Comprehensive monitoring configuration for performance analysis and
+# research validation supporting continuous optimization and debugging.
+
+# Performance monitoring settings
+monitoring:
+  # Enable detailed timing statistics collection
+  # Tracks velocity query performance and step execution times
+  timing_enabled: true
+  
+  # Performance warning thresholds for research quality assurance
+  # Triggers warnings when computational performance degrades
+  performance_thresholds:
+    velocity_query_ms: 0.5    # Maximum acceptable single query time
+    step_execution_ms: 2.0    # Maximum acceptable step execution time
+    memory_usage_mb: 50.0     # Maximum acceptable memory usage
+  
+  # Statistical validation settings for research verification
+  # Enables automated validation of turbulent statistics and physics
+  validation:
+    turbulence_statistics: true    # Validate energy spectra and correlations
+    conservation_checks: true     # Verify mass and momentum conservation
+    boundary_condition_checks: true  # Validate domain boundary handling
+
+# Output and logging configuration
+output:
+  # Enable detailed wind field state logging for research analysis
+  # Provides comprehensive data for atmospheric physics validation
+  detailed_logging: false  # Disabled for performance (enable for debugging)
+  
+  # Wind field visualization export settings
+  # Supports research visualization and presentation requirements
+  visualization_export:
+    enabled: false           # Disabled by default for performance
+    export_format: 'numpy'   # Options: 'numpy', 'vtk', 'csv'
+    temporal_resolution: 10  # Export every N time steps
+  
+  # Performance metrics export for optimization analysis
+  metrics_export:
+    enabled: true            # Enable for continuous performance monitoring
+    export_interval: 100     # Export metrics every N steps
+    include_detailed_stats: false  # Minimal metrics for performance
+
+# ============================================================================
+# ENVIRONMENT VARIABLE INTEGRATION
+# ============================================================================
+# Flexible deployment configuration supporting containerized and cloud
+# environments with dynamic parameter override capabilities.
+
+# Environment variable mappings for deployment flexibility
+_env_overrides_:
+  # Core atmospheric parameters
+  mean_velocity_x: ${oc.env:WIND_MEAN_VELOCITY_X,3.0}
+  mean_velocity_y: ${oc.env:WIND_MEAN_VELOCITY_Y,1.0}
+  turbulence_intensity: ${oc.env:WIND_TURBULENCE_INTENSITY,0.2}
+  
+  # Spatial and temporal scales
+  correlation_length: ${oc.env:WIND_CORRELATION_LENGTH,10.0}
+  correlation_time: ${oc.env:WIND_CORRELATION_TIME,5.0}
+  
+  # Domain and resolution parameters
+  domain_width: ${oc.env:WIND_DOMAIN_WIDTH,100.0}
+  domain_height: ${oc.env:WIND_DOMAIN_HEIGHT,100.0}
+  grid_resolution: ${oc.env:WIND_GRID_RESOLUTION,2.0}
+  
+  # Atmospheric physics parameters
+  atmospheric_stability: ${oc.env:WIND_ATMOSPHERIC_STABILITY,0.0}
+  surface_roughness: ${oc.env:WIND_SURFACE_ROUGHNESS,0.1}
+  anisotropy_ratio: ${oc.env:WIND_ANISOTROPY_RATIO,0.6}
+  
+  # Performance optimization settings
+  enable_numba: ${oc.env:WIND_ENABLE_NUMBA,true}
+  max_velocity_magnitude: ${oc.env:WIND_MAX_VELOCITY,20.0}
+  boundary_conditions: ${oc.env:WIND_BOUNDARY_CONDITIONS,'periodic'}
+  
+  # Reproducibility and debugging
+  random_seed: ${oc.env:WIND_RANDOM_SEED,42}
+  detailed_logging: ${oc.env:WIND_DETAILED_LOGGING,false}
+
+# ============================================================================
+# DEPLOYMENT VALIDATION AND REQUIREMENTS
+# ============================================================================
+# Configuration validation and deployment requirements ensuring optimal
+# operation in research computing environments.
+
+_deployment_validation_:
+  # Computational requirements for turbulent wind field modeling
+  computational_requirements:
+    cpu_cores: 2              # Minimum CPU cores for parallel computation
+    memory_gb: 2              # Minimum memory for typical domain sizes
+    scipy_required: true      # SciPy required for statistical functions
+    numba_recommended: true   # Numba recommended for performance
+  
+  # Performance validation thresholds for research deployment
+  performance_requirements:
+    velocity_query_time_ms: 0.5    # Maximum single query latency
+    step_execution_time_ms: 2.0    # Maximum step execution latency
+    memory_efficiency: 0.8         # Minimum memory utilization efficiency
+    initialization_time_s: 5.0     # Maximum initialization time
+  
+  # Research validation requirements for atmospheric physics
+  physics_validation:
+    turbulence_statistics_check: true   # Validate turbulent energy spectra
+    correlation_function_check: true    # Validate spatial/temporal correlations
+    boundary_layer_profile_check: true  # Validate atmospheric profiles
+    mass_conservation_check: true       # Verify conservation laws
+
+# ============================================================================
+# RESEARCH CONFIGURATION EXAMPLES
+# ============================================================================
+# Pre-configured parameter sets for common research scenarios enabling
+# quick setup for different atmospheric conditions and experimental designs.
+
+# Configuration variants for different research scenarios
+_research_scenarios_:
+  # Stable atmospheric conditions with minimal turbulence
+  stable_atmosphere:
+    turbulence_intensity: 0.1
+    atmospheric_stability: 1.0
+    thermal_effects: false
+    correlation_time: 10.0
+  
+  # Convective conditions with enhanced mixing
+  convective_atmosphere:
+    turbulence_intensity: 0.4
+    atmospheric_stability: -1.0
+    thermal_effects: true
+    correlation_time: 2.0
+  
+  # High-resolution spatial modeling
+  high_resolution:
+    grid_resolution: 1.0
+    correlation_length: 5.0
+    domain_bounds: [50.0, 50.0]
+    enable_numba: true
+  
+  # Large-scale atmospheric modeling
+  large_scale:
+    domain_bounds: [200.0, 200.0]
+    grid_resolution: 4.0
+    correlation_length: 20.0
+    max_velocity_magnitude: 30.0
+
+# ============================================================================
+# END OF TURBULENT WIND FIELD CONFIGURATION
+# ============================================================================
+# This configuration provides comprehensive realistic atmospheric boundary
+# layer dynamics with configurable complexity levels. All parameters can be
+# overridden through environment variables or CLI arguments while maintaining
+# optimal performance characteristics for research applications.
+#
+# RESEARCH DEPLOYMENT CHECKLIST:
+#   □ Verify computational requirements (2+ CPU cores, 2+ GB memory)
+#   □ Install SciPy for statistical functions (required)
+#   □ Install Numba for performance optimization (recommended)
+#   □ Configure appropriate domain bounds for research scenario
+#   □ Set atmospheric parameters for desired environmental conditions
+#   □ Validate performance thresholds meet research requirements
+#
+# PERFORMANCE VALIDATION:
+#   □ Velocity queries complete in <0.5ms per protocol requirements
+#   □ Step execution completes in <2ms for real-time compatibility
+#   □ Memory usage remains <50MB for typical domain configurations
+#   □ Turbulent statistics match atmospheric boundary layer theory
+#   □ Spatial and temporal correlations exhibit expected behavior
+#
+# ATMOSPHERIC PHYSICS VALIDATION:
+#   □ Turbulent energy spectra follow Kolmogorov scaling laws
+#   □ Spatial correlation functions decay exponentially with distance
+#   □ Temporal correlation exhibits realistic decorrelation time scales
+#   □ Wind shear profiles match logarithmic atmospheric boundary layer
+#   □ Anisotropic turbulence exhibits realistic directional characteristics
+#
+# For additional configuration examples and advanced research scenarios,
+# see the technical specification documentation and example notebooks.
+# ============================================================================
