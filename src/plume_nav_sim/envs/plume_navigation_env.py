@@ -105,22 +105,42 @@ except ImportError:
 
 # Core plume navigation imports with graceful fallbacks during migration
 try:
-    from plume_nav_sim.core.protocols import NavigatorProtocol, NavigatorFactory
+    from plume_nav_sim.core.protocols import (
+        NavigatorProtocol, NavigatorFactory, PlumeModelProtocol, 
+        WindFieldProtocol, SensorProtocol, AgentObservationProtocol, 
+        AgentActionProtocol
+    )
     NAVIGATOR_AVAILABLE = True
 except ImportError:
     # Fallback during migration - will be created by other agents
     NavigatorProtocol = Any
+    PlumeModelProtocol = Any
+    WindFieldProtocol = Any
+    SensorProtocol = Any
+    AgentObservationProtocol = Any
+    AgentActionProtocol = Any
     class NavigatorFactory:
         @staticmethod
         def single_agent(**kwargs):
             raise ImportError("NavigatorFactory not yet available")
+        @staticmethod
+        def create_plume_model(**kwargs):
+            raise ImportError("PlumeModel creation not yet available")
+        @staticmethod
+        def create_wind_field(**kwargs):
+            raise ImportError("WindField creation not yet available")
+        @staticmethod
+        def create_sensors(**kwargs):
+            raise ImportError("Sensor creation not yet available")
     NAVIGATOR_AVAILABLE = False
 
 # Enhanced space definitions with proper Gymnasium compliance
 try:
     from plume_nav_sim.envs.spaces import (
-        ActionSpaceFactory, ObservationSpaceFactory, SpaceValidator,
-        ReturnFormatConverter, get_standard_action_space, get_standard_observation_space
+        ActionSpaceFactory, ObservationSpaceFactory, SensorAwareSpaceFactory, 
+        SpaceValidator, ReturnFormatConverter, WindDataConfig,
+        get_standard_action_space, get_standard_observation_space,
+        get_sensor_aware_observation_space, validate_sensor_observation_compatibility
     )
     SPACES_AVAILABLE = True
 except ImportError:
@@ -135,6 +155,27 @@ except ImportError:
     class ObservationSpaceFactory:
         @staticmethod
         def create_navigation_observation_space(**kwargs):
+            if GYMNASIUM_AVAILABLE:
+                return DictSpace({
+                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "agent_position": Box(low=-1000.0, high=1000.0, shape=(2,), dtype=np.float32),
+                    "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
+                })
+            return None
+        
+        @staticmethod
+        def create_dynamic_sensor_observation_space(sensors, **kwargs):
+            if GYMNASIUM_AVAILABLE:
+                return DictSpace({
+                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "agent_position": Box(low=-1000.0, high=1000.0, shape=(2,), dtype=np.float32),
+                    "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
+                })
+            return None
+    
+    class SensorAwareSpaceFactory:
+        @staticmethod
+        def create_sensor_observation_space(sensors, **kwargs):
             if GYMNASIUM_AVAILABLE:
                 return DictSpace({
                     "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
@@ -162,27 +203,50 @@ except ImportError:
             truncated = False
             return obs, reward, terminated, truncated, info
     
+    class WindDataConfig:
+        def __init__(self, enabled=False, **kwargs):
+            self.enabled = enabled
+    
     def get_standard_action_space():
         return ActionSpaceFactory.create_continuous_action_space()
     
     def get_standard_observation_space():
         return ObservationSpaceFactory.create_navigation_observation_space()
     
+    def get_sensor_aware_observation_space(sensors, **kwargs):
+        return SensorAwareSpaceFactory.create_sensor_observation_space(sensors, **kwargs)
+    
+    def validate_sensor_observation_compatibility(obs, sensors, **kwargs):
+        return True
+    
     SPACES_AVAILABLE = False
 
-# Video plume processing with fallback
+# Plume model implementations with fallback
 try:
-    from plume_nav_sim.envs.video_plume import VideoPlume
-    VIDEO_PLUME_AVAILABLE = True
+    from plume_nav_sim.models.plume.gaussian_plume import GaussianPlumeModel
+    from plume_nav_sim.models.plume.turbulent_plume import TurbulentPlumeModel  
+    from plume_nav_sim.models.plume.video_plume_adapter import VideoPlumeAdapter
+    PLUME_MODELS_AVAILABLE = True
 except ImportError:
-    # Minimal fallback implementation
-    class VideoPlume:
-        def __init__(self, video_path: str):
+    # Minimal fallback implementation for VideoPlumeAdapter
+    class VideoPlumeAdapter:
+        def __init__(self, video_path: str, **kwargs):
             self.video_path = video_path
             self.frame_count = 1000
             self.width = 640
             self.height = 480
             self.fps = 30.0
+        
+        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+            if positions.ndim == 1:
+                return np.random.rand()
+            return np.random.rand(len(positions))
+        
+        def step(self, dt: float = 1.0) -> None:
+            pass
+        
+        def reset(self, **kwargs) -> None:
+            pass
         
         def get_frame(self, frame_id: int) -> Optional[np.ndarray]:
             return np.random.rand(self.height, self.width).astype(np.float32)
@@ -198,7 +262,137 @@ except ImportError:
         def close(self):
             pass
     
-    VIDEO_PLUME_AVAILABLE = False
+    class GaussianPlumeModel:
+        def __init__(self, source_position=(50, 50), source_strength=1000.0, **kwargs):
+            self.source_position = source_position
+            self.source_strength = source_strength
+        
+        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+            if positions.ndim == 1:
+                return np.random.rand()
+            return np.random.rand(len(positions))
+        
+        def step(self, dt: float = 1.0) -> None:
+            pass
+        
+        def reset(self, **kwargs) -> None:
+            pass
+    
+    class TurbulentPlumeModel:
+        def __init__(self, filament_count=500, turbulence_intensity=0.3, **kwargs):
+            self.filament_count = filament_count
+            self.turbulence_intensity = turbulence_intensity
+        
+        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+            if positions.ndim == 1:
+                return np.random.rand()
+            return np.random.rand(len(positions))
+        
+        def step(self, dt: float = 1.0) -> None:
+            pass
+        
+        def reset(self, **kwargs) -> None:
+            pass
+    
+    PLUME_MODELS_AVAILABLE = False
+
+# Wind field implementations with fallback
+try:
+    from plume_nav_sim.models.wind.constant_wind import ConstantWindField
+    from plume_nav_sim.models.wind.turbulent_wind import TurbulentWindField
+    WIND_FIELDS_AVAILABLE = True
+except ImportError:
+    class ConstantWindField:
+        def __init__(self, velocity=(0.0, 0.0), **kwargs):
+            self.velocity = np.array(velocity)
+        
+        def velocity_at(self, positions: np.ndarray) -> np.ndarray:
+            if positions.ndim == 1:
+                return self.velocity
+            return np.tile(self.velocity, (len(positions), 1))
+        
+        def step(self, dt: float = 1.0) -> None:
+            pass
+        
+        def reset(self, **kwargs) -> None:
+            pass
+    
+    class TurbulentWindField:
+        def __init__(self, mean_velocity=(0.0, 0.0), turbulence_intensity=0.1, **kwargs):
+            self.mean_velocity = np.array(mean_velocity)
+            self.turbulence_intensity = turbulence_intensity
+        
+        def velocity_at(self, positions: np.ndarray) -> np.ndarray:
+            if positions.ndim == 1:
+                return self.mean_velocity + np.random.normal(0, self.turbulence_intensity, 2)
+            return np.tile(self.mean_velocity, (len(positions), 1)) + np.random.normal(0, self.turbulence_intensity, (len(positions), 2))
+        
+        def step(self, dt: float = 1.0) -> None:
+            pass
+        
+        def reset(self, **kwargs) -> None:
+            pass
+    
+    WIND_FIELDS_AVAILABLE = False
+
+# Sensor implementations with fallback  
+try:
+    from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
+    from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
+    from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
+    SENSORS_AVAILABLE = True
+except ImportError:
+    class BinarySensor:
+        def __init__(self, threshold=0.1, **kwargs):
+            self.threshold = threshold
+        
+        def detect(self, concentration_values: np.ndarray, positions: np.ndarray, **kwargs) -> np.ndarray:
+            return concentration_values >= self.threshold
+        
+        def configure(self, **kwargs):
+            pass
+        
+        def get_metadata(self):
+            return {"type": "binary", "threshold": self.threshold}
+        
+        def reset(self):
+            pass
+    
+    class ConcentrationSensor:
+        def __init__(self, dynamic_range=(0.0, 1.0), **kwargs):
+            self.dynamic_range = dynamic_range
+        
+        def measure(self, concentration_values: np.ndarray, positions: np.ndarray, **kwargs) -> np.ndarray:
+            return np.clip(concentration_values, *self.dynamic_range)
+        
+        def configure(self, **kwargs):
+            pass
+        
+        def get_metadata(self):
+            return {"type": "concentration", "range": self.dynamic_range}
+        
+        def reset(self):
+            pass
+    
+    class GradientSensor:
+        def __init__(self, spatial_resolution=(0.5, 0.5), **kwargs):
+            self.spatial_resolution = spatial_resolution
+        
+        def compute_gradient(self, plume_state: Any, positions: np.ndarray, **kwargs) -> np.ndarray:
+            if positions.ndim == 1:
+                return np.random.rand(2) - 0.5  # Random gradient direction
+            return np.random.rand(len(positions), 2) - 0.5
+        
+        def configure(self, **kwargs):
+            pass
+        
+        def get_metadata(self):
+            return {"type": "gradient", "resolution": self.spatial_resolution}
+        
+        def reset(self):
+            pass
+    
+    SENSORS_AVAILABLE = False
 
 # Frame caching with enhanced memory management
 try:
@@ -445,7 +639,11 @@ class PlumeNavigationEnv(gym.Env):
     
     def __init__(
         self,
-        video_path: Union[str, Path],
+        plume_model: Optional[Union[PlumeModelProtocol, Dict[str, Any], str]] = None,
+        wind_field: Optional[Union[WindFieldProtocol, Dict[str, Any]]] = None,
+        sensors: Optional[List[Union[SensorProtocol, Dict[str, Any]]]] = None,
+        # Legacy parameters for backward compatibility
+        video_path: Optional[Union[str, Path]] = None,
         initial_position: Optional[Tuple[float, float]] = None,
         initial_orientation: float = 0.0,
         max_speed: float = 2.0,
@@ -464,37 +662,65 @@ class PlumeNavigationEnv(gym.Env):
         **kwargs
     ):
         """
-        Initialize Gymnasium environment wrapper with comprehensive configuration.
+        Initialize Gymnasium environment wrapper with modular component configuration.
+        
+        Enhanced for modular architecture supporting pluggable plume models, wind fields,
+        and sensor configurations. Maintains backward compatibility with video-based workflows
+        while enabling advanced physics modeling and environmental dynamics.
         
         Args:
-            video_path: Path to video file containing odor plume data
-            initial_position: Starting (x, y) position for agent (default: video center)
+            plume_model: Plume model implementation (PlumeModelProtocol) or configuration dict.
+                Can be GaussianPlumeModel, TurbulentPlumeModel, VideoPlumeAdapter, or config dict
+                with '_target_' field for Hydra instantiation. If None, defaults to VideoPlumeAdapter
+                with video_path parameter for backward compatibility.
+            wind_field: Wind field implementation (WindFieldProtocol) or configuration dict.
+                Can be ConstantWindField, TurbulentWindField, or None to disable wind effects.
+            sensors: List of sensor implementations (SensorProtocol) or configuration dicts.
+                Each sensor can be BinarySensor, ConcentrationSensor, GradientSensor, or config dict.
+                If None, uses legacy multi-sensor configuration based on include_multi_sensor.
+                
+            # Legacy parameters for backward compatibility:
+            video_path: Path to video file containing odor plume data (legacy)
+            initial_position: Starting (x, y) position for agent (default: environment center)
             initial_orientation: Starting orientation in radians (default: 0.0)
             max_speed: Maximum agent speed in units per time step (default: 2.0)
             max_angular_velocity: Maximum angular velocity in radians/sec (default: π)
-            include_multi_sensor: Whether to include multi-sensor observations (default: False)
-            num_sensors: Number of additional sensors for multi-sensor mode (default: 2)
-            sensor_distance: Distance from agent center to sensors (default: 5.0)
-            sensor_layout: Sensor arrangement ("bilateral", "triangular", "custom") (default: "bilateral")
+            include_multi_sensor: Whether to include multi-sensor observations (legacy, default: False)
+            num_sensors: Number of additional sensors for multi-sensor mode (legacy, default: 2)
+            sensor_distance: Distance from agent center to sensors (legacy, default: 5.0)
+            sensor_layout: Sensor arrangement ("bilateral", "triangular", "custom") (legacy, default: "bilateral")
             reward_config: Dictionary of reward function weights (default: standard weights)
             max_episode_steps: Maximum steps per episode (default: 1000)
             render_mode: Rendering mode ("human", "rgb_array", "headless") (default: None)
             seed: Random seed for reproducible experiments (default: None)
             performance_monitoring: Enable performance tracking (default: True)
-            frame_cache: Optional FrameCache instance for high-performance frame retrieval
+            frame_cache: Optional FrameCache instance for high-performance frame retrieval (VideoPlumeAdapter only)
             _force_legacy_api: Force legacy API mode (internal use)
             **kwargs: Additional configuration parameters
             
         Raises:
             ImportError: If gymnasium is not available
             ValueError: If configuration parameters are invalid
-            FileNotFoundError: If video file does not exist
+            FileNotFoundError: If video file does not exist (VideoPlumeAdapter only)
             RuntimeError: If environment initialization fails
             
         Note:
             The environment automatically configures action and observation spaces based
-            on the provided parameters. Video dimensions are extracted automatically
-            from the provided video file for space configuration.
+            on the provided component configuration. For modular components, spaces adapt
+            dynamically to active sensors and wind field configuration. For legacy video
+            mode, dimensions are extracted from the video file.
+            
+        Examples:
+            Modular configuration with Gaussian plume:
+                >>> plume_config = {"_target_": "plume_nav_sim.models.plume.GaussianPlumeModel",
+                ...                 "source_position": (50, 50), "source_strength": 1000}
+                >>> wind_config = {"_target_": "plume_nav_sim.models.wind.ConstantWindField",
+                ...                "velocity": (2.0, 0.5)}
+                >>> sensors = [{"_target_": "plume_nav_sim.core.sensors.BinarySensor", "threshold": 0.1}]
+                >>> env = PlumeNavigationEnv(plume_model=plume_config, wind_field=wind_config, sensors=sensors)
+                
+            Legacy video-based configuration:
+                >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", include_multi_sensor=True)
         """
         if not GYMNASIUM_AVAILABLE:
             raise ImportError(
@@ -505,12 +731,23 @@ class PlumeNavigationEnv(gym.Env):
         super().__init__()
         
         # Store configuration parameters
-        self.video_path = Path(video_path)
         self.max_episode_steps = max_episode_steps
         self.render_mode = render_mode
         self.performance_monitoring = performance_monitoring
         
-        # Store and validate frame cache instance for performance optimization
+        # Store modular component configurations
+        self._plume_model_config = plume_model
+        self._wind_field_config = wind_field
+        self._sensors_config = sensors
+        
+        # Legacy compatibility parameters
+        self._video_path = Path(video_path) if video_path else None
+        self._legacy_multi_sensor = include_multi_sensor
+        self._legacy_num_sensors = num_sensors
+        self._legacy_sensor_distance = sensor_distance
+        self._legacy_sensor_layout = sensor_layout
+        
+        # Store and validate frame cache instance for performance optimization (VideoPlumeAdapter only)
         self.frame_cache = frame_cache
         self._cache_enabled = frame_cache is not None and FRAME_CACHE_AVAILABLE
         
@@ -518,9 +755,22 @@ class PlumeNavigationEnv(gym.Env):
         self._use_legacy_api = _force_legacy_api or _detect_legacy_gym_caller()
         self._correlation_id = None
         
-        # Validate video file existence
-        if not self.video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {self.video_path}")
+        # Component instances (initialized later)
+        self.plume_model: Optional[PlumeModelProtocol] = None
+        self.wind_field: Optional[WindFieldProtocol] = None
+        self.sensors: List[SensorProtocol] = []
+        self._wind_enabled = False
+        
+        # Environment dimensions (determined by plume model)
+        self.env_width = 640  # Default, will be updated
+        self.env_height = 480  # Default, will be updated
+        
+        # Validate configuration and determine initialization approach
+        if plume_model is None and video_path is None:
+            raise ValueError("Either plume_model or video_path must be provided")
+        
+        if self._video_path and not self._video_path.exists():
+            raise FileNotFoundError(f"Video file not found: {self._video_path}")
         
         # Initialize performance tracking
         self._step_count = 0
@@ -531,15 +781,23 @@ class PlumeNavigationEnv(gym.Env):
         
         with correlation_context(
             "plume_env_init", 
-            video_path=str(self.video_path),
+            plume_model_type=type(plume_model).__name__ if plume_model else "legacy_video",
+            wind_enabled=wind_field is not None,
+            sensor_count=len(sensors) if sensors else (num_sensors if include_multi_sensor else 0),
             legacy_api=self._use_legacy_api,
             performance_monitoring=self.performance_monitoring
         ) as ctx:
             self._correlation_id = ctx.correlation_id
             
             try:
-                # Initialize video plume environment
-                self._init_video_plume()
+                # Initialize modular plume model (replaces _init_video_plume)
+                self._init_plume_model()
+                
+                # Initialize wind field for environmental dynamics
+                self._init_wind_field()
+                
+                # Initialize sensor suite for observation collection
+                self._init_sensors()
                 
                 # Configure reward function parameters
                 self._init_reward_config(reward_config)
@@ -550,11 +808,8 @@ class PlumeNavigationEnv(gym.Env):
                     max_speed, max_angular_velocity
                 )
                 
-                # Configure action and observation spaces
-                self._init_spaces(
-                    include_multi_sensor, num_sensors, 
-                    sensor_distance, sensor_layout
-                )
+                # Configure action and observation spaces (now sensor-aware)
+                self._init_spaces()
                 
                 # Set up rendering system
                 self._init_rendering()
@@ -569,12 +824,17 @@ class PlumeNavigationEnv(gym.Env):
                 logger.info(
                     f"PlumeNavigationEnv initialized successfully",
                     extra={
-                        "video_dims": f"{self.video_width}x{self.video_height}",
+                        "env_dims": f"{self.env_width}x{self.env_height}",
+                        "plume_model": type(self.plume_model).__name__,
+                        "wind_field": type(self.wind_field).__name__ if self.wind_field else None,
+                        "sensor_count": len(self.sensors),
+                        "sensor_types": [type(s).__name__ for s in self.sensors],
                         "action_space": str(self.action_space),
                         "obs_space_keys": list(self.observation_space.spaces.keys()),
                         "max_episode_steps": self.max_episode_steps,
                         "api_mode": "legacy" if self._use_legacy_api else "gymnasium",
                         "cache_enabled": self._cache_enabled,
+                        "wind_enabled": self._wind_enabled,
                         "metric_type": "environment_initialization"
                     }
                 )
@@ -583,28 +843,159 @@ class PlumeNavigationEnv(gym.Env):
                 logger.error(f"Failed to initialize PlumeNavigationEnv: {e}")
                 raise RuntimeError(f"Environment initialization failed: {e}") from e
     
-    def _init_video_plume(self) -> None:
-        """Initialize VideoPlume environment processor with optional frame cache integration."""
+    def _init_plume_model(self) -> None:
+        """Initialize plume model implementation supporting GaussianPlumeModel, TurbulentPlumeModel, and VideoPlumeAdapter."""
         try:
-            self.video_plume = VideoPlume(str(self.video_path))
+            # Determine plume model type and instantiate
+            if self._plume_model_config is not None:
+                # Use provided plume model configuration
+                if isinstance(self._plume_model_config, dict):
+                    # Configuration-based instantiation
+                    if NAVIGATOR_AVAILABLE:
+                        self.plume_model = NavigatorFactory.create_plume_model(self._plume_model_config)
+                    else:
+                        # Fallback instantiation
+                        model_type = self._plume_model_config.get('type', 'GaussianPlumeModel')
+                        if model_type == 'GaussianPlumeModel':
+                            self.plume_model = GaussianPlumeModel(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
+                        elif model_type == 'TurbulentPlumeModel':
+                            self.plume_model = TurbulentPlumeModel(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
+                        elif model_type == 'VideoPlumeAdapter':
+                            self.plume_model = VideoPlumeAdapter(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
+                        else:
+                            raise ValueError(f"Unknown plume model type: {model_type}")
+                else:
+                    # Direct instance provided
+                    self.plume_model = self._plume_model_config
+            else:
+                # Legacy mode: use VideoPlumeAdapter with video_path
+                if self._video_path is None:
+                    raise ValueError("Either plume_model or video_path must be provided")
+                self.plume_model = VideoPlumeAdapter(str(self._video_path))
             
-            # Extract video metadata for space configuration
-            metadata = self.video_plume.get_metadata()
-            self.video_width = metadata['width']
-            self.video_height = metadata['height']
-            self.video_fps = metadata['fps']
-            self.video_frame_count = metadata['frame_count']
+            # Extract environment dimensions from plume model
+            if hasattr(self.plume_model, 'get_metadata'):
+                # VideoPlumeAdapter case
+                metadata = self.plume_model.get_metadata()
+                self.env_width = metadata['width']
+                self.env_height = metadata['height']
+                if hasattr(self.plume_model, 'fps'):
+                    self.video_fps = metadata.get('fps', 30.0)
+                if hasattr(self.plume_model, 'frame_count'):
+                    self.video_frame_count = metadata.get('frame_count', 1000)
+            else:
+                # Mathematical plume models - use default dimensions or config
+                if hasattr(self.plume_model, 'domain_bounds'):
+                    bounds = self.plume_model.domain_bounds
+                    self.env_width = int(bounds[1] - bounds[0])
+                    self.env_height = int(bounds[3] - bounds[2]) 
+                else:
+                    # Default dimensions for mathematical models
+                    self.env_width = 640
+                    self.env_height = 480
+            
+            # Set up current frame tracking (for video-based models)
+            self.current_frame_index = 0
             
             logger.debug(
-                f"VideoPlume initialized: {self.video_width}x{self.video_height}, "
-                f"{self.video_frame_count} frames at {self.video_fps:.1f} fps"
+                f"Plume model initialized: {type(self.plume_model).__name__}, "
+                f"environment dimensions: {self.env_width}x{self.env_height}"
             )
             
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize VideoPlume: {e}") from e
+            raise RuntimeError(f"Failed to initialize plume model: {e}") from e
+    
+    def _init_wind_field(self) -> None:
+        """Initialize wind field for environmental dynamics and realistic plume transport modeling."""
+        try:
+            if self._wind_field_config is not None:
+                # Wind field provided
+                if isinstance(self._wind_field_config, dict):
+                    # Configuration-based instantiation
+                    if NAVIGATOR_AVAILABLE:
+                        self.wind_field = NavigatorFactory.create_wind_field(self._wind_field_config)
+                    else:
+                        # Fallback instantiation
+                        wind_type = self._wind_field_config.get('type', 'ConstantWindField')
+                        if wind_type == 'ConstantWindField':
+                            self.wind_field = ConstantWindField(**{k: v for k, v in self._wind_field_config.items() if k != 'type'})
+                        elif wind_type == 'TurbulentWindField':
+                            self.wind_field = TurbulentWindField(**{k: v for k, v in self._wind_field_config.items() if k != 'type'})
+                        else:
+                            raise ValueError(f"Unknown wind field type: {wind_type}")
+                else:
+                    # Direct instance provided
+                    self.wind_field = self._wind_field_config
+                self._wind_enabled = True
+            else:
+                # No wind field - disable wind effects
+                self.wind_field = None
+                self._wind_enabled = False
+            
+            logger.debug(
+                f"Wind field initialized: {type(self.wind_field).__name__ if self.wind_field else 'None'}, "
+                f"enabled: {self._wind_enabled}"
+            )
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize wind field: {e}") from e
+    
+    def _init_sensors(self) -> None:
+        """Initialize sensor suite for flexible agent perception modeling."""
+        try:
+            if self._sensors_config is not None:
+                # Modern sensor configuration provided
+                self.sensors = []
+                for i, sensor_config in enumerate(self._sensors_config):
+                    if isinstance(sensor_config, dict):
+                        # Configuration-based instantiation
+                        if NAVIGATOR_AVAILABLE:
+                            sensor = NavigatorFactory.create_sensors([sensor_config])[0]
+                        else:
+                            # Fallback instantiation
+                            sensor_type = sensor_config.get('type', 'ConcentrationSensor')
+                            if sensor_type == 'BinarySensor':
+                                sensor = BinarySensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
+                            elif sensor_type == 'ConcentrationSensor':
+                                sensor = ConcentrationSensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
+                            elif sensor_type == 'GradientSensor':
+                                sensor = GradientSensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
+                            else:
+                                raise ValueError(f"Unknown sensor type: {sensor_type}")
+                    else:
+                        # Direct instance provided
+                        sensor = sensor_config
+                    self.sensors.append(sensor)
+            else:
+                # Legacy mode: create sensors based on legacy parameters
+                self.sensors = []
+                if self._legacy_multi_sensor:
+                    # Create default concentration sensors for backward compatibility
+                    for i in range(self._legacy_num_sensors):
+                        sensor = ConcentrationSensor(
+                            dynamic_range=(0.0, 1.0),
+                            sensor_id=f"legacy_sensor_{i}"
+                        )
+                        self.sensors.append(sensor)
+                
+                # Always include a primary concentration sensor for basic observations
+                if not self.sensors:
+                    primary_sensor = ConcentrationSensor(
+                        dynamic_range=(0.0, 1.0),
+                        sensor_id="primary_sensor"
+                    )
+                    self.sensors.append(primary_sensor)
+            
+            logger.debug(
+                f"Sensors initialized: {len(self.sensors)} sensors, "
+                f"types: {[type(s).__name__ for s in self.sensors]}"
+            )
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize sensors: {e}") from e
     
     def _init_reward_config(self, reward_config: Optional[Dict[str, float]]) -> None:
-        """Initialize reward function configuration with domain-specific defaults."""
+        """Initialize reward function configuration with domain-specific defaults and wind-aware components."""
         # Default reward weights based on olfactory navigation research
         self.reward_weights = {
             "odor_concentration": 1.0,      # Primary reward for finding odor
@@ -613,7 +1004,11 @@ class PlumeNavigationEnv(gym.Env):
             "boundary_penalty": -1.0,       # Penalty for hitting boundaries
             "time_penalty": -0.001,         # Small time penalty to encourage efficiency
             "exploration_bonus": 0.1,       # Bonus for exploring new areas
-            "gradient_following": 0.5       # Bonus for following odor gradients
+            "gradient_following": 0.5,      # Bonus for following odor gradients
+            # Wind-aware reward components
+            "wind_following": 0.1,          # Bonus for strategic wind utilization
+            "gradient_alignment": 0.2,      # Enhanced bonus for gradient sensor alignment
+            "multi_sensor_bonus": 0.05      # Small bonus for utilizing multiple sensors
         }
         
         # Override with user-provided weights
@@ -636,19 +1031,19 @@ class PlumeNavigationEnv(gym.Env):
         max_angular_velocity: float
     ) -> None:
         """Initialize navigator with specified parameters."""
-        # Use video center as default position if not specified
+        # Use environment center as default position if not specified
         if initial_position is None:
-            initial_position = (self.video_width / 2, self.video_height / 2)
+            initial_position = (self.env_width / 2, self.env_height / 2)
         
         # Validate position bounds
         x, y = initial_position
-        if not (0 <= x <= self.video_width and 0 <= y <= self.video_height):
+        if not (0 <= x <= self.env_width and 0 <= y <= self.env_height):
             logger.warning(
-                f"Initial position {initial_position} outside video bounds "
-                f"({self.video_width}x{self.video_height}), clipping to bounds"
+                f"Initial position {initial_position} outside environment bounds "
+                f"({self.env_width}x{self.env_height}), clipping to bounds"
             )
-            x = np.clip(x, 0, self.video_width)
-            y = np.clip(y, 0, self.video_height)
+            x = np.clip(x, 0, self.env_width)
+            y = np.clip(y, 0, self.env_height)
             initial_position = (x, y)
         
         # Store initial configuration for reset operations
@@ -728,14 +1123,8 @@ class PlumeNavigationEnv(gym.Env):
         except Exception as e:
             raise RuntimeError(f"Failed to initialize navigator: {e}") from e
     
-    def _init_spaces(
-        self,
-        include_multi_sensor: bool,
-        num_sensors: int,
-        sensor_distance: float,
-        sensor_layout: str
-    ) -> None:
-        """Initialize action and observation spaces using space definitions."""
+    def _init_spaces(self) -> None:
+        """Initialize action and observation spaces using sensor-aware dynamic space construction."""
         try:
             # Create action space for continuous control
             if SPACES_AVAILABLE:
@@ -745,16 +1134,44 @@ class PlumeNavigationEnv(gym.Env):
                     dtype=np.float32
                 )
                 
-                # Create observation space with multi-sensor support
-                self.observation_space = ObservationSpaceFactory.create_navigation_observation_space(
-                    include_position=True,
-                    include_velocity=False,  # We track speed and orientation separately
-                    include_odor=True,
-                    include_sensors=include_multi_sensor,
-                    position_bounds=(0.0, max(self.video_width, self.video_height)),
-                    odor_concentration_range=(0.0, 1.0),
-                    dtype=np.float32
-                )
+                # Create wind data configuration for observation space
+                wind_config = None
+                if self._wind_enabled and self.wind_field:
+                    wind_config = WindDataConfig(
+                        enabled=True,
+                        velocity_components=2,  # 2D wind field
+                        velocity_range=(-10.0, 10.0),  # Default wind velocity range
+                        include_direction=True,
+                        include_magnitude=True,
+                        coordinate_system="cartesian"
+                    )
+                
+                # Create sensor-aware observation space
+                if SENSORS_AVAILABLE and len(self.sensors) > 0:
+                    # Modern sensor-based observation space
+                    self.observation_space = SensorAwareSpaceFactory.create_sensor_observation_space(
+                        sensors=self.sensors,
+                        wind_config=wind_config,
+                        include_agent_state=True,
+                        agent_state_bounds={
+                            'position': (0.0, max(self.env_width, self.env_height)),
+                            'velocity': (-self.max_speed, self.max_speed),
+                            'orientation': (0.0, 360.0)
+                        },
+                        dtype=np.float32
+                    )
+                else:
+                    # Fallback to legacy observation space for backward compatibility
+                    self.observation_space = ObservationSpaceFactory.create_dynamic_sensor_observation_space(
+                        sensors=self.sensors,
+                        wind_config=wind_config,
+                        include_position=True,
+                        include_velocity=False,  # We track speed and orientation separately
+                        include_orientation=True,
+                        position_bounds=(0.0, max(self.env_width, self.env_height)),
+                        velocity_bounds=(-self.max_speed, self.max_speed),
+                        dtype=np.float32
+                    )
             else:
                 # Fallback space creation
                 self.action_space = Box(
@@ -765,30 +1182,37 @@ class PlumeNavigationEnv(gym.Env):
                 )
                 
                 obs_spaces = {
-                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
                     "agent_position": Box(
-                        low=0.0, high=max(self.video_width, self.video_height), 
+                        low=0.0, high=max(self.env_width, self.env_height), 
                         shape=(2,), dtype=np.float32
                     ),
                     "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
                 }
                 
-                if include_multi_sensor:
-                    obs_spaces["multi_sensor_readings"] = Box(
-                        low=0.0, high=1.0, shape=(num_sensors,), dtype=np.float32
+                # Add sensor-specific observation components
+                for i, sensor in enumerate(self.sensors):
+                    sensor_name = type(sensor).__name__.lower()
+                    if 'binary' in sensor_name:
+                        obs_spaces[f"sensor_{i}_{sensor_name}_detection"] = Box(
+                            low=0, high=1, shape=(1,), dtype=bool
+                        )
+                    else:
+                        obs_spaces[f"sensor_{i}_{sensor_name}_measurement"] = Box(
+                            low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                        )
+                
+                # Add wind components if enabled
+                if self._wind_enabled:
+                    obs_spaces["wind_velocity"] = Box(
+                        low=-10.0, high=10.0, shape=(2,), dtype=np.float32
                     )
                 
                 self.observation_space = DictSpace(obs_spaces)
             
-            # Store sensor configuration for observation generation
-            self.include_multi_sensor = include_multi_sensor
-            self.num_sensors = num_sensors
-            self.sensor_distance = sensor_distance
-            self.sensor_layout = sensor_layout
-            
             logger.debug(
                 f"Spaces initialized - Action: {self.action_space}, "
-                f"Observation keys: {list(self.observation_space.spaces.keys())}"
+                f"Observation keys: {list(self.observation_space.spaces.keys())}, "
+                f"Sensor count: {len(self.sensors)}, Wind enabled: {self._wind_enabled}"
             )
             
         except Exception as e:
@@ -861,9 +1285,16 @@ class PlumeNavigationEnv(gym.Env):
         # Apply override parameters
         config_dict.update(override_kwargs)
         
-        # Extract required video path
-        if "video_path" not in config_dict:
-            raise ValueError("Configuration must include 'video_path'")
+        # Extract plume model configuration (required unless video_path provided for legacy mode)
+        plume_model_config = config_dict.get("plume_model")
+        if plume_model_config is None and "video_path" not in config_dict:
+            raise ValueError("Configuration must include either 'plume_model' or 'video_path'")
+        
+        # Extract wind field configuration
+        wind_field_config = config_dict.get("wind_field")
+        
+        # Extract sensor configurations
+        sensors_config = config_dict.get("sensors")
         
         # Extract navigator configuration
         nav_config = config_dict.get("navigator", {})
@@ -895,7 +1326,12 @@ class PlumeNavigationEnv(gym.Env):
         
         # Build constructor arguments
         constructor_args = {
-            "video_path": config_dict["video_path"],
+            # Modular components
+            "plume_model": plume_model_config,
+            "wind_field": wind_field_config,
+            "sensors": sensors_config,
+            # Legacy compatibility
+            "video_path": config_dict.get("video_path"),
             "initial_position": initial_position,
             "initial_orientation": nav_config.get("orientation", 0.0),
             "max_speed": nav_config.get("max_speed", 2.0),
@@ -921,7 +1357,10 @@ class PlumeNavigationEnv(gym.Env):
             logger.info(
                 "PlumeNavigationEnv created successfully from configuration",
                 extra={
-                    "video_path": constructor_args["video_path"],
+                    "plume_model_config": plume_model_config,
+                    "wind_field_config": wind_field_config,
+                    "sensors_config": sensors_config,
+                    "video_path": constructor_args.get("video_path"),  # Legacy compatibility
                     "navigator_config": nav_config,
                     "space_config": space_config,
                     "reward_config": reward_config
@@ -1013,8 +1452,22 @@ class PlumeNavigationEnv(gym.Env):
             # Reset episode state
             self._reset_episode_state()
             
+            # Reset plume model to initial conditions
+            self.plume_model.reset(
+                frame_index=start_frame if hasattr(self.plume_model, 'get_frame') else None
+            )
+            
+            # Reset wind field to initial conditions  
+            if self._wind_enabled and self.wind_field:
+                self.wind_field.reset()
+            
+            # Reset all sensors
+            for sensor in self.sensors:
+                if hasattr(sensor, 'reset'):
+                    sensor.reset()
+            
             # Apply position override if provided
-            if reset_position != self.initial_position:
+            if reset_position != self.initial_position or reset_orientation != self.initial_orientation:
                 self.navigator.reset(
                     position=reset_position,
                     orientation=reset_orientation,
@@ -1022,7 +1475,7 @@ class PlumeNavigationEnv(gym.Env):
                     angular_velocity=0.0
                 )
             
-            # Set current video frame
+            # Set current frame index for video-based models
             self.current_frame_index = start_frame
             
             # Generate initial observation
@@ -1035,12 +1488,25 @@ class PlumeNavigationEnv(gym.Env):
                 "agent_position": list(self.navigator.positions[0]),
                 "agent_orientation": float(self.navigator.orientations[0]),
                 "current_frame": self.current_frame_index,
-                "video_metadata": self.video_plume.get_metadata(),
+                "plume_model_type": type(self.plume_model).__name__,
+                "wind_enabled": self._wind_enabled,
+                "sensor_count": len(self.sensors),
+                "environment_metadata": {
+                    "width": self.env_width,
+                    "height": self.env_height,
+                    "plume_model": type(self.plume_model).__name__,
+                    "wind_field": type(self.wind_field).__name__ if self.wind_field else None,
+                    "sensors": [type(s).__name__ for s in self.sensors]
+                },
                 "seed": getattr(self, "_last_seed", None),
                 "reset_options": options or {},
                 "correlation_id": self._correlation_id,
                 "api_mode": "legacy" if self._use_legacy_api else "gymnasium"
             }
+            
+            # Add video metadata for backward compatibility if using VideoPlumeAdapter
+            if hasattr(self.plume_model, 'get_metadata'):
+                info["video_metadata"] = self.plume_model.get_metadata()
             
             # Update episode counter
             self._episode_count += 1
@@ -1127,30 +1593,51 @@ class PlumeNavigationEnv(gym.Env):
             self.navigator.speeds[0] = speed
             self.navigator.angular_velocities[0] = angular_velocity
             
-            # Get current environment frame
-            if self._cache_enabled and self.frame_cache:
-                current_frame = self.frame_cache.get(
-                    frame_id=self.current_frame_index,
-                    video_plume=self.video_plume
-                )
-            else:
-                current_frame = self.video_plume.get_frame(self.current_frame_index)
+            # Update wind field temporal dynamics
+            if self._wind_enabled and self.wind_field:
+                self.wind_field.step(dt=1.0)
             
-            if current_frame is None:
-                # Handle end of video by cycling
-                self.current_frame_index = 0
+            # Update plume model temporal dynamics and wind integration
+            self.plume_model.step(dt=1.0)
+            
+            # Get current environment state for navigator step
+            if hasattr(self.plume_model, 'get_frame'):
+                # VideoPlumeAdapter case - get video frame
                 if self._cache_enabled and self.frame_cache:
                     current_frame = self.frame_cache.get(
-                        frame_id=0, video_plume=self.video_plume
+                        frame_id=self.current_frame_index,
+                        video_plume=self.plume_model
                     )
                 else:
-                    current_frame = self.video_plume.get_frame(0)
-            
-            # Execute navigator step
-            self.navigator.step(current_frame, dt=1.0)
-            
-            # Advance frame index for next step
-            self.current_frame_index = (self.current_frame_index + 1) % self.video_frame_count
+                    current_frame = self.plume_model.get_frame(self.current_frame_index)
+                
+                if current_frame is None:
+                    # Handle end of video by cycling
+                    self.current_frame_index = 0
+                    if self._cache_enabled and self.frame_cache:
+                        current_frame = self.frame_cache.get(
+                            frame_id=0, video_plume=self.plume_model
+                        )
+                    else:
+                        current_frame = self.plume_model.get_frame(0)
+                
+                # Execute navigator step with video frame
+                self.navigator.step(current_frame, dt=1.0)
+                
+                # Advance frame index for next step
+                self.current_frame_index = (self.current_frame_index + 1) % getattr(self.plume_model, 'frame_count', 1000)
+            else:
+                # Mathematical plume model case - create synthetic frame for navigator compatibility
+                current_frame = np.zeros((self.env_height, self.env_width), dtype=np.float32)
+                
+                # Populate frame with plume model data
+                y_coords, x_coords = np.mgrid[0:self.env_height, 0:self.env_width]
+                positions = np.column_stack([x_coords.ravel(), y_coords.ravel()])
+                concentrations = self.plume_model.concentration_at(positions)
+                current_frame = concentrations.reshape(self.env_height, self.env_width)
+                
+                # Execute navigator step with synthetic frame
+                self.navigator.step(current_frame, dt=1.0)
             
             # Get new state observation
             observation = self._get_observation()
@@ -1207,8 +1694,10 @@ class PlumeNavigationEnv(gym.Env):
                     "memory_usage_mb": getattr(self.frame_cache, "memory_usage_mb", 0.0)
                 }
             
-            # Add video frame for analysis
-            info["video_frame"] = current_frame
+            # Add environment frame for analysis (video frame for VideoPlumeAdapter)
+            info["environment_frame"] = current_frame
+            if hasattr(self.plume_model, 'get_frame'):
+                info["video_frame"] = current_frame  # Backward compatibility
             
             # Log performance threshold violations
             if step_time > 0.01:  # 10ms target
@@ -1253,30 +1742,51 @@ class PlumeNavigationEnv(gym.Env):
             self.navigator.speeds[0] = speed
             self.navigator.angular_velocities[0] = angular_velocity
             
-            # Get current environment frame
-            if self._cache_enabled and self.frame_cache:
-                current_frame = self.frame_cache.get(
-                    frame_id=self.current_frame_index,
-                    video_plume=self.video_plume
-                )
-            else:
-                current_frame = self.video_plume.get_frame(self.current_frame_index)
+            # Update wind field temporal dynamics
+            if self._wind_enabled and self.wind_field:
+                self.wind_field.step(dt=1.0)
             
-            if current_frame is None:
-                # Handle end of video by cycling
-                self.current_frame_index = 0
+            # Update plume model temporal dynamics and wind integration
+            self.plume_model.step(dt=1.0)
+            
+            # Get current environment state for navigator step
+            if hasattr(self.plume_model, 'get_frame'):
+                # VideoPlumeAdapter case - get video frame
                 if self._cache_enabled and self.frame_cache:
                     current_frame = self.frame_cache.get(
-                        frame_id=0, video_plume=self.video_plume
+                        frame_id=self.current_frame_index,
+                        video_plume=self.plume_model
                     )
                 else:
-                    current_frame = self.video_plume.get_frame(0)
-            
-            # Execute navigator step
-            self.navigator.step(current_frame, dt=1.0)
-            
-            # Advance frame index for next step
-            self.current_frame_index = (self.current_frame_index + 1) % self.video_frame_count
+                    current_frame = self.plume_model.get_frame(self.current_frame_index)
+                
+                if current_frame is None:
+                    # Handle end of video by cycling
+                    self.current_frame_index = 0
+                    if self._cache_enabled and self.frame_cache:
+                        current_frame = self.frame_cache.get(
+                            frame_id=0, video_plume=self.plume_model
+                        )
+                    else:
+                        current_frame = self.plume_model.get_frame(0)
+                
+                # Execute navigator step with video frame
+                self.navigator.step(current_frame, dt=1.0)
+                
+                # Advance frame index for next step
+                self.current_frame_index = (self.current_frame_index + 1) % getattr(self.plume_model, 'frame_count', 1000)
+            else:
+                # Mathematical plume model case - create synthetic frame for navigator compatibility
+                current_frame = np.zeros((self.env_height, self.env_width), dtype=np.float32)
+                
+                # Populate frame with plume model data
+                y_coords, x_coords = np.mgrid[0:self.env_height, 0:self.env_width]
+                positions = np.column_stack([x_coords.ravel(), y_coords.ravel()])
+                concentrations = self.plume_model.concentration_at(positions)
+                current_frame = concentrations.reshape(self.env_height, self.env_width)
+                
+                # Execute navigator step with synthetic frame
+                self.navigator.step(current_frame, dt=1.0)
             
             # Get new state observation
             observation = self._get_observation()
@@ -1319,8 +1829,10 @@ class PlumeNavigationEnv(gym.Env):
                 action, reward, prev_position, prev_orientation, None
             )
             
-            # Add video frame for analysis workflows
-            info["video_frame"] = current_frame
+            # Add environment frame for analysis workflows
+            info["environment_frame"] = current_frame
+            if hasattr(self.plume_model, 'get_frame'):
+                info["video_frame"] = current_frame  # Backward compatibility
             
             # Return appropriate tuple based on API compatibility
             return self._format_step_return(observation, reward, terminated, truncated, info)
@@ -1353,67 +1865,127 @@ class PlumeNavigationEnv(gym.Env):
     
     def _get_observation(self) -> ObservationType:
         """
-        Generate current observation dictionary from navigator and environment state.
+        Generate current observation dictionary from navigator, environment state, and sensor readings.
+        
+        Enhanced to aggregate multi-modal sensor outputs (binary detection, concentration measurement, 
+        gradient information) into structured observation dictionaries with wind data integration.
         
         Returns:
             Observation dictionary containing:
-                - odor_concentration: Current odor level at agent position
                 - agent_position: Agent coordinates [x, y]
-                - agent_orientation: Agent heading in radians
-                - multi_sensor_readings: Optional multi-sensor data (if enabled)
+                - agent_orientation: Agent heading in degrees
+                - agent_velocity: Agent velocity [vx, vy] (if included)
+                - sensor_*_*: Sensor-specific readings based on active sensor configuration
+                - wind_*: Wind data (if wind field enabled)
         """
-        # Get current environment frame
-        if self._cache_enabled and self.frame_cache:
-            current_frame = self.frame_cache.get(
-                frame_id=self.current_frame_index,
-                video_plume=self.video_plume
-            )
-        else:
-            current_frame = self.video_plume.get_frame(self.current_frame_index)
-        
-        # Sample odor concentration at agent position
-        odor_concentration = self.navigator.sample_odor(current_frame)
-        self._previous_odor = float(odor_concentration)
-        
         # Get agent state
         agent_position = self.navigator.positions[0].astype(np.float32)
         agent_orientation = np.array([self.navigator.orientations[0]], dtype=np.float32)
         
-        # Build core observation
+        # Build core observation with agent state
         observation = {
-            "odor_concentration": np.array([odor_concentration], dtype=np.float32),
             "agent_position": agent_position,
             "agent_orientation": agent_orientation
         }
         
-        # Add multi-sensor readings if enabled
-        if self.include_multi_sensor:
-            # Configure sensor layout
-            sensor_kwargs = {
-                "sensor_distance": self.sensor_distance,
-                "num_sensors": self.num_sensors
-            }
+        # Add agent velocity if available
+        if hasattr(self.navigator, 'velocities'):
+            observation["agent_velocity"] = self.navigator.velocities[0].astype(np.float32)
+        else:
+            # Compute velocity from speed and orientation
+            speed = getattr(self.navigator, 'speeds', np.array([0.0]))[0]
+            angle_rad = np.radians(agent_orientation[0])
+            velocity = np.array([speed * np.cos(angle_rad), speed * np.sin(angle_rad)], dtype=np.float32)
+            observation["agent_velocity"] = velocity
+        
+        # Get plume state for sensor sampling
+        plume_state = self.plume_model
+        
+        # Collect sensor readings using SensorProtocol-based approach
+        for i, sensor in enumerate(self.sensors):
+            sensor_name = type(sensor).__name__.lower()
+            agent_positions = agent_position.reshape(1, 2)  # Shape for sensor interface
             
-            if self.sensor_layout == "bilateral":
-                sensor_kwargs["layout_name"] = "LEFT_RIGHT"
-            elif self.sensor_layout == "triangular":
-                sensor_kwargs["layout_name"] = "TRIANGLE"
-            elif self.sensor_layout == "forward_back":
-                sensor_kwargs["layout_name"] = "FORWARD_BACK"
-            else:
-                # Custom layout with angular spacing
-                sensor_kwargs["sensor_angle"] = 360.0 / self.num_sensors
-            
-            # Sample multi-sensor readings
-            multi_sensor_readings = self.navigator.sample_multiple_sensors(
-                current_frame, **sensor_kwargs
-            )
-            
-            # Ensure correct shape for single agent
-            if multi_sensor_readings.ndim == 2:
-                multi_sensor_readings = multi_sensor_readings[0]
-            
-            observation["multi_sensor_readings"] = multi_sensor_readings.astype(np.float32)
+            try:
+                # Get concentration values from plume model for sensor sampling
+                concentration_values = self.plume_model.concentration_at(agent_positions)
+                if hasattr(concentration_values, '__len__') and len(concentration_values) == 1:
+                    concentration_values = concentration_values[0]
+                concentration_array = np.array([concentration_values], dtype=np.float32)
+                
+                # Apply sensor-specific processing
+                if hasattr(sensor, 'detect') and 'binary' in sensor_name:
+                    # Binary sensor detection
+                    detection = sensor.detect(concentration_array, agent_positions)
+                    if hasattr(detection, '__len__') and len(detection) == 1:
+                        detection = detection[0]
+                    observation[f"sensor_{i}_{sensor_name}_detection"] = np.array([detection], dtype=bool)
+                    
+                elif hasattr(sensor, 'measure') and 'concentration' in sensor_name:
+                    # Concentration sensor measurement
+                    measurement = sensor.measure(concentration_array, agent_positions)
+                    if hasattr(measurement, '__len__') and len(measurement) == 1:
+                        measurement = measurement[0]
+                    observation[f"sensor_{i}_{sensor_name}_concentration"] = np.array([measurement], dtype=np.float32)
+                    
+                elif hasattr(sensor, 'compute_gradient') and 'gradient' in sensor_name:
+                    # Gradient sensor computation
+                    gradient = sensor.compute_gradient(plume_state, agent_positions)
+                    if gradient.ndim == 2 and gradient.shape[0] == 1:
+                        gradient = gradient[0]
+                    observation[f"sensor_{i}_{sensor_name}_gradient"] = gradient.astype(np.float32)
+                    
+                    # Also compute magnitude and direction
+                    magnitude = np.linalg.norm(gradient)
+                    direction = np.degrees(np.arctan2(gradient[1], gradient[0])) % 360
+                    observation[f"sensor_{i}_{sensor_name}_magnitude"] = np.array([magnitude], dtype=np.float32)
+                    observation[f"sensor_{i}_{sensor_name}_direction"] = np.array([direction], dtype=np.float32)
+                    
+                else:
+                    # Generic sensor - use detect method or fallback
+                    if hasattr(sensor, 'detect'):
+                        reading = sensor.detect(concentration_array, agent_positions)
+                    elif hasattr(sensor, 'measure'):
+                        reading = sensor.measure(concentration_array, agent_positions)
+                    else:
+                        reading = concentration_array  # Fallback
+                    
+                    if hasattr(reading, '__len__') and len(reading) == 1:
+                        reading = reading[0]
+                    observation[f"sensor_{i}_{sensor_name}_output"] = np.array([reading], dtype=np.float32)
+                
+                # Store primary concentration for reward computation (backward compatibility)
+                if i == 0:  # Use first sensor as primary
+                    self._previous_odor = float(concentration_values)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to process sensor {i} ({sensor_name}): {e}")
+                # Fallback: provide zero reading
+                observation[f"sensor_{i}_{sensor_name}_output"] = np.array([0.0], dtype=np.float32)
+                if i == 0:
+                    self._previous_odor = 0.0
+        
+        # Add wind data if wind field is enabled
+        if self._wind_enabled and self.wind_field:
+            try:
+                wind_velocity = self.wind_field.velocity_at(agent_positions)
+                if wind_velocity.ndim == 2 and wind_velocity.shape[0] == 1:
+                    wind_velocity = wind_velocity[0]
+                
+                observation["wind_velocity"] = wind_velocity.astype(np.float32)
+                
+                # Also compute wind magnitude and direction
+                wind_magnitude = np.linalg.norm(wind_velocity)
+                wind_direction = np.degrees(np.arctan2(wind_velocity[1], wind_velocity[0])) % 360
+                observation["wind_magnitude"] = np.array([wind_magnitude], dtype=np.float32)
+                observation["wind_direction"] = np.array([wind_direction], dtype=np.float32)
+                
+            except Exception as e:
+                logger.warning(f"Failed to compute wind data: {e}")
+                # Fallback: provide zero wind
+                observation["wind_velocity"] = np.array([0.0, 0.0], dtype=np.float32)
+                observation["wind_magnitude"] = np.array([0.0], dtype=np.float32)
+                observation["wind_direction"] = np.array([0.0], dtype=np.float32)
         
         return observation
     
@@ -1426,24 +1998,33 @@ class PlumeNavigationEnv(gym.Env):
         observation: ObservationType
     ) -> float:
         """
-        Compute domain-specific reward based on olfactory navigation criteria.
+        Compute domain-specific reward based on olfactory navigation criteria with wind-aware enhancements.
         
         The reward function implements research-validated incentives for chemotaxis
-        behavior including odor following, efficient movement, and exploration.
+        behavior including odor following, efficient movement, exploration, and wind-aware navigation strategies.
         
         Args:
             action: Applied action [speed, angular_velocity]
             prev_position: Agent position before action
             prev_orientation: Agent orientation before action  
             prev_odor: Odor concentration before action
-            observation: Current observation after action
+            observation: Current observation after action (includes wind data when enabled)
             
         Returns:
             Scalar reward value for the transition
         """
         current_position = observation["agent_position"]
-        current_odor = float(observation["odor_concentration"][0])
         speed, angular_velocity = action
+        
+        # Extract current odor concentration from sensor readings
+        current_odor = 0.0
+        for key, value in observation.items():
+            if "concentration" in key or "odor_concentration" in key:
+                if hasattr(value, '__len__') and len(value) > 0:
+                    current_odor = float(value[0])
+                else:
+                    current_odor = float(value)
+                break
         
         reward = 0.0
         
@@ -1455,6 +2036,38 @@ class PlumeNavigationEnv(gym.Env):
         odor_change = current_odor - prev_odor
         gradient_reward = odor_change * self.reward_weights["gradient_following"]
         reward += gradient_reward
+        
+        # Wind-aware navigation bonus: Reward for strategic wind usage
+        if self._wind_enabled and "wind_velocity" in observation:
+            wind_velocity = observation["wind_velocity"]
+            agent_velocity = observation.get("agent_velocity", np.array([0.0, 0.0]))
+            
+            # Reward for moving with favorable wind when exploring
+            wind_speed = np.linalg.norm(wind_velocity)
+            if wind_speed > 0.1:  # Only consider significant wind
+                # Compute alignment between agent movement and wind direction
+                if np.linalg.norm(agent_velocity) > 0.1:
+                    wind_alignment = np.dot(agent_velocity, wind_velocity) / (np.linalg.norm(agent_velocity) * wind_speed)
+                    wind_bonus = wind_alignment * 0.1 * self.reward_weights.get("wind_following", 0.1)
+                    reward += wind_bonus
+                
+                # Penalty for moving directly against strong wind (energy inefficiency)
+                if np.linalg.norm(agent_velocity) > 0.1:
+                    headwind_penalty = max(0, -wind_alignment) * wind_speed * 0.05
+                    reward -= headwind_penalty
+        
+        # Enhanced gradient following using gradient sensors
+        if any("gradient" in key for key in observation.keys()):
+            for key, value in observation.items():
+                if "gradient" in key and "direction" not in key and "magnitude" not in key:
+                    gradient = np.array(value) if hasattr(value, '__len__') else np.array([0.0, 0.0])
+                    agent_velocity = observation.get("agent_velocity", np.array([0.0, 0.0]))
+                    
+                    # Reward for moving in gradient direction
+                    if np.linalg.norm(gradient) > 0.01 and np.linalg.norm(agent_velocity) > 0.01:
+                        gradient_alignment = np.dot(agent_velocity, gradient) / (np.linalg.norm(agent_velocity) * np.linalg.norm(gradient))
+                        gradient_bonus = gradient_alignment * 0.2 * self.reward_weights.get("gradient_alignment", 0.2)
+                        reward += gradient_bonus
         
         # Distance penalty: Encourage staying in high-odor regions
         if current_odor > 0:
@@ -1480,8 +2093,8 @@ class PlumeNavigationEnv(gym.Env):
         # Boundary penalty: Strong negative reward for hitting environment edges
         x, y = current_position
         boundary_margin = 10.0  # Pixels from edge
-        if (x < boundary_margin or x > self.video_width - boundary_margin or
-            y < boundary_margin or y > self.video_height - boundary_margin):
+        if (x < boundary_margin or x > self.env_width - boundary_margin or
+            y < boundary_margin or y > self.env_height - boundary_margin):
             boundary_penalty = self.reward_weights["boundary_penalty"]
             reward += boundary_penalty
         
@@ -1506,8 +2119,8 @@ class PlumeNavigationEnv(gym.Env):
             Exploration bonus value
         """
         # Map position to exploration grid
-        grid_x = int(position[0] / self.video_width * self._exploration_grid.shape[1])
-        grid_y = int(position[1] / self.video_height * self._exploration_grid.shape[0])
+        grid_x = int(position[0] / self.env_width * self._exploration_grid.shape[1])
+        grid_y = int(position[1] / self.env_height * self._exploration_grid.shape[0])
         
         # Clamp to grid bounds
         grid_x = np.clip(grid_x, 0, self._exploration_grid.shape[1] - 1)
@@ -1539,7 +2152,7 @@ class PlumeNavigationEnv(gym.Env):
         
         # Check boundary termination
         x, y = observation["agent_position"]
-        if x < 0 or x > self.video_width or y < 0 or y > self.video_height:
+        if x < 0 or x > self.env_width or y < 0 or y > self.env_height:
             terminated = True
         
         # Check success condition: High odor concentration for sustained period
@@ -1773,13 +2386,24 @@ class PlumeNavigationEnv(gym.Env):
                 self._init_render_display()
             
             # Get current frame and agent state
-            if self._cache_enabled and self.frame_cache:
-                current_frame = self.frame_cache.get(
-                    frame_id=self.current_frame_index,
-                    video_plume=self.video_plume
-                )
+            if hasattr(self.plume_model, 'get_frame'):
+                # VideoPlumeAdapter case
+                if self._cache_enabled and self.frame_cache:
+                    current_frame = self.frame_cache.get(
+                        frame_id=self.current_frame_index,
+                        video_plume=self.plume_model
+                    )
+                else:
+                    current_frame = self.plume_model.get_frame(self.current_frame_index)
             else:
-                current_frame = self.video_plume.get_frame(self.current_frame_index)
+                # Mathematical plume model case - generate visualization frame
+                y_coords, x_coords = np.mgrid[0:self.env_height, 0:self.env_width]
+                positions = np.column_stack([x_coords.ravel(), y_coords.ravel()])
+                concentrations = self.plume_model.concentration_at(positions)
+                current_frame = concentrations.reshape(self.env_height, self.env_width)
+                # Normalize to [0, 1] for visualization
+                if np.max(current_frame) > 0:
+                    current_frame = current_frame / np.max(current_frame)
             
             agent_pos = self.navigator.positions[0]
             agent_orientation = self.navigator.orientations[0]
@@ -1823,8 +2447,8 @@ class PlumeNavigationEnv(gym.Env):
                 fontsize=10
             )
             
-            self.ax.set_xlim(0, self.video_width)
-            self.ax.set_ylim(self.video_height, 0)  # Invert y-axis for image coordinates
+            self.ax.set_xlim(0, self.env_width)
+            self.ax.set_ylim(self.env_height, 0)  # Invert y-axis for image coordinates
             self.ax.set_title(f"Odor Plume Navigation - Episode {self._episode_count}")
             self.ax.legend(loc='upper right')
             
@@ -1869,9 +2493,14 @@ class PlumeNavigationEnv(gym.Env):
         })
         
         try:
-            # Close video plume
-            if hasattr(self, 'video_plume'):
-                self.video_plume.close()
+            # Close plume model
+            if hasattr(self.plume_model, 'close'):
+                self.plume_model.close()
+            
+            # Reset sensors for cleanup
+            for sensor in self.sensors:
+                if hasattr(sensor, 'reset'):
+                    sensor.reset()
             
             # Clear frame cache to free memory
             if self._cache_enabled and hasattr(self, 'frame_cache') and self.frame_cache is not None:
