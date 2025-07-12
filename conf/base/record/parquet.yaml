@@ -1,0 +1,233 @@
+# @package record
+# Hydra configuration for Parquet recording backend
+# Provides high-performance columnar storage for experimental trajectory data
+# with configurable compression, buffering, and recording granularity.
+
+# Parquet Recorder Backend Configuration
+# Implements RecorderProtocol interface with pandas/pyarrow columnar storage
+# Supports minimal overhead (<1ms per 1000 steps) and asynchronous I/O
+_target_: plume_nav_sim.recording.backends.ParquetRecorder
+
+# Recording Configuration
+# Controls what data is captured and storage granularity
+recording:
+  # Full trajectory recording (record.full: bool from user specification)
+  # When true: saves per-step trajectories with complete state information
+  # When false: saves only episode summaries and aggregated metrics
+  full: ${oc.env:PLUME_RECORD_FULL,true}
+  
+  # Recording frequency control
+  # step_interval: record every N simulation steps (1 = every step)
+  # episode_interval: record every N episodes (1 = every episode)
+  step_interval: ${oc.env:PLUME_RECORD_STEP_INTERVAL,1}
+  episode_interval: ${oc.env:PLUME_RECORD_EPISODE_INTERVAL,1}
+  
+  # Data granularity options
+  include_observations: true    # Include agent observations in trajectory data
+  include_actions: true        # Include agent actions in trajectory data
+  include_rewards: true        # Include reward signals in trajectory data
+  include_states: true         # Include internal simulator state
+  include_metadata: true       # Include episode and run metadata
+
+# Storage Configuration
+# Controls file organization and compression settings
+storage:
+  # Output directory structure following Section 5.2.8 specifications
+  # Organized by run_id/episode_id hierarchy for systematic data management
+  base_directory: ${oc.env:PLUME_OUTPUT_DIR,"./simulation_data"}
+  
+  # Directory structure template using Hydra interpolation
+  # Creates hierarchical organization: base_directory/runs/run_id/episodes/episode_id/
+  directory_template: "${storage.base_directory}/runs/${hydra:job.name}/episodes"
+  
+  # File naming patterns for different data types
+  file_patterns:
+    trajectory: "trajectory_ep_{episode_id:06d}.parquet"
+    summary: "episode_summary_ep_{episode_id:06d}.parquet"
+    metadata: "run_metadata.parquet"
+    statistics: "run_statistics.parquet"
+  
+  # Compression settings for storage efficiency
+  # Supports snappy, gzip, lz4 compression algorithms per Section 0.3.1
+  compression:
+    algorithm: ${oc.env:PLUME_PARQUET_COMPRESSION,"snappy"}  # snappy, gzip, lz4, brotli
+    level: null  # Use default compression level (algorithm-specific)
+    
+# Performance Configuration
+# Implements performance-aware buffering to meet <1ms overhead requirement (F-017-RQ-001)
+performance:
+  # Buffered I/O configuration for non-blocking data persistence
+  buffer:
+    # Buffer size in number of records before forced flush
+    max_records: ${oc.env:PLUME_BUFFER_SIZE,1000}
+    
+    # Buffer memory limit in MB before forced flush
+    max_memory_mb: ${oc.env:PLUME_BUFFER_MEMORY_MB,100}
+    
+    # Auto-flush interval in seconds for periodic data persistence
+    flush_interval_seconds: ${oc.env:PLUME_FLUSH_INTERVAL,30.0}
+    
+    # Force flush on episode completion for data integrity
+    flush_on_episode_end: true
+  
+  # Asynchronous I/O configuration for minimal simulation impact
+  async_io:
+    # Enable asynchronous writes to prevent blocking simulation step
+    enabled: ${oc.env:PLUME_ASYNC_IO,true}
+    
+    # Number of background I/O worker threads
+    worker_threads: ${oc.env:PLUME_IO_WORKERS,2}
+    
+    # Queue size for pending I/O operations
+    queue_size: ${oc.env:PLUME_IO_QUEUE_SIZE,100}
+    
+    # I/O timeout in seconds for background operations
+    timeout_seconds: ${oc.env:PLUME_IO_TIMEOUT,60.0}
+  
+  # Memory management for large-scale simulations
+  memory:
+    # Maximum memory usage in MB before triggering data flush
+    max_usage_mb: ${oc.env:PLUME_MAX_MEMORY_MB,512}
+    
+    # Memory monitoring interval in seconds
+    monitor_interval_seconds: 10.0
+    
+    # Enable memory pressure detection and auto-cleanup
+    auto_cleanup: true
+
+# Data Schema Configuration
+# Defines column schemas and data types for consistent storage
+schema:
+  # Trajectory data schema (when recording.full = true)
+  trajectory_columns:
+    # Temporal information
+    timestamp: float64
+    step: int64
+    episode_id: int64
+    
+    # Agent state information
+    agent_id: int64
+    position_x: float32
+    position_y: float32
+    orientation: float32
+    speed: float32
+    
+    # Environmental observations
+    odor_concentration: float32
+    odor_gradient_x: float32
+    odor_gradient_y: float32
+    wind_speed_x: float32
+    wind_speed_y: float32
+    
+    # Action information
+    action_speed: float32
+    action_angular_velocity: float32
+    
+    # Reward and episode status
+    reward: float32
+    done: bool
+    info: string  # JSON-serialized info dict
+  
+  # Episode summary schema (always recorded)
+  summary_columns:
+    episode_id: int64
+    start_timestamp: float64
+    end_timestamp: float64
+    duration_seconds: float64
+    total_steps: int64
+    total_reward: float64
+    success: bool
+    termination_reason: string
+    
+    # Aggregated statistics
+    avg_speed: float32
+    max_concentration: float32
+    distance_traveled: float32
+    source_found: bool
+    time_to_source: float32
+
+# Validation and Error Handling
+# Ensures data integrity and graceful error recovery
+validation:
+  # Enable data type validation before writing
+  validate_schema: true
+  
+  # Handle missing or invalid data
+  handle_missing_data: "fill_null"  # Options: "fill_null", "skip_record", "raise_error"
+  
+  # Maximum number of validation errors before stopping recording
+  max_validation_errors: 100
+  
+  # Log validation errors for debugging
+  log_validation_errors: true
+
+# Integration Configuration
+# Settings for integration with other system components
+integration:
+  # Statistics aggregator integration
+  stats_integration:
+    # Automatically trigger statistics calculation on episode completion
+    auto_calculate_stats: true
+    
+    # Include statistics in episode summary files
+    include_stats_in_summary: true
+  
+  # Visualization integration
+  visualization:
+    # Generate plot-ready data structures
+    export_plot_data: false
+    
+    # Include visualization metadata in output files
+    include_viz_metadata: false
+  
+  # Hook system integration for extensibility
+  hooks:
+    # Pre-record hook for data transformation
+    pre_record_hook: null
+    
+    # Post-record hook for custom processing
+    post_record_hook: null
+    
+    # Episode completion hook
+    episode_end_hook: null
+
+# Debug and Monitoring Configuration
+# Development and troubleshooting settings
+debug:
+  # Enable verbose logging for recording operations
+  verbose_logging: ${oc.env:PLUME_DEBUG_RECORDING,false}
+  
+  # Log performance metrics for optimization
+  log_performance_metrics: true
+  
+  # Performance monitoring settings
+  monitoring:
+    # Track recording overhead per simulation step
+    track_step_overhead: true
+    
+    # Alert if overhead exceeds threshold (microseconds)
+    overhead_alert_threshold_us: 1000  # 1ms threshold per F-017-RQ-001
+    
+    # Monitor I/O queue depths and processing times
+    track_io_metrics: true
+    
+    # Export performance reports
+    export_performance_reports: false
+
+# Feature Flags
+# Enable/disable specific functionality for testing and deployment
+features:
+  # Enable compression (can be disabled for debugging)
+  enable_compression: true
+  
+  # Enable asynchronous I/O (can be disabled for debugging)
+  enable_async_io: true
+  
+  # Enable data validation (can be disabled for performance)
+  enable_validation: true
+  
+  # Enable automatic cleanup of temporary files
+  enable_auto_cleanup: true
+  
+  # Enable compatibility mode for legacy data formats
+  enable_legacy_compatibility: false
