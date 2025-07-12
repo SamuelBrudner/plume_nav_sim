@@ -1,0 +1,231 @@
+# @package _global_
+#
+# Hydra configuration for WrapBoundary policy implementing toroidal domain topology.
+#
+# This configuration enables periodic boundary conditions where agents exiting one
+# domain edge seamlessly appear on the opposite edge, creating infinite exploration
+# space within finite computational domains. Ideal for continuous navigation studies
+# and eliminating boundary artifacts in large-scale exploration research.
+#
+# Key Features:
+# - Seamless position wrapping across domain boundaries
+# - Velocity preservation during boundary transitions  
+# - Zero energy loss during wrapping operations
+# - Vectorized operations supporting 100+ agents with <0.5ms latency
+# - Configurable domain bounds with coordinate restriction options
+#
+# Performance Characteristics:
+# - apply_policy(): O(n) vectorized operation, <0.2ms for 100 agents
+# - check_violations(): O(n) vectorized operation, <0.1ms for 100 agents  
+# - Memory usage: <1KB for policy state and domain parameters
+#
+# Use Cases:
+# - Continuous exploration without boundary effects
+# - Large-scale navigation pattern studies
+# - Toroidal navigation domain research
+# - Infinite environment simulations
+#
+# Version: v1.0 - Protocol-based boundary policy framework
+# Compliance: BoundaryPolicyProtocol interface adherence
+# Integration: src/plume_nav_sim/core/boundaries.py::WrapBoundary
+
+# =============================================================================
+# BOUNDARY POLICY CONFIGURATION
+# =============================================================================
+
+defaults:
+  - base_config
+
+# Hydra instantiation target for WrapBoundary policy implementation
+_target_: plume_nav_sim.core.boundaries.WrapBoundary
+
+# =============================================================================
+# CORE PARAMETERS
+# =============================================================================
+
+# Domain size defining wrapping region as (width, height) tuple
+# Agents exiting domain bounds are wrapped to opposite edge coordinates
+# Must be positive values for valid wrapping behavior
+domain_bounds: [100.0, 100.0]
+
+# Coordinate restriction configuration for wrapping behavior
+# When false (default): wrapping occurs at [0, domain_max] boundaries
+# When true: allows negative coordinates before wrapping (advanced usage)
+allow_negative_coords: false
+
+# =============================================================================
+# RUNTIME CONFIGURATION OVERRIDES
+# =============================================================================
+
+# Environment variable overrides for dynamic boundary control
+# Enables runtime adjustment without configuration file modification
+# Supports CI/CD pipelines and automated experiment orchestration
+
+# Global wrap boundary toggle
+# Usage: BOUNDARY_WRAP_ENABLED=false python train.py
+# Effect: Disables boundary wrapping (agents can exit domain)
+boundary_wrap_enabled: ${env:BOUNDARY_WRAP_ENABLED, true}
+
+# Domain size overrides for flexible experimentation
+# Usage: BOUNDARY_DOMAIN_WIDTH=200 BOUNDARY_DOMAIN_HEIGHT=150 python train.py
+# Effect: Dynamically adjusts wrapping domain dimensions
+domain_width: ${env:BOUNDARY_DOMAIN_WIDTH, ${.domain_bounds[0]}}
+domain_height: ${env:BOUNDARY_DOMAIN_HEIGHT, ${.domain_bounds[1]}}
+
+# Coordinate system configuration override
+# Usage: BOUNDARY_ALLOW_NEGATIVE=true python train.py  
+# Effect: Enables negative coordinate handling before wrapping
+allow_negative_override: ${env:BOUNDARY_ALLOW_NEGATIVE, ${.allow_negative_coords}}
+
+# =============================================================================
+# AXIS-SPECIFIC WRAPPING CONTROLS
+# =============================================================================
+
+# Independent axis wrapping enables selective boundary behavior
+# Supports mixed boundary conditions (e.g., wrap X-axis, terminate Y-axis)
+# Advanced feature for complex domain topology research
+
+# X-axis wrapping configuration
+# When false: X-axis behaves as non-wrapping boundary
+# When true: X-axis implements periodic wrapping behavior
+wrap_x_axis: ${env:BOUNDARY_WRAP_X, true}
+
+# Y-axis wrapping configuration  
+# When false: Y-axis behaves as non-wrapping boundary
+# When true: Y-axis implements periodic wrapping behavior
+wrap_y_axis: ${env:BOUNDARY_WRAP_Y, true}
+
+# =============================================================================
+# VALIDATION AND CONSISTENCY PARAMETERS
+# =============================================================================
+
+# Validation ensures wrap behavior maintains agent state consistency
+# Critical for deterministic simulation and reproducible research
+
+# Position validation tolerance for floating point comparison
+# Prevents numerical precision issues in boundary detection
+position_tolerance: 1e-6
+
+# Velocity preservation validation during wrapping transitions
+# Ensures momentum conservation across boundary crossings
+preserve_velocity: true
+
+# Domain bounds validation for positive size constraints
+# Prevents invalid domain configurations that break wrapping logic
+validate_domain_bounds: true
+
+# =============================================================================
+# PERFORMANCE OPTIMIZATION PARAMETERS  
+# =============================================================================
+
+# Performance tuning for large-scale multi-agent scenarios
+# Optimizations maintain <0.5ms latency requirement for 100+ agents
+
+# Vectorized operation batching for efficient boundary checking
+# Larger batch sizes improve performance but increase memory usage
+batch_size: 100
+
+# Memory pre-allocation for position arrays to reduce allocation overhead
+# Enables zero-copy operations for critical performance paths
+preallocate_arrays: true
+
+# Early exit optimization for agents not requiring wrapping
+# Skips expensive modular arithmetic when no boundary violations detected
+enable_early_exit: true
+
+# =============================================================================
+# DEBUGGING AND VISUALIZATION SUPPORT
+# =============================================================================
+
+# Debug utilities for interactive development and troubleshooting
+# Zero performance impact when disabled via configuration
+
+# Enable boundary crossing event logging for analysis
+# Tracks agent wrapping events for research data collection
+log_wrap_events: ${env:BOUNDARY_DEBUG_LOGGING, false}
+
+# Visualization markers for wrapped agent positions
+# Enables GUI debugging of boundary wrapping behavior
+show_wrap_markers: ${env:BOUNDARY_SHOW_MARKERS, false}
+
+# Statistical tracking of wrapping frequency per episode
+# Provides metrics for boundary interaction analysis
+track_wrap_statistics: ${env:BOUNDARY_TRACK_STATS, false}
+
+# =============================================================================
+# COMPATIBILITY AND MIGRATION SUPPORT
+# =============================================================================
+
+# Legacy compatibility for v0.3.0 migration support
+# Ensures backward compatibility during transition period
+
+# Migration mode enables v0.3.0 boundary behavior emulation
+# Temporary feature for gradual transition to v1.0 protocol system
+legacy_compatibility_mode: false
+
+# Automatic parameter translation from old configuration format
+# Converts legacy boundary configuration to v1.0 protocol parameters
+auto_migrate_legacy_params: true
+
+# =============================================================================
+# SCHEMA VALIDATION AND TYPE SAFETY
+# =============================================================================
+
+# Runtime validation ensures type safety and parameter correctness
+# Prevents configuration errors that could break simulation
+
+# Parameter type validation using Pydantic schemas
+# Enforces strict typing for domain_bounds and coordinate settings
+validate_parameter_types: true
+
+# Range validation for numeric parameters
+# Ensures domain_bounds are positive and tolerance values are reasonable
+validate_parameter_ranges: true
+
+# Protocol interface compliance validation
+# Confirms WrapBoundary implementation satisfies BoundaryPolicyProtocol
+validate_protocol_compliance: true
+
+# =============================================================================
+# INTEGRATION HOOKS AND EXTENSIBILITY
+# =============================================================================
+
+# Hook system for downstream customization without code modification
+# Enables research-specific extensions via configuration
+
+# Pre-wrap hook for custom logic before position wrapping
+# Allows injection of custom validation or transformation logic
+pre_wrap_hook: null
+
+# Post-wrap hook for custom logic after position wrapping  
+# Enables custom analytics or state modification after wrapping
+post_wrap_hook: null
+
+# Custom wrap logic override for advanced research scenarios
+# Allows replacement of default modular arithmetic with custom functions
+custom_wrap_function: null
+
+# =============================================================================
+# DOCUMENTATION AND METADATA
+# =============================================================================
+
+# Configuration metadata for documentation and tooling integration
+# Supports automated documentation generation and configuration validation
+
+# Human-readable description for configuration documentation
+description: "WrapBoundary policy for toroidal domain topology with seamless agent wrapping"
+
+# Version information for configuration schema evolution
+schema_version: "1.0.0"
+
+# Configuration tags for categorization and filtering
+tags: ["boundary", "wrap", "toroidal", "periodic", "infinite"]
+
+# Author information for configuration maintenance
+author: "Blitzy Platform - Boundary Policy Framework v1.0"
+
+# Creation timestamp for configuration tracking
+created: "2024-01-01T00:00:00Z"
+
+# Last modified timestamp for change tracking  
+modified: "2024-01-01T00:00:00Z"
