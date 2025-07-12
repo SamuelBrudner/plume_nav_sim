@@ -3599,18 +3599,24 @@ class NavigatorFactory:
             initializer_type = _get_config_value(config, 'type', 'UniformRandomInitializer')
             
             try:
+                # Extract parameters and handle common parameter mappings
+                params = {k: v for k, v in config.items() if k != 'type'}
+                
                 if initializer_type == 'UniformRandomInitializer':
                     from ..core.initialization import UniformRandomInitializer
-                    return UniformRandomInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                    # Map domain_bounds to bounds for compatibility
+                    if 'domain_bounds' in params and 'bounds' not in params:
+                        params['bounds'] = params.pop('domain_bounds')
+                    return UniformRandomInitializer(**params)
                 elif initializer_type == 'GridInitializer':
                     from ..core.initialization import GridInitializer
-                    return GridInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                    return GridInitializer(**params)
                 elif initializer_type == 'FixedListInitializer':
                     from ..core.initialization import FixedListInitializer
-                    return FixedListInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                    return FixedListInitializer(**params)
                 elif initializer_type == 'DatasetInitializer':
                     from ..core.initialization import DatasetInitializer
-                    return DatasetInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                    return DatasetInitializer(**params)
                 else:
                     raise ValueError(f"Unknown agent initializer type: {initializer_type}")
             except ImportError as e:
