@@ -4,7 +4,8 @@ Enhanced Logging Configuration Module for Plume Navigation Simulation with Gymna
 This module provides a comprehensive, configuration-driven logging setup across the plume_nav_sim 
 application, using Loguru for advanced structured logging capabilities with Hydra and Pydantic 
 integration. Supports environment-specific configurations, performance monitoring, frame cache 
-observability, and legacy Gym API deprecation management for the migration to Gymnasium 0.29.x.
+observability, CLI debug logging integration, collaborative debugging, and legacy Gym API 
+deprecation management for the migration to Gymnasium 0.29.x.
 
 Key Features:
 - Configuration-driven initialization with Hydra and Pydantic integration
@@ -18,6 +19,14 @@ Key Features:
 - Legacy Gym API deprecation detection and structured warning system for migration guidance
 - Comprehensive performance timing integration (frame rate, memory, database, cache)
 - PSUtil-based memory pressure monitoring for intelligent cache management
+
+Enhanced CLI Debug Integration (Section 7.6.4.1):
+- Debug command correlation tracking with sequential command numbering
+- Collaborative debugging session management with host/participant modes
+- Debug-specific performance thresholds for CLI operations and viewer interactions
+- Debug session state tracking for interactive debugging workflows
+- Performance monitoring for debug viewer launch, frame navigation, and state inspection
+- Automatic performance violation detection for debug operations
 
 Enhanced Performance Monitoring:
 - Environment step() latency tracking with automatic WARN logging when >10ms threshold exceeded
@@ -47,6 +56,18 @@ Example Usage:
     ...     with create_step_timer() as step_metrics:
     ...         obs, reward, terminated, truncated, info = env.step(action)
     ...     # Automatic warning if step() > 10ms, includes cache stats
+    
+    >>> # CLI debug command performance monitoring
+    >>> with debug_command_timer("debug_viewer_launch", backend="pyside6") as metrics:
+    ...     launch_debug_viewer(results, backend="pyside6")
+    ...     # Automatic warning if launch > 3s threshold
+    
+    >>> # Debug session context with collaborative debugging
+    >>> debug_ctx = create_debug_session_context("analyze_run1", results_path="results/run1")
+    >>> debug_ctx.enable_collaborative_debugging("localhost", 8502, mode="host")
+    >>> with debug_ctx:
+    ...     log_debug_command_correlation("frame_navigation", {"frame": 245})
+    ...     log_debug_session_event("breakpoint_hit", {"condition": "odor_reading > 0.8"})
     
     >>> # YAML configuration with dual sinks
     >>> setup_logger(logging_config_path="./logging.yaml")
@@ -210,6 +231,15 @@ PERFORMANCE_THRESHOLDS = {
     "environment_step": 0.010,  # 10ms per step - critical RL performance requirement per Section 5.4.4
     "frame_rate_measurement": 0.033,  # 33ms target frame rate for real-time performance
     "memory_usage_delta": 0.050,  # 50ms for memory measurement operations
+    # Enhanced CLI debug operation thresholds per Section 7.6.4.1
+    "debug_viewer_launch": 3.0,  # 3s for debug viewer initialization
+    "debug_session_init": 1.0,  # 1s for debug session creation
+    "debug_frame_navigation": 0.100,  # 100ms for frame-to-frame navigation
+    "debug_state_inspection": 0.050,  # 50ms for state inspector operations
+    "debug_breakpoint_eval": 0.025,  # 25ms for breakpoint condition evaluation
+    "debug_export_operation": 2.0,  # 2s for debug frame/session export
+    "debug_session_sharing": 1.5,  # 1.5s for collaborative session setup
+    "debug_performance_analysis": 5.0,  # 5s for automated performance analysis
 }
 
 # Environment-specific logging defaults with operational configurations
@@ -530,7 +560,8 @@ class CorrelationContext:
     
     Maintains correlation IDs and context metadata across function calls within the same thread,
     enabling comprehensive experiment tracking, debugging, and operational monitoring. Enhanced 
-    with request_id/episode_id support for distributed tracing and frame cache integration.
+    with request_id/episode_id support for distributed tracing, frame cache integration, and
+    debug session tracking for collaborative debugging per Section 7.6.4.1.
     
     Attributes:
         correlation_id: Unique correlation identifier for request tracing
@@ -540,9 +571,14 @@ class CorrelationContext:
         performance_stack: Stack of active performance measurements
         start_time: Context creation timestamp
         step_count: Environment step counter for performance monitoring
+        debug_session_id: Debug session identifier for collaborative debugging
+        debug_command_sequence: Sequence counter for debug command correlation
+        debug_viewer_state: Current debug viewer state for session tracking
+        collaborative_session_info: Information for shared debug sessions
     """
     
-    def __init__(self, request_id: Optional[str] = None, episode_id: Optional[str] = None):
+    def __init__(self, request_id: Optional[str] = None, episode_id: Optional[str] = None, 
+                 debug_session_id: Optional[str] = None):
         self.correlation_id = str(uuid.uuid4())
         self.request_id = request_id or str(uuid.uuid4())
         self.episode_id = episode_id
@@ -550,16 +586,29 @@ class CorrelationContext:
         self.performance_stack = []
         self.start_time = time.time()
         self.step_count = 0  # Track environment steps for performance monitoring
+        
+        # Enhanced debug session tracking per Section 7.6.4.1
+        self.debug_session_id = debug_session_id or str(uuid.uuid4())
+        self.debug_command_sequence = 0  # Sequential counter for debug command correlation
+        self.debug_viewer_state = {}  # Current debug viewer state for session tracking
+        self.collaborative_session_info = {
+            "session_host": None,
+            "session_port": None,
+            "shared_session_active": False,
+            "collaboration_mode": None,  # "host", "participant", or None
+            "participant_count": 0
+        }
     
     def bind_context(self, **kwargs) -> Dict[str, Any]:
         """
-        Get context dictionary for binding to loggers with enhanced distributed tracing and cache statistics.
+        Get context dictionary for binding to loggers with enhanced distributed tracing, cache statistics,
+        and debug session tracking per Section 7.6.4.1.
         
         Args:
             **kwargs: Additional context parameters to include
             
         Returns:
-            Dict containing complete context for logger binding including cache statistics
+            Dict containing complete context for logger binding including cache statistics and debug session info
         """
         context = {
             "correlation_id": self.correlation_id,
@@ -574,6 +623,22 @@ class CorrelationContext:
         # Add episode_id if available (for RL environments)
         if self.episode_id is not None:
             context["episode_id"] = self.episode_id
+        
+        # Add debug session tracking information per Section 7.6.4.1
+        context.update({
+            "debug_session_id": self.debug_session_id,
+            "debug_command_sequence": self.debug_command_sequence,
+            "collaborative_session_active": self.collaborative_session_info["shared_session_active"],
+            "collaboration_mode": self.collaborative_session_info["collaboration_mode"]
+        })
+        
+        # Add collaborative session info when active
+        if self.collaborative_session_info["shared_session_active"]:
+            context.update({
+                "session_host": self.collaborative_session_info["session_host"],
+                "session_port": self.collaborative_session_info["session_port"],
+                "participant_count": self.collaborative_session_info["participant_count"]
+            })
         
         # Add cache statistics if available from current performance stack
         if self.performance_stack:
@@ -633,6 +698,123 @@ class CorrelationContext:
         """Reset episode tracking with optional new episode ID."""
         self.episode_id = new_episode_id or str(uuid.uuid4())
         self.step_count = 0
+    
+    def increment_debug_command(self, command_name: str, command_args: Optional[Dict[str, Any]] = None) -> int:
+        """
+        Increment debug command sequence counter for command correlation tracking.
+        
+        This method enables CLI debug command correlation per Section 7.6.4.1 by
+        providing sequential tracking of debug operations within a session.
+        
+        Args:
+            command_name: Name of the debug command being executed
+            command_args: Optional arguments passed to the debug command
+            
+        Returns:
+            Current debug command sequence number
+        """
+        self.debug_command_sequence += 1
+        
+        # Log debug command correlation for session tracking
+        if hasattr(self, '_logger_context'):
+            logger.bind(**self.bind_context()).debug(
+                f"Debug command correlation: {command_name}",
+                extra={
+                    "metric_type": "debug_command_correlation",
+                    "debug_command": command_name,
+                    "command_sequence": self.debug_command_sequence,
+                    "command_args": command_args or {},
+                    "debug_session_id": self.debug_session_id
+                }
+            )
+        
+        return self.debug_command_sequence
+    
+    def update_debug_viewer_state(self, **state_updates):
+        """
+        Update debug viewer state for session tracking and collaborative debugging.
+        
+        Args:
+            **state_updates: Key-value pairs representing debug viewer state changes
+        """
+        self.debug_viewer_state.update(state_updates)
+        
+        # Add timestamp for state change tracking
+        self.debug_viewer_state["last_updated"] = time.time()
+        
+        # Log viewer state update for collaborative session synchronization
+        if self.collaborative_session_info["shared_session_active"]:
+            logger.bind(**self.bind_context()).debug(
+                "Debug viewer state updated in collaborative session",
+                extra={
+                    "metric_type": "debug_viewer_state_update",
+                    "state_updates": state_updates,
+                    "collaboration_mode": self.collaborative_session_info["collaboration_mode"],
+                    "participant_count": self.collaborative_session_info["participant_count"]
+                }
+            )
+    
+    def enable_collaborative_debugging(self, host: str, port: int, mode: str = "host"):
+        """
+        Enable collaborative debugging session sharing per Section 7.6.4.1.
+        
+        Args:
+            host: Host address for collaborative session
+            port: Port number for collaborative session
+            mode: Collaboration mode ("host" or "participant")
+        """
+        self.collaborative_session_info.update({
+            "session_host": host,
+            "session_port": port,
+            "shared_session_active": True,
+            "collaboration_mode": mode
+        })
+        
+        logger.bind(**self.bind_context()).info(
+            f"Collaborative debugging session enabled as {mode}",
+            extra={
+                "metric_type": "collaborative_session_enabled",
+                "session_host": host,
+                "session_port": port,
+                "collaboration_mode": mode,
+                "debug_session_id": self.debug_session_id
+            }
+        )
+    
+    def disable_collaborative_debugging(self):
+        """Disable collaborative debugging session."""
+        old_mode = self.collaborative_session_info["collaboration_mode"]
+        
+        self.collaborative_session_info.update({
+            "session_host": None,
+            "session_port": None,
+            "shared_session_active": False,
+            "collaboration_mode": None,
+            "participant_count": 0
+        })
+        
+        logger.bind(**self.bind_context()).info(
+            f"Collaborative debugging session disabled (was {old_mode})",
+            extra={
+                "metric_type": "collaborative_session_disabled",
+                "previous_mode": old_mode,
+                "debug_session_id": self.debug_session_id
+            }
+        )
+    
+    def update_participant_count(self, count: int):
+        """Update participant count for collaborative debugging session."""
+        self.collaborative_session_info["participant_count"] = count
+        
+        if self.collaborative_session_info["shared_session_active"]:
+            logger.bind(**self.bind_context()).debug(
+                f"Collaborative session participant count updated: {count}",
+                extra={
+                    "metric_type": "participant_count_update",
+                    "participant_count": count,
+                    "debug_session_id": self.debug_session_id
+                }
+            )
 
 
 def get_correlation_context() -> CorrelationContext:
@@ -804,6 +986,100 @@ def frame_rate_timer() -> ContextManager[PerformanceMetrics]:
                         "performance_metrics": completed_metrics.to_dict()
                     }
                 )
+
+
+@contextmanager
+def debug_command_timer(command_name: str, **metadata) -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for CLI debug command performance monitoring per Section 7.6.4.1.
+    
+    Tracks debug command execution time and logs performance violations when
+    commands exceed their defined thresholds for responsive debugging experience.
+    
+    Args:
+        command_name: Name of the debug command being executed
+        **metadata: Additional metadata to include in performance tracking
+        
+    Returns:
+        Context manager that tracks debug command timing and issues warnings
+        
+    Example:
+        >>> with debug_command_timer("debug_viewer_launch", backend="pyside6") as metrics:
+        ...     launch_debug_viewer(results, backend="pyside6")
+        >>> # Automatic warning if command took >3s threshold
+    """
+    context = get_correlation_context()
+    
+    # Increment debug command sequence for correlation tracking
+    command_sequence = context.increment_debug_command(command_name, metadata)
+    
+    # Start performance tracking with debug-specific operation name
+    metrics = context.push_performance(f"debug_{command_name}", **metadata)
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        
+        if completed_metrics and completed_metrics.is_slow():
+            threshold = PERFORMANCE_THRESHOLDS.get(f"debug_{command_name}", 
+                                                 PERFORMANCE_THRESHOLDS.get(command_name, 1.0))
+            
+            bound_logger = logger.bind(**context.bind_context())
+            bound_logger.warning(
+                f"Debug command exceeded threshold: {command_name} took {completed_metrics.duration:.3f}s > {threshold:.3f}s",
+                extra={
+                    "metric_type": "debug_performance_violation",
+                    "debug_command": command_name,
+                    "command_sequence": command_sequence,
+                    "actual_duration_ms": completed_metrics.duration * 1000,
+                    "threshold_duration_ms": threshold * 1000,
+                    "performance_metrics": completed_metrics.to_dict(),
+                    "overage_percent": ((completed_metrics.duration - threshold) / threshold) * 100
+                }
+            )
+
+
+@contextmanager
+def debug_session_timer(session_operation: str, **metadata) -> ContextManager[PerformanceMetrics]:
+    """
+    Context manager for debug session operation performance monitoring.
+    
+    Tracks debug session-specific operations like initialization, state updates,
+    and collaborative session management with appropriate performance thresholds.
+    
+    Args:
+        session_operation: Type of debug session operation being performed
+        **metadata: Additional metadata for the session operation
+        
+    Returns:
+        Context manager that tracks session operation timing
+    """
+    context = get_correlation_context()
+    metrics = context.push_performance(f"debug_session_{session_operation}", **metadata)
+    
+    try:
+        yield metrics
+    finally:
+        completed_metrics = context.pop_performance()
+        
+        # Check against debug session thresholds
+        threshold_key = f"debug_{session_operation}"
+        threshold = PERFORMANCE_THRESHOLDS.get(threshold_key, 1.0)
+        
+        if completed_metrics and completed_metrics.duration > threshold:
+            bound_logger = logger.bind(**context.bind_context())
+            bound_logger.warning(
+                f"Debug session operation exceeded threshold: {session_operation}",
+                extra={
+                    "metric_type": "debug_session_performance_violation",
+                    "session_operation": session_operation,
+                    "actual_duration_ms": completed_metrics.duration * 1000,
+                    "threshold_duration_ms": threshold * 1000,
+                    "performance_metrics": completed_metrics.to_dict(),
+                    "collaborative_session_active": context.collaborative_session_info["shared_session_active"]
+                }
+            )
 
 
 def detect_legacy_gym_import() -> bool:
@@ -1180,7 +1456,7 @@ def _create_context_filter(default_context: Dict[str, Any]):
 
 
 def _create_json_formatter():
-    """Create a JSON formatter function for structured logging with cache statistics and enhanced correlation tracking."""
+    """Create a JSON formatter function for structured logging with cache statistics, enhanced correlation tracking, and debug session support."""
     def json_formatter(record):
         # Extract relevant fields for JSON output with enhanced correlation support
         json_record = {
@@ -1201,6 +1477,20 @@ def _create_json_formatter():
         # Add episode_id for RL environment tracking
         if "episode_id" in record["extra"]:
             json_record["episode_id"] = record["extra"]["episode_id"]
+        
+        # Add debug session tracking fields per Section 7.6.4.1
+        debug_fields = [
+            "debug_session_id", "debug_command_sequence", "collaborative_session_active",
+            "collaboration_mode", "session_host", "session_port", "participant_count"
+        ]
+        
+        debug_info = {}
+        for field in debug_fields:
+            if field in record["extra"]:
+                debug_info[field] = record["extra"][field]
+        
+        if debug_info:
+            json_record["debug_session"] = debug_info
         
         # Add performance metrics if present
         if "performance_metrics" in record["extra"]:
@@ -1576,6 +1866,178 @@ def log_cache_memory_pressure_violation(
         )
 
 
+def log_debug_command_correlation(
+    command_name: str,
+    command_args: Optional[Dict[str, Any]] = None,
+    result_status: str = "success",
+    execution_context: Optional[Dict[str, Any]] = None
+) -> None:
+    """
+    Log debug command execution with correlation tracking per Section 7.6.4.1.
+    
+    This function provides comprehensive logging for CLI debug commands with correlation
+    IDs, command sequencing, and execution context for debugging session tracking
+    and collaborative debugging support.
+    
+    Args:
+        command_name: Name of the debug command executed
+        command_args: Arguments passed to the debug command
+        result_status: Execution result status ("success", "warning", "error")
+        execution_context: Additional execution context (e.g., file paths, frame ranges)
+        
+    Example:
+        >>> log_debug_command_correlation(
+        ...     "debug_viewer_launch",
+        ...     command_args={"backend": "pyside6", "results_path": "results/run1"},
+        ...     result_status="success",
+        ...     execution_context={"frame_count": 1500, "duration_seconds": 45.2}
+        ... )
+    """
+    context = get_correlation_context()
+    
+    # Increment debug command sequence for correlation
+    command_sequence = context.increment_debug_command(command_name, command_args)
+    
+    # Determine log level based on result status
+    log_level = {
+        "success": "info",
+        "warning": "warning", 
+        "error": "error"
+    }.get(result_status, "info")
+    
+    bound_logger = logger.bind(**context.bind_context())
+    log_method = getattr(bound_logger, log_level)
+    
+    log_method(
+        f"Debug command executed: {command_name}",
+        extra={
+            "metric_type": "debug_command_execution",
+            "debug_command": command_name,
+            "command_sequence": command_sequence,
+            "command_args": command_args or {},
+            "result_status": result_status,
+            "execution_context": execution_context or {},
+            "debug_session_id": context.debug_session_id,
+            "collaborative_session_active": context.collaborative_session_info["shared_session_active"]
+        }
+    )
+
+
+def create_debug_session_context(
+    session_name: str,
+    results_path: Optional[str] = None,
+    collaborative_mode: Optional[str] = None,
+    session_config: Optional[Dict[str, Any]] = None
+) -> CorrelationContext:
+    """
+    Create a new correlation context specifically for debug session tracking.
+    
+    This function creates an enhanced correlation context with debug session
+    capabilities for collaborative debugging and session state management
+    per Section 7.6.4.1.
+    
+    Args:
+        session_name: Human-readable name for the debug session
+        results_path: Path to simulation results being debugged
+        collaborative_mode: Collaboration mode ("host", "participant", or None)
+        session_config: Debug session configuration parameters
+        
+    Returns:
+        CorrelationContext: Enhanced context with debug session capabilities
+        
+    Example:
+        >>> debug_context = create_debug_session_context(
+        ...     "analyze_run1", 
+        ...     results_path="results/run1",
+        ...     collaborative_mode="host",
+        ...     session_config={"backend": "pyside6", "auto_analyze": True}
+        ... )
+        >>> with debug_context:
+        ...     # All operations within this context will be correlated
+        ...     launch_debug_viewer()
+    """
+    # Create new correlation context with debug session ID
+    debug_session_id = f"debug_{session_name}_{int(time.time())}"
+    context = CorrelationContext(debug_session_id=debug_session_id)
+    
+    # Add debug session metadata
+    context.add_metadata(
+        debug_session_name=session_name,
+        results_path=results_path,
+        session_config=session_config or {},
+        session_created_at=time.time()
+    )
+    
+    # Configure collaboration if specified
+    if collaborative_mode and collaborative_mode in ["host", "participant"]:
+        # Note: Actual host/port would be configured when enable_collaborative_debugging is called
+        context.collaborative_session_info["collaboration_mode"] = collaborative_mode
+    
+    # Log debug session creation
+    bound_logger = logger.bind(**context.bind_context())
+    bound_logger.info(
+        f"Debug session created: {session_name}",
+        extra={
+            "metric_type": "debug_session_created",
+            "session_name": session_name,
+            "debug_session_id": debug_session_id,
+            "results_path": results_path,
+            "collaborative_mode": collaborative_mode,
+            "session_config": session_config or {}
+        }
+    )
+    
+    return context
+
+
+def log_debug_session_event(
+    event_type: str,
+    event_data: Dict[str, Any],
+    session_context: Optional[CorrelationContext] = None
+) -> None:
+    """
+    Log debug session events for collaborative debugging and session tracking.
+    
+    This function provides structured logging for debug session events such as
+    breakpoint hits, frame navigation, state inspection, and collaboration events
+    per Section 7.6.4.1.
+    
+    Args:
+        event_type: Type of debug session event
+        event_data: Event-specific data and parameters
+        session_context: Optional debug session context (uses current if None)
+        
+    Example:
+        >>> log_debug_session_event(
+        ...     "breakpoint_hit",
+        ...     {
+        ...         "condition": "odor_reading > 0.8",
+        ...         "frame_number": 245,
+        ...         "agent_id": "agent_0",
+        ...         "odor_value": 0.92
+        ...     }
+        ... )
+    """
+    context = session_context or get_correlation_context()
+    bound_logger = logger.bind(**context.bind_context())
+    
+    # Increment debug command sequence for event correlation
+    event_sequence = context.increment_debug_command(f"session_event_{event_type}", event_data)
+    
+    bound_logger.info(
+        f"Debug session event: {event_type}",
+        extra={
+            "metric_type": "debug_session_event",
+            "event_type": event_type,
+            "event_sequence": event_sequence,
+            "event_data": event_data,
+            "debug_session_id": context.debug_session_id,
+            "collaborative_session_active": context.collaborative_session_info["shared_session_active"],
+            "timestamp": time.time()
+        }
+    )
+
+
 def register_logging_config_schema():
     """
     Register LoggingConfig with Hydra ConfigStore for structured configuration.
@@ -1654,9 +2116,18 @@ __all__ = [
     "step_performance_timer",
     "frame_rate_timer",
     
+    # Enhanced CLI debug performance monitoring per Section 7.6.4.1
+    "debug_command_timer",
+    "debug_session_timer",
+    
     # Cache monitoring and integration functions
     "update_cache_metrics",
     "log_cache_memory_pressure_violation",
+    
+    # Debug session management and correlation tracking per Section 7.6.4.1
+    "log_debug_command_correlation",
+    "create_debug_session_context",
+    "log_debug_session_event",
     
     # Legacy API detection and deprecation
     "detect_legacy_gym_import",
