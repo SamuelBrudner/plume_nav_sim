@@ -1,0 +1,167 @@
+# @package _global_
+#
+# HDF5 Recording Backend Configuration
+# 
+# Provides hierarchical scientific data storage with configurable compression, 
+# chunking, and metadata attribution for odor plume navigation simulations.
+# Implements RecorderProtocol interface with performance-optimized buffering
+# to meet ≤33ms step latency requirements.
+#
+# Features:
+# - Hierarchical data organization (/run_id/episode_id/datasets)
+# - Configurable compression algorithms (gzip, lzf, szip)
+# - Performance-aware chunking for time-series trajectory data
+# - Metadata attribution with HDF5 attributes for experiment parameters
+# - Buffered asynchronous I/O for minimal simulation impact
+# - Self-describing format with embedded documentation
+#
+# Dependencies: h5py ≥3.0.0
+
+defaults:
+  - _self_
+
+# HDF5 Backend Implementation
+_target_: plume_nav_sim.recording.backends.hdf5.HDF5Recorder
+
+# === File Organization ===
+output_dir: ${oc.env:PLUME_DATA_DIR,./data/recordings}
+filename_pattern: "simulation_{run_id}_{timestamp}.h5"
+create_dirs: true
+overwrite_existing: false
+
+# === Hierarchical Data Structure ===
+# Groups organized as: /run_{run_id}/episode_{episode_id}/dataset_name
+group_structure:
+  run_prefix: "run_"
+  episode_prefix: "episode_"
+  datasets:
+    trajectories: "trajectories"
+    observations: "observations" 
+    actions: "actions"
+    rewards: "rewards"
+    metadata: "metadata"
+    statistics: "statistics"
+
+# === Compression Configuration ===
+compression:
+  # Algorithm: gzip (standard), lzf (fast), szip (scientific), None (disabled)
+  algorithm: "gzip"
+  compression_level: 6  # 0-9 for gzip, 0-32000 for szip
+  shuffle: true         # Reorder bytes for better compression
+  fletcher32: true      # Checksum for data integrity
+
+# === Chunking Strategy ===
+# Optimized for time-series trajectory data access patterns
+chunking:
+  enabled: true
+  auto_chunk: true      # Let h5py determine optimal chunk size
+  # Manual chunk configuration (used when auto_chunk: false)
+  chunk_size:
+    trajectories: [1000, null]    # 1000 steps, all columns
+    observations: [1000, null]    # 1000 steps, all features
+    actions: [1000, null]         # 1000 steps, all action dims
+    rewards: [10000]              # 10000 reward values
+  chunk_cache_size: 1048576       # 1MB chunk cache per dataset
+
+# === Buffering Configuration ===
+# Performance-optimized buffering for minimal step latency impact
+buffering:
+  enabled: true
+  buffer_size: 10000              # Number of steps to buffer
+  flush_interval: 100             # Auto-flush every N steps
+  async_io: true                  # Use separate thread for I/O
+  max_memory_mb: 256              # Maximum buffer memory usage
+  backpressure_threshold: 0.8     # Warn when buffer 80% full
+
+# === Data Type Configuration ===
+# Optimized dtypes for storage efficiency and precision
+dtypes:
+  positions: "float32"            # Agent positions (x, y)
+  orientations: "float32"         # Agent orientations (radians)
+  velocities: "float32"           # Agent velocities 
+  concentrations: "float32"       # Odor concentrations
+  actions: "float32"              # Continuous actions
+  rewards: "float32"              # Reward values
+  timestamps: "float64"           # High-precision timestamps
+  episode_ids: "uint32"           # Episode identifiers
+  step_ids: "uint32"              # Step identifiers
+
+# === Metadata Configuration ===
+# Comprehensive metadata attribution for experimental reproducibility
+metadata:
+  enabled: true
+  include_config: true            # Store complete configuration
+  include_environment: true       # Store environment variables
+  include_git_info: false         # Store git commit/branch info
+  include_system_info: true       # Store system specifications
+  custom_attributes: {}           # User-defined metadata
+
+# === Dataset Creation Options ===
+dataset_options:
+  track_times: true               # Track creation/modification times
+  track_order: true               # Maintain insertion order
+  maxshape: [null, null]          # Allow unlimited expansion
+  scaleoffset: null               # No scale-offset filter
+  external: false                 # Store data internally
+
+# === Performance Monitoring ===
+# Track recording performance to ensure SLA compliance
+monitoring:
+  enabled: true
+  log_performance: true           # Log I/O timing statistics
+  warn_slow_writes: true          # Warn if writes exceed threshold
+  slow_write_threshold_ms: 10     # Threshold for slow write warnings
+  track_memory_usage: true        # Monitor buffer memory usage
+  compression_ratio_reporting: true  # Report compression effectiveness
+
+# === Error Handling ===
+error_handling:
+  retry_attempts: 3               # Number of write retry attempts
+  retry_delay_ms: 100             # Delay between retry attempts
+  graceful_degradation: true      # Continue simulation on recording errors
+  backup_to_memory: true          # Buffer in memory on file write failures
+  corruption_checks: true         # Validate written data integrity
+
+# === Environment Variable Overrides ===
+# Allow deployment-time configuration via environment variables
+env_overrides:
+  output_dir: "${oc.env:PLUME_HDF5_OUTPUT_DIR,${output_dir}}"
+  compression.algorithm: "${oc.env:PLUME_HDF5_COMPRESSION,${compression.algorithm}}"
+  compression.compression_level: "${oc.env:PLUME_HDF5_COMP_LEVEL,${compression.compression_level}}"
+  buffering.buffer_size: "${oc.env:PLUME_HDF5_BUFFER_SIZE,${buffering.buffer_size}}"
+  buffering.max_memory_mb: "${oc.env:PLUME_HDF5_MAX_MEMORY,${buffering.max_memory_mb}}"
+
+# === Schema Validation ===
+# Pydantic schema enforcement for configuration validation
+schema_validation:
+  enabled: true
+  strict_types: true              # Enforce strict data type checking
+  validate_on_write: true         # Validate data before writing
+  schema_version: "1.0.0"         # Configuration schema version
+
+# === Optional Features ===
+# Advanced features that can be enabled based on requirements
+optional_features:
+  parallel_hdf5: false            # Use parallel HDF5 (requires MPI)
+  virtual_datasets: false         # Use virtual datasets for large files
+  swmr_mode: false                # Single Writer Multiple Reader mode
+  file_locking: true              # Enable file locking for safety
+  dataset_filters: []             # Additional filter pipeline
+
+# === Export Options ===
+# Configuration for data export and post-processing
+export:
+  include_episode_summaries: true   # Generate per-episode summaries
+  include_run_summaries: true       # Generate per-run summaries  
+  auto_export_formats: []           # Auto-export to other formats
+  export_on_close: false           # Export summaries when closing file
+  summary_statistics: true          # Include statistical summaries
+
+# === Debug Configuration ===
+# Enhanced debugging and diagnostic capabilities
+debug:
+  enabled: false                  # Enable debug mode
+  verbose_logging: false          # Detailed logging of operations
+  profile_writes: false           # Profile write performance
+  validate_roundtrip: false       # Validate data read-back
+  dump_config_on_init: false      # Dump configuration at initialization
