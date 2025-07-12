@@ -1,0 +1,365 @@
+# Hydra configuration for Fixed List Agent Initialization Strategy
+# 
+# This configuration enables precise agent placement at predetermined coordinates
+# specified via lists, files, or coordinate arrays. Supports validation, coordinate
+# transformation, and fallback options for robust experimental control with exact
+# agent placement per v1.0 specifications.
+#
+# Key Features:
+# - Direct position specification via lists/arrays
+# - File-based position loading (JSON, CSV formats)
+# - Coordinate validation and transformation
+# - Fallback strategies for position count mismatches
+# - Runtime environment variable overrides
+# - Deterministic reproducible placement
+
+# @package agent_init
+defaults:
+  - /hydra/help: default
+
+# Primary Hydra target class for fixed list initialization
+_target_: plume_nav_sim.core.initialization.FixedListInitializer
+
+# =============================================================================
+# POSITION SPECIFICATION OPTIONS
+# =============================================================================
+
+# Direct position specification as coordinate lists
+# Format: List of [x, y] coordinate pairs
+# Example: [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]]
+positions: []
+
+# Alternative: File-based position loading
+# Path to file containing agent starting positions
+# Supports relative paths from config directory and absolute paths
+# Can be overridden via PLUME_POSITION_FILE environment variable
+position_file: null
+
+# File format specification for position loading
+# Supported formats: json, csv, npy (numpy arrays)
+file_format:
+  # File type detection (auto, json, csv, npy)
+  type: auto
+  
+  # CSV-specific options
+  csv:
+    # Delimiter character for CSV parsing
+    delimiter: ","
+    # Whether first row contains column headers
+    has_header: true
+    # Skip rows at beginning of file
+    skip_rows: 0
+    # Comment character to ignore lines
+    comment_char: "#"
+  
+  # JSON-specific options  
+  json:
+    # JSON object path to coordinate data (dot notation)
+    # Example: "experiment.initial_positions" for nested objects
+    data_path: null
+    # Array format: "list_of_lists" or "objects_with_xy"
+    array_format: list_of_lists
+  
+  # NumPy array options
+  numpy:
+    # Allow pickle loading (security consideration)
+    allow_pickle: false
+    # Memory mapping for large files
+    mmap_mode: null
+
+# Column specification for structured data files
+coordinate_columns:
+  # X-coordinate column name/index
+  x: "x"
+  # Y-coordinate column name/index  
+  y: "y"
+  # Optional agent ID column for tracking
+  agent_id: null
+  # Optional metadata columns to preserve
+  metadata: []
+
+# =============================================================================
+# VALIDATION AND CONSTRAINTS
+# =============================================================================
+
+# Position validation configuration
+validation:
+  # Enable position bounds checking
+  enabled: true
+  
+  # Domain bounds for validation (width, height)
+  # Positions outside these bounds will trigger fallback behavior
+  domain_bounds: [100.0, 100.0]
+  
+  # Strict validation mode
+  # If true, out-of-bounds positions cause errors
+  # If false, out-of-bounds positions are clipped or handled by fallback
+  strict_bounds: false
+  
+  # Minimum distance between agents (collision avoidance)
+  min_agent_distance: 0.0
+  
+  # Check for duplicate positions
+  check_duplicates: false
+  
+  # Remove invalid positions (NaN, Inf) automatically
+  remove_invalid: true
+  
+  # Tolerance for floating-point comparisons
+  tolerance: 1e-6
+
+# =============================================================================
+# COORDINATE TRANSFORMATIONS
+# =============================================================================
+
+# Coordinate transformation options
+coordinate_transform:
+  # Enable coordinate transformations
+  enabled: false
+  
+  # Scaling transformation
+  scale:
+    # Uniform scaling factor (applied to both x and y)
+    uniform: 1.0
+    # Separate x and y scaling factors
+    x: 1.0
+    y: 1.0
+  
+  # Translation (offset) transformation
+  translate:
+    # X-axis offset
+    x: 0.0
+    # Y-axis offset
+    y: 0.0
+  
+  # Rotation transformation
+  rotate:
+    # Rotation angle in degrees (counterclockwise)
+    angle_degrees: 0.0
+    # Rotation center point [x, y] (default: origin)
+    center: [0.0, 0.0]
+  
+  # Coordinate system conversion
+  coordinate_system:
+    # Source coordinate system (cartesian, polar, etc.)
+    from: cartesian
+    # Target coordinate system
+    to: cartesian
+  
+  # Bounds clipping after transformation
+  clip_to_bounds: true
+  
+  # Coordinate precision (decimal places)
+  precision: 3
+
+# =============================================================================
+# FALLBACK STRATEGIES
+# =============================================================================
+
+# Fallback behavior when position requirements cannot be met
+fallback_strategy:
+  # Strategy for insufficient positions (fewer positions than agents)
+  insufficient_positions:
+    # Options: cycle, repeat_last, random_fill, error
+    action: cycle
+    # Parameters for random_fill fallback
+    random_fill:
+      # Domain bounds for random generation
+      bounds: [100.0, 100.0]
+      # Random seed for reproducibility
+      seed: null
+      # Margin from domain edges
+      margin: 0.0
+  
+  # Strategy for excess positions (more positions than agents)
+  excess_positions:
+    # Options: truncate, sample_random, sample_uniform, error
+    action: truncate
+    # Random seed for sampling strategies
+    sampling_seed: null
+  
+  # Strategy for out-of-bounds positions
+  out_of_bounds:
+    # Options: clip, remove, transform, error
+    action: clip
+    # Clipping bounds (uses validation.domain_bounds if null)
+    clip_bounds: null
+  
+  # Strategy for invalid positions (NaN, Inf)
+  invalid_positions:
+    # Options: remove, replace, error
+    action: remove
+    # Replacement strategy if action is "replace"
+    replacement: random
+
+# =============================================================================
+# RUNTIME CONFIGURATION
+# =============================================================================
+
+# Environment variable overrides for runtime parameter adjustment
+environment_overrides:
+  # Enable environment variable substitution
+  enabled: true
+  
+  # Position file override
+  position_file:
+    # Environment variable name
+    env_var: PLUME_POSITION_FILE
+    # Default value if environment variable not set
+    default: null
+  
+  # Domain bounds override
+  domain_bounds:
+    env_var: PLUME_DOMAIN_BOUNDS
+    # Format: "width,height" (comma-separated)
+    default: null
+    # Parser function for string conversion
+    parser: comma_separated_floats
+  
+  # Coordinate transformation parameters
+  transform_scale:
+    env_var: PLUME_POSITION_SCALE
+    default: null
+    parser: float
+  
+  transform_translate:
+    env_var: PLUME_POSITION_TRANSLATE
+    default: null
+    # Format: "x,y" (comma-separated)
+    parser: comma_separated_floats
+  
+  # Fallback strategy override
+  fallback_mode:
+    env_var: PLUME_FALLBACK_MODE
+    default: null
+    parser: string
+  
+  # Random seed override
+  seed:
+    env_var: PLUME_INIT_SEED
+    default: null
+    parser: int
+
+# =============================================================================
+# INITIALIZATION PARAMETERS
+# =============================================================================
+
+# Core FixedListInitializer parameters
+# Domain bounds for validation (passed to constructor)
+domain_bounds: [100.0, 100.0]
+
+# Enable position cycling when agents > available positions
+cycling_enabled: true
+
+# Random seed for any random operations (sampling, random_fill, etc.)
+seed: null
+
+# =============================================================================
+# PERFORMANCE AND CACHING
+# =============================================================================
+
+# Performance optimization settings
+performance:
+  # Cache loaded positions to avoid repeated file I/O
+  cache_positions: true
+  
+  # Pre-validate positions during initialization
+  eager_validation: true
+  
+  # Use memory mapping for large position files
+  use_mmap: false
+  
+  # Batch size for processing large position lists
+  batch_size: 1000
+  
+  # Enable position data compression in memory
+  compress_cache: false
+
+# =============================================================================
+# DEBUGGING AND LOGGING
+# =============================================================================
+
+# Debug configuration for development and troubleshooting
+debug:
+  # Enable verbose logging
+  verbose: false
+  
+  # Log position loading details
+  log_loading: false
+  
+  # Log validation results
+  log_validation: false
+  
+  # Log transformation steps
+  log_transforms: false
+  
+  # Save intermediate position data for inspection
+  save_intermediate: false
+  
+  # Output directory for debug files
+  debug_output_dir: ./debug/agent_init
+
+# =============================================================================
+# METADATA AND DOCUMENTATION
+# =============================================================================
+
+# Configuration metadata
+_meta:
+  # Strategy name for identification
+  strategy_name: fixed_list
+  
+  # Version compatibility
+  version: "1.0"
+  
+  # Description of this configuration
+  description: >
+    Fixed list agent initialization strategy for precise agent placement at
+    predetermined coordinates. Supports coordinate lists, file-based loading,
+    validation, transformation, and fallback options for robust experimental
+    control per plume_nav_sim v1.0 specifications.
+  
+  # Example usage scenarios
+  examples:
+    - name: Direct coordinate list
+      description: Specify agent positions directly in configuration
+      config:
+        positions: [[10, 10], [20, 20], [30, 30]]
+    
+    - name: CSV file loading
+      description: Load positions from CSV file with custom columns
+      config:
+        position_file: data/agent_positions.csv
+        coordinate_columns:
+          x: x_coord
+          y: y_coord
+    
+    - name: JSON file with transformation
+      description: Load from JSON and apply coordinate transformation
+      config:
+        position_file: experiments/initial_state.json
+        coordinate_transform:
+          enabled: true
+          scale:
+            uniform: 2.0
+          translate:
+            x: 50.0
+            y: 50.0
+    
+    - name: Runtime environment override
+      description: Override position file via environment variable
+      config:
+        environment_overrides:
+          enabled: true
+        position_file: default_positions.json
+      environment:
+        PLUME_POSITION_FILE: /path/to/experiment/positions.csv
+
+# =============================================================================
+# HYDRA INTEGRATION
+# =============================================================================
+
+# Hydra-specific configuration
+hydra:
+  # Allow missing keys in config merging
+  job:
+    chdir: false
