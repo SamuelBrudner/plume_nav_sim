@@ -68,40 +68,42 @@ defaults:
   # Inherit foundational parameters from base configuration
   - base
   
-  # Frame caching configuration group for high-performance frame storage
-  # LRU cache mode provides intelligent eviction with memory management
-  # Compatible with environment flavors: memoryless, memory
-  - override frame_cache: lru
-  
   # ======================================================================
   # V1.0 COMPONENT-BASED ARCHITECTURE: Protocol-Driven Abstractions
   # ======================================================================
   # NEW: Pluggable component configuration groups enabling zero-code
   # extensibility and configuration-driven research scenarios
   
+  # ======================================================================
+  # V1.0 COMPONENT-BASED ARCHITECTURE (Configurations pending implementation)
+  # ======================================================================
+  # NOTE: The following v1.0 component groups are documented but not yet
+  # implemented. They will be activated once the component implementations
+  # are complete. For now, they remain commented to allow testing.
+  
   # Odor source abstraction for flexible source modeling
   # Configure source position, strength, and detection algorithms
-  - source: ${oc.env:SOURCE_TYPE,"point_source"}  # Options: point_source, multi_source, dynamic_source
+  # - source: ${oc.env:SOURCE_TYPE,"point_source"}  # Options: point_source, multi_source, dynamic_source
   
   # Agent initialization strategy for diverse experiment setups
   # Control starting positions, orientations, and formation patterns
-  - agent_init: ${oc.env:AGENT_INIT_TYPE,"uniform_random"}  # Options: uniform_random, grid, fixed_list, from_dataset
+  # - agent_init: ${oc.env:AGENT_INIT_TYPE,"uniform_random"}  # Options: uniform_random, grid, fixed_list, from_dataset
   
   # Boundary handling policy for domain edge behavior
   # Define agent response when reaching simulation boundaries
-  - boundary: ${oc.env:BOUNDARY_TYPE,"terminate"}  # Options: terminate, bounce, wrap, clip
+  # - boundary: ${oc.env:BOUNDARY_TYPE,"terminate"}  # Options: terminate, bounce, wrap, clip
   
   # Action interface abstraction for unified RL framework integration
   # Standardize action processing across different control schemes
-  - action: ${oc.env:ACTION_TYPE,"continuous_2d"}  # Options: continuous_2d, cardinal_discrete
+  # - action: ${oc.env:ACTION_TYPE,"continuous_2d"}  # Options: continuous_2d, cardinal_discrete
   
   # Data recording system for comprehensive experiment tracking
   # Configure data persistence, formats, and performance optimization
-  - record: ${oc.env:RECORD_BACKEND,"parquet"}  # Options: parquet, hdf5, sqlite, none
+  # - record: ${oc.env:RECORD_BACKEND,"parquet"}  # Options: parquet, hdf5, sqlite, none
   
   # Extension hook system for downstream project integration
   # Enable custom callbacks and observation/reward extensions
-  - hooks: ${oc.env:HOOKS_CONFIG,"basic"}  # Options: basic, episode_stats, custom
+  # - hooks: ${oc.env:HOOKS_CONFIG,"basic"}  # Options: basic, episode_stats, custom
   
   # ======================================================================
   # V0.3.0 LEGACY COMPONENTS (Maintained for Backward Compatibility)
@@ -109,15 +111,15 @@ defaults:
   
   # Plume model selection for different simulation fidelity levels
   # Switch between fast analytical models and realistic turbulent physics
-  - plume_models: ${oc.env:PLUME_MODEL_TYPE,"gaussian"}  # Options: gaussian, turbulent, video_adapter
+  - plume_models: gaussian  # Options: gaussian, turbulent, video_adapter
   
   # Wind field dynamics configuration for environmental realism
   # Control atmospheric conditions affecting plume transport
-  - wind_fields: ${oc.env:WIND_FIELD_TYPE,"constant"}  # Options: constant, turbulent, time_varying
+  - wind_fields: constant  # Options: constant, turbulent, time_varying
   
   # Sensor configuration for flexible perception modeling
   # Support different sensing modalities for navigation research
-  - sensors: ${oc.env:SENSOR_TYPE,"concentration"}  # Options: binary, concentration, gradient
+  - sensors: concentration  # Options: binary, concentration, gradient
   
   # ======================================================================
   # CONFIGURATION GROUP OVERRIDE EXAMPLES
@@ -155,6 +157,11 @@ defaults:
   # - override frame_cache: preload_all     # Full preload mode for maximum performance
   # - override record: none                 # Disable recording for speed optimization
   # - override hooks: minimal               # Minimal hooks for performance testing
+  
+  # Frame caching configuration group for high-performance frame storage
+  # LRU cache mode provides intelligent eviction with memory management
+  # Compatible with environment flavors: memoryless, memory
+  - override frame_cache: lru
   
   # Enable this configuration file as the primary override source
   - _self_
