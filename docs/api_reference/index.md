@@ -76,6 +76,7 @@ pip install plume_nav_sim[all]
 ```bash
 # Parquet support (recommended)
 pip install plume_nav_sim[recording] 
+# Includes: pandas >=1.5.0, pyarrow >=10.0.0
 
 # HDF5 scientific data format
 pip install h5py>=3.0.0
@@ -220,6 +221,7 @@ graph TB
 | Protocol | Purpose | Implementations | Configuration |
 |----------|---------|----------------|---------------|
 | `SourceProtocol` | Odor source modeling | Point, Multi, Dynamic | `conf/base/source/` |
+| `AgentInitializerProtocol` | Starting position strategies | UniformRandom, Grid, FixedList, FromDataset | `conf/base/agent_init/` |
 | `BoundaryPolicyProtocol` | Domain edge handling | Terminate, Bounce, Wrap, Clip | `conf/base/boundary/` |
 | `ActionInterfaceProtocol` | RL action translation | Continuous2D, CardinalDiscrete | `conf/base/action/` |
 | `RecorderProtocol` | Data persistence | Parquet, HDF5, SQLite, None | `conf/base/record/` |
