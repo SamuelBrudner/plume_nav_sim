@@ -1,0 +1,97 @@
+# @package _global_
+#
+# Hook System Configuration: None (Default)
+# 
+# This configuration disables all hooks for maximum performance, providing null
+# implementations of all hook protocols to ensure zero computational overhead
+# when no extensions are needed. Essential for maintaining ≤33 ms/step performance
+# target in production environments.
+#
+# Purpose:
+# - Enable zero-code extensibility framework per Section 0.2.1
+# - Support ≤33 ms/step performance target when hooks disabled
+# - Provide backward compatibility for legacy environments
+# - Serve as the default configuration for production deployments
+#
+# Performance Impact: ZERO - All hooks are no-op implementations
+# Memory Impact: MINIMAL - Only configuration overhead, no runtime allocations
+# Compatible with: All plume_nav_sim v1.0 environments and legacy v0.3.0 systems
+
+# Hook System Configuration
+# Implements HookSystemProtocol with disabled implementations for all hook types
+hooks:
+  # Hook system factory target - creates a no-op hook system implementation
+  _target_: plume_nav_sim.core.hooks.NullHookSystem
+  
+  # Hook system configuration
+  enabled: false  # Master switch to disable all hook processing
+  
+  # Pre-step hooks configuration
+  # Executed before each simulation step in the main loop
+  pre_step:
+    enabled: false  # Disable pre-step hook execution
+    hooks: []       # Empty list - no pre-step hooks registered
+    
+  # Post-step hooks configuration  
+  # Executed after each simulation step in the main loop
+  post_step:
+    enabled: false  # Disable post-step hook execution
+    hooks: []       # Empty list - no post-step hooks registered
+    
+  # Episode end hooks configuration
+  # Executed when an episode completes (success, failure, or termination)
+  episode_end:
+    enabled: false  # Disable episode end hook execution
+    hooks: []       # Empty list - no episode end hooks registered
+  
+  # Extension function hooks for dynamic environment modification
+  # These provide zero-code extensibility for observation and reward shaping
+  extensions:
+    # Extra observation function hook - extends environment observations
+    extra_obs_fn: null      # No additional observations when disabled
+    
+    # Extra reward function hook - modifies or supplements reward calculation  
+    extra_reward_fn: null   # No reward modifications when disabled
+    
+    # Custom termination condition hook - additional episode termination logic
+    extra_done_fn: null     # No custom termination logic when disabled
+  
+  # Performance monitoring configuration for hook system overhead
+  performance:
+    # Monitor hook execution time to ensure zero overhead
+    monitor_overhead: false   # Disable performance monitoring for hooks
+    
+    # Performance threshold warnings (only relevant when hooks are enabled)
+    max_hook_overhead_ms: 0.0  # Zero tolerance for overhead when disabled
+    
+    # Hook timing statistics collection
+    collect_timing_stats: false  # Disable timing collection for performance
+  
+  # Backward compatibility configuration
+  # Ensures seamless operation with existing v0.3.0 environments
+  compatibility:
+    # Legacy Gym environment support
+    legacy_gym_support: true   # Maintain compatibility with legacy environments
+    
+    # Automatic hook system detection and graceful degradation
+    auto_detect_requirements: true  # Automatically handle environments without hook support
+    
+    # Fallback behavior when hook system is not available
+    graceful_fallback: true    # Silently disable hooks if environment doesn't support them
+
+# Configuration validation schema
+# Ensures proper configuration structure and type safety
+defaults:
+  - _self_  # Include this configuration in the composition
+
+# Configuration metadata for validation and debugging
+_config_metadata:
+  version: "1.0.0"
+  description: "Default hook system configuration with all hooks disabled"
+  performance_profile: "minimal_overhead"
+  compatibility_level: "full_backward_compatibility"
+  use_cases:
+    - "Production simulation runs requiring maximum performance"
+    - "Baseline performance benchmarking without extensions"
+    - "Legacy environment compatibility during v0.3.0 to v1.0 migration"
+    - "High-throughput training scenarios with ≤33 ms/step requirements"
