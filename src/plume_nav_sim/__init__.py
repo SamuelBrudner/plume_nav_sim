@@ -1,8 +1,10 @@
 """
-Plume Navigation Simulation Package (v0.3.0)
+Plume Navigation Simulation Package (v1.0.0)
 
-A modernized package for simulating navigation through odor plumes with full 
-Gymnasium 0.29.x compatibility and backward compatibility for legacy Gym APIs.
+A general-purpose, extensible simulation toolkit for odor plume navigation research 
+with protocol-based architecture, zero-code extensibility, and comprehensive 
+recording and analysis capabilities. Maintains full Gymnasium 0.29.x compatibility 
+and backward compatibility for legacy Gym APIs.
 
 This package provides enhanced tools for simulating how agents navigate through 
 odor plumes, with support for both single and multi-agent simulations, 
@@ -19,7 +21,7 @@ import inspect
 import sys
 import atexit
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"
 
 # =============================================================================
 # LEGACY GYM DETECTION AND DEPRECATION WARNING SYSTEM
