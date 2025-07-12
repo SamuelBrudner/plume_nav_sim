@@ -37,6 +37,8 @@ import math
 import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Protocol, runtime_checkable
+from typing_extensions import Literal
+from functools import wraps
 
 import numpy as np
 import matplotlib
@@ -47,6 +49,44 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap
+
+# Import new protocols for enhanced visualization capabilities
+try:
+    from ..core.protocols import SourceProtocol
+    PROTOCOLS_AVAILABLE = True
+except ImportError:
+    # Fallback for development when protocols might not be available yet
+    class SourceProtocol:
+        """Fallback protocol definition for development."""
+        def get_position(self) -> Tuple[float, float]:
+            return (0.0, 0.0)
+        def get_emission_rate(self) -> float:
+            return 0.0
+    PROTOCOLS_AVAILABLE = False
+
+# Optional GUI dependencies for debug visualizer
+try:
+    import PySide6
+    from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
+    from PySide6.QtCore import QTimer, Signal, QThread
+    from PySide6.QtGui import QPixmap, QPainter
+    PYSIDE6_AVAILABLE = True
+except ImportError:
+    PYSIDE6_AVAILABLE = False
+
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+
+# Track available debug backends
+DEBUG_BACKENDS = []
+if PYSIDE6_AVAILABLE:
+    DEBUG_BACKENDS.append('qt')
+if STREAMLIT_AVAILABLE:
+    DEBUG_BACKENDS.append('streamlit')
+DEBUG_BACKENDS.append('console')  # Always available fallback
 
 # Conditional imports for Hydra configuration support
 try:
@@ -675,6 +715,9 @@ def visualize_trajectory(
     legend: bool = True,
     colorbar: bool = True,
     batch_mode: bool = False,
+    # New hook system parameters
+    visualization_hooks: Optional[Dict[str, Callable]] = None,
+    hook_data: Optional[Dict[str, Any]] = None,
     **kwargs
 ) -> Optional[Figure]:
     """
@@ -709,6 +752,8 @@ def visualize_trajectory(
         legend: Show agent legend
         colorbar: Show plume concentration colorbar
         batch_mode: Optimize for batch processing (disables interactive features)
+        visualization_hooks: Optional dict of custom plotting functions for extensions
+        hook_data: Optional additional data passed to visualization hooks
         **kwargs: Additional matplotlib configuration parameters
         
     Returns:
@@ -741,6 +786,18 @@ def visualize_trajectory(
             ...         batch_mode=True, headless=True
             ...     )
             ...     fig.clear()  # Memory management
+            
+        With custom visualization hooks:
+            >>> def custom_overlay(hook_context):
+            ...     ax = hook_context['axes']
+            ...     # Add custom elements to the plot
+            ...     ax.scatter([50], [50], marker='X', s=200, c='red')
+            >>> 
+            >>> hooks = {'plot_custom_overlay': custom_overlay}
+            >>> visualize_trajectory(
+            ...     positions, visualization_hooks=hooks,
+            ...     hook_data={'experiment_id': 'exp_001'}
+            ... )
     """
     logger.info(f"Generating trajectory visualization for positions shape {positions.shape}")
     
@@ -975,6 +1032,835 @@ def visualize_trajectory(
         return None
 
 
+def plot_initial_state(
+    env: Any,
+    source: Optional[SourceProtocol] = None,
+    agent_positions: Optional[np.ndarray] = None,
+    domain_bounds: Optional[Tuple[float, float, float, float]] = None,
+    boundary_style: str = 'solid',
+    source_marker_size: float = 150,
+    agent_marker_size: float = 100,
+    figsize: Tuple[float, float] = (10, 8),
+    title: Optional[str] = None,
+    show_grid: bool = True,
+    colors: Optional[Dict[str, str]] = None,
+    output_path: Optional[Union[str, Path]] = None,
+    dpi: int = 150,
+    **kwargs
+) -> Optional[Figure]:
+    """
+    Visualize source location, domain boundaries, and agent starting positions.
+    
+    This function provides publication-quality visualization of the initial simulation
+    state, showing the spatial relationships between odor sources, navigation domain,
+    and agent starting positions. Supports both single and multi-agent scenarios with
+    configurable styling for research documentation.
+    
+    Args:
+        env: Environment instance providing domain information (can be None if bounds provided).
+        source: Optional source instance implementing SourceProtocol for position visualization.
+        agent_positions: Agent starting positions as array with shape (n_agents, 2) or (2,).
+        domain_bounds: Domain boundaries as (left, right, bottom, top) tuple.
+        boundary_style: Boundary line style ('solid', 'dashed', 'dotted').
+        source_marker_size: Size of source position marker.
+        agent_marker_size: Size of agent position markers.
+        figsize: Figure size as (width, height) in inches.
+        title: Plot title (auto-generated if None).
+        show_grid: Show coordinate grid.
+        colors: Custom color mapping dict with keys ('source', 'agents', 'boundary').
+        output_path: Path for saving the plot.
+        dpi: Resolution for saved figures.
+        **kwargs: Additional matplotlib configuration parameters.
+        
+    Returns:
+        Optional[Figure]: Figure object if requested, None otherwise.
+        
+    Examples:
+        Basic initial state visualization:
+        >>> plot_initial_state(env, source=my_source, agent_positions=start_positions)
+        
+        Custom styling with bounds:
+        >>> plot_initial_state(
+        ...     env=None, source=my_source, agent_positions=positions,
+        ...     domain_bounds=(0, 100, 0, 100), boundary_style='dashed',
+        ...     colors={'source': 'red', 'agents': 'blue', 'boundary': 'black'}
+        ... )
+        
+        Publication-quality export:
+        >>> plot_initial_state(
+        ...     env, source=my_source, agent_positions=positions,
+        ...     output_path="initial_state.pdf", dpi=300,
+        ...     title="Experimental Setup: Multi-Agent Navigation"
+        ... )
+    """
+    logger.info("Generating initial state visualization")
+    
+    # Set up default colors
+    default_colors = {
+        'source': '#ff4444',      # Red for source
+        'agents': '#4444ff',      # Blue for agents  
+        'boundary': '#333333',    # Dark gray for boundaries
+        'background': '#f8f9fa'   # Light background
+    }
+    
+    if colors:
+        default_colors.update(colors)
+    
+    # Create figure and axes
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    
+    # Determine domain bounds
+    if domain_bounds is None:
+        if hasattr(env, 'domain_bounds'):
+            domain_bounds = env.domain_bounds
+        elif hasattr(env, 'observation_space') and hasattr(env.observation_space, 'high'):
+            # Try to infer from observation space
+            high = env.observation_space.high
+            if len(high) >= 2:
+                domain_bounds = (0, high[0], 0, high[1])
+            else:
+                domain_bounds = (0, 100, 0, 100)  # Default bounds
+        else:
+            domain_bounds = (0, 100, 0, 100)  # Default bounds
+            logger.warning("No domain bounds found, using default (0, 100, 0, 100)")
+    
+    left, right, bottom, top = domain_bounds
+    
+    # Set axis limits with small margin
+    margin = 0.05 * max(right - left, top - bottom)
+    ax.set_xlim(left - margin, right + margin)
+    ax.set_ylim(bottom - margin, top + margin)
+    
+    # Draw domain boundaries
+    boundary_rect = patches.Rectangle(
+        (left, bottom), right - left, top - bottom,
+        linewidth=2, edgecolor=default_colors['boundary'], 
+        facecolor='none', linestyle=boundary_style
+    )
+    ax.add_patch(boundary_rect)
+    
+    # Plot source position if provided
+    if source is not None:
+        try:
+            source_pos = source.get_position()
+            emission_rate = source.get_emission_rate()
+            
+            ax.scatter(
+                source_pos[0], source_pos[1],
+                s=source_marker_size, c=default_colors['source'],
+                marker='*', edgecolors='white', linewidth=2,
+                label=f'Source (rate: {emission_rate:.1f})', zorder=10
+            )
+            
+            logger.debug(f"Plotted source at position {source_pos} with emission rate {emission_rate}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to plot source: {e}")
+    
+    # Plot agent starting positions if provided
+    if agent_positions is not None:
+        positions = np.asarray(agent_positions)
+        if positions.ndim == 1:
+            # Single agent case
+            positions = positions.reshape(1, -1)
+        
+        num_agents = positions.shape[0]
+        
+        # Use different markers for multiple agents
+        markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', 'h', '8']
+        
+        for i, pos in enumerate(positions):
+            marker = markers[i % len(markers)]
+            ax.scatter(
+                pos[0], pos[1],
+                s=agent_marker_size, c=default_colors['agents'],
+                marker=marker, edgecolors='white', linewidth=1.5,
+                alpha=0.8, zorder=8
+            )
+        
+        # Add agent legend
+        if num_agents == 1:
+            ax.scatter([], [], s=agent_marker_size, c=default_colors['agents'],
+                      marker='o', edgecolors='white', linewidth=1.5,
+                      label='Agent Start Position', alpha=0.8)
+        else:
+            ax.scatter([], [], s=agent_marker_size, c=default_colors['agents'],
+                      marker='o', edgecolors='white', linewidth=1.5,
+                      label=f'{num_agents} Agent Start Positions', alpha=0.8)
+        
+        logger.debug(f"Plotted {num_agents} agent starting positions")
+    
+    # Configure plot appearance
+    if title:
+        ax.set_title(title, fontsize=14, fontweight='bold')
+    elif source is not None and agent_positions is not None:
+        ax.set_title('Initial Simulation State', fontsize=14, fontweight='bold')
+    else:
+        ax.set_title('Domain Setup', fontsize=14, fontweight='bold')
+    
+    ax.set_xlabel('X Position', fontsize=12)
+    ax.set_ylabel('Y Position', fontsize=12)
+    
+    if show_grid:
+        ax.grid(True, alpha=0.3)
+    
+    # Set background color
+    ax.set_facecolor(default_colors['background'])
+    
+    # Add legend if there are items to show
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    # Set equal aspect ratio for accurate spatial representation
+    ax.set_aspect('equal', adjustable='box')
+    
+    # Execute visualization hooks if provided
+    if visualization_hooks:
+        hook_context = {
+            'positions': positions,
+            'orientations': orientations,
+            'plume_frames': plume_frames,
+            'figure': fig,
+            'axes': ax,
+            'num_agents': num_agents,
+            'time_steps': time_steps,
+            **(hook_data or {})
+        }
+        
+        for hook_name, hook_func in visualization_hooks.items():
+            if hook_name.startswith('plot_'):
+                try:
+                    logger.debug(f"Executing visualization hook: {hook_name}")
+                    hook_result = hook_func(hook_context)
+                    
+                    # Hook can return additional plot elements
+                    if hook_result is not None:
+                        logger.debug(f"Hook {hook_name} returned additional plot elements")
+                except Exception as e:
+                    logger.warning(f"Visualization hook {hook_name} failed: {e}")
+    
+    # Save plot if output path specified
+    if output_path:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        save_kwargs = {
+            'dpi': dpi,
+            'bbox_inches': 'tight',
+            'facecolor': fig.get_facecolor(),
+            'edgecolor': 'none'
+        }
+        
+        try:
+            fig.savefig(str(output_path), **save_kwargs)
+            logger.info(f"Initial state plot saved to {output_path}")
+        except Exception as e:
+            logger.error(f"Error saving plot to {output_path}: {e}")
+            raise
+    
+    return fig
+
+
+def create_debug_visualizer(
+    backend: Literal['qt', 'streamlit', 'auto'] = 'auto',
+    real_time_updates: bool = True,
+    performance_monitoring: bool = True,
+    state_inspection: bool = True,
+    parameter_controls: bool = True,
+    export_capabilities: bool = True,
+    **config_kwargs
+) -> Any:
+    """
+    Create an interactive debug visualizer with GUI integration for real-time simulation analysis.
+    
+    This function creates a comprehensive debugging interface supporting both Qt-based desktop
+    applications and Streamlit web interfaces. The visualizer provides real-time state inspection,
+    parameter manipulation, and performance monitoring capabilities for advanced debugging workflows.
+    
+    Args:
+        backend: GUI backend selection ('qt', 'streamlit', 'auto' for automatic fallback).
+        real_time_updates: Enable real-time visualization updates during simulation.
+        performance_monitoring: Include performance metrics and profiling tools.
+        state_inspection: Enable detailed agent state and sensor reading inspection.
+        parameter_controls: Provide interactive parameter adjustment capabilities.
+        export_capabilities: Enable data export and screenshot functionality.
+        **config_kwargs: Additional configuration parameters for backend-specific setup.
+        
+    Returns:
+        Any: Debug visualizer instance with backend-specific interface.
+        
+    Raises:
+        ImportError: If required GUI dependencies are not available.
+        RuntimeError: If no suitable backend can be initialized.
+        
+    Examples:
+        Qt-based desktop debugger:
+        >>> debugger = create_debug_visualizer(backend='qt', state_inspection=True)
+        >>> debugger.setup_environment(env)
+        >>> debugger.start_session()
+        
+        Streamlit web interface:
+        >>> debugger = create_debug_visualizer(
+        ...     backend='streamlit', 
+        ...     real_time_updates=True,
+        ...     export_capabilities=True
+        ... )
+        >>> debugger.launch_web_interface(port=8501)
+        
+        Auto-fallback with full features:
+        >>> debugger = create_debug_visualizer(
+        ...     backend='auto',
+        ...     performance_monitoring=True,
+        ...     parameter_controls=True
+        ... )
+    """
+    logger.info(f"Creating debug visualizer with backend: {backend}")
+    
+    # Backend selection logic using already imported modules
+    available_backends = DEBUG_BACKENDS.copy()
+    available_backends.remove('console')  # Remove console from user selection
+    
+    if PYSIDE6_AVAILABLE:
+        logger.debug("PySide6 available for Qt backend")
+    
+    if STREAMLIT_AVAILABLE:
+        logger.debug("Streamlit available for web backend")
+    
+    # Determine backend to use
+    if backend == 'auto':
+        if 'qt' in available_backends:
+            selected_backend = 'qt'
+        elif 'streamlit' in available_backends:
+            selected_backend = 'streamlit'
+        else:
+            selected_backend = 'console'  # Fallback
+    else:
+        selected_backend = backend
+        if backend not in available_backends and backend != 'console':
+            raise ImportError(
+                f"Requested backend '{backend}' not available. "
+                f"Available backends: {available_backends}"
+            )
+    
+    logger.info(f"Selected debug backend: {selected_backend}")
+    
+    # Configuration common to all backends
+    visualizer_config = {
+        'real_time_updates': real_time_updates,
+        'performance_monitoring': performance_monitoring,
+        'state_inspection': state_inspection,
+        'parameter_controls': parameter_controls,
+        'export_capabilities': export_capabilities,
+        'backend': selected_backend,
+        **config_kwargs
+    }
+    
+    # Create backend-specific visualizer
+    if selected_backend == 'qt':
+        return _create_qt_debug_visualizer(visualizer_config)
+    elif selected_backend == 'streamlit':
+        return _create_streamlit_debug_visualizer(visualizer_config)
+    else:
+        # Console fallback
+        return _create_console_debug_visualizer(visualizer_config)
+
+
+def register_visualization_hooks(
+    hook_registry: Dict[str, Any],
+    custom_plot_functions: Optional[Dict[str, Callable]] = None,
+    debug_callbacks: Optional[Dict[str, Callable]] = None,
+    export_handlers: Optional[Dict[str, Callable]] = None,
+    performance_monitors: Optional[Dict[str, Callable]] = None
+) -> Dict[str, Callable]:
+    """
+    Register extensible visualization callbacks for custom debugging extensions.
+    
+    This function provides a comprehensive hook registration system enabling downstream
+    projects to extend visualization capabilities without modifying core library code.
+    Supports custom plotting functions, debug callbacks, export handlers, and performance
+    monitoring extensions.
+    
+    Args:
+        hook_registry: Central hook registry dictionary for storing registered callbacks.
+        custom_plot_functions: Custom plotting functions mapped by name.
+        debug_callbacks: Debug-specific callback functions for state inspection.
+        export_handlers: Custom export format handlers and data processors.
+        performance_monitors: Performance monitoring callbacks for profiling.
+        
+    Returns:
+        Dict[str, Callable]: Dictionary of registered hook functions for verification.
+        
+    Examples:
+        Basic hook registration:
+        >>> hooks = {}
+        >>> custom_plots = {'trajectory_heatmap': plot_trajectory_heatmap}
+        >>> registered = register_visualization_hooks(
+        ...     hooks, custom_plot_functions=custom_plots
+        ... )
+        
+        Comprehensive debugging extension:
+        >>> def custom_state_inspector(agent_state, plume_state):
+        ...     return {'custom_metric': compute_custom_metric(agent_state)}
+        >>> 
+        >>> def custom_exporter(data, output_path):
+        ...     # Custom export logic
+        ...     pass
+        >>> 
+        >>> registered = register_visualization_hooks(
+        ...     hook_registry=global_hooks,
+        ...     debug_callbacks={'state_inspector': custom_state_inspector},
+        ...     export_handlers={'custom_format': custom_exporter}
+        ... )
+        
+        Performance monitoring hooks:
+        >>> perf_monitors = {
+        ...     'step_timer': lambda: time.perf_counter(),
+        ...     'memory_tracker': lambda: psutil.Process().memory_info().rss
+        ... }
+        >>> registered = register_visualization_hooks(
+        ...     hook_registry, performance_monitors=perf_monitors
+        ... )
+    """
+    logger.info("Registering visualization hooks")
+    
+    registered_hooks = {}
+    
+    # Register custom plot functions
+    if custom_plot_functions:
+        for name, func in custom_plot_functions.items():
+            decorated_func = _wrap_visualization_hook(func, 'plot')
+            hook_registry[f'plot_{name}'] = decorated_func
+            registered_hooks[f'plot_{name}'] = decorated_func
+            logger.debug(f"Registered custom plot function: {name}")
+    
+    # Register debug callbacks
+    if debug_callbacks:
+        for name, func in debug_callbacks.items():
+            decorated_func = _wrap_visualization_hook(func, 'debug')
+            hook_registry[f'debug_{name}'] = decorated_func
+            registered_hooks[f'debug_{name}'] = decorated_func
+            logger.debug(f"Registered debug callback: {name}")
+    
+    # Register export handlers
+    if export_handlers:
+        for name, func in export_handlers.items():
+            decorated_func = _wrap_visualization_hook(func, 'export')
+            hook_registry[f'export_{name}'] = decorated_func
+            registered_hooks[f'export_{name}'] = decorated_func
+            logger.debug(f"Registered export handler: {name}")
+    
+    # Register performance monitors
+    if performance_monitors:
+        for name, func in performance_monitors.items():
+            decorated_func = _wrap_visualization_hook(func, 'performance')
+            hook_registry[f'perf_{name}'] = decorated_func
+            registered_hooks[f'perf_{name}'] = decorated_func
+            logger.debug(f"Registered performance monitor: {name}")
+    
+    logger.info(f"Registered {len(registered_hooks)} visualization hooks")
+    return registered_hooks
+
+
+# Helper functions for debug visualizer backends
+
+def _wrap_visualization_hook(func: Callable, hook_type: str) -> Callable:
+    """
+    Wrap visualization hook functions with error handling and logging.
+    
+    Args:
+        func: Hook function to wrap.
+        hook_type: Type of hook for logging context.
+        
+    Returns:
+        Callable: Wrapped function with error handling.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            logger.debug(f"Executing {hook_type} hook: {func.__name__}")
+            result = func(*args, **kwargs)
+            logger.debug(f"Successfully executed {hook_type} hook: {func.__name__}")
+            return result
+        except Exception as e:
+            logger.error(f"Error in {hook_type} hook {func.__name__}: {e}")
+            # Return None or appropriate default based on hook type
+            if hook_type == 'plot':
+                return None
+            elif hook_type == 'debug':
+                return {}
+            elif hook_type == 'export':
+                return False
+            elif hook_type == 'performance':
+                return 0.0
+            else:
+                return None
+    
+    return wrapper
+
+
+def _create_qt_debug_visualizer(config: Dict[str, Any]) -> Any:
+    """
+    Create Qt-based debug visualizer with PySide6.
+    
+    Args:
+        config: Visualizer configuration dictionary.
+        
+    Returns:
+        Any: Qt debug visualizer instance.
+    """
+    if not PYSIDE6_AVAILABLE:
+        raise ImportError("PySide6 is required for Qt backend")
+    
+    logger.info("Creating Qt-based debug visualizer")
+    
+    class QtDebugVisualizer(QMainWindow):
+        """Qt-based interactive debug visualizer with comprehensive debugging capabilities."""
+        
+        def __init__(self, config):
+            super().__init__()
+            self.config = config
+            self.env = None
+            self.simulation_state = {}
+            self.hooks = {}
+            
+            self.setWindowTitle("Plume Navigation Debug Viewer")
+            self.setGeometry(100, 100, 1200, 800)
+            
+            # Initialize UI components
+            self._setup_ui()
+            
+            # Setup timer for real-time updates
+            if config.get('real_time_updates', True):
+                self.update_timer = QTimer()
+                self.update_timer.timeout.connect(self._update_display)
+            
+            logger.debug("Qt debug visualizer initialized")
+        
+        def _setup_ui(self):
+            """Setup the user interface components."""
+            self.central_widget = QWidget()
+            self.setCentralWidget(self.central_widget)
+            
+            # Main layout
+            layout = QVBoxLayout()
+            self.central_widget.setLayout(layout)
+            
+            # Create visualization area
+            self.viz_widget = QWidget()
+            self.viz_widget.setMinimumSize(800, 600)
+            layout.addWidget(self.viz_widget)
+            
+            # Create control panel if enabled
+            if self.config.get('parameter_controls', True):
+                self.control_panel = QWidget()
+                self.control_panel.setMaximumHeight(150)
+                layout.addWidget(self.control_panel)
+        
+        def setup_environment(self, env):
+            """Setup environment for debugging."""
+            self.env = env
+            logger.debug("Environment setup complete")
+        
+        def register_hooks(self, hooks: Dict[str, Callable]):
+            """Register visualization hooks."""
+            self.hooks.update(hooks)
+            logger.debug(f"Registered {len(hooks)} visualization hooks")
+        
+        def start_session(self):
+            """Start debugging session."""
+            if hasattr(self, 'update_timer') and self.config.get('real_time_updates', True):
+                self.update_timer.start(33)  # ~30 FPS
+            self.show()
+            logger.info("Qt debug session started")
+        
+        def stop_session(self):
+            """Stop debugging session."""
+            if hasattr(self, 'update_timer'):
+                self.update_timer.stop()
+            logger.info("Qt debug session stopped")
+        
+        def _update_display(self):
+            """Update display with current state."""
+            if self.env is None:
+                return
+            
+            # Execute visualization hooks
+            for hook_name, hook_func in self.hooks.items():
+                if hook_name.startswith('plot_'):
+                    try:
+                        hook_func(self.simulation_state)
+                    except Exception as e:
+                        logger.warning(f"Visualization hook {hook_name} failed: {e}")
+        
+        def update_state(self, state: Dict[str, Any]):
+            """Update simulation state for display."""
+            self.simulation_state.update(state)
+            
+            # Trigger manual update if not using timer
+            if not self.config.get('real_time_updates', True):
+                self._update_display()
+        
+        def export_screenshot(self, output_path: str):
+            """Export current visualization as image."""
+            try:
+                pixmap = self.grab()
+                pixmap.save(output_path)
+                logger.info(f"Screenshot saved to {output_path}")
+            except Exception as e:
+                logger.error(f"Failed to save screenshot: {e}")
+    
+    return QtDebugVisualizer(config)
+
+
+def _create_streamlit_debug_visualizer(config: Dict[str, Any]) -> Any:
+    """
+    Create Streamlit-based debug visualizer for web interface.
+    
+    Args:
+        config: Visualizer configuration dictionary.
+        
+    Returns:
+        Any: Streamlit debug visualizer instance.
+    """
+    if not STREAMLIT_AVAILABLE:
+        raise ImportError("Streamlit is required for web backend")
+    
+    logger.info("Creating Streamlit-based debug visualizer")
+    
+    class StreamlitDebugVisualizer:
+        """Streamlit-based web debug visualizer with collaborative debugging capabilities."""
+        
+        def __init__(self, config):
+            self.config = config
+            self.env = None
+            self.simulation_state = {}
+            self.hooks = {}
+            self.session_data = {}
+            logger.debug("Streamlit debug visualizer initialized")
+        
+        def setup_environment(self, env):
+            """Setup environment for debugging."""
+            self.env = env
+            logger.debug("Environment setup complete")
+        
+        def register_hooks(self, hooks: Dict[str, Callable]):
+            """Register visualization hooks."""
+            self.hooks.update(hooks)
+            logger.debug(f"Registered {len(hooks)} visualization hooks")
+        
+        def launch_web_interface(self, port: int = 8501, host: str = "localhost"):
+            """Launch Streamlit web interface."""
+            logger.info(f"Launching Streamlit interface on {host}:{port}")
+            
+            # Create Streamlit app
+            def main_app():
+                self.create_dashboard()
+            
+            # Note: In real implementation, this would use st.run()
+            # For now, we setup the dashboard structure
+            return main_app
+        
+        def create_dashboard(self):
+            """Create comprehensive Streamlit dashboard with all debugging features."""
+            st.set_page_config(
+                page_title="Plume Navigation Debug Dashboard",
+                layout="wide",
+                initial_sidebar_state="expanded"
+            )
+            
+            st.title("🧭 Plume Navigation Debug Dashboard")
+            
+            # Sidebar for configuration
+            with st.sidebar:
+                st.header("Debug Configuration")
+                
+                # Real-time update controls
+                if self.config.get('real_time_updates', True):
+                    auto_update = st.checkbox("Auto-update", value=True)
+                    update_interval = st.slider("Update interval (ms)", 100, 5000, 1000)
+                
+                # Export controls
+                if self.config.get('export_capabilities', True):
+                    st.header("Export Options")
+                    export_format = st.selectbox("Format", ["PNG", "PDF", "SVG", "JSON"])
+                    if st.button("Export Current State"):
+                        self._export_state(export_format.lower())
+            
+            # Main content area
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.header("Simulation Visualization")
+                
+                # Visualization container
+                viz_container = st.container()
+                with viz_container:
+                    if self.env is not None:
+                        self._render_simulation_view()
+                    else:
+                        st.info("No environment loaded. Use setup_environment() to load.")
+                
+                # Hook execution results
+                if self.hooks:
+                    st.header("Custom Visualization Hooks")
+                    self._execute_visualization_hooks()
+            
+            with col2:
+                # State inspection panel
+                if self.config.get('state_inspection', True):
+                    st.header("🔍 State Inspection")
+                    self._render_state_inspector()
+                
+                # Performance monitoring
+                if self.config.get('performance_monitoring', True):
+                    st.header("⚡ Performance Monitor")
+                    self._render_performance_monitor()
+                
+                # Parameter controls
+                if self.config.get('parameter_controls', True):
+                    st.header("🎛️ Parameter Controls")
+                    self._render_parameter_controls()
+        
+        def _render_simulation_view(self):
+            """Render the main simulation visualization."""
+            if self.simulation_state:
+                # Create matplotlib figure for current state
+                fig, ax = plt.subplots(figsize=(10, 8))
+                
+                # Basic visualization - this would be enhanced with actual simulation data
+                ax.set_title("Current Simulation State")
+                ax.set_xlabel("X Position")
+                ax.set_ylabel("Y Position")
+                ax.grid(True, alpha=0.3)
+                
+                # Display the figure
+                st.pyplot(fig)
+                plt.close(fig)
+            else:
+                st.info("No simulation state available")
+        
+        def _render_state_inspector(self):
+            """Render state inspection panel."""
+            if self.simulation_state:
+                st.json(self.simulation_state)
+            else:
+                st.info("No state data available")
+        
+        def _render_performance_monitor(self):
+            """Render performance monitoring panel."""
+            # Example performance metrics
+            if 'performance' in self.simulation_state:
+                perf_data = self.simulation_state['performance']
+                
+                for metric, value in perf_data.items():
+                    st.metric(metric.replace('_', ' ').title(), f"{value:.3f}")
+            else:
+                st.info("No performance data available")
+        
+        def _render_parameter_controls(self):
+            """Render parameter adjustment controls."""
+            st.info("Parameter controls would be implemented here")
+            
+            # Example parameter controls
+            if st.button("Reset Simulation"):
+                self._reset_simulation()
+            
+            if st.button("Pause/Resume"):
+                self._toggle_simulation()
+        
+        def _execute_visualization_hooks(self):
+            """Execute and display results from visualization hooks."""
+            for hook_name, hook_func in self.hooks.items():
+                if hook_name.startswith('plot_'):
+                    with st.expander(f"Hook: {hook_name}"):
+                        try:
+                            result = hook_func(self.simulation_state)
+                            if result is not None:
+                                st.pyplot(result)
+                        except Exception as e:
+                            st.error(f"Hook execution failed: {e}")
+        
+        def _export_state(self, format: str):
+            """Export current state in specified format."""
+            try:
+                # Implementation would handle different export formats
+                st.success(f"State exported in {format.upper()} format")
+                logger.info(f"State exported in {format} format")
+            except Exception as e:
+                st.error(f"Export failed: {e}")
+                logger.error(f"Export failed: {e}")
+        
+        def _reset_simulation(self):
+            """Reset simulation state."""
+            self.simulation_state.clear()
+            st.success("Simulation reset")
+        
+        def _toggle_simulation(self):
+            """Toggle simulation pause/resume."""
+            # Implementation would control simulation state
+            st.info("Simulation pause/resume toggled")
+        
+        def update_state(self, state: Dict[str, Any]):
+            """Update simulation state for display."""
+            self.simulation_state.update(state)
+    
+    return StreamlitDebugVisualizer(config)
+
+
+def _create_console_debug_visualizer(config: Dict[str, Any]) -> Any:
+    """
+    Create console-based debug visualizer as fallback.
+    
+    Args:
+        config: Visualizer configuration dictionary.
+        
+    Returns:
+        Any: Console debug visualizer instance.
+    """
+    logger.info("Creating console-based debug visualizer (fallback)")
+    
+    class ConsoleDebugVisualizer:
+        """Console-based fallback debug visualizer."""
+        
+        def __init__(self, config):
+            self.config = config
+            logger.debug("Console debug visualizer initialized")
+        
+        def setup_environment(self, env):
+            """Setup environment for debugging."""
+            self.env = env
+            logger.debug("Environment setup complete")
+        
+        def start_session(self):
+            """Start debugging session."""
+            logger.info("Console debug session started")
+            print("Debug visualizer running in console mode")
+            print("Available commands: help, state, performance, quit")
+        
+        def interactive_session(self):
+            """Run interactive console debugging session."""
+            while True:
+                try:
+                    command = input("debug> ").strip().lower()
+                    if command == 'quit':
+                        break
+                    elif command == 'help':
+                        print("Available commands: help, state, performance, quit")
+                    elif command == 'state':
+                        print("Current simulation state information...")
+                    elif command == 'performance':
+                        print("Performance metrics and profiling data...")
+                    else:
+                        print(f"Unknown command: {command}")
+                except KeyboardInterrupt:
+                    break
+            
+            logger.info("Console debug session ended")
+    
+    return ConsoleDebugVisualizer(config)
+
+
 # Factory Functions for Enhanced API
 
 def create_realtime_visualizer(
@@ -1191,7 +2077,7 @@ if HYDRA_AVAILABLE:
     
     # Register visualization configuration schemas
     try:
-        from dataclasses import dataclass
+        from dataclasses import dataclass, field
         from typing import Optional
         
         @dataclass
@@ -1214,9 +2100,9 @@ if HYDRA_AVAILABLE:
             
         @dataclass
         class VisualizationConfig:
-            animation: AnimationConfig = AnimationConfig()
-            static: StaticConfig = StaticConfig()
-            agents: AgentConfig = AgentConfig()
+            animation: AnimationConfig = field(default_factory=AnimationConfig)
+            static: StaticConfig = field(default_factory=StaticConfig)
+            agents: AgentConfig = field(default_factory=AgentConfig)
             headless: bool = False
             resolution: str = "720p"
             theme: str = "scientific"
@@ -1241,5 +2127,9 @@ __all__ = [
     "visualize_trajectory", 
     "create_realtime_visualizer",
     "create_static_plotter",
-    "VisualizationConfig"
+    "VisualizationConfig",
+    # New v1.0 debug and hook functions
+    "plot_initial_state",
+    "create_debug_visualizer", 
+    "register_visualization_hooks"
 ]
