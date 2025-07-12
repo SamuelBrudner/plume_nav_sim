@@ -1,0 +1,116 @@
+# @package _global_
+# PointSource Configuration for Odor Plume Navigation Simulation
+# Implements F-013: Source Abstraction via SourceProtocol interface
+# 
+# This configuration defines a single-point odor source with configurable
+# position, emission characteristics, and detection parameters for basic
+# source scenarios in plume navigation research.
+
+defaults:
+  - override /source: point_source
+
+# PointSource implementation from core sources module
+_target_: plume_nav_sim.core.sources.PointSource
+
+# Source position coordinates [x, y] in simulation domain
+# Supports environment variable override for deployment flexibility
+position: ${oc.env:SOURCE_POSITION,[10.0, 10.0]}
+
+# Source emission strength/rate (concentration units/time)
+# Higher values create stronger odor plumes with greater detection range
+# Supports environment variable override for parametric studies
+emission_rate: ${oc.env:SOURCE_STRENGTH,1.0}
+
+# Detection threshold - minimum concentration for agent perception
+# Controls sensitivity of odor detection for sensor modeling
+detection_threshold: 0.01
+
+# Maximum detection distance from source (simulation units)
+# Defines effective range of source influence for computational efficiency
+max_detection_distance: 50.0
+
+# Source activity status - allows dynamic source control
+# Enable/disable source emission during simulation
+active: true
+
+# Source emission profile parameters
+emission_profile:
+  # Emission type: constant, pulsed, or variable
+  type: constant
+  
+  # For pulsed emission - pulse duration and interval (time units)
+  pulse_duration: 1.0
+  pulse_interval: 5.0
+  
+  # For variable emission - temporal variation parameters
+  variation_amplitude: 0.1
+  variation_frequency: 0.1
+
+# Source geometry and spatial characteristics
+geometry:
+  # Source radius for spatial extent modeling (simulation units)
+  # Zero for true point source, positive for extended source
+  radius: 0.0
+  
+  # Source height above ground plane (for 3D visualization)
+  height: 0.0
+
+# Detection and sensing parameters
+detection:
+  # Noise level in concentration measurements (0.0 = perfect detection)
+  noise_level: 0.05
+  
+  # Sensor response time constant (affects detection dynamics)
+  response_time: 0.1
+  
+  # Binary detection flag - true for binary on/off detection
+  binary_detection: false
+
+# Performance and optimization settings
+performance:
+  # Update frequency for source state (Hz)
+  # Higher values provide better temporal resolution
+  update_frequency: 100.0
+  
+  # Enable vectorized computation for multi-agent scenarios
+  vectorized: true
+  
+  # Cache emission calculations for performance optimization
+  cache_emissions: true
+
+# Validation and bounds checking
+validation:
+  # Enforce position bounds within simulation domain
+  enforce_domain_bounds: true
+  
+  # Minimum and maximum emission rates for validation
+  min_emission_rate: 0.0
+  max_emission_rate: 10.0
+  
+  # Position validation bounds [min_x, min_y, max_x, max_y]
+  position_bounds: [0.0, 0.0, 100.0, 100.0]
+
+# Logging and debugging configuration
+logging:
+  # Enable detailed source logging for debugging
+  verbose: false
+  
+  # Log emission state changes and updates
+  log_state_changes: true
+  
+  # Performance metrics logging
+  log_performance: false
+
+# Metadata for experiment tracking and reproducibility
+metadata:
+  # Source description for experiment documentation
+  description: "Single point odor source for basic navigation scenarios"
+  
+  # Source version for compatibility tracking
+  version: "1.0.0"
+  
+  # Tags for experiment categorization
+  tags: ["point_source", "basic", "single_source"]
+  
+  # Reference to source model or paper
+  reference: "Standard point source model for plume navigation research"
