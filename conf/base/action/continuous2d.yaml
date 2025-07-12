@@ -1,0 +1,158 @@
+# Hydra configuration for Continuous2DAction interface
+# Implements continuous action space translation with 2D movement control (speed and angular velocity)
+# Enables seamless RL framework integration with configurable action bounds, validation, and performance optimization
+
+# ActionInterfaceProtocol implementation target
+_target_: src.plume_nav_sim.core.actions.Continuous2DAction
+
+# Continuous Action Space Configuration
+action_space:
+  # Gymnasium Box space definition for continuous control paradigms
+  type: "Box"
+  # Action vector: [speed, angular_velocity]
+  shape: [2]
+  dtype: "float32"
+  
+  # Action bounds configuration with environment variable overrides
+  bounds:
+    # Speed control bounds (m/s)
+    speed:
+      min: ${oc.env:ACTION_SPEED_MIN,0.0}           # Minimum speed (m/s)
+      max: ${oc.env:ACTION_SPEED_MAX,1.0}           # Maximum speed (m/s)
+    
+    # Angular velocity control bounds (rad/s)
+    angular_velocity:
+      min: ${oc.env:ACTION_ANGULAR_VELOCITY_MIN,-3.14159}  # Minimum angular velocity (rad/s)
+      max: ${oc.env:ACTION_ANGULAR_VELOCITY_MAX,3.14159}   # Maximum angular velocity (rad/s)
+
+# Action Validation and Clipping Configuration
+validation:
+  # Enable action bounds enforcement per F-016-RQ-003
+  enable_bounds_checking: true
+  
+  # Clipping behavior for out-of-bounds actions
+  clipping:
+    mode: "clip"  # Options: "clip", "error", "warn"
+    clip_to_bounds: true
+    
+  # Input validation settings
+  input_validation:
+    reject_nan: true          # Reject NaN values
+    reject_inf: true          # Reject infinite values
+    type_checking: true       # Enforce dtype compatibility
+    
+  # Error handling configuration
+  error_handling:
+    mode: "raise"            # Options: "raise", "warn", "ignore"
+    log_violations: true     # Log validation violations
+    include_debug_info: true # Include debug information in error messages
+
+# Performance Optimization Settings
+# Target: <0.05ms per step action translation overhead per F-016-RQ-001
+performance:
+  # Enable vectorized operations for multi-agent scenarios
+  vectorized_operations: true
+  
+  # Memory optimization settings
+  memory_optimization:
+    preallocate_arrays: true     # Pre-allocate arrays for repeated operations
+    use_float32: true            # Use float32 for memory efficiency
+    minimize_copies: true        # Minimize array copying operations
+  
+  # Caching configuration for action translation
+  caching:
+    enable_bounds_cache: true    # Cache bounds checking results
+    cache_validation_results: false  # Disable for real-time performance
+  
+  # Profiling and monitoring
+  profiling:
+    enable_timing: false         # Disable timing overhead in production
+    track_overhead: false        # Disable overhead tracking for performance
+    log_performance_warnings: true  # Log if overhead exceeds threshold
+
+# Action Translation Configuration
+translation:
+  # Coordinate system settings
+  coordinate_system: "local"     # Options: "local", "global"
+  
+  # Action normalization
+  normalization:
+    input_range: [-1.0, 1.0]    # Expected input range from RL agent
+    auto_normalize: true         # Automatically normalize inputs to action bounds
+    
+  # Action smoothing (optional)
+  smoothing:
+    enable: false               # Disable for raw control
+    alpha: 0.1                  # Smoothing factor (when enabled)
+
+# Gymnasium Integration Configuration
+gymnasium:
+  # Action space metadata
+  action_space_metadata:
+    description: "Continuous 2D navigation control"
+    units: ["m/s", "rad/s"]
+    names: ["speed", "angular_velocity"]
+  
+  # Observation space integration
+  action_feedback:
+    include_in_obs: false       # Include last action in observation
+    obs_key: "last_action"      # Key name if included in observation
+  
+  # Compatibility settings
+  compatibility:
+    gymnasium_version: "0.29.*"  # Target Gymnasium version
+    legacy_gym_support: true     # Support legacy gym environments
+
+# Debugging and Diagnostics
+debug:
+  # Debug mode settings (zero overhead when disabled)
+  enable_debug_mode: false
+  
+  # Action logging for debugging
+  action_logging:
+    log_all_actions: false      # Log every action (development only)
+    log_violations_only: true   # Log only validation violations
+    max_log_entries: 1000       # Maximum log entries to retain
+  
+  # Visualization support
+  visualization:
+    plot_action_distribution: false  # Plot action distribution (debugging)
+    export_action_history: false     # Export action history for analysis
+
+# Environment-Specific Overrides
+environment_overrides:
+  # Production environment settings
+  production:
+    validation.enable_bounds_checking: true
+    performance.profiling.enable_timing: false
+    debug.enable_debug_mode: false
+  
+  # Development environment settings  
+  development:
+    validation.error_handling.mode: "warn"
+    performance.profiling.enable_timing: true
+    debug.enable_debug_mode: true
+    debug.action_logging.log_all_actions: true
+  
+  # Testing environment settings
+  testing:
+    validation.error_handling.mode: "raise"
+    performance.caching.enable_bounds_cache: false
+    debug.enable_debug_mode: true
+
+# Metadata and Documentation
+metadata:
+  component_type: "ActionInterface"
+  protocol_compliance: "ActionInterfaceProtocol"
+  performance_target_ms: 0.05    # Target translation overhead in milliseconds
+  supported_frameworks: ["stable-baselines3", "ray-rllib", "tianshou"]
+  version: "1.0.0"
+  last_updated: "2025-01-01"
+  
+  # Feature flags
+  features:
+    continuous_control: true
+    discrete_control: false
+    multi_agent_support: true
+    real_time_performance: true
+    gymnasium_compatible: true
