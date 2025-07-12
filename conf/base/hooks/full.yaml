@@ -12,8 +12,8 @@
 # Agent Support: Up to 100 concurrent agents with vectorized operations
 # =============================================================================
 
-defaults:
-  - override /hooks: full
+# Configuration for comprehensive hook system with all extension points enabled
+# This file provides the full hooks configuration when selected via "hooks=full"
 
 # =============================================================================
 # Hook System Core Configuration
