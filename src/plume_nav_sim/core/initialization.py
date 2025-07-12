@@ -627,6 +627,12 @@ class FixedListInitializer:
         positions: Union[List[List[float]], List[Tuple[float, float]], np.ndarray]
     ) -> np.ndarray:
         """Validate and convert positions to standardized format."""
+        # Handle OmegaConf ListConfig objects
+        if hasattr(positions, '_content'):  # Check for OmegaConf ListConfig
+            positions = positions._content
+        elif hasattr(positions, 'to_container'):  # Alternative OmegaConf handling
+            positions = positions.to_container()
+        
         if isinstance(positions, np.ndarray):
             if positions.ndim != 2 or positions.shape[1] != 2:
                 raise ValueError(
