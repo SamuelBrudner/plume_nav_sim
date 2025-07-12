@@ -1,0 +1,149 @@
+# ClipBoundary Policy Configuration
+# Part of the Boundary Policy Framework (F-015) for plume navigation simulation
+# 
+# This policy constrains agent positions to remain strictly within domain boundaries
+# by clipping coordinates to valid ranges. Unlike terminate policy, this maintains
+# episode continuity for studies requiring strict domain containment.
+#
+# Technical Specifications:
+# - Performance: <0.5ms boundary handling for 100 agents (vectorized operations)
+# - Behavior: Hard boundary constraints with coordinate clipping
+# - Use Case: Studies requiring agents to never leave the simulation domain
+# - Episode Impact: Continues episode after boundary correction
+
+# Core Implementation
+_target_: plume_nav_sim.core.boundaries.ClipBoundary
+
+# Clipping Behavior Configuration
+clip_mode: "hard"  # Hard clipping ensures strict boundary enforcement
+preserve_velocity_direction: true  # Maintain velocity direction when clipping position
+apply_damping: false  # No velocity damping for pure position constraint
+
+# Domain Boundary Parameters
+# These define the valid coordinate ranges for agent positions
+boundary_params:
+  # Domain bounds - will be automatically inherited from environment config
+  # but can be overridden here for specialized boundary behavior
+  x_min: ${oc.env:BOUNDARY_X_MIN, null}  # Inherit from environment or use default
+  x_max: ${oc.env:BOUNDARY_X_MAX, null}  # Inherit from environment or use default  
+  y_min: ${oc.env:BOUNDARY_Y_MIN, null}  # Inherit from environment or use default
+  y_max: ${oc.env:BOUNDARY_Y_MAX, null}  # Inherit from environment or use default
+  
+  # Buffer zone - optional margin from true boundary for softer clipping
+  margin: ${oc.env:BOUNDARY_CLIP_MARGIN, 0.0}  # No margin by default
+  
+  # Coordinate precision for clipping operations
+  precision: 1e-6  # Numerical precision for boundary calculations
+
+# Velocity Handling Configuration
+velocity_handling:
+  # When enabled, preserves velocity direction after position clipping
+  enabled: ${oc.env:BOUNDARY_CLIP_PRESERVE_VELOCITY, true}
+  
+  # Velocity damping options when agent hits boundary
+  damping_factor: ${oc.env:BOUNDARY_CLIP_DAMPING, 1.0}  # 1.0 = no damping
+  
+  # Reflect velocity component normal to boundary (experimental)
+  reflect_normal_component: false
+  
+  # Zero out velocity components pointing into boundary
+  zero_inward_velocity: true
+
+# Performance Optimization Settings
+performance:
+  # Enable vectorized operations for multi-agent scenarios
+  vectorized: true
+  
+  # Pre-allocate arrays for boundary checking (improves performance)
+  preallocate_arrays: true
+  
+  # Batch size for vectorized boundary checks
+  batch_size: 100  # Optimized for ≤100 agents requirement
+  
+  # Use optimized NumPy operations
+  use_numpy_clip: true
+
+# Validation and Safety Settings
+validation:
+  # Validate that clipped positions are within bounds
+  validate_output: ${oc.env:BOUNDARY_CLIP_VALIDATE, true}
+  
+  # Tolerance for boundary validation checks
+  validation_tolerance: 1e-8
+  
+  # Raise warnings for excessive boundary violations
+  warn_excessive_violations: true
+  
+  # Threshold for excessive violation warnings (violations per step)
+  violation_warning_threshold: 0.1
+
+# Episode Termination Behavior
+termination:
+  # ClipBoundary maintains episode continuity - never terminates
+  terminate_on_violation: false
+  
+  # Status code when boundary violation occurs (for logging/analysis)
+  violation_status: "clipped"
+  
+  # Record violation events for post-analysis
+  record_violations: ${oc.env:BOUNDARY_CLIP_RECORD_VIOLATIONS, false}
+
+# Debug and Monitoring Configuration
+debug:
+  # Enable verbose logging for boundary operations
+  verbose_logging: ${oc.env:BOUNDARY_CLIP_DEBUG, false}
+  
+  # Track boundary violation statistics
+  track_violation_stats: false
+  
+  # Export boundary interaction data
+  export_violation_data: false
+
+# Environment Variable Overrides
+# These provide runtime configuration without code changes
+defaults:
+  # Primary toggle for clipping behavior
+  - override /boundary/enabled: ${oc.env:BOUNDARY_CLIP_ENABLED, true}
+  
+  # Performance optimization toggles
+  - override /boundary/vectorized: ${oc.env:BOUNDARY_CLIP_VECTORIZED, true}
+  
+  # Validation and safety toggles
+  - override /boundary/validate: ${oc.env:BOUNDARY_CLIP_VALIDATE_OUTPUT, true}
+
+# Integration with Core System
+system_integration:
+  # Ensure compatibility with NavigatorProtocol
+  navigator_compatible: true
+  
+  # Support for SingleAgentController and MultiAgentController
+  controller_compatible: true
+  
+  # Integration with performance monitoring
+  performance_monitoring: true
+  
+  # Protocol compliance verification
+  protocol_compliance: "BoundaryPolicyProtocol"
+
+# Research and Analysis Features
+analysis:
+  # Enable metrics collection for boundary interaction analysis
+  collect_metrics: false
+  
+  # Metrics to collect when enabled
+  metrics:
+    - "violations_per_episode"
+    - "violation_positions"
+    - "clipping_magnitude"
+    - "boundary_pressure_distribution"
+  
+  # Export format for boundary analysis data
+  export_format: "json"  # Options: json, csv, parquet
+
+# Notes for Researchers:
+# - This policy is ideal for studies where agents must remain within bounds
+# - Episode continuity is preserved unlike TerminateBoundary
+# - Vectorized operations ensure minimal performance impact
+# - All parameters can be overridden via environment variables
+# - Compatible with complex domain geometries through coordinate validation
+# - Supports both single and multi-agent scenarios efficiently
