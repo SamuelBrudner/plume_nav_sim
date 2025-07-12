@@ -375,7 +375,17 @@ class SingleAgentParams:
     
     def to_kwargs(self) -> Dict[str, Any]:
         """Convert dataclass to kwargs dictionary for controller reset methods."""
-        return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
+        result = {}
+        for k, v in self.__dict__.items():
+            if v is not None:
+                # Handle list/array comparisons safely
+                if isinstance(v, list) and len(v) == 0:
+                    continue
+                elif isinstance(v, np.ndarray) and v.size == 0:
+                    continue
+                else:
+                    result[k] = v
+        return result
 
 
 @dataclass
@@ -420,7 +430,17 @@ class MultiAgentParams:
     
     def to_kwargs(self) -> Dict[str, Any]:
         """Convert dataclass to kwargs dictionary for controller reset methods."""
-        return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
+        result = {}
+        for k, v in self.__dict__.items():
+            if v is not None:
+                # Handle list/array comparisons safely
+                if isinstance(v, list) and len(v) == 0:
+                    continue
+                elif isinstance(v, np.ndarray) and v.size == 0:
+                    continue
+                else:
+                    result[k] = v
+        return result
 
 
 class BaseController:
@@ -1784,11 +1804,11 @@ class MultiAgentController(BaseController):
             if self._enable_logging:
                 self._performance_metrics['step_times'] = []
                 self._performance_metrics['sample_times'] = []
+                self._performance_metrics['agents_per_step'] = []
+                self._performance_metrics['vectorized_op_times'] = []
             
             # Clear boundary termination status for new episode
             self.clear_boundary_termination()
-                self._performance_metrics['agents_per_step'] = []
-                self._performance_metrics['vectorized_op_times'] = []
             
             # Reset sensors and memory for new episode
             self.reset_sensors()
