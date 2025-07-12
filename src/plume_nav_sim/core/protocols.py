@@ -152,6 +152,61 @@ class NavigatorProtocol(Protocol):
         ...     navigator = NavigatorFactory.from_config(cfg.navigator)
     """
     
+    # Protocol-based dependency injection properties for v1.0 architecture
+    
+    @property 
+    def source(self) -> Optional['SourceProtocol']:
+        """
+        Get current source implementation for odor emission modeling.
+        
+        Returns:
+            Optional[SourceProtocol]: Source instance providing emission data and
+                position information, or None if no source is configured.
+                
+        Notes:
+            Source dependency enables flexible odor source modeling through
+            protocol-based composition. Different source implementations can be
+            injected at runtime based on experimental requirements.
+            
+            The source provides emission rate and position data that integrates
+            with plume models for realistic concentration field generation.
+            
+        Examples:
+            Source integration in navigation:
+            >>> if navigator.source:
+            ...     emission_rate = navigator.source.get_emission_rate()
+            ...     source_pos = navigator.source.get_position()
+            ...     # Use source data for navigation decisions
+        """
+        ...
+    
+    @property
+    def boundary_policy(self) -> Optional['BoundaryPolicyProtocol']:
+        """
+        Get current boundary policy implementation for domain edge management.
+        
+        Returns:
+            Optional[BoundaryPolicyProtocol]: Boundary policy instance providing
+                edge handling behavior, or None if default behavior is used.
+                
+        Notes:
+            Boundary policy dependency enables configurable domain edge behavior
+            through protocol-based composition. Different policies can be injected
+            to support various experimental scenarios and navigation strategies.
+            
+            The policy handles agent position corrections and episode termination
+            decisions when agents interact with domain boundaries.
+            
+        Examples:
+            Boundary policy integration:
+            >>> if navigator.boundary_policy:
+            ...     violations = navigator.boundary_policy.check_violations(positions)
+            ...     if violations.any():
+            ...         corrected_pos = navigator.boundary_policy.apply_policy(positions)
+            ...         termination_status = navigator.boundary_policy.get_termination_status()
+        """
+        ...
+    
     # Core state properties - must be implemented by all navigators
     
     @property
@@ -719,6 +774,1242 @@ class NavigatorProtocol(Protocol):
 
 
 # New modular component protocols for pluggable architecture
+
+@runtime_checkable
+class SourceProtocol(Protocol):
+    """
+    Protocol defining the interface for pluggable odor source implementations.
+    
+    This protocol enables seamless switching between different odor source types:
+    - PointSource: Single stationary emission point with configurable strength
+    - MultiSource: Multiple concurrent sources with independent control  
+    - DynamicSource: Time-varying sources with configurable emission patterns
+    
+    All implementations must provide real-time emission queries, position access,
+    and temporal evolution while maintaining performance requirements for interactive simulation.
+    
+    Key Design Principles:
+    - Emission queries via get_emission_rate() for plume model integration
+    - Spatial access via get_position() for source-agent distance calculations
+    - Temporal dynamics via update_state() for realistic source behavior
+    - Configuration-driven instantiation for zero-code source selection
+    
+    Performance Requirements:
+    - get_emission_rate(): <0.1ms for single query supporting real-time simulation
+    - get_position(): <0.1ms for spatial queries with minimal overhead
+    - update_state(): <1ms per time step for temporal evolution
+    - Memory efficiency: <10MB for typical source configurations
+    
+    Examples:
+        Basic point source:
+        >>> source = PointSource(position=(50, 50), emission_rate=1000.0)
+        >>> rate = source.get_emission_rate()
+        >>> position = source.get_position()
+        
+        Dynamic source with temporal variation:
+        >>> source = DynamicSource(
+        ...     initial_position=(25, 75), 
+        ...     emission_pattern="sinusoidal",
+        ...     period=60.0
+        ... )
+        >>> for t in range(100):
+        ...     source.update_state(dt=1.0)
+        ...     current_rate = source.get_emission_rate()
+        
+        Multi-source configuration:
+        >>> sources = MultiSource([
+        ...     {'position': (20, 20), 'rate': 500.0},
+        ...     {'position': (80, 80), 'rate': 750.0}
+        ... ])
+        >>> total_rate = sources.get_emission_rate()
+    """
+    
+    def get_emission_rate(self) -> float:
+        """
+        Get current odor emission rate from this source.
+        
+        Returns:
+            float: Emission rate in source-specific units (typically molecules/second
+                or concentration units/second). Non-negative value representing
+                current source strength.
+                
+        Notes:
+            Emission rate may vary over time for dynamic sources based on internal
+            temporal patterns or external control signals. Rate should remain
+            physically realistic and consistent with source configuration.
+            
+            For multi-source implementations, returns the total aggregate emission
+            rate across all active sub-sources.
+            
+        Performance:
+            Must execute in <0.1ms for real-time simulation compatibility.
+            
+        Examples:
+            Static source query:
+            >>> rate = source.get_emission_rate()
+            >>> assert rate >= 0.0, "Emission rate must be non-negative"
+            
+            Dynamic source monitoring:
+            >>> rates = [source.get_emission_rate() for _ in range(100)]
+            >>> assert all(r >= 0 for r in rates), "All rates must be valid"
+        """
+        ...
+    
+    def get_position(self) -> Tuple[float, float]:
+        """
+        Get current source position coordinates.
+        
+        Returns:
+            Tuple[float, float]: Source position as (x, y) coordinates in
+                environment coordinate system. Values should be within
+                environment domain bounds.
+                
+        Notes:
+            Position may be static for fixed sources or dynamic for moving sources.
+            Coordinates follow environment convention (typically with origin at
+            top-left for video-based environments).
+            
+            For multi-source implementations, returns the centroid or primary
+            source position as appropriate for the source configuration.
+            
+        Performance:
+            Must execute in <0.1ms for minimal spatial query overhead.
+            
+        Examples:
+            Static source position:
+            >>> x, y = source.get_position()
+            >>> assert 0 <= x <= domain_width and 0 <= y <= domain_height
+            
+            Dynamic source tracking:
+            >>> positions = [source.get_position() for _ in range(100)]
+            >>> # Track source movement over time
+        """
+        ...
+    
+    def update_state(self, dt: float = 1.0) -> None:
+        """
+        Advance source state by specified time delta.
+        
+        Args:
+            dt: Time step size in seconds. Controls temporal resolution of
+                source dynamics including emission variations, position changes,
+                and internal state evolution.
+                
+        Notes:
+            Updates source internal state including:
+            - Emission rate variations based on temporal patterns
+            - Position changes for mobile sources
+            - Internal parameters for complex source dynamics
+            - Environmental interactions and external influences
+            
+            Static sources may have minimal state updates while dynamic
+            sources implement complex temporal behaviors.
+            
+        Performance:
+            Must complete in <1ms per step for real-time simulation compatibility.
+            
+        Examples:
+            Standard time evolution:
+            >>> source.update_state(dt=1.0)
+            
+            High-frequency dynamics:
+            >>> for _ in range(10):
+            ...     source.update_state(dt=0.1)  # 10x higher temporal resolution
+            
+            Variable time stepping:
+            >>> source.update_state(dt=variable_dt)  # Adaptive time stepping
+        """
+        ...
+
+
+@runtime_checkable
+class BoundaryPolicyProtocol(Protocol):
+    """
+    Protocol defining configurable boundary handling strategies for domain edge management.
+    
+    This protocol enables flexible boundary behavior implementations:
+    - TerminatePolicy: End episode when agent reaches boundary (status = "oob")
+    - BouncePolicy: Reflect agent trajectory off boundary walls with energy conservation
+    - WrapPolicy: Periodic boundary conditions wrapping to opposite domain edge
+    - ClipPolicy: Constrain agent position to remain within valid domain
+    
+    All implementations must provide vectorized operations for multi-agent scenarios
+    while maintaining performance requirements for real-time simulation.
+    
+    Key Design Principles:
+    - Policy application via apply_policy() for position and velocity corrections
+    - Violation detection via check_violations() for efficient boundary checking
+    - Termination logic via get_termination_status() for episode management
+    - Vectorized operations for scalable multi-agent boundary processing
+    
+    Performance Requirements:
+    - apply_policy(): <1ms for 100 agents with vectorized operations
+    - check_violations(): <0.5ms for boundary detection across all agents
+    - get_termination_status(): <0.1ms for episode termination decisions
+    - Memory efficiency: <1MB for boundary state management
+    
+    Examples:
+        Episode termination boundary:
+        >>> policy = TerminatePolicy(domain_bounds=(100, 100))
+        >>> violations = policy.check_violations(agent_positions)
+        >>> if violations.any():
+        ...     status = policy.get_termination_status()
+        
+        Reflective boundary physics:
+        >>> policy = BouncePolicy(domain_bounds=(100, 100), energy_loss=0.1)
+        >>> corrected_pos, corrected_vel = policy.apply_policy(positions, velocities)
+        
+        Periodic domain wrapping:
+        >>> policy = WrapPolicy(domain_bounds=(100, 100))
+        >>> wrapped_positions = policy.apply_policy(positions, velocities)
+    """
+    
+    def apply_policy(
+        self, 
+        positions: np.ndarray, 
+        velocities: Optional[np.ndarray] = None
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """
+        Apply boundary policy to agent positions and optionally velocities.
+        
+        Args:
+            positions: Agent positions as array with shape (n_agents, 2) for multiple
+                agents or (2,) for single agent. Coordinates in environment units.
+            velocities: Optional agent velocities with same shape as positions.
+                Required for physics-based policies like bounce behavior.
+                
+        Returns:
+            Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]: 
+                - If velocities not provided: corrected positions array
+                - If velocities provided: tuple of (corrected_positions, corrected_velocities)
+                
+        Notes:
+            Policy application depends on boundary type:
+            - Terminate: positions returned unchanged (termination handled separately)
+            - Bounce: positions and velocities corrected for elastic/inelastic collisions
+            - Wrap: positions wrapped to opposite boundary with velocity preservation
+            - Clip: positions constrained to domain bounds with velocity zeroing
+            
+            Vectorized implementation processes all agents simultaneously for
+            performance optimization in multi-agent scenarios.
+            
+        Performance:
+            Must execute in <1ms for 100 agents with vectorized operations.
+            
+        Examples:
+            Position-only correction (clip policy):
+            >>> corrected_pos = policy.apply_policy(agent_positions)
+            
+            Physics-based correction (bounce policy):
+            >>> corrected_pos, corrected_vel = policy.apply_policy(
+            ...     agent_positions, agent_velocities
+            ... )
+            
+            Multi-agent batch processing:
+            >>> positions = np.array([[10, -5], [105, 50], [50, 110]])  # Some out of bounds
+            >>> corrected = policy.apply_policy(positions)
+        """
+        ...
+    
+    def check_violations(self, positions: np.ndarray) -> np.ndarray:
+        """
+        Detect boundary violations for given agent positions.
+        
+        Args:
+            positions: Agent positions as array with shape (n_agents, 2) for multiple
+                agents or (2,) for single agent. Coordinates in environment units.
+                
+        Returns:
+            np.ndarray: Boolean array with shape (n_agents,) or scalar bool for single
+                agent. True indicates boundary violation requiring policy application.
+                
+        Notes:
+            Violation detection is consistent across policy types but may trigger
+            different responses based on policy implementation. Efficient vectorized
+            implementation enables sub-millisecond checking for large agent populations.
+            
+            Violation criteria may include:
+            - Position outside domain bounds (all policies)
+            - Velocity pointing outward at boundary (bounce policy)
+            - Distance from boundary below threshold (predictive policies)
+            
+        Performance:
+            Must execute in <0.5ms for boundary detection across 100 agents.
+            
+        Examples:
+            Single agent violation check:
+            >>> position = np.array([105, 50])  # Outside domain
+            >>> violated = policy.check_violations(position)
+            >>> assert violated == True
+            
+            Multi-agent batch checking:
+            >>> positions = np.array([[50, 50], [105, 25], [25, 105]])
+            >>> violations = policy.check_violations(positions)
+            >>> # Returns [False, True, True] for domain bounds (100, 100)
+            
+            Performance monitoring:
+            >>> start_time = time.time()
+            >>> violations = policy.check_violations(large_position_array)
+            >>> assert (time.time() - start_time) < 0.0005  # <0.5ms requirement
+        """
+        ...
+    
+    def get_termination_status(self) -> str:
+        """
+        Get episode termination status for boundary policy.
+        
+        Returns:
+            str: Termination status string indicating boundary policy behavior.
+                Common values:
+                - "oob": Out of bounds termination (TerminatePolicy)
+                - "continue": Episode continues with correction (BouncePolicy, WrapPolicy, ClipPolicy)
+                - "boundary_contact": Boundary interaction without termination
+                - Policy-specific status codes for specialized behaviors
+                
+        Notes:
+            Termination status provides semantic information about boundary
+            interactions for episode management and data analysis. Status codes
+            are consistent within policy types but may vary between implementations.
+            
+            Non-terminating policies return "continue" to indicate normal episode
+            progression with boundary corrections applied.
+            
+        Performance:
+            Must execute in <0.1ms for immediate episode management decisions.
+            
+        Examples:
+            Termination boundary policy:
+            >>> policy = TerminatePolicy(domain_bounds=(100, 100))
+            >>> status = policy.get_termination_status()
+            >>> assert status == "oob"
+            
+            Reflection boundary policy:
+            >>> policy = BouncePolicy(domain_bounds=(100, 100))
+            >>> status = policy.get_termination_status()
+            >>> assert status == "continue"
+            
+            Status-based episode management:
+            >>> status = policy.get_termination_status()
+            >>> episode_done = (status == "oob")
+        """
+        ...
+
+
+@runtime_checkable
+class ActionInterfaceProtocol(Protocol):
+    """
+    Protocol defining standardized action space translation for RL framework integration.
+    
+    This protocol enables unified action handling across different control paradigms:
+    - Continuous2D: Continuous velocity/acceleration control with bounded action spaces
+    - CardinalDiscrete: Discrete directional commands (N, S, E, W, NE, NW, SE, SW, Stop)
+    - Custom implementations supporting specialized control schemes
+    
+    All implementations must provide action validation, space translation, and efficient
+    processing while maintaining compatibility with RL frameworks and navigation controllers.
+    
+    Key Design Principles:
+    - Action translation via translate_action() for RL-to-navigation command conversion
+    - Validation via validate_action() for constraint enforcement and safety
+    - Space definition via get_action_space() for Gymnasium compatibility
+    - Framework agnostic design supporting multiple RL libraries
+    
+    Performance Requirements:
+    - translate_action(): <0.1ms per agent for minimal control overhead
+    - validate_action(): <0.05ms per action for constraint checking
+    - get_action_space(): <1ms for space construction (called infrequently)
+    - Memory efficiency: <100 bytes per action for structured representations
+    
+    Examples:
+        Continuous velocity control:
+        >>> action_interface = Continuous2DAction(
+        ...     max_linear_velocity=2.0, 
+        ...     max_angular_velocity=45.0
+        ... )
+        >>> rl_action = np.array([0.8, -0.3])  # Normalized action
+        >>> nav_command = action_interface.translate_action(rl_action)
+        
+        Discrete directional control:
+        >>> action_interface = CardinalDiscreteAction()
+        >>> rl_action = 3  # Discrete action index
+        >>> nav_command = action_interface.translate_action(rl_action)
+        
+        Action space for RL training:
+        >>> action_space = action_interface.get_action_space()
+        >>> assert isinstance(action_space, gymnasium.spaces.Space)
+    """
+    
+    def translate_action(
+        self, 
+        action: Union[np.ndarray, int, float, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Translate RL framework action to navigation controller commands.
+        
+        Args:
+            action: RL action in framework-specific format. Supported types:
+                - np.ndarray: Continuous control vectors (velocity, acceleration)
+                - int: Discrete action indices for directional commands
+                - float: Scalar actions for 1D control
+                - Dict[str, Any]: Structured actions for complex control schemes
+                
+        Returns:
+            Dict[str, Any]: Navigation command dictionary with standardized keys:
+                - 'linear_velocity': Target linear velocity (float)
+                - 'angular_velocity': Target angular velocity (float)
+                - 'action_type': Control scheme identifier (str)
+                - Additional keys for specialized control modes
+                
+        Notes:
+            Translation handles scaling, bounds checking, and coordinate transformations
+            between RL action spaces and navigation controller interfaces. Output
+            format is consistent across action interface implementations.
+            
+            Continuous actions are typically normalized to [-1, 1] range in RL
+            frameworks and scaled to physical units during translation.
+            
+        Performance:
+            Must execute in <0.1ms per agent for minimal control overhead.
+            
+        Examples:
+            Continuous action translation:
+            >>> rl_action = np.array([0.5, -0.2])  # [linear_vel_norm, angular_vel_norm]
+            >>> command = action_interface.translate_action(rl_action)
+            >>> assert 'linear_velocity' in command
+            >>> assert 'angular_velocity' in command
+            
+            Discrete action translation:
+            >>> rl_action = 2  # East direction
+            >>> command = action_interface.translate_action(rl_action)
+            >>> assert command['linear_velocity'] > 0
+            >>> assert abs(command['angular_velocity']) < 1e-6  # Straight movement
+            
+            Structured action translation:
+            >>> rl_action = {'target_velocity': 1.5, 'turn_rate': 10.0}
+            >>> command = action_interface.translate_action(rl_action)
+        """
+        ...
+    
+    def validate_action(
+        self, 
+        action: Union[np.ndarray, int, float, Dict[str, Any]]
+    ) -> bool:
+        """
+        Validate action compliance with interface constraints and safety limits.
+        
+        Args:
+            action: RL action to validate in same format as translate_action().
+                
+        Returns:
+            bool: True if action is valid and safe to execute, False otherwise.
+                
+        Notes:
+            Validation includes:
+            - Bounds checking for continuous actions (within normalized ranges)
+            - Index validation for discrete actions (valid action indices)
+            - Safety constraints (maximum velocities, acceleration limits)
+            - Type checking and format validation
+            
+            Invalid actions should be rejected before translation to prevent
+            unsafe navigation commands or system errors.
+            
+        Performance:
+            Must execute in <0.05ms per action for constraint checking.
+            
+        Examples:
+            Continuous action validation:
+            >>> rl_action = np.array([0.5, -0.2])  # Valid normalized action
+            >>> assert action_interface.validate_action(rl_action) == True
+            >>> 
+            >>> invalid_action = np.array([2.0, -3.0])  # Out of bounds
+            >>> assert action_interface.validate_action(invalid_action) == False
+            
+            Discrete action validation:
+            >>> valid_action = 5  # Valid direction index
+            >>> assert action_interface.validate_action(valid_action) == True
+            >>> 
+            >>> invalid_action = 15  # Invalid index
+            >>> assert action_interface.validate_action(invalid_action) == False
+            
+            Batch validation:
+            >>> actions = [np.array([0.1, 0.2]), np.array([1.5, 0.0])]
+            >>> validity = [action_interface.validate_action(a) for a in actions]
+            >>> # Returns [True, False] for valid and invalid actions
+        """
+        ...
+    
+    def get_action_space(self) -> Optional['spaces.Space']:
+        """
+        Construct Gymnasium action space definition for RL framework integration.
+        
+        Returns:
+            Optional[spaces.Space]: Gymnasium action space defining valid action
+                structure and value ranges. Returns None if Gymnasium is not available.
+                Common space types:
+                - spaces.Box: Continuous control with bounded ranges
+                - spaces.Discrete: Discrete action indices  
+                - spaces.Dict: Structured action dictionaries
+                - spaces.MultiDiscrete: Multiple discrete action dimensions
+                
+        Notes:
+            Action space automatically reflects interface configuration including
+            bounds, discrete action counts, and control modality constraints.
+            
+            Space definition must be consistent with translate_action() and
+            validate_action() methods for proper RL framework integration.
+            
+        Performance:
+            Must execute in <1ms for space construction (called infrequently).
+            
+        Examples:
+            Continuous control space:
+            >>> action_space = action_interface.get_action_space()
+            >>> assert isinstance(action_space, gymnasium.spaces.Box)
+            >>> assert action_space.shape == (2,)  # [linear_vel, angular_vel]
+            >>> assert np.all(action_space.low == -1.0)
+            >>> assert np.all(action_space.high == 1.0)
+            
+            Discrete control space:
+            >>> action_space = action_interface.get_action_space()
+            >>> assert isinstance(action_space, gymnasium.spaces.Discrete)
+            >>> assert action_space.n == 9  # 8 directions + stop
+            
+            Space-action consistency:
+            >>> action_space = action_interface.get_action_space()
+            >>> sample_action = action_space.sample()
+            >>> assert action_interface.validate_action(sample_action) == True
+        """
+        ...
+
+
+@runtime_checkable
+class RecorderProtocol(Protocol):
+    """
+    Protocol defining comprehensive data recording interfaces for experiment persistence.
+    
+    This protocol enables configurable data collection with multiple storage backends:
+    - ParquetBackend: Columnar storage with compression for large trajectory datasets
+    - HDF5Backend: Hierarchical scientific data format with metadata support
+    - SQLiteBackend: Embedded database for structured queries and analysis
+    - NoneBackend: Disabled recording for performance-critical scenarios
+    
+    All implementations must provide buffered I/O, compression options, and structured
+    output organization while maintaining minimal performance impact on simulation.
+    
+    Key Design Principles:
+    - Step recording via record_step() for detailed trajectory capture
+    - Episode recording via record_episode() for summary data persistence
+    - Data export via export_data() for analysis and visualization
+    - Performance-aware buffering with configurable granularity
+    
+    Performance Requirements:
+    - record_step(): <0.1ms overhead when recording disabled, <1ms when enabled
+    - record_episode(): <10ms for episode finalization and metadata storage
+    - export_data(): <100ms for typical dataset export with compression
+    - Memory efficiency: Configurable buffering with backpressure handling
+    
+    Examples:
+        High-frequency step recording:
+        >>> recorder = ParquetRecorder(
+        ...     output_dir="./data", 
+        ...     buffer_size=1000,
+        ...     compression="snappy"
+        ... )
+        >>> for step in range(episode_length):
+        ...     state_data = {'position': agent_pos, 'concentration': odor_level}
+        ...     recorder.record_step(state_data, step_number=step)
+        
+        Episode-level data collection:
+        >>> episode_data = {
+        ...     'total_steps': 250,
+        ...     'success': True,
+        ...     'final_position': (85, 92),
+        ...     'path_efficiency': 0.75
+        ... }
+        >>> recorder.record_episode(episode_data, episode_id=42)
+        
+        Data export for analysis:
+        >>> recorder.export_data(
+        ...     format="parquet", 
+        ...     compression="gzip",
+        ...     output_file="experiment_results.parquet"
+        ... )
+    """
+    
+    def record_step(
+        self, 
+        step_data: Dict[str, Any], 
+        step_number: int,
+        episode_id: Optional[int] = None,
+        **metadata: Any
+    ) -> None:
+        """
+        Record simulation state data for a single time step.
+        
+        Args:
+            step_data: Dictionary containing step-level measurements and state.
+                Common keys include:
+                - 'position': Agent position coordinates
+                - 'velocity': Agent velocity vector
+                - 'concentration': Sampled odor concentration
+                - 'action': Applied navigation command
+                - 'reward': Step reward value
+                - Additional domain-specific measurements
+            step_number: Sequential step index within current episode (0-based).
+            episode_id: Optional episode identifier for data organization.
+            **metadata: Additional metadata for step context and debugging.
+                
+        Notes:
+            Step recording provides detailed trajectory capture for analysis and
+            visualization. Data is buffered for performance and flushed based on
+            buffer size and timing configurations.
+            
+            Recording granularity is configurable - high-frequency recording
+            captures every simulation step while reduced frequency captures
+            periodic snapshots for memory efficiency.
+            
+        Performance:
+            Must execute in <0.1ms when recording disabled, <1ms when enabled.
+            
+        Examples:
+            Basic step recording:
+            >>> step_data = {
+            ...     'position': np.array([45.2, 78.1]),
+            ...     'concentration': 0.23,
+            ...     'action': {'linear_velocity': 1.5, 'angular_velocity': 0.0}
+            ... }
+            >>> recorder.record_step(step_data, step_number=125)
+            
+            Multi-agent step recording:
+            >>> step_data = {
+            ...     'positions': np.array([[45, 78], [52, 81], [49, 75]]),
+            ...     'concentrations': np.array([0.23, 0.31, 0.18]),
+            ...     'rewards': np.array([0.1, 0.2, 0.05])
+            ... }
+            >>> recorder.record_step(step_data, step_number=125, episode_id=42)
+            
+            Performance monitoring:
+            >>> import time
+            >>> start = time.time()
+            >>> recorder.record_step(step_data, step_number=125)
+            >>> duration = time.time() - start
+            >>> assert duration < 0.001  # <1ms requirement
+        """
+        ...
+    
+    def record_episode(
+        self, 
+        episode_data: Dict[str, Any], 
+        episode_id: int,
+        **metadata: Any
+    ) -> None:
+        """
+        Record episode-level summary data and metrics.
+        
+        Args:
+            episode_data: Dictionary containing episode summary information.
+                Common keys include:
+                - 'total_steps': Episode length in simulation steps
+                - 'success': Boolean success indicator
+                - 'final_position': Agent position at episode end
+                - 'total_reward': Cumulative episode reward
+                - 'path_efficiency': Navigation performance metric
+                - 'exploration_coverage': Spatial coverage measure
+                - Additional domain-specific episode metrics
+            episode_id: Unique episode identifier for data organization.
+            **metadata: Additional metadata for episode context and configuration.
+                
+        Notes:
+            Episode recording provides summary statistics and metadata for
+            experimental analysis and comparison. Data includes both computed
+            metrics and configuration snapshots for reproducibility.
+            
+            Episode finalization may trigger buffer flushing and file system
+            organization based on recorder configuration.
+            
+        Performance:
+            Must execute in <10ms for episode finalization and metadata storage.
+            
+        Examples:
+            Successful episode recording:
+            >>> episode_data = {
+            ...     'total_steps': 245,
+            ...     'success': True,
+            ...     'final_position': (87.3, 91.8),
+            ...     'total_reward': 12.4,
+            ...     'path_efficiency': 0.78
+            ... }
+            >>> recorder.record_episode(episode_data, episode_id=42)
+            
+            Failed episode with diagnostics:
+            >>> episode_data = {
+            ...     'total_steps': 500,  # Max steps reached
+            ...     'success': False,
+            ...     'final_position': (23.1, 45.7),
+            ...     'total_reward': -2.1,
+            ...     'termination_reason': 'timeout'
+            ... }
+            >>> recorder.record_episode(episode_data, episode_id=43)
+            
+            Episode with configuration snapshot:
+            >>> recorder.record_episode(
+            ...     episode_data, episode_id=44,
+            ...     config_snapshot=current_config,
+            ...     random_seed=12345
+            ... )
+        """
+        ...
+    
+    def export_data(
+        self, 
+        output_path: str,
+        format: str = "parquet",
+        compression: Optional[str] = None,
+        filter_episodes: Optional[List[int]] = None,
+        **export_options: Any
+    ) -> bool:
+        """
+        Export recorded data to specified file format and location.
+        
+        Args:
+            output_path: File system path for exported data output.
+            format: Export format specification. Supported formats:
+                - "parquet": Columnar format with excellent compression
+                - "hdf5": Hierarchical scientific data format
+                - "csv": Human-readable comma-separated values
+                - "json": JSON format for structured data exchange
+            compression: Optional compression method (format-specific).
+                - Parquet: "snappy", "gzip", "brotli", "lz4"
+                - HDF5: "gzip", "lzf", "szip"
+            filter_episodes: Optional list of episode IDs to export (default: all).
+            **export_options: Additional format-specific export parameters.
+                
+        Returns:
+            bool: True if export completed successfully, False otherwise.
+                
+        Notes:
+            Export operation consolidates buffered data and generates output files
+            with appropriate compression and metadata. Large datasets may require
+            streaming export to manage memory usage.
+            
+            Export includes both step-level trajectory data and episode-level
+            summary information organized for analysis workflows.
+            
+        Performance:
+            Must execute in <100ms for typical dataset export with compression.
+            
+        Examples:
+            Parquet export with compression:
+            >>> success = recorder.export_data(
+            ...     output_path="./results/experiment_001.parquet",
+            ...     format="parquet",
+            ...     compression="snappy"
+            ... )
+            >>> assert success == True
+            
+            Filtered episode export:
+            >>> success = recorder.export_data(
+            ...     output_path="./results/successful_episodes.csv",
+            ...     format="csv",
+            ...     filter_episodes=[42, 47, 51, 63]
+            ... )
+            
+            HDF5 export with metadata:
+            >>> success = recorder.export_data(
+            ...     output_path="./results/full_dataset.h5",
+            ...     format="hdf5",
+            ...     compression="gzip",
+            ...     include_metadata=True,
+            ...     chunking_strategy="auto"
+            ... )
+        """
+        ...
+
+
+@runtime_checkable
+class StatsAggregatorProtocol(Protocol):
+    """
+    Protocol defining automated statistics collection for research-focused metrics.
+    
+    This protocol enables standardized analysis and summary generation:
+    - Episode-level metrics calculation with statistical measures
+    - Run-level aggregation across multiple episodes for comparative analysis  
+    - Automated summary export in standardized formats for publication
+    - Custom metric definitions and calculation frameworks
+    
+    All implementations must provide efficient statistical computation and structured
+    output generation while maintaining research reproducibility and comparison standards.
+    
+    Key Design Principles:
+    - Episode analysis via calculate_episode_stats() for detailed performance metrics
+    - Run aggregation via calculate_run_stats() for comparative study support
+    - Summary export via export_summary() for standardized research reporting
+    - Extensible metric definitions for domain-specific analysis requirements
+    
+    Performance Requirements:
+    - calculate_episode_stats(): <10ms for episode-level metric computation
+    - calculate_run_stats(): <100ms for multi-episode aggregation analysis
+    - export_summary(): <50ms for summary generation and file output
+    - Memory efficiency: <50MB for typical experimental dataset analysis
+    
+    Examples:
+        Episode performance analysis:
+        >>> aggregator = StandardStatsAggregator()
+        >>> episode_metrics = aggregator.calculate_episode_stats(
+        ...     trajectory_data=episode_trajectories,
+        ...     episode_id=42
+        ... )
+        >>> assert 'path_efficiency' in episode_metrics
+        >>> assert 'exploration_coverage' in episode_metrics
+        
+        Multi-episode comparative analysis:
+        >>> run_metrics = aggregator.calculate_run_stats(
+        ...     episode_data_list=all_episodes,
+        ...     run_id="experiment_001"
+        ... )
+        >>> assert 'success_rate' in run_metrics
+        >>> assert 'mean_path_efficiency' in run_metrics
+        
+        Research summary generation:
+        >>> aggregator.export_summary(
+        ...     output_path="./results/summary.json",
+        ...     include_distributions=True,
+        ...     statistical_tests=["t_test", "anova"]
+        ... )
+    """
+    
+    def calculate_episode_stats(
+        self, 
+        trajectory_data: Dict[str, Any],
+        episode_id: int,
+        custom_metrics: Optional[Dict[str, callable]] = None
+    ) -> Dict[str, float]:
+        """
+        Calculate comprehensive statistics for a single episode.
+        
+        Args:
+            trajectory_data: Dictionary containing episode trajectory information.
+                Expected keys include:
+                - 'positions': Agent position time series
+                - 'concentrations': Odor concentration measurements
+                - 'actions': Applied navigation commands
+                - 'rewards': Step-wise reward values
+                - 'timestamps': Temporal information
+                - Additional domain-specific trajectory data
+            episode_id: Unique episode identifier for metric correlation.
+            custom_metrics: Optional dictionary of custom metric calculation functions.
+                
+        Returns:
+            Dict[str, float]: Dictionary of calculated episode-level metrics including:
+                - 'path_efficiency': Ratio of direct distance to actual path length
+                - 'exploration_coverage': Fraction of domain area explored
+                - 'mean_concentration': Average odor concentration encountered
+                - 'success_indicator': Binary success metric (1.0 if successful)
+                - 'total_reward': Cumulative episode reward
+                - 'episode_length': Number of simulation steps
+                - Additional computed and custom metrics
+                
+        Notes:
+            Metric calculation uses standard statistical methods and domain-specific
+            algorithms appropriate for navigation analysis. Custom metrics enable
+            specialized analysis for research-specific requirements.
+            
+            All metrics are computed as floating-point values for consistent
+            analysis and comparison across episodes and experimental conditions.
+            
+        Performance:
+            Must execute in <10ms for episode-level metric computation.
+            
+        Examples:
+            Standard episode analysis:
+            >>> trajectory_data = {
+            ...     'positions': position_time_series,
+            ...     'concentrations': concentration_measurements,
+            ...     'actions': action_sequence,
+            ...     'rewards': reward_time_series
+            ... }
+            >>> metrics = aggregator.calculate_episode_stats(trajectory_data, episode_id=42)
+            >>> print(f"Path efficiency: {metrics['path_efficiency']:.3f}")
+            >>> print(f"Success: {bool(metrics['success_indicator'])}")
+            
+            Custom metric integration:
+            >>> def custom_tortuosity(trajectory_data):
+            ...     positions = trajectory_data['positions']
+            ...     # Calculate path tortuosity metric
+            ...     return computed_tortuosity
+            >>> 
+            >>> custom_metrics = {'tortuosity': custom_tortuosity}
+            >>> metrics = aggregator.calculate_episode_stats(
+            ...     trajectory_data, episode_id=42, custom_metrics=custom_metrics
+            ... )
+            >>> assert 'tortuosity' in metrics
+            
+            Performance validation:
+            >>> import time
+            >>> start = time.time()
+            >>> metrics = aggregator.calculate_episode_stats(trajectory_data, episode_id=42)
+            >>> duration = time.time() - start
+            >>> assert duration < 0.01  # <10ms requirement
+        """
+        ...
+    
+    def calculate_run_stats(
+        self, 
+        episode_data_list: List[Dict[str, Any]],
+        run_id: str,
+        statistical_tests: Optional[List[str]] = None
+    ) -> Dict[str, float]:
+        """
+        Calculate aggregate statistics across multiple episodes for run-level analysis.
+        
+        Args:
+            episode_data_list: List of episode data dictionaries from calculate_episode_stats().
+                Each dictionary contains episode-level metrics and metadata.
+            run_id: Unique run identifier for experimental tracking and comparison.
+            statistical_tests: Optional list of statistical tests to perform.
+                Supported tests: ["t_test", "anova", "ks_test", "wilcoxon"]
+                
+        Returns:
+            Dict[str, float]: Dictionary of run-level aggregate metrics including:
+                - 'success_rate': Fraction of successful episodes
+                - 'mean_path_efficiency': Average path efficiency across episodes
+                - 'std_path_efficiency': Standard deviation of path efficiency
+                - 'mean_episode_length': Average episode duration
+                - 'total_episodes': Number of episodes in run
+                - 'confidence_intervals': Statistical confidence bounds (if requested)
+                - Additional aggregated metrics and statistical test results
+                
+        Notes:
+            Run-level analysis provides statistical summary across episode populations
+            for experimental comparison and hypothesis testing. Statistical tests
+            enable rigorous analysis of experimental differences and significance.
+            
+            Aggregate metrics include central tendency, variability, and distribution
+            characteristics appropriate for research publication and comparison.
+            
+        Performance:
+            Must execute in <100ms for multi-episode aggregation analysis.
+            
+        Examples:
+            Standard run analysis:
+            >>> episode_data_list = [episode_metrics_1, episode_metrics_2, ...]
+            >>> run_metrics = aggregator.calculate_run_stats(
+            ...     episode_data_list, run_id="experiment_001"
+            ... )
+            >>> print(f"Success rate: {run_metrics['success_rate']:.2%}")
+            >>> print(f"Mean efficiency: {run_metrics['mean_path_efficiency']:.3f}")
+            
+            Statistical hypothesis testing:
+            >>> run_metrics = aggregator.calculate_run_stats(
+            ...     episode_data_list, 
+            ...     run_id="experiment_001",
+            ...     statistical_tests=["t_test", "anova"]
+            ... )
+            >>> assert 't_test_p_value' in run_metrics
+            >>> assert 'anova_f_statistic' in run_metrics
+            
+            Comparative analysis:
+            >>> control_metrics = aggregator.calculate_run_stats(control_episodes, "control")
+            >>> treatment_metrics = aggregator.calculate_run_stats(treatment_episodes, "treatment")
+            >>> improvement = (treatment_metrics['success_rate'] - 
+            ...               control_metrics['success_rate']) / control_metrics['success_rate']
+            >>> print(f"Performance improvement: {improvement:.1%}")
+        """
+        ...
+    
+    def export_summary(
+        self, 
+        output_path: str,
+        run_data: Optional[Dict[str, Any]] = None,
+        include_distributions: bool = False,
+        format: str = "json"
+    ) -> bool:
+        """
+        Generate and export standardized summary report for research publication.
+        
+        Args:
+            output_path: File system path for summary report output.
+            run_data: Optional run-level data from calculate_run_stats() for inclusion.
+            include_distributions: Include distribution plots and histograms in summary.
+            format: Output format specification ("json", "yaml", "markdown", "latex").
+                
+        Returns:
+            bool: True if summary export completed successfully, False otherwise.
+                
+        Notes:
+            Summary export generates publication-ready reports with standardized
+            metrics, statistical analysis, and optional visualizations. Output
+            format supports research workflows and publication requirements.
+            
+            Summary includes experiment configuration, statistical results, and
+            performance metrics organized for clear presentation and comparison.
+            
+        Performance:
+            Must execute in <50ms for summary generation and file output.
+            
+        Examples:
+            JSON summary export:
+            >>> success = aggregator.export_summary(
+            ...     output_path="./results/experiment_summary.json",
+            ...     run_data=run_metrics,
+            ...     include_distributions=False
+            ... )
+            >>> assert success == True
+            
+            Markdown report with visualizations:
+            >>> success = aggregator.export_summary(
+            ...     output_path="./results/experiment_report.md",
+            ...     run_data=run_metrics,
+            ...     include_distributions=True,
+            ...     format="markdown"
+            ... )
+            
+            LaTeX summary for publication:
+            >>> success = aggregator.export_summary(
+            ...     output_path="./results/paper_summary.tex",
+            ...     run_data=run_metrics,
+            ...     format="latex",
+            ...     citation_style="ieee"
+            ... )
+        """
+        ...
+
+
+@runtime_checkable
+class AgentInitializerProtocol(Protocol):
+    """
+    Protocol defining configurable agent initialization strategies for diverse experimental setups.
+    
+    This protocol enables flexible starting position generation patterns:
+    - UniformRandomInitializer: Random positions with uniform spatial distribution
+    - GridInitializer: Regular grid patterns for systematic spatial coverage
+    - FixedListInitializer: Predetermined position lists for reproducible experiments
+    - DatasetInitializer: Position loading from experimental datasets or files
+    
+    All implementations must provide deterministic seeding, domain validation, and
+    efficient position generation while supporting both single and multi-agent scenarios.
+    
+    Key Design Principles:
+    - Position generation via initialize_positions() for flexible starting configurations
+    - Domain validation via validate_domain() for spatial constraint enforcement
+    - State management via reset() for deterministic experiment reproducibility
+    - Strategy identification via get_strategy_name() for experimental tracking
+    
+    Performance Requirements:
+    - initialize_positions(): <5ms for 100 agents with spatial distribution algorithms
+    - validate_domain(): <1ms for position constraint checking and validation
+    - reset(): <1ms for strategy state reset with deterministic seeding
+    - Memory efficiency: <10MB for position generation and validation state
+    
+    Examples:
+        Random spatial distribution:
+        >>> initializer = UniformRandomInitializer(
+        ...     domain_bounds=(100, 100),
+        ...     seed=42
+        ... )
+        >>> positions = initializer.initialize_positions(num_agents=50)
+        >>> assert positions.shape == (50, 2)
+        
+        Regular grid arrangement:
+        >>> initializer = GridInitializer(
+        ...     domain_bounds=(100, 100),
+        ...     grid_spacing=10.0
+        ... )
+        >>> positions = initializer.initialize_positions(num_agents=25)
+        
+        Reproducible experiment setup:
+        >>> initializer.reset(seed=12345)
+        >>> positions_1 = initializer.initialize_positions(num_agents=10)
+        >>> initializer.reset(seed=12345)
+        >>> positions_2 = initializer.initialize_positions(num_agents=10)
+        >>> assert np.allclose(positions_1, positions_2)  # Deterministic reproduction
+    """
+    
+    def initialize_positions(
+        self, 
+        num_agents: int,
+        **kwargs: Any
+    ) -> np.ndarray:
+        """
+        Generate initial agent positions based on configured strategy.
+        
+        Args:
+            num_agents: Number of agent positions to generate (must be positive).
+            **kwargs: Additional strategy-specific parameters for position generation.
+                Common parameters include:
+                - exclusion_zones: List of spatial regions to avoid
+                - clustering_factor: Spatial clustering strength for grouped initialization
+                - minimum_distance: Minimum separation between agent positions
+                - boundary_margin: Margin from domain edges for position placement
+                
+        Returns:
+            np.ndarray: Agent positions as array with shape (num_agents, 2) containing
+                [x, y] coordinates in environment coordinate system. All positions
+                guaranteed to be within domain bounds and satisfy strategy constraints.
+                
+        Notes:
+            Position generation follows strategy-specific algorithms with deterministic
+            behavior based on internal random state. Validation ensures all generated
+            positions comply with domain constraints and strategy requirements.
+            
+            Multi-agent scenarios may include collision avoidance and spatial
+            distribution optimization for realistic initialization patterns.
+            
+        Performance:
+            Must execute in <5ms for 100 agents with spatial distribution algorithms.
+            
+        Examples:
+            Basic position generation:
+            >>> positions = initializer.initialize_positions(num_agents=25)
+            >>> assert positions.shape == (25, 2)
+            >>> assert np.all(positions >= 0)  # Within domain bounds
+            >>> assert np.all(positions[:, 0] <= domain_width)
+            >>> assert np.all(positions[:, 1] <= domain_height)
+            
+            Constrained initialization:
+            >>> exclusion_zones = [{'center': (50, 50), 'radius': 15}]
+            >>> positions = initializer.initialize_positions(
+            ...     num_agents=20,
+            ...     exclusion_zones=exclusion_zones,
+            ...     minimum_distance=5.0
+            ... )
+            
+            Performance validation:
+            >>> import time
+            >>> start = time.time()
+            >>> positions = initializer.initialize_positions(num_agents=100)
+            >>> duration = time.time() - start
+            >>> assert duration < 0.005  # <5ms requirement
+        """
+        ...
+    
+    def validate_domain(
+        self, 
+        positions: np.ndarray,
+        domain_bounds: Tuple[float, float]
+    ) -> bool:
+        """
+        Validate that positions comply with domain constraints and strategy requirements.
+        
+        Args:
+            positions: Agent positions to validate as array with shape (n_agents, 2).
+            domain_bounds: Spatial domain limits as (width, height) tuple.
+                
+        Returns:
+            bool: True if all positions are valid and compliant, False otherwise.
+                
+        Notes:
+            Validation includes:
+            - Boundary checking for domain compliance
+            - Strategy-specific constraint verification
+            - Collision detection and minimum distance requirements
+            - Exclusion zone compliance and spatial restrictions
+            
+            Validation provides diagnostic feedback for position generation
+            debugging and constraint satisfaction verification.
+            
+        Performance:
+            Must execute in <1ms for position constraint checking and validation.
+            
+        Examples:
+            Domain boundary validation:
+            >>> positions = np.array([[25, 30], [75, 80], [10, 90]])
+            >>> domain_bounds = (100, 100)
+            >>> is_valid = initializer.validate_domain(positions, domain_bounds)
+            >>> assert is_valid == True
+            
+            Invalid position detection:
+            >>> invalid_positions = np.array([[150, 50], [50, 150]])  # Out of bounds
+            >>> is_valid = initializer.validate_domain(invalid_positions, domain_bounds)
+            >>> assert is_valid == False
+            
+            Strategy constraint validation:
+            >>> grid_initializer = GridInitializer(grid_spacing=20.0)
+            >>> positions = grid_initializer.initialize_positions(num_agents=9)
+            >>> is_valid = grid_initializer.validate_domain(positions, domain_bounds)
+            >>> assert is_valid == True  # Grid spacing satisfied
+        """
+        ...
+    
+    def reset(self, seed: Optional[int] = None, **kwargs: Any) -> None:
+        """
+        Reset initializer state for deterministic position generation.
+        
+        Args:
+            seed: Optional random seed for deterministic behavior reproduction.
+            **kwargs: Additional reset parameters for strategy-specific state.
+                
+        Notes:
+            Reset operation reinitializes internal random number generators and
+            strategy-specific state for reproducible experiment conditions.
+            
+            Deterministic seeding enables exact reproduction of initialization
+            patterns for scientific reproducibility and debugging workflows.
+            
+        Performance:
+            Must execute in <1ms for strategy state reset with deterministic seeding.
+            
+        Examples:
+            Deterministic reset:
+            >>> initializer.reset(seed=42)
+            >>> positions_1 = initializer.initialize_positions(num_agents=10)
+            >>> initializer.reset(seed=42)
+            >>> positions_2 = initializer.initialize_positions(num_agents=10)
+            >>> assert np.array_equal(positions_1, positions_2)
+            
+            Strategy state reset:
+            >>> grid_initializer.reset(grid_origin=(10, 10), grid_spacing=15.0)
+            >>> positions = grid_initializer.initialize_positions(num_agents=16)
+            
+            Random state validation:
+            >>> import time
+            >>> start = time.time()
+            >>> initializer.reset(seed=123)
+            >>> duration = time.time() - start
+            >>> assert duration < 0.001  # <1ms requirement
+        """
+        ...
+    
+    def get_strategy_name(self) -> str:
+        """
+        Get human-readable strategy name for experimental tracking and logging.
+        
+        Returns:
+            str: Strategy identifier string for documentation and analysis.
+                Common names include:
+                - "uniform_random": Uniform spatial distribution
+                - "grid": Regular grid pattern
+                - "fixed_list": Predetermined position list
+                - "dataset": External dataset loading
+                - Strategy-specific identifiers for custom implementations
+                
+        Notes:
+            Strategy names provide consistent identification for experimental
+            tracking, configuration documentation, and analysis workflows.
+            
+            Names should be descriptive and unique within the initialization
+            framework for clear experimental record keeping.
+            
+        Examples:
+            Strategy identification:
+            >>> strategy_name = initializer.get_strategy_name()
+            >>> assert isinstance(strategy_name, str)
+            >>> assert len(strategy_name) > 0
+            
+            Experimental logging:
+            >>> experiment_config = {
+            ...     'initialization_strategy': initializer.get_strategy_name(),
+            ...     'num_agents': 25,
+            ...     'domain_bounds': (100, 100)
+            ... }
+            >>> log_experiment_setup(experiment_config)
+            
+            Strategy comparison:
+            >>> strategies = [init1.get_strategy_name(), init2.get_strategy_name()]
+            >>> assert strategies[0] != strategies[1]  # Different strategies
+        """
+        ...
+
 
 @runtime_checkable
 class PlumeModelProtocol(Protocol):
@@ -2031,31 +3322,347 @@ class NavigatorFactory:
         return sensors
 
     @staticmethod
+    def create_source(config: Union[DictConfig, dict]) -> 'SourceProtocol':
+        """
+        Create source from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying source type and parameters.
+                
+        Returns:
+            SourceProtocol: Configured source implementation.
+            
+        Examples:
+            Point source:
+            >>> config = {'type': 'PointSource', 'position': (50, 50), 'emission_rate': 1000.0}
+            >>> source = NavigatorFactory.create_source(config)
+            
+            Dynamic source:
+            >>> config = {
+            ...     'type': 'DynamicSource',
+            ...     'initial_position': (25, 75),
+            ...     'emission_pattern': 'sinusoidal'
+            ... }
+            >>> source = NavigatorFactory.create_source(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            source_type = _get_config_value(config, 'type', 'PointSource')
+            
+            try:
+                if source_type == 'PointSource':
+                    from ..core.sources import PointSource
+                    return PointSource(**{k: v for k, v in config.items() if k != 'type'})
+                elif source_type == 'MultiSource':
+                    from ..core.sources import MultiSource
+                    return MultiSource(**{k: v for k, v in config.items() if k != 'type'})
+                elif source_type == 'DynamicSource':
+                    from ..core.sources import DynamicSource
+                    return DynamicSource(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown source type: {source_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Source implementation not available: {source_type}. "
+                    f"Ensure the source module has been created. Error: {e}"
+                )
+
+    @staticmethod
+    def create_boundary_policy(config: Union[DictConfig, dict]) -> 'BoundaryPolicyProtocol':
+        """
+        Create boundary policy from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying boundary policy type and parameters.
+                
+        Returns:
+            BoundaryPolicyProtocol: Configured boundary policy implementation.
+            
+        Examples:
+            Terminate boundary:
+            >>> config = {'type': 'TerminatePolicy', 'domain_bounds': (100, 100)}
+            >>> policy = NavigatorFactory.create_boundary_policy(config)
+            
+            Bounce boundary:
+            >>> config = {
+            ...     'type': 'BouncePolicy',
+            ...     'domain_bounds': (100, 100),
+            ...     'energy_loss': 0.1
+            ... }
+            >>> policy = NavigatorFactory.create_boundary_policy(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            policy_type = _get_config_value(config, 'type', 'TerminatePolicy')
+            
+            try:
+                if policy_type == 'TerminatePolicy':
+                    from ..core.boundaries import TerminatePolicy
+                    return TerminatePolicy(**{k: v for k, v in config.items() if k != 'type'})
+                elif policy_type == 'BouncePolicy':
+                    from ..core.boundaries import BouncePolicy
+                    return BouncePolicy(**{k: v for k, v in config.items() if k != 'type'})
+                elif policy_type == 'WrapPolicy':
+                    from ..core.boundaries import WrapPolicy
+                    return WrapPolicy(**{k: v for k, v in config.items() if k != 'type'})
+                elif policy_type == 'ClipPolicy':
+                    from ..core.boundaries import ClipPolicy
+                    return ClipPolicy(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown boundary policy type: {policy_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Boundary policy implementation not available: {policy_type}. "
+                    f"Ensure the boundary policy module has been created. Error: {e}"
+                )
+
+    @staticmethod
+    def create_action_interface(config: Union[DictConfig, dict]) -> 'ActionInterfaceProtocol':
+        """
+        Create action interface from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying action interface type and parameters.
+                
+        Returns:
+            ActionInterfaceProtocol: Configured action interface implementation.
+            
+        Examples:
+            Continuous 2D control:
+            >>> config = {
+            ...     'type': 'Continuous2D',
+            ...     'max_linear_velocity': 2.0,
+            ...     'max_angular_velocity': 45.0
+            ... }
+            >>> action_interface = NavigatorFactory.create_action_interface(config)
+            
+            Cardinal discrete control:
+            >>> config = {'type': 'CardinalDiscrete', 'action_count': 9}
+            >>> action_interface = NavigatorFactory.create_action_interface(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            interface_type = _get_config_value(config, 'type', 'Continuous2D')
+            
+            try:
+                if interface_type == 'Continuous2D':
+                    from ..core.actions import Continuous2DAction
+                    return Continuous2DAction(**{k: v for k, v in config.items() if k != 'type'})
+                elif interface_type == 'CardinalDiscrete':
+                    from ..core.actions import CardinalDiscreteAction
+                    return CardinalDiscreteAction(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown action interface type: {interface_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Action interface implementation not available: {interface_type}. "
+                    f"Ensure the action interface module has been created. Error: {e}"
+                )
+
+    @staticmethod
+    def create_recorder(config: Union[DictConfig, dict]) -> 'RecorderProtocol':
+        """
+        Create recorder from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying recorder backend and parameters.
+                
+        Returns:
+            RecorderProtocol: Configured recorder implementation.
+            
+        Examples:
+            Parquet recorder:
+            >>> config = {
+            ...     'type': 'ParquetRecorder',
+            ...     'output_dir': './data',
+            ...     'compression': 'snappy'
+            ... }
+            >>> recorder = NavigatorFactory.create_recorder(config)
+            
+            HDF5 recorder:
+            >>> config = {
+            ...     'type': 'HDF5Recorder',
+            ...     'output_dir': './data',
+            ...     'compression': 'gzip'
+            ... }
+            >>> recorder = NavigatorFactory.create_recorder(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            recorder_type = _get_config_value(config, 'type', 'ParquetRecorder')
+            
+            try:
+                if recorder_type == 'ParquetRecorder':
+                    from ..recording.backends.parquet_backend import ParquetRecorder
+                    return ParquetRecorder(**{k: v for k, v in config.items() if k != 'type'})
+                elif recorder_type == 'HDF5Recorder':
+                    from ..recording.backends.hdf5_backend import HDF5Recorder
+                    return HDF5Recorder(**{k: v for k, v in config.items() if k != 'type'})
+                elif recorder_type == 'SQLiteRecorder':
+                    from ..recording.backends.sqlite_backend import SQLiteRecorder
+                    return SQLiteRecorder(**{k: v for k, v in config.items() if k != 'type'})
+                elif recorder_type == 'NoneRecorder':
+                    from ..recording.backends.none_backend import NoneRecorder
+                    return NoneRecorder(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown recorder type: {recorder_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Recorder implementation not available: {recorder_type}. "
+                    f"Ensure the recorder module has been created. Error: {e}"
+                )
+
+    @staticmethod
+    def create_stats_aggregator(config: Union[DictConfig, dict]) -> 'StatsAggregatorProtocol':
+        """
+        Create statistics aggregator from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying stats aggregator type and parameters.
+                
+        Returns:
+            StatsAggregatorProtocol: Configured statistics aggregator implementation.
+            
+        Examples:
+            Standard stats aggregator:
+            >>> config = {'type': 'StandardStatsAggregator', 'include_distributions': True}
+            >>> aggregator = NavigatorFactory.create_stats_aggregator(config)
+            
+            Custom metrics aggregator:
+            >>> config = {
+            ...     'type': 'CustomStatsAggregator',
+            ...     'custom_metrics': ['tortuosity', 'efficiency']
+            ... }
+            >>> aggregator = NavigatorFactory.create_stats_aggregator(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            aggregator_type = _get_config_value(config, 'type', 'StandardStatsAggregator')
+            
+            try:
+                if aggregator_type == 'StandardStatsAggregator':
+                    from ..analysis.stats import StandardStatsAggregator
+                    return StandardStatsAggregator(**{k: v for k, v in config.items() if k != 'type'})
+                elif aggregator_type == 'CustomStatsAggregator':
+                    from ..analysis.stats import CustomStatsAggregator
+                    return CustomStatsAggregator(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown stats aggregator type: {aggregator_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Stats aggregator implementation not available: {aggregator_type}. "
+                    f"Ensure the stats aggregator module has been created. Error: {e}"
+                )
+
+    @staticmethod
+    def create_agent_initializer(config: Union[DictConfig, dict]) -> 'AgentInitializerProtocol':
+        """
+        Create agent initializer from configuration using the modular architecture.
+        
+        Args:
+            config: Configuration specifying initializer strategy and parameters.
+                
+        Returns:
+            AgentInitializerProtocol: Configured agent initializer implementation.
+            
+        Examples:
+            Uniform random initializer:
+            >>> config = {
+            ...     'type': 'UniformRandomInitializer',
+            ...     'domain_bounds': (100, 100),
+            ...     'seed': 42
+            ... }
+            >>> initializer = NavigatorFactory.create_agent_initializer(config)
+            
+            Grid initializer:
+            >>> config = {
+            ...     'type': 'GridInitializer',
+            ...     'domain_bounds': (100, 100),
+            ...     'grid_spacing': 10.0
+            ... }
+            >>> initializer = NavigatorFactory.create_agent_initializer(config)
+        """
+        if HYDRA_AVAILABLE and '_target_' in config:
+            from hydra import utils as hydra_utils
+            return hydra_utils.instantiate(config)
+        else:
+            initializer_type = _get_config_value(config, 'type', 'UniformRandomInitializer')
+            
+            try:
+                if initializer_type == 'UniformRandomInitializer':
+                    from ..core.initialization import UniformRandomInitializer
+                    return UniformRandomInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                elif initializer_type == 'GridInitializer':
+                    from ..core.initialization import GridInitializer
+                    return GridInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                elif initializer_type == 'FixedListInitializer':
+                    from ..core.initialization import FixedListInitializer
+                    return FixedListInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                elif initializer_type == 'DatasetInitializer':
+                    from ..core.initialization import DatasetInitializer
+                    return DatasetInitializer(**{k: v for k, v in config.items() if k != 'type'})
+                else:
+                    raise ValueError(f"Unknown agent initializer type: {initializer_type}")
+            except ImportError as e:
+                raise ImportError(
+                    f"Agent initializer implementation not available: {initializer_type}. "
+                    f"Ensure the agent initializer module has been created. Error: {e}"
+                )
+
+    @staticmethod
     def create_modular_environment(
         navigator_config: Union[DictConfig, dict],
         plume_model_config: Union[DictConfig, dict],
         wind_field_config: Optional[Union[DictConfig, dict]] = None,
         sensor_configs: Optional[List[Union[DictConfig, dict]]] = None,
+        source_config: Optional[Union[DictConfig, dict]] = None,
+        boundary_policy_config: Optional[Union[DictConfig, dict]] = None,
+        action_interface_config: Optional[Union[DictConfig, dict]] = None,
+        recorder_config: Optional[Union[DictConfig, dict]] = None,
+        stats_aggregator_config: Optional[Union[DictConfig, dict]] = None,
+        agent_initializer_config: Optional[Union[DictConfig, dict]] = None,
         **env_kwargs: Any
     ) -> 'NavigatorProtocol':
         """
-        Create complete modular navigation environment with all components.
+        Create complete modular navigation environment with all v1.0 components.
         
         Args:
             navigator_config: Navigator configuration.
             plume_model_config: Plume model configuration.
             wind_field_config: Optional wind field configuration.
             sensor_configs: Optional list of sensor configurations.
+            source_config: Optional source configuration for odor emission modeling.
+            boundary_policy_config: Optional boundary policy configuration.
+            action_interface_config: Optional action interface configuration.
+            recorder_config: Optional recorder configuration for data persistence.
+            stats_aggregator_config: Optional statistics aggregator configuration.
+            agent_initializer_config: Optional agent initializer configuration.
             **env_kwargs: Additional environment parameters.
             
         Returns:
-            NavigatorProtocol: Complete navigation environment with all components.
+            NavigatorProtocol: Complete navigation environment with all v1.0 components.
             
         Examples:
-            Complete modular environment:
+            Complete v1.0 modular environment:
             >>> env = NavigatorFactory.create_modular_environment(
             ...     navigator_config={'position': (0, 0), 'max_speed': 2.0},
-            ...     plume_model_config={'type': 'GaussianPlumeModel', 'source_position': (50, 50)},
+            ...     plume_model_config={'type': 'GaussianPlumeModel'},
+            ...     source_config={'type': 'PointSource', 'position': (50, 50), 'emission_rate': 1000.0},
+            ...     boundary_policy_config={'type': 'TerminatePolicy', 'domain_bounds': (100, 100)},
+            ...     action_interface_config={'type': 'Continuous2D', 'max_linear_velocity': 2.0},
+            ...     recorder_config={'type': 'ParquetRecorder', 'output_dir': './data'},
+            ...     stats_aggregator_config={'type': 'StandardStatsAggregator'},
+            ...     agent_initializer_config={'type': 'UniformRandomInitializer', 'domain_bounds': (100, 100)},
             ...     wind_field_config={'type': 'ConstantWindField', 'velocity': (1.0, 0.0)},
             ...     sensor_configs=[{'type': 'ConcentrationSensor', 'dynamic_range': (0, 1)}]
             ... )
@@ -2064,6 +3671,32 @@ class NavigatorFactory:
         navigator = NavigatorFactory.from_config(navigator_config)
         plume_model = NavigatorFactory.create_plume_model(plume_model_config)
         
+        # Create v1.0 components
+        source = None
+        if source_config:
+            source = NavigatorFactory.create_source(source_config)
+        
+        boundary_policy = None
+        if boundary_policy_config:
+            boundary_policy = NavigatorFactory.create_boundary_policy(boundary_policy_config)
+        
+        action_interface = None
+        if action_interface_config:
+            action_interface = NavigatorFactory.create_action_interface(action_interface_config)
+        
+        recorder = None
+        if recorder_config:
+            recorder = NavigatorFactory.create_recorder(recorder_config)
+        
+        stats_aggregator = None
+        if stats_aggregator_config:
+            stats_aggregator = NavigatorFactory.create_stats_aggregator(stats_aggregator_config)
+        
+        agent_initializer = None
+        if agent_initializer_config:
+            agent_initializer = NavigatorFactory.create_agent_initializer(agent_initializer_config)
+        
+        # Create existing components
         wind_field = None
         if wind_field_config:
             wind_field = NavigatorFactory.create_wind_field(wind_field_config)
@@ -2079,6 +3712,12 @@ class NavigatorFactory:
                 'plume_model': plume_model,
                 'wind_field': wind_field,
                 'sensors': sensors,
+                'source': source,
+                'boundary_policy': boundary_policy,
+                'action_interface': action_interface,
+                'recorder': recorder,
+                'stats_aggregator': stats_aggregator,
+                'agent_initializer': agent_initializer,
                 'env_kwargs': env_kwargs
             }
         
@@ -2105,8 +3744,77 @@ class NavigatorFactory:
             ...     plume_model, PlumeModelProtocol
             ... )
             >>> assert is_valid, "Component must implement PlumeModelProtocol"
+            
+            Validate v1.0 component compliance:
+            >>> is_valid = NavigatorFactory.validate_protocol_compliance(
+            ...     source, SourceProtocol
+            ... )
+            >>> assert is_valid, "Component must implement SourceProtocol"
         """
         return isinstance(component, protocol_type)
+
+    @staticmethod
+    def validate_v1_component_suite(
+        source: Optional[Any] = None,
+        boundary_policy: Optional[Any] = None,
+        action_interface: Optional[Any] = None,
+        recorder: Optional[Any] = None,
+        stats_aggregator: Optional[Any] = None,
+        agent_initializer: Optional[Any] = None
+    ) -> Dict[str, bool]:
+        """
+        Validate complete v1.0 component suite for protocol compliance.
+        
+        Args:
+            source: Optional source component to validate.
+            boundary_policy: Optional boundary policy component to validate.
+            action_interface: Optional action interface component to validate.
+            recorder: Optional recorder component to validate.
+            stats_aggregator: Optional stats aggregator component to validate.
+            agent_initializer: Optional agent initializer component to validate.
+            
+        Returns:
+            Dict[str, bool]: Validation results for each provided component.
+            
+        Examples:
+            Validate complete component suite:
+            >>> validation_results = NavigatorFactory.validate_v1_component_suite(
+            ...     source=my_source,
+            ...     boundary_policy=my_boundary_policy,
+            ...     action_interface=my_action_interface,
+            ...     recorder=my_recorder
+            ... )
+            >>> assert all(validation_results.values()), "All components must be valid"
+        """
+        results = {}
+        
+        if source is not None:
+            results['source'] = NavigatorFactory.validate_protocol_compliance(source, SourceProtocol)
+        
+        if boundary_policy is not None:
+            results['boundary_policy'] = NavigatorFactory.validate_protocol_compliance(
+                boundary_policy, BoundaryPolicyProtocol
+            )
+        
+        if action_interface is not None:
+            results['action_interface'] = NavigatorFactory.validate_protocol_compliance(
+                action_interface, ActionInterfaceProtocol
+            )
+        
+        if recorder is not None:
+            results['recorder'] = NavigatorFactory.validate_protocol_compliance(recorder, RecorderProtocol)
+        
+        if stats_aggregator is not None:
+            results['stats_aggregator'] = NavigatorFactory.validate_protocol_compliance(
+                stats_aggregator, StatsAggregatorProtocol
+            )
+        
+        if agent_initializer is not None:
+            results['agent_initializer'] = NavigatorFactory.validate_protocol_compliance(
+                agent_initializer, AgentInitializerProtocol
+            )
+        
+        return results
 
 
 # Utility functions for configuration processing and API compatibility
@@ -2421,6 +4129,47 @@ ActionDictType = Dict[str, Union[np.ndarray, float, Dict[str, Any]]]
 ComponentConfigType = Dict[str, Any]
 """Type alias for component configuration dictionaries."""
 
+# Type aliases for new v1.0 component protocols
+
+SourceConfigType = Dict[str, Any]
+"""Type alias for source configuration dictionaries."""
+
+BoundaryPolicyConfigType = Dict[str, Any] 
+"""Type alias for boundary policy configuration dictionaries."""
+
+ActionInterfaceConfigType = Dict[str, Any]
+"""Type alias for action interface configuration dictionaries."""
+
+RecorderConfigType = Dict[str, Any]
+"""Type alias for recorder configuration dictionaries."""
+
+StatsConfigType = Dict[str, Any]
+"""Type alias for statistics aggregator configuration dictionaries."""
+
+AgentInitConfigType = Dict[str, Any]
+"""Type alias for agent initializer configuration dictionaries."""
+
+EmissionRateType = float
+"""Type alias for odor emission rate values."""
+
+PositionTupleType = Tuple[float, float]
+"""Type alias for 2D position coordinate tuples."""
+
+BoundaryViolationType = np.ndarray
+"""Type alias for boundary violation boolean arrays."""
+
+NavigationCommandType = Dict[str, Union[float, str]]
+"""Type alias for navigation command dictionaries."""
+
+StepDataType = Dict[str, Any]
+"""Type alias for step-level recording data dictionaries."""
+
+EpisodeDataType = Dict[str, Any]
+"""Type alias for episode-level recording data dictionaries."""
+
+MetricsType = Dict[str, float]
+"""Type alias for calculated statistics and metrics dictionaries."""
+
 
 # Re-export protocol and factory for public API
 __all__ = [
@@ -2428,7 +4177,15 @@ __all__ = [
     "NavigatorProtocol",
     "NavigatorFactory",
     
-    # Modular component protocols for pluggable architecture
+    # New v1.0 component protocols for pluggable architecture
+    "SourceProtocol",
+    "BoundaryPolicyProtocol", 
+    "ActionInterfaceProtocol",
+    "RecorderProtocol",
+    "StatsAggregatorProtocol",
+    "AgentInitializerProtocol",
+    
+    # Existing modular component protocols for pluggable architecture
     "PlumeModelProtocol",
     "WindFieldProtocol", 
     "SensorProtocol",
@@ -2456,6 +4213,21 @@ __all__ = [
     "ObservationDictType",
     "ActionDictType",
     "ComponentConfigType",
+    
+    # Type aliases for new v1.0 components
+    "SourceConfigType",
+    "BoundaryPolicyConfigType",
+    "ActionInterfaceConfigType", 
+    "RecorderConfigType",
+    "StatsConfigType",
+    "AgentInitConfigType",
+    "EmissionRateType",
+    "PositionTupleType",
+    "BoundaryViolationType",
+    "NavigationCommandType",
+    "StepDataType",
+    "EpisodeDataType",
+    "MetricsType",
     
     # API compatibility utilities
     "detect_api_compatibility_mode",
