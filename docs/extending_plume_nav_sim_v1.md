@@ -1560,7 +1560,7 @@ include_stop: false
 
 ### RecorderProtocol Implementation
 
-The `RecorderProtocol` enables comprehensive data recording with multiple backend support:
+The `RecorderProtocol` enables comprehensive data recording with multiple backend support and performance-aware buffering:
 
 ```python
 # src/plume_nav_sim/recording/__init__.py
@@ -3673,7 +3673,7 @@ enable_plot_export: true
 
 ### Hook System Architecture
 
-The v1.0 hook system provides non-invasive extension points for downstream customization:
+The v1.0 hook system provides non-invasive extension points for downstream customization, including extra_obs_fn, extra_reward_fn, and episode_end_fn extension hooks:
 
 ```python
 # src/plume_nav_sim/core/hooks.py
@@ -4683,7 +4683,7 @@ class EfficientRecorder:
 
 #### Built-in Profiling
 
-```python
+```bash
 # Enable profiling mode
 python run_simulation.py performance.enable_profiling=true
 
