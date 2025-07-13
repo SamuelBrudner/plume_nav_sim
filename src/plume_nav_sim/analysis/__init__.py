@@ -76,6 +76,7 @@ Examples:
 
 from __future__ import annotations
 import warnings
+import time
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 import logging
 
@@ -221,7 +222,7 @@ def create_from_config(config: Union[Dict[str, Any], DictConfig]) -> StatsAggreg
             raise ConfigurationError(f"Invalid configuration type: {type(config)}")
         
         # Validate performance requirements
-        if stats_config.memory_limit_mb < 64:
+        if hasattr(stats_config, 'memory_limit_mb') and stats_config.memory_limit_mb < 64:
             warnings.warn(
                 "Low memory limit may impact performance with large datasets. "
                 "Consider increasing memory_limit_mb to at least 64MB.",
@@ -229,7 +230,7 @@ def create_from_config(config: Union[Dict[str, Any], DictConfig]) -> StatsAggreg
                 stacklevel=2
             )
         
-        if stats_config.buffer_size < 100:
+        if hasattr(stats_config, 'buffer_size') and stats_config.buffer_size < 100:
             logger.info("Small buffer size detected. Consider increasing for better I/O performance.")
         
         # Create aggregator instance
@@ -329,18 +330,34 @@ def validate_recorder_compatibility(
             return validation_results
         
         # Get recorder backend information
-        recorder_backend = getattr(recorder, 'config', {}).get('backend', 'unknown')
+        recorder_config = getattr(recorder, 'config', None)
+        if recorder_config:
+            if hasattr(recorder_config, 'backend'):
+                recorder_backend = recorder_config.backend
+            elif isinstance(recorder_config, dict):
+                recorder_backend = recorder_config.get('backend', 'unknown')
+            else:
+                recorder_backend = 'unknown'
+        else:
+            recorder_backend = 'unknown'
+            
         if recorder_backend == 'unknown':
             validation_results['warnings'].append(
                 "Unable to determine recorder backend type"
             )
         
         # Check backend-specific compatibility
-        supported_backends = RecorderFactory.get_available_backends()
-        if recorder_backend not in supported_backends:
-            validation_results['backend_supported'] = False
-            validation_results['errors'].append(
-                f"Recorder backend '{recorder_backend}' not in supported backends: {supported_backends}"
+        try:
+            supported_backends = RecorderFactory.get_available_backends()
+            if recorder_backend not in supported_backends:
+                validation_results['backend_supported'] = False
+                validation_results['errors'].append(
+                    f"Recorder backend '{recorder_backend}' not in supported backends: {supported_backends}"
+                )
+        except (AttributeError, ImportError):
+            # RecorderFactory may not have get_available_backends method or may not be importable
+            validation_results['warnings'].append(
+                "Unable to verify backend compatibility - RecorderFactory method unavailable"
             )
         
         # Performance compatibility validation
