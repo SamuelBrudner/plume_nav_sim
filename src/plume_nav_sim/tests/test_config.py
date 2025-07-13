@@ -111,13 +111,13 @@ except ImportError:
 
 # Import AgentInitializer components for testing
 try:
-    from plume_nav_sim.core.initialization import AgentInitializerProtocol, create_initializer
+    from plume_nav_sim.core.initialization import AgentInitializerProtocol, create_agent_initializer
     AGENT_INITIALIZER_AVAILABLE = True
 except ImportError:
     AGENT_INITIALIZER_AVAILABLE = False
     class AgentInitializerProtocol:
         pass
-    def create_initializer(config):
+    def create_agent_initializer(config):
         return None
 
 # Import source components for testing
@@ -447,8 +447,13 @@ environment:
             for path_part in param_path:
                 value = getattr(value, path_part)
             
-            # Validate type conversion
-            assert isinstance(value, expected_type), f"Expected {expected_type}, got {type(value)}"
+            # Validate type conversion - handle OmegaConf types
+            if expected_type == list:
+                # Handle OmegaConf ListConfig which behaves like a list
+                from omegaconf import ListConfig
+                assert isinstance(value, (list, ListConfig)), f"Expected {expected_type} or ListConfig, got {type(value)}"
+            else:
+                assert isinstance(value, expected_type), f"Expected {expected_type}, got {type(value)}"
 
 
 class TestEnvironmentVariableInterpolation:
@@ -474,6 +479,7 @@ class TestEnvironmentVariableInterpolation:
         self.config_dir.mkdir()
         
         # Create configuration with comprehensive environment variable interpolation
+        # NOTE: Need to use resolver format for proper interpolation
         env_config = """
 navigator:
   max_speed: ${oc.env:TEST_MAX_SPEED,1.5}
@@ -1557,7 +1563,7 @@ class TestComponentRegistrationSystem:
             'margin': 2.0
         }
         
-        initializer = create_initializer(uniform_config)
+        initializer = create_agent_initializer(uniform_config)
         assert initializer is not None
         
         # Test that created initializer has required methods
@@ -1575,7 +1581,7 @@ class TestComponentRegistrationSystem:
             'seed': 42
         }
         
-        grid_initializer = create_initializer(grid_config)
+        grid_initializer = create_agent_initializer(grid_config)
         assert grid_initializer is not None
         assert hasattr(grid_initializer, 'initialize_positions')
         
@@ -1586,7 +1592,7 @@ class TestComponentRegistrationSystem:
             'domain_bounds': (100.0, 100.0)
         }
         
-        fixed_initializer = create_initializer(fixed_config)
+        fixed_initializer = create_agent_initializer(fixed_config)
         assert fixed_initializer is not None
         assert hasattr(fixed_initializer, 'get_position_count')
     
@@ -1693,11 +1699,11 @@ class TestComponentRegistrationSystem:
         
         # Test invalid initializer type
         with pytest.raises(ValueError):
-            create_initializer({'type': 'invalid_type'})
+            create_agent_initializer({'type': 'invalid_type'})
         
         # Test missing required parameters
         with pytest.raises((ValueError, TypeError)):
-            create_initializer({'type': 'uniform_random'})  # Missing bounds
+            create_agent_initializer({'type': 'uniform_random'})  # Missing bounds
         
         if SOURCE_FACTORY_AVAILABLE:
             # Test invalid source type
@@ -1800,7 +1806,7 @@ boundary:
         
         # Test component creation
         if component_type == "agent_init":
-            component = create_initializer(config)
+            component = create_agent_initializer(config)
         elif component_type == "source":
             component = create_source(config)
         elif component_type == "boundary":
@@ -2233,7 +2239,7 @@ def test_v1_component_integration():
     if AGENT_INITIALIZER_AVAILABLE:
         # Test agent initializer integration
         config = {'type': 'uniform_random', 'bounds': (100, 100), 'seed': 42}
-        initializer = create_initializer(config)
+        initializer = create_agent_initializer(config)
         assert initializer is not None
         assert hasattr(initializer, 'get_strategy_name')
     
