@@ -352,10 +352,13 @@ class ParquetRecorder(BaseRecorder):
                     if df[col].dtype == 'object':
                         # Try to convert to more efficient types
                         try:
-                            # Check if it's numeric
-                            numeric_series = pd.to_numeric(df[col], errors='ignore')
-                            if not numeric_series.equals(df[col]):
-                                df[col] = numeric_series
+                            # Check if it's numeric - handle deprecation warning
+                            try:
+                                numeric_series = pd.to_numeric(df[col], errors='coerce')
+                                if not pd.isna(numeric_series).all() and not numeric_series.equals(df[col]):
+                                    df[col] = numeric_series
+                            except Exception:
+                                pass  # Keep as object/string
                         except (ValueError, TypeError):
                             pass  # Keep as object/string
                     elif df[col].dtype == 'float64':
@@ -450,6 +453,11 @@ class ParquetRecorder(BaseRecorder):
     def close_file(self) -> None:
         """Close Parquet writer and finalize file with proper cleanup."""
         try:
+            # Ensure we have the writer lock attribute
+            if not hasattr(self, '_writer_lock'):
+                import threading
+                self._writer_lock = threading.RLock()
+                
             with self._writer_lock:
                 if self._parquet_writer is not None:
                     self._parquet_writer.close()
@@ -647,18 +655,34 @@ class ParquetRecorder(BaseRecorder):
             if metadata:
                 schema = schema.with_metadata(metadata)
             
+            # Prepare writer options, avoiding parameter conflicts
+            writer_options = {
+                'compression': self.parquet_config.compression,
+                'write_statistics': True,
+                'use_deprecated_int96_timestamps': False,
+                'allow_truncated_timestamps': False,
+                'metadata_collector': None,  # We handle metadata separately
+            }
+            
+            # Add compression level if specified
+            if self.parquet_config.compression_level is not None:
+                writer_options['compression_level'] = self.parquet_config.compression_level
+            
+            # Merge with additional write options, avoiding conflicts
+            additional_options = self.parquet_config.write_options.copy()
+            
+            # Remove conflicting parameters from additional options
+            conflicting_params = ['compression', 'compression_level', 'write_statistics']
+            for param in conflicting_params:
+                additional_options.pop(param, None)
+            
+            writer_options.update(additional_options)
+            
             # Initialize writer with optimized settings
             self._parquet_writer = pq.ParquetWriter(
                 str(self.parquet_config.file_path),
                 schema=schema,
-                compression=self.parquet_config.compression,
-                compression_level=self.parquet_config.compression_level,
-                use_dictionary=True,
-                write_statistics=True,
-                use_deprecated_int96_timestamps=False,
-                allow_truncated_timestamps=False,
-                metadata_collector=None,  # We handle metadata separately
-                **self.parquet_config.write_options
+                **writer_options
             )
             
             logger.debug(f"Initialized ParquetWriter with schema: {schema}")
@@ -775,10 +799,19 @@ class ParquetRecorder(BaseRecorder):
         base_metrics.update(parquet_metrics)
         return base_metrics
     
+    def stop_recording(self) -> None:
+        """Override stop_recording to ensure proper file closure."""
+        # Call parent stop_recording first
+        super().stop_recording()
+        
+        # Ensure file is properly closed
+        self.close_file()
+    
     def __del__(self):
         """Destructor with automatic cleanup of Parquet resources."""
         try:
-            self.close_file()
+            if hasattr(self, '_parquet_writer') and self._parquet_writer is not None:
+                self.close_file()
         except Exception:
             pass  # Avoid exceptions in destructor
 
