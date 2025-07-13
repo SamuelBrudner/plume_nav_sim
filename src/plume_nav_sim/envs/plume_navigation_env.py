@@ -1745,7 +1745,7 @@ class PlumeNavigationEnv(gym.Env):
                     raise ValueError(f"Frame index {start_frame} out of range [0, {self.plume_model.frame_count})")
         
         # Use AgentInitializer pattern for configurable agent positioning strategies
-        if self.agent_initializer is not None and "position" not in options:
+        if self.agent_initializer is not None and (options is None or "position" not in options):
             try:
                 # Generate position using initializer strategy
                 domain_bounds = (self.env_width, self.env_height)
@@ -2250,29 +2250,7 @@ class PlumeNavigationEnv(gym.Env):
                 except Exception as e:
                     logger.warning(f"Failed to record step data: {e}")
             
-            # Integrate Recorder hooks with buffered I/O for simulation state capture  
-            if self.recorder is not None:
-                try:
-                    step_data = {
-                        'step_number': self._step_count,
-                        'episode_id': self._episode_count,
-                        'agent_position': self.navigator.positions[0].copy(),
-                        'agent_orientation': float(self.navigator.orientations[0]),
-                        'action': action.tolist() if hasattr(action, 'tolist') else action,
-                        'reward': reward,
-                        'odor_concentration': self._previous_odor,
-                        'observation': {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in observation.items()},
-                        'timestamp': time.time()
-                    }
-                    
-                    # Add wind data if available
-                    if self._wind_enabled and "wind_velocity" in observation:
-                        step_data['wind_velocity'] = observation["wind_velocity"].tolist()
-                    
-                    # Record step with minimal overhead
-                    self.recorder.record_step(step_data, self._step_count, episode_id=self._episode_count)
-                except Exception as e:
-                    logger.warning(f"Failed to record step data: {e}")
+
             
             # Update step counter and tracking
             self._step_count += 1
