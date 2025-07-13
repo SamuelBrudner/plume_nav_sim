@@ -1,0 +1,338 @@
+# @package _global_
+#
+# Debug-focused hook configuration enabling interactive debugging capabilities,
+# real-time state inspection, and step-through visualization.
+#
+# This configuration integrates with GUI debugging tools and provides comprehensive
+# hook callbacks for development and troubleshooting scenarios per Feature F-019.
+#
+# Key Features:
+# - Interactive step-through debugging per F-019-RQ-002
+# - Extensible hook system with runtime registration per F-019-RQ-003
+# - Real-time state visualization with ≥30 FPS refresh rate per F-019-RQ-001
+# - Performance monitoring hooks with automatic degradation warnings
+# - Comprehensive debugging and hook toolkit per Feature F-019
+#
+# Performance Targets:
+# - Hook execution overhead: <1ms per step when enabled
+# - Real-time visualization: ≥30 FPS refresh rate
+# - Step-through debugging: ≤33ms per step with 100 agents
+# - Memory footprint: <50MB for debug session management
+#
+# Usage Examples:
+#   Enable debug hooks for interactive session:
+#   $ python train.py hooks=debug visualization.enable_gui=true
+#   
+#   Enable debug hooks with performance monitoring:
+#   $ python train.py hooks=debug hooks.debug.enable_profiling=true
+#   
+#   Enable debug hooks with collaborative debugging:
+#   $ python train.py hooks=debug hooks.debug.collaborative.enabled=true
+
+# Hook System Configuration
+hooks:
+  # Enable hook system with debug capabilities
+  enabled: true
+  
+  # Debug-specific hook configuration
+  debug:
+    # Core debug settings
+    enabled: true
+    backend: "auto"  # qt, streamlit, auto
+    session_id: null  # Auto-generated if not provided
+    
+    # Performance monitoring configuration
+    enable_profiling: true
+    performance_target_ms: 33.0  # ≤33ms per step requirement
+    memory_threshold_mb: 50.0    # Memory usage warning threshold
+    auto_degradation_warnings: true
+    
+    # Real-time visualization settings
+    visualization:
+      enabled: true
+      refresh_rate: 30  # ≥30 FPS requirement per F-019-RQ-001
+      window_size: [1200, 800]
+      theme: "dark"
+      show_inspector: true
+      real_time_plots: true
+      
+    # Interactive debugging configuration per F-019-RQ-002
+    interactive:
+      step_through_enabled: true
+      breakpoints_enabled: true
+      state_inspection_enabled: true
+      pause_on_violations: true
+      auto_pause_on_error: true
+      keyboard_shortcuts: true
+      
+    # Hook callback configuration with runtime registration per F-019-RQ-003
+    callbacks:
+      # Pre-step hooks for state preparation and validation
+      pre_step:
+        - _target_: plume_nav_sim.debug.hooks.performance_monitor_pre_step
+          enabled: ${hooks.debug.enable_profiling}
+          threshold_ms: ${hooks.debug.performance_target_ms}
+          
+        - _target_: plume_nav_sim.debug.hooks.state_validation_pre_step
+          enabled: true
+          validate_bounds: true
+          validate_actions: true
+          
+        - _target_: plume_nav_sim.debug.hooks.breakpoint_check_pre_step
+          enabled: ${hooks.debug.interactive.breakpoints_enabled}
+          auto_pause: ${hooks.debug.interactive.pause_on_violations}
+          
+      # Post-step hooks for data collection and visualization updates
+      post_step:
+        - _target_: plume_nav_sim.debug.hooks.performance_monitor_post_step
+          enabled: ${hooks.debug.enable_profiling}
+          log_violations: ${hooks.debug.auto_degradation_warnings}
+          correlation_tracking: true
+          
+        - _target_: plume_nav_sim.debug.hooks.visualization_update_post_step
+          enabled: ${hooks.debug.visualization.enabled}
+          refresh_rate: ${hooks.debug.visualization.refresh_rate}
+          real_time_plots: ${hooks.debug.visualization.real_time_plots}
+          
+        - _target_: plume_nav_sim.debug.hooks.state_recorder_post_step
+          enabled: true
+          record_frequency: 1  # Record every step for debugging
+          include_metadata: true
+          
+        - _target_: plume_nav_sim.debug.hooks.trajectory_tracker_post_step
+          enabled: true
+          max_history_length: 1000
+          memory_efficient: true
+          
+      # Episode-end hooks for summary generation and session management
+      episode_end:
+        - _target_: plume_nav_sim.debug.hooks.debug_summary_episode_end
+          enabled: true
+          export_trajectory: true
+          export_performance_metrics: true
+          auto_screenshot: false
+          
+        - _target_: plume_nav_sim.debug.hooks.breakpoint_summary_episode_end
+          enabled: ${hooks.debug.interactive.breakpoints_enabled}
+          report_hit_counts: true
+          reset_counters: false
+          
+        - _target_: plume_nav_sim.debug.hooks.memory_cleanup_episode_end
+          enabled: true
+          cleanup_trajectory_buffer: false  # Keep for debug inspection
+          cleanup_performance_history: false
+          
+    # Collaborative debugging configuration
+    collaborative:
+      enabled: false
+      mode: "host"  # host, participant
+      host: "localhost"
+      port: 8502
+      max_participants: 5
+      shared_state: true
+      
+    # Debug data recording and export settings
+    recording:
+      # Enable debug-specific recording
+      enabled: true
+      
+      # Record full debug sessions with high granularity
+      session_recording:
+        enabled: true
+        record_step_data: true
+        record_state_history: true
+        record_performance_metrics: true
+        record_breakpoint_events: true
+        include_gui_interactions: true
+        
+      # Export settings for debug data
+      export:
+        auto_export_on_session_end: true
+        export_format: "json"  # json, parquet, hdf5
+        compression: "gzip"
+        output_dir: "./debug_exports"
+        include_screenshots: false
+        include_state_dumps: true
+        
+    # Debug GUI and visualization hook integration
+    gui_integration:
+      # Initialize debug GUI with hook system
+      gui_backend: ${hooks.debug.backend}
+      
+      # GUI-specific hooks for interactive debugging
+      gui_hooks:
+        - _target_: plume_nav_sim.debug.gui.DebugGUIHooks
+          enabled: true
+          session_tracking: true
+          
+        # Interactive state inspection hooks
+        - _target_: plume_nav_sim.debug.hooks.gui_state_inspector
+          enabled: ${hooks.debug.visualization.show_inspector}
+          update_frequency: ${hooks.debug.visualization.refresh_rate}
+          detailed_inspection: true
+          
+        # Real-time visualization hooks per F-019-RQ-001
+        - _target_: plume_nav_sim.debug.hooks.gui_visualization_update
+          enabled: ${hooks.debug.visualization.enabled}
+          fps_target: ${hooks.debug.visualization.refresh_rate}
+          performance_monitoring: ${hooks.debug.enable_profiling}
+          
+      # GUI lifecycle management
+      auto_launch_gui: false  # Set to true for automatic GUI startup
+      gui_window_title: "Plume Navigation Debug Session"
+      gui_always_on_top: false
+      
+    # Advanced debugging features
+    advanced:
+      # Memory usage tracking and optimization
+      memory_monitoring:
+        enabled: true
+        check_frequency: 10  # Every 10 steps
+        warning_threshold_mb: ${hooks.debug.memory_threshold_mb}
+        auto_cleanup: false
+        
+      # Performance profiling and bottleneck detection
+      profiling:
+        enabled: ${hooks.debug.enable_profiling}
+        profile_functions: true
+        profile_memory: true
+        profile_gpu: false  # GPU profiling disabled by default
+        generate_reports: true
+        
+      # Automatic regression detection
+      regression_detection:
+        enabled: true
+        baseline_performance_ms: ${hooks.debug.performance_target_ms}
+        deviation_threshold_pct: 20.0  # 20% performance degradation threshold
+        auto_alert: ${hooks.debug.auto_degradation_warnings}
+        
+# Integration with existing environment and recorder systems
+environment:
+  # Hook integration points for environment lifecycle
+  hooks_integration:
+    # Environment reset hooks
+    on_reset:
+      - _target_: plume_nav_sim.debug.hooks.debug_session_reset
+        enabled: ${hooks.debug.enabled}
+        reset_performance_metrics: false  # Keep across episodes for analysis
+        reset_breakpoints: false
+        log_reset_event: true
+        
+    # Environment step hooks (integrated with debug callbacks)
+    on_step:
+      pre_step_hooks: ${hooks.debug.callbacks.pre_step}
+      post_step_hooks: ${hooks.debug.callbacks.post_step}
+      
+    # Environment close hooks
+    on_close:
+      - _target_: plume_nav_sim.debug.hooks.debug_session_cleanup
+        enabled: ${hooks.debug.enabled}
+        export_final_data: ${hooks.debug.recording.export.auto_export_on_session_end}
+        save_session_state: true
+        
+# Recorder integration for debug data persistence
+recorder:
+  # Enable recorder for debug hook integration
+  enabled: true
+  
+  # Debug-specific recording backend
+  debug_backend:
+    _target_: plume_nav_sim.recording.backends.DebugRecorderBackend
+    enabled: ${hooks.debug.recording.enabled}
+    output_dir: ${hooks.debug.recording.export.output_dir}
+    compression: ${hooks.debug.recording.export.compression}
+    
+    # High-frequency recording for debugging
+    recording_config:
+      record_frequency: 1  # Every step for detailed debugging
+      buffer_size: 1000   # Large buffer for debug data
+      flush_frequency: 100  # Flush every 100 steps
+      include_debug_metadata: true
+      
+    # Debug-specific data schema
+    debug_schema:
+      include_step_timing: true
+      include_memory_usage: true
+      include_gui_state: ${hooks.debug.gui_integration.enabled}
+      include_breakpoint_events: ${hooks.debug.interactive.breakpoints_enabled}
+      include_performance_violations: ${hooks.debug.enable_profiling}
+      
+# Visualization hook configuration for real-time updates
+visualization:
+  # Debug visualization settings
+  debug_mode: true
+  enable_gui: ${hooks.debug.visualization.enabled}
+  
+  # Visualization hooks registration per F-019-RQ-003
+  hook_registration:
+    - _target_: plume_nav_sim.utils.visualization.register_visualization_hooks
+      hooks:
+        # Real-time state visualization hooks
+        - name: "debug_state_visualization"
+          callback: plume_nav_sim.debug.visualization.update_state_plot
+          frequency: ${hooks.debug.visualization.refresh_rate}
+          enabled: ${hooks.debug.visualization.enabled}
+          
+        # Performance visualization hooks
+        - name: "debug_performance_plot"
+          callback: plume_nav_sim.debug.visualization.update_performance_plot
+          frequency: 5  # Update every 5 steps
+          enabled: ${hooks.debug.enable_profiling}
+          
+        # Trajectory visualization hooks
+        - name: "debug_trajectory_plot"
+          callback: plume_nav_sim.debug.visualization.update_trajectory_plot
+          frequency: 1  # Update every step
+          enabled: ${hooks.debug.visualization.real_time_plots}
+          
+  # Initial state visualization per user examples from Section 0.3.2
+  initial_state_plot:
+    enabled: true
+    function: plume_nav_sim.debug.gui.plot_initial_state
+    auto_display: ${hooks.debug.gui_integration.auto_launch_gui}
+    include_source_locations: true
+    include_domain_boundaries: true
+    include_agent_start_positions: true
+    
+# Logging configuration for debug hooks
+logging:
+  # Enhanced logging for debug sessions
+  debug_logging:
+    enabled: true
+    level: "DEBUG"
+    correlation_tracking: true
+    
+    # Debug-specific loggers
+    loggers:
+      "plume_nav_sim.debug": "DEBUG"
+      "plume_nav_sim.debug.hooks": "DEBUG" 
+      "plume_nav_sim.debug.gui": "INFO"
+      "plume_nav_sim.debug.performance": "INFO"
+      
+    # Debug session correlation
+    session_correlation:
+      enabled: true
+      session_id_header: "debug_session_id"
+      include_hook_timing: ${hooks.debug.enable_profiling}
+      include_gui_events: ${hooks.debug.gui_integration.enabled}
+
+# Default configuration overrides for debug mode
+defaults:
+  - override /recorder: debug_backend
+  - override /logging: debug_logging
+
+# Hydra-specific configuration for debug hook system
+hydra:
+  # Job configuration for debug sessions  
+  job:
+    name: plume_nav_debug_session
+    
+  # Output directory for debug data
+  run:
+    dir: ${hooks.debug.recording.export.output_dir}/${now:%Y-%m-%d_%H-%M-%S}_debug_session
+    
+  # Configuration for debug hook system
+  job_logging:
+    formatters:
+      debug_formatter:
+        format: '[%(asctime)s][%(name)s][%(levelname)s][DEBUG_SESSION:${hooks.debug.session_id}] - %(message)s'
