@@ -1,0 +1,165 @@
+# @package _global_
+#
+# Hydra Configuration for CardinalDiscreteAction Interface
+# 
+# This configuration implements discrete action space translation using cardinal directions
+# (north/south/east/west/stop) for standardized RL framework integration with discrete
+# control paradigms. Supports grid-based navigation scenarios and interpretable action commands.
+#
+# Requirements Addressed:
+# - F-016-RQ-001: Action translation overhead <0.05 ms per step for real-time performance
+# - F-016-RQ-002: Multiple action space support including discrete modes for algorithm comparison
+# - F-016-RQ-003: Action validation and clipping with bounds enforcement and error handling  
+# - F-016-RQ-004: Protocol interface compliance implementing ActionInterfaceProtocol
+#
+# Integration: Part of plume_nav_sim v1.0 action abstraction framework per Section 0.2.1
+
+# Core Action Interface Configuration
+action:
+  # Target class implementing ActionInterfaceProtocol for standardized action processing
+  _target_: plume_nav_sim.core.actions.CardinalDiscreteAction
+  
+  # Action Space Definition - Gymnasium Discrete space with cardinal direction mapping
+  action_space:
+    # Base discrete actions: [0=stop, 1=north, 2=south, 3=east, 4=west]
+    n_actions: 5
+    # Extended with diagonal movements when enable_diagonal=true: [5=NE, 6=NW, 7=SE, 8=SW]
+    n_actions_with_diagonal: 9
+  
+  # Cardinal Direction Configuration
+  movement:
+    # Step size for discrete movement in meters per action
+    # Controls distance moved per discrete action command
+    step_size: 0.1
+    
+    # Angular step size for orientation changes in radians
+    # Used when action includes orientation adjustment
+    angular_step: 0.314159  # π/10 radians (~18 degrees)
+    
+    # Enable diagonal movement actions (NE, NW, SE, SW)
+    # Expands action space from 5 to 9 discrete actions
+    enable_diagonal: false
+    
+    # Movement speed scaling factor for diagonal actions
+    # Diagonal movements are scaled by sqrt(2)/2 to maintain consistent step distance
+    diagonal_scale: 0.7071  # sqrt(2)/2 for consistent step magnitude
+  
+  # Action Validation Configuration
+  validation:
+    # Enable action bounds checking before translation
+    # Validates discrete action indices are within valid range
+    check_bounds: true
+    
+    # Action clipping behavior for out-of-bounds actions
+    # Options: "clip" (nearest valid), "error" (raise exception), "wrap" (modulo)
+    bounds_handling: "clip"
+    
+    # Enable runtime validation of translated commands
+    # Checks that output navigation commands are valid
+    validate_output: true
+    
+    # Maximum allowed movement distance per step (safety bounds)
+    # Prevents excessive movement from misconfigured step sizes
+    max_step_distance: 1.0
+  
+  # Performance Optimization Settings
+  optimization:
+    # Enable fast lookup table for action translation
+    # Pre-computes direction vectors for <0.05ms translation overhead
+    use_lookup_table: true
+    
+    # Cache translated actions to avoid repeated computation
+    # Reduces overhead for repeated identical actions
+    enable_action_cache: true
+    
+    # Vectorized processing for multi-agent scenarios
+    # Enables batch action translation for efficiency
+    vectorized_operations: true
+    
+    # Memory pool size for vectorized operations (number of agents)
+    vector_pool_size: 100
+
+# Environment Variable Overrides for Deployment Flexibility
+# These settings can be overridden via environment variables for different deployment scenarios
+
+defaults:
+  - override /action/movement/step_size: ${oc.env:DISCRETE_STEP_SIZE,0.1}
+  - override /action/movement/angular_step: ${oc.env:DISCRETE_ANGULAR_STEP,0.314159}
+  - override /action/movement/enable_diagonal: ${oc.env:DISCRETE_ENABLE_DIAGONAL,false}
+
+# Gymnasium Action Space Integration
+# Defines the action space interface for RL framework compatibility
+gymnasium_config:
+  # Action space type for Gymnasium environment registration
+  space_type: "Discrete"
+  
+  # Action space parameters based on diagonal movement setting
+  # Dynamically determined by enable_diagonal flag
+  space_kwargs:
+    n: "${action.action_space.n_actions}"  # Will be 5 or 9 based on diagonal setting
+  
+  # Action mapping documentation for RL algorithms
+  # Provides clear mapping between integer actions and movement commands
+  action_meanings:
+    base_actions:
+      0: "STOP"      # No movement, maintain current position
+      1: "NORTH"     # Move in positive Y direction
+      2: "SOUTH"     # Move in negative Y direction  
+      3: "EAST"      # Move in positive X direction
+      4: "WEST"      # Move in negative X direction
+    diagonal_actions:  # Only available when enable_diagonal=true
+      5: "NORTHEAST" # Move diagonally: +X, +Y
+      6: "NORTHWEST" # Move diagonally: -X, +Y
+      7: "SOUTHEAST" # Move diagonally: +X, -Y
+      8: "SOUTHWEST" # Move diagonally: -X, -Y
+
+# Debug and Monitoring Configuration
+debug:
+  # Enable action translation logging for debugging
+  # Logs input actions and translated navigation commands
+  log_translations: false
+  
+  # Log performance metrics for action translation
+  # Tracks translation time to verify <0.05ms requirement
+  log_performance: false
+  
+  # Enable action validation warnings
+  # Logs when actions are clipped or validated
+  log_validation: false
+  
+  # Statistical tracking for action usage patterns
+  # Collects statistics on action frequency for analysis
+  track_action_stats: false
+
+# Integration Hooks for Extension System
+# Provides extension points for custom action processing
+hooks:
+  # Pre-translation hook for custom action preprocessing
+  # Function signature: pre_translate_fn(action: int, state: dict) -> int
+  pre_translate_fn: null
+  
+  # Post-translation hook for custom command modification
+  # Function signature: post_translate_fn(command: dict, action: int) -> dict
+  post_translate_fn: null
+  
+  # Validation hook for custom action validation logic
+  # Function signature: validate_fn(action: int, state: dict) -> bool
+  custom_validate_fn: null
+
+# Documentation and Metadata
+metadata:
+  # Configuration version for compatibility tracking
+  config_version: "1.0.0"
+  
+  # Description of this action interface configuration
+  description: "Cardinal discrete action interface for grid-based navigation with cardinal directions"
+  
+  # Compatible plume_nav_sim version
+  plume_nav_sim_version: ">=1.0.0"
+  
+  # Author and maintenance information
+  author: "Blitzy Platform"
+  created: "2024-12-19"
+  
+  # Tags for configuration categorization
+  tags: ["discrete", "cardinal", "grid-navigation", "interpretable"]

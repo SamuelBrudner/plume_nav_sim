@@ -1,0 +1,227 @@
+# @package _global_
+#
+# Grid-based Agent Initialization Configuration
+# 
+# This configuration implements systematic grid-based agent positioning for controlled
+# experimental setups. Agents are arranged in regular grid patterns with configurable
+# spacing, orientation, boundary handling, and optional jitter for natural variation.
+#
+# Features:
+# - Deterministic position generation with 100% reproducibility via seeding
+# - Configurable grid dimensions and spacing patterns
+# - Optional jitter for natural variation while maintaining grid structure
+# - Boundary handling for grids exceeding domain limits with multiple strategies
+# - Environment variable overrides for runtime parameter adjustment
+# - Support for both square and rectangular grid arrangements
+#
+# Performance: <1ms initialization for 100 agents (F-014-RQ-001)
+# Compliance: Implements AgentInitializer protocol interface (F-014-RQ-004)
+#
+# Usage Examples:
+#   # 5x5 square grid with automatic spacing
+#   agent_init: grid
+#   agent_init.grid_shape: [5, 5]
+#   
+#   # Custom rectangular grid with fixed spacing
+#   agent_init: grid
+#   agent_init.grid_shape: [8, 4]
+#   agent_init.grid_spacing: [10.0, 15.0]
+#   
+#   # Grid with natural jitter variation
+#   agent_init: grid
+#   agent_init.jitter_enabled: true
+#   agent_init.jitter_std: 1.5
+
+# Core grid initializer configuration targeting the GridInitializer class
+grid_initializer_config:
+  # Hydra target specification for dependency injection
+  _target_: plume_nav_sim.core.initialization.GridInitializer
+  
+  # Grid layout parameters
+  grid_spacing: [10.0, 10.0]  # [x_spacing, y_spacing] in domain units
+  grid_shape: [5, 5]          # [n_cols, n_rows] - number of grid positions
+  orientation: 0.0            # Grid rotation angle in radians (0 = aligned with axes)
+  
+  # Natural variation parameters for realistic positioning
+  jitter_enabled: false       # Enable small random perturbations from grid positions
+  jitter_std: 0.5            # Standard deviation of jitter noise (domain units)
+  
+  # Boundary handling for grids exceeding domain limits
+  boundary_handling:
+    strategy: "clip"           # Strategy: "clip", "scale", "wrap", "error"
+    preserve_shape: true       # Maintain grid proportions when scaling/clipping
+    margin: 1.0               # Safety margin from domain edges (domain units)
+  
+  # Domain constraints and validation
+  domain_bounds: [100.0, 100.0]  # [width, height] of simulation domain
+  
+  # Deterministic seeding for reproducible experiments (F-014-RQ-001)
+  seed: 42                   # Random seed for jitter generation (null for random)
+  
+  # Runtime parameter overrides via environment variables
+  environment_overrides:
+    # Grid layout overrides
+    grid_spacing_override: ${oc.env:PLUME_GRID_SPACING,null}      # "x,y" format
+    grid_shape_override: ${oc.env:PLUME_GRID_SHAPE,null}         # "cols,rows" format
+    orientation_override: ${oc.env:PLUME_GRID_ORIENTATION,null}   # Float in radians
+    
+    # Jitter parameter overrides
+    jitter_enabled_override: ${oc.env:PLUME_GRID_JITTER_ENABLED,null}  # Boolean
+    jitter_std_override: ${oc.env:PLUME_GRID_JITTER_STD,null}          # Float
+    
+    # Boundary handling overrides
+    boundary_strategy_override: ${oc.env:PLUME_GRID_BOUNDARY_STRATEGY,null}  # String
+    boundary_margin_override: ${oc.env:PLUME_GRID_BOUNDARY_MARGIN,null}      # Float
+    
+    # Domain and seeding overrides
+    domain_bounds_override: ${oc.env:PLUME_GRID_DOMAIN_BOUNDS,null}     # "width,height" format
+    seed_override: ${oc.env:PLUME_GRID_SEED,null}                       # Integer seed
+
+# Advanced grid configuration options for specialized research scenarios
+advanced_options:
+  # Grid generation algorithms
+  generation_algorithm: "sequential"  # "sequential", "spiral", "checkerboard", "random_fill"
+  
+  # Multi-layer grid support for 3D-like positioning
+  layer_config:
+    enabled: false             # Enable multi-layer grid generation
+    layer_count: 1            # Number of grid layers (z-axis simulation)
+    layer_spacing: 0.0        # Vertical spacing between layers
+  
+  # Performance optimization settings
+  performance:
+    vectorized_generation: true    # Use NumPy vectorized operations
+    cache_positions: false         # Cache generated positions for repeated use
+    validation_level: "standard"   # "none", "basic", "standard", "strict"
+  
+  # Grid density and distribution controls
+  density_control:
+    adaptive_spacing: false        # Automatically adjust spacing based on agent count
+    min_spacing: 1.0              # Minimum allowed spacing between agents
+    max_agents_per_cell: 1        # Maximum agents per grid cell (1 = no overlap)
+  
+  # Geometric constraints and validations
+  geometry_validation:
+    check_domain_overlap: true     # Verify all positions are within domain
+    check_position_uniqueness: true # Ensure no duplicate positions
+    tolerance: 1e-6               # Numerical tolerance for validations
+
+# Research-focused presets for common experimental scenarios
+presets:
+  # Dense grid for high-resolution studies
+  dense:
+    grid_spacing: [5.0, 5.0]
+    boundary_handling:
+      strategy: "scale"
+      preserve_shape: true
+      margin: 2.0
+  
+  # Sparse grid for long-range navigation studies  
+  sparse:
+    grid_spacing: [20.0, 20.0]
+    boundary_handling:
+      strategy: "clip"
+      preserve_shape: false
+      margin: 5.0
+  
+  # Natural variation grid with jitter
+  natural:
+    jitter_enabled: true
+    jitter_std: 1.0
+    boundary_handling:
+      strategy: "clip"
+      margin: 2.0
+  
+  # High-precision systematic grid
+  systematic:
+    jitter_enabled: false
+    grid_spacing: [8.0, 8.0]
+    boundary_handling:
+      strategy: "scale"
+      preserve_shape: true
+      margin: 0.5
+
+# Validation schemas for configuration parameters
+validation:
+  grid_spacing:
+    type: "float_pair"
+    constraints:
+      min_value: 0.1
+      max_value: 1000.0
+      all_positive: true
+  
+  grid_shape:
+    type: "int_pair"
+    constraints:
+      min_value: 1
+      max_value: 1000
+      all_positive: true
+  
+  orientation:
+    type: "float"
+    constraints:
+      min_value: -6.28318530718  # -2π
+      max_value: 6.28318530718   # 2π
+  
+  jitter_std:
+    type: "float"
+    constraints:
+      min_value: 0.0
+      max_value: 100.0
+  
+  domain_bounds:
+    type: "float_pair"
+    constraints:
+      min_value: 1.0
+      max_value: 10000.0
+      all_positive: true
+
+# Documentation and usage examples for researchers
+examples:
+  # Basic square grid
+  square_grid:
+    description: "5x5 agents in square formation"
+    config:
+      grid_shape: [5, 5]
+      grid_spacing: [10.0, 10.0]
+      jitter_enabled: false
+  
+  # Rectangular formation
+  rectangular_grid:
+    description: "10x3 agents in rectangular formation for corridor studies"
+    config:
+      grid_shape: [10, 3]
+      grid_spacing: [8.0, 15.0]
+      orientation: 0.0
+  
+  # Natural variation grid
+  jittered_grid:
+    description: "Grid with natural positioning variation"
+    config:
+      grid_shape: [6, 6]
+      grid_spacing: [12.0, 12.0]
+      jitter_enabled: true
+      jitter_std: 2.0
+      seed: 123
+  
+  # Large-scale systematic study
+  large_scale:
+    description: "Large grid for population-level studies"
+    config:
+      grid_shape: [20, 10]
+      grid_spacing: [5.0, 5.0]
+      boundary_handling:
+        strategy: "scale"
+        preserve_shape: true
+      domain_bounds: [200.0, 100.0]
+
+# Integration metadata for the plume_nav_sim v1.0 framework
+metadata:
+  version: "1.0.0"
+  feature_id: "F-014"
+  protocol_interface: "AgentInitializerProtocol"
+  performance_target: "<1ms for 100 agents"
+  deterministic_behavior: true
+  multi_agent_support: true
+  hydra_group: "agent_init"
+  config_schema_version: "2024.1"

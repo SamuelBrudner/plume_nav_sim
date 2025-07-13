@@ -1,0 +1,440 @@
+# @package _global_
+# =============================================================================
+# Full Hook System Configuration
+# =============================================================================
+# Comprehensive hook system configuration with all extension points enabled.
+# Provides maximum customization capability while maintaining performance targets.
+# Suitable for advanced research scenarios requiring complete observability and
+# extensibility.
+#
+# Performance Target: ≤33 ms/step with all hooks enabled
+# Hook Overhead Target: <1 ms/step when hooks are no-ops
+# Agent Support: Up to 100 concurrent agents with vectorized operations
+# =============================================================================
+
+# Configuration for comprehensive hook system with all extension points enabled
+# This file provides the full hooks configuration when selected via "hooks=full"
+
+# =============================================================================
+# Hook System Core Configuration
+# =============================================================================
+hooks:
+  # Enable the comprehensive hook framework
+  enabled: true
+  
+  # Performance monitoring for hook execution
+  monitor_performance: true
+  performance_threshold_ms: 1.0  # Alert if hook overhead exceeds threshold
+  
+  # Correlation tracking for debugging and analysis
+  enable_correlation_tracking: true
+  correlation_id_format: "hook-{timestamp}-{component}-{uuid4}"
+  
+  # =============================================================================
+  # Lifecycle Hook Configuration
+  # =============================================================================
+  lifecycle:
+    # Pre-step hooks - executed before each simulation step
+    pre_step:
+      enabled: true
+      hooks:
+        - name: "state_validator"
+          _target_: plume_nav_sim.hooks.lifecycle.StateValidationHook
+          validate_positions: true
+          validate_boundaries: true
+          validate_sources: true
+          log_validation_results: true
+          
+        - name: "performance_profiler"
+          _target_: plume_nav_sim.hooks.lifecycle.PerformanceProfilerHook
+          profile_components: ["navigation", "plume", "sensors", "boundaries"]
+          enable_memory_tracking: true
+          enable_timing_breakdown: true
+          
+        - name: "custom_state_preparation"
+          _target_: plume_nav_sim.hooks.lifecycle.CustomStatePreparationHook
+          prepare_extra_observations: true
+          prepare_debug_data: true
+          enable_state_snapshots: true
+    
+    # Post-step hooks - executed after each simulation step
+    post_step:
+      enabled: true
+      hooks:
+        - name: "trajectory_recorder"
+          _target_: plume_nav_sim.hooks.lifecycle.TrajectoryRecorderHook
+          record_full_state: true
+          record_intermediate_calculations: true
+          buffer_size: 1000
+          compression_enabled: true
+          
+        - name: "statistics_collector"
+          _target_: plume_nav_sim.hooks.lifecycle.StatisticsCollectorHook
+          collect_step_metrics: true
+          collect_agent_metrics: true
+          collect_environment_metrics: true
+          real_time_analysis: true
+          
+        - name: "visualization_updater"
+          _target_: plume_nav_sim.hooks.lifecycle.VisualizationUpdaterHook
+          update_real_time_plots: true
+          export_frame_snapshots: true
+          enable_trajectory_overlay: true
+          
+        - name: "alert_system"
+          _target_: plume_nav_sim.hooks.lifecycle.AlertSystemHook
+          monitor_performance_sla: true
+          monitor_boundary_violations: true
+          monitor_convergence_metrics: true
+          alert_threshold_violations: true
+    
+    # Episode-end hooks - executed when episodes complete
+    episode_end:
+      enabled: true
+      hooks:
+        - name: "episode_summarizer"
+          _target_: plume_nav_sim.hooks.lifecycle.EpisodeSummarizerHook
+          generate_comprehensive_summary: true
+          calculate_success_metrics: true
+          analyze_trajectory_patterns: true
+          export_summary_json: true
+          
+        - name: "data_validator"
+          _target_: plume_nav_sim.hooks.lifecycle.DataValidatorHook
+          validate_trajectory_integrity: true
+          validate_metric_consistency: true
+          validate_reproducibility: true
+          
+        - name: "cleanup_manager"
+          _target_: plume_nav_sim.hooks.lifecycle.CleanupManagerHook
+          cleanup_temporary_files: true
+          optimize_data_storage: true
+          flush_all_buffers: true
+          generate_cleanup_report: true
+
+  # =============================================================================
+  # Extension Point Configuration
+  # =============================================================================
+  extensions:
+    # Custom observation functions
+    extra_obs_fn:
+      enabled: true
+      functions:
+        - name: "plume_gradient_analysis"
+          _target_: plume_nav_sim.hooks.extensions.PlumeGradientAnalysisObs
+          calculate_spatial_gradients: true
+          calculate_temporal_gradients: true
+          include_statistical_moments: true
+          vectorized_computation: true
+          
+        - name: "agent_interaction_features"
+          _target_: plume_nav_sim.hooks.extensions.AgentInteractionObs
+          calculate_inter_agent_distances: true
+          detect_collision_risks: true
+          analyze_coordination_patterns: true
+          include_communication_features: true
+          
+        - name: "environmental_context"
+          _target_: plume_nav_sim.hooks.extensions.EnvironmentalContextObs
+          include_wind_field_features: true
+          include_boundary_proximity: true
+          include_source_distance_features: true
+          include_temporal_context: true
+    
+    # Custom reward functions
+    extra_reward_fn:
+      enabled: true
+      functions:
+        - name: "exploration_bonus"
+          _target_: plume_nav_sim.hooks.extensions.ExplorationBonusReward
+          novelty_weight: 0.1
+          coverage_weight: 0.05
+          diversity_bonus: true
+          temporal_decay: 0.99
+          
+        - name: "efficiency_penalty"
+          _target_: plume_nav_sim.hooks.extensions.EfficiencyPenaltyReward
+          energy_consumption_weight: -0.01
+          path_length_penalty: -0.005
+          collision_penalty: -1.0
+          boundary_violation_penalty: -0.5
+          
+        - name: "collaborative_bonus"
+          _target_: plume_nav_sim.hooks.extensions.CollaborativeBonusReward
+          team_success_bonus: 1.0
+          coordination_reward: 0.2
+          information_sharing_bonus: 0.1
+          redundancy_penalty: -0.1
+    
+    # Episode completion functions
+    episode_end_fn:
+      enabled: true
+      functions:
+        - name: "adaptive_curriculum"
+          _target_: plume_nav_sim.hooks.extensions.AdaptiveCurriculumEpisodeEnd
+          adjust_difficulty: true
+          track_learning_progress: true
+          modify_environment_parameters: true
+          export_curriculum_state: true
+          
+        - name: "model_checkpointing"
+          _target_: plume_nav_sim.hooks.extensions.ModelCheckpointingEpisodeEnd
+          save_periodic_checkpoints: true
+          validate_model_performance: true
+          export_training_metrics: true
+          cleanup_old_checkpoints: true
+          
+        - name: "experiment_tracking"
+          _target_: plume_nav_sim.hooks.extensions.ExperimentTrackingEpisodeEnd
+          log_to_wandb: true
+          log_to_tensorboard: true
+          export_artifacts: true
+          sync_remote_storage: true
+
+  # =============================================================================
+  # Component-Specific Hook Configuration
+  # =============================================================================
+  components:
+    # Source component hooks
+    source:
+      enabled: true
+      hooks:
+        - name: "source_state_monitor"
+          _target_: plume_nav_sim.hooks.components.SourceStateMonitorHook
+          track_emission_patterns: true
+          monitor_source_dynamics: true
+          validate_concentration_fields: true
+          
+        - name: "multi_source_coordinator"
+          _target_: plume_nav_sim.hooks.components.MultiSourceCoordinatorHook
+          coordinate_multiple_sources: true
+          optimize_source_placement: true
+          detect_source_interactions: true
+    
+    # Agent initialization hooks
+    agent_init:
+      enabled: true
+      hooks:
+        - name: "position_validator"
+          _target_: plume_nav_sim.hooks.components.PositionValidatorHook
+          validate_initial_positions: true
+          prevent_agent_overlap: true
+          ensure_valid_starting_states: true
+          
+        - name: "initialization_tracker"
+          _target_: plume_nav_sim.hooks.components.InitializationTrackerHook
+          log_initialization_patterns: true
+          track_seed_reproducibility: true
+          validate_deterministic_behavior: true
+    
+    # Boundary policy hooks
+    boundary:
+      enabled: true
+      hooks:
+        - name: "boundary_analytics"
+          _target_: plume_nav_sim.hooks.components.BoundaryAnalyticsHook
+          track_boundary_interactions: true
+          analyze_violation_patterns: true
+          optimize_boundary_responses: true
+          
+        - name: "collision_detector"
+          _target_: plume_nav_sim.hooks.components.CollisionDetectorHook
+          detect_agent_collisions: true
+          prevent_collision_cascades: true
+          log_collision_events: true
+    
+    # Action interface hooks
+    action:
+      enabled: true
+      hooks:
+        - name: "action_validator"
+          _target_: plume_nav_sim.hooks.components.ActionValidatorHook
+          validate_action_bounds: true
+          detect_invalid_actions: true
+          sanitize_action_inputs: true
+          
+        - name: "action_analyzer"
+          _target_: plume_nav_sim.hooks.components.ActionAnalyzerHook
+          analyze_action_distributions: true
+          detect_action_patterns: true
+          track_action_effectiveness: true
+    
+    # Recorder hooks
+    recorder:
+      enabled: true
+      hooks:
+        - name: "data_integrity_checker"
+          _target_: plume_nav_sim.hooks.components.DataIntegrityCheckerHook
+          validate_data_consistency: true
+          detect_data_corruption: true
+          verify_schema_compliance: true
+          
+        - name: "compression_optimizer"
+          _target_: plume_nav_sim.hooks.components.CompressionOptimizerHook
+          optimize_compression_settings: true
+          monitor_storage_efficiency: true
+          adjust_buffer_sizes: true
+    
+    # Statistics aggregator hooks
+    stats:
+      enabled: true
+      hooks:
+        - name: "metric_validator"
+          _target_: plume_nav_sim.hooks.components.MetricValidatorHook
+          validate_statistical_correctness: true
+          detect_metric_anomalies: true
+          ensure_metric_consistency: true
+          
+        - name: "real_time_analyzer"
+          _target_: plume_nav_sim.hooks.components.RealTimeAnalyzerHook
+          calculate_streaming_statistics: true
+          detect_trend_changes: true
+          generate_alerts: true
+
+  # =============================================================================
+  # Debug and Development Hook Configuration
+  # =============================================================================
+  debug:
+    enabled: true
+    
+    # Interactive debugging hooks
+    interactive:
+      enabled: true
+      hooks:
+        - name: "step_debugger"
+          _target_: plume_nav_sim.hooks.debug.StepDebuggerHook
+          enable_breakpoints: true
+          enable_step_through: true
+          enable_state_inspection: true
+          
+        - name: "visualization_debugger"
+          _target_: plume_nav_sim.hooks.debug.VisualizationDebuggerHook
+          enable_real_time_plots: true
+          enable_interactive_controls: true
+          enable_state_overlay: true
+    
+    # Profiling and performance hooks
+    profiling:
+      enabled: true
+      hooks:
+        - name: "performance_profiler"
+          _target_: plume_nav_sim.hooks.debug.PerformanceProfilerHook
+          profile_memory_usage: true
+          profile_cpu_usage: true
+          profile_gpu_usage: true
+          enable_detailed_timing: true
+          
+        - name: "bottleneck_detector"
+          _target_: plume_nav_sim.hooks.debug.BottleneckDetectorHook
+          detect_performance_bottlenecks: true
+          analyze_scaling_behavior: true
+          suggest_optimizations: true
+    
+    # Testing and validation hooks
+    testing:
+      enabled: true
+      hooks:
+        - name: "unit_test_runner"
+          _target_: plume_nav_sim.hooks.debug.UnitTestRunnerHook
+          run_component_tests: true
+          validate_protocol_compliance: true
+          check_invariants: true
+          
+        - name: "integration_tester"
+          _target_: plume_nav_sim.hooks.debug.IntegrationTesterHook
+          test_component_interactions: true
+          validate_data_flow: true
+          check_performance_sla: true
+
+  # =============================================================================
+  # Performance Optimization Configuration
+  # =============================================================================
+  performance:
+    # Global performance settings
+    enable_vectorization: true
+    enable_jit_compilation: true
+    enable_parallel_execution: true
+    
+    # Memory management
+    memory_management:
+      enable_memory_pooling: true
+      enable_garbage_collection_tuning: true
+      memory_pressure_threshold: 0.8
+      
+    # Caching optimization
+    caching:
+      enable_hook_result_caching: true
+      cache_invalidation_strategy: "smart"
+      max_cache_size_mb: 256
+      
+    # Threading configuration
+    threading:
+      max_worker_threads: 4
+      enable_async_hooks: true
+      thread_pool_timeout: 30.0
+      
+    # Batch processing optimization
+    batching:
+      enable_batch_processing: true
+      batch_size: 100
+      batch_timeout_ms: 10.0
+
+  # =============================================================================
+  # Logging and Monitoring Configuration
+  # =============================================================================
+  logging:
+    # Hook-specific logging
+    enabled: true
+    log_level: "INFO"
+    log_hook_execution: true
+    log_performance_metrics: true
+    log_correlation_ids: true
+    
+    # Structured logging format
+    format:
+      include_timestamps: true
+      include_component_names: true
+      include_hook_names: true
+      include_performance_data: true
+      
+    # Log aggregation
+    aggregation:
+      enable_log_aggregation: true
+      aggregation_interval_seconds: 60
+      export_aggregated_logs: true
+      
+    # Alert configuration
+    alerts:
+      enable_performance_alerts: true
+      enable_error_alerts: true
+      alert_escalation_levels: ["WARNING", "ERROR", "CRITICAL"]
+
+  # =============================================================================
+  # Experimental Features
+  # =============================================================================
+  experimental:
+    # Advanced hook features (use with caution)
+    enabled: false
+    
+    # Machine learning enhanced hooks
+    ml_enhanced:
+      enable_adaptive_hooks: false
+      enable_predictive_profiling: false
+      enable_auto_optimization: false
+      
+    # Distributed hooks (for future multi-node support)
+    distributed:
+      enable_distributed_hooks: false
+      enable_remote_execution: false
+      enable_cluster_coordination: false
+
+# =============================================================================
+# Hook System Integration Points
+# =============================================================================
+# This configuration integrates with:
+# - Core simulation loop for lifecycle hooks
+# - Component protocols for extension points
+# - Performance monitoring system for SLA compliance
+# - Logging infrastructure for observability
+# - Configuration system for runtime customization
+# =============================================================================

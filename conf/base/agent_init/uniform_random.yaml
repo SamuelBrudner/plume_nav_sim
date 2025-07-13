@@ -1,0 +1,255 @@
+# @package _global_
+#
+# Hydra Configuration for Uniform Random Agent Initialization Strategy
+# 
+# This configuration implements the uniform_random strategy for the AgentInitializer 
+# framework, providing deterministic random agent placement within domain boundaries.
+# The configuration supports reproducible experimental setups with configurable seed,
+# collision avoidance parameters, and environment variable overrides.
+#
+# IMPLEMENTATION STATUS: 
+# - Core functionality (bounds, seed, margin) is implemented and working
+# - Advanced features are specified but require UniformRandomInitializer enhancement
+# - All TODO sections indicate features planned for v1.0 but not yet implemented
+#
+# Feature: F-014 Agent Initialization Strategies
+# Requirements: F-014-RQ-001 (Deterministic seeding), F-014-RQ-004 (Runtime switching)
+# Performance Target: <1ms initialization for 100 agents
+#
+# Key Features:
+# - Deterministic seeding for 100% reproducible position generation
+# - Configurable domain bounds with margin safety zones
+# - Optional collision avoidance with rejection sampling
+# - Environment variable overrides for deployment flexibility
+# - Runtime parameter validation and bounds checking
+# - Multi-agent position validation for domain constraint compliance
+#
+# Usage Examples:
+#   # Basic usage with default parameters
+#   python run_simulation.py agent_init=uniform_random
+#
+#   # With custom domain bounds and seed
+#   python run_simulation.py agent_init=uniform_random \
+#     agent_init.domain_bounds=[200,150] agent_init.seed=42
+#
+#   # With environment variable override
+#   AGENT_INIT_SEED=123 python run_simulation.py agent_init=uniform_random
+#
+# Integration Points:
+# - PlumeNavigationEnv.reset() method for episode initialization  
+# - Multi-agent scenarios with vectorized position generation
+# - Configuration-driven strategy switching via Hydra groups
+
+# Target class for Hydra instantiation
+# References the UniformRandomInitializer implementation from core.initialization module
+_target_: plume_nav_sim.core.initialization.UniformRandomInitializer
+
+# Core Configuration Parameters
+# Domain bounds define the rectangular region for agent placement
+# Format: [width, height] in simulation units (typically meters)
+# Agents will be placed uniformly at random within [0, width] x [0, height]
+# Must be positive values, validated at initialization time
+# Note: Parameter name 'bounds' matches UniformRandomInitializer constructor
+bounds: [100.0, 100.0]
+
+# Random seed for deterministic position generation
+# - null: Non-deterministic random behavior (different each run)
+# - integer: Reproducible behavior (identical positions each run)
+# - Critical for scientific reproducibility per F-014-RQ-001
+# - Can be overridden via environment variable AGENT_INIT_SEED
+seed: null
+
+# Safety margin from domain edges in simulation units
+# Prevents agents from spawning too close to boundaries
+# - 0.0: Agents can spawn at exact domain edges
+# - >0: Creates buffer zone, effective domain becomes smaller
+# - Must be non-negative and less than half of minimum domain dimension
+# - Useful for boundary policy integration and collision prevention
+margin: 0.0
+
+# Advanced Features (TODO: Not yet implemented in current UniformRandomInitializer)
+# These parameters are part of the v1.0 specification but require implementation enhancement
+
+# Minimum distance between agents during initialization
+# Controls spatial distribution density and prevents overcrowding
+# - 0.0: No minimum distance enforced (pure uniform random)
+# - >0: Rejection sampling enforces minimum separation
+# - Units: simulation distance (typically meters)
+# - Performance impact: Higher values increase rejection sampling iterations
+# TODO: Implement rejection sampling in UniformRandomInitializer
+min_distance: 0.0
+
+# Maximum attempts for rejection sampling
+# Limits computation time when min_distance constraints are difficult to satisfy
+# - Lower values: Faster initialization, may fail with tight constraints
+# - Higher values: Better constraint satisfaction, potential performance impact
+# - Recommended: 100-1000 for most scenarios
+# - Validation failure triggers fallback to relaxed constraints
+# TODO: Implement rejection sampling logic
+max_attempts: 100
+
+# Rejection sampling configuration
+# Advanced control over the collision avoidance algorithm
+# TODO: Implement rejection sampling in UniformRandomInitializer
+rejection_sampling:
+  # Enable/disable rejection sampling for min_distance enforcement
+  enabled: true
+  
+  # Strategy for handling failed attempts
+  # - "relax": Gradually reduce min_distance until success
+  # - "fail": Raise exception if max_attempts exceeded
+  # - "ignore": Place agents without distance constraints after max_attempts
+  fallback_strategy: "relax"
+  
+  # Distance relaxation factor when fallback_strategy="relax"
+  # Each failed attempt reduces min_distance by this factor
+  # Range: (0.0, 1.0), typical values: 0.9-0.95
+  relaxation_factor: 0.9
+  
+  # Enable spatial optimization for faster collision detection
+  # Uses spatial hashing to accelerate distance calculations
+  # Recommended for scenarios with >50 agents
+  spatial_optimization: true
+
+# Collision avoidance configuration
+# Additional safety measures for multi-agent initialization
+# TODO: Implement collision avoidance in UniformRandomInitializer
+collision_avoidance:
+  # Enable post-placement collision checking and correction
+  enabled: false
+  
+  # Agent radius for collision detection (simulation units)
+  # Represents physical size or personal space requirement
+  agent_radius: 0.5
+  
+  # Maximum displacement for collision resolution
+  # Limits how far agents can be moved during collision correction
+  max_displacement: 2.0
+  
+  # Collision resolution algorithm
+  # - "push": Move colliding agents apart
+  # - "redistribute": Re-randomize positions for colliding agents
+  # - "cluster": Allow overlapping but track collision events
+  resolution_method: "push"
+
+# Boundary handling configuration
+# Defines behavior when agents are placed near or outside domain bounds
+# TODO: Implement advanced boundary handling in UniformRandomInitializer
+boundary_handling:
+  # Boundary enforcement strategy
+  # - "clip": Clamp positions to domain bounds
+  # - "reflect": Mirror positions back into domain
+  # - "wrap": Wrap around periodic boundaries
+  # - "error": Raise exception for out-of-bounds positions
+  strategy: "clip"
+  
+  # Tolerance for boundary violations (simulation units)
+  # Small violations within tolerance are automatically corrected
+  tolerance: 1e-6
+  
+  # Enable validation warnings for boundary adjustments
+  warn_on_adjustment: true
+
+# Environment variable overrides
+# Allows runtime parameter modification without code changes
+# Critical for deployment flexibility and CI/CD integration
+# TODO: Implement environment variable override support in UniformRandomInitializer
+environment_overrides:
+  # Mapping of environment variable names to configuration paths
+  # Format: {"ENV_VAR_NAME": "config.path.to.parameter"}
+  env_mappings:
+    AGENT_INIT_SEED: "seed"
+    AGENT_INIT_DOMAIN_WIDTH: "domain_bounds.0"
+    AGENT_INIT_DOMAIN_HEIGHT: "domain_bounds.1" 
+    AGENT_INIT_MARGIN: "margin"
+    AGENT_INIT_MIN_DISTANCE: "min_distance"
+    AGENT_INIT_MAX_ATTEMPTS: "max_attempts"
+  
+  # Enable automatic type conversion for environment variables
+  # Ensures proper type handling (int, float, bool) from string env vars
+  auto_convert_types: true
+  
+  # Validation mode for environment overrides
+  # - "strict": Fail on invalid environment values
+  # - "warn": Log warnings but continue with defaults
+  # - "silent": Ignore invalid values silently
+  validation_mode: "warn"
+
+# Performance optimization settings
+# Fine-tuning for large-scale multi-agent scenarios
+# TODO: Implement performance optimization features in UniformRandomInitializer
+performance:
+  # Use vectorized NumPy operations for position generation
+  # Significant speedup for large agent counts (>50 agents)
+  vectorized_ops: true
+  
+  # Pre-allocate arrays for known agent counts
+  # Reduces memory allocation overhead during initialization
+  preallocate_arrays: true
+  
+  # Float precision for position arrays
+  # - "float32": Memory efficient, sufficient for most simulations
+  # - "float64": Higher precision, required for some scientific applications
+  dtype: "float32"
+  
+  # Enable performance monitoring and timing
+  # Logs initialization time for performance regression detection
+  enable_profiling: false
+
+# Validation and debugging settings
+# Development and debugging aids for configuration troubleshooting
+# TODO: Implement advanced validation features in UniformRandomInitializer
+validation:
+  # Enable comprehensive parameter validation at initialization
+  # Checks all constraints and relationships between parameters
+  strict_validation: true
+  
+  # Log detailed initialization information
+  # Helpful for debugging complex multi-agent scenarios
+  verbose_logging: false
+  
+  # Save initialization state for reproducibility verification
+  # Creates snapshot of random state and generated positions
+  save_debug_info: false
+  
+  # Debug output directory (relative to working directory)
+  debug_output_dir: "debug/agent_init"
+
+# Metadata for configuration management
+# Administrative information for version control and documentation
+metadata:
+  # Configuration version for compatibility tracking
+  version: "1.0.0"
+  
+  # Human-readable description
+  description: "Uniform random agent initialization with collision avoidance"
+  
+  # Author information for maintenance
+  author: "Blitzy Platform v1.0 Development Team"
+  
+  # Creation and modification timestamps
+  created: "2024-01-15"
+  modified: "2024-01-15"
+  
+  # Related feature IDs from technical specification
+  feature_ids: ["F-014"]
+  
+  # Requirement IDs satisfied by this configuration
+  requirement_ids: ["F-014-RQ-001", "F-014-RQ-004"]
+
+# Legacy compatibility settings
+# Backward compatibility with v0.3.0 configuration formats
+# TODO: Implement legacy compatibility support in UniformRandomInitializer
+legacy:
+  # Support legacy parameter names for smooth migration
+  # Maps old parameter names to new configuration paths
+  parameter_aliases:
+    bounds: "domain_bounds"
+    random_seed: "seed"
+    buffer_margin: "margin"
+  
+  # Enable compatibility warnings for deprecated parameters
+  warn_deprecated: true
+  
+  # Migration guidance for deprecated parameters
+  migration_guide_url: "https://docs.plume-nav-sim.org/migration/v1.0"

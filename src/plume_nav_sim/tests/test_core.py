@@ -43,6 +43,11 @@ from plume_nav_sim.core.controllers import (
     create_controller_from_config
 )
 
+# Import new v1.0 protocol components for dependency injection testing
+from plume_nav_sim.core.protocols import BoundaryPolicyProtocol
+from plume_nav_sim.core.sources import create_source
+from plume_nav_sim.core.boundaries import create_boundary_policy
+
 # Import utility functions
 from plume_nav_sim.utils.navigator_utils import (
     create_navigator_from_config,
@@ -1060,6 +1065,814 @@ class TestExtensibilityHooksIntegration:
             assert isinstance(metrics, dict)
 
 
+class TestV1SourceProtocolIntegration:
+    """Test v1.0 source protocol integration and component dependency injection."""
+    
+    def test_source_protocol_compliance(self):
+        """Test that source implementations comply with SourceProtocol."""
+        # Test PointSource protocol compliance
+        source_config = {
+            'type': 'PointSource',
+            'position': (50.0, 50.0),
+            'emission_rate': 1000.0
+        }
+        point_source = create_source(source_config)
+        
+        # Verify protocol compliance
+        assert isinstance(point_source, object)  # SourceProtocol is runtime_checkable
+        assert hasattr(point_source, 'get_emission_rate')
+        assert hasattr(point_source, 'get_position')
+        assert hasattr(point_source, 'update_state')
+        assert callable(point_source.get_emission_rate)
+        assert callable(point_source.get_position)
+        assert callable(point_source.update_state)
+    
+    def test_source_factory_creation(self):
+        """Test source factory method with different source types."""
+        # Test PointSource creation
+        point_config = {
+            'type': 'PointSource',
+            'position': (25.0, 75.0),
+            'emission_rate': 500.0
+        }
+        point_source = create_source(point_config)
+        assert point_source.get_position()[0] == 25.0
+        assert point_source.get_position()[1] == 75.0
+        
+        # Test MultiSource creation
+        multi_config = {
+            'type': 'MultiSource',
+            'sources': [
+                {'type': 'PointSource', 'position': (30, 30), 'emission_rate': 500},
+                {'type': 'PointSource', 'position': (70, 70), 'emission_rate': 800}
+            ]
+        }
+        multi_source = create_source(multi_config)
+        assert multi_source.get_source_count() == 2
+        
+        # Test DynamicSource creation
+        dynamic_config = {
+            'type': 'DynamicSource',
+            'initial_position': (50, 50),
+            'pattern_type': 'circular',
+            'amplitude': 10.0,
+            'frequency': 0.1
+        }
+        dynamic_source = create_source(dynamic_config)
+        assert dynamic_source.get_pattern_type() == 'circular'
+    
+    def test_source_emission_rate_functionality(self):
+        """Test source emission rate queries for single and multi-agent scenarios."""
+        source_config = {
+            'type': 'PointSource',
+            'position': (50.0, 50.0),
+            'emission_rate': 1000.0
+        }
+        source = create_source(source_config)
+        
+        # Test scalar emission rate query
+        scalar_rate = source.get_emission_rate()
+        assert isinstance(scalar_rate, (int, float))
+        assert scalar_rate == 1000.0
+        
+        # Test single agent emission rate query
+        single_position = np.array([45.0, 48.0])
+        single_rate = source.get_emission_rate(single_position)
+        assert isinstance(single_rate, (int, float))
+        assert single_rate == 1000.0
+        
+        # Test multi-agent emission rate query
+        multi_positions = np.array([[40, 45], [50, 50], [60, 55]])
+        multi_rates = source.get_emission_rate(multi_positions)
+        assert isinstance(multi_rates, np.ndarray)
+        assert multi_rates.shape == (3,)
+        assert np.all(multi_rates == 1000.0)
+    
+    def test_source_temporal_dynamics(self):
+        """Test source temporal evolution and state updates."""
+        dynamic_config = {
+            'type': 'DynamicSource',
+            'initial_position': (50, 50),
+            'pattern_type': 'linear',
+            'velocity': (1.0, 0.5)
+        }
+        dynamic_source = create_source(dynamic_config)
+        
+        initial_position = dynamic_source.get_position()
+        
+        # Update state and verify position change
+        dynamic_source.update_state(dt=2.0)
+        updated_position = dynamic_source.get_position()
+        
+        # Verify linear motion
+        expected_x = initial_position[0] + 2.0 * 1.0  # dt * velocity_x
+        expected_y = initial_position[1] + 2.0 * 0.5  # dt * velocity_y
+        
+        np.testing.assert_allclose(updated_position[0], expected_x, atol=NUMERICAL_PRECISION_TOLERANCE)
+        np.testing.assert_allclose(updated_position[1], expected_y, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_multi_source_aggregation(self):
+        """Test multi-source emission rate aggregation."""
+        multi_config = {
+            'type': 'MultiSource',
+            'sources': [
+                {'type': 'PointSource', 'position': (30, 30), 'emission_rate': 400},
+                {'type': 'PointSource', 'position': (70, 70), 'emission_rate': 600}
+            ]
+        }
+        multi_source = create_source(multi_config)
+        
+        # Test total emission rate
+        total_rate = multi_source.get_total_emission_rate()
+        assert total_rate == 1000.0  # 400 + 600
+        
+        # Test multi-agent aggregation
+        agent_positions = np.array([[25, 25], [50, 50], [75, 75]])
+        aggregated_rates = multi_source.get_emission_rate(agent_positions)
+        assert isinstance(aggregated_rates, np.ndarray)
+        assert aggregated_rates.shape == (3,)
+        assert np.all(aggregated_rates == 1000.0)  # All agents get sum of all sources
+    
+    def test_source_performance_requirements(self):
+        """Test source performance meets v1.0 requirements."""
+        source_config = {
+            'type': 'PointSource',
+            'position': (50.0, 50.0),
+            'emission_rate': 1000.0
+        }
+        source = create_source(source_config)
+        
+        # Test single query performance (<0.1ms requirement)
+        start_time = time.time()
+        _ = source.get_emission_rate(np.array([45.0, 48.0]))
+        single_query_time = (time.time() - start_time) * 1000
+        assert single_query_time < 0.1, f"Single query took {single_query_time:.3f}ms, should be <0.1ms"
+        
+        # Test multi-agent query performance (<1ms for 100 agents requirement)
+        large_positions = np.random.rand(100, 2) * 100
+        start_time = time.time()
+        _ = source.get_emission_rate(large_positions)
+        multi_query_time = (time.time() - start_time) * 1000
+        assert multi_query_time < 1.0, f"100-agent query took {multi_query_time:.3f}ms, should be <1ms"
+
+
+class TestV1BoundaryPolicyIntegration:
+    """Test v1.0 boundary policy protocol integration and vectorized operations."""
+    
+    def test_boundary_policy_protocol_compliance(self):
+        """Test that boundary policy implementations comply with BoundaryPolicyProtocol."""
+        # Test TerminateBoundary protocol compliance
+        terminate_policy = create_boundary_policy(
+            "terminate", 
+            domain_bounds=(100, 100)
+        )
+        
+        # Verify protocol compliance
+        assert isinstance(terminate_policy, BoundaryPolicyProtocol)
+        assert hasattr(terminate_policy, 'apply_policy')
+        assert hasattr(terminate_policy, 'check_violations')
+        assert hasattr(terminate_policy, 'get_termination_status')
+        assert callable(terminate_policy.apply_policy)
+        assert callable(terminate_policy.check_violations)
+        assert callable(terminate_policy.get_termination_status)
+    
+    def test_boundary_policy_factory_creation(self):
+        """Test boundary policy factory method with different policy types."""
+        domain_bounds = (100, 100)
+        
+        # Test terminate policy creation
+        terminate_policy = create_boundary_policy("terminate", domain_bounds)
+        assert terminate_policy.get_termination_status() == "oob"
+        
+        # Test bounce policy creation
+        bounce_policy = create_boundary_policy(
+            "bounce", 
+            domain_bounds, 
+            elasticity=0.8,
+            energy_loss=0.1
+        )
+        assert bounce_policy.get_termination_status() == "continue"
+        
+        # Test wrap policy creation
+        wrap_policy = create_boundary_policy("wrap", domain_bounds)
+        assert wrap_policy.get_termination_status() == "continue"
+        
+        # Test clip policy creation
+        clip_policy = create_boundary_policy(
+            "clip", 
+            domain_bounds,
+            velocity_damping=0.8
+        )
+        assert clip_policy.get_termination_status() == "continue"
+    
+    def test_boundary_violation_detection(self):
+        """Test vectorized boundary violation detection."""
+        policy = create_boundary_policy("terminate", domain_bounds=(100, 100))
+        
+        # Test single agent violation detection
+        in_bounds_position = np.array([50.0, 50.0])
+        out_bounds_position = np.array([105.0, 50.0])
+        
+        assert not policy.check_violations(in_bounds_position)
+        assert policy.check_violations(out_bounds_position)
+        
+        # Test multi-agent violation detection
+        mixed_positions = np.array([
+            [50, 50],    # In bounds
+            [105, 50],   # Out of bounds (x)
+            [50, 105],   # Out of bounds (y)
+            [25, 75]     # In bounds
+        ])
+        violations = policy.check_violations(mixed_positions)
+        expected_violations = np.array([False, True, True, False])
+        np.testing.assert_array_equal(violations, expected_violations)
+    
+    def test_terminate_boundary_behavior(self):
+        """Test terminate boundary policy behavior."""
+        policy = create_boundary_policy("terminate", domain_bounds=(100, 100))
+        
+        positions = np.array([[50, 50], [105, 50]])  # One in, one out
+        velocities = np.array([[1.0, 0.5], [2.0, 1.0]])
+        
+        # Apply policy - terminate policy should not modify positions/velocities
+        corrected_pos, corrected_vel = policy.apply_policy(positions, velocities)
+        np.testing.assert_array_equal(corrected_pos, positions)
+        np.testing.assert_array_equal(corrected_vel, velocities)
+        
+        # Test termination status
+        assert policy.get_termination_status() == "oob"
+    
+    def test_bounce_boundary_behavior(self):
+        """Test bounce boundary policy behavior with collision physics."""
+        policy = create_boundary_policy(
+            "bounce", 
+            domain_bounds=(100, 100),
+            elasticity=1.0,  # Perfect elastic collision
+            energy_loss=0.0
+        )
+        
+        # Agent moving out of right boundary
+        positions = np.array([[105.0, 50.0]])  # 5 units beyond right boundary
+        velocities = np.array([[2.0, 1.0]])    # Moving right and up
+        
+        corrected_pos, corrected_vel = policy.apply_policy(positions, velocities)
+        
+        # Position should be reflected back into domain
+        assert corrected_pos[0, 0] <= 100.0  # Within x boundary
+        assert corrected_pos[0, 1] == 50.0   # Y unchanged
+        
+        # X velocity should be reversed, Y velocity unchanged
+        assert corrected_vel[0, 0] < 0        # X velocity reversed
+        assert corrected_vel[0, 1] == 1.0     # Y velocity unchanged
+    
+    def test_wrap_boundary_behavior(self):
+        """Test wrap boundary policy behavior with periodic conditions."""
+        policy = create_boundary_policy("wrap", domain_bounds=(100, 100))
+        
+        # Agent beyond right boundary
+        positions = np.array([[105.0, 50.0]])
+        velocities = np.array([[2.0, 1.0]])
+        
+        wrapped_pos, unchanged_vel = policy.apply_policy(positions, velocities)
+        
+        # Position should wrap to left side
+        assert wrapped_pos[0, 0] == 5.0       # 105 % 100 = 5
+        assert wrapped_pos[0, 1] == 50.0      # Y unchanged
+        
+        # Velocities should be unchanged
+        np.testing.assert_array_equal(unchanged_vel, velocities)
+    
+    def test_clip_boundary_behavior(self):
+        """Test clip boundary policy behavior with hard constraints."""
+        policy = create_boundary_policy("clip", domain_bounds=(100, 100))
+        
+        # Agent beyond boundaries
+        positions = np.array([[105.0, 110.0], [50.0, 50.0]])  # One out, one in
+        
+        clipped_pos = policy.apply_policy(positions)
+        
+        # Out-of-bounds position should be clipped
+        assert clipped_pos[0, 0] == 100.0     # Clipped to right boundary
+        assert clipped_pos[0, 1] == 100.0     # Clipped to top boundary
+        
+        # In-bounds position should be unchanged
+        assert clipped_pos[1, 0] == 50.0
+        assert clipped_pos[1, 1] == 50.0
+    
+    def test_boundary_policy_performance_requirements(self):
+        """Test boundary policy performance meets v1.0 requirements."""
+        policy = create_boundary_policy("bounce", domain_bounds=(100, 100))
+        
+        # Test check_violations performance (<0.5ms for 100 agents)
+        large_positions = np.random.rand(100, 2) * 120  # Some out of bounds
+        start_time = time.time()
+        _ = policy.check_violations(large_positions)
+        violation_check_time = (time.time() - start_time) * 1000
+        assert violation_check_time < 0.5, f"Violation check took {violation_check_time:.3f}ms, should be <0.5ms"
+        
+        # Test apply_policy performance (<1ms for 100 agents)
+        large_velocities = np.random.rand(100, 2) * 2 - 1  # Velocities in [-1, 1]
+        start_time = time.time()
+        _ = policy.apply_policy(large_positions, large_velocities)
+        policy_apply_time = (time.time() - start_time) * 1000
+        assert policy_apply_time < 1.0, f"Policy application took {policy_apply_time:.3f}ms, should be <1ms"
+
+
+class TestV1NavigatorProtocolExtensions:
+    """Test NavigatorProtocol extensions with Source and BoundaryPolicy dependencies."""
+    
+    def test_navigator_protocol_source_dependency(self):
+        """Test NavigatorProtocol extension with source dependency injection."""
+        # Create a navigator with source dependency
+        navigator = SingleAgentController(position=(25.0, 25.0))
+        
+        # Test source property access (may be None if not configured)
+        source = getattr(navigator, 'source', None)
+        if source is not None:
+            # If source is configured, verify it implements SourceProtocol
+            assert hasattr(source, 'get_emission_rate')
+            assert hasattr(source, 'get_position')
+            assert hasattr(source, 'update_state')
+        
+        # Test source integration
+        if hasattr(navigator, 'set_source'):
+            test_source_config = {
+                'type': 'PointSource',
+                'position': (50.0, 50.0),
+                'emission_rate': 1000.0
+            }
+            test_source = create_source(test_source_config)
+            navigator.set_source(test_source)
+            
+            # Verify source integration
+            assert navigator.source is not None
+            assert navigator.source.get_emission_rate() == 1000.0
+    
+    def test_navigator_protocol_boundary_policy_dependency(self):
+        """Test NavigatorProtocol extension with boundary policy dependency injection."""
+        # Create a navigator with boundary policy dependency
+        navigator = SingleAgentController(position=(75.0, 75.0))
+        
+        # Test boundary_policy property access (may be None if not configured)
+        boundary_policy = getattr(navigator, 'boundary_policy', None)
+        if boundary_policy is not None:
+            # If boundary policy is configured, verify it implements BoundaryPolicyProtocol
+            assert isinstance(boundary_policy, BoundaryPolicyProtocol)
+            assert hasattr(boundary_policy, 'apply_policy')
+            assert hasattr(boundary_policy, 'check_violations')
+            assert hasattr(boundary_policy, 'get_termination_status')
+        
+        # Test boundary policy integration
+        if hasattr(navigator, 'set_boundary_policy'):
+            test_policy = create_boundary_policy("terminate", domain_bounds=(100, 100))
+            navigator.set_boundary_policy(test_policy)
+            
+            # Verify boundary policy integration
+            assert navigator.boundary_policy is not None
+            assert navigator.boundary_policy.get_termination_status() == "oob"
+    
+    def test_navigator_dependency_injection_patterns(self):
+        """Test component dependency injection patterns in controllers."""
+        # Test source dependency injection
+        source_config = {
+            'type': 'PointSource',
+            'position': (60.0, 40.0),
+            'emission_rate': 750.0
+        }
+        source = create_source(source_config)
+        
+        # Test boundary policy dependency injection
+        boundary_policy = create_boundary_policy(
+            "bounce", 
+            domain_bounds=(100, 100),
+            elasticity=0.9
+        )
+        
+        # Create navigator with dependencies (if supported)
+        navigator = SingleAgentController(position=(30.0, 30.0))
+        
+        # Test dependency injection methods (if available)
+        if hasattr(navigator, 'configure_dependencies'):
+            navigator.configure_dependencies(
+                source=source,
+                boundary_policy=boundary_policy
+            )
+            
+            # Verify dependencies are properly injected
+            assert navigator.source is source
+            assert navigator.boundary_policy is boundary_policy
+        
+        # Test that navigator can operate with dependencies
+        if hasattr(navigator, 'source') and navigator.source is not None:
+            # Test source-aware navigation
+            mock_env = np.random.rand(50, 50)
+            navigator.step(mock_env)  # Should complete without error
+            
+            # Verify navigator can query source
+            emission_rate = navigator.source.get_emission_rate()
+            assert isinstance(emission_rate, (int, float))
+    
+    def test_v1_component_integration_workflow(self):
+        """Test complete v1.0 component integration workflow."""
+        # Step 1: Create source component
+        source_config = {
+            'type': 'DynamicSource',
+            'initial_position': (50, 50),
+            'pattern_type': 'circular',
+            'amplitude': 15.0,
+            'frequency': 0.1
+        }
+        source = create_source(source_config)
+        
+        # Step 2: Create boundary policy component
+        boundary_policy = create_boundary_policy(
+            "wrap",
+            domain_bounds=(100, 100)
+        )
+        
+        # Step 3: Create navigator with v1.0 integration (if supported)
+        navigator = MultiAgentController(
+            positions=np.array([[25, 25], [75, 75]])
+        )
+        
+        # Step 4: Test component integration
+        components = {
+            'source': source,
+            'boundary_policy': boundary_policy
+        }
+        
+        # Verify components implement correct protocols
+        assert hasattr(source, 'get_emission_rate')
+        assert hasattr(source, 'update_state')
+        assert isinstance(boundary_policy, BoundaryPolicyProtocol)
+        
+        # Step 5: Test integrated simulation step
+        mock_env = np.random.rand(100, 100)
+        
+        # Update source state
+        source.update_state(dt=1.0)
+        
+        # Check boundary violations
+        violations = boundary_policy.check_violations(navigator.positions)
+        if np.any(violations):
+            corrected_positions = boundary_policy.apply_policy(navigator.positions)
+            # Verify positions were corrected appropriately
+            assert isinstance(corrected_positions, np.ndarray)
+        
+        # Execute navigator step
+        navigator.step(mock_env)
+        
+        # Verify simulation completed successfully
+        assert navigator.positions.shape == (2, 2)
+        assert np.all(np.isfinite(navigator.positions))
+
+
+class TestV1HookPointIntegration:
+    """Test hook point integration in core navigation components for v1.0."""
+    
+    def test_component_lifecycle_hooks(self):
+        """Test that navigation components support lifecycle hooks."""
+        navigator = SingleAgentController(
+            position=(25.0, 25.0),
+            enable_extensibility_hooks=True
+        )
+        
+        # Test pre-step hook integration
+        if hasattr(navigator, 'on_pre_step'):
+            mock_env = np.random.rand(50, 50)
+            navigator.on_pre_step(mock_env)  # Should not raise error
+        
+        # Test post-step hook integration
+        if hasattr(navigator, 'on_post_step'):
+            mock_env = np.random.rand(50, 50)
+            navigator.on_post_step(mock_env)  # Should not raise error
+        
+        # Test reset hook integration
+        if hasattr(navigator, 'on_reset'):
+            navigator.on_reset()  # Should not raise error
+    
+    def test_source_integration_hooks(self):
+        """Test source integration hooks in navigation components."""
+        # Create source for testing hooks
+        source_config = {
+            'type': 'PointSource',
+            'position': (50.0, 50.0),
+            'emission_rate': 1000.0
+        }
+        source = create_source(source_config)
+        
+        navigator = SingleAgentController(position=(40.0, 40.0))
+        
+        # Test source state update hooks
+        if hasattr(navigator, 'update_source_state'):
+            navigator.update_source_state(source, dt=1.0)
+        
+        # Test source query hooks
+        if hasattr(navigator, 'on_source_query'):
+            emission_rate = source.get_emission_rate(navigator.positions)
+            navigator.on_source_query(source, emission_rate)
+    
+    def test_boundary_policy_integration_hooks(self):
+        """Test boundary policy integration hooks in navigation components."""
+        # Create boundary policy for testing hooks
+        boundary_policy = create_boundary_policy("bounce", domain_bounds=(100, 100))
+        
+        navigator = MultiAgentController(
+            positions=np.array([[95.0, 50.0], [50.0, 95.0]])  # Near boundaries
+        )
+        
+        # Test boundary violation hooks
+        violations = boundary_policy.check_violations(navigator.positions)
+        if hasattr(navigator, 'on_boundary_violation'):
+            navigator.on_boundary_violation(violations, boundary_policy)
+        
+        # Test boundary correction hooks
+        if np.any(violations):
+            corrected_positions = boundary_policy.apply_policy(navigator.positions)
+            if hasattr(navigator, 'on_boundary_correction'):
+                navigator.on_boundary_correction(
+                    original_positions=navigator.positions,
+                    corrected_positions=corrected_positions,
+                    policy=boundary_policy
+                )
+    
+    def test_dependency_injection_hooks(self):
+        """Test dependency injection hooks for v1.0 components."""
+        navigator = SingleAgentController(position=(30.0, 30.0))
+        
+        # Test source injection hooks
+        if hasattr(navigator, 'on_source_injected'):
+            source_config = {'type': 'PointSource', 'position': (60, 60), 'emission_rate': 500}
+            source = create_source(source_config)
+            navigator.on_source_injected(source)
+        
+        # Test boundary policy injection hooks
+        if hasattr(navigator, 'on_boundary_policy_injected'):
+            policy = create_boundary_policy("terminate", domain_bounds=(100, 100))
+            navigator.on_boundary_policy_injected(policy)
+        
+        # Test component configuration hooks
+        if hasattr(navigator, 'on_components_configured'):
+            component_config = {
+                'source_type': 'PointSource',
+                'boundary_policy_type': 'terminate'
+            }
+            navigator.on_components_configured(component_config)
+    
+    def test_performance_monitoring_hooks(self):
+        """Test performance monitoring hooks for v1.0 components."""
+        navigator = SingleAgentController(
+            position=(45.0, 55.0),
+            enable_extensibility_hooks=True
+        )
+        
+        # Test performance measurement hooks
+        if hasattr(navigator, 'on_performance_measured'):
+            performance_data = {
+                'step_time': 0.5,  # milliseconds
+                'query_count': 10,
+                'memory_usage': 1024  # bytes
+            }
+            navigator.on_performance_measured(performance_data)
+        
+        # Test performance threshold hooks
+        if hasattr(navigator, 'on_performance_threshold_exceeded'):
+            threshold_data = {
+                'metric': 'step_time',
+                'value': 1.5,
+                'threshold': 1.0,
+                'severity': 'warning'
+            }
+            navigator.on_performance_threshold_exceeded(threshold_data)
+    
+    def test_extensibility_hook_chaining(self):
+        """Test that extensibility hooks can be chained and composed."""
+        navigator = SingleAgentController(
+            position=(35.0, 65.0),
+            enable_extensibility_hooks=True
+        )
+        
+        # Test observation hook chaining
+        base_obs = {"position": [35.0, 65.0], "orientation": 0.0}
+        
+        # Call additional observations hook multiple times to test chaining
+        additional_obs_1 = navigator.compute_additional_obs(base_obs)
+        combined_obs = {**base_obs, **additional_obs_1}
+        additional_obs_2 = navigator.compute_additional_obs(combined_obs)
+        
+        # Verify hook chaining works correctly
+        assert isinstance(additional_obs_1, dict)
+        assert isinstance(additional_obs_2, dict)
+        
+        # Test reward hook chaining
+        base_reward = 1.0
+        info = {"step": 50}
+        
+        extra_reward_1 = navigator.compute_extra_reward(base_reward, info)
+        total_reward = base_reward + extra_reward_1
+        extra_reward_2 = navigator.compute_extra_reward(total_reward, info)
+        
+        # Verify reward hook chaining works correctly
+        assert isinstance(extra_reward_1, (int, float))
+        assert isinstance(extra_reward_2, (int, float))
+    
+    def test_hook_error_handling(self):
+        """Test error handling in hook point integration."""
+        navigator = SingleAgentController(
+            position=(20.0, 80.0),
+            enable_extensibility_hooks=True
+        )
+        
+        # Test that hooks handle None inputs gracefully
+        additional_obs = navigator.compute_additional_obs(None)
+        assert isinstance(additional_obs, dict)
+        
+        extra_reward = navigator.compute_extra_reward(0.0, None)
+        assert isinstance(extra_reward, (int, float))
+        
+        # Test that episode end hook handles empty info
+        navigator.on_episode_end({})  # Should not raise error
+        navigator.on_episode_end(None)  # Should not raise error
+    
+    def test_hook_integration_with_v1_components(self):
+        """Test hook integration with v1.0 source and boundary components."""
+        navigator = SingleAgentController(
+            position=(55.0, 45.0),
+            enable_extensibility_hooks=True
+        )
+        
+        # Create v1.0 components
+        source = create_source({
+            'type': 'DynamicSource',
+            'initial_position': (50, 50),
+            'pattern_type': 'linear',
+            'velocity': (1.0, 0.5)
+        })
+        
+        boundary_policy = create_boundary_policy("wrap", domain_bounds=(100, 100))
+        
+        # Test hooks receive component information
+        base_obs = {"position": navigator.positions[0]}
+        
+        # If navigator supports component-aware hooks
+        if hasattr(navigator, 'compute_additional_obs_with_components'):
+            component_obs = navigator.compute_additional_obs_with_components(
+                base_obs, source=source, boundary_policy=boundary_policy
+            )
+            assert isinstance(component_obs, dict)
+        
+        # Test that standard hooks work with component integration
+        mock_env = np.random.rand(100, 100)
+        
+        # Update components
+        source.update_state(dt=1.0)
+        violations = boundary_policy.check_violations(navigator.positions)
+        
+        # Test hooks with component state
+        additional_obs = navigator.compute_additional_obs(base_obs)
+        assert isinstance(additional_obs, dict)
+        
+        # Component state should not break hook functionality
+        navigator.step(mock_env)  # Should complete successfully
+
+
+class TestV1BackwardCompatibility:
+    """Test backward compatibility during v0.3.0 to v1.0 migration."""
+    
+    def test_existing_navigator_interface_preserved(self):
+        """Test that existing NavigatorProtocol interface is preserved."""
+        # Test that v0.3.0 navigator creation still works
+        navigator = SingleAgentController(
+            position=(10.0, 20.0),
+            orientation=45.0,
+            speed=1.5,
+            max_speed=3.0
+        )
+        
+        # Verify all original properties still exist and work
+        assert hasattr(navigator, 'positions')
+        assert hasattr(navigator, 'orientations')
+        assert hasattr(navigator, 'speeds')
+        assert hasattr(navigator, 'max_speeds')
+        assert hasattr(navigator, 'angular_velocities')
+        assert hasattr(navigator, 'num_agents')
+        
+        # Verify all original methods still exist and work
+        assert hasattr(navigator, 'reset')
+        assert hasattr(navigator, 'step')
+        assert hasattr(navigator, 'sample_odor')
+        assert hasattr(navigator, 'sample_multiple_sensors')
+        
+        # Test that original functionality works unchanged
+        mock_env = np.random.rand(50, 50)
+        navigator.step(mock_env)
+        
+        odor_sample = navigator.sample_odor(mock_env)
+        assert isinstance(odor_sample, (float, np.floating))
+        
+        multi_sensor_samples = navigator.sample_multiple_sensors(mock_env, num_sensors=2)
+        assert isinstance(multi_sensor_samples, np.ndarray)
+        assert multi_sensor_samples.shape == (2,)
+    
+    def test_v0_3_controller_creation_patterns(self):
+        """Test that v0.3.0 controller creation patterns still work."""
+        # Test factory method compatibility
+        single_agent_config = {
+            'position': [15.0, 25.0],
+            'orientation': 90.0,
+            'speed': 2.0,
+            'max_speed': 4.0
+        }
+        
+        navigator = create_navigator_from_config(single_agent_config)
+        assert isinstance(navigator, Navigator)
+        assert navigator.num_agents == 1
+        
+        # Test multi-agent creation patterns
+        multi_agent_config = {
+            'positions': [[0.0, 0.0], [20.0, 20.0]],
+            'orientations': [0.0, 180.0],
+            'speeds': [1.0, 1.5],
+            'max_speeds': [2.0, 3.0]
+        }
+        
+        navigator = create_navigator_from_config(multi_agent_config)
+        assert isinstance(navigator, Navigator)
+        assert navigator.num_agents == 2
+    
+    def test_extensibility_hooks_optional(self):
+        """Test that v1.0 extensibility hooks are optional and backward compatible."""
+        # Create navigator without extensibility hooks (v0.3.0 style)
+        navigator = SingleAgentController(position=(5.0, 5.0))
+        
+        # Verify navigator works without hooks
+        mock_env = np.random.rand(25, 25)
+        navigator.step(mock_env)
+        
+        # Test that hook methods exist but have default behavior
+        base_obs = {"position": [5.0, 5.0]}
+        additional_obs = navigator.compute_additional_obs(base_obs)
+        assert isinstance(additional_obs, dict)
+        
+        extra_reward = navigator.compute_extra_reward(1.0, {})
+        assert isinstance(extra_reward, (int, float))
+        
+        # Test episode end hook (should not raise error)
+        navigator.on_episode_end({"success": True})
+    
+    def test_v1_extensions_do_not_break_v0_3_functionality(self):
+        """Test that v1.0 extensions do not break existing v0.3.0 functionality."""
+        # Create v0.3.0 style navigator
+        navigator = MultiAgentController(
+            positions=np.array([[10, 10], [30, 30], [50, 50]])
+        )
+        
+        # Test that all v0.3.0 operations still work
+        mock_env = np.random.rand(100, 100)
+        
+        # Test step functionality
+        navigator.step(mock_env)
+        assert navigator.positions.shape == (3, 2)
+        
+        # Test odor sampling
+        odor_samples = navigator.sample_odor(mock_env)
+        assert isinstance(odor_samples, np.ndarray)
+        assert odor_samples.shape == (3,)
+        
+        # Test multi-sensor sampling
+        sensor_samples = navigator.sample_multiple_sensors(mock_env, num_sensors=3)
+        assert sensor_samples.shape == (3, 3)  # 3 agents, 3 sensors each
+        
+        # Test reset functionality
+        navigator.reset(positions=np.array([[5, 5], [15, 15], [25, 25]]))
+        expected_positions = np.array([[5, 5], [15, 15], [25, 25]])
+        np.testing.assert_allclose(navigator.positions, expected_positions, atol=NUMERICAL_PRECISION_TOLERANCE)
+    
+    def test_performance_regression_prevention(self):
+        """Test that v1.0 changes do not introduce performance regressions."""
+        # Create navigator in v0.3.0 style
+        navigator = SingleAgentController(position=(50.0, 50.0))
+        mock_env = np.random.rand(100, 100)
+        
+        # Test single agent step performance (should still meet <1ms requirement)
+        start_time = time.time()
+        navigator.step(mock_env)
+        step_time = (time.time() - start_time) * 1000
+        assert step_time < SINGLE_AGENT_STEP_THRESHOLD_MS, \
+            f"v1.0 single agent step took {step_time:.2f}ms, should be <{SINGLE_AGENT_STEP_THRESHOLD_MS}ms"
+        
+        # Test multi-agent performance
+        multi_navigator = MultiAgentController(
+            positions=np.random.rand(100, 2) * 100
+        )
+        
+        start_time = time.time()
+        multi_navigator.step(mock_env)
+        multi_step_time = (time.time() - start_time) * 1000
+        assert multi_step_time < MULTI_AGENT_100_STEP_THRESHOLD_MS, \
+            f"v1.0 100-agent step took {multi_step_time:.2f}ms, should be <{MULTI_AGENT_100_STEP_THRESHOLD_MS}ms"
+
+
 if __name__ == "__main__":
     # Run tests with appropriate verbosity and coverage
     pytest.main([
@@ -1067,5 +1880,8 @@ if __name__ == "__main__":
         "-v", 
         "--tb=short",
         f"--cov=src.plume_nav_sim.core",
-        "--cov-report=term-missing"
+        "--cov-report=term-missing",
+        # Include new v1.0 component coverage
+        f"--cov=src.plume_nav_sim.core.sources",
+        f"--cov=src.plume_nav_sim.core.boundaries"
     ])

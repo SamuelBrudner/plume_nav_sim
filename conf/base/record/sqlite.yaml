@@ -1,0 +1,342 @@
+# @package _global_
+#
+# SQLite Recording Backend Configuration
+# Provides embedded relational database storage for plume navigation simulation data
+# with transaction-based buffering and zero-configuration deployment
+#
+# This configuration implements the RecorderProtocol interface per Section 0.2.1
+# requirement to support sqlite backend as one of the multiple storage options
+# (parquet, hdf5, sqlite, none) for experiment data persistence.
+#
+# Performance Requirements:
+# - F-017-RQ-001: <1 ms overhead per 1000 steps when recorder disabled
+# - F-017-RQ-003: Buffered asynchronous I/O for non-blocking persistence
+# - Section 5.2.8: ≤33 ms/step with 100 agents through optimized buffering
+#
+# Key Features:
+# - Embedded SQLite database requiring no external dependencies
+# - Normalized relational schema for runs, episodes, steps, and metadata
+# - Transaction-based buffered writes with configurable batch sizes
+# - Connection pooling and prepared statements for efficient insertion
+# - JSON metadata storage for flexible experimental parameter preservation
+# - Environment variable overrides for deployment flexibility
+
+defaults:
+  - _self_
+
+# SQLite Recorder Backend Implementation
+recorder:
+  # Target class implementing RecorderProtocol interface
+  _target_: plume_nav_sim.recording.backends.sqlite.SQLiteRecorder
+  
+  # Database Configuration
+  database:
+    # Database file path with environment variable override support
+    file_path: ${oc.env:PLUME_NAV_DB_PATH,"${hydra:runtime.output_dir}/simulation_data.db"}
+    
+    # Connection configuration for performance optimization
+    connection:
+      # Connection pooling for efficient database access
+      pool_size: 5
+      max_overflow: 10
+      pool_timeout: 30
+      pool_recycle: 3600
+      
+      # SQLite-specific connection parameters
+      check_same_thread: false
+      isolation_level: "DEFERRED"
+      
+      # Connection pragmas for performance optimization
+      pragmas:
+        journal_mode: "WAL"          # Write-Ahead Logging for better concurrency
+        synchronous: "NORMAL"        # Balance between safety and performance
+        cache_size: -2000            # 2MB cache size (negative = kibibytes)
+        temp_store: "MEMORY"         # Store temporary tables in memory
+        mmap_size: 268435456         # 256MB memory-mapped I/O
+        page_size: 4096              # Optimal page size for most systems
+        auto_vacuum: "INCREMENTAL"   # Automatic space reclamation
+        foreign_keys: true           # Enable foreign key constraints
+        
+  # Schema Configuration - Normalized relational structure
+  schema:
+    # Table configurations with optimized indexes
+    tables:
+      # Runs table for experiment-level metadata
+      runs:
+        name: "runs"
+        columns:
+          run_id: "TEXT PRIMARY KEY"
+          start_time: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+          end_time: "TIMESTAMP NULL"
+          config_hash: "TEXT NOT NULL"
+          status: "TEXT DEFAULT 'running'"
+          git_commit: "TEXT NULL"
+          experiment_name: "TEXT NULL"
+          user_id: "TEXT NULL"
+          metadata: "JSON NULL"
+        indexes:
+          - "CREATE INDEX IF NOT EXISTS idx_runs_start_time ON runs(start_time)"
+          - "CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status)"
+          - "CREATE INDEX IF NOT EXISTS idx_runs_experiment ON runs(experiment_name)"
+      
+      # Episodes table for episode-level data
+      episodes:
+        name: "episodes"
+        columns:
+          episode_id: "INTEGER PRIMARY KEY AUTOINCREMENT"
+          run_id: "TEXT NOT NULL"
+          episode_number: "INTEGER NOT NULL"
+          start_time: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+          end_time: "TIMESTAMP NULL"
+          final_reward: "REAL NULL"
+          total_steps: "INTEGER DEFAULT 0"
+          termination_reason: "TEXT NULL"
+          success: "BOOLEAN NULL"
+          agent_count: "INTEGER NOT NULL DEFAULT 1"
+          metadata: "JSON NULL"
+        foreign_keys:
+          - "FOREIGN KEY (run_id) REFERENCES runs(run_id) ON DELETE CASCADE"
+        indexes:
+          - "CREATE INDEX IF NOT EXISTS idx_episodes_run_id ON episodes(run_id)"
+          - "CREATE INDEX IF NOT EXISTS idx_episodes_number ON episodes(episode_number)"
+          - "CREATE INDEX IF NOT EXISTS idx_episodes_success ON episodes(success)"
+          - "CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_run_episode ON episodes(run_id, episode_number)"
+      
+      # Steps table for detailed trajectory data
+      steps:
+        name: "steps"
+        columns:
+          step_id: "INTEGER PRIMARY KEY AUTOINCREMENT"
+          episode_id: "INTEGER NOT NULL"
+          step_number: "INTEGER NOT NULL"
+          timestamp: "REAL NOT NULL"
+          agent_id: "INTEGER NOT NULL DEFAULT 0"
+          position_x: "REAL NOT NULL"
+          position_y: "REAL NOT NULL"
+          orientation: "REAL NOT NULL"
+          speed: "REAL NOT NULL"
+          action_speed: "REAL NULL"
+          action_angular_velocity: "REAL NULL"
+          odor_concentration: "REAL NULL"
+          reward: "REAL NULL"
+          done: "BOOLEAN NOT NULL DEFAULT FALSE"
+          info: "JSON NULL"
+        foreign_keys:
+          - "FOREIGN KEY (episode_id) REFERENCES episodes(episode_id) ON DELETE CASCADE"
+        indexes:
+          - "CREATE INDEX IF NOT EXISTS idx_steps_episode_id ON steps(episode_id)"
+          - "CREATE INDEX IF NOT EXISTS idx_steps_step_number ON steps(step_number)"
+          - "CREATE INDEX IF NOT EXISTS idx_steps_agent_id ON steps(agent_id)"
+          - "CREATE INDEX IF NOT EXISTS idx_steps_timestamp ON steps(timestamp)"
+          - "CREATE UNIQUE INDEX IF NOT EXISTS idx_steps_episode_step_agent ON steps(episode_id, step_number, agent_id)"
+      
+      # Configuration snapshots for reproducibility
+      configurations:
+        name: "configurations"
+        columns:
+          config_hash: "TEXT PRIMARY KEY"
+          config_yaml: "TEXT NOT NULL"
+          config_json: "JSON NOT NULL"
+          created_time: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+          plume_nav_version: "TEXT NULL"
+          python_version: "TEXT NULL"
+          dependencies: "JSON NULL"
+        indexes:
+          - "CREATE INDEX IF NOT EXISTS idx_configurations_created ON configurations(created_time)"
+  
+  # Buffering Configuration for Performance Optimization
+  buffering:
+    # Buffer sizes for different data types to maintain ≤33ms step latency
+    buffer_sizes:
+      steps: 1000              # Buffer 1000 steps before batch insert
+      episodes: 50             # Buffer 50 episodes before batch insert
+      metadata: 20             # Buffer 20 metadata entries before batch insert
+    
+    # Flush strategies for different scenarios
+    flush_triggers:
+      time_interval: 5.0       # Flush buffers every 5 seconds
+      memory_threshold: 0.8    # Flush when buffer reaches 80% capacity
+      episode_complete: true   # Flush on episode completion
+      run_complete: true       # Flush on run completion
+      shutdown: true           # Flush on system shutdown
+    
+    # Asynchronous I/O configuration for F-017-RQ-003 compliance
+    async_io:
+      enabled: true            # Enable buffered asynchronous I/O
+      worker_threads: 2        # Number of background I/O threads
+      queue_size: 10000        # Maximum queued operations
+      timeout: 30.0            # I/O operation timeout in seconds
+      retry_attempts: 3        # Number of retry attempts for failed operations
+      retry_delay: 1.0         # Delay between retry attempts
+  
+  # Performance Optimization Settings
+  performance:
+    # Prepared statements for efficient high-frequency insertion
+    prepared_statements:
+      enabled: true
+      cache_size: 100          # Number of prepared statements to cache
+      
+    # Batch operation settings
+    batch_operations:
+      enabled: true
+      max_batch_size: 1000     # Maximum records per batch operation
+      batch_timeout: 1.0       # Maximum time to wait for batch completion
+      
+    # Connection reuse and pooling
+    connection_reuse:
+      enabled: true
+      max_idle_time: 300       # Close idle connections after 5 minutes
+      health_check_interval: 60 # Check connection health every minute
+  
+  # Data Integrity and Validation
+  validation:
+    # Schema validation for data integrity
+    strict_schema: true        # Enforce strict schema compliance
+    validate_foreign_keys: true # Validate foreign key relationships
+    check_constraints: true    # Enable check constraints
+    
+    # Data type validation
+    type_checking:
+      enabled: true
+      null_checks: true        # Validate null constraints
+      range_checks: true       # Validate numerical ranges
+      string_length_checks: true # Validate string length constraints
+  
+  # Metadata and Experimental Parameter Storage
+  metadata:
+    # JSON storage configuration for flexible parameter preservation
+    json_storage:
+      enabled: true
+      compression: false       # No compression for JSON fields (SQLite handles this)
+      pretty_print: false      # Compact JSON format for storage efficiency
+      
+    # Automatic metadata capture
+    auto_capture:
+      environment_variables: true    # Capture relevant environment variables
+      system_info: true             # Capture system information
+      git_info: true                # Capture git commit information
+      dependency_versions: true     # Capture package dependency versions
+      
+    # Custom metadata fields
+    custom_fields:
+      experiment_tags: "JSON NULL"           # User-defined experiment tags
+      researcher_notes: "TEXT NULL"         # Free-form researcher notes
+      publication_ref: "TEXT NULL"          # Publication reference
+      funding_source: "TEXT NULL"           # Funding source information
+  
+  # Data Export and Compression
+  export:
+    # Export format support
+    formats:
+      - "csv"                  # CSV export for analysis tools
+      - "json"                 # JSON export for data interchange
+      - "parquet"              # Parquet export for big data tools
+    
+    # Compression options for exports
+    compression:
+      enabled: true
+      algorithm: "gzip"        # Compression algorithm for exports
+      level: 6                 # Compression level (1-9)
+    
+    # Export batch processing
+    batch_export:
+      enabled: true
+      chunk_size: 10000        # Records per export chunk
+      parallel_workers: 2      # Parallel export workers
+  
+  # Monitoring and Diagnostics
+  monitoring:
+    # Performance metrics collection
+    metrics:
+      enabled: true
+      collection_interval: 10.0 # Collect metrics every 10 seconds
+      metrics_retention: 86400  # Retain metrics for 24 hours
+      
+    # Logging configuration
+    logging:
+      level: "INFO"            # Log level for recorder operations
+      log_sql_queries: false   # Log SQL queries (disable in production)
+      log_performance_stats: true # Log performance statistics
+      
+    # Health checks
+    health_checks:
+      enabled: true
+      check_interval: 60       # Health check every minute
+      database_connectivity: true # Check database connectivity
+      disk_space: true         # Monitor available disk space
+      memory_usage: true       # Monitor memory usage
+  
+  # Environment Variable Overrides for Deployment Flexibility
+  # Following established configuration patterns for production deployment
+  env_overrides:
+    # Database configuration overrides
+    database_path: "${oc.env:PLUME_NAV_SQLITE_PATH,}"
+    buffer_size: "${oc.env:PLUME_NAV_BUFFER_SIZE,1000}"
+    async_enabled: "${oc.env:PLUME_NAV_ASYNC_IO,true}"
+    log_level: "${oc.env:PLUME_NAV_LOG_LEVEL,INFO}"
+    
+    # Performance tuning overrides
+    connection_pool_size: "${oc.env:PLUME_NAV_POOL_SIZE,5}"
+    batch_size: "${oc.env:PLUME_NAV_BATCH_SIZE,1000}"
+    cache_size: "${oc.env:PLUME_NAV_CACHE_SIZE,2000}"
+    
+    # Feature toggles
+    enable_monitoring: "${oc.env:PLUME_NAV_MONITORING,true}"
+    enable_validation: "${oc.env:PLUME_NAV_VALIDATION,true}"
+    enable_compression: "${oc.env:PLUME_NAV_COMPRESSION,true}"
+
+# Recording granularity control for F-017-RQ-001 compliance
+# Minimal overhead when recording is disabled
+record:
+  # Recording toggle flags
+  enabled: true                    # Master recording enable/disable
+  full: false                      # Save per-step trajectories (high overhead)
+  episodes_only: true              # Save episode-level data only (low overhead)
+  metadata_only: false             # Save metadata only (minimal overhead)
+  
+  # Selective recording for performance optimization
+  selective:
+    positions: true                # Record agent positions
+    actions: true                  # Record agent actions
+    rewards: true                  # Record step rewards
+    observations: false            # Skip detailed observations (large data)
+    info_dict: false              # Skip info dictionary (variable size)
+    debug_info: false             # Skip debug information (development only)
+  
+  # Sampling configuration for reduced overhead
+  sampling:
+    enabled: false                 # Enable data sampling
+    step_interval: 10              # Record every Nth step
+    episode_interval: 1            # Record every Nth episode
+    agent_subset: []               # Record specific agents only (empty = all)
+  
+  # Real-time processing flags
+  real_time:
+    enabled: true                  # Enable real-time data processing
+    max_latency: 0.001            # Maximum recording latency (1ms per F-017-RQ-001)
+    drop_on_overload: true        # Drop data if processing falls behind
+    queue_size_limit: 5000        # Limit queue size to prevent memory issues
+
+# Integration with simulation environment
+integration:
+  # Hook registration for lifecycle events
+  hooks:
+    pre_reset: true                # Register pre-reset hook
+    post_reset: true               # Register post-reset hook
+    pre_step: false                # Skip pre-step hook (performance)
+    post_step: true                # Register post-step hook
+    episode_end: true              # Register episode-end hook
+    run_end: true                  # Register run-end hook
+  
+  # Event filtering for selective recording
+  event_filters:
+    record_successful_episodes: true    # Always record successful episodes
+    record_failed_episodes: true       # Always record failed episodes
+    record_terminated_episodes: true   # Record terminated episodes
+    record_truncated_episodes: false   # Skip truncated episodes
+    
+  # State access configuration
+  state_access:
+    full_state: false              # Access full simulation state (high overhead)
+    minimal_state: true            # Access minimal required state (low overhead)
+    custom_fields: []              # Custom state fields to capture

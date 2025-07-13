@@ -85,6 +85,59 @@ except ImportError:
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
+# Import new protocol interfaces and factory functions for v1.0 architecture testing
+try:
+    from plume_nav_sim.core.protocols import (
+        SourceProtocol, 
+        BoundaryPolicyProtocol, 
+        ActionInterfaceProtocol, 
+        RecorderProtocol, 
+        StatsAggregatorProtocol
+    )
+    NEW_PROTOCOLS_AVAILABLE = True
+except ImportError:
+    NEW_PROTOCOLS_AVAILABLE = False
+    # Define fallback protocol classes for testing when not yet implemented
+    class SourceProtocol:
+        pass
+    class BoundaryPolicyProtocol:
+        pass
+    class ActionInterfaceProtocol:
+        pass
+    class RecorderProtocol:
+        pass
+    class StatsAggregatorProtocol:
+        pass
+
+# Import AgentInitializer components for testing
+try:
+    from plume_nav_sim.core.initialization import AgentInitializerProtocol, create_agent_initializer
+    AGENT_INITIALIZER_AVAILABLE = True
+except ImportError:
+    AGENT_INITIALIZER_AVAILABLE = False
+    class AgentInitializerProtocol:
+        pass
+    def create_agent_initializer(config):
+        return None
+
+# Import source components for testing
+try:
+    from plume_nav_sim.core.sources import create_source
+    SOURCE_FACTORY_AVAILABLE = True
+except ImportError:
+    SOURCE_FACTORY_AVAILABLE = False
+    def create_source(config):
+        return None
+
+# Import boundary components for testing
+try:
+    from plume_nav_sim.core.boundaries import create_boundary_policy
+    BOUNDARY_FACTORY_AVAILABLE = True
+except ImportError:
+    BOUNDARY_FACTORY_AVAILABLE = False
+    def create_boundary_policy(policy_type, domain_bounds, **kwargs):
+        return None
+
 # Frame cache imports
 try:
     from plume_nav_sim.utils.frame_cache import CacheMode, FrameCache
@@ -394,8 +447,13 @@ environment:
             for path_part in param_path:
                 value = getattr(value, path_part)
             
-            # Validate type conversion
-            assert isinstance(value, expected_type), f"Expected {expected_type}, got {type(value)}"
+            # Validate type conversion - handle OmegaConf types
+            if expected_type == list:
+                # Handle OmegaConf ListConfig which behaves like a list
+                from omegaconf import ListConfig
+                assert isinstance(value, (list, ListConfig)), f"Expected {expected_type} or ListConfig, got {type(value)}"
+            else:
+                assert isinstance(value, expected_type), f"Expected {expected_type}, got {type(value)}"
 
 
 class TestEnvironmentVariableInterpolation:
@@ -421,6 +479,7 @@ class TestEnvironmentVariableInterpolation:
         self.config_dir.mkdir()
         
         # Create configuration with comprehensive environment variable interpolation
+        # NOTE: Need to use resolver format for proper interpolation
         env_config = """
 navigator:
   max_speed: ${oc.env:TEST_MAX_SPEED,1.5}
@@ -1166,6 +1225,778 @@ system:
         assert cfg.environment.env_id == "PlumeNavSim-v0"  # Default value
 
 
+class TestV1ConfigGroupHierarchy:
+    """
+    Test suite for new Hydra config group hierarchy supporting the v1.0 architecture
+    with protocol-based component system and modular configuration structure.
+    
+    Validates the new config groups: source/, agent_init/, boundary/, action/, 
+    record/, hooks/ and their integration with the component registration system
+    and runtime component selection per the v1.0 requirements.
+    """
+    
+    @pytest.fixture(autouse=True)
+    def setup_v1_config_structure(self, tmp_path):
+        """Setup v1.0 config directory structure with new component groups."""
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available - skipping v1.0 config group tests")
+        
+        # Clean any existing Hydra global state
+        if GlobalHydra().is_initialized():
+            GlobalHydra.instance().clear()
+            
+        # Create temporary config directory with v1.0 structure
+        self.config_dir = tmp_path / "conf"
+        self.config_dir.mkdir()
+        
+        # Create new config group directories
+        (self.config_dir / "base").mkdir()
+        (self.config_dir / "base" / "source").mkdir()
+        (self.config_dir / "base" / "agent_init").mkdir()
+        (self.config_dir / "base" / "boundary").mkdir()
+        (self.config_dir / "base" / "action").mkdir()
+        (self.config_dir / "base" / "record").mkdir()
+        (self.config_dir / "base" / "hooks").mkdir()
+        
+        # Create source configurations
+        point_source_config = """
+# @package _global_
+source:
+  _target_: plume_nav_sim.core.sources.PointSource
+  position: [50.0, 50.0]
+  emission_rate: 1000.0
+  seed: 42
+"""
+        
+        multi_source_config = """
+# @package _global_
+source:
+  _target_: plume_nav_sim.core.sources.MultiSource
+  sources:
+    - _target_: plume_nav_sim.core.sources.PointSource
+      position: [30.0, 30.0]
+      emission_rate: 500.0
+    - _target_: plume_nav_sim.core.sources.PointSource
+      position: [70.0, 70.0]
+      emission_rate: 800.0
+  seed: 42
+"""
+        
+        # Create agent initialization configurations
+        uniform_random_init = """
+# @package _global_
+agent_init:
+  _target_: plume_nav_sim.core.initialization.UniformRandomInitializer
+  bounds: [100.0, 100.0]
+  seed: 42
+  margin: 2.0
+"""
+        
+        grid_init = """
+# @package _global_
+agent_init:
+  _target_: plume_nav_sim.core.initialization.GridInitializer
+  domain_bounds: [100.0, 100.0]
+  grid_shape: [5, 5]
+  grid_spacing: [10.0, 10.0]
+  jitter_enabled: false
+  seed: 42
+"""
+        
+        # Create boundary policy configurations
+        terminate_boundary = """
+# @package _global_
+boundary:
+  _target_: plume_nav_sim.core.boundaries.TerminateBoundary
+  domain_bounds: [100.0, 100.0]
+  status_on_violation: "oob"
+  allow_negative_coords: false
+"""
+        
+        bounce_boundary = """
+# @package _global_
+boundary:
+  _target_: plume_nav_sim.core.boundaries.BounceBoundary
+  domain_bounds: [100.0, 100.0]
+  elasticity: 0.8
+  energy_loss: 0.1
+  velocity_damping: 0.9
+"""
+        
+        # Create action interface configurations
+        continuous_action = """
+# @package _global_
+action:
+  _target_: plume_nav_sim.core.actions.Continuous2DAction
+  max_linear_velocity: 2.0
+  max_angular_velocity: 45.0
+  velocity_scaling: 1.0
+  clip_actions: true
+"""
+        
+        discrete_action = """
+# @package _global_
+action:
+  _target_: plume_nav_sim.core.actions.CardinalDiscreteAction
+  step_size: 1.0
+  num_directions: 8
+  allow_no_op: true
+"""
+        
+        # Create recorder configurations
+        parquet_recorder = """
+# @package _global_
+record:
+  _target_: plume_nav_sim.recording.backends.ParquetRecorder
+  output_dir: "recordings"
+  full_trajectories: true
+  compression: "snappy"
+  buffer_size: 1000
+"""
+        
+        no_recorder = """
+# @package _global_
+record:
+  _target_: plume_nav_sim.recording.backends.NoOpRecorder
+  enabled: false
+"""
+        
+        # Create hook configurations
+        basic_hooks = """
+# @package _global_
+hooks:
+  extra_obs_fn: null
+  extra_reward_fn: null
+  episode_end_fn: null
+  enable_custom_metrics: false
+"""
+        
+        exploration_hooks = """
+# @package _global_
+hooks:
+  extra_obs_fn: plume_nav_sim.hooks.exploration_bonus_obs
+  extra_reward_fn: plume_nav_sim.hooks.exploration_reward
+  episode_end_fn: plume_nav_sim.hooks.log_exploration_metrics
+  enable_custom_metrics: true
+  exploration_bonus_weight: 0.1
+"""
+        
+        # Create main configuration that uses all new config groups
+        main_config = """
+defaults:
+  - base/source: point
+  - base/agent_init: uniform_random
+  - base/boundary: terminate
+  - base/action: continuous
+  - base/record: parquet
+  - base/hooks: basic
+  - _self_
+
+navigator:
+  position: [0.0, 0.0]
+  orientation: 0.0
+  speed: 0.0
+  max_speed: 2.0
+  angular_velocity: 0.0
+
+environment:
+  env_id: "PlumeNavSim-v1"
+  max_episode_steps: 1000
+  step_timeout_ms: 33  # Meeting performance requirement
+
+system:
+  random_seed: 42
+  debug_mode: false
+  output_dir: "outputs"
+  log_level: "INFO"
+"""
+        
+        # Write all configuration files
+        (self.config_dir / "base" / "source" / "point.yaml").write_text(point_source_config)
+        (self.config_dir / "base" / "source" / "multi.yaml").write_text(multi_source_config)
+        (self.config_dir / "base" / "agent_init" / "uniform_random.yaml").write_text(uniform_random_init)
+        (self.config_dir / "base" / "agent_init" / "grid.yaml").write_text(grid_init)
+        (self.config_dir / "base" / "boundary" / "terminate.yaml").write_text(terminate_boundary)
+        (self.config_dir / "base" / "boundary" / "bounce.yaml").write_text(bounce_boundary)
+        (self.config_dir / "base" / "action" / "continuous.yaml").write_text(continuous_action)
+        (self.config_dir / "base" / "action" / "discrete.yaml").write_text(discrete_action)
+        (self.config_dir / "base" / "record" / "parquet.yaml").write_text(parquet_recorder)
+        (self.config_dir / "base" / "record" / "none.yaml").write_text(no_recorder)
+        (self.config_dir / "base" / "hooks" / "basic.yaml").write_text(basic_hooks)
+        (self.config_dir / "base" / "hooks" / "exploration.yaml").write_text(exploration_hooks)
+        (self.config_dir / "config.yaml").write_text(main_config)
+        
+        yield self.config_dir
+        
+        # Cleanup Hydra state
+        if GlobalHydra().is_initialized():
+            GlobalHydra.instance().clear()
+    
+    def test_new_config_group_composition(self, setup_v1_config_structure):
+        """Test that new v1.0 config groups compose correctly."""
+        config_dir = setup_v1_config_structure
+        
+        with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+            cfg = compose(config_name="config")
+            
+            # Validate all new config groups are present
+            assert "source" in cfg
+            assert "agent_init" in cfg  
+            assert "boundary" in cfg
+            assert "action" in cfg
+            assert "record" in cfg
+            assert "hooks" in cfg
+            
+            # Validate source configuration
+            assert cfg.source._target_ == "plume_nav_sim.core.sources.PointSource"
+            assert cfg.source.position == [50.0, 50.0]
+            assert cfg.source.emission_rate == 1000.0
+            
+            # Validate agent initialization configuration
+            assert cfg.agent_init._target_ == "plume_nav_sim.core.initialization.UniformRandomInitializer"
+            assert cfg.agent_init.bounds == [100.0, 100.0]
+            assert cfg.agent_init.seed == 42
+            
+            # Validate boundary policy configuration
+            assert cfg.boundary._target_ == "plume_nav_sim.core.boundaries.TerminateBoundary"
+            assert cfg.boundary.domain_bounds == [100.0, 100.0]
+            assert cfg.boundary.status_on_violation == "oob"
+            
+            # Validate action interface configuration
+            assert cfg.action._target_ == "plume_nav_sim.core.actions.Continuous2DAction"
+            assert cfg.action.max_linear_velocity == 2.0
+            assert cfg.action.max_angular_velocity == 45.0
+            
+            # Validate recorder configuration
+            assert cfg.record._target_ == "plume_nav_sim.recording.backends.ParquetRecorder"
+            assert cfg.record.output_dir == "recordings"
+            assert cfg.record.full_trajectories == True
+            
+            # Validate hooks configuration
+            assert cfg.hooks.extra_obs_fn == None
+            assert cfg.hooks.extra_reward_fn == None
+            assert cfg.hooks.enable_custom_metrics == False
+    
+    def test_config_group_override_combinations(self, setup_v1_config_structure):
+        """Test different combinations of config group overrides."""
+        config_dir = setup_v1_config_structure
+        
+        test_combinations = [
+            {
+                "overrides": ["base/source=multi", "base/boundary=bounce"],
+                "expected_source": "plume_nav_sim.core.sources.MultiSource",
+                "expected_boundary": "plume_nav_sim.core.boundaries.BounceBoundary"
+            },
+            {
+                "overrides": ["base/agent_init=grid", "base/action=discrete"],
+                "expected_agent_init": "plume_nav_sim.core.initialization.GridInitializer",
+                "expected_action": "plume_nav_sim.core.actions.CardinalDiscreteAction"
+            },
+            {
+                "overrides": ["base/record=none", "base/hooks=exploration"],
+                "expected_record": "plume_nav_sim.recording.backends.NoOpRecorder",
+                "expected_hooks_fn": "plume_nav_sim.hooks.exploration_bonus_obs"
+            }
+        ]
+        
+        for test_case in test_combinations:
+            with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+                cfg = compose(config_name="config", overrides=test_case["overrides"])
+                
+                # Check expected values based on test case
+                if "expected_source" in test_case:
+                    assert cfg.source._target_ == test_case["expected_source"]
+                if "expected_boundary" in test_case:
+                    assert cfg.boundary._target_ == test_case["expected_boundary"]
+                if "expected_agent_init" in test_case:
+                    assert cfg.agent_init._target_ == test_case["expected_agent_init"]
+                if "expected_action" in test_case:
+                    assert cfg.action._target_ == test_case["expected_action"]
+                if "expected_record" in test_case:
+                    assert cfg.record._target_ == test_case["expected_record"]
+                if "expected_hooks_fn" in test_case:
+                    assert cfg.hooks.extra_obs_fn == test_case["expected_hooks_fn"]
+    
+    def test_v1_config_performance_requirements(self, setup_v1_config_structure):
+        """Test that v1.0 config composition meets 500ms performance requirement."""
+        config_dir = setup_v1_config_structure
+        
+        start_time = time.time()
+        
+        with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+            cfg = compose(config_name="config")
+        
+        composition_time = (time.time() - start_time) * 1000  # Convert to ms
+        
+        # Validate performance requirement for new configuration structure
+        assert composition_time < 500, f"V1.0 config composition took {composition_time:.2f}ms, exceeds 500ms limit"
+        
+        # Validate all v1.0 components were loaded
+        assert cfg is not None
+        assert "source" in cfg
+        assert "agent_init" in cfg
+        assert "boundary" in cfg
+        assert "action" in cfg
+        assert "record" in cfg
+        assert "hooks" in cfg
+
+
+class TestComponentRegistrationSystem:
+    """
+    Test suite for the component registration system enabling runtime component
+    selection and Hydra-based dependency injection for the v1.0 architecture.
+    
+    Validates factory function integration, component instantiation from configuration,
+    and protocol compliance checking for the new modular component system.
+    """
+    
+    def test_agent_initializer_factory_creation(self):
+        """Test agent initializer factory function creation and validation."""
+        if not AGENT_INITIALIZER_AVAILABLE:
+            pytest.skip("Agent initializer components not available")
+        
+        # Test uniform random initializer creation
+        uniform_config = {
+            'type': 'uniform_random',
+            'bounds': (100.0, 100.0),
+            'seed': 42,
+            'margin': 2.0
+        }
+        
+        initializer = create_agent_initializer(uniform_config)
+        assert initializer is not None
+        
+        # Test that created initializer has required methods
+        assert hasattr(initializer, 'initialize_positions')
+        assert hasattr(initializer, 'validate_domain')
+        assert hasattr(initializer, 'reset')
+        assert hasattr(initializer, 'get_strategy_name')
+        
+        # Test grid initializer creation
+        grid_config = {
+            'type': 'grid',
+            'domain_bounds': (100.0, 100.0),
+            'grid_shape': (5, 5),
+            'grid_spacing': (10.0, 10.0),
+            'seed': 42
+        }
+        
+        grid_initializer = create_agent_initializer(grid_config)
+        assert grid_initializer is not None
+        assert hasattr(grid_initializer, 'initialize_positions')
+        
+        # Test fixed list initializer creation
+        fixed_config = {
+            'type': 'fixed_list',
+            'positions': [[10, 20], [30, 40], [50, 60]],
+            'domain_bounds': (100.0, 100.0)
+        }
+        
+        fixed_initializer = create_agent_initializer(fixed_config)
+        assert fixed_initializer is not None
+        assert hasattr(fixed_initializer, 'get_position_count')
+    
+    def test_source_factory_creation(self):
+        """Test source factory function creation and configuration validation."""
+        if not SOURCE_FACTORY_AVAILABLE:
+            pytest.skip("Source factory components not available")
+        
+        # Test point source creation
+        point_config = {
+            'type': 'PointSource',
+            'position': (50.0, 50.0),
+            'emission_rate': 1000.0,
+            'seed': 42
+        }
+        
+        point_source = create_source(point_config)
+        assert point_source is not None
+        
+        # Test that created source has required methods
+        assert hasattr(point_source, 'get_emission_rate')
+        assert hasattr(point_source, 'get_position')
+        assert hasattr(point_source, 'update_state')
+        
+        # Test multi-source creation with nested sources
+        multi_config = {
+            'type': 'MultiSource',
+            'sources': [
+                {'type': 'PointSource', 'position': (30, 30), 'emission_rate': 500},
+                {'type': 'PointSource', 'position': (70, 70), 'emission_rate': 800}
+            ],
+            'seed': 42
+        }
+        
+        multi_source = create_source(multi_config)
+        assert multi_source is not None
+        assert hasattr(multi_source, 'add_source')
+        assert hasattr(multi_source, 'get_source_count')
+        
+        # Test dynamic source creation
+        dynamic_config = {
+            'type': 'DynamicSource',
+            'initial_position': (25, 75),
+            'pattern_type': 'circular',
+            'amplitude': 15.0,
+            'frequency': 0.1,
+            'base_emission_rate': 1000.0
+        }
+        
+        dynamic_source = create_source(dynamic_config)
+        assert dynamic_source is not None
+        assert hasattr(dynamic_source, 'set_pattern')
+        assert hasattr(dynamic_source, 'reset_time')
+    
+    def test_boundary_policy_factory_creation(self):
+        """Test boundary policy factory function creation and validation."""
+        if not BOUNDARY_FACTORY_AVAILABLE:
+            pytest.skip("Boundary policy factory components not available")
+        
+        # Test terminate boundary creation
+        terminate_policy = create_boundary_policy(
+            "terminate",
+            domain_bounds=(100.0, 100.0),
+            status_on_violation="oob"
+        )
+        assert terminate_policy is not None
+        
+        # Test that created policy has required methods
+        assert hasattr(terminate_policy, 'apply_policy')
+        assert hasattr(terminate_policy, 'check_violations')
+        assert hasattr(terminate_policy, 'get_termination_status')
+        
+        # Test bounce boundary creation
+        bounce_policy = create_boundary_policy(
+            "bounce",
+            domain_bounds=(100.0, 100.0),
+            elasticity=0.8,
+            energy_loss=0.1
+        )
+        assert bounce_policy is not None
+        assert hasattr(bounce_policy, 'apply_policy')
+        
+        # Test wrap boundary creation
+        wrap_policy = create_boundary_policy(
+            "wrap",
+            domain_bounds=(100.0, 100.0)
+        )
+        assert wrap_policy is not None
+        assert hasattr(wrap_policy, 'apply_policy')
+        
+        # Test clip boundary creation
+        clip_policy = create_boundary_policy(
+            "clip",
+            domain_bounds=(100.0, 100.0),
+            velocity_damping=0.7
+        )
+        assert clip_policy is not None
+        assert hasattr(clip_policy, 'apply_policy')
+    
+    def test_component_factory_error_handling(self):
+        """Test error handling in component factory functions."""
+        if not AGENT_INITIALIZER_AVAILABLE:
+            pytest.skip("Agent initializer components not available")
+        
+        # Test invalid initializer type
+        with pytest.raises(ValueError):
+            create_agent_initializer({'type': 'invalid_type'})
+        
+        # Test missing required parameters
+        with pytest.raises((ValueError, TypeError)):
+            create_agent_initializer({'type': 'uniform_random'})  # Missing bounds
+        
+        if SOURCE_FACTORY_AVAILABLE:
+            # Test invalid source type
+            with pytest.raises(ValueError):
+                create_source({'type': 'InvalidSource'})
+            
+            # Test missing type field
+            with pytest.raises(KeyError):
+                create_source({'position': (0, 0)})  # Missing type
+        
+        if BOUNDARY_FACTORY_AVAILABLE:
+            # Test invalid boundary policy type
+            with pytest.raises(ValueError):
+                create_boundary_policy("invalid_policy", (100, 100))
+    
+    def test_hydra_based_component_instantiation(self, tmp_path):
+        """Test Hydra-based component instantiation using _target_ syntax."""
+        if not HYDRA_AVAILABLE:
+            pytest.skip("Hydra not available - skipping Hydra instantiation tests")
+        
+        if not AGENT_INITIALIZER_AVAILABLE:
+            pytest.skip("Agent initializer components not available")
+        
+        # Clean Hydra state
+        if GlobalHydra().is_initialized():
+            GlobalHydra.instance().clear()
+        
+        config_dir = tmp_path / "conf"
+        config_dir.mkdir()
+        
+        # Create configuration with Hydra _target_ syntax
+        hydra_config = """
+agent_init:
+  _target_: plume_nav_sim.core.initialization.UniformRandomInitializer
+  bounds: [100.0, 100.0]
+  seed: 42
+  margin: 2.0
+
+source:
+  _target_: plume_nav_sim.core.sources.PointSource
+  position: [50.0, 50.0]
+  emission_rate: 1000.0
+  seed: 42
+
+boundary:
+  _target_: plume_nav_sim.core.boundaries.TerminateBoundary
+  domain_bounds: [100.0, 100.0]
+  status_on_violation: "oob"
+"""
+        
+        (config_dir / "config.yaml").write_text(hydra_config)
+        
+        with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+            cfg = compose(config_name="config")
+            
+            # Validate Hydra _target_ syntax is preserved
+            assert cfg.agent_init._target_ == "plume_nav_sim.core.initialization.UniformRandomInitializer"
+            assert cfg.agent_init.bounds == [100.0, 100.0]
+            assert cfg.agent_init.seed == 42
+            
+            assert cfg.source._target_ == "plume_nav_sim.core.sources.PointSource"
+            assert cfg.source.position == [50.0, 50.0]
+            assert cfg.source.emission_rate == 1000.0
+            
+            assert cfg.boundary._target_ == "plume_nav_sim.core.boundaries.TerminateBoundary"
+            assert cfg.boundary.domain_bounds == [100.0, 100.0]
+            assert cfg.boundary.status_on_violation == "oob"
+    
+    @pytest.mark.parametrize("component_type,config_key,factory_available", [
+        ("agent_init", "agent_init", "AGENT_INITIALIZER_AVAILABLE"),
+        ("source", "source", "SOURCE_FACTORY_AVAILABLE"),
+        ("boundary", "boundary", "BOUNDARY_FACTORY_AVAILABLE"),
+    ])
+    def test_component_registration_integration(self, component_type, config_key, factory_available):
+        """Test component registration system integration with configuration."""
+        if not globals().get(factory_available, False):
+            pytest.skip(f"{component_type} factory not available")
+        
+        # Test that components can be created from configuration dictionaries
+        test_configs = {
+            "agent_init": {
+                'type': 'uniform_random',
+                'bounds': (100.0, 100.0),
+                'seed': 42
+            },
+            "source": {
+                'type': 'PointSource',
+                'position': (50.0, 50.0),
+                'emission_rate': 1000.0
+            },
+            "boundary": {
+                'policy_type': 'terminate',
+                'domain_bounds': (100.0, 100.0)
+            }
+        }
+        
+        config = test_configs.get(component_type)
+        if not config:
+            pytest.skip(f"No test config for {component_type}")
+        
+        # Test component creation
+        if component_type == "agent_init":
+            component = create_agent_initializer(config)
+        elif component_type == "source":
+            component = create_source(config)
+        elif component_type == "boundary":
+            component = create_boundary_policy(**config)
+        
+        assert component is not None
+        
+        # Test that component follows expected interface patterns
+        if component_type == "agent_init":
+            assert hasattr(component, 'initialize_positions')
+            assert hasattr(component, 'reset')
+        elif component_type == "source":
+            assert hasattr(component, 'get_emission_rate')
+            assert hasattr(component, 'get_position')
+        elif component_type == "boundary":
+            assert hasattr(component, 'apply_policy')
+            assert hasattr(component, 'check_violations')
+
+
+class TestPydanticSchemaValidation:
+    """
+    Test suite for Pydantic schema validation integration with the new v1.0
+    component configuration system and enhanced type safety requirements.
+    
+    Validates schema enforcement for new component configurations and ensures
+    proper validation of the expanded configuration parameter space.
+    """
+    
+    def test_component_configuration_schema_validation(self):
+        """Test Pydantic schema validation for new component configurations."""
+        if not SCHEMAS_AVAILABLE:
+            pytest.skip("Configuration schemas not available")
+        
+        # This test focuses on existing schemas that might be extended
+        # for v1.0 component configuration validation
+        
+        # Test enhanced navigator configuration with new fields
+        enhanced_navigator_config = {
+            "position": [1.0, 2.0],
+            "orientation": 45.0,
+            "speed": 1.5,
+            "max_speed": 2.0,
+            "angular_velocity": 0.5,
+            # Potential new fields for v1.0
+            "enable_hooks": True,
+            "custom_sensors": ["odor", "wind"],
+        }
+        
+        try:
+            config = NavigatorConfig(**enhanced_navigator_config)
+            assert hasattr(config, 'position')
+            assert hasattr(config, 'max_speed')
+        except TypeError:
+            # Schema may not support new fields yet, which is expected
+            basic_config = {k: v for k, v in enhanced_navigator_config.items() 
+                          if k in ["position", "orientation", "speed", "max_speed", "angular_velocity"]}
+            config = NavigatorConfig(**basic_config)
+            assert hasattr(config, 'position')
+    
+    def test_component_parameter_boundary_validation(self):
+        """Test parameter boundary validation for component configurations."""
+        if not SCHEMAS_AVAILABLE:
+            pytest.skip("Configuration schemas not available")
+        
+        # Test boundary conditions for frame cache configuration
+        boundary_test_cases = [
+            {
+                "mode": "lru",
+                "memory_limit_mb": 0,  # Minimum valid value
+                "memory_pressure_threshold": 0.0,
+                "should_pass": True
+            },
+            {
+                "mode": "lru", 
+                "memory_limit_mb": 16384,  # Large but reasonable value
+                "memory_pressure_threshold": 1.0,
+                "should_pass": True
+            },
+            {
+                "mode": "invalid_mode",  # Invalid mode
+                "memory_limit_mb": 1024,
+                "memory_pressure_threshold": 0.9,
+                "should_pass": False
+            },
+            {
+                "mode": "lru",
+                "memory_limit_mb": -100,  # Negative value
+                "memory_pressure_threshold": 0.9,
+                "should_pass": False
+            }
+        ]
+        
+        for test_case in boundary_test_cases:
+            config_params = {k: v for k, v in test_case.items() if k != 'should_pass'}
+            
+            try:
+                config = FrameCacheConfig(**config_params)
+                assert test_case['should_pass'], f"Expected validation to fail for {config_params}"
+                assert hasattr(config, 'mode')
+                assert hasattr(config, 'memory_limit_mb')
+            except (ValidationError, ValueError, TypeError):
+                assert not test_case['should_pass'], f"Expected validation to pass for {config_params}"
+    
+    def test_v1_configuration_composition_validation(self, tmp_path):
+        """Test end-to-end configuration composition with Pydantic validation."""
+        if not HYDRA_AVAILABLE or not SCHEMAS_AVAILABLE:
+            pytest.skip("Hydra or schemas not available")
+        
+        # Clean Hydra state
+        if GlobalHydra().is_initialized():
+            GlobalHydra.instance().clear()
+        
+        config_dir = tmp_path / "conf"
+        config_dir.mkdir()
+        
+        # Create configuration that should pass full validation
+        validated_config = """
+navigator:
+  position: [0.0, 0.0]
+  orientation: 0.0
+  speed: 1.0
+  max_speed: 2.0
+  angular_velocity: 0.0
+
+video_plume:
+  video_path: "data/test_video.mp4"
+  flip: false
+  grayscale: true
+  kernel_size: 5
+  kernel_sigma: 1.0
+  threshold: 0.5
+  normalize: true
+
+frame_cache:
+  mode: lru
+  memory_limit_mb: 2048
+  memory_pressure_threshold: 0.9
+  enable_statistics: true
+  enable_logging: true
+  preload_chunk_size: 100
+  eviction_batch_size: 10
+
+# New v1.0 component configurations (may not have schemas yet)
+source:
+  type: PointSource
+  position: [50.0, 50.0]
+  emission_rate: 1000.0
+  seed: 42
+
+agent_init:
+  type: uniform_random
+  bounds: [100.0, 100.0]
+  seed: 42
+
+boundary:
+  type: terminate
+  domain_bounds: [100.0, 100.0]
+  status_on_violation: "oob"
+"""
+        
+        (config_dir / "config.yaml").write_text(validated_config)
+        
+        with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+            cfg = compose(config_name="config")
+            
+            # Test existing component validation
+            navigator_config = NavigatorConfig(**cfg.navigator)
+            video_config = VideoPlumeConfig(**cfg.video_plume)
+            frame_cache_config = FrameCacheConfig(**cfg.frame_cache)
+            
+            # Validate successful schema validation
+            assert hasattr(navigator_config, 'position')
+            assert hasattr(navigator_config, 'max_speed')
+            assert hasattr(video_config, 'video_path')
+            assert hasattr(video_config, 'kernel_size')
+            assert hasattr(frame_cache_config, 'mode')
+            assert hasattr(frame_cache_config, 'memory_limit_mb')
+            
+            # Validate new v1.0 components are present (even if not schema-validated yet)
+            assert "source" in cfg
+            assert "agent_init" in cfg
+            assert "boundary" in cfg
+            
+            # Test that configurations have expected structure
+            assert cfg.source.type == "PointSource"
+            assert cfg.source.position == [50.0, 50.0]
+            assert cfg.agent_init.type == "uniform_random"
+            assert cfg.boundary.type == "terminate"
+
+
 class TestConfigurationSecurity:
     """
     Test suite for configuration security including path traversal prevention
@@ -1399,6 +2230,179 @@ def test_configuration_system_integration():
     )
     assert hasattr(frame_cache_config, 'mode')
     assert hasattr(frame_cache_config, 'memory_limit_mb')
+
+
+def test_v1_component_integration():
+    """Integration test for v1.0 component system with factory functions."""
+    # Test factory function availability and basic functionality
+    
+    if AGENT_INITIALIZER_AVAILABLE:
+        # Test agent initializer integration
+        config = {'type': 'uniform_random', 'bounds': (100, 100), 'seed': 42}
+        initializer = create_agent_initializer(config)
+        assert initializer is not None
+        assert hasattr(initializer, 'get_strategy_name')
+    
+    if SOURCE_FACTORY_AVAILABLE:
+        # Test source integration
+        config = {'type': 'PointSource', 'position': (50, 50), 'emission_rate': 1000}
+        source = create_source(config)
+        assert source is not None
+        assert hasattr(source, 'get_emission_rate')
+    
+    if BOUNDARY_FACTORY_AVAILABLE:
+        # Test boundary policy integration
+        policy = create_boundary_policy('terminate', (100, 100))
+        assert policy is not None
+        assert hasattr(policy, 'apply_policy')
+
+
+def test_v1_configuration_performance_integration(tmp_path):
+    """Integration test for v1.0 configuration system performance with all components."""
+    if not HYDRA_AVAILABLE:
+        pytest.skip("Hydra not available - skipping v1.0 performance integration test")
+    
+    # Clean Hydra state
+    if GlobalHydra().is_initialized():
+        GlobalHydra.instance().clear()
+    
+    config_dir = tmp_path / "conf"
+    config_dir.mkdir()
+    
+    # Create comprehensive v1.0 configuration
+    v1_integration_config = """
+defaults:
+  - _self_
+
+navigator:
+  position: [0.0, 0.0]
+  orientation: 0.0
+  speed: 0.0
+  max_speed: ${oc.env:MAX_SPEED,2.0}
+  angular_velocity: 0.0
+
+video_plume:
+  video_path: ${oc.env:VIDEO_PATH,data/test.mp4}
+  flip: ${oc.env:VIDEO_FLIP,false}
+  grayscale: true
+  kernel_size: 5
+  kernel_sigma: 1.0
+  threshold: ${oc.env:THRESHOLD,0.5}
+  normalize: true
+
+frame_cache:
+  mode: ${oc.env:CACHE_MODE,lru}
+  memory_limit_mb: ${oc.env:CACHE_MEMORY,2048}
+  memory_pressure_threshold: ${oc.env:CACHE_PRESSURE,0.9}
+  enable_statistics: ${oc.env:CACHE_STATS,true}
+  enable_logging: true
+  preload_chunk_size: 100
+  eviction_batch_size: 10
+
+# New v1.0 component configurations
+source:
+  _target_: plume_nav_sim.core.sources.PointSource
+  position: [50.0, 50.0]
+  emission_rate: ${oc.env:SOURCE_RATE,1000.0}
+  seed: 42
+
+agent_init:
+  _target_: plume_nav_sim.core.initialization.UniformRandomInitializer
+  bounds: [100.0, 100.0]
+  seed: 42
+  margin: ${oc.env:INIT_MARGIN,2.0}
+
+boundary:
+  _target_: plume_nav_sim.core.boundaries.TerminateBoundary
+  domain_bounds: [100.0, 100.0]
+  status_on_violation: ${oc.env:BOUNDARY_STATUS,oob}
+  allow_negative_coords: false
+
+action:
+  _target_: plume_nav_sim.core.actions.Continuous2DAction
+  max_linear_velocity: ${oc.env:MAX_LINEAR_VEL,2.0}
+  max_angular_velocity: ${oc.env:MAX_ANGULAR_VEL,45.0}
+  velocity_scaling: 1.0
+  clip_actions: true
+
+record:
+  _target_: plume_nav_sim.recording.backends.ParquetRecorder
+  output_dir: ${oc.env:RECORD_DIR,recordings}
+  full_trajectories: ${oc.env:FULL_TRAJ,true}
+  compression: snappy
+  buffer_size: 1000
+
+hooks:
+  extra_obs_fn: ${oc.env:EXTRA_OBS_FN,null}
+  extra_reward_fn: ${oc.env:EXTRA_REWARD_FN,null}
+  episode_end_fn: ${oc.env:EPISODE_END_FN,null}
+  enable_custom_metrics: ${oc.env:CUSTOM_METRICS,false}
+
+environment:
+  env_id: "PlumeNavSim-v1"
+  render_mode: ${oc.env:RENDER_MODE,null}
+  max_episode_steps: ${oc.env:MAX_STEPS,1000}
+  step_timeout_ms: 33  # Meeting ≤33ms requirement
+  api_compatibility: gymnasium
+  legacy_gym_support: true
+
+multi_agent:
+  num_agents: ${oc.env:NUM_AGENTS,3}
+  positions: [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
+  orientations: [0.0, 90.0, 180.0]
+  speeds: [1.0, 1.2, 0.8]
+  max_speeds: [2.0, 2.0, 2.0]
+
+system:
+  random_seed: ${oc.env:RANDOM_SEED,42}
+  debug_mode: ${oc.env:DEBUG,false}
+  output_dir: ${oc.env:OUTPUT_DIR,outputs}
+  log_level: ${oc.env:LOG_LEVEL,INFO}
+  performance_monitoring: true
+"""
+    
+    (config_dir / "config.yaml").write_text(v1_integration_config)
+    
+    # Measure comprehensive v1.0 configuration loading performance
+    start_time = time.time()
+    
+    with initialize_config_dir(config_dir=str(config_dir), version_base="1.1"):
+        cfg = compose(config_name="config")
+    
+    loading_time = (time.time() - start_time) * 1000  # Convert to ms
+    
+    # Validate performance requirement for complete v1.0 system
+    assert loading_time < 500, f"V1.0 integration config took {loading_time:.2f}ms, exceeds 500ms limit"
+    
+    # Validate all v1.0 components and existing components are present
+    assert cfg is not None
+    
+    # Core components
+    assert "navigator" in cfg
+    assert "video_plume" in cfg
+    assert "frame_cache" in cfg
+    assert "environment" in cfg
+    assert "system" in cfg
+    
+    # New v1.0 components
+    assert "source" in cfg
+    assert "agent_init" in cfg
+    assert "boundary" in cfg
+    assert "action" in cfg
+    assert "record" in cfg
+    assert "hooks" in cfg
+    
+    # Multi-agent support
+    assert "multi_agent" in cfg
+    
+    # Validate performance-critical configuration
+    assert cfg.environment.step_timeout_ms == 33  # ≤33ms requirement
+    assert cfg.system.performance_monitoring == True
+    
+    # Validate environment variable interpolation worked
+    assert cfg.navigator.max_speed == 2.0  # Default value
+    assert cfg.frame_cache.mode == "lru"   # Default value
+    assert cfg.source.emission_rate == 1000.0  # Default value
 
 
 def test_frame_cache_configuration_modes():

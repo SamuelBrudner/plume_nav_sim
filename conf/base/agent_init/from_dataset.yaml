@@ -1,0 +1,404 @@
+# @package _global_
+#
+# Dataset-driven Agent Initialization Configuration
+#
+# This configuration file defines parameters for the FromDatasetInitializer strategy,
+# which loads agent starting positions from external research datasets, experimental 
+# recordings, or trajectory files. The configuration supports multiple data formats,
+# temporal sampling from time-series data, coordinate system transformations, and 
+# statistical resampling methods for comprehensive data-driven experimental design.
+#
+# Key Features:
+# - Multi-format support: CSV, HDF5, JSON, Parquet with automatic format detection
+# - Temporal sampling: Extract positions from specific time points in trajectory data
+# - Coordinate transformations: Handle different coordinate systems and unit conversions
+# - Statistical resampling: Random, stratified, and temporal sampling strategies
+# - Environment overrides: Runtime configuration via environment variables
+# - Deterministic seeding: Reproducible position generation for scientific rigor
+#
+# Performance Characteristics:
+# - Dataset loading: Cached after first access for <1ms subsequent queries
+# - Position sampling: <1ms for 100 agents using vectorized operations
+# - Memory efficiency: Lazy loading with configurable caching strategies
+# - Supports datasets: Up to 1M positions with efficient indexing
+#
+# Usage Examples:
+#   # Load from CSV with default sequential sampling
+#   python run_simulation.py agent_init=from_dataset dataset_path=data/positions.csv
+#   
+#   # Use random sampling with specific seed
+#   python run_simulation.py agent_init=from_dataset \
+#     agent_init.statistical_resampling.mode=random \
+#     agent_init.statistical_resampling.seed=42
+#
+#   # Extract from time-series at specific time point
+#   python run_simulation.py agent_init=from_dataset \
+#     agent_init.temporal_sampling.enabled=true \
+#     agent_init.temporal_sampling.time_point=10.5
+
+# Core initializer configuration targeting FromDatasetInitializer class
+_target_: plume_nav_sim.core.initialization.FromDatasetInitializer
+
+# Primary dataset file path - supports environment variable substitution
+# Supports absolute paths, relative paths, and environment variable expansion
+# Examples: 
+#   - data/experiments/initial_positions.csv
+#   - ${EXPERIMENT_DATA_DIR}/positions.json
+#   - /absolute/path/to/dataset.h5
+dataset_path: ${oc.env:DATASET_PATH,data/agent_positions.csv}
+
+# Dataset format specification with automatic detection support
+# Supports explicit format specification or auto-detection based on file extension
+# Enables format-specific loading optimizations and validation
+format:
+  # Auto-detect format from file extension (csv, json, h5, hdf5, parquet)
+  auto_detect: true
+  
+  # Explicit format override (when auto-detection fails or for non-standard extensions)
+  # Valid values: csv, json, hdf5, parquet
+  explicit_format: null
+  
+  # Format-specific loading parameters for optimization and compatibility
+  format_options:
+    # CSV-specific loading parameters
+    csv:
+      delimiter: ","
+      header: 0  # Row index for column names (0 = first row)
+      encoding: "utf-8"
+      parse_dates: false
+      na_values: ["", "nan", "NaN", "null"]
+    
+    # JSON-specific loading parameters  
+    json:
+      orient: "records"  # JSON structure: records, index, values, split
+      lines: false       # Line-delimited JSON format
+      encoding: "utf-8"
+    
+    # HDF5-specific loading parameters
+    hdf5:
+      dataset_key: "/positions"  # Dataset path within HDF5 file
+      chunk_size: 10000         # Read chunk size for large datasets
+      compression: "gzip"       # Expected compression format
+    
+    # Parquet-specific loading parameters
+    parquet:
+      engine: "pyarrow"    # Engine: pyarrow, fastparquet
+      use_columns: null    # Specific columns to load (null = all)
+      filters: null        # Predicate pushdown filters
+
+# Position column mapping for flexible dataset schemas
+# Supports various naming conventions and coordinate systems commonly
+# used in experimental datasets and trajectory recordings
+position_columns:
+  # Primary coordinate column names
+  x_column: "x"  # X-coordinate column name
+  y_column: "y"  # Y-coordinate column name
+  
+  # Alternative column name patterns for flexible dataset integration
+  # Used when primary column names are not found
+  x_alternatives: ["x_pos", "x_position", "pos_x", "longitude", "lon"]
+  y_alternatives: ["y_pos", "y_position", "pos_y", "latitude", "lat"]
+  
+  # Optional additional columns for enhanced initialization
+  time_column: "time"        # Time column for temporal sampling
+  agent_id_column: "agent"   # Agent ID for multi-agent trajectory data
+  condition_column: "condition"  # Experimental condition for filtering
+
+# Temporal sampling configuration for time-series trajectory data
+# Enables extraction of agent positions from specific time points in
+# experimental recordings or simulation trajectories
+temporal_sampling:
+  # Enable temporal sampling from time-series data
+  enabled: false
+  
+  # Time point selection strategy
+  time_selection:
+    # Sampling mode: fixed_time, time_range, relative_position
+    mode: "fixed_time"
+    
+    # Fixed time point (used when mode=fixed_time)
+    time_point: 0.0
+    
+    # Time range sampling (used when mode=time_range)
+    time_range:
+      start: 0.0
+      end: 10.0
+      num_samples: 1
+    
+    # Relative position in trajectory (used when mode=relative_position)
+    # Values: 0.0 = start, 0.5 = middle, 1.0 = end
+    relative_position: 0.0
+  
+  # Time interpolation for non-exact time matches
+  interpolation:
+    enabled: true
+    method: "linear"  # linear, nearest, cubic
+    tolerance: 1.0    # Maximum time difference for interpolation
+  
+  # Handling of missing time data
+  missing_time_policy: "skip"  # skip, use_index, error
+
+# Coordinate system transformation for dataset compatibility
+# Handles unit conversions, coordinate system changes, and
+# spatial transformations for diverse experimental setups
+coordinate_transform:
+  # Enable coordinate transformations
+  enabled: false
+  
+  # Unit conversion settings
+  units:
+    # Input dataset units (meters, centimeters, millimeters, pixels)
+    input_units: "meters"
+    
+    # Target simulation units (must match domain_bounds units)
+    target_units: "meters"
+    
+    # Scale factor override (if automatic conversion insufficient)
+    scale_factor: null
+  
+  # Coordinate system transformations
+  coordinate_system:
+    # Flip coordinates to match simulation coordinate system
+    flip_x: false
+    flip_y: false
+    
+    # Rotation transformation (degrees, counterclockwise)
+    rotation_angle: 0.0
+    
+    # Translation offset [x_offset, y_offset]
+    offset: [0.0, 0.0]
+  
+  # Domain bounds fitting
+  bounds_fitting:
+    # Enable automatic scaling to fit domain bounds
+    auto_fit: false
+    
+    # Preserve aspect ratio during fitting
+    preserve_aspect: true
+    
+    # Margin percentage when fitting (0.0 = no margin, 0.1 = 10% margin)
+    margin_percent: 0.05
+
+# Statistical resampling configuration for position selection
+# Controls how agent positions are sampled from the dataset,
+# supporting various experimental design requirements
+statistical_resampling:
+  # Sampling mode: sequential, random, stratified, clustered
+  mode: "sequential"
+  
+  # Random seed for reproducible sampling (overrides global seed)
+  seed: null
+  
+  # Sequential sampling parameters
+  sequential:
+    # Starting index in dataset
+    start_index: 0
+    
+    # Stride between selected positions
+    stride: 1
+    
+    # Enable cycling through dataset if more agents than positions
+    cycle_enabled: true
+  
+  # Random sampling parameters
+  random:
+    # Enable replacement in random sampling
+    replacement: true
+    
+    # Rejection sampling for domain constraints
+    rejection_sampling:
+      enabled: true
+      max_attempts: 1000
+  
+  # Stratified sampling parameters for spatial diversity
+  stratified:
+    # Number of spatial bins for stratification
+    n_bins_x: 5
+    n_bins_y: 5
+    
+    # Minimum samples per bin
+    min_samples_per_bin: 1
+    
+    # Fallback to random if insufficient bin coverage
+    fallback_to_random: true
+  
+  # Clustered sampling for grouped experimental conditions
+  clustered:
+    # Number of clusters for position grouping
+    n_clusters: 5
+    
+    # Cluster selection method: random, centroid, representative
+    selection_method: "random"
+    
+    # Enable single-cluster sampling (all agents from one cluster)
+    single_cluster: false
+
+# Data filtering and validation configuration
+# Enables quality control and experimental condition selection
+data_filtering:
+  # Enable data filtering
+  enabled: false
+  
+  # Domain boundary constraints
+  domain_constraints:
+    # Enforce positions within domain bounds
+    enforce_bounds: true
+    
+    # Domain bounds [width, height] - uses environment default if null
+    domain_bounds: null
+    
+    # Margin for boundary checking
+    boundary_margin: 0.0
+  
+  # Value-based filtering conditions
+  filter_conditions:
+    # Column-based filters (column_name: condition)
+    # Examples:
+    # velocity: {min: 0.0, max: 5.0}    # Velocity range filter
+    # condition: "treatment_a"           # Equality filter
+    # agent_count: {min: 1}             # Minimum value filter
+  
+  # Data quality validation
+  quality_validation:
+    # Remove NaN/Inf values
+    remove_invalid: true
+    
+    # Remove duplicate positions
+    remove_duplicates: false
+    
+    # Minimum dataset size after filtering
+    min_dataset_size: 1
+
+# Environment variable override configuration
+# Allows runtime configuration without modifying files,
+# supporting CI/CD and automated experimental workflows
+environment_overrides:
+  # Enable environment variable overrides
+  enabled: true
+  
+  # Environment variable mappings
+  # Format: config_path: ENVIRONMENT_VARIABLE_NAME
+  variable_mappings:
+    dataset_path: "DATASET_PATH"
+    statistical_resampling.mode: "SAMPLING_MODE"
+    statistical_resampling.seed: "SAMPLING_SEED"
+    temporal_sampling.time_point: "TIME_POINT"
+    coordinate_transform.units.scale_factor: "COORD_SCALE"
+    data_filtering.domain_constraints.domain_bounds: "DOMAIN_BOUNDS"
+  
+  # Type conversion for environment variables
+  type_conversions:
+    SAMPLING_SEED: "int"
+    TIME_POINT: "float"
+    COORD_SCALE: "float"
+    DOMAIN_BOUNDS: "list_float"  # Comma-separated list to float list
+  
+  # Default values when environment variables are not set
+  defaults:
+    DATASET_PATH: "data/agent_positions.csv"
+    SAMPLING_MODE: "sequential"
+    SAMPLING_SEED: null
+    TIME_POINT: 0.0
+    COORD_SCALE: 1.0
+
+# Performance optimization settings
+# Controls caching, memory usage, and loading strategies
+# for efficient operation with large datasets
+performance:
+  # Dataset caching configuration
+  caching:
+    # Enable dataset caching after first load
+    enabled: true
+    
+    # Cache invalidation policy: never, file_modified, ttl
+    invalidation_policy: "file_modified"
+    
+    # Time-to-live for cached data (seconds, used with ttl policy)
+    cache_ttl: 3600
+  
+  # Memory management for large datasets
+  memory_management:
+    # Maximum dataset size to load into memory (bytes)
+    max_memory_usage: 134217728  # 128 MB
+    
+    # Enable lazy loading for large datasets
+    lazy_loading: true
+    
+    # Chunk size for streaming large datasets
+    chunk_size: 10000
+  
+  # Optimization flags
+  optimization:
+    # Enable NumPy vectorization for position operations
+    vectorized_operations: true
+    
+    # Use float32 instead of float64 for memory efficiency
+    use_float32: true
+    
+    # Enable parallel processing for large datasets
+    parallel_processing: false
+
+# Advanced configuration for specialized use cases
+# Provides fine-grained control for research applications
+# and integration with external experimental systems
+advanced:
+  # Multi-dataset support for complex experimental designs
+  multi_dataset:
+    # Enable loading from multiple dataset files
+    enabled: false
+    
+    # Dataset file list (when enabled)
+    dataset_files: []
+    
+    # Merging strategy: concatenate, interleave, stratified
+    merge_strategy: "concatenate"
+  
+  # External validation hooks
+  validation_hooks:
+    # Enable custom validation functions
+    enabled: false
+    
+    # Validation function parameters
+    validation_params: {}
+  
+  # Integration with external systems
+  external_integration:
+    # Database connection for real-time data loading
+    database:
+      enabled: false
+      connection_string: null
+      query: null
+    
+    # REST API for remote dataset access
+    api:
+      enabled: false
+      endpoint: null
+      authentication: null
+
+# Migration and compatibility settings
+# Ensures backward compatibility with existing datasets
+# and provides migration paths for legacy configurations
+compatibility:
+  # Legacy format support
+  legacy_formats:
+    # Support old column naming conventions
+    legacy_column_names: true
+    
+    # Automatic column name detection and mapping
+    auto_column_detection: true
+  
+  # Configuration migration
+  migration:
+    # Migrate from v0.3.0 configuration format
+    from_v0_3_0: false
+    
+    # Migrate from fixed_list initializer configuration
+    from_fixed_list: false
+  
+  # Deprecation warnings
+  warnings:
+    # Show deprecation warnings for old configuration options
+    show_deprecation: true
+    
+    # Treat warnings as errors for strict validation
+    strict_validation: false

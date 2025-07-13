@@ -1,0 +1,368 @@
+# @package _global_
+#
+# Research-oriented hook configuration for comprehensive experimental data collection
+# 
+# This configuration enables research-focused data collection, automated statistics aggregation,
+# and custom observation/reward extensions for RL training while maintaining performance
+# requirements. Designed for scientific experiments requiring publication-quality data
+# collection and analysis capabilities.
+#
+# Key Features:
+# - High-performance data recording with ParquetRecorder backend and buffered I/O
+# - Automated research metrics calculation with <100ms episode processing
+# - Extension hooks for custom observations and reward shaping  
+# - Performance-aware configuration balancing data richness with simulation speed
+# - Non-invasive system extension points for downstream project customization
+#
+# Performance Characteristics:
+# - Recording overhead: <1ms per step when enabled, <0.001ms when disabled
+# - Statistics processing: <100ms per episode per F-018-RQ-001 requirement
+# - Memory usage: Configurable buffering with automatic backpressure handling
+# - Export capabilities: Multiple formats (JSON, Parquet, HDF5) with compression
+
+# =============================================================================
+# RECORDING SYSTEM CONFIGURATION
+# =============================================================================
+
+# High-performance data recorder configuration for research data collection
+recorder:
+  # Use ParquetRecorder for efficient columnar storage with compression
+  _target_: plume_nav_sim.recording.backends.ParquetRecorder
+  
+  # Core configuration
+  backend: parquet
+  output_dir: ./data/research_recordings
+  run_id: null  # Auto-generated based on timestamp
+  episode_id_format: "episode_{episode_id:06d}"
+  
+  # Performance optimization for research workloads
+  buffer_size: 1000  # Balance memory usage with I/O efficiency
+  flush_interval: 5.0  # Maximum seconds between buffer flushes
+  async_io: true  # Enable asynchronous I/O for non-blocking writes
+  compression: snappy  # Fast compression for real-time recording
+  
+  # Monitoring and quality assurance
+  enable_metrics: true  # Track recording performance for optimization
+  memory_limit_mb: 256  # Reasonable limit for research workloads
+  warning_threshold: 0.8  # Alert when buffer utilization exceeds 80%
+  disabled_mode_optimization: true  # Ultra-fast mode when recording disabled
+
+# Recording enablement flags for granular control
+recording_config:
+  # Full trajectory recording for detailed analysis
+  full_trajectory: true  # Record per-step agent positions and states
+  
+  # Episode-level data collection  
+  episode_summaries: true  # Record episode-level metrics and outcomes
+  
+  # Performance and timing data
+  performance_metrics: true  # Track step timing and computational costs
+  
+  # Environmental data recording
+  environmental_data: true  # Record odor concentrations and wind conditions
+  
+  # Action and observation logging
+  action_history: true  # Record all agent actions for behavioral analysis
+  observation_history: true  # Record sensor readings and derived observations
+
+# =============================================================================
+# STATISTICS AGGREGATOR CONFIGURATION  
+# =============================================================================
+
+# Automated research metrics calculation and analysis
+stats_aggregator:
+  _target_: plume_nav_sim.analysis.stats.StatsAggregator
+  
+  # Configuration for comprehensive research metrics
+  config:
+    # Define metrics to calculate for each data type
+    metrics_definitions:
+      # Trajectory analysis metrics
+      trajectory:
+        - mean  # Average position coordinates
+        - std   # Position variability 
+        - total_distance  # Path length for efficiency analysis
+        - displacement_efficiency  # Ratio of direct to actual distance
+        - tortuosity  # Path complexity measure
+        - exploration_area  # Spatial coverage metric
+        - position_entropy  # Spatial diversity measure
+      
+      # Concentration detection and sensing metrics  
+      concentration:
+        - mean  # Average odor concentration encountered
+        - std   # Concentration variability
+        - min   # Minimum detected concentration
+        - max   # Maximum detected concentration
+        - median  # Median concentration for robust statistics
+        - percentiles  # Distribution analysis (10th, 25th, 75th, 90th, 95th, 99th)
+        - detection_rate  # Fraction of steps with odor detection
+        - detection_efficiency  # Weighted detection performance
+        - max_detection_streak  # Longest consecutive detection sequence
+      
+      # Movement and navigation metrics
+      speed:
+        - mean_speed  # Average movement velocity
+        - std_speed   # Speed variability
+        - max_speed   # Peak velocity achieved
+        - total_distance  # Cumulative path length
+        - movement_efficiency  # Navigation effectiveness measure
+        - speed_entropy  # Movement pattern diversity
+        - acceleration_variance  # Smoothness of movement
+      
+      # Timing and performance metrics
+      timing:
+        - episode_length  # Number of simulation steps
+        - mean_step_duration  # Average computational time per step
+        - std_step_duration   # Step timing variability  
+        - max_step_duration   # Longest step computation time
+        - total_episode_time  # Total episode duration
+        - performance_compliance_rate  # Fraction meeting 33ms target
+    
+    # Multi-level aggregation for comprehensive analysis
+    aggregation_levels:
+      - episode  # Individual episode statistics
+      - run      # Cross-episode aggregation and trends
+    
+    # Output format for research reproducibility
+    output_format: json  # Standard format for cross-tool compatibility
+    
+    # Performance optimization settings
+    performance_tracking: true  # Enable detailed performance monitoring
+    parallel_processing: false  # Sequential processing for deterministic results
+    memory_limit_mb: 512  # Generous limit for complex calculations
+    computation_timeout_s: 30.0  # Safety timeout for statistical calculations
+    
+    # Data quality and validation
+    data_validation: true  # Enable input data validation and schema checking
+    output_validation: true  # Validate calculated metrics against expected ranges  
+    error_handling: warn  # Log warnings for calculation errors but continue
+    precision_mode: float64  # High precision for accurate statistical calculations
+
+# =============================================================================
+# EXTENSION HOOKS CONFIGURATION
+# =============================================================================
+
+# Custom observation extension hooks for enhanced RL training
+observation_hooks:
+  # Enable custom observation extensions
+  enable_extra_observations: true
+  
+  # Research-focused observation additions
+  extra_observations:
+    # Environmental context 
+    wind_direction: true  # Current wind vector for environmental awareness
+    wind_speed: true      # Wind magnitude for dynamic adaptation
+    
+    # Spatial awareness
+    distance_to_boundaries: true  # Proximity to domain edges
+    exploration_progress: true    # Cumulative area coverage metric
+    
+    # Historical context
+    concentration_history: true   # Recent concentration time series (last 10 steps)
+    position_history: true       # Recent position trajectory (last 5 steps)
+    
+    # Navigation efficiency metrics
+    path_efficiency: true        # Real-time efficiency calculation
+    search_effectiveness: true   # Detection-weighted performance score
+    
+    # Performance monitoring
+    step_timing: false           # Computational timing (disable for performance)
+    memory_usage: false          # Resource utilization (disable for performance)
+
+# Custom reward shaping hooks for research-oriented training
+reward_hooks:
+  # Enable reward extensions for research experiments
+  enable_extra_rewards: true
+  
+  # Research-focused reward components
+  extra_rewards:
+    # Exploration incentives
+    exploration_bonus:
+      enabled: true
+      weight: 0.1  # Bonus weight for visiting novel areas
+      novelty_threshold: 5.0  # Minimum distance for area to be considered novel
+    
+    # Efficiency incentives  
+    efficiency_bonus:
+      enabled: true
+      weight: 0.05  # Bonus weight for efficient navigation
+      efficiency_threshold: 0.7  # Minimum efficiency for bonus activation
+    
+    # Detection consistency rewards
+    detection_consistency:
+      enabled: true
+      weight: 0.02  # Reward for maintaining consistent detection
+      streak_multiplier: 1.1  # Multiplier for consecutive detections
+    
+    # Energy conservation (penalty for excessive speed)
+    energy_conservation:
+      enabled: false  # Disabled by default - enable for energy-aware experiments
+      weight: -0.01   # Penalty weight for high-speed movement
+      speed_threshold: 0.8  # Fraction of max speed above which penalty applies
+    
+    # Multi-objective balancing
+    objective_balancing:
+      enabled: true
+      weights:
+        detection: 0.7     # Primary objective weight
+        efficiency: 0.2    # Secondary objective weight  
+        exploration: 0.1   # Tertiary objective weight
+
+# Episode completion hooks for automated research workflows
+episode_hooks:
+  # Enable episode completion processing
+  enable_episode_end_hooks: true
+  
+  # Automated analysis triggers
+  episode_analysis:
+    # Immediate episode statistics calculation
+    calculate_episode_stats: true
+    stats_timeout_ms: 100  # Maximum time for episode stats calculation
+    
+    # Performance assessment
+    performance_evaluation: true
+    performance_threshold_ms: 33  # Target step time for performance warnings
+    
+    # Data quality validation
+    trajectory_validation: true  # Validate trajectory data integrity
+    concentration_validation: true  # Validate sensor data completeness
+    
+    # Export triggers
+    export_episode_data: false  # Disable immediate export for performance
+    export_on_milestone: true   # Export every 100 episodes
+    milestone_interval: 100     # Episode interval for milestone exports
+
+# =============================================================================
+# PERFORMANCE AND INTEGRATION SETTINGS
+# =============================================================================
+
+# Performance monitoring and optimization
+performance_config:
+  # Target performance thresholds
+  target_step_time_ms: 33  # Maximum acceptable step time per F-017 requirements
+  target_episode_stats_ms: 100  # Maximum episode statistics time per F-018-RQ-001
+  
+  # Memory management
+  max_memory_usage_mb: 512  # Total memory limit for hooks and recording
+  buffer_warning_threshold: 0.8  # Alert threshold for buffer utilization
+  
+  # Monitoring frequency
+  performance_monitoring_enabled: true
+  monitoring_interval_steps: 100  # Check performance every 100 steps
+  
+  # Optimization flags
+  vectorized_operations: true     # Use NumPy vectorization when possible
+  lazy_evaluation: true          # Defer expensive calculations when possible  
+  cache_derived_metrics: true    # Cache computed metrics for reuse
+
+# Integration with simulation loop
+integration_config:
+  # Hook execution timing
+  pre_step_hooks: []  # No pre-step hooks for maximum performance
+  
+  post_step_hooks:
+    - record_step_data      # Record step data after each simulation step
+    - update_statistics     # Update running statistics
+    - performance_check     # Monitor performance compliance
+  
+  episode_end_hooks:
+    - finalize_recording    # Complete episode data recording
+    - calculate_episode_metrics  # Compute episode-level statistics  
+    - export_data_conditional    # Export data based on milestone criteria
+    - cleanup_buffers       # Clean up temporary data structures
+  
+  # Error handling and recovery
+  error_handling:
+    mode: graceful_degradation  # Continue simulation with warnings on hook errors
+    max_error_rate: 0.05        # Maximum tolerable error rate (5%)
+    disable_on_repeated_failure: true  # Disable problematic hooks automatically
+    
+  # Resource cleanup
+  automatic_cleanup: true      # Enable automatic resource cleanup
+  cleanup_interval_episodes: 10  # Clean up every 10 episodes
+
+# =============================================================================
+# RESEARCH-SPECIFIC CONFIGURATION
+# =============================================================================
+
+# Publication-quality data collection settings
+research_config:
+  # Data reproducibility
+  deterministic_recording: true  # Ensure deterministic data collection
+  seed_recording: true          # Record random seeds for reproducibility
+  config_snapshots: true       # Save configuration snapshots with data
+  
+  # Metadata collection
+  experiment_metadata:
+    collect_environment_info: true  # Record environment version and settings
+    collect_system_info: true      # Record hardware and software information
+    collect_timing_info: true      # Record detailed timing and performance data
+    
+  # Analysis readiness
+  analysis_ready_exports: true    # Generate analysis-ready data formats
+  cross_tool_compatibility: true # Ensure compatibility with analysis tools
+  
+  # Collaboration support  
+  shared_data_formats: true      # Use standardized formats for team collaboration
+  version_tracking: true         # Track data format versions for compatibility
+  
+  # Quality assurance
+  data_integrity_checks: true    # Perform comprehensive data validation
+  statistical_validation: true   # Validate statistical calculations
+  export_validation: true        # Validate exported data completeness
+
+# Advanced features for complex research scenarios
+advanced_config:
+  # Multi-agent coordination (when applicable)
+  multi_agent_aware: true        # Handle multi-agent scenarios appropriately
+  agent_correlation_analysis: false  # Disable by default for single-agent focus
+  
+  # Adaptive configuration
+  adaptive_recording: false      # Static configuration for consistent experiments
+  dynamic_statistics: false     # Static metrics for reproducible analysis
+  
+  # Custom metric support
+  custom_metric_plugins: []      # List of custom metric calculation plugins
+  custom_export_formats: []     # List of custom export format handlers
+  
+  # Integration with external tools
+  external_tool_hooks: []       # Hooks for external analysis tool integration
+  real_time_streaming: false    # Disable real-time streaming for file-based analysis
+
+# =============================================================================
+# VALIDATION AND COMPATIBILITY
+# =============================================================================
+
+# Configuration validation settings
+validation:
+  # Schema validation
+  validate_on_init: true         # Validate configuration on initialization
+  strict_type_checking: true     # Enforce strict type validation
+  
+  # Compatibility checks
+  check_dependency_versions: true  # Validate dependency compatibility
+  check_backend_availability: true  # Verify recorder backend availability
+  
+  # Performance validation
+  benchmark_on_start: false      # Skip benchmarking for faster startup
+  validate_performance_targets: true  # Check if configuration meets performance targets
+
+# Backward compatibility settings
+compatibility:
+  # Legacy support
+  support_legacy_formats: false  # Focus on modern formats for new experiments
+  legacy_hook_compatibility: false  # Disable legacy hook support
+  
+  # Migration support
+  auto_upgrade_configs: false    # Manual configuration migration preferred
+  deprecation_warnings: true     # Show warnings for deprecated features
+
+# Documentation and help
+documentation:
+  # Inline documentation
+  include_metric_descriptions: true  # Include descriptions in exported data
+  include_configuration_docs: true   # Include configuration documentation
+  
+  # Usage examples
+  generate_usage_examples: false     # Skip example generation for production
+  include_performance_notes: true    # Include performance recommendations

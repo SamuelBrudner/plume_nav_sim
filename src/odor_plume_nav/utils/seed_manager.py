@@ -209,8 +209,8 @@ class SeedConfig(BaseModel):
         description="Warn when randomness is used without explicit seed setting"
     )
     
-    # Hydra-specific _target_ metadata for factory-driven instantiation
-    _target_: str = Field(
+    # Hydra-specific target metadata for factory-driven instantiation
+    target_: str = Field(
         default="odor_plume_nav.utils.seed_manager.setup_global_seed",
         description="Hydra target for automatic seed setup"
     )

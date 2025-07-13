@@ -117,10 +117,30 @@ from __future__ import annotations
 import warnings
 from typing import Optional, Union, Dict, List, Any, Tuple, TYPE_CHECKING
 
-# Core protocol and type definitions
+# Core protocol and type definitions - including new v1.0 protocols
 from .protocols import (
+    # Existing core protocols
     NavigatorProtocol,
     NavigatorFactory as BaseNavigatorFactory,
+    
+    # New v1.0 protocol interfaces for pluggable architecture per Section 0.2.1
+    SourceProtocol,
+    BoundaryPolicyProtocol,
+    ActionInterfaceProtocol,
+    RecorderProtocol,
+    StatsAggregatorProtocol,
+    AgentInitializerProtocol,
+    
+    # Existing modular component protocols
+    PlumeModelProtocol,
+    WindFieldProtocol,
+    SensorProtocol,
+    AgentObservationProtocol,
+    AgentActionProtocol,
+    ObservationSpaceProtocol,
+    ActionSpaceProtocol,
+    
+    # Type aliases for enhanced IDE support
     PositionType,
     PositionsType,
     OrientationType, 
@@ -131,6 +151,23 @@ from .protocols import (
     ObservationHookType,
     RewardHookType,
     EpisodeEndHookType,
+    
+    # New v1.0 type aliases
+    SourceConfigType,
+    BoundaryPolicyConfigType,
+    ActionInterfaceConfigType,
+    RecorderConfigType,
+    StatsConfigType,
+    AgentInitConfigType,
+    EmissionRateType,
+    PositionTupleType,
+    BoundaryViolationType,
+    NavigationCommandType,
+    StepDataType,
+    EpisodeDataType,
+    MetricsType,
+    
+    # Utility functions
     _is_multi_agent_config,
     _get_config_value,
     _extract_extensibility_config,
@@ -141,6 +178,105 @@ from .protocols import (
 
 # Enhanced navigator implementations
 from .navigator import Navigator, NavigatorFactory, create_navigator_from_config
+
+# New v1.0 source implementations per Section 0.2.1 source abstraction
+try:
+    from .sources import (
+        PointSource,
+        MultiSource,
+        DynamicSource,
+        create_source
+    )
+    SOURCES_AVAILABLE = True
+except ImportError:
+    # Sources will be created by other agents - create minimal fallback
+    def create_source(config):
+        """Placeholder until sources module is available."""
+        warnings.warn("Source implementations not yet available", UserWarning, stacklevel=2)
+        return None
+    
+    class PointSource:
+        """Placeholder for PointSource until sources module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("PointSource not yet available", UserWarning, stacklevel=2)
+    
+    class MultiSource:
+        """Placeholder for MultiSource until sources module is available.""" 
+        def __init__(self, **kwargs):
+            warnings.warn("MultiSource not yet available", UserWarning, stacklevel=2)
+    
+    class DynamicSource:
+        """Placeholder for DynamicSource until sources module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("DynamicSource not yet available", UserWarning, stacklevel=2)
+    
+    SOURCES_AVAILABLE = False
+
+# New v1.0 boundary policy implementations per Section 0.2.1 boundary handling
+try:
+    from .boundaries import (
+        TerminateBoundary,
+        BounceBoundary,
+        WrapBoundary,
+        ClipBoundary,
+        create_boundary_policy
+    )
+    BOUNDARIES_AVAILABLE = True
+except ImportError:
+    # Boundaries will be created by other agents - create minimal fallback
+    def create_boundary_policy(policy_type, domain_bounds, **kwargs):
+        """Placeholder until boundaries module is available."""
+        warnings.warn("Boundary policy implementations not yet available", UserWarning, stacklevel=2)
+        return None
+    
+    class TerminateBoundary:
+        """Placeholder for TerminateBoundary until boundaries module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("TerminateBoundary not yet available", UserWarning, stacklevel=2)
+    
+    class BounceBoundary:
+        """Placeholder for BounceBoundary until boundaries module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("BounceBoundary not yet available", UserWarning, stacklevel=2)
+    
+    class WrapBoundary:
+        """Placeholder for WrapBoundary until boundaries module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("WrapBoundary not yet available", UserWarning, stacklevel=2)
+    
+    class ClipBoundary:
+        """Placeholder for ClipBoundary until boundaries module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("ClipBoundary not yet available", UserWarning, stacklevel=2)
+    
+    BOUNDARIES_AVAILABLE = False
+
+# New v1.0 action interface implementations per Section 0.2.1 action standardization
+try:
+    from .actions import (
+        Continuous2DAction,
+        CardinalDiscreteAction,
+        create_action_interface
+    )
+    ACTIONS_AVAILABLE = True
+except ImportError:
+    # Actions will be created by other agents - create minimal fallback
+    def create_action_interface(config):
+        """Placeholder until actions module is available."""
+        warnings.warn("Action interface implementations not yet available", UserWarning, stacklevel=2)
+        return None
+    
+    class Continuous2DAction:
+        """Placeholder for Continuous2DAction until actions module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("Continuous2DAction not yet available", UserWarning, stacklevel=2)
+    
+    class CardinalDiscreteAction:
+        """Placeholder for CardinalDiscreteAction until actions module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("CardinalDiscreteAction not yet available", UserWarning, stacklevel=2)
+    
+    ACTIONS_AVAILABLE = False
 
 # Controller implementations - handle case where they don't exist yet
 try:
@@ -191,6 +327,97 @@ except ImportError:
     
     SIMULATION_AVAILABLE = False
 
+# New v1.0 recording framework implementations per Section 0.2.1 data recording
+try:
+    from ..recording import (
+        RecorderFactory,
+        RecorderManager,
+        BaseRecorder
+    )
+    RECORDING_AVAILABLE = True
+except ImportError:
+    # Recording will be created by other agents - create minimal fallback
+    class RecorderFactory:
+        """Placeholder for RecorderFactory until recording module is available."""
+        @staticmethod
+        def create_recorder(config):
+            warnings.warn("RecorderFactory not yet available", UserWarning, stacklevel=2)
+            return None
+        
+        @staticmethod
+        def get_available_backends():
+            return ['none']
+        
+        @staticmethod
+        def validate_config(config):
+            return {'valid': False, 'error': 'RecorderFactory not available'}
+    
+    class RecorderManager:
+        """Placeholder for RecorderManager until recording module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("RecorderManager not yet available", UserWarning, stacklevel=2)
+    
+    class BaseRecorder:
+        """Placeholder for BaseRecorder until recording module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("BaseRecorder not yet available", UserWarning, stacklevel=2)
+    
+    RECORDING_AVAILABLE = False
+
+# New v1.0 analysis framework implementations per Section 0.2.1 statistics aggregation
+try:
+    from ..analysis import (
+        StatsAggregator,
+        generate_summary
+    )
+    ANALYSIS_AVAILABLE = True
+except ImportError:
+    # Analysis will be created by other agents - create minimal fallback
+    def generate_summary(aggregator, episodes_data, output_path=None, **export_options):
+        """Placeholder until analysis module is available."""
+        warnings.warn("Analysis framework not yet available", UserWarning, stacklevel=2)
+        return {'status': 'placeholder', 'episode_count': 0}
+    
+    class StatsAggregator:
+        """Placeholder for StatsAggregator until analysis module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("StatsAggregator not yet available", UserWarning, stacklevel=2)
+    
+    ANALYSIS_AVAILABLE = False
+
+# New v1.0 debug framework implementations per Section 0.2.1 enhanced debugging
+try:
+    from ..debug import (
+        DebugGUI,
+        plot_initial_state
+    )
+    DEBUG_AVAILABLE = True
+except ImportError:
+    # Debug will be created by other agents - create minimal fallback
+    def plot_initial_state(*args, **kwargs):
+        """Placeholder until debug module is available."""
+        warnings.warn("Debug plotting not yet available", UserWarning, stacklevel=2)
+        return None
+    
+    class DebugGUI:
+        """Placeholder for DebugGUI until debug module is available."""
+        def __init__(self, **kwargs):
+            warnings.warn("DebugGUI not yet available", UserWarning, stacklevel=2)
+        
+        def start_session(self):
+            return self
+        
+        def step_through(self):
+            return True
+        
+        def export_screenshots(self, output_dir='./debug_exports'):
+            return None
+        
+        def configure_backend(self, **kwargs):
+            pass
+    
+    DEBUG_AVAILABLE = False
+
 # Hydra configuration support
 try:
     from omegaconf import DictConfig
@@ -210,16 +437,64 @@ except ImportError:
     LOGURU_AVAILABLE = False
 
 
-# Define public API with comprehensive exports for maximum flexibility
+# Define public API with comprehensive exports for v1.0 architecture
 __all__ = [
     # Core protocol and factory interfaces
     "NavigatorProtocol",
     "NavigatorFactory", 
     "Navigator",  # Enhanced navigator with Gymnasium features
     
+    # New v1.0 protocol interfaces for pluggable architecture
+    "SourceProtocol",
+    "BoundaryPolicyProtocol",
+    "ActionInterfaceProtocol", 
+    "RecorderProtocol",
+    "StatsAggregatorProtocol",
+    "AgentInitializerProtocol",
+    
+    # Existing modular component protocols
+    "PlumeModelProtocol",
+    "WindFieldProtocol",
+    "SensorProtocol",
+    "AgentObservationProtocol",
+    "AgentActionProtocol",
+    "ObservationSpaceProtocol",
+    "ActionSpaceProtocol",
+    
     # Controller implementations  
     "SingleAgentController",
     "MultiAgentController",
+    
+    # New v1.0 source implementations
+    "PointSource",
+    "MultiSource",
+    "DynamicSource",
+    "create_source",
+    
+    # New v1.0 boundary policy implementations
+    "TerminateBoundary",
+    "BounceBoundary",
+    "WrapBoundary",
+    "ClipBoundary",
+    "create_boundary_policy",
+    
+    # New v1.0 action interface implementations
+    "Continuous2DAction",
+    "CardinalDiscreteAction",
+    "create_action_interface",
+    
+    # New v1.0 recording framework
+    "RecorderFactory",
+    "RecorderManager",
+    "BaseRecorder",
+    
+    # New v1.0 analysis framework
+    "StatsAggregator",
+    "generate_summary",
+    
+    # New v1.0 debug framework
+    "DebugGUI",
+    "plot_initial_state",
     
     # Configuration and utility classes
     "SingleAgentParams",
@@ -241,6 +516,21 @@ __all__ = [
     "ObservationHookType",
     "RewardHookType", 
     "EpisodeEndHookType",
+    
+    # New v1.0 type aliases
+    "SourceConfigType",
+    "BoundaryPolicyConfigType",
+    "ActionInterfaceConfigType",
+    "RecorderConfigType", 
+    "StatsConfigType",
+    "AgentInitConfigType",
+    "EmissionRateType",
+    "PositionTupleType",
+    "BoundaryViolationType",
+    "NavigationCommandType",
+    "StepDataType",
+    "EpisodeDataType",
+    "MetricsType",
     
     # API compatibility utilities for Gymnasium migration
     "detect_api_compatibility_mode",

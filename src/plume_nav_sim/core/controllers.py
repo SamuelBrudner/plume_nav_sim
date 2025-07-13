@@ -109,8 +109,11 @@ from typing import Optional, Union, Any, Tuple, List, Dict, TypeVar, Callable
 from dataclasses import dataclass, field
 import numpy as np
 
-# Core protocol import
-from .protocols import NavigatorProtocol
+# Core protocol imports
+from .protocols import NavigatorProtocol, BoundaryPolicyProtocol
+
+# Boundary policy factory import
+from .boundaries import create_boundary_policy
 
 # Sensor protocol definitions - basic implementations for modular architecture
 from typing import Protocol, runtime_checkable
@@ -372,7 +375,17 @@ class SingleAgentParams:
     
     def to_kwargs(self) -> Dict[str, Any]:
         """Convert dataclass to kwargs dictionary for controller reset methods."""
-        return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
+        result = {}
+        for k, v in self.__dict__.items():
+            if v is not None:
+                # Handle list/array comparisons safely
+                if isinstance(v, list) and len(v) == 0:
+                    continue
+                elif isinstance(v, np.ndarray) and v.size == 0:
+                    continue
+                else:
+                    result[k] = v
+        return result
 
 
 @dataclass
@@ -417,7 +430,17 @@ class MultiAgentParams:
     
     def to_kwargs(self) -> Dict[str, Any]:
         """Convert dataclass to kwargs dictionary for controller reset methods."""
-        return {k: v for k, v in self.__dict__.items() if v is not None and v != []}
+        result = {}
+        for k, v in self.__dict__.items():
+            if v is not None:
+                # Handle list/array comparisons safely
+                if isinstance(v, list) and len(v) == 0:
+                    continue
+                elif isinstance(v, np.ndarray) and v.size == 0:
+                    continue
+                else:
+                    result[k] = v
+        return result
 
 
 class BaseController:
@@ -439,6 +462,8 @@ class BaseController:
         reward_shaping: Optional[str] = None,
         sensors: Optional[List[SensorProtocol]] = None,
         enable_memory: bool = False,
+        boundary_policy: Optional[BoundaryPolicyProtocol] = None,
+        domain_bounds: Optional[Tuple[float, float]] = None,
         **kwargs: Any
     ) -> None:
         """Initialize base controller with enhanced monitoring capabilities and sensor support."""
@@ -457,6 +482,18 @@ class BaseController:
         # Memory management hooks - optional for flexible cognitive modeling
         self._memory_enabled = enable_memory
         self._memory_state = None
+        
+        # Boundary policy integration for v1.0 pluggable architecture
+        self._boundary_policy = boundary_policy
+        self._domain_bounds = domain_bounds
+        if boundary_policy is None and domain_bounds is not None:
+            # Create default terminate boundary policy if domain bounds provided
+            try:
+                self._boundary_policy = create_boundary_policy("terminate", domain_bounds)
+            except Exception as e:
+                if self._enable_logging:
+                    logger.warning(f"Failed to create default boundary policy: {e}")
+                self._boundary_policy = None
         
         # Performance metrics tracking
         self._performance_metrics = {
@@ -503,6 +540,19 @@ class BaseController:
                     pass
         else:
             self._logger = None
+    
+    # NavigatorProtocol boundary policy property for v1.0 architecture
+    
+    @property
+    def boundary_policy(self) -> Optional[BoundaryPolicyProtocol]:
+        """
+        Get current boundary policy implementation for domain edge management.
+        
+        Returns:
+            Optional[BoundaryPolicyProtocol]: Boundary policy instance providing
+                edge handling behavior, or None if no boundary policy is configured.
+        """
+        return self._boundary_policy
     
     # Extensibility hooks - default implementations for protocol compliance
     
@@ -844,6 +894,97 @@ class BaseController:
                 "All sensors reset",
                 num_sensors=len(self._sensors)
             )
+    
+    # Boundary policy integration methods for v1.0 architecture
+    
+    def _apply_boundary_policy(
+        self, 
+        positions: np.ndarray, 
+        velocities: Optional[np.ndarray] = None
+    ) -> Tuple[np.ndarray, Optional[np.ndarray], bool]:
+        """
+        Apply boundary policy to agent positions and velocities.
+        
+        Args:
+            positions: Agent positions with shape (n_agents, 2) or (2,)
+            velocities: Optional agent velocities with same shape
+            
+        Returns:
+            Tuple[np.ndarray, Optional[np.ndarray], bool]: 
+                (corrected_positions, corrected_velocities, terminate_episode)
+                
+        Notes:
+            This method integrates boundary policy checking and correction into
+            the navigation step process while maintaining performance requirements.
+        """
+        if self._boundary_policy is None:
+            # No boundary policy - return positions unchanged
+            return positions, velocities, False
+        
+        try:
+            # Check for boundary violations
+            violations = self._boundary_policy.check_violations(positions)
+            
+            # If no violations, return unchanged
+            if not np.any(violations):
+                return positions, velocities, False
+            
+            # Apply boundary policy corrections
+            if velocities is not None:
+                corrected_pos, corrected_vel = self._boundary_policy.apply_policy(positions, velocities)
+            else:
+                corrected_pos = self._boundary_policy.apply_policy(positions)
+                corrected_vel = velocities
+            
+            # Check if episode should terminate based on boundary policy
+            termination_status = self._boundary_policy.get_termination_status()
+            terminate_episode = (termination_status == "oob")
+            
+            # Log boundary interactions for debugging
+            if self._logger and np.any(violations):
+                self._logger.debug(
+                    "Boundary policy applied",
+                    policy_type=type(self._boundary_policy).__name__,
+                    violations_count=int(np.sum(violations)),
+                    termination_status=termination_status,
+                    terminate_episode=terminate_episode
+                )
+            
+            return corrected_pos, corrected_vel, terminate_episode
+            
+        except Exception as e:
+            if self._logger:
+                self._logger.error(
+                    f"Boundary policy application failed: {str(e)}",
+                    error_type=type(e).__name__,
+                    policy_type=type(self._boundary_policy).__name__ if self._boundary_policy else None
+                )
+            # On error, return positions unchanged and don't terminate
+            return positions, velocities, False
+    
+    def is_boundary_termination_pending(self) -> bool:
+        """
+        Check if boundary policy has triggered episode termination.
+        
+        Returns:
+            bool: True if boundary termination is pending, False otherwise
+            
+        Notes:
+            This method allows external episode management to check if a boundary
+            policy has triggered episode termination (e.g., agent out of bounds).
+        """
+        return getattr(self, '_boundary_termination_pending', False)
+    
+    def clear_boundary_termination(self) -> None:
+        """
+        Clear boundary termination flag for new episode.
+        
+        Notes:
+            This method should be called at episode reset to clear any pending
+            boundary termination status from the previous episode.
+        """
+        if hasattr(self, '_boundary_termination_pending'):
+            self._boundary_termination_pending = False
 
 
 class SingleAgentController(BaseController):
@@ -905,6 +1046,8 @@ class SingleAgentController(BaseController):
         angular_velocity: float = 0.0,
         sensors: Optional[List[SensorProtocol]] = None,
         enable_memory: bool = False,
+        boundary_policy: Optional[BoundaryPolicyProtocol] = None,
+        domain_bounds: Optional[Tuple[float, float]] = None,
         **kwargs: Any
     ) -> None:
         """
@@ -918,6 +1061,8 @@ class SingleAgentController(BaseController):
             angular_velocity: Initial angular velocity in degrees/second, defaults to 0.0
             sensors: List of SensorProtocol implementations for perception, defaults to [DirectOdorSensor()]
             enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
+            boundary_policy: Optional boundary policy for domain edge handling, defaults to None
+            domain_bounds: Optional domain bounds for default boundary policy creation, defaults to None
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging (default: True)
                 - controller_id: Unique controller identifier
@@ -929,8 +1074,14 @@ class SingleAgentController(BaseController):
         Raises:
             ValueError: If speed exceeds max_speed or parameters are invalid
         """
-        # Initialize base controller with enhanced features
-        super().__init__(sensors=sensors, enable_memory=enable_memory, **kwargs)
+        # Initialize base controller with enhanced features and boundary policy
+        super().__init__(
+            sensors=sensors, 
+            enable_memory=enable_memory, 
+            boundary_policy=boundary_policy,
+            domain_bounds=domain_bounds,
+            **kwargs
+        )
         
         # Validate parameters
         if speed > max_speed:
@@ -1127,6 +1278,35 @@ class SingleAgentController(BaseController):
                 self._angular_velocity,
                 dt=dt
             )
+            
+            # Apply boundary policy for domain edge management (v1.0 architecture)
+            if self._boundary_policy is not None:
+                # Calculate velocities for boundary policy (velocity = speed * [cos(θ), sin(θ)])
+                rad_orientation = np.radians(self._orientation[0])
+                velocity = np.array([[self._speed[0] * np.cos(rad_orientation), 
+                                    self._speed[0] * np.sin(rad_orientation)]])
+                
+                # Apply boundary policy with position and velocity correction
+                corrected_pos, corrected_vel, terminate_episode = self._apply_boundary_policy(
+                    self._position, velocity
+                )
+                
+                # Update position with boundary corrections
+                self._position = corrected_pos
+                
+                # Update speed and orientation from corrected velocity if modified
+                if corrected_vel is not None and not np.array_equal(velocity, corrected_vel):
+                    new_speed = np.linalg.norm(corrected_vel[0])
+                    new_orientation = np.degrees(np.arctan2(corrected_vel[0, 1], corrected_vel[0, 0]))
+                    self._speed[0] = new_speed
+                    self._orientation[0] = new_orientation % 360.0
+                
+                # Store termination status for episode management
+                if hasattr(self, '_boundary_termination_pending'):
+                    self._boundary_termination_pending = terminate_episode
+                else:
+                    # Add attribute for tracking boundary termination
+                    self._boundary_termination_pending = terminate_episode
             
             # Track performance metrics
             if self._enable_logging:
@@ -1403,6 +1583,8 @@ class MultiAgentController(BaseController):
         enable_vectorized_ops: bool = True,
         sensors: Optional[List[SensorProtocol]] = None,
         enable_memory: bool = False,
+        boundary_policy: Optional[BoundaryPolicyProtocol] = None,
+        domain_bounds: Optional[Tuple[float, float]] = None,
         **kwargs: Any
     ) -> None:
         """
@@ -1417,6 +1599,8 @@ class MultiAgentController(BaseController):
             enable_vectorized_ops: Enable vectorized operations for performance
             sensors: List of SensorProtocol implementations for perception, defaults to [DirectOdorSensor()]
             enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
+            boundary_policy: Optional boundary policy for domain edge handling, defaults to None
+            domain_bounds: Optional domain bounds for default boundary policy creation, defaults to None
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging
                 - controller_id: Unique controller identifier
@@ -1428,8 +1612,14 @@ class MultiAgentController(BaseController):
         Raises:
             ValueError: If array dimensions are inconsistent or constraints violated
         """
-        # Initialize base controller with enhanced features
-        super().__init__(sensors=sensors, enable_memory=enable_memory, **kwargs)
+        # Initialize base controller with enhanced features and boundary policy
+        super().__init__(
+            sensors=sensors, 
+            enable_memory=enable_memory, 
+            boundary_policy=boundary_policy,
+            domain_bounds=domain_bounds,
+            **kwargs
+        )
         
         self._enable_vectorized_ops = enable_vectorized_ops
         
@@ -1617,11 +1807,17 @@ class MultiAgentController(BaseController):
                 self._performance_metrics['agents_per_step'] = []
                 self._performance_metrics['vectorized_op_times'] = []
             
+            # Clear boundary termination status for new episode
+            self.clear_boundary_termination()
+            
             # Reset sensors and memory for new episode
             self.reset_sensors()
             if self._memory_enabled and 'reset_memory' not in kwargs:
                 # Only reset memory if not explicitly preserving it
                 self._memory_state = None
+            
+            # Clear boundary termination status for new episode
+            self.clear_boundary_termination()
             
             # Log successful reset
             if self._logger:
@@ -1740,6 +1936,37 @@ class MultiAgentController(BaseController):
             if self._enable_logging and vectorized_start:
                 vectorized_time = (time.perf_counter() - vectorized_start) * 1000
                 self._performance_metrics['vectorized_op_times'].append(vectorized_time)
+            
+            # Apply boundary policy for domain edge management (v1.0 architecture with vectorized operations)
+            if self._boundary_policy is not None:
+                # Calculate velocities for boundary policy (velocity = speed * [cos(θ), sin(θ)])
+                rad_orientations = np.radians(self._orientations)
+                velocities = np.column_stack([
+                    self._speeds * np.cos(rad_orientations),
+                    self._speeds * np.sin(rad_orientations)
+                ])
+                
+                # Apply boundary policy with vectorized position and velocity correction
+                corrected_pos, corrected_vel, terminate_episode = self._apply_boundary_policy(
+                    self._positions, velocities
+                )
+                
+                # Update positions with boundary corrections
+                self._positions = corrected_pos
+                
+                # Update speeds and orientations from corrected velocities if modified
+                if corrected_vel is not None and not np.array_equal(velocities, corrected_vel):
+                    new_speeds = np.linalg.norm(corrected_vel, axis=1)
+                    new_orientations = np.degrees(np.arctan2(corrected_vel[:, 1], corrected_vel[:, 0])) % 360.0
+                    self._speeds = new_speeds
+                    self._orientations = new_orientations
+                
+                # Store termination status for episode management
+                if hasattr(self, '_boundary_termination_pending'):
+                    self._boundary_termination_pending = terminate_episode
+                else:
+                    # Add attribute for tracking boundary termination
+                    self._boundary_termination_pending = terminate_episode
             
             # Track performance metrics
             if self._enable_logging:
@@ -2534,6 +2761,8 @@ def create_controller_from_config(
                 enable_vectorized_ops=config_dict.get('enable_vectorized_ops', True),
                 sensors=config_dict.get('sensors'),
                 enable_memory=config_dict.get('enable_memory', False),
+                boundary_policy=config_dict.get('boundary_policy'),
+                domain_bounds=config_dict.get('domain_bounds'),
                 enable_logging=enable_logging,
                 controller_id=controller_id,
                 enable_extensibility_hooks=config_dict.get('enable_extensibility_hooks', False),
@@ -2552,6 +2781,8 @@ def create_controller_from_config(
                 angular_velocity=config_dict.get('angular_velocity', 0.0),
                 sensors=config_dict.get('sensors'),
                 enable_memory=config_dict.get('enable_memory', False),
+                boundary_policy=config_dict.get('boundary_policy'),
+                domain_bounds=config_dict.get('domain_bounds'),
                 enable_logging=enable_logging,
                 controller_id=controller_id,
                 enable_extensibility_hooks=config_dict.get('enable_extensibility_hooks', False),
@@ -2612,6 +2843,15 @@ def create_single_agent_controller(
     
     config_dict.update(kwargs)
     
+    # Create boundary policy from configuration if specified
+    if 'boundary_policy_config' in config_dict and config_dict['boundary_policy_config'] is not None:
+        boundary_config = config_dict.pop('boundary_policy_config')
+        if 'boundary_policy' not in config_dict or config_dict['boundary_policy'] is None:
+            try:
+                config_dict['boundary_policy'] = create_boundary_policy(**boundary_config)
+            except Exception as e:
+                warnings.warn(f"Failed to create boundary policy from config: {e}", UserWarning)
+    
     return SingleAgentController(**config_dict)
 
 
@@ -2638,6 +2878,15 @@ def create_multi_agent_controller(
         config_dict = dict(config) if config else {}
     
     config_dict.update(kwargs)
+    
+    # Create boundary policy from configuration if specified
+    if 'boundary_policy_config' in config_dict and config_dict['boundary_policy_config'] is not None:
+        boundary_config = config_dict.pop('boundary_policy_config')
+        if 'boundary_policy' not in config_dict or config_dict['boundary_policy'] is None:
+            try:
+                config_dict['boundary_policy'] = create_boundary_policy(**boundary_config)
+            except Exception as e:
+                warnings.warn(f"Failed to create boundary policy from config: {e}", UserWarning)
     
     return MultiAgentController(**config_dict)
 
@@ -2703,6 +2952,30 @@ def validate_controller_config(config: Dict[str, Any]) -> Tuple[bool, List[str]]
         if not isinstance(config['enable_memory'], bool):
             errors.append("enable_memory must be a boolean value")
     
+    # Validate boundary policy configuration
+    if 'boundary_policy_config' in config:
+        boundary_config = config['boundary_policy_config']
+        if boundary_config is not None:
+            if not isinstance(boundary_config, dict):
+                errors.append("boundary_policy_config must be a dictionary")
+            else:
+                if 'policy_type' not in boundary_config:
+                    errors.append("boundary_policy_config must include 'policy_type'")
+                elif boundary_config['policy_type'] not in ['terminate', 'bounce', 'wrap', 'clip']:
+                    errors.append("boundary_policy_config policy_type must be one of: terminate, bounce, wrap, clip")
+                
+                if 'domain_bounds' not in boundary_config:
+                    errors.append("boundary_policy_config must include 'domain_bounds'")
+    
+    # Validate domain bounds configuration
+    if 'domain_bounds' in config:
+        domain_bounds = config['domain_bounds']
+        if domain_bounds is not None:
+            if not isinstance(domain_bounds, (list, tuple)) or len(domain_bounds) != 2:
+                errors.append("domain_bounds must be a tuple or list of (width, height)")
+            elif any(bound <= 0 for bound in domain_bounds):
+                errors.append("domain_bounds values must be positive")
+    
     return len(errors) == 0, errors
 
 
@@ -2731,7 +3004,11 @@ def get_controller_info(controller: Union[SingleAgentController, MultiAgentContr
         'memory_enabled': getattr(controller, '_memory_enabled', False),
         'num_sensors': len(getattr(controller, '_sensors', [])),
         'sensor_types': [type(sensor).__name__ for sensor in getattr(controller, '_sensors', [])],
-        'primary_sensor_type': type(getattr(controller, '_primary_sensor', None)).__name__ if hasattr(controller, '_primary_sensor') else None
+        'primary_sensor_type': type(getattr(controller, '_primary_sensor', None)).__name__ if hasattr(controller, '_primary_sensor') else None,
+        'boundary_policy_enabled': getattr(controller, '_boundary_policy', None) is not None,
+        'boundary_policy_type': type(getattr(controller, '_boundary_policy', None)).__name__ if getattr(controller, '_boundary_policy', None) else None,
+        'domain_bounds': getattr(controller, '_domain_bounds', None),
+        'boundary_termination_pending': getattr(controller, '_boundary_termination_pending', False)
     }
     
     # Add state information
@@ -2768,9 +3045,9 @@ def get_controller_info(controller: Union[SingleAgentController, MultiAgentContr
     return info
 
 
-# Export public API with backward compatibility
+# Export public API with backward compatibility and v1.0 boundary policy integration
 __all__ = [
-    # Enhanced controller classes
+    # Enhanced controller classes with v1.0 boundary policy support
     "SingleAgentController",
     "MultiAgentController",
     
@@ -2791,4 +3068,8 @@ __all__ = [
     "SensorProtocol",
     "DirectOdorSensor",
     "MultiPointOdorSensor",
+    
+    # Boundary policy protocols and implementations (v1.0 integration)
+    "BoundaryPolicyProtocol",
+    "create_boundary_policy",
 ]

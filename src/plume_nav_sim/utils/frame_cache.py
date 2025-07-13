@@ -40,7 +40,7 @@ import time
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional, Union, Any, Callable, Range, Tuple
+from typing import Dict, Optional, Union, Any, Callable, Tuple
 import warnings
 
 import numpy as np

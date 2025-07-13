@@ -1,0 +1,232 @@
+# @package _global_
+#
+# Hydra Configuration for Continuous2DAction Interface
+#
+# This configuration implements continuous action space translation with 2D movement control
+# (speed and angular velocity) for standardized RL framework integration with configurable
+# action bounds, validation, and performance optimization for unified action handling.
+#
+# Requirements Addressed:
+# - F-016-RQ-001: Action translation overhead <0.05 ms per step for real-time performance
+# - F-016-RQ-002: Multiple action space support including continuous modes for RL framework compatibility
+# - F-016-RQ-003: Action validation and clipping with bounds enforcement and error handling
+# - F-016-RQ-004: Protocol interface compliance implementing ActionInterfaceProtocol
+#
+# Integration: Part of plume_nav_sim v1.0 action abstraction framework per Section 0.2.1
+
+# Core Action Interface Configuration
+action:
+  # Target class implementing ActionInterfaceProtocol for standardized action processing
+  _target_: plume_nav_sim.core.actions.Continuous2DAction
+  
+  # Continuous Action Space Configuration
+  action_space:
+    # Gymnasium Box space definition for continuous control paradigms
+    type: "Box"
+    # Action vector: [speed, angular_velocity]
+    shape: [2]
+    dtype: "float32"
+    
+    # Action bounds configuration with environment variable overrides
+    bounds:
+      # Speed control bounds (m/s)
+      speed:
+        min: ${oc.env:ACTION_SPEED_MIN,0.0}           # Minimum speed (m/s)
+        max: ${oc.env:ACTION_SPEED_MAX,1.0}           # Maximum speed (m/s)
+      
+      # Angular velocity control bounds (rad/s)
+      angular_velocity:
+        min: ${oc.env:ACTION_ANGULAR_VELOCITY_MIN,-3.14159}  # Minimum angular velocity (rad/s)
+        max: ${oc.env:ACTION_ANGULAR_VELOCITY_MAX,3.14159}   # Maximum angular velocity (rad/s)
+
+  # Action Validation and Clipping Configuration
+  validation:
+    # Enable action bounds enforcement per F-016-RQ-003
+    enable_bounds_checking: true
+    
+    # Clipping behavior for out-of-bounds actions
+    clipping:
+      mode: "clip"  # Options: "clip", "error", "warn"
+      clip_to_bounds: true
+      
+    # Input validation settings
+    input_validation:
+      reject_nan: true          # Reject NaN values
+      reject_inf: true          # Reject infinite values
+      type_checking: true       # Enforce dtype compatibility
+      
+    # Error handling configuration
+    error_handling:
+      mode: "raise"            # Options: "raise", "warn", "ignore"
+      log_violations: true     # Log validation violations
+      include_debug_info: true # Include debug information in error messages
+
+  # Performance Optimization Settings
+  # Target: <0.05ms per step action translation overhead per F-016-RQ-001
+  performance:
+    # Enable vectorized operations for multi-agent scenarios
+    vectorized_operations: true
+    
+    # Memory optimization settings
+    memory_optimization:
+      preallocate_arrays: true     # Pre-allocate arrays for repeated operations
+      use_float32: true            # Use float32 for memory efficiency
+      minimize_copies: true        # Minimize array copying operations
+    
+    # Caching configuration for action translation
+    caching:
+      enable_bounds_cache: true    # Cache bounds checking results
+      cache_validation_results: false  # Disable for real-time performance
+    
+    # Profiling and monitoring
+    profiling:
+      enable_timing: false         # Disable timing overhead in production
+      track_overhead: false        # Disable overhead tracking for performance
+      log_performance_warnings: true  # Log if overhead exceeds threshold
+
+  # Action Translation Configuration
+  translation:
+    # Coordinate system settings
+    coordinate_system: "local"     # Options: "local", "global"
+    
+    # Action normalization
+    normalization:
+      input_range: [-1.0, 1.0]    # Expected input range from RL agent
+      auto_normalize: true         # Automatically normalize inputs to action bounds
+      
+    # Action smoothing (optional)
+    smoothing:
+      enable: false               # Disable for raw control
+      alpha: 0.1                  # Smoothing factor (when enabled)
+
+# Environment Variable Overrides for Deployment Flexibility
+# Environment variables are directly referenced in the action_space.bounds configuration
+# No defaults overrides needed as the oc.env resolver handles this automatically
+
+# Gymnasium Action Space Integration
+# Defines the action space interface for RL framework compatibility
+gymnasium_config:
+  # Action space type for Gymnasium environment registration
+  space_type: "Box"
+  
+  # Action space parameters for Box space
+  space_kwargs:
+    low: [-1.0, -1.0]   # Will be mapped to actual bounds during translation
+    high: [1.0, 1.0]    # Will be mapped to actual bounds during translation
+    shape: [2]
+    dtype: "float32"
+  
+  # Action space metadata
+  action_space_metadata:
+    description: "Continuous 2D navigation control"
+    units: ["m/s", "rad/s"]
+    names: ["speed", "angular_velocity"]
+  
+  # Observation space integration
+  action_feedback:
+    include_in_obs: false       # Include last action in observation
+    obs_key: "last_action"      # Key name if included in observation
+  
+  # Compatibility settings
+  compatibility:
+    gymnasium_version: "0.29.*"  # Target Gymnasium version
+    legacy_gym_support: true     # Support legacy gym environments
+
+# Debug and Monitoring Configuration
+debug:
+  # Enable action translation logging for debugging
+  # Logs input actions and translated navigation commands
+  log_translations: false
+  
+  # Log performance metrics for action translation
+  # Tracks translation time to verify <0.05ms requirement
+  log_performance: false
+  
+  # Enable action validation warnings
+  # Logs when actions are clipped or validated
+  log_validation: false
+  
+  # Statistical tracking for action usage patterns
+  # Collects statistics on action frequency for analysis
+  track_action_stats: false
+  
+  # Debug mode settings (zero overhead when disabled)
+  enable_debug_mode: false
+  
+  # Action logging for debugging
+  action_logging:
+    log_all_actions: false      # Log every action (development only)
+    log_violations_only: true   # Log only validation violations
+    max_log_entries: 1000       # Maximum log entries to retain
+  
+  # Visualization support
+  visualization:
+    plot_action_distribution: false  # Plot action distribution (debugging)
+    export_action_history: false     # Export action history for analysis
+
+# Integration Hooks for Extension System
+# Provides extension points for custom action processing
+hooks:
+  # Pre-translation hook for custom action preprocessing
+  # Function signature: pre_translate_fn(action: np.ndarray, state: dict) -> np.ndarray
+  pre_translate_fn: null
+  
+  # Post-translation hook for custom command modification
+  # Function signature: post_translate_fn(command: dict, action: np.ndarray) -> dict
+  post_translate_fn: null
+  
+  # Validation hook for custom action validation logic
+  # Function signature: validate_fn(action: np.ndarray, state: dict) -> bool
+  custom_validate_fn: null
+
+# Environment-Specific Overrides
+environment_overrides:
+  # Production environment settings
+  production:
+    action.validation.enable_bounds_checking: true
+    action.performance.profiling.enable_timing: false
+    debug.enable_debug_mode: false
+  
+  # Development environment settings  
+  development:
+    action.validation.error_handling.mode: "warn"
+    action.performance.profiling.enable_timing: true
+    debug.enable_debug_mode: true
+    debug.action_logging.log_all_actions: true
+  
+  # Testing environment settings
+  testing:
+    action.validation.error_handling.mode: "raise"
+    action.performance.caching.enable_bounds_cache: false
+    debug.enable_debug_mode: true
+
+# Documentation and Metadata
+metadata:
+  # Configuration version for compatibility tracking
+  config_version: "1.0.0"
+  
+  # Description of this action interface configuration
+  description: "Continuous 2D action interface for smooth navigation with speed and angular velocity control"
+  
+  # Compatible plume_nav_sim version
+  plume_nav_sim_version: ">=1.0.0"
+  
+  # Performance target and specifications
+  performance_target_ms: 0.05    # Target translation overhead in milliseconds
+  supported_frameworks: ["stable-baselines3", "ray-rllib", "tianshou"]
+  
+  # Author and maintenance information
+  author: "Blitzy Platform"
+  created: "2024-12-19"
+  last_updated: "2025-01-01"
+  
+  # Feature flags
+  features:
+    continuous_control: true
+    discrete_control: false
+    multi_agent_support: true
+    real_time_performance: true
+    gymnasium_compatible: true
+  
+  # Tags for configuration categorization
+  tags: ["continuous", "2d-control", "smooth-navigation", "rl-compatible"]
