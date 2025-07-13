@@ -439,16 +439,22 @@ class HDF5Recorder(BaseRecorder):
                 chunks = self._calculate_optimal_chunks(shape)
                 
                 # Create dataset with compression and chunking
+                compression_kwargs = {}
+                if self.hdf5_config.compression:
+                    compression_kwargs['compression'] = self.hdf5_config.compression
+                    # Only add compression_opts for algorithms that support it
+                    if self.hdf5_config.compression == 'gzip' and self.hdf5_config.compression_opts is not None:
+                        compression_kwargs['compression_opts'] = self.hdf5_config.compression_opts
+                
                 dataset = self._h5_file.create_dataset(
                     dataset_path,
                     data=data,
                     dtype=dtype,
                     chunks=chunks,
-                    compression=self.hdf5_config.compression,
-                    compression_opts=self.hdf5_config.compression_opts,
                     shuffle=self.hdf5_config.shuffle,
                     fletcher32=self.hdf5_config.fletcher32,
-                    maxshape=(None,) + shape[1:] if len(shape) > 1 else (None,)  # Unlimited first dimension
+                    maxshape=(None,) + shape[1:] if len(shape) > 1 else (None,),  # Unlimited first dimension
+                    **compression_kwargs
                 )
                 
                 # Set metadata attributes
@@ -758,20 +764,24 @@ class HDF5Recorder(BaseRecorder):
                 # Convert to appropriate numpy array
                 array = np.array(values)
                 if array.dtype.kind in 'UO':  # Unicode or object
-                    # Convert strings/objects to fixed-length strings
+                    # Convert strings/objects to fixed-length strings with HDF5-compatible encoding
                     if all(isinstance(v, str) for v in values):
-                        max_len = max(len(str(v)) for v in values) if values else 1
-                        array = np.array(values, dtype=f'U{max_len}')
+                        max_len = max(len(str(v).encode('utf-8')) for v in values) if values else 1
+                        # Use S (bytes) dtype instead of U (unicode) for better HDF5 compatibility
+                        byte_values = [str(v).encode('utf-8') for v in values]
+                        array = np.array(byte_values, dtype=f'S{max_len}')
                     else:
                         # Convert to JSON strings for complex objects
-                        json_values = [json.dumps(v) if not isinstance(v, str) else v for v in values]
-                        max_len = max(len(s) for s in json_values) if json_values else 1
-                        array = np.array(json_values, dtype=f'U{max_len}')
+                        json_values = [json.dumps(v) if not isinstance(v, str) else str(v) for v in values]
+                        max_len = max(len(s.encode('utf-8')) for s in json_values) if json_values else 1
+                        byte_values = [s.encode('utf-8') for s in json_values]
+                        array = np.array(byte_values, dtype=f'S{max_len}')
                 
                 arrays[key] = array
                 
             except Exception as e:
                 logger.warning(f"Failed to convert {key} to array: {e}")
+                # Skip problematic fields to avoid blocking the entire write
                 continue
         
         return arrays
@@ -784,14 +794,25 @@ class HDF5Recorder(BaseRecorder):
             try:
                 if isinstance(value, (list, tuple)):
                     array = np.array(value)
+                    # Handle string arrays in lists
+                    if array.dtype.kind in 'UO':
+                        # Convert to bytes for HDF5 compatibility
+                        if array.size > 0:
+                            str_values = [str(v) for v in value]
+                            max_len = max(len(s.encode('utf-8')) for s in str_values) if str_values else 1
+                            byte_values = [s.encode('utf-8') for s in str_values]
+                            array = np.array(byte_values, dtype=f'S{max_len}')
                 elif isinstance(value, (int, float, bool)):
                     array = np.array([value])
                 elif isinstance(value, str):
-                    array = np.array([value], dtype=f'U{len(value)}')
+                    # Use bytes encoding for HDF5 compatibility
+                    byte_value = value.encode('utf-8')
+                    array = np.array([byte_value], dtype=f'S{len(byte_value)}')
                 else:
                     # Convert complex objects to JSON strings
                     json_str = json.dumps(value)
-                    array = np.array([json_str], dtype=f'U{len(json_str)}')
+                    byte_value = json_str.encode('utf-8')
+                    array = np.array([byte_value], dtype=f'S{len(byte_value)}')
                 
                 arrays[key] = array
                 
