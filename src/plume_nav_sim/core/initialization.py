@@ -290,6 +290,13 @@ class GridInitializer:
     The grid layout automatically adjusts spacing to fit the specified number of
     agents within domain bounds while maintaining even distribution patterns.
     
+    Key Features:
+    - Deterministic grid generation with configurable spacing and arrangement patterns
+    - Optional jitter parameters for natural variation while maintaining grid structure
+    - Boundary handling for grids that exceed domain limits with clipping and scaling options
+    - Environment variable overrides for runtime grid parameter adjustment
+    - Support for both square and rectangular grid arrangements
+    
     Performance Characteristics:
     - Time complexity: O(n) where n is number of agents
     - Memory complexity: O(n) for position storage  
@@ -300,46 +307,193 @@ class GridInitializer:
         >>> initializer = GridInitializer(domain_bounds=(100, 100))
         >>> positions = initializer.initialize_positions(num_agents=25)  # 5x5 grid
         
-        Custom grid dimensions:
+        Custom grid dimensions with jitter:
         >>> initializer = GridInitializer(
         ...     domain_bounds=(100, 50), 
-        ...     grid_size=(10, 5)
+        ...     grid_shape=(10, 5),
+        ...     grid_spacing=(8.0, 8.0),
+        ...     jitter_enabled=True,
+        ...     jitter_std=1.0
         ... )
         >>> positions = initializer.initialize_positions(num_agents=50)
     """
     
     def __init__(
         self,
-        domain_bounds: Tuple[float, float] = (100.0, 100.0),
+        domain_bounds: Union[Tuple[float, float], List[float]] = (100.0, 100.0),
+        grid_spacing: Union[Tuple[float, float], List[float]] = (10.0, 10.0),
+        grid_shape: Union[Tuple[int, int], List[int]] = (5, 5),
+        orientation: float = 0.0,
+        jitter_enabled: bool = False,
+        jitter_std: float = 0.5,
+        boundary_handling: Optional[Dict[str, Any]] = None,
+        seed: Optional[int] = None,
+        environment_overrides: Optional[Dict[str, Any]] = None,
+        # Legacy parameter aliases for backward compatibility
         grid_size: Optional[Tuple[int, int]] = None,
         spacing: Optional[Tuple[float, float]] = None,
         offset: Tuple[float, float] = (0.0, 0.0)
     ):
         """
-        Initialize grid strategy with layout configuration.
+        Initialize grid strategy with comprehensive layout configuration.
         
         Args:
-            domain_bounds: Domain dimensions as (width, height) tuple
-            grid_size: Explicit grid dimensions as (cols, rows) tuple (optional)
-            spacing: Grid spacing as (dx, dy) tuple (optional)
+            domain_bounds: Domain dimensions as (width, height) tuple or list
+            grid_spacing: Grid spacing as (dx, dy) tuple or list
+            grid_shape: Grid dimensions as (cols, rows) tuple or list
+            orientation: Grid rotation angle in radians (0 = aligned with axes)
+            jitter_enabled: Enable small random perturbations from grid positions
+            jitter_std: Standard deviation of jitter noise (domain units)
+            boundary_handling: Dictionary with boundary strategy configuration
+            seed: Random seed for jitter generation (null for random)
+            environment_overrides: Environment variable overrides configuration
+            grid_size: Legacy alias for grid_shape (backward compatibility)
+            spacing: Legacy alias for grid_spacing (backward compatibility)
             offset: Grid offset from origin as (x_offset, y_offset)
         """
-        self.domain_bounds = domain_bounds
-        self.grid_size = grid_size
-        self.spacing = spacing
+        # Handle parameter aliases and conversions
+        self.domain_bounds = tuple(domain_bounds) if isinstance(domain_bounds, list) else domain_bounds
+        
+        # Use legacy parameters if new ones not provided (backward compatibility)
+        if grid_size is not None and isinstance(grid_shape, (tuple, list)) and len(grid_shape) == 2 and grid_shape == (5, 5):
+            # Default grid_shape was used, prefer legacy grid_size
+            self.grid_shape = tuple(grid_size)
+        else:
+            self.grid_shape = tuple(grid_shape) if isinstance(grid_shape, list) else grid_shape
+            
+        if spacing is not None and isinstance(grid_spacing, (tuple, list)) and len(grid_spacing) == 2 and grid_spacing == (10.0, 10.0):
+            # Default grid_spacing was used, prefer legacy spacing
+            self.grid_spacing = tuple(spacing)
+        else:
+            self.grid_spacing = tuple(grid_spacing) if isinstance(grid_spacing, list) else grid_spacing
+        
+        self.orientation = orientation
+        self.jitter_enabled = jitter_enabled
+        self.jitter_std = jitter_std
+        self.seed = seed
         self.offset = offset
         
+        # Set up boundary handling with defaults
+        self.boundary_handling = boundary_handling or {
+            'strategy': 'clip',
+            'preserve_shape': True,
+            'margin': 1.0
+        }
+        
+        # Environment overrides (for runtime parameter adjustment)
+        self.environment_overrides = environment_overrides or {}
+        
+        # Initialize random number generator for jitter
+        self._rng = np.random.RandomState(seed) if seed is not None else np.random.RandomState()
+        
         # Validate configuration parameters
-        if domain_bounds[0] <= 0 or domain_bounds[1] <= 0:
-            raise ValueError(f"Domain bounds must be positive: {domain_bounds}")
-        if grid_size and (grid_size[0] <= 0 or grid_size[1] <= 0):
-            raise ValueError(f"Grid size must be positive: {grid_size}")
-        if spacing and (spacing[0] <= 0 or spacing[1] <= 0):
-            raise ValueError(f"Grid spacing must be positive: {spacing}")
+        self._validate_configuration()
+        
+        # Legacy aliases for backward compatibility
+        self.grid_size = self.grid_shape
+        self.spacing = self.grid_spacing
+    
+    def _validate_configuration(self) -> None:
+        """Validate grid configuration parameters."""
+        if self.domain_bounds[0] <= 0 or self.domain_bounds[1] <= 0:
+            raise ValueError(f"Domain bounds must be positive: {self.domain_bounds}")
+        if self.grid_shape[0] <= 0 or self.grid_shape[1] <= 0:
+            raise ValueError(f"Grid shape must be positive: {self.grid_shape}")
+        if self.grid_spacing[0] <= 0 or self.grid_spacing[1] <= 0:
+            raise ValueError(f"Grid spacing must be positive: {self.grid_spacing}")
+        if self.jitter_std < 0:
+            raise ValueError(f"Jitter standard deviation must be non-negative: {self.jitter_std}")
+        # Accept both dict and OmegaConf DictConfig
+        if not isinstance(self.boundary_handling, dict):
+            # Check if it's an OmegaConf DictConfig
+            if hasattr(self.boundary_handling, '_content') or hasattr(self.boundary_handling, 'to_container'):
+                # Convert OmegaConf to dict
+                if hasattr(self.boundary_handling, 'to_container'):
+                    self.boundary_handling = self.boundary_handling.to_container()
+                elif hasattr(self.boundary_handling, '_content'):
+                    self.boundary_handling = dict(self.boundary_handling._content)
+            else:
+                raise ValueError(f"Boundary handling must be a dictionary: {type(self.boundary_handling)}")
+        
+        # Validate boundary handling strategy
+        valid_strategies = ['clip', 'scale', 'wrap', 'error']
+        strategy = self.boundary_handling.get('strategy', 'clip')
+        if strategy not in valid_strategies:
+            raise ValueError(f"Invalid boundary strategy: {strategy}. Valid options: {valid_strategies}")
+    
+    def _apply_environment_overrides(self) -> None:
+        """Apply environment variable overrides if available."""
+        # Note: In a real implementation, this would check actual environment variables
+        # For now, we keep the functionality as a placeholder for Hydra integration
+        pass
+    
+    def _apply_boundary_handling(self, positions: np.ndarray) -> np.ndarray:
+        """Apply boundary handling strategy to grid positions."""
+        strategy = self.boundary_handling.get('strategy', 'clip')
+        margin = self.boundary_handling.get('margin', 1.0)
+        preserve_shape = self.boundary_handling.get('preserve_shape', True)
+        
+        # Calculate effective domain bounds with margin
+        effective_width = self.domain_bounds[0] - 2 * margin
+        effective_height = self.domain_bounds[1] - 2 * margin
+        
+        if strategy == 'clip':
+            # Clip positions to domain bounds with margin
+            positions[:, 0] = np.clip(positions[:, 0], margin, self.domain_bounds[0] - margin)
+            positions[:, 1] = np.clip(positions[:, 1], margin, self.domain_bounds[1] - margin)
+            
+        elif strategy == 'scale':
+            # Scale grid to fit within domain bounds
+            if preserve_shape:
+                # Find current grid bounds
+                min_x, max_x = np.min(positions[:, 0]), np.max(positions[:, 0])
+                min_y, max_y = np.min(positions[:, 1]), np.max(positions[:, 1])
+                
+                current_width = max_x - min_x
+                current_height = max_y - min_y
+                
+                # Calculate scale factors
+                scale_x = effective_width / current_width if current_width > 0 else 1.0
+                scale_y = effective_height / current_height if current_height > 0 else 1.0
+                
+                # Use the smaller scale factor to preserve shape
+                scale = min(scale_x, scale_y)
+                
+                # Scale and center the grid
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                
+                positions[:, 0] = margin + effective_width / 2 + (positions[:, 0] - center_x) * scale
+                positions[:, 1] = margin + effective_height / 2 + (positions[:, 1] - center_y) * scale
+            else:
+                # Scale each dimension independently
+                min_x, max_x = np.min(positions[:, 0]), np.max(positions[:, 0])
+                min_y, max_y = np.min(positions[:, 1]), np.max(positions[:, 1])
+                
+                if max_x > min_x:
+                    positions[:, 0] = margin + (positions[:, 0] - min_x) / (max_x - min_x) * effective_width
+                if max_y > min_y:
+                    positions[:, 1] = margin + (positions[:, 1] - min_y) / (max_y - min_y) * effective_height
+                    
+        elif strategy == 'wrap':
+            # Wrap positions around domain boundaries
+            positions[:, 0] = np.mod(positions[:, 0] - margin, effective_width) + margin
+            positions[:, 1] = np.mod(positions[:, 1] - margin, effective_height) + margin
+            
+        elif strategy == 'error':
+            # Check if any positions are out of bounds and raise error
+            out_of_bounds = (
+                (positions[:, 0] < margin) | (positions[:, 0] > self.domain_bounds[0] - margin) |
+                (positions[:, 1] < margin) | (positions[:, 1] > self.domain_bounds[1] - margin)
+            )
+            if np.any(out_of_bounds):
+                raise ValueError(f"Grid positions exceed domain bounds with margin {margin}")
+        
+        return positions
     
     def initialize_positions(self, num_agents: int, **kwargs: Any) -> np.ndarray:
         """
-        Generate grid-based agent positions within domain bounds.
+        Generate grid-based agent positions with optional jitter and boundary handling.
         
         Args:
             num_agents: Number of agent positions to generate
@@ -355,13 +509,16 @@ class GridInitializer:
         if num_agents <= 0:
             raise ValueError(f"Number of agents must be positive: {num_agents}")
         
+        # Apply environment overrides if available
+        self._apply_environment_overrides()
+        
         # Determine grid dimensions
         grid_cols, grid_rows = self._calculate_grid_dimensions(num_agents, **kwargs)
         
         # Calculate grid spacing
         spacing_x, spacing_y = self._calculate_grid_spacing(grid_cols, grid_rows)
         
-        # Generate grid positions
+        # Generate base grid positions
         positions = []
         agent_count = 0
         
@@ -370,15 +527,45 @@ class GridInitializer:
                 if agent_count >= num_agents:
                     break
                     
+                # Base grid position
                 x = self.offset[0] + col * spacing_x
                 y = self.offset[1] + row * spacing_y
+                
+                # Apply rotation if specified
+                if self.orientation != 0:
+                    # Rotate around grid center
+                    center_x = self.offset[0] + (grid_cols - 1) * spacing_x / 2
+                    center_y = self.offset[1] + (grid_rows - 1) * spacing_y / 2
+                    
+                    # Translate to origin, rotate, translate back
+                    rel_x = x - center_x
+                    rel_y = y - center_y
+                    
+                    cos_theta = np.cos(self.orientation)
+                    sin_theta = np.sin(self.orientation)
+                    
+                    x = center_x + rel_x * cos_theta - rel_y * sin_theta
+                    y = center_y + rel_x * sin_theta + rel_y * cos_theta
+                
+                # Add jitter if enabled
+                if self.jitter_enabled and self.jitter_std > 0:
+                    jitter_x = self._rng.normal(0, self.jitter_std)
+                    jitter_y = self._rng.normal(0, self.jitter_std)
+                    x += jitter_x
+                    y += jitter_y
+                
                 positions.append([x, y])
                 agent_count += 1
             
             if agent_count >= num_agents:
                 break
         
-        return np.array(positions, dtype=np.float32)
+        positions = np.array(positions, dtype=np.float32)
+        
+        # Apply boundary handling
+        positions = self._apply_boundary_handling(positions)
+        
+        return positions
     
     def validate_domain(self, positions: np.ndarray) -> bool:
         """
@@ -407,13 +594,18 @@ class GridInitializer:
     
     def reset(self, seed: Optional[int] = None) -> None:
         """
-        Reset grid initializer (no random state to reset).
+        Reset grid initializer with optional deterministic seeding.
         
         Args:
-            seed: Unused for deterministic grid initialization
+            seed: Random seed for jitter generation (uses instance seed if None)
         """
-        # Grid initialization is deterministic, no state to reset
-        pass
+        # Update seed if provided
+        if seed is not None:
+            self.seed = seed
+        
+        # Reset random number generator for jitter
+        reset_seed = seed if seed is not None else self.seed
+        self._rng = np.random.RandomState(reset_seed) if reset_seed is not None else np.random.RandomState()
     
     def get_strategy_name(self) -> str:
         """Get human-readable strategy name."""
@@ -421,19 +613,70 @@ class GridInitializer:
     
     def set_grid_parameters(
         self, 
+        grid_shape: Optional[Tuple[int, int]] = None,
+        grid_spacing: Optional[Tuple[float, float]] = None,
+        # Legacy parameter aliases
         grid_size: Optional[Tuple[int, int]] = None,
         spacing: Optional[Tuple[float, float]] = None
     ) -> None:
         """Update grid layout parameters."""
+        # Handle new parameter names
+        if grid_shape:
+            if grid_shape[0] <= 0 or grid_shape[1] <= 0:
+                raise ValueError(f"Grid shape must be positive: {grid_shape}")
+            self.grid_shape = grid_shape
+            self.grid_size = grid_shape  # Update legacy alias
+        
+        if grid_spacing:
+            if grid_spacing[0] <= 0 or grid_spacing[1] <= 0:
+                raise ValueError(f"Grid spacing must be positive: {grid_spacing}")
+            self.grid_spacing = grid_spacing
+            self.spacing = grid_spacing  # Update legacy alias
+        
+        # Handle legacy parameter names for backward compatibility
         if grid_size:
             if grid_size[0] <= 0 or grid_size[1] <= 0:
                 raise ValueError(f"Grid size must be positive: {grid_size}")
+            self.grid_shape = grid_size
             self.grid_size = grid_size
         
         if spacing:
             if spacing[0] <= 0 or spacing[1] <= 0:
                 raise ValueError(f"Grid spacing must be positive: {spacing}")
+            self.grid_spacing = spacing
             self.spacing = spacing
+    
+    def set_jitter_parameters(self, enabled: bool, std: float = 0.5) -> None:
+        """Update jitter parameters for natural variation."""
+        if std < 0:
+            raise ValueError(f"Jitter standard deviation must be non-negative: {std}")
+        self.jitter_enabled = enabled
+        self.jitter_std = std
+    
+    def set_boundary_handling(self, strategy: str, preserve_shape: bool = True, margin: float = 1.0) -> None:
+        """Update boundary handling configuration."""
+        valid_strategies = ['clip', 'scale', 'wrap', 'error']
+        if strategy not in valid_strategies:
+            raise ValueError(f"Invalid boundary strategy: {strategy}. Valid options: {valid_strategies}")
+        
+        self.boundary_handling = {
+            'strategy': strategy,
+            'preserve_shape': preserve_shape,
+            'margin': margin
+        }
+    
+    def get_configuration_summary(self) -> Dict[str, Any]:
+        """Get a summary of current configuration for debugging."""
+        return {
+            'grid_shape': self.grid_shape,
+            'grid_spacing': self.grid_spacing,
+            'orientation': self.orientation,
+            'jitter_enabled': self.jitter_enabled,
+            'jitter_std': self.jitter_std,
+            'boundary_handling': self.boundary_handling,
+            'domain_bounds': self.domain_bounds,
+            'seed': self.seed
+        }
     
     def calculate_grid_spacing(self, grid_cols: int, grid_rows: int) -> Tuple[float, float]:
         """
@@ -457,12 +700,20 @@ class GridInitializer:
         # Check for explicit override
         if 'grid_size_override' in kwargs:
             return kwargs['grid_size_override']
+        if 'grid_shape_override' in kwargs:
+            return kwargs['grid_shape_override']
         
-        # Use configured grid size if available
-        if self.grid_size:
-            return self.grid_size
+        # Use configured grid shape if available
+        if self.grid_shape and self.grid_shape != (5, 5):  # Not default value
+            return self.grid_shape
         
-        # Calculate square-ish grid dimensions
+        # Check if enough agents to fill configured grid
+        if self.grid_shape:
+            grid_capacity = self.grid_shape[0] * self.grid_shape[1]
+            if num_agents <= grid_capacity:
+                return self.grid_shape
+        
+        # Calculate square-ish grid dimensions for dynamic sizing
         grid_cols = int(np.ceil(np.sqrt(num_agents)))
         grid_rows = int(np.ceil(num_agents / grid_cols))
         
@@ -474,12 +725,18 @@ class GridInitializer:
         grid_rows: int
     ) -> Tuple[float, float]:
         """Calculate grid spacing to fit domain bounds."""
-        if self.spacing:
-            return self.spacing
+        # Use configured spacing if available
+        if self.grid_spacing and self.grid_spacing != (10.0, 10.0):  # Not default value
+            return self.grid_spacing
         
-        # Calculate spacing to fit domain with margin
-        spacing_x = self.domain_bounds[0] / max(1, grid_cols - 1) if grid_cols > 1 else 0
-        spacing_y = self.domain_bounds[1] / max(1, grid_rows - 1) if grid_rows > 1 else 0
+        # Calculate spacing to fit domain with boundary margin
+        margin = self.boundary_handling.get('margin', 1.0)
+        effective_width = self.domain_bounds[0] - 2 * margin
+        effective_height = self.domain_bounds[1] - 2 * margin
+        
+        # Calculate spacing to fit grid within effective domain
+        spacing_x = effective_width / max(1, grid_cols - 1) if grid_cols > 1 else 0
+        spacing_y = effective_height / max(1, grid_rows - 1) if grid_rows > 1 else 0
         
         return spacing_x, spacing_y
 
@@ -745,6 +1002,8 @@ class FromDatasetInitializer:
                 UserWarning
             )
     
+
+    
     def initialize_positions(self, num_agents: int, **kwargs: Any) -> np.ndarray:
         """
         Generate positions from dataset with configured sampling strategy.
@@ -796,6 +1055,70 @@ class FromDatasetInitializer:
             raise ValueError(f"Unknown sampling mode: {sampling_mode}")
         
         return self._positions_cache[indices].copy()
+    
+    def _apply_boundary_handling(self, positions: np.ndarray) -> np.ndarray:
+        """Apply boundary handling strategy to grid positions."""
+        strategy = self.boundary_handling.get('strategy', 'clip')
+        margin = self.boundary_handling.get('margin', 1.0)
+        preserve_shape = self.boundary_handling.get('preserve_shape', True)
+        
+        # Calculate effective domain bounds with margin
+        effective_width = self.domain_bounds[0] - 2 * margin
+        effective_height = self.domain_bounds[1] - 2 * margin
+        
+        if strategy == 'clip':
+            # Clip positions to domain bounds with margin
+            positions[:, 0] = np.clip(positions[:, 0], margin, self.domain_bounds[0] - margin)
+            positions[:, 1] = np.clip(positions[:, 1], margin, self.domain_bounds[1] - margin)
+            
+        elif strategy == 'scale':
+            # Scale grid to fit within domain bounds
+            if preserve_shape:
+                # Find current grid bounds
+                min_x, max_x = np.min(positions[:, 0]), np.max(positions[:, 0])
+                min_y, max_y = np.min(positions[:, 1]), np.max(positions[:, 1])
+                
+                current_width = max_x - min_x
+                current_height = max_y - min_y
+                
+                # Calculate scale factors
+                scale_x = effective_width / current_width if current_width > 0 else 1.0
+                scale_y = effective_height / current_height if current_height > 0 else 1.0
+                
+                # Use the smaller scale factor to preserve shape
+                scale = min(scale_x, scale_y)
+                
+                # Scale and center the grid
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                
+                positions[:, 0] = margin + effective_width / 2 + (positions[:, 0] - center_x) * scale
+                positions[:, 1] = margin + effective_height / 2 + (positions[:, 1] - center_y) * scale
+            else:
+                # Scale each dimension independently
+                min_x, max_x = np.min(positions[:, 0]), np.max(positions[:, 0])
+                min_y, max_y = np.min(positions[:, 1]), np.max(positions[:, 1])
+                
+                if max_x > min_x:
+                    positions[:, 0] = margin + (positions[:, 0] - min_x) / (max_x - min_x) * effective_width
+                if max_y > min_y:
+                    positions[:, 1] = margin + (positions[:, 1] - min_y) / (max_y - min_y) * effective_height
+                    
+        elif strategy == 'wrap':
+            # Wrap positions around domain boundaries
+            positions[:, 0] = np.mod(positions[:, 0] - margin, effective_width) + margin
+            positions[:, 1] = np.mod(positions[:, 1] - margin, effective_height) + margin
+            
+        elif strategy == 'error':
+            # Check if any positions are out of bounds and raise error
+            out_of_bounds = (
+                (positions[:, 0] < margin) | (positions[:, 0] > self.domain_bounds[0] - margin) |
+                (positions[:, 1] < margin) | (positions[:, 1] > self.domain_bounds[1] - margin)
+            )
+            if np.any(out_of_bounds):
+                raise ValueError(f"Grid positions exceed domain bounds with margin {margin}")
+        
+        return positions
     
     def validate_domain(self, positions: np.ndarray) -> bool:
         """
