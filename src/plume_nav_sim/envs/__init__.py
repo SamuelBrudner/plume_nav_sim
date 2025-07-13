@@ -26,7 +26,7 @@ Modular Architecture Components:
 """
 
 import warnings
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 
 # Hydra imports for dependency injection and component instantiation
 try:
@@ -37,7 +37,7 @@ except ImportError:
     # Fallback for environments without Hydra
     def instantiate(config, **kwargs):
         """Fallback instantiate function."""
-        raise RuntimeError("Hydra not available for dependency injection"), List
+        raise RuntimeError("Hydra not available for dependency injection")
 
 # Core environment - always available
 try:
@@ -449,6 +449,13 @@ RL_ENV_AVAILABLE = PLUME_ENV_AVAILABLE and GYMNASIUM_AVAILABLE
 MODULAR_ARCHITECTURE_AVAILABLE = PROTOCOLS_AVAILABLE
 MODULAR_COMPONENTS_PARTIAL = PLUME_MODELS_AVAILABLE or WIND_FIELDS_AVAILABLE or SENSORS_AVAILABLE
 MODULAR_COMPONENTS_COMPLETE = PLUME_MODELS_AVAILABLE and WIND_FIELDS_AVAILABLE and SENSORS_AVAILABLE
+
+# Initialize v1.0 component availability flags (will be updated by import blocks)
+SOURCE_COMPONENTS_AVAILABLE = False
+AGENT_INIT_COMPONENTS_AVAILABLE = False
+BOUNDARY_COMPONENTS_AVAILABLE = False
+ACTION_COMPONENTS_AVAILABLE = False
+RECORDER_COMPONENTS_AVAILABLE = False
 
 # v1.0 Protocol-based architecture availability summary
 V1_ARCHITECTURE_AVAILABLE = NEW_PROTOCOLS_AVAILABLE and HYDRA_INSTANTIATE_AVAILABLE
@@ -869,6 +876,7 @@ def create_modular_environment(
                 "recommendation": "Ensure core protocols are available"
             }
         ) if LOGGING_AVAILABLE else None
+        return None
 
 # Import v1.0 component factory functions and implementations
 try:
@@ -1014,33 +1022,9 @@ except ImportError as e:
             "note": "Recorder components will be available after other agents complete implementation"
         }
     ) if LOGGING_AVAILABLE else None
-        return None
-    
-    try:
-        # Use NavigatorFactory to create modular environment if available
-        if NavigatorFactory and hasattr(NavigatorFactory, 'create_modular_environment'):
-            return NavigatorFactory.create_modular_environment(
-                navigator_config=navigator_config or {},
-                plume_model_config=plume_model_config or {'type': 'GaussianPlumeModel'},
-                wind_field_config=wind_field_config,
-                sensor_configs=sensor_configs,
-                **env_kwargs
-            )
-        else:
-            # Fallback to standard environment creation with modular support
-            env_config = {
-                'modular_architecture': True,
-                'plume_model': plume_model_config,
-                'wind_field': wind_field_config,
-                'sensors': sensor_configs,
-                'navigator': navigator_config,
-                **env_kwargs
-            }
-            return make_environment('PlumeNavSim-v1', env_config)
-            
-    except Exception as e:
-        logger.error(f"Failed to create modular environment: {e}")
-        return None
+
+# NOTE: Main environment creation logic moved inside create_modular_environment function
+# This orphaned code has been removed to fix compilation issues
 
 
 def create_plume_model(config: Dict[str, Any]):
@@ -1472,6 +1456,8 @@ def create_recorder(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
             }
         ) if LOGGING_AVAILABLE else None
         return None
+
+
     
     try:
         # Use Hydra instantiate for dependency injection
@@ -1525,7 +1511,6 @@ def create_recorder(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
                 "error": str(e)
             }
         ) if LOGGING_AVAILABLE else None
-        return None
 
 
 def create_stats_aggregator(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
@@ -1567,8 +1552,7 @@ def create_stats_aggregator(config: Union[Dict[str, Any], Any]) -> Optional[Any]
                 "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
             }
         ) if LOGGING_AVAILABLE else None
-        return None
-    
+
     try:
         # Use Hydra instantiate for dependency injection
         if HYDRA_INSTANTIATE_AVAILABLE:
@@ -1615,7 +1599,6 @@ def create_stats_aggregator(config: Union[Dict[str, Any], Any]) -> Optional[Any]
                 "error": str(e)
             }
         ) if LOGGING_AVAILABLE else None
-        return None
 
 
 def get_available_environments() -> Dict[str, Dict[str, Any]]:
