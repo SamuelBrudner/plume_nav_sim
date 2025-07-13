@@ -108,7 +108,7 @@ try:
     from plume_nav_sim.core.protocols import (
         NavigatorProtocol, NavigatorFactory, PlumeModelProtocol, 
         WindFieldProtocol, SensorProtocol, AgentObservationProtocol, 
-        AgentActionProtocol
+        AgentActionProtocol, AgentInitializerProtocol
     )
     NAVIGATOR_AVAILABLE = True
 except ImportError:
@@ -119,6 +119,7 @@ except ImportError:
     SensorProtocol = Any
     AgentObservationProtocol = Any
     AgentActionProtocol = Any
+    AgentInitializerProtocol = Any
     class NavigatorFactory:
         @staticmethod
         def single_agent(**kwargs):
@@ -470,6 +471,7 @@ except ImportError:
 # Configuration support
 try:
     from omegaconf import DictConfig, OmegaConf
+    from hydra.utils import instantiate
     HYDRA_AVAILABLE = True
 except ImportError:
     DictConfig = dict
@@ -477,7 +479,75 @@ except ImportError:
         @staticmethod
         def to_container(config, resolve=True):
             return dict(config)
+    def instantiate(config):
+        raise ImportError("Hydra not available")
     HYDRA_AVAILABLE = False
+
+# New v1.0 component imports with graceful fallbacks
+try:
+    from plume_nav_sim.core.sources import create_source
+    SOURCES_AVAILABLE = True
+except ImportError:
+    def create_source(config):
+        raise ImportError("Sources module not yet available")
+    SOURCES_AVAILABLE = False
+
+try:
+    from plume_nav_sim.core.initialization import create_agent_initializer
+    INITIALIZATION_AVAILABLE = True
+except ImportError:
+    def create_agent_initializer(config):
+        raise ImportError("Initialization module not yet available")
+    INITIALIZATION_AVAILABLE = False
+
+try:
+    from plume_nav_sim.core.boundaries import create_boundary_policy
+    BOUNDARIES_AVAILABLE = True
+except ImportError:
+    def create_boundary_policy(config):
+        raise ImportError("Boundaries module not yet available")
+    BOUNDARIES_AVAILABLE = False
+
+try:
+    from plume_nav_sim.core.actions import create_action_interface
+    ACTIONS_AVAILABLE = True
+except ImportError:
+    def create_action_interface(config):
+        raise ImportError("Actions module not yet available")
+    ACTIONS_AVAILABLE = False
+
+try:
+    from plume_nav_sim.recording import RecorderFactory
+    RECORDING_AVAILABLE = True
+except ImportError:
+    class RecorderFactory:
+        @staticmethod
+        def create_recorder(config):
+            raise ImportError("Recording module not yet available")
+        @staticmethod
+        def get_available_backends():
+            return []
+        @staticmethod
+        def validate_config(config):
+            return {'valid': False, 'error': 'Recording module not available'}
+    RECORDING_AVAILABLE = False
+
+try:
+    from plume_nav_sim.analysis import StatsAggregator
+    ANALYSIS_AVAILABLE = True
+except ImportError:
+    class StatsAggregator:
+        def __init__(self, config):
+            pass
+        def calculate_episode_stats(self, trajectory_data, episode_id, **kwargs):
+            return {}
+        def calculate_run_stats(self, episode_data_list, run_id, **kwargs):
+            return {}
+        def export_summary(self, output_path, **kwargs):
+            return True
+        def configure_metrics(self, metrics_config):
+            pass
+    ANALYSIS_AVAILABLE = False
 
 # Matplotlib for rendering
 try:
@@ -639,10 +709,21 @@ class PlumeNavigationEnv(gym.Env):
     
     def __init__(
         self,
+        # New v1.0 protocol-based components
+        source: Optional[Union[Any, Dict[str, Any]]] = None,
+        agent_initializer: Optional[Union[AgentInitializerProtocol, Dict[str, Any]]] = None,
+        boundary_policy: Optional[Union[Any, Dict[str, Any]]] = None,
+        action_interface: Optional[Union[Any, Dict[str, Any]]] = None,
+        recorder: Optional[Union[Any, Dict[str, Any]]] = None,
+        stats_aggregator: Optional[Union[StatsAggregator, Dict[str, Any]]] = None,
+        # Extensibility hooks
+        extra_obs_fn: Optional[callable] = None,
+        extra_reward_fn: Optional[callable] = None,
+        episode_end_fn: Optional[callable] = None,
+        # Legacy components for backward compatibility
         plume_model: Optional[Union[PlumeModelProtocol, Dict[str, Any], str]] = None,
         wind_field: Optional[Union[WindFieldProtocol, Dict[str, Any]]] = None,
         sensors: Optional[List[Union[SensorProtocol, Dict[str, Any]]]] = None,
-        # Legacy parameters for backward compatibility
         video_path: Optional[Union[str, Path]] = None,
         initial_position: Optional[Tuple[float, float]] = None,
         initial_orientation: float = 0.0,
@@ -735,7 +816,20 @@ class PlumeNavigationEnv(gym.Env):
         self.render_mode = render_mode
         self.performance_monitoring = performance_monitoring
         
-        # Store modular component configurations
+        # Store v1.0 protocol-based component configurations
+        self._source_config = source
+        self._agent_initializer_config = agent_initializer
+        self._boundary_policy_config = boundary_policy
+        self._action_interface_config = action_interface
+        self._recorder_config = recorder
+        self._stats_aggregator_config = stats_aggregator
+        
+        # Store extensibility hooks
+        self.extra_obs_fn = extra_obs_fn
+        self.extra_reward_fn = extra_reward_fn
+        self.episode_end_fn = episode_end_fn
+        
+        # Store legacy modular component configurations
         self._plume_model_config = plume_model
         self._wind_field_config = wind_field
         self._sensors_config = sensors
@@ -755,7 +849,15 @@ class PlumeNavigationEnv(gym.Env):
         self._use_legacy_api = _force_legacy_api or _detect_legacy_gym_caller()
         self._correlation_id = None
         
-        # Component instances (initialized later)
+        # v1.0 protocol-based component instances (initialized later)
+        self.source: Optional[Any] = None
+        self.agent_initializer: Optional[AgentInitializerProtocol] = None
+        self.boundary_policy: Optional[Any] = None
+        self.action_interface: Optional[Any] = None
+        self.recorder: Optional[Any] = None
+        self.stats_aggregator: Optional[StatsAggregator] = None
+        
+        # Legacy component instances (initialized later)
         self.plume_model: Optional[PlumeModelProtocol] = None
         self.wind_field: Optional[WindFieldProtocol] = None
         self.sensors: List[SensorProtocol] = []
@@ -790,13 +892,17 @@ class PlumeNavigationEnv(gym.Env):
             self._correlation_id = ctx.correlation_id
             
             try:
-                # Initialize modular plume model (replaces _init_video_plume)
+                # Initialize v1.0 protocol-based components first
+                self._init_source()
+                self._init_agent_initializer()
+                self._init_boundary_policy()
+                self._init_action_interface()
+                self._init_recorder()
+                self._init_stats_aggregator()
+                
+                # Initialize legacy components for backward compatibility
                 self._init_plume_model()
-                
-                # Initialize wind field for environmental dynamics
                 self._init_wind_field()
-                
-                # Initialize sensor suite for observation collection
                 self._init_sensors()
                 
                 # Configure reward function parameters
@@ -808,13 +914,13 @@ class PlumeNavigationEnv(gym.Env):
                     max_speed, max_angular_velocity
                 )
                 
-                # Configure action and observation spaces (now sensor-aware)
+                # Configure action and observation spaces (now component-aware)
                 self._init_spaces()
                 
                 # Set up rendering system
                 self._init_rendering()
                 
-                # Apply seed if provided
+                # Apply seed if provided for deterministic experiments
                 if seed is not None:
                     self.seed(seed)
                 
@@ -842,6 +948,150 @@ class PlumeNavigationEnv(gym.Env):
             except Exception as e:
                 logger.error(f"Failed to initialize PlumeNavigationEnv: {e}")
                 raise RuntimeError(f"Environment initialization failed: {e}") from e
+    
+    def _init_source(self) -> None:
+        """Initialize source component using SourceProtocol via dependency injection."""
+        try:
+            if self._source_config is not None:
+                if isinstance(self._source_config, dict):
+                    # Configuration-based instantiation using factory
+                    if SOURCES_AVAILABLE:
+                        self.source = create_source(self._source_config)
+                    else:
+                        logger.warning("Sources module not available, source initialization skipped")
+                        self.source = None
+                else:
+                    # Direct instance provided
+                    self.source = self._source_config
+                    
+                logger.debug(f"Source initialized: {type(self.source).__name__ if self.source else 'None'}")
+            else:
+                self.source = None
+                logger.debug("No source configuration provided")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize source: {e}")
+            self.source = None
+    
+    def _init_agent_initializer(self) -> None:
+        """Initialize agent initializer using AgentInitializerProtocol via dependency injection."""
+        try:
+            if self._agent_initializer_config is not None:
+                if isinstance(self._agent_initializer_config, dict):
+                    # Configuration-based instantiation using factory
+                    if INITIALIZATION_AVAILABLE:
+                        self.agent_initializer = create_agent_initializer(self._agent_initializer_config)
+                    else:
+                        logger.warning("Initialization module not available, using default initializer")
+                        self.agent_initializer = None
+                else:
+                    # Direct instance provided
+                    self.agent_initializer = self._agent_initializer_config
+                    
+                logger.debug(f"Agent initializer initialized: {type(self.agent_initializer).__name__ if self.agent_initializer else 'None'}")
+            else:
+                self.agent_initializer = None
+                logger.debug("No agent initializer configuration provided")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize agent initializer: {e}")
+            self.agent_initializer = None
+    
+    def _init_boundary_policy(self) -> None:
+        """Initialize boundary policy using BoundaryPolicyProtocol via dependency injection."""
+        try:
+            if self._boundary_policy_config is not None:
+                if isinstance(self._boundary_policy_config, dict):
+                    # Configuration-based instantiation using factory
+                    if BOUNDARIES_AVAILABLE:
+                        self.boundary_policy = create_boundary_policy(self._boundary_policy_config)
+                    else:
+                        logger.warning("Boundaries module not available, using default policy")
+                        self.boundary_policy = None
+                else:
+                    # Direct instance provided
+                    self.boundary_policy = self._boundary_policy_config
+                    
+                logger.debug(f"Boundary policy initialized: {type(self.boundary_policy).__name__ if self.boundary_policy else 'None'}")
+            else:
+                self.boundary_policy = None
+                logger.debug("No boundary policy configuration provided")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize boundary policy: {e}")
+            self.boundary_policy = None
+    
+    def _init_action_interface(self) -> None:
+        """Initialize action interface using ActionInterfaceProtocol via dependency injection."""
+        try:
+            if self._action_interface_config is not None:
+                if isinstance(self._action_interface_config, dict):
+                    # Configuration-based instantiation using factory
+                    if ACTIONS_AVAILABLE:
+                        self.action_interface = create_action_interface(self._action_interface_config)
+                    else:
+                        logger.warning("Actions module not available, using default interface")
+                        self.action_interface = None
+                else:
+                    # Direct instance provided
+                    self.action_interface = self._action_interface_config
+                    
+                logger.debug(f"Action interface initialized: {type(self.action_interface).__name__ if self.action_interface else 'None'}")
+            else:
+                self.action_interface = None
+                logger.debug("No action interface configuration provided")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize action interface: {e}")
+            self.action_interface = None
+    
+    def _init_recorder(self) -> None:
+        """Initialize recorder using RecorderProtocol via dependency injection."""
+        try:
+            if self._recorder_config is not None:
+                if isinstance(self._recorder_config, dict):
+                    # Configuration-based instantiation using factory
+                    if RECORDING_AVAILABLE:
+                        self.recorder = RecorderFactory.create_recorder(self._recorder_config)
+                    else:
+                        logger.warning("Recording module not available, recording disabled")
+                        self.recorder = None
+                else:
+                    # Direct instance provided
+                    self.recorder = self._recorder_config
+                    
+                logger.debug(f"Recorder initialized: {type(self.recorder).__name__ if self.recorder else 'None'}")
+            else:
+                self.recorder = None
+                logger.debug("No recorder configuration provided, recording disabled")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize recorder: {e}")
+            self.recorder = None
+    
+    def _init_stats_aggregator(self) -> None:
+        """Initialize statistics aggregator using StatsAggregatorProtocol via dependency injection."""
+        try:
+            if self._stats_aggregator_config is not None:
+                if isinstance(self._stats_aggregator_config, dict):
+                    # Configuration-based instantiation
+                    if ANALYSIS_AVAILABLE:
+                        self.stats_aggregator = StatsAggregator(self._stats_aggregator_config)
+                    else:
+                        logger.warning("Analysis module not available, statistics disabled")
+                        self.stats_aggregator = None
+                else:
+                    # Direct instance provided
+                    self.stats_aggregator = self._stats_aggregator_config
+                    
+                logger.debug(f"Statistics aggregator initialized: {type(self.stats_aggregator).__name__ if self.stats_aggregator else 'None'}")
+            else:
+                self.stats_aggregator = None
+                logger.debug("No statistics aggregator configuration provided")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize statistics aggregator: {e}")
+            self.stats_aggregator = None
     
     def _init_plume_model(self) -> None:
         """Initialize plume model implementation supporting GaussianPlumeModel, TurbulentPlumeModel, and VideoPlumeAdapter."""
@@ -1285,10 +1535,23 @@ class PlumeNavigationEnv(gym.Env):
         # Apply override parameters
         config_dict.update(override_kwargs)
         
-        # Extract plume model configuration (required unless video_path provided for legacy mode)
+        # Extract v1.0 protocol-based component configurations
+        source_config = config_dict.get("source")
+        agent_initializer_config = config_dict.get("agent_initializer")
+        boundary_policy_config = config_dict.get("boundary_policy")
+        action_interface_config = config_dict.get("action_interface")
+        recorder_config = config_dict.get("recorder")
+        stats_aggregator_config = config_dict.get("stats_aggregator")
+        
+        # Extract extensibility hooks
+        extra_obs_fn = config_dict.get("extra_obs_fn")
+        extra_reward_fn = config_dict.get("extra_reward_fn")
+        episode_end_fn = config_dict.get("episode_end_fn")
+        
+        # Extract legacy component configurations for backward compatibility
         plume_model_config = config_dict.get("plume_model")
-        if plume_model_config is None and "video_path" not in config_dict:
-            raise ValueError("Configuration must include either 'plume_model' or 'video_path'")
+        if plume_model_config is None and "video_path" not in config_dict and source_config is None:
+            raise ValueError("Configuration must include either 'source', 'plume_model', or 'video_path'")
         
         # Extract wind field configuration
         wind_field_config = config_dict.get("wind_field")
@@ -1326,7 +1589,18 @@ class PlumeNavigationEnv(gym.Env):
         
         # Build constructor arguments
         constructor_args = {
-            # Modular components
+            # v1.0 protocol-based components
+            "source": source_config,
+            "agent_initializer": agent_initializer_config,
+            "boundary_policy": boundary_policy_config,
+            "action_interface": action_interface_config,
+            "recorder": recorder_config,
+            "stats_aggregator": stats_aggregator_config,
+            # Extensibility hooks
+            "extra_obs_fn": extra_obs_fn,
+            "extra_reward_fn": extra_reward_fn,
+            "episode_end_fn": episode_end_fn,
+            # Legacy modular components
             "plume_model": plume_model_config,
             "wind_field": wind_field_config,
             "sensors": sensors_config,
@@ -1357,6 +1631,19 @@ class PlumeNavigationEnv(gym.Env):
             logger.info(
                 "PlumeNavigationEnv created successfully from configuration",
                 extra={
+                    # v1.0 component configurations
+                    "source_config": source_config,
+                    "agent_initializer_config": agent_initializer_config,
+                    "boundary_policy_config": boundary_policy_config,
+                    "action_interface_config": action_interface_config,
+                    "recorder_config": recorder_config,
+                    "stats_aggregator_config": stats_aggregator_config,
+                    "hooks_configured": {
+                        "extra_obs_fn": extra_obs_fn is not None,
+                        "extra_reward_fn": extra_reward_fn is not None,
+                        "episode_end_fn": episode_end_fn is not None
+                    },
+                    # Legacy component configurations
                     "plume_model_config": plume_model_config,
                     "wind_field_config": wind_field_config,
                     "sensors_config": sensors_config,
@@ -1414,7 +1701,7 @@ class PlumeNavigationEnv(gym.Env):
             "metric_type": "environment_reset"
         })
         
-        # Handle seeding if provided
+        # Handle seeding if provided - enforce deterministic seeding for reproducible experiments
         if seed is not None:
             try:
                 if SEED_UTILS_AVAILABLE:
@@ -1422,7 +1709,16 @@ class PlumeNavigationEnv(gym.Env):
                 else:
                     np.random.seed(seed)
                 self._last_seed = seed
-                logger.debug(f"Environment reset with seed {seed}")
+                
+                # Propagate seed to all components for full determinism
+                if self.source and hasattr(self.source, 'reset'):
+                    self.source.reset(seed=seed)
+                if self.agent_initializer and hasattr(self.agent_initializer, 'reset'):
+                    self.agent_initializer.reset(seed=seed)
+                if self.boundary_policy and hasattr(self.boundary_policy, 'reset'):
+                    self.boundary_policy.reset(seed=seed)
+                    
+                logger.debug(f"Environment reset with deterministic seed {seed}")
             except Exception as e:
                 logger.warning(f"Failed to set seed {seed}: {e}")
                 self.seed(seed)
@@ -1445,8 +1741,23 @@ class PlumeNavigationEnv(gym.Env):
                 
             if "frame_index" in options:
                 start_frame = int(options["frame_index"])
-                if not (0 <= start_frame < self.video_frame_count):
-                    raise ValueError(f"Frame index {start_frame} out of range [0, {self.video_frame_count})")
+                if hasattr(self.plume_model, 'frame_count') and not (0 <= start_frame < self.plume_model.frame_count):
+                    raise ValueError(f"Frame index {start_frame} out of range [0, {self.plume_model.frame_count})")
+        
+        # Use AgentInitializer pattern for configurable agent positioning strategies
+        if self.agent_initializer is not None and "position" not in options:
+            try:
+                # Generate position using initializer strategy
+                domain_bounds = (self.env_width, self.env_height)
+                if hasattr(self.agent_initializer, 'validate_domain'):
+                    self.agent_initializer.validate_domain(np.array([reset_position]), domain_bounds)
+                
+                positions = self.agent_initializer.initialize_positions(num_agents=1)
+                reset_position = tuple(positions[0])
+                logger.debug(f"Agent position initialized using {type(self.agent_initializer).__name__}: {reset_position}")
+            except Exception as e:
+                logger.warning(f"Failed to use agent initializer: {e}, falling back to default position")
+                # Keep original reset_position
         
         try:
             # Reset episode state
@@ -1477,6 +1788,13 @@ class PlumeNavigationEnv(gym.Env):
             
             # Set current frame index for video-based models
             self.current_frame_index = start_frame
+            
+            # Start recording session for new episode
+            if self.recorder is not None:
+                try:
+                    self.recorder.start_recording(episode_id=self._episode_count + 1)
+                except Exception as e:
+                    logger.warning(f"Failed to start recording for episode {self._episode_count + 1}: {e}")
             
             # Generate initial observation
             observation = self._get_observation()
@@ -1639,6 +1957,26 @@ class PlumeNavigationEnv(gym.Env):
                 # Execute navigator step with synthetic frame
                 self.navigator.step(current_frame, dt=1.0)
             
+            # Apply boundary policy delegation from inline checks to configurable policies
+            if self.boundary_policy is not None:
+                try:
+                    current_positions = self.navigator.positions
+                    violations = self.boundary_policy.check_violations(current_positions)
+                    
+                    if violations.any():
+                        # Apply boundary policy
+                        if hasattr(self.navigator, 'velocities'):
+                            corrected_pos, corrected_vel = self.boundary_policy.apply_policy(
+                                current_positions, self.navigator.velocities
+                            )
+                            self.navigator.positions = corrected_pos
+                            self.navigator.velocities = corrected_vel
+                        else:
+                            corrected_pos = self.boundary_policy.apply_policy(current_positions)
+                            self.navigator.positions = corrected_pos
+                except Exception as e:
+                    logger.warning(f"Boundary policy application failed: {e}")
+            
             # Get new state observation
             observation = self._get_observation()
             
@@ -1661,16 +1999,58 @@ class PlumeNavigationEnv(gym.Env):
             # Check termination conditions
             terminated, truncated = self._check_termination(observation)
             
-            # Apply episode end hooks if episode is ending
+            # Apply episode end hooks if episode is ending - integrate StatsAggregator for automatic metrics
             if terminated or truncated:
-                self._apply_episode_end_hooks({
+                final_info = {
                     "episode": self._episode_count,
                     "total_steps": self._step_count,
                     "total_reward": self._total_reward,
                     "terminated": terminated,
                     "truncated": truncated,
-                    "final_observation": observation
-                })
+                    "final_observation": observation,
+                    "final_position": self.navigator.positions[0].copy(),
+                    "trajectory": self._visited_positions.copy(),
+                    "exploration_coverage": float(np.sum(self._exploration_grid) / self._exploration_grid.size)
+                }
+                
+                # StatsAggregator integration for automatic metric calculation at episode completion
+                if self.stats_aggregator is not None:
+                    try:
+                        trajectory_data = {
+                            'positions': np.array(self._visited_positions),
+                            'total_steps': self._step_count,
+                            'total_reward': self._total_reward,
+                            'success': terminated and self._total_reward > 0,
+                            'final_position': self.navigator.positions[0].copy(),
+                            'exploration_coverage': final_info["exploration_coverage"]
+                        }
+                        
+                        episode_stats = self.stats_aggregator.calculate_episode_stats(
+                            trajectory_data, 
+                            episode_id=self._episode_count
+                        )
+                        final_info['episode_stats'] = episode_stats
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate episode statistics: {e}")
+                
+                # Record episode data if recorder is available
+                if self.recorder is not None:
+                    try:
+                        episode_data = {
+                            'episode_id': self._episode_count,
+                            'total_steps': self._step_count,
+                            'total_reward': self._total_reward,
+                            'success': terminated and self._total_reward > 0,
+                            'final_position': self.navigator.positions[0].tolist(),
+                            'exploration_coverage': final_info["exploration_coverage"],
+                            'termination_reason': 'terminated' if terminated else 'truncated'
+                        }
+                        self.recorder.record_episode(episode_data, self._episode_count)
+                    except Exception as e:
+                        logger.warning(f"Failed to record episode data: {e}")
+                
+                # Apply custom episode end hooks
+                self._apply_episode_end_hooks(final_info)
             
             # Update exploration tracking
             self._update_exploration_tracking(self.navigator.positions[0])
@@ -1723,14 +2103,35 @@ class PlumeNavigationEnv(gym.Env):
 
     def _execute_step_without_monitoring(self, action: ActionType) -> Union[Tuple, Tuple]:
         """Execute step without performance monitoring for maximum performance."""
-        # Validate and clip action
-        action = np.asarray(action, dtype=np.float32)
-        if action.shape != (2,):
-            raise ValueError(f"Action must have shape (2,), got {action.shape}")
-        
-        # Clip action to space bounds
-        action = np.clip(action, self.action_space.low, self.action_space.high)
-        speed, angular_velocity = action
+        # Delegate action translation to ActionInterfaceProtocol implementation
+        if self.action_interface is not None:
+            try:
+                # Validate action using action interface
+                if hasattr(self.action_interface, 'validate_action') and not self.action_interface.validate_action(action):
+                    logger.warning(f"Invalid action detected: {action}, clipping to valid bounds")
+                
+                # Translate RL action to navigation command
+                nav_command = self.action_interface.translate_action(action)
+                speed = nav_command.get('linear_velocity', 0.0)
+                angular_velocity = nav_command.get('angular_velocity', 0.0)
+                logger.debug(f"Action translated via {type(self.action_interface).__name__}: {action} -> speed={speed}, angular_vel={angular_velocity}")
+            except Exception as e:
+                logger.warning(f"Action interface translation failed: {e}, falling back to default")
+                # Fallback to default action processing
+                action = np.asarray(action, dtype=np.float32)
+                if action.shape != (2,):
+                    raise ValueError(f"Action must have shape (2,), got {action.shape}")
+                action = np.clip(action, self.action_space.low, self.action_space.high)
+                speed, angular_velocity = action
+        else:
+            # Default action processing for backward compatibility
+            action = np.asarray(action, dtype=np.float32)
+            if action.shape != (2,):
+                raise ValueError(f"Action must have shape (2,), got {action.shape}")
+            
+            # Clip action to space bounds
+            action = np.clip(action, self.action_space.low, self.action_space.high)
+            speed, angular_velocity = action
         
         # Store previous state for reward computation
         prev_position = self.navigator.positions[0].copy()
@@ -1788,6 +2189,28 @@ class PlumeNavigationEnv(gym.Env):
                 # Execute navigator step with synthetic frame
                 self.navigator.step(current_frame, dt=1.0)
             
+            # Apply boundary policy delegation from inline checks to configurable policies
+            if self.boundary_policy is not None:
+                try:
+                    current_positions = self.navigator.positions
+                    violations = self.boundary_policy.check_violations(current_positions)
+                    
+                    if violations.any():
+                        # Apply boundary policy
+                        if hasattr(self.navigator, 'velocities'):
+                            corrected_pos, corrected_vel = self.boundary_policy.apply_policy(
+                                current_positions, self.navigator.velocities
+                            )
+                            self.navigator.positions = corrected_pos
+                            self.navigator.velocities = corrected_vel
+                        else:
+                            corrected_pos = self.boundary_policy.apply_policy(current_positions)
+                            self.navigator.positions = corrected_pos
+                            
+                        logger.debug(f"Boundary policy applied: {type(self.boundary_policy).__name__}")
+                except Exception as e:
+                    logger.warning(f"Boundary policy application failed: {e}")
+            
             # Get new state observation
             observation = self._get_observation()
             
@@ -1796,12 +2219,60 @@ class PlumeNavigationEnv(gym.Env):
                 action, prev_position, prev_orientation, prev_odor, observation
             )
             
-            # Apply extensibility hooks
+            # Apply extensibility hooks - integrate hook system with extension points
             additional_obs = self._apply_observation_hooks(observation)
             observation.update(additional_obs)
             
             extra_reward = self._apply_reward_hooks(base_reward, observation)
             reward = base_reward + extra_reward
+            
+            # Integrate Recorder hooks with buffered I/O for simulation state capture
+            if self.recorder is not None:
+                try:
+                    step_data = {
+                        'step_number': self._step_count,
+                        'episode_id': self._episode_count,
+                        'agent_position': self.navigator.positions[0].copy(),
+                        'agent_orientation': float(self.navigator.orientations[0]),
+                        'action': action.tolist() if hasattr(action, 'tolist') else action,
+                        'reward': reward,
+                        'odor_concentration': self._previous_odor,
+                        'observation': {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in observation.items()},
+                        'timestamp': time.time()
+                    }
+                    
+                    # Add wind data if available
+                    if self._wind_enabled and "wind_velocity" in observation:
+                        step_data['wind_velocity'] = observation["wind_velocity"].tolist()
+                    
+                    # Record step with minimal overhead
+                    self.recorder.record_step(step_data, self._step_count, episode_id=self._episode_count)
+                except Exception as e:
+                    logger.warning(f"Failed to record step data: {e}")
+            
+            # Integrate Recorder hooks with buffered I/O for simulation state capture  
+            if self.recorder is not None:
+                try:
+                    step_data = {
+                        'step_number': self._step_count,
+                        'episode_id': self._episode_count,
+                        'agent_position': self.navigator.positions[0].copy(),
+                        'agent_orientation': float(self.navigator.orientations[0]),
+                        'action': action.tolist() if hasattr(action, 'tolist') else action,
+                        'reward': reward,
+                        'odor_concentration': self._previous_odor,
+                        'observation': {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in observation.items()},
+                        'timestamp': time.time()
+                    }
+                    
+                    # Add wind data if available
+                    if self._wind_enabled and "wind_velocity" in observation:
+                        step_data['wind_velocity'] = observation["wind_velocity"].tolist()
+                    
+                    # Record step with minimal overhead
+                    self.recorder.record_step(step_data, self._step_count, episode_id=self._episode_count)
+                except Exception as e:
+                    logger.warning(f"Failed to record step data: {e}")
             
             # Update step counter and tracking
             self._step_count += 1
@@ -1810,16 +2281,59 @@ class PlumeNavigationEnv(gym.Env):
             # Check termination conditions
             terminated, truncated = self._check_termination(observation)
             
-            # Apply episode end hooks if episode is ending
+            # Apply episode end hooks if episode is ending - integrate StatsAggregator for automatic metrics
             if terminated or truncated:
-                self._apply_episode_end_hooks({
+                final_info = {
                     "episode": self._episode_count,
                     "total_steps": self._step_count,
                     "total_reward": self._total_reward,
                     "terminated": terminated,
                     "truncated": truncated,
-                    "final_observation": observation
-                })
+                    "final_observation": observation,
+                    "final_position": self.navigator.positions[0].copy(),
+                    "trajectory": self._visited_positions.copy(),
+                    "exploration_coverage": float(np.sum(self._exploration_grid) / self._exploration_grid.size)
+                }
+                
+                # StatsAggregator integration for automatic metric calculation at episode completion
+                if self.stats_aggregator is not None:
+                    try:
+                        trajectory_data = {
+                            'positions': np.array(self._visited_positions),
+                            'total_steps': self._step_count,
+                            'total_reward': self._total_reward,
+                            'success': terminated and self._total_reward > 0,
+                            'final_position': self.navigator.positions[0].copy(),
+                            'exploration_coverage': final_info["exploration_coverage"]
+                        }
+                        
+                        episode_stats = self.stats_aggregator.calculate_episode_stats(
+                            trajectory_data, 
+                            episode_id=self._episode_count
+                        )
+                        final_info['episode_stats'] = episode_stats
+                        logger.debug(f"Episode statistics calculated: {episode_stats}")
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate episode statistics: {e}")
+                
+                # Record episode data if recorder is available
+                if self.recorder is not None:
+                    try:
+                        episode_data = {
+                            'episode_id': self._episode_count,
+                            'total_steps': self._step_count,
+                            'total_reward': self._total_reward,
+                            'success': terminated and self._total_reward > 0,
+                            'final_position': self.navigator.positions[0].tolist(),
+                            'exploration_coverage': final_info["exploration_coverage"],
+                            'termination_reason': 'terminated' if terminated else 'truncated'
+                        }
+                        self.recorder.record_episode(episode_data, self._episode_count)
+                    except Exception as e:
+                        logger.warning(f"Failed to record episode data: {e}")
+                
+                # Apply custom episode end hooks
+                self._apply_episode_end_hooks(final_info)
             
             # Update exploration tracking
             self._update_exploration_tracking(self.navigator.positions[0])
@@ -2150,13 +2664,39 @@ class PlumeNavigationEnv(gym.Env):
         if self._step_count >= self.max_episode_steps:
             truncated = True
         
-        # Check boundary termination
+        # Check boundary termination using boundary policy
         x, y = observation["agent_position"]
-        if x < 0 or x > self.env_width or y < 0 or y > self.env_height:
-            terminated = True
+        
+        # Use boundary policy for termination decisions if available
+        if self.boundary_policy is not None:
+            try:
+                positions = np.array([[x, y]])
+                violations = self.boundary_policy.check_violations(positions)
+                if violations.any():
+                    termination_status = self.boundary_policy.get_termination_status()
+                    if termination_status == "oob":
+                        terminated = True
+            except Exception as e:
+                logger.warning(f"Error checking boundary policy termination: {e}")
+                # Fallback to default boundary checking
+                if x < 0 or x > self.env_width or y < 0 or y > self.env_height:
+                    terminated = True
+        else:
+            # Default boundary checking for backward compatibility
+            if x < 0 or x > self.env_width or y < 0 or y > self.env_height:
+                terminated = True
         
         # Check success condition: High odor concentration for sustained period
-        current_odor = float(observation["odor_concentration"][0])
+        current_odor = 0.0
+        # Extract odor concentration from sensor observations
+        for key, value in observation.items():
+            if "concentration" in key and "sensor" in key:
+                if hasattr(value, '__len__') and len(value) > 0:
+                    current_odor = float(value[0])
+                else:
+                    current_odor = float(value)
+                break
+        
         if current_odor > 0.8:  # High odor threshold
             if not hasattr(self, "_high_odor_steps"):
                 self._high_odor_steps = 0
@@ -2315,35 +2855,76 @@ class PlumeNavigationEnv(gym.Env):
         pass
     
     def _apply_observation_hooks(self, base_obs: dict) -> dict:
-        """Apply observation extensibility hooks."""
+        """Apply observation extensibility hooks with extra_obs_fn integration."""
         try:
-            additional_obs = self.compute_additional_obs(base_obs)
+            additional_obs = {}
+            
+            # Apply built-in hook method
+            additional_obs.update(self.compute_additional_obs(base_obs))
+            
+            # Apply configured extra_obs_fn hook
+            if self.extra_obs_fn is not None:
+                try:
+                    extra_obs = self.extra_obs_fn(base_obs)
+                    if isinstance(extra_obs, dict):
+                        additional_obs.update(extra_obs)
+                except Exception as e:
+                    logger.warning(f"Error in extra_obs_fn hook: {e}")
+            
+            # Apply navigator hooks for backward compatibility
             if hasattr(self.navigator, 'compute_additional_obs'):
                 navigator_obs = self.navigator.compute_additional_obs(base_obs)
                 additional_obs.update(navigator_obs)
+                
             return additional_obs
         except Exception as e:
             logger.warning(f"Error in observation hooks: {e}")
             return {}
     
     def _apply_reward_hooks(self, base_reward: float, info: dict) -> float:
-        """Apply reward extensibility hooks."""
+        """Apply reward extensibility hooks with extra_reward_fn integration."""
         try:
-            extra_reward = self.compute_extra_reward(base_reward, info)
+            extra_reward = 0.0
+            
+            # Apply built-in hook method
+            extra_reward += self.compute_extra_reward(base_reward, info)
+            
+            # Apply configured extra_reward_fn hook
+            if self.extra_reward_fn is not None:
+                try:
+                    hook_reward = self.extra_reward_fn(base_reward, info)
+                    if isinstance(hook_reward, (int, float)):
+                        extra_reward += hook_reward
+                except Exception as e:
+                    logger.warning(f"Error in extra_reward_fn hook: {e}")
+            
+            # Apply navigator hooks for backward compatibility
             if hasattr(self.navigator, 'compute_extra_reward'):
                 navigator_reward = self.navigator.compute_extra_reward(base_reward, info)
                 extra_reward += navigator_reward
+                
             return extra_reward
         except Exception as e:
             logger.warning(f"Error in reward hooks: {e}")
             return 0.0
     
     def _apply_episode_end_hooks(self, final_info: dict) -> None:
-        """Apply episode end extensibility hooks."""
+        """Apply episode end extensibility hooks with episode_end_fn integration."""
         try:
+            # Apply built-in hook method
             self.on_episode_end(final_info)
+            
+            # Apply configured episode_end_fn hook
+            if self.episode_end_fn is not None:
+                try:
+                    self.episode_end_fn(final_info)
+                except Exception as e:
+                    logger.warning(f"Error in episode_end_fn hook: {e}")
+            
+            # Apply navigator hooks for backward compatibility
             if hasattr(self.navigator, 'on_episode_end'):
                 self.navigator.on_episode_end(final_info)
+                
         except Exception as e:
             logger.warning(f"Error in episode end hooks: {e}")
     
@@ -2493,7 +3074,24 @@ class PlumeNavigationEnv(gym.Env):
         })
         
         try:
-            # Close plume model
+            # Close v1.0 protocol-based components
+            if self.recorder is not None:
+                try:
+                    self.recorder.stop_recording()
+                    logger.debug("Recorder stopped and cleaned up")
+                except Exception as e:
+                    logger.warning(f"Error stopping recorder: {e}")
+            
+            if self.stats_aggregator is not None and hasattr(self.stats_aggregator, 'export_summary'):
+                try:
+                    # Export final summary if configured
+                    output_path = f"./results/episode_{self._episode_count}_summary.json"
+                    self.stats_aggregator.export_summary(output_path)
+                    logger.debug(f"Final statistics summary exported to {output_path}")
+                except Exception as e:
+                    logger.warning(f"Error exporting final summary: {e}")
+            
+            # Close legacy components
             if hasattr(self.plume_model, 'close'):
                 self.plume_model.close()
             
@@ -2599,7 +3197,8 @@ def create_plume_navigation_environment(config: ConfigType, **kwargs) -> PlumeNa
     Factory function to create PlumeNavigationEnv from configuration.
     
     This is the primary entry point for environment creation, supporting both
-    programmatic instantiation and Hydra configuration-driven workflows.
+    programmatic instantiation and Hydra configuration-driven workflows with
+    full v1.0 protocol-based component support.
     
     Args:
         config: Configuration dictionary or DictConfig
@@ -2609,15 +3208,58 @@ def create_plume_navigation_environment(config: ConfigType, **kwargs) -> PlumeNa
         Configured PlumeNavigationEnv instance
         
     Examples:
+        Legacy configuration:
         >>> config = {"video_path": "data/plume.mp4", "max_speed": 2.0}
         >>> env = create_plume_navigation_environment(config)
-        >>> 
-        >>> # With frame cache for performance
-        >>> from plume_nav_sim.utils.frame_cache import create_lru_cache
-        >>> cache = create_lru_cache(memory_limit_mb=512)
-        >>> env = create_plume_navigation_environment(config, frame_cache=cache)
+        
+        v1.0 protocol-based configuration:
+        >>> config = {
+        ...     "source": {"type": "PointSource", "position": [50, 50], "emission_rate": 1000},
+        ...     "agent_initializer": {"type": "UniformRandomInitializer", "seed": 42},
+        ...     "boundary_policy": {"type": "TerminatePolicy", "domain_bounds": [100, 100]},
+        ...     "action_interface": {"type": "Continuous2DAction"},
+        ...     "recorder": {"backend": "parquet", "output_dir": "./data"},
+        ...     "stats_aggregator": {"metrics_definitions": {"trajectory": ["mean", "std"]}}
+        ... }
+        >>> env = create_plume_navigation_environment(config)
+        
+        With extensibility hooks:
+        >>> def custom_obs_hook(base_obs):
+        ...     return {"wind_direction": calculate_wind_direction()}
+        >>> config["extra_obs_fn"] = custom_obs_hook
+        >>> env = create_plume_navigation_environment(config)
     """
     return PlumeNavigationEnv.from_config(config, **kwargs)
+
+
+def create_v1_environment_from_hydra(cfg: DictConfig) -> PlumeNavigationEnv:
+    """
+    Create v1.0 environment directly from Hydra configuration with dependency injection.
+    
+    This function leverages Hydra's instantiate mechanism for component creation,
+    providing full dependency injection support for all protocol-based components.
+    
+    Args:
+        cfg: Hydra DictConfig containing environment configuration
+        
+    Returns:
+        Configured PlumeNavigationEnv with all v1.0 components
+        
+    Examples:
+        >>> from hydra import compose, initialize
+        >>> with initialize(config_path="../conf"):
+        ...     cfg = compose(config_name="config")
+        ...     env = create_v1_environment_from_hydra(cfg.env)
+    """
+    if not HYDRA_AVAILABLE:
+        raise ImportError("Hydra is required for create_v1_environment_from_hydra")
+    
+    # Use Hydra's instantiate for full dependency injection
+    if "_target_" in cfg:
+        return instantiate(cfg)
+    else:
+        # Fallback to from_config method
+        return PlumeNavigationEnv.from_config(cfg)
 
 
 def validate_environment_api_compliance(env: PlumeNavigationEnv) -> Dict[str, Any]:
@@ -2690,7 +3332,8 @@ logger.info(
 # Public API exports
 __all__ = [
     "PlumeNavigationEnv",
-    "create_plume_navigation_environment", 
+    "create_plume_navigation_environment",
+    "create_v1_environment_from_hydra",
     "validate_environment_api_compliance"
 ]
 
