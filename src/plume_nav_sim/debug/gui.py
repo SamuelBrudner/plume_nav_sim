@@ -85,15 +85,80 @@ try:
 except ImportError:
     # Create mock classes to prevent import errors
     class QTimer:
-        pass
+        def __init__(self): pass
+        def timeout(self): pass
+        def start(self, interval): pass
+        def stop(self): pass
+    
     class Signal:
-        pass
+        def __init__(self, *args): pass
+        def emit(self, *args): pass
+        def connect(self, slot): pass
+    
     class QThread:
         pass
+    
     class QObject:
-        pass
+        def __init__(self): pass
+    
     class Qt:
-        pass
+        Key_Space = 32
+        Key_Right = 16777236
+        Key_R = 82
+        Horizontal = 1
+    
+    class QMainWindow:
+        def __init__(self): 
+            self.central_widget = None
+        def setWindowTitle(self, title): pass
+        def setGeometry(self, x, y, w, h): pass
+        def setCentralWidget(self, widget): 
+            self.central_widget = widget
+        def statusBar(self): 
+            return MockStatusBar()
+        def show(self): pass
+        def hide(self): pass
+        def grab(self): 
+            return MockPixmap()
+    
+    class QWidget:
+        def __init__(self): pass
+        def setMaximumWidth(self, width): pass
+        def setMaximumHeight(self, height): pass
+        def setReadOnly(self, readonly): pass
+        def setPlaceholderText(self, text): pass
+        def clear(self): pass
+        def setText(self, text): pass
+        def setPlainText(self, text): pass
+        def toPlainText(self): return ""
+        def getValue(self): return 0
+        def setValue(self, value): pass
+        def setRange(self, min_val, max_val): pass
+        def valueChanged(self): return Signal()
+        def clicked(self): return Signal()
+        def activated(self): return Signal()
+    
+    QApplication = QWidget
+    QVBoxLayout = QHBoxLayout = QGridLayout = QWidget
+    QPushButton = QLabel = QSlider = QSpinBox = QCheckBox = QWidget
+    QTabWidget = QTextEdit = QProgressBar = QGroupBox = QWidget
+    QFileDialog = QMessageBox = QSplitter = QFrame = QWidget
+    QKeySequence = QShortcut = QPixmap = QPainter = QWidget
+    
+    class MockStatusBar:
+        def addWidget(self, widget): pass
+        def addPermanentWidget(self, widget): pass
+    
+    class MockPixmap:
+        def save(self, filename): return True
+    
+    # Mock matplotlib classes
+    class Figure:
+        def __init__(self, *args, **kwargs): pass
+    
+    class FigureCanvas:
+        def __init__(self, figure): pass
+        def draw(self): pass
 
 try:
     import streamlit as st
