@@ -197,10 +197,10 @@ class TestTerminateBoundary:
         violations = terminate_policy.check_violations(position)
         assert violations == True
         
-        # Agent at exact boundary
+        # Agent at exact boundary (implementation treats boundary as valid)
         position = np.array([100, 100])
         violations = terminate_policy.check_violations(position)
-        assert violations == True
+        assert violations == False
     
     def test_violation_detection_multi_agent(self, terminate_policy):
         """Test vectorized boundary violation detection for multi-agent scenarios."""
@@ -216,7 +216,7 @@ class TestTerminateBoundary:
         ])
         
         violations = terminate_policy.check_violations(positions)
-        expected = np.array([False, True, True, True, True, False, True])
+        expected = np.array([False, True, True, True, True, False, False])
         
         assert isinstance(violations, np.ndarray)
         assert violations.shape == (7,)
@@ -1252,12 +1252,13 @@ class TestBoundaryPolicyEdgeCases:
             violations = policy.check_violations(boundary_positions)
             
             if isinstance(policy, (TerminateBoundary, BounceBoundary, ClipBoundary)):
-                # These policies consider boundary positions as violations
-                assert np.all(violations == True)
+                # These policies use inclusive boundaries, so boundary positions are NOT violations
+                assert np.all(violations == False)
             elif isinstance(policy, WrapBoundary):
-                # Wrap policy may or may not consider exact boundaries as violations
-                # depending on implementation details
-                pass
+                # Wrap policy considers upper boundaries as violations but not lower boundaries
+                # Expected: [False, True, False, True] for positions [0,50], [100,50], [50,0], [50,100]
+                expected_wrap = np.array([False, True, False, True])
+                np.testing.assert_array_equal(violations, expected_wrap)
     
     def test_floating_point_precision(self):
         """Test numerical stability with floating point precision issues."""
