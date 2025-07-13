@@ -28,6 +28,17 @@ Modular Architecture Components:
 import warnings
 from typing import Dict, Any, Optional, Union
 
+# Hydra imports for dependency injection and component instantiation
+try:
+    from hydra import instantiate
+    HYDRA_INSTANTIATE_AVAILABLE = True
+except ImportError:
+    HYDRA_INSTANTIATE_AVAILABLE = False
+    # Fallback for environments without Hydra
+    def instantiate(config, **kwargs):
+        """Fallback instantiate function."""
+        raise RuntimeError("Hydra not available for dependency injection"), List
+
 # Core environment - always available
 try:
     from plume_nav_sim.envs.video_plume import VideoPlume
@@ -261,7 +272,14 @@ try:
         SensorProtocol,
         AgentObservationProtocol,
         AgentActionProtocol,
-        NavigatorFactory
+        NavigatorFactory,
+        # New v1.0 protocols for protocol-based architecture
+        SourceProtocol,
+        BoundaryPolicyProtocol,
+        ActionInterfaceProtocol,
+        RecorderProtocol,
+        StatsAggregatorProtocol,
+        AgentInitializerProtocol
     )
     __all__.extend([
         "PlumeModelProtocol",
@@ -269,15 +287,25 @@ try:
         "SensorProtocol",
         "AgentObservationProtocol", 
         "AgentActionProtocol",
-        "NavigatorFactory"
+        "NavigatorFactory",
+        # New v1.0 protocol interfaces
+        "SourceProtocol",
+        "BoundaryPolicyProtocol", 
+        "ActionInterfaceProtocol",
+        "RecorderProtocol",
+        "StatsAggregatorProtocol",
+        "AgentInitializerProtocol"
     ])
     PROTOCOLS_AVAILABLE = True
+    NEW_PROTOCOLS_AVAILABLE = True
     logger.info(
-        "Modular component protocols available for pluggable architecture",
+        "Enhanced modular component protocols available for v1.0 architecture",
         extra={
             "metric_type": "environment_capability",
             "component": "protocols",
-            "protocols": ["plume_model", "wind_field", "sensor", "observation", "action"]
+            "protocols": ["plume_model", "wind_field", "sensor", "observation", "action", 
+                         "source", "boundary_policy", "action_interface", "recorder", "stats_aggregator", "agent_initializer"],
+            "v1_architecture": True
         }
     ) if LOGGING_AVAILABLE else None
 except ImportError as e:
@@ -287,13 +315,22 @@ except ImportError as e:
     AgentObservationProtocol = None
     AgentActionProtocol = None
     NavigatorFactory = None
+    # New v1.0 protocols
+    SourceProtocol = None
+    BoundaryPolicyProtocol = None
+    ActionInterfaceProtocol = None
+    RecorderProtocol = None
+    StatsAggregatorProtocol = None
+    AgentInitializerProtocol = None
     PROTOCOLS_AVAILABLE = False
+    NEW_PROTOCOLS_AVAILABLE = False
     logger.warning(
-        f"Modular component protocols not available: {e}",
+        f"Enhanced modular component protocols not available: {e}",
         extra={
             "metric_type": "environment_limitation",
             "missing_component": "protocols",
-            "error": str(e)
+            "error": str(e),
+            "note": "v1.0 protocol-based architecture features disabled"
         }
     ) if LOGGING_AVAILABLE else None
 
@@ -412,6 +449,18 @@ RL_ENV_AVAILABLE = PLUME_ENV_AVAILABLE and GYMNASIUM_AVAILABLE
 MODULAR_ARCHITECTURE_AVAILABLE = PROTOCOLS_AVAILABLE
 MODULAR_COMPONENTS_PARTIAL = PLUME_MODELS_AVAILABLE or WIND_FIELDS_AVAILABLE or SENSORS_AVAILABLE
 MODULAR_COMPONENTS_COMPLETE = PLUME_MODELS_AVAILABLE and WIND_FIELDS_AVAILABLE and SENSORS_AVAILABLE
+
+# v1.0 Protocol-based architecture availability summary
+V1_ARCHITECTURE_AVAILABLE = NEW_PROTOCOLS_AVAILABLE and HYDRA_INSTANTIATE_AVAILABLE
+V1_COMPONENTS_AVAILABLE = (SOURCE_COMPONENTS_AVAILABLE and AGENT_INIT_COMPONENTS_AVAILABLE and 
+                          BOUNDARY_COMPONENTS_AVAILABLE and ACTION_COMPONENTS_AVAILABLE and 
+                          RECORDER_COMPONENTS_AVAILABLE)
+V1_COMPONENTS_PARTIAL = (SOURCE_COMPONENTS_AVAILABLE or AGENT_INIT_COMPONENTS_AVAILABLE or 
+                        BOUNDARY_COMPONENTS_AVAILABLE or ACTION_COMPONENTS_AVAILABLE or 
+                        RECORDER_COMPONENTS_AVAILABLE)
+
+# Enhanced environment capabilities with v1.0 features
+ENHANCED_ENVIRONMENT_AVAILABLE = RL_ENV_AVAILABLE and V1_ARCHITECTURE_AVAILABLE
 
 # Environment registration functionality
 def register_environments() -> Dict[str, bool]:
@@ -548,12 +597,20 @@ def register_environments() -> Dict[str, bool]:
                     'modular_architecture': True,  # Enable modular component support
                     'support_plume_models': PLUME_MODELS_AVAILABLE,
                     'support_wind_fields': WIND_FIELDS_AVAILABLE,
-                    'support_sensors': SENSORS_AVAILABLE
+                    'support_sensors': SENSORS_AVAILABLE,
+                    # v1.0 protocol-based architecture support
+                    'v1_architecture': V1_ARCHITECTURE_AVAILABLE,
+                    'support_source_protocols': SOURCE_COMPONENTS_AVAILABLE,
+                    'support_boundary_policies': BOUNDARY_COMPONENTS_AVAILABLE,
+                    'support_action_interfaces': ACTION_COMPONENTS_AVAILABLE,
+                    'support_recorder_components': RECORDER_COMPONENTS_AVAILABLE,
+                    'enable_hook_system': True,  # Enable extensibility hook system
+                    'enable_dependency_injection': HYDRA_INSTANTIATE_AVAILABLE,
                 }
             )
             registration_results['PlumeNavSim-v1'] = True
             logger.info(
-                "Successfully registered PlumeNavSim-v1 for modular architecture",
+                "Successfully registered PlumeNavSim-v1 for enhanced modular architecture",
                 extra={
                     "metric_type": "environment_registration",
                     "env_id": "PlumeNavSim-v1",
@@ -561,10 +618,15 @@ def register_environments() -> Dict[str, bool]:
                     "api_version": "0.29.x",
                     "compliance": "5-tuple",
                     "modular_architecture": True,
+                    "v1_architecture": V1_ARCHITECTURE_AVAILABLE,
                     "plume_models_available": PLUME_MODELS_AVAILABLE,
                     "wind_fields_available": WIND_FIELDS_AVAILABLE,
                     "sensors_available": SENSORS_AVAILABLE,
-                    "protocols_available": PROTOCOLS_AVAILABLE
+                    "protocols_available": PROTOCOLS_AVAILABLE,
+                    "new_protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                    "v1_components_available": V1_COMPONENTS_AVAILABLE,
+                    "hook_system_enabled": True,
+                    "dependency_injection_enabled": HYDRA_INSTANTIATE_AVAILABLE
                 }
             ) if LOGGING_AVAILABLE else None
         except Exception as e:
@@ -574,6 +636,69 @@ def register_environments() -> Dict[str, bool]:
                 extra={
                     "metric_type": "registration_error",
                     "env_id": "PlumeNavSim-v1",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            ) if LOGGING_AVAILABLE else None
+    
+    # Register new enhanced v1.0 environment with full protocol-based architecture
+    if GYMNASIUM_AVAILABLE and V1_ARCHITECTURE_AVAILABLE and V1_COMPONENTS_AVAILABLE:
+        try:
+            gym_modern.register(
+                id='PlumeNavSim-v1-Enhanced',
+                entry_point='plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv',
+                max_episode_steps=1000,
+                reward_threshold=100.0,
+                nondeterministic=False,
+                kwargs={
+                    'use_gymnasium_api': True,  # Explicit Gymnasium API mode
+                    'api_version': '0.29.x',
+                    'enable_extensibility_hooks': True,
+                    'frame_cache_mode': 'lru',  # Default to LRU caching
+                    'modular_architecture': True,  # Enable modular component support
+                    'v1_architecture': True,  # Enable full v1.0 architecture
+                    'protocol_based_components': True,  # Enable protocol-based component system
+                    'enable_hook_system': True,  # Enable extensibility hook system
+                    'enable_dependency_injection': True,  # Enable Hydra dependency injection
+                    'enable_source_protocols': True,  # Enable source component protocols
+                    'enable_boundary_policies': True,  # Enable boundary policy protocols
+                    'enable_action_interfaces': True,  # Enable action interface protocols
+                    'enable_recorder_components': True,  # Enable recorder protocols
+                    'enable_stats_aggregator': True,  # Enable stats aggregator protocols
+                    'enable_agent_initializers': True,  # Enable agent initializer protocols
+                    'performance_target_ms': 33,  # Performance target for real-time simulation
+                    'deterministic_seeding': True,  # Enable deterministic seeding
+                    'immutable_config_snapshot': True,  # Enable config snapshot for reproducibility
+                }
+            )
+            registration_results['PlumeNavSim-v1-Enhanced'] = True
+            logger.info(
+                "Successfully registered PlumeNavSim-v1-Enhanced for full v1.0 architecture",
+                extra={
+                    "metric_type": "environment_registration",
+                    "env_id": "PlumeNavSim-v1-Enhanced",
+                    "api_type": "gymnasium",
+                    "api_version": "0.29.x",
+                    "compliance": "5-tuple",
+                    "v1_architecture": True,
+                    "protocol_based_components": True,
+                    "hook_system_enabled": True,
+                    "dependency_injection_enabled": True,
+                    "source_protocols_enabled": SOURCE_COMPONENTS_AVAILABLE,
+                    "boundary_policies_enabled": BOUNDARY_COMPONENTS_AVAILABLE,
+                    "action_interfaces_enabled": ACTION_COMPONENTS_AVAILABLE,
+                    "recorder_components_enabled": RECORDER_COMPONENTS_AVAILABLE,
+                    "performance_target_ms": 33,
+                    "deterministic_seeding": True
+                }
+            ) if LOGGING_AVAILABLE else None
+        except Exception as e:
+            registration_results['PlumeNavSim-v1-Enhanced'] = False
+            logger.error(
+                f"Failed to register PlumeNavSim-v1-Enhanced: {e}",
+                extra={
+                    "metric_type": "registration_error",
+                    "env_id": "PlumeNavSim-v1-Enhanced",
                     "error_type": type(e).__name__,
                     "error_message": str(e)
                 }
@@ -744,6 +869,151 @@ def create_modular_environment(
                 "recommendation": "Ensure core protocols are available"
             }
         ) if LOGGING_AVAILABLE else None
+
+# Import v1.0 component factory functions and implementations
+try:
+    # Source components and factory
+    from plume_nav_sim.core.sources import (
+        create_source,
+        PointSource,
+        MultiSource,
+        DynamicSource
+    )
+    SOURCE_COMPONENTS_AVAILABLE = True
+    logger.info(
+        "Source components and factory available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "source_factory",
+            "available_sources": ["PointSource", "MultiSource", "DynamicSource"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    create_source = None
+    PointSource = None
+    MultiSource = None
+    DynamicSource = None
+    SOURCE_COMPONENTS_AVAILABLE = False
+    logger.info(
+        f"Source components not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "source_factory",
+            "note": "Source components will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+try:
+    # Agent initialization components and factory
+    from plume_nav_sim.core.initialization import (
+        create_agent_initializer,
+        UniformRandomInitializer
+    )
+    AGENT_INIT_COMPONENTS_AVAILABLE = True
+    logger.info(
+        "Agent initialization components and factory available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "agent_init_factory",
+            "available_initializers": ["UniformRandomInitializer"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    create_agent_initializer = None
+    UniformRandomInitializer = None
+    AGENT_INIT_COMPONENTS_AVAILABLE = False
+    logger.info(
+        f"Agent initialization components not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "agent_init_factory",
+            "note": "Agent initialization components will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+try:
+    # Boundary policy components and factory
+    from plume_nav_sim.core.boundaries import (
+        create_boundary_policy,
+        TerminateBoundary
+    )
+    BOUNDARY_COMPONENTS_AVAILABLE = True
+    logger.info(
+        "Boundary policy components and factory available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "boundary_factory",
+            "available_policies": ["TerminateBoundary"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    create_boundary_policy = None
+    TerminateBoundary = None
+    BOUNDARY_COMPONENTS_AVAILABLE = False
+    logger.info(
+        f"Boundary policy components not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "boundary_factory",
+            "note": "Boundary policy components will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+try:
+    # Action interface components and factory
+    from plume_nav_sim.core.actions import (
+        create_action_interface,
+        Continuous2DAction
+    )
+    ACTION_COMPONENTS_AVAILABLE = True
+    logger.info(
+        "Action interface components and factory available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "action_factory",
+            "available_interfaces": ["Continuous2DAction"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    create_action_interface = None
+    Continuous2DAction = None
+    ACTION_COMPONENTS_AVAILABLE = False
+    logger.info(
+        f"Action interface components not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "action_factory",
+            "note": "Action interface components will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
+
+try:
+    # Recorder components and manager
+    from plume_nav_sim.recording import (
+        RecorderManager,
+        RecorderFactory
+    )
+    RECORDER_COMPONENTS_AVAILABLE = True
+    logger.info(
+        "Recorder components and manager available",
+        extra={
+            "metric_type": "environment_capability",
+            "component": "recorder_factory",
+            "features": ["RecorderManager", "RecorderFactory"]
+        }
+    ) if LOGGING_AVAILABLE else None
+except ImportError as e:
+    RecorderManager = None
+    RecorderFactory = None
+    RECORDER_COMPONENTS_AVAILABLE = False
+    logger.info(
+        f"Recorder components not available yet: {e}",
+        extra={
+            "metric_type": "environment_info",
+            "missing_component": "recorder_factory",
+            "note": "Recorder components will be available after other agents complete implementation"
+        }
+    ) if LOGGING_AVAILABLE else None
         return None
     
     try:
@@ -870,6 +1140,484 @@ def create_sensors(sensor_configs: List[Dict[str, Any]]):
     return []
 
 
+# v1.0 Protocol-based Component Factory Functions
+
+def create_source_component(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
+    """
+    Factory function for creating source components via Hydra dependency injection.
+    
+    Supports configuration-driven source instantiation for the v1.0 protocol-based
+    architecture, enabling zero-code source type switching through configuration.
+    
+    Args:
+        config: Source configuration dictionary or DictConfig with '_target_' field
+            and appropriate parameters. Supports PointSource, MultiSource, and
+            DynamicSource implementations.
+            
+    Returns:
+        Source instance implementing SourceProtocol or None if creation fails
+        
+    Examples:
+        Point source creation:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.sources.PointSource',
+        ...     'position': (50.0, 50.0),
+        ...     'emission_rate': 1000.0
+        ... }
+        >>> source = create_source_component(config)
+        
+        Multi-source creation:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.sources.MultiSource',
+        ...     'sources': [
+        ...         {'position': (30, 30), 'emission_rate': 500},
+        ...         {'position': (70, 70), 'emission_rate': 800}
+        ...     ]
+        ... }
+        >>> multi_source = create_source_component(config)
+        
+        Hydra-style instantiation:
+        >>> from hydra import instantiate
+        >>> source = create_source_component(hydra_config.source)
+    """
+    if not V1_ARCHITECTURE_AVAILABLE:
+        logger.warning(
+            "v1.0 architecture not available for source component creation",
+            extra={
+                "protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use Hydra instantiate for dependency injection
+        if HYDRA_INSTANTIATE_AVAILABLE:
+            source = instantiate(config)
+            
+            # Validate protocol compliance
+            if hasattr(source, 'get_emission_rate') and hasattr(source, 'get_position') and hasattr(source, 'update_state'):
+                logger.info(
+                    f"Successfully created source component: {type(source).__name__}",
+                    extra={
+                        "metric_type": "component_creation_success",
+                        "component_type": "source",
+                        "implementation": type(source).__name__
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return source
+            else:
+                logger.error(
+                    f"Source component does not implement SourceProtocol: {type(source).__name__}",
+                    extra={
+                        "metric_type": "component_creation_error",
+                        "component_type": "source",
+                        "error": "protocol_compliance_failure"
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return None
+        
+        # Fallback to direct factory function if available
+        elif SOURCE_COMPONENTS_AVAILABLE and create_source:
+            return create_source(config)
+        
+        else:
+            logger.error(
+                "No source creation mechanism available",
+                extra={
+                    "hydra_available": HYDRA_INSTANTIATE_AVAILABLE,
+                    "source_factory_available": SOURCE_COMPONENTS_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+            return None
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to create source component: {e}",
+            extra={
+                "metric_type": "component_creation_error",
+                "component_type": "source",
+                "error": str(e)
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+
+
+def create_boundary_policy(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
+    """
+    Factory function for creating boundary policy components via Hydra dependency injection.
+    
+    Supports configuration-driven boundary policy instantiation for domain edge
+    management with terminate, bounce, wrap, and clip behaviors.
+    
+    Args:
+        config: Boundary policy configuration dictionary or DictConfig with '_target_'
+            field and appropriate parameters for the policy type.
+            
+    Returns:
+        Boundary policy instance implementing BoundaryPolicyProtocol or None if creation fails
+        
+    Examples:
+        Terminate boundary policy:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.boundaries.TerminateBoundary',
+        ...     'domain_bounds': (100, 100),
+        ...     'status_on_violation': 'oob'
+        ... }
+        >>> policy = create_boundary_policy(config)
+        
+        Bounce boundary policy:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.boundaries.BounceBoundary',
+        ...     'domain_bounds': (100, 100),
+        ...     'elasticity': 0.9
+        ... }
+        >>> bounce_policy = create_boundary_policy(config)
+    """
+    if not V1_ARCHITECTURE_AVAILABLE:
+        logger.warning(
+            "v1.0 architecture not available for boundary policy creation",
+            extra={
+                "protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use Hydra instantiate for dependency injection
+        if HYDRA_INSTANTIATE_AVAILABLE:
+            policy = instantiate(config)
+            
+            # Validate protocol compliance
+            if (hasattr(policy, 'apply_policy') and hasattr(policy, 'check_violations') 
+                and hasattr(policy, 'get_termination_status')):
+                logger.info(
+                    f"Successfully created boundary policy: {type(policy).__name__}",
+                    extra={
+                        "metric_type": "component_creation_success",
+                        "component_type": "boundary_policy",
+                        "implementation": type(policy).__name__
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return policy
+            else:
+                logger.error(
+                    f"Boundary policy does not implement BoundaryPolicyProtocol: {type(policy).__name__}",
+                    extra={
+                        "metric_type": "component_creation_error",
+                        "component_type": "boundary_policy",
+                        "error": "protocol_compliance_failure"
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return None
+        
+        # Fallback to direct factory function if available
+        elif BOUNDARY_COMPONENTS_AVAILABLE and create_boundary_policy:
+            return create_boundary_policy(**config)
+        
+        else:
+            logger.error(
+                "No boundary policy creation mechanism available",
+                extra={
+                    "hydra_available": HYDRA_INSTANTIATE_AVAILABLE,
+                    "boundary_factory_available": BOUNDARY_COMPONENTS_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+            return None
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to create boundary policy: {e}",
+            extra={
+                "metric_type": "component_creation_error",
+                "component_type": "boundary_policy",
+                "error": str(e)
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+
+
+def create_action_interface(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
+    """
+    Factory function for creating action interface components via Hydra dependency injection.
+    
+    Supports configuration-driven action interface instantiation for RL framework
+    integration with continuous and discrete action space support.
+    
+    Args:
+        config: Action interface configuration dictionary or DictConfig with '_target_'
+            field and appropriate parameters for the interface type.
+            
+    Returns:
+        Action interface instance implementing ActionInterfaceProtocol or None if creation fails
+        
+    Examples:
+        Continuous 2D action interface:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.actions.Continuous2DAction',
+        ...     'max_linear_velocity': 2.0,
+        ...     'max_angular_velocity': 45.0
+        ... }
+        >>> action_interface = create_action_interface(config)
+        
+        Cardinal discrete action interface:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.core.actions.CardinalDiscreteAction',
+        ...     'speed': 1.5,
+        ...     'include_stop': True
+        ... }
+        >>> discrete_interface = create_action_interface(config)
+    """
+    if not V1_ARCHITECTURE_AVAILABLE:
+        logger.warning(
+            "v1.0 architecture not available for action interface creation",
+            extra={
+                "protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use Hydra instantiate for dependency injection
+        if HYDRA_INSTANTIATE_AVAILABLE:
+            interface = instantiate(config)
+            
+            # Validate protocol compliance
+            if (hasattr(interface, 'translate_action') and hasattr(interface, 'validate_action') 
+                and hasattr(interface, 'get_action_space')):
+                logger.info(
+                    f"Successfully created action interface: {type(interface).__name__}",
+                    extra={
+                        "metric_type": "component_creation_success",
+                        "component_type": "action_interface",
+                        "implementation": type(interface).__name__
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return interface
+            else:
+                logger.error(
+                    f"Action interface does not implement ActionInterfaceProtocol: {type(interface).__name__}",
+                    extra={
+                        "metric_type": "component_creation_error",
+                        "component_type": "action_interface",
+                        "error": "protocol_compliance_failure"
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return None
+        
+        # Fallback to direct factory function if available
+        elif ACTION_COMPONENTS_AVAILABLE and create_action_interface:
+            return create_action_interface(config)
+        
+        else:
+            logger.error(
+                "No action interface creation mechanism available",
+                extra={
+                    "hydra_available": HYDRA_INSTANTIATE_AVAILABLE,
+                    "action_factory_available": ACTION_COMPONENTS_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+            return None
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to create action interface: {e}",
+            extra={
+                "metric_type": "component_creation_error",
+                "component_type": "action_interface",
+                "error": str(e)
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+
+
+def create_recorder(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
+    """
+    Factory function for creating recorder components via Hydra dependency injection.
+    
+    Supports configuration-driven recorder instantiation with multiple backend support
+    (parquet, hdf5, sqlite, none) for experiment data persistence.
+    
+    Args:
+        config: Recorder configuration dictionary or DictConfig with '_target_' field
+            and appropriate parameters for the backend type.
+            
+    Returns:
+        Recorder instance implementing RecorderProtocol or None if creation fails
+        
+    Examples:
+        Parquet recorder creation:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.recording.backends.ParquetRecorder',
+        ...     'output_dir': './data',
+        ...     'buffer_size': 1000,
+        ...     'compression': 'snappy'
+        ... }
+        >>> recorder = create_recorder(config)
+        
+        None recorder (disabled):
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.recording.NoneRecorder'
+        ... }
+        >>> no_recorder = create_recorder(config)
+    """
+    if not V1_ARCHITECTURE_AVAILABLE:
+        logger.warning(
+            "v1.0 architecture not available for recorder creation",
+            extra={
+                "protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use Hydra instantiate for dependency injection
+        if HYDRA_INSTANTIATE_AVAILABLE:
+            recorder = instantiate(config)
+            
+            # Validate protocol compliance
+            if (hasattr(recorder, 'record_step') and hasattr(recorder, 'record_episode') 
+                and hasattr(recorder, 'export_data')):
+                logger.info(
+                    f"Successfully created recorder: {type(recorder).__name__}",
+                    extra={
+                        "metric_type": "component_creation_success",
+                        "component_type": "recorder",
+                        "implementation": type(recorder).__name__
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return recorder
+            else:
+                logger.error(
+                    f"Recorder does not implement RecorderProtocol: {type(recorder).__name__}",
+                    extra={
+                        "metric_type": "component_creation_error",
+                        "component_type": "recorder",
+                        "error": "protocol_compliance_failure"
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return None
+        
+        # Fallback to RecorderFactory if available
+        elif RECORDER_COMPONENTS_AVAILABLE and RecorderFactory:
+            if hasattr(RecorderFactory, 'create_recorder'):
+                return RecorderFactory.create_recorder(config)
+        
+        else:
+            logger.error(
+                "No recorder creation mechanism available",
+                extra={
+                    "hydra_available": HYDRA_INSTANTIATE_AVAILABLE,
+                    "recorder_factory_available": RECORDER_COMPONENTS_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+            return None
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to create recorder: {e}",
+            extra={
+                "metric_type": "component_creation_error",
+                "component_type": "recorder",
+                "error": str(e)
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+
+
+def create_stats_aggregator(config: Union[Dict[str, Any], Any]) -> Optional[Any]:
+    """
+    Factory function for creating statistics aggregator components via Hydra dependency injection.
+    
+    Supports configuration-driven stats aggregator instantiation for automated
+    statistics collection and research-focused metrics calculation.
+    
+    Args:
+        config: Stats aggregator configuration dictionary or DictConfig with '_target_'
+            field and appropriate parameters for the aggregator type.
+            
+    Returns:
+        Stats aggregator instance implementing StatsAggregatorProtocol or None if creation fails
+        
+    Examples:
+        Basic stats aggregator:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.analysis.BasicStatsAggregator',
+        ...     'calculate_success_rate': True,
+        ...     'calculate_efficiency_metrics': True
+        ... }
+        >>> aggregator = create_stats_aggregator(config)
+        
+        Advanced stats aggregator:
+        >>> config = {
+        ...     '_target_': 'plume_nav_sim.analysis.AdvancedStatsAggregator',
+        ...     'include_trajectory_analysis': True,
+        ...     'compute_spatial_metrics': True
+        ... }
+        >>> advanced_aggregator = create_stats_aggregator(config)
+    """
+    if not V1_ARCHITECTURE_AVAILABLE:
+        logger.warning(
+            "v1.0 architecture not available for stats aggregator creation",
+            extra={
+                "protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+    
+    try:
+        # Use Hydra instantiate for dependency injection
+        if HYDRA_INSTANTIATE_AVAILABLE:
+            aggregator = instantiate(config)
+            
+            # Validate protocol compliance
+            if (hasattr(aggregator, 'calculate_episode_stats') and hasattr(aggregator, 'calculate_run_stats') 
+                and hasattr(aggregator, 'export_summary')):
+                logger.info(
+                    f"Successfully created stats aggregator: {type(aggregator).__name__}",
+                    extra={
+                        "metric_type": "component_creation_success",
+                        "component_type": "stats_aggregator",
+                        "implementation": type(aggregator).__name__
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return aggregator
+            else:
+                logger.error(
+                    f"Stats aggregator does not implement StatsAggregatorProtocol: {type(aggregator).__name__}",
+                    extra={
+                        "metric_type": "component_creation_error",
+                        "component_type": "stats_aggregator",
+                        "error": "protocol_compliance_failure"
+                    }
+                ) if LOGGING_AVAILABLE else None
+                return None
+        
+        else:
+            logger.error(
+                "No stats aggregator creation mechanism available",
+                extra={
+                    "hydra_available": HYDRA_INSTANTIATE_AVAILABLE
+                }
+            ) if LOGGING_AVAILABLE else None
+            return None
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to create stats aggregator: {e}",
+            extra={
+                "metric_type": "component_creation_error",
+                "component_type": "stats_aggregator",
+                "error": str(e)
+            }
+        ) if LOGGING_AVAILABLE else None
+        return None
+
+
 def get_available_environments() -> Dict[str, Dict[str, Any]]:
     """
     Get information about all available environment IDs and their capabilities.
@@ -907,23 +1655,85 @@ def get_available_environments() -> Dict[str, Dict[str, Any]]:
             'extensibility_hooks': ['compute_additional_obs', 'compute_extra_reward', 'on_episode_end'],
             'frame_cache_modes': ['none', 'lru', 'all'],
             'modular_architecture': True,
+            'v1_architecture': V1_ARCHITECTURE_AVAILABLE,
             'pluggable_components': {
                 'plume_models': ['gaussian', 'turbulent', 'video_adapter'],
                 'wind_fields': ['constant', 'turbulent', 'time_varying'],
-                'sensors': ['binary', 'concentration', 'gradient', 'historical']
+                'sensors': ['binary', 'concentration', 'gradient', 'historical'],
+                # v1.0 protocol-based components
+                'sources': ['point_source', 'multi_source', 'dynamic_source'],
+                'boundary_policies': ['terminate', 'bounce', 'wrap', 'clip'],
+                'action_interfaces': ['continuous_2d', 'cardinal_discrete'],
+                'recorders': ['parquet', 'hdf5', 'sqlite', 'none'],
+                'stats_aggregators': ['basic', 'advanced'],
+                'agent_initializers': ['uniform_random', 'grid', 'fixed_list', 'from_dataset']
             },
             'component_availability': {
                 'plume_models': PLUME_MODELS_AVAILABLE,
                 'wind_fields': WIND_FIELDS_AVAILABLE,  
                 'sensors': SENSORS_AVAILABLE,
-                'protocols': PROTOCOLS_AVAILABLE
+                'protocols': PROTOCOLS_AVAILABLE,
+                'new_protocols': NEW_PROTOCOLS_AVAILABLE,
+                'sources': SOURCE_COMPONENTS_AVAILABLE,
+                'boundary_policies': BOUNDARY_COMPONENTS_AVAILABLE,
+                'action_interfaces': ACTION_COMPONENTS_AVAILABLE,
+                'recorders': RECORDER_COMPONENTS_AVAILABLE,
+                'hydra_injection': HYDRA_INSTANTIATE_AVAILABLE
             },
             'available': GYMNASIUM_AVAILABLE and MODULAR_ARCHITECTURE_AVAILABLE,
-            'description': 'Advanced modular environment with pluggable plume models, wind fields, and sensors',
-            'recommended': MODULAR_ARCHITECTURE_AVAILABLE,
-            'performance_target': '<10ms step time',
-            'configuration_driven': True
+            'description': 'Enhanced modular environment with v1.0 protocol-based component architecture',
+            'recommended': MODULAR_ARCHITECTURE_AVAILABLE and V1_ARCHITECTURE_AVAILABLE,
+            'performance_target': '<33ms step time',
+            'configuration_driven': True,
+            'hook_system_enabled': True,
+            'dependency_injection_enabled': HYDRA_INSTANTIATE_AVAILABLE,
+            'deterministic_seeding': V1_ARCHITECTURE_AVAILABLE
         }
+        
+        # Add enhanced v1.0 environment if fully available
+        if V1_ARCHITECTURE_AVAILABLE and V1_COMPONENTS_AVAILABLE:
+            environments['PlumeNavSim-v1-Enhanced'] = {
+                'api_type': 'gymnasium',
+                'api_version': '0.29.x',
+                'step_returns': '5-tuple',
+                'reset_signature': 'reset(seed=None, options=None)',
+                'supports_terminated_truncated': True,
+                'extensibility_hooks': ['compute_additional_obs', 'compute_extra_reward', 'on_episode_end'],
+                'frame_cache_modes': ['none', 'lru', 'all'],
+                'modular_architecture': True,
+                'v1_architecture': True,
+                'protocol_based_components': True,
+                'pluggable_components': {
+                    'plume_models': ['gaussian', 'turbulent', 'video_adapter'],
+                    'wind_fields': ['constant', 'turbulent', 'time_varying'],
+                    'sensors': ['binary', 'concentration', 'gradient', 'historical'],
+                    'sources': ['point_source', 'multi_source', 'dynamic_source'],
+                    'boundary_policies': ['terminate', 'bounce', 'wrap', 'clip'],
+                    'action_interfaces': ['continuous_2d', 'cardinal_discrete'],
+                    'recorders': ['parquet', 'hdf5', 'sqlite', 'none'],
+                    'stats_aggregators': ['basic', 'advanced'],
+                    'agent_initializers': ['uniform_random', 'grid', 'fixed_list', 'from_dataset']
+                },
+                'component_availability': {
+                    'all_components': V1_COMPONENTS_AVAILABLE,
+                    'sources': SOURCE_COMPONENTS_AVAILABLE,
+                    'boundary_policies': BOUNDARY_COMPONENTS_AVAILABLE,
+                    'action_interfaces': ACTION_COMPONENTS_AVAILABLE,
+                    'recorders': RECORDER_COMPONENTS_AVAILABLE,
+                    'agent_initializers': AGENT_INIT_COMPONENTS_AVAILABLE,
+                    'hydra_injection': HYDRA_INSTANTIATE_AVAILABLE
+                },
+                'available': GYMNASIUM_AVAILABLE and V1_ARCHITECTURE_AVAILABLE and V1_COMPONENTS_AVAILABLE,
+                'description': 'Full v1.0 protocol-based environment with complete component ecosystem',
+                'recommended': V1_COMPONENTS_AVAILABLE,
+                'performance_target': '<33ms step time',
+                'configuration_driven': True,
+                'hook_system_enabled': True,
+                'dependency_injection_enabled': True,
+                'deterministic_seeding': True,
+                'immutable_config_snapshot': True,
+                'zero_code_extensibility': True
+            }
         
         environments['OdorPlumeNavigation-v1'] = {
             'api_type': 'legacy_compatible',
@@ -1013,6 +1823,19 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             'components_partial': MODULAR_COMPONENTS_PARTIAL,
             'components_complete': MODULAR_COMPONENTS_COMPLETE
         },
+        'v1_architecture': {
+            'new_protocols_available': NEW_PROTOCOLS_AVAILABLE,
+            'hydra_instantiate_available': HYDRA_INSTANTIATE_AVAILABLE,
+            'v1_architecture_available': V1_ARCHITECTURE_AVAILABLE,
+            'v1_components_available': V1_COMPONENTS_AVAILABLE,
+            'v1_components_partial': V1_COMPONENTS_PARTIAL,
+            'enhanced_environment_available': ENHANCED_ENVIRONMENT_AVAILABLE,
+            'source_components_available': SOURCE_COMPONENTS_AVAILABLE,
+            'agent_init_components_available': AGENT_INIT_COMPONENTS_AVAILABLE,
+            'boundary_components_available': BOUNDARY_COMPONENTS_AVAILABLE,
+            'action_components_available': ACTION_COMPONENTS_AVAILABLE,
+            'recorder_components_available': RECORDER_COMPONENTS_AVAILABLE
+        },
         'component_implementations': {
             'plume_models': {
                 'gaussian': GaussianPlumeModel is not None,
@@ -1029,6 +1852,28 @@ def diagnose_environment_setup() -> Dict[str, Any]:
                 'concentration': ConcentrationSensor is not None,
                 'gradient': GradientSensor is not None,
                 'historical': HistoricalSensor is not None
+            },
+            'v1_sources': {
+                'point_source': PointSource is not None,
+                'multi_source': MultiSource is not None,
+                'dynamic_source': DynamicSource is not None,
+                'source_factory': create_source is not None
+            },
+            'v1_initializers': {
+                'uniform_random': UniformRandomInitializer is not None,
+                'initializer_factory': create_agent_initializer is not None
+            },
+            'v1_boundaries': {
+                'terminate_boundary': TerminateBoundary is not None,
+                'boundary_factory': create_boundary_policy is not None
+            },
+            'v1_actions': {
+                'continuous_2d': Continuous2DAction is not None,
+                'action_factory': create_action_interface is not None
+            },
+            'v1_recorders': {
+                'recorder_manager': RecorderManager is not None,
+                'recorder_factory': RecorderFactory is not None
             }
         },
         'environments': get_available_environments(),
@@ -1042,7 +1887,19 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             'modular_components': MODULAR_ARCHITECTURE_AVAILABLE,
             'pluggable_plume_models': PLUME_MODELS_AVAILABLE,
             'configurable_wind_fields': WIND_FIELDS_AVAILABLE,
-            'flexible_sensors': SENSORS_AVAILABLE
+            'flexible_sensors': SENSORS_AVAILABLE,
+            # v1.0 enhanced capabilities
+            'v1_protocol_architecture': V1_ARCHITECTURE_AVAILABLE,
+            'hydra_dependency_injection': HYDRA_INSTANTIATE_AVAILABLE,
+            'pluggable_sources': SOURCE_COMPONENTS_AVAILABLE,
+            'configurable_agent_initialization': AGENT_INIT_COMPONENTS_AVAILABLE,
+            'flexible_boundary_policies': BOUNDARY_COMPONENTS_AVAILABLE,
+            'standardized_action_interfaces': ACTION_COMPONENTS_AVAILABLE,
+            'comprehensive_data_recording': RECORDER_COMPONENTS_AVAILABLE,
+            'zero_code_extensibility': V1_ARCHITECTURE_AVAILABLE,
+            'deterministic_seeding': V1_ARCHITECTURE_AVAILABLE,
+            'hook_system': V1_ARCHITECTURE_AVAILABLE,
+            'enhanced_environment': ENHANCED_ENVIRONMENT_AVAILABLE
         },
         'recommendations': []
     }
@@ -1110,6 +1967,44 @@ def diagnose_environment_setup() -> Dict[str, Any]:
             "Consider using create_modular_environment() for configuration-driven component selection"
         )
     
+    # v1.0 Protocol-based architecture recommendations
+    if not HYDRA_INSTANTIATE_AVAILABLE and NEW_PROTOCOLS_AVAILABLE:
+        diagnostics['recommendations'].append(
+            "Install Hydra for v1.0 dependency injection: pip install hydra-core>=1.3.0"
+        )
+    
+    if V1_ARCHITECTURE_AVAILABLE and not V1_COMPONENTS_AVAILABLE:
+        missing_v1_components = []
+        if not SOURCE_COMPONENTS_AVAILABLE:
+            missing_v1_components.append("source components")
+        if not AGENT_INIT_COMPONENTS_AVAILABLE:
+            missing_v1_components.append("agent initializers")
+        if not BOUNDARY_COMPONENTS_AVAILABLE:
+            missing_v1_components.append("boundary policies")
+        if not ACTION_COMPONENTS_AVAILABLE:
+            missing_v1_components.append("action interfaces")
+        if not RECORDER_COMPONENTS_AVAILABLE:
+            missing_v1_components.append("recorder components")
+            
+        diagnostics['recommendations'].append(
+            f"v1.0 architecture partially available - missing: {', '.join(missing_v1_components)}"
+        )
+    elif V1_COMPONENTS_AVAILABLE:
+        diagnostics['recommendations'].append(
+            "Full v1.0 protocol-based architecture available - use PlumeNavSim-v1-Enhanced for complete feature set"
+        )
+        diagnostics['recommendations'].append(
+            "Consider using create_source_component(), create_boundary_policy(), etc. for protocol-based component creation"
+        )
+        diagnostics['recommendations'].append(
+            "Use Hydra configuration groups (source/, boundary/, action/, record/, hooks/) for zero-code extensibility"
+        )
+    
+    if V1_ARCHITECTURE_AVAILABLE and ENHANCED_ENVIRONMENT_AVAILABLE:
+        diagnostics['recommendations'].append(
+            "Enhanced environment with v1.0 features available - supports deterministic seeding and hook system"
+        )
+    
     return diagnostics
 
 
@@ -1124,8 +2019,30 @@ __all__.extend([
     "create_modular_environment",
     "create_plume_model",
     "create_wind_field", 
-    "create_sensors"
+    "create_sensors",
+    # v1.0 Protocol-based component factory functions
+    "create_source_component",
+    "create_boundary_policy",
+    "create_action_interface", 
+    "create_recorder",
+    "create_stats_aggregator"
 ])
+
+# Add v1.0 component implementations to exports if available
+if SOURCE_COMPONENTS_AVAILABLE:
+    __all__.extend(["PointSource", "MultiSource", "DynamicSource"])
+
+if AGENT_INIT_COMPONENTS_AVAILABLE:
+    __all__.extend(["UniformRandomInitializer"])
+
+if BOUNDARY_COMPONENTS_AVAILABLE:
+    __all__.extend(["TerminateBoundary"])
+
+if ACTION_COMPONENTS_AVAILABLE:
+    __all__.extend(["Continuous2DAction"])
+
+if RECORDER_COMPONENTS_AVAILABLE:
+    __all__.extend(["RecorderManager", "RecorderFactory"])
 
 # Module initialization: Automatically register environments on import
 # This ensures environments are available via gymnasium.make() immediately
@@ -1159,7 +2076,19 @@ try:
                 "plume_models_available": PLUME_MODELS_AVAILABLE,
                 "wind_fields_available": WIND_FIELDS_AVAILABLE,
                 "sensors_available": SENSORS_AVAILABLE,
-                "modular_components_complete": MODULAR_COMPONENTS_COMPLETE
+                "modular_components_complete": MODULAR_COMPONENTS_COMPLETE,
+                # v1.0 architecture status
+                "v1_architecture_available": V1_ARCHITECTURE_AVAILABLE,
+                "new_protocols_available": NEW_PROTOCOLS_AVAILABLE,
+                "hydra_instantiate_available": HYDRA_INSTANTIATE_AVAILABLE,
+                "v1_components_available": V1_COMPONENTS_AVAILABLE,
+                "v1_components_partial": V1_COMPONENTS_PARTIAL,
+                "enhanced_environment_available": ENHANCED_ENVIRONMENT_AVAILABLE,
+                "source_components_available": SOURCE_COMPONENTS_AVAILABLE,
+                "agent_init_components_available": AGENT_INIT_COMPONENTS_AVAILABLE,
+                "boundary_components_available": BOUNDARY_COMPONENTS_AVAILABLE,
+                "action_components_available": ACTION_COMPONENTS_AVAILABLE,
+                "recorder_components_available": RECORDER_COMPONENTS_AVAILABLE
             }
         )
         
@@ -1175,21 +2104,48 @@ try:
     
     # Provide user-friendly summary for common import scenarios
     if successful_registrations:
-        if 'PlumeNavSim-v1' in successful_registrations:
-            # Advanced modular setup - recommend new environment
+        if 'PlumeNavSim-v1-Enhanced' in successful_registrations:
+            # Full v1.0 setup - recommend enhanced environment
             if LOGGING_AVAILABLE:
                 logger.info(
-                    "Advanced modular Gymnasium environment available",
+                    "Full v1.0 protocol-based architecture available",
+                    extra={
+                        "metric_type": "setup_success",
+                        "recommended_env_id": "PlumeNavSim-v1-Enhanced",
+                        "api_version": "0.29.x",
+                        "v1_architecture": True,
+                        "protocol_based_components": True,
+                        "hook_system_enabled": True,
+                        "dependency_injection_enabled": True,
+                        "deterministic_seeding": True,
+                        "zero_code_extensibility": True,
+                        "component_availability": {
+                            "sources": SOURCE_COMPONENTS_AVAILABLE,
+                            "boundary_policies": BOUNDARY_COMPONENTS_AVAILABLE,
+                            "action_interfaces": ACTION_COMPONENTS_AVAILABLE,
+                            "recorders": RECORDER_COMPONENTS_AVAILABLE,
+                            "agent_initializers": AGENT_INIT_COMPONENTS_AVAILABLE
+                        }
+                    }
+                )
+        elif 'PlumeNavSim-v1' in successful_registrations:
+            # Advanced modular setup - recommend modular environment
+            if LOGGING_AVAILABLE:
+                logger.info(
+                    "Enhanced modular Gymnasium environment available",
                     extra={
                         "metric_type": "setup_success",
                         "recommended_env_id": "PlumeNavSim-v1",
                         "api_version": "0.29.x",
                         "modular_architecture": True,
+                        "v1_architecture": V1_ARCHITECTURE_AVAILABLE,
                         "component_availability": {
                             "plume_models": PLUME_MODELS_AVAILABLE,
                             "wind_fields": WIND_FIELDS_AVAILABLE,
-                            "sensors": SENSORS_AVAILABLE
-                        }
+                            "sensors": SENSORS_AVAILABLE,
+                            "v1_components": V1_COMPONENTS_AVAILABLE
+                        },
+                        "note": "For full v1.0 features, ensure all components are available"
                     }
                 )
         elif 'PlumeNavSim-v0' in successful_registrations:
@@ -1201,7 +2157,7 @@ try:
                         "metric_type": "setup_success",
                         "recommended_env_id": "PlumeNavSim-v0",
                         "api_version": "0.29.x",
-                        "note": "For modular architecture features, ensure protocols are available"
+                        "note": "For v1.0 protocol-based architecture features, ensure v1.0 components are available"
                     }
                 )
         elif 'OdorPlumeNavigation-v1' in successful_registrations:
@@ -1211,7 +2167,7 @@ try:
                     "Running in legacy compatibility mode",
                     extra={
                         "metric_type": "compatibility_mode",
-                        "recommendation": "consider_upgrading_to_gymnasium",
+                        "recommendation": "consider_upgrading_to_gymnasium_and_v1_architecture",
                         "available_env_id": "OdorPlumeNavigation-v1"
                     }
                 )
@@ -1240,10 +2196,20 @@ except Exception as e:
 
 # Module provides the following environment IDs for registration:
 #
-# Advanced Modular Architecture (recommended):
+# Full v1.0 Protocol-Based Architecture (recommended for new projects):
+#   PlumeNavSim-v1-Enhanced - Returns 5-tuple (obs, reward, terminated, truncated, info)
+#   Usage: env = gymnasium.make('PlumeNavSim-v1-Enhanced', 
+#                              source={'_target_': 'plume_nav_sim.core.sources.PointSource', 'position': (50, 50)},
+#                              boundary={'_target_': 'plume_nav_sim.core.boundaries.TerminateBoundary'})
+#   Features: Full protocol-based component system, Hydra dependency injection, hook system,
+#            deterministic seeding, zero-code extensibility, immutable config snapshots
+#   Components: PointSource, MultiSource, DynamicSource, TerminateBoundary, Continuous2DAction,
+#              RecorderManager, UniformRandomInitializer, etc.
+#
+# Enhanced Modular Architecture:
 #   PlumeNavSim-v1 - Returns 5-tuple (obs, reward, terminated, truncated, info)
 #   Usage: env = gymnasium.make('PlumeNavSim-v1', plume_model={'type': 'GaussianPlumeModel'})
-#   Features: Pluggable plume models, wind fields, sensors, configuration-driven component selection
+#   Features: Enhanced pluggable components, v1.0 protocol support, hook system integration
 #   Components: GaussianPlumeModel, TurbulentPlumeModel, ConstantWindField, BinarySensor, etc.
 #
 # Modern Gymnasium API (standard):
@@ -1256,6 +2222,13 @@ except Exception as e:
 #   Usage: env = gym.make('OdorPlumeNavigation-v1', video_path='plume.mp4')
 #   Features: Backward compatibility, automatic format detection, deprecation guidance
 #
+# v1.0 Protocol-Based Component Factory Functions:
+#   create_source_component() - Create sources via Hydra (PointSource, MultiSource, DynamicSource)
+#   create_boundary_policy() - Create boundary policies via Hydra (Terminate, Bounce, Wrap, Clip)
+#   create_action_interface() - Create action interfaces via Hydra (Continuous2D, CardinalDiscrete)
+#   create_recorder() - Create recorders via Hydra (Parquet, HDF5, SQLite, None backends)
+#   create_stats_aggregator() - Create stats aggregators via Hydra (Basic, Advanced)
+#
 # Modular Component Factory Functions:
 #   create_modular_environment() - Create environment with pluggable components
 #   create_plume_model() - Instantiate plume models (Gaussian, Turbulent, Video)
@@ -1266,12 +2239,20 @@ except Exception as e:
 #   make_environment() - Recommended factory with enhanced configuration support
 #   get_available_environments() - Discovery of available environment IDs with capabilities
 #   get_environment_flavors() - Available configuration flavors (memory, memoryless, balanced)
-#   diagnose_environment_setup() - Comprehensive troubleshooting and modular component validation
+#   diagnose_environment_setup() - Comprehensive troubleshooting and v1.0 component validation
 #
 # Extensibility Hooks (available in all environments):
 #   compute_additional_obs(base_obs: dict) -> dict  # Add custom observations
 #   compute_extra_reward(base_reward: float, info: dict) -> float  # Reward shaping
 #   on_episode_end(final_info: dict) -> None  # Episode-level processing
+#
+# v1.0 Protocol-Based Component Protocols:
+#   SourceProtocol: get_emission_rate(), get_position(), update_state()
+#   BoundaryPolicyProtocol: apply_policy(), check_violations(), get_termination_status()
+#   ActionInterfaceProtocol: translate_action(), validate_action(), get_action_space()
+#   RecorderProtocol: record_step(), record_episode(), export_data()
+#   StatsAggregatorProtocol: calculate_episode_stats(), calculate_run_stats(), export_summary()
+#   AgentInitializerProtocol: initialize_positions(), validate_domain(), reset(), get_strategy_name()
 #
 # Modular Component Protocols:
 #   PlumeModelProtocol: concentration_at(), step(), reset()
@@ -1280,10 +2261,23 @@ except Exception as e:
 #   AgentObservationProtocol: construct_observation(), get_observation_space()
 #   AgentActionProtocol: validate_action(), process_action(), get_action_space()
 #
+# Hydra Configuration Groups (v1.0):
+#   conf/base/source/ - Source component configurations (PointSource, MultiSource, DynamicSource)
+#   conf/base/agent_init/ - Agent initialization strategies (uniform_random, grid, fixed_list)
+#   conf/base/boundary/ - Boundary policy configurations (terminate, bounce, wrap, clip)
+#   conf/base/action/ - Action interface configurations (continuous_2d, cardinal_discrete)
+#   conf/base/record/ - Recorder configurations (parquet, hdf5, sqlite, none)
+#   conf/base/hooks/ - Extension hook configurations for custom functionality
+#
 # Frame Cache Modes:
 #   'none' - No caching, minimal memory usage
 #   'lru' - LRU caching with configurable memory limits (default)
 #   'all' - Full preload caching for maximum performance
 #
-# For detailed usage examples, modular architecture guide, and component development,
-# see the project documentation at docs/extending_plume_nav_sim.md
+# Performance Targets:
+#   v1.0 environments: ≤33ms per simulation step for real-time simulation
+#   Component creation: <2s for environment initialization
+#   Hook system: <1ms overhead when disabled
+#
+# For detailed usage examples, v1.0 architecture guide, and component development,
+# see the project documentation at docs/extending_plume_nav_sim_v1.md
