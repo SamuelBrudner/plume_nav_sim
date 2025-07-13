@@ -1607,6 +1607,8 @@ class DebugGUI:
             if not STREAMLIT_AVAILABLE:
                 raise ImportError("Streamlit not available for web backend")
             return 'streamlit'
+        elif requested_backend == 'console':
+            return 'console'
         else:
             raise ValueError(f"Unknown backend: {requested_backend}")
     
