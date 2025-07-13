@@ -653,7 +653,7 @@ class TestDynamicSource:
         
         # Test custom emission pattern
         def pulse_pattern(t):
-            return 1.0 if int(t) % 2 == 0 else 0.5
+            return 1.0 if int(t) % 2 == 1 else 0.5
         
         source.set_emission_pattern(pulse_pattern)
         
