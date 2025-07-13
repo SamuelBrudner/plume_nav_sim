@@ -854,6 +854,10 @@ class DynamicSource:
         else:
             self._rng = np.random.RandomState()
         
+        # Custom emission pattern support
+        self._use_custom_emission_pattern = False
+        self._emission_pattern_func = None
+        
         # Performance tracking
         self._query_count = 0
         self._total_query_time = 0.0
@@ -984,11 +988,17 @@ class DynamicSource:
         # Base emission rate
         rate = self._base_emission_rate
         
-        # Add simple temporal variation (can be extended for more complex patterns)
-        if self._pattern_type in ["circular", "sinusoidal"]:
-            # Emission varies with movement pattern
-            variation = 0.2 * math.sin(2 * math.pi * self._frequency * self._time)
-            rate *= (1.0 + variation)
+        # Apply custom emission pattern if set
+        if hasattr(self, '_use_custom_emission_pattern') and self._use_custom_emission_pattern:
+            if hasattr(self, '_emission_pattern_func') and self._emission_pattern_func:
+                pattern_multiplier = self._emission_pattern_func(self._time)
+                rate *= pattern_multiplier
+        else:
+            # Add simple temporal variation (can be extended for more complex patterns)
+            if self._pattern_type in ["circular", "sinusoidal"]:
+                # Emission varies with movement pattern
+                variation = 0.2 * math.sin(2 * math.pi * self._frequency * self._time)
+                rate *= (1.0 + variation)
         
         # Ensure non-negative emission rate
         return max(0.0, rate)
