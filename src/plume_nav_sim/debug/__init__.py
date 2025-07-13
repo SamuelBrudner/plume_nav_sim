@@ -53,7 +53,7 @@ Examples:
 """
 
 import warnings
-import importlib
+import importlib.util
 from typing import Dict, Any, Optional, List, Union
 
 # Enhanced logging integration
