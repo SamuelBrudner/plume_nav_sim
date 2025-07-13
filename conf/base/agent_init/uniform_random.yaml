@@ -7,6 +7,11 @@
 # The configuration supports reproducible experimental setups with configurable seed,
 # collision avoidance parameters, and environment variable overrides.
 #
+# IMPLEMENTATION STATUS: 
+# - Core functionality (bounds, seed, margin) is implemented and working
+# - Advanced features are specified but require UniformRandomInitializer enhancement
+# - All TODO sections indicate features planned for v1.0 but not yet implemented
+#
 # Feature: F-014 Agent Initialization Strategies
 # Requirements: F-014-RQ-001 (Deterministic seeding), F-014-RQ-004 (Runtime switching)
 # Performance Target: <1ms initialization for 100 agents
@@ -44,7 +49,8 @@ _target_: plume_nav_sim.core.initialization.UniformRandomInitializer
 # Format: [width, height] in simulation units (typically meters)
 # Agents will be placed uniformly at random within [0, width] x [0, height]
 # Must be positive values, validated at initialization time
-domain_bounds: [100.0, 100.0]
+# Note: Parameter name 'bounds' matches UniformRandomInitializer constructor
+bounds: [100.0, 100.0]
 
 # Random seed for deterministic position generation
 # - null: Non-deterministic random behavior (different each run)
@@ -61,12 +67,16 @@ seed: null
 # - Useful for boundary policy integration and collision prevention
 margin: 0.0
 
+# Advanced Features (TODO: Not yet implemented in current UniformRandomInitializer)
+# These parameters are part of the v1.0 specification but require implementation enhancement
+
 # Minimum distance between agents during initialization
 # Controls spatial distribution density and prevents overcrowding
 # - 0.0: No minimum distance enforced (pure uniform random)
 # - >0: Rejection sampling enforces minimum separation
 # - Units: simulation distance (typically meters)
 # - Performance impact: Higher values increase rejection sampling iterations
+# TODO: Implement rejection sampling in UniformRandomInitializer
 min_distance: 0.0
 
 # Maximum attempts for rejection sampling
@@ -75,10 +85,12 @@ min_distance: 0.0
 # - Higher values: Better constraint satisfaction, potential performance impact
 # - Recommended: 100-1000 for most scenarios
 # - Validation failure triggers fallback to relaxed constraints
+# TODO: Implement rejection sampling logic
 max_attempts: 100
 
 # Rejection sampling configuration
 # Advanced control over the collision avoidance algorithm
+# TODO: Implement rejection sampling in UniformRandomInitializer
 rejection_sampling:
   # Enable/disable rejection sampling for min_distance enforcement
   enabled: true
@@ -101,6 +113,7 @@ rejection_sampling:
 
 # Collision avoidance configuration
 # Additional safety measures for multi-agent initialization
+# TODO: Implement collision avoidance in UniformRandomInitializer
 collision_avoidance:
   # Enable post-placement collision checking and correction
   enabled: false
@@ -121,6 +134,7 @@ collision_avoidance:
 
 # Boundary handling configuration
 # Defines behavior when agents are placed near or outside domain bounds
+# TODO: Implement advanced boundary handling in UniformRandomInitializer
 boundary_handling:
   # Boundary enforcement strategy
   # - "clip": Clamp positions to domain bounds
@@ -139,6 +153,7 @@ boundary_handling:
 # Environment variable overrides
 # Allows runtime parameter modification without code changes
 # Critical for deployment flexibility and CI/CD integration
+# TODO: Implement environment variable override support in UniformRandomInitializer
 environment_overrides:
   # Mapping of environment variable names to configuration paths
   # Format: {"ENV_VAR_NAME": "config.path.to.parameter"}
@@ -162,6 +177,7 @@ environment_overrides:
 
 # Performance optimization settings
 # Fine-tuning for large-scale multi-agent scenarios
+# TODO: Implement performance optimization features in UniformRandomInitializer
 performance:
   # Use vectorized NumPy operations for position generation
   # Significant speedup for large agent counts (>50 agents)
@@ -182,6 +198,7 @@ performance:
 
 # Validation and debugging settings
 # Development and debugging aids for configuration troubleshooting
+# TODO: Implement advanced validation features in UniformRandomInitializer
 validation:
   # Enable comprehensive parameter validation at initialization
   # Checks all constraints and relationships between parameters
@@ -222,6 +239,7 @@ metadata:
 
 # Legacy compatibility settings
 # Backward compatibility with v0.3.0 configuration formats
+# TODO: Implement legacy compatibility support in UniformRandomInitializer
 legacy:
   # Support legacy parameter names for smooth migration
   # Maps old parameter names to new configuration paths
