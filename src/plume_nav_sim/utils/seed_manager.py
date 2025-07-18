@@ -292,10 +292,11 @@ class SeedConfig(BaseModel):
         description="Warn when randomness is used without explicit seed setting"
     )
     
-    # Hydra-specific _target_ metadata for factory-driven instantiation
-    _target_: str = Field(
+    # Hydra-specific target_ metadata for factory-driven instantiation
+    target_: str = Field(
         default="plume_nav_sim.utils.seed_manager.setup_global_seed",
-        description="Hydra target for automatic seed setup"
+        description="Hydra target for automatic seed setup",
+        alias="_target_"
     )
     
     @field_validator('global_seed', 'python_seed', 'numpy_seed', 'hash_seed')

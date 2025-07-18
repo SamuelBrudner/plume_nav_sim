@@ -27,7 +27,7 @@ Modular Architecture Extensions:
 """
 
 from __future__ import annotations
-from typing import Protocol, Union, Optional, Tuple, List, Any, Dict, runtime_checkable
+from typing import Protocol, Union, Optional, Tuple, List, Any, Dict, Callable, runtime_checkable
 from typing_extensions import Self
 import numpy as np
 import warnings
@@ -4106,14 +4106,26 @@ SpeedsType = Union[List[float], np.ndarray]
 ConfigType = Union[DictConfig, NavigatorConfig, dict]
 """Type alias for configuration objects - supports Hydra, Pydantic, or dict."""
 
-ObservationHookType = callable
-"""Type alias for compute_additional_obs hook functions."""
+ObservationHookType = Callable[[dict], dict]
+"""Type alias for compute_additional_obs hook functions.
 
-RewardHookType = callable
-"""Type alias for compute_extra_reward hook functions."""
+Hook functions should accept base_obs dict and return additional observations dict.
+Example: def custom_obs_hook(base_obs: dict) -> dict: ...
+"""
 
-EpisodeEndHookType = callable
-"""Type alias for on_episode_end hook functions."""
+RewardHookType = Callable[[float, dict], float]
+"""Type alias for compute_extra_reward hook functions.
+
+Hook functions should accept base_reward float and info dict, return extra reward float.
+Example: def custom_reward_hook(base_reward: float, info: dict) -> float: ...
+"""
+
+EpisodeEndHookType = Callable[[dict], None]
+"""Type alias for on_episode_end hook functions.
+
+Hook functions should accept final_info dict and return None.
+Example: def custom_episode_end_hook(final_info: dict) -> None: ...
+"""
 
 # Type aliases for new modular component protocols
 
