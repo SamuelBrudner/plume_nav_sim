@@ -103,7 +103,7 @@ defaults:
   
   # Extension hook system for downstream project integration
   # Enable custom callbacks and observation/reward extensions
-  # - hooks: ${oc.env:HOOKS_CONFIG,"basic"}  # Options: basic, episode_stats, custom
+  - hooks: ${oc.env:HOOKS_CONFIG,"none"}  # Options: none, basic, episode_stats, custom
   
   # ======================================================================
   # V0.3.0 LEGACY COMPONENTS (Maintained for Backward Compatibility)
