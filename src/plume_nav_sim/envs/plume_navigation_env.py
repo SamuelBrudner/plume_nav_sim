@@ -433,6 +433,24 @@ except ImportError:
     
     SEED_UTILS_AVAILABLE = False
 
+# HookManager integration with graceful fallback handling
+try:
+    from plume_nav_sim.hooks import HookManager
+    HOOKS_AVAILABLE = True
+except ImportError:
+    # Fallback HookManager with no-op operations for graceful degradation
+    class HookManager:
+        def __init__(self):
+            pass
+        def register_pre_step(self, hook): pass
+        def register_post_step(self, hook): pass
+        def register_episode_end(self, hook): pass
+        def dispatch_pre_step(self): pass
+        def dispatch_post_step(self): pass
+        def dispatch_episode_end(self, final_info): pass
+        def clear_hooks(self): pass
+    HOOKS_AVAILABLE = False
+
 # Enhanced logging with correlation support
 try:
     from plume_nav_sim.utils.logging_setup import (
@@ -716,6 +734,7 @@ class PlumeNavigationEnv(gym.Env):
         action_interface: Optional[Union[Any, Dict[str, Any]]] = None,
         recorder: Optional[Union[Any, Dict[str, Any]]] = None,
         stats_aggregator: Optional[Union[StatsAggregator, Dict[str, Any]]] = None,
+        hook_manager_config: Optional[Union[Dict[str, Any], str]] = None,
         # Extensibility hooks
         extra_obs_fn: Optional[callable] = None,
         extra_reward_fn: Optional[callable] = None,
@@ -750,6 +769,19 @@ class PlumeNavigationEnv(gym.Env):
         while enabling advanced physics modeling and environmental dynamics.
         
         Args:
+            # v1.0 protocol-based components:
+            source: Source implementation or configuration dict for odor emission modeling.
+            agent_initializer: Agent initialization strategy or configuration dict.
+            boundary_policy: Boundary handling policy or configuration dict.
+            action_interface: Action translation interface or configuration dict.
+            recorder: Data recording backend or configuration dict.
+            stats_aggregator: Statistics aggregation system or configuration dict.
+            hook_manager_config: Hook manager configuration (dict or string). 
+                String values: "none" for zero-overhead NullHookSystem, others for HookManager.
+                Dict values: Configuration for hook registration and dispatch.
+                If None, defaults to "none" for backward compatibility.
+            
+            # Legacy components for backward compatibility:
             plume_model: Plume model implementation (PlumeModelProtocol) or configuration dict.
                 Can be GaussianPlumeModel, TurbulentPlumeModel, VideoPlumeAdapter, or config dict
                 with '_target_' field for Hydra instantiation. If None, defaults to VideoPlumeAdapter
@@ -802,6 +834,10 @@ class PlumeNavigationEnv(gym.Env):
                 
             Legacy video-based configuration:
                 >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", include_multi_sensor=True)
+                
+            Hook system configuration:
+                >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", hook_manager_config="none")  # Zero overhead
+                >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", hook_manager_config={"type": "full"})  # Full hooks
         """
         if not GYMNASIUM_AVAILABLE:
             raise ImportError(
@@ -823,6 +859,7 @@ class PlumeNavigationEnv(gym.Env):
         self._action_interface_config = action_interface
         self._recorder_config = recorder
         self._stats_aggregator_config = stats_aggregator
+        self._hook_manager_config = hook_manager_config
         
         # Store extensibility hooks
         self.extra_obs_fn = extra_obs_fn
@@ -856,6 +893,7 @@ class PlumeNavigationEnv(gym.Env):
         self.action_interface: Optional[Any] = None
         self.recorder: Optional[Any] = None
         self.stats_aggregator: Optional[StatsAggregator] = None
+        self.hook_manager: Optional[HookManager] = None
         
         # Legacy component instances (initialized later)
         self.plume_model: Optional[PlumeModelProtocol] = None
@@ -899,6 +937,7 @@ class PlumeNavigationEnv(gym.Env):
                 self._init_action_interface()
                 self._init_recorder()
                 self._init_stats_aggregator()
+                self._init_hook_manager()
                 
                 # Initialize legacy components for backward compatibility
                 self._init_plume_model()
@@ -941,6 +980,7 @@ class PlumeNavigationEnv(gym.Env):
                         "api_mode": "legacy" if self._use_legacy_api else "gymnasium",
                         "cache_enabled": self._cache_enabled,
                         "wind_enabled": self._wind_enabled,
+                        "hook_manager_type": type(self.hook_manager).__name__ if self.hook_manager else None,
                         "metric_type": "environment_initialization"
                     }
                 )
@@ -1092,6 +1132,53 @@ class PlumeNavigationEnv(gym.Env):
         except Exception as e:
             logger.warning(f"Failed to initialize statistics aggregator: {e}")
             self.stats_aggregator = None
+    
+    def _init_hook_manager(self) -> None:
+        """Initialize HookManager from Hydra configuration with default 'none' config."""
+        try:
+            if self._hook_manager_config is not None:
+                if isinstance(self._hook_manager_config, dict):
+                    # Configuration-based instantiation
+                    if HOOKS_AVAILABLE:
+                        # Check for specific configuration - if config is "none", use NullHookSystem
+                        if self._hook_manager_config.get("type") == "none" or self._hook_manager_config.get("name") == "none":
+                            # Use lightweight null system for zero overhead
+                            from plume_nav_sim.hooks import NullHookSystem
+                            self.hook_manager = NullHookSystem()
+                        else:
+                            # Use full HookManager with configuration
+                            self.hook_manager = HookManager()
+                    else:
+                        logger.warning("Hooks module not available, using fallback HookManager")
+                        self.hook_manager = HookManager()
+                elif isinstance(self._hook_manager_config, str):
+                    # String-based configuration (e.g., "none")
+                    if HOOKS_AVAILABLE:
+                        if self._hook_manager_config == "none":
+                            from plume_nav_sim.hooks import NullHookSystem
+                            self.hook_manager = NullHookSystem()
+                        else:
+                            self.hook_manager = HookManager()
+                    else:
+                        self.hook_manager = HookManager()
+                else:
+                    # Direct instance provided
+                    self.hook_manager = self._hook_manager_config
+                    
+                logger.debug(f"Hook manager initialized: {type(self.hook_manager).__name__}")
+            else:
+                # Default to NullHookSystem for zero overhead when no configuration provided
+                if HOOKS_AVAILABLE:
+                    from plume_nav_sim.hooks import NullHookSystem
+                    self.hook_manager = NullHookSystem()
+                else:
+                    self.hook_manager = HookManager()
+                logger.debug("No hook manager configuration provided, using NullHookSystem")
+                
+        except Exception as e:
+            logger.warning(f"Failed to initialize hook manager: {e}")
+            # Fallback to basic HookManager
+            self.hook_manager = HookManager()
     
     def _init_plume_model(self) -> None:
         """Initialize plume model implementation supporting GaussianPlumeModel, TurbulentPlumeModel, and VideoPlumeAdapter."""
@@ -1542,6 +1629,7 @@ class PlumeNavigationEnv(gym.Env):
         action_interface_config = config_dict.get("action_interface")
         recorder_config = config_dict.get("recorder")
         stats_aggregator_config = config_dict.get("stats_aggregator")
+        hook_manager_config = config_dict.get("hooks", "none")
         
         # Extract extensibility hooks
         extra_obs_fn = config_dict.get("extra_obs_fn")
@@ -1596,6 +1684,7 @@ class PlumeNavigationEnv(gym.Env):
             "action_interface": action_interface_config,
             "recorder": recorder_config,
             "stats_aggregator": stats_aggregator_config,
+            "hook_manager_config": hook_manager_config,
             # Extensibility hooks
             "extra_obs_fn": extra_obs_fn,
             "extra_reward_fn": extra_reward_fn,
@@ -1638,6 +1727,7 @@ class PlumeNavigationEnv(gym.Env):
                     "action_interface_config": action_interface_config,
                     "recorder_config": recorder_config,
                     "stats_aggregator_config": stats_aggregator_config,
+                    "hook_manager_config": hook_manager_config,
                     "hooks_configured": {
                         "extra_obs_fn": extra_obs_fn is not None,
                         "extra_reward_fn": extra_reward_fn is not None,
@@ -1777,6 +1867,10 @@ class PlumeNavigationEnv(gym.Env):
                 if hasattr(sensor, 'reset'):
                     sensor.reset()
             
+            # Reset HookManager to ensure clean episode initialization
+            if self.hook_manager is not None:
+                self.hook_manager.clear_hooks()
+            
             # Apply position override if provided
             if reset_position != self.initial_position or reset_orientation != self.initial_orientation:
                 self.navigator.reset(
@@ -1906,6 +2000,10 @@ class PlumeNavigationEnv(gym.Env):
         prev_orientation = self.navigator.orientations[0]
         prev_odor = self._previous_odor
         
+        # Dispatch pre-step hooks before action processing with zero-overhead early exit
+        if self.hook_manager is not None:
+            self.hook_manager.dispatch_pre_step()
+        
         try:
             # Apply action to navigator
             self.navigator.speeds[0] = speed
@@ -1991,6 +2089,10 @@ class PlumeNavigationEnv(gym.Env):
             
             extra_reward = self._apply_reward_hooks(base_reward, observation)
             reward = base_reward + extra_reward
+            
+            # Dispatch post-step hooks after reward computation with zero-overhead early exit
+            if self.hook_manager is not None:
+                self.hook_manager.dispatch_post_step()
             
             # Update step counter and tracking
             self._step_count += 1
@@ -2138,6 +2240,10 @@ class PlumeNavigationEnv(gym.Env):
         prev_orientation = self.navigator.orientations[0]
         prev_odor = self._previous_odor
         
+        # Dispatch pre-step hooks before action processing with zero-overhead early exit
+        if self.hook_manager is not None:
+            self.hook_manager.dispatch_pre_step()
+        
         try:
             # Apply action to navigator
             self.navigator.speeds[0] = speed
@@ -2226,6 +2332,10 @@ class PlumeNavigationEnv(gym.Env):
             extra_reward = self._apply_reward_hooks(base_reward, observation)
             reward = base_reward + extra_reward
             
+            # Dispatch post-step hooks after reward computation with zero-overhead early exit
+            if self.hook_manager is not None:
+                self.hook_manager.dispatch_post_step()
+            
             # Integrate Recorder hooks with buffered I/O for simulation state capture
             if self.recorder is not None:
                 try:
@@ -2312,6 +2422,14 @@ class PlumeNavigationEnv(gym.Env):
                 
                 # Apply custom episode end hooks
                 self._apply_episode_end_hooks(final_info)
+                
+                # Dispatch episode-end hooks when episode terminates with zero-overhead early exit
+                if self.hook_manager is not None:
+                    self.hook_manager.dispatch_episode_end(final_info)
+                
+                # Dispatch episode-end hooks when episode terminates with zero-overhead early exit
+                if self.hook_manager is not None:
+                    self.hook_manager.dispatch_episode_end(final_info)
             
             # Update exploration tracking
             self._update_exploration_tracking(self.navigator.positions[0])
@@ -3077,6 +3195,10 @@ class PlumeNavigationEnv(gym.Env):
             for sensor in self.sensors:
                 if hasattr(sensor, 'reset'):
                     sensor.reset()
+            
+            # Clear HookManager for cleanup
+            if self.hook_manager is not None and hasattr(self.hook_manager, 'clear_hooks'):
+                self.hook_manager.clear_hooks()
             
             # Clear frame cache to free memory
             if self._cache_enabled and hasattr(self, 'frame_cache') and self.frame_cache is not None:
