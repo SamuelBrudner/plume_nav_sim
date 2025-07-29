@@ -58,6 +58,7 @@ Examples:
 
 import abc
 import contextlib
+from contextlib import contextmanager
 import json
 import logging
 import queue
@@ -69,7 +70,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union, List, Protocol, TYPE_CHECKING
 
 import numpy as np
-from hydra import instantiate
+from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 # Import the RecorderProtocol from core protocols
