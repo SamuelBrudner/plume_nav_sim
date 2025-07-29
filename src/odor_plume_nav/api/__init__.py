@@ -48,7 +48,7 @@ Supported Import Patterns:
         >>> env = from_legacy(navigator, plume, cfg.simulation)
     
     Machine learning analysis tools:
-        >>> from odor_plume_nav.api import create_video_plume, visualize_simulation_results
+        >>> from odor_plume_nav.api import create_video_plume, visualize_trajectory
         >>> from odor_plume_nav.utils import set_global_seed
 
 Configuration Management:
@@ -223,18 +223,12 @@ from .navigation import (
 
 # Import visualization functions from utils module
 from ..utils.visualization import (
-    visualize_simulation_results,
     visualize_trajectory,
     SimulationVisualization,
-    batch_visualize_trajectories,
-    setup_headless_mode,
-    get_available_themes,
-    create_simulation_visualization,
-    export_animation,
 )
 
 # Import core protocols for type hints and advanced usage
-from ..core.navigator import NavigatorProtocol
+from ..core.protocols import NavigatorProtocol
 from ..environments.video_plume import VideoPlume
 
 # Import Gymnasium RL integration functions with enhanced error handling
@@ -498,17 +492,9 @@ def visualize_results(
         ...     show_plot=False
         ... )
     """
-    if animation:
-        return visualize_simulation_results(
-            positions=positions,
-            orientations=orientations,
-            odor_readings=odor_readings,
-            plume_frames=plume_frames,
-            **kwargs
-        )
-    else:
-        return visualize_trajectory(
-            positions=positions,
+    # Both animation and static visualization use visualize_trajectory for now
+    return visualize_trajectory(
+        positions=positions,
             orientations=orientations,
             plume_frames=plume_frames,
             config=cfg,
@@ -610,15 +596,8 @@ __all__ = [
     "visualize_results",
     
     # Visualization functions
-    "visualize_simulation_results",
     "visualize_trajectory", 
-    "visualize_plume_simulation",
     "SimulationVisualization",
-    "batch_visualize_trajectories",
-    "setup_headless_mode",
-    "get_available_themes",
-    "create_simulation_visualization",
-    "export_animation",
     
     # Core protocols and classes for advanced usage
     "NavigatorProtocol",
@@ -664,7 +643,7 @@ def _get_api_info() -> Dict[str, Any]:
             "create_navigator", 
             "create_video_plume", 
             "run_plume_simulation",
-            "visualize_simulation_results"
+            "visualize_trajectory"
         ],
         "rl_functions": [
             "create_gymnasium_environment",
