@@ -12,7 +12,7 @@ import json
 import copy
 from pathlib import Path
 
-from odor_plume_nav.config.validator import validate_config
+from odor_plume_nav.services.validator import validate_config
 
 
 def get_config_dir() -> Path:
