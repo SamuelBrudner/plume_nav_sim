@@ -63,8 +63,7 @@ import numpy as np
 # Import test utilities
 from tests.helpers.import_validator import (
     assert_imported_from,
-    assert_all_imported_from,
-    validate_new_package_components
+    assert_all_imported_from
 )
 
 # Import CLI components under test
