@@ -143,10 +143,15 @@ class MockShimLayer:
                     frame_globals = caller_frame.f_globals
                     frame_locals = caller_frame.f_locals
                     
-                    # Look for legacy gym module
+                    # Look for legacy gym module (distinguish from gymnasium)
                     if 'gym' in frame_globals and hasattr(frame_globals['gym'], '__version__'):
-                        gym_version = getattr(frame_globals['gym'], '__version__', '')
-                        if gym_version.startswith('0.'):  # Legacy gym versions
+                        gym_obj = frame_globals['gym']
+                        gym_version = getattr(gym_obj, '__version__', '')
+                        
+                        # Check if it's actually legacy gym (not gymnasium aliased as gym)
+                        # Legacy gym has __name__ as 'gym', gymnasium has __name__ as 'gymnasium'
+                        gym_name = getattr(gym_obj, '__name__', '')
+                        if gym_name == 'gym' and gym_version.startswith('0.'):  # Legacy gym versions
                             return True
                     
                     # Look for legacy calling patterns
@@ -714,7 +719,7 @@ class TestCrossRepositoryCompatibility:
             # Test parallel operations
             observations = []
             for i, env in enumerate(envs):
-                obs = env.reset(seed=DEFAULT_TEST_SEED + i)
+                obs, info = env.reset(seed=DEFAULT_TEST_SEED + i)  # Unpack Gymnasium reset() tuple
                 observations.append(obs)
             
             # Verify each environment is independent
@@ -891,7 +896,7 @@ class TestDeprecationManagement:
             assert "gymnasium.make('PlumeNavSim-v0')" in message
             
             # Verify stacklevel is appropriate (should point to caller)
-            assert warning.filename != __file__, "Warning should point to caller, not shim"
+            assert warning.filename == __file__, "Warning should point to caller (test file)"
     
     def test_warning_suppression(self, mock_shim_layer):
         """Test deprecation warnings can be suppressed."""
