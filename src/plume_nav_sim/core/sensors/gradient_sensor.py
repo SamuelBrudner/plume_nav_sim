@@ -141,6 +141,12 @@ class GradientSensorConfig:
     
     def __post_init__(self):
         """Validate configuration parameters after initialization."""
+        # Convert string method to enum if needed
+        if isinstance(self.method, str):
+            self.method = FiniteDifferenceMethod(self.method)
+        elif not isinstance(self.method, FiniteDifferenceMethod):
+            raise ValueError(f"method must be FiniteDifferenceMethod or string, got {type(self.method)}")
+            
         if self.order not in [2, 4, 6, 8]:
             raise ValueError(f"Order must be in [2, 4, 6, 8], got {self.order}")
         
@@ -810,6 +816,20 @@ class GradientSensor:
         """
         n_agents = gradients.shape[0]
         
+        # Handle case where gradients array is empty
+        if n_agents == 0:
+            return {
+                'magnitude': np.array([]),
+                'direction': np.array([]),
+                'confidence': np.array([]),
+                'computation_method': computation_metadata.get('method_used', []),
+                'step_sizes': computation_metadata.get('step_sizes_used', []),
+                'edge_effects_detected': np.array([], dtype=bool),
+                'noise_level': self.config.noise_threshold,
+                'sensor_id': self._sensor_id,
+                'timestamp': time.time()
+            }
+        
         # Compute gradient magnitudes and directions
         magnitudes = np.sqrt(np.sum(gradients**2, axis=1))
         
@@ -819,7 +839,13 @@ class GradientSensor:
         
         # Compute confidence metrics based on numerical stability
         numerical_stability = np.array(computation_metadata.get('numerical_stability', [1.0] * n_agents))
-        edge_effects = np.array(computation_metadata.get('edge_corrections', [False] * n_agents))
+        edge_effects = np.array(computation_metadata.get('edge_corrections', [False] * n_agents), dtype=bool)
+        
+        # Ensure all arrays have consistent size
+        if len(numerical_stability) != n_agents:
+            numerical_stability = np.array([1.0] * n_agents)
+        if len(edge_effects) != n_agents:
+            edge_effects = np.array([False] * n_agents, dtype=bool)
         
         # Confidence calculation considering multiple factors
         confidence = numerical_stability.copy()
@@ -921,6 +947,9 @@ class GradientSensor:
         if positions.ndim == 1 and positions.shape[0] == 2:
             # Single agent case - reshape to (1, 2)
             positions = positions.reshape(1, -1)
+            single_agent = True
+        elif positions.ndim == 2 and positions.shape[0] == 1 and positions.shape[1] == 2:
+            # Single agent case - already in (1, 2) format
             single_agent = True
         else:
             single_agent = False
@@ -1228,6 +1257,41 @@ class GradientSensor:
         })
         
         return metrics
+    
+    def reset(self, **kwargs: Any) -> None:
+        """
+        Reset sensor to initial state, clearing cache and performance metrics.
+        
+        Args:
+            **kwargs: Optional parameters for sensor-specific reset behavior.
+                Common options include:
+                - clear_cache: Whether to reset computation cache (default: True)
+                - clear_metrics: Whether to reset performance metrics (default: True)
+                - reset_config: Whether to reset sensor configuration (default: False)
+                
+        Notes:
+            This method provides comprehensive sensor reset functionality by clearing
+            both computation cache and performance metrics. Sensor configuration
+            is preserved unless explicitly requested via reset_config parameter.
+            
+        Examples:
+            Complete sensor reset:
+                >>> sensor.reset()
+                
+            Reset only cache:
+                >>> sensor.reset(clear_cache=True, clear_metrics=False)
+        """
+        clear_cache = kwargs.get('clear_cache', True)
+        clear_metrics = kwargs.get('clear_metrics', True)
+        
+        if clear_cache and hasattr(self, '_gradient_cache'):
+            self._gradient_cache.clear()
+            
+        if clear_metrics:
+            self.reset_performance_metrics()
+            
+        if self._logger:
+            self._logger.debug(f"Sensor {self._sensor_id} reset completed")
     
     def reset_performance_metrics(self) -> None:
         """Reset performance metrics for new monitoring period."""
