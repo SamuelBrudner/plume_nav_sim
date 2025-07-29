@@ -430,11 +430,11 @@ def create_navigator(
             if is_multi_agent:
                 # Multi-agent navigator
                 merged_params = {
-                    "positions": positions or config_params.get("positions"),
-                    "orientations": orientations or config_params.get("orientations"),
-                    "speeds": speeds or config_params.get("speeds"),
-                    "max_speeds": max_speeds or config_params.get("max_speeds"),
-                    "angular_velocities": angular_velocities or config_params.get("angular_velocities"),
+                    "positions": positions if positions is not None else config_params.get("positions"),
+                    "orientations": orientations if orientations is not None else config_params.get("orientations"),
+                    "speeds": speeds if speeds is not None else config_params.get("speeds"),
+                    "max_speeds": max_speeds if max_speeds is not None else config_params.get("max_speeds"),
+                    "angular_velocities": angular_velocities if angular_velocities is not None else config_params.get("angular_velocities"),
                 }
                 
                 # Add any additional config parameters
@@ -448,7 +448,7 @@ def create_navigator(
                     func_logger.info(
                         "Multi-agent navigator configuration validated",
                         extra={
-                            "num_agents": len(validated_config.positions) if validated_config.positions else None,
+                            "num_agents": len(validated_config.positions) if validated_config.positions is not None else None,
                             "config_source": "hydra" if cfg is not None else "direct",
                             "correlation_id": correlation_id
                         }
@@ -464,9 +464,7 @@ def create_navigator(
                         orientations=validated_config.orientations,
                         speeds=validated_config.speeds,
                         max_speeds=validated_config.max_speeds,
-                        angular_velocities=validated_config.angular_velocities,
-                        config=validated_config,
-                        seed_manager=get_seed_context()
+                        angular_velocities=validated_config.angular_velocities
                     )
                 else:
                     navigator = MultiAgentController(
@@ -474,8 +472,7 @@ def create_navigator(
                         orientations=validated_config.orientations,
                         speeds=validated_config.speeds,
                         max_speeds=validated_config.max_speeds,
-                        angular_velocities=validated_config.angular_velocities,
-                        config=validated_config
+                        angular_velocities=validated_config.angular_velocities
                     )
 
             else:
@@ -540,6 +537,9 @@ def create_navigator(
             
             return navigator
 
+        except ValueError:
+            # Re-raise ValueError as-is since these are user input validation errors
+            raise
         except Exception as e:
             func_logger.error(f"Navigator creation failed: {e}", extra={"correlation_id": correlation_id})
             raise RuntimeError(f"Failed to create navigator: {e}") from e
@@ -766,6 +766,14 @@ def create_video_plume(
 
             return plume
 
+        except ValueError as e:
+            # Preserve ValueError for validation errors
+            func_logger.error(f"VideoPlume validation failed: {e}", extra={"correlation_id": correlation_id})
+            raise
+        except FileNotFoundError as e:
+            # Preserve FileNotFoundError for file system errors
+            func_logger.error(f"VideoPlume file not found: {e}", extra={"correlation_id": correlation_id})
+            raise
         except Exception as e:
             func_logger.error(f"VideoPlume creation failed: {e}", extra={"correlation_id": correlation_id})
             raise RuntimeError(f"Failed to create VideoPlume: {e}") from e
@@ -889,6 +897,59 @@ def run_plume_simulation(
     episode_id = kwargs.get('episode_id', f"episode_{int(time.time())}")
     request_id = kwargs.get('request_id', str(uuid.uuid4()))
     
+    # Validate required inputs early, before any logging that accesses their attributes
+    if navigator is None:
+        raise ValueError("navigator parameter is required")
+    if video_plume is None:
+        raise ValueError("video_plume parameter is required")
+
+    # Type validation
+    if not hasattr(navigator, 'positions') or not hasattr(navigator, 'step'):
+        raise TypeError("navigator must implement NavigatorProtocol interface")
+    
+    if not hasattr(video_plume, 'get_frame') or not hasattr(video_plume, 'frame_count'):
+        raise TypeError("video_plume must be a VideoPlume instance")
+
+    # Validate direct parameters if provided
+    if num_steps is not None:
+        # Check if num_steps is an integer or can be converted to one
+        try:
+            num_steps_val = int(num_steps) if isinstance(num_steps, (int, float)) else int(num_steps)
+        except (ValueError, TypeError):
+            raise ValueError(f"num_steps must be a positive integer, got {type(num_steps).__name__}: {num_steps}")
+        
+        if num_steps_val <= 0:
+            raise ValueError(f"num_steps must be positive, got {num_steps_val}")
+        
+        # Reassign the validated value
+        num_steps = num_steps_val
+
+    if dt is not None:
+        # Check if dt is a number or can be converted to one
+        try:
+            dt_val = float(dt) if isinstance(dt, (int, float)) else float(dt)
+        except (ValueError, TypeError):
+            raise ValueError(f"dt must be a positive number, got {type(dt).__name__}: {dt}")
+        
+        if dt_val <= 0:
+            raise ValueError(f"dt must be positive, got {dt_val}")
+        
+        # Reassign the validated value
+        dt = dt_val
+
+    if step_size is not None:
+        # Check if step_size is a number or can be converted to one
+        try:
+            step_size_val = float(step_size) if isinstance(step_size, (int, float)) else float(step_size)
+        except (ValueError, TypeError):
+            raise ValueError(f"step_size must be a positive number, got {type(step_size).__name__}: {step_size}")
+        
+        if step_size_val <= 0:
+            raise ValueError(f"step_size must be positive, got {step_size_val}")
+        
+        # Reassign the validated value
+        step_size = step_size_val
+    
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
             "correlation_id": correlation_id,
@@ -916,19 +977,6 @@ def run_plume_simulation(
     # Performance monitoring for entire simulation
     with performance_monitor("simulation_execution") as perf_metrics:
         try:
-            # Validate required inputs
-            if navigator is None:
-                raise ValueError("navigator parameter is required")
-            if video_plume is None:
-                raise ValueError("video_plume parameter is required")
-
-            # Type validation
-            if not hasattr(navigator, 'positions') or not hasattr(navigator, 'step'):
-                raise TypeError("navigator must implement NavigatorProtocol interface")
-            
-            if not hasattr(video_plume, 'get_frame') or not hasattr(video_plume, 'frame_count'):
-                raise TypeError("video_plume must be a VideoPlume instance")
-
             # Initialize seed management if available
             if SEED_UTILS_AVAILABLE:
                 seed_context = get_seed_context()
@@ -954,11 +1002,9 @@ def run_plume_simulation(
 
             # Merge parameters with precedence and handle backward compatibility
             merged_params = {
-                "num_steps": num_steps or config_params.get("num_steps"),
-                "dt": dt or step_size or config_params.get("dt") or config_params.get("step_size"),
-                "sensor_distance": sensor_distance or config_params.get("sensor_distance", 5.0),
-                "sensor_angle": sensor_angle or config_params.get("sensor_angle", 45.0),
-                "record_trajectories": record_trajectories and config_params.get("record_trajectories", True),
+                "max_steps": num_steps or config_params.get("num_steps") or config_params.get("max_steps"),
+                "step_size": dt or step_size or config_params.get("dt") or config_params.get("step_size"),
+                "record_trajectory": record_trajectories and config_params.get("record_trajectories", True),
             }
 
             # Add any additional config parameters
@@ -989,8 +1035,8 @@ def run_plume_simulation(
                 raise ValueError(f"Invalid simulation configuration: {e}") from e
 
             # Get simulation parameters
-            num_steps = merged_params.get("num_steps", validated_config.max_steps)
-            dt = merged_params.get("dt", validated_config.step_size)
+            num_steps = validated_config.max_steps
+            dt = validated_config.step_size
             num_agents = navigator.num_agents
 
             # Initialize trajectory storage if recording enabled
