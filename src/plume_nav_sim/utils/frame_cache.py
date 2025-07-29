@@ -979,6 +979,116 @@ def create_no_cache(**kwargs) -> FrameCache:
     return FrameCache(mode=CacheMode.NONE, **kwargs)
 
 
+def create_frame_cache(mode: Union[str, CacheMode], memory_limit_mb: Optional[float] = None, **kwargs) -> FrameCache:
+    """
+    Factory function to create frame cache instances with various modes.
+    
+    Args:
+        mode: Cache mode, can be string ("lru", "all", "none") or CacheMode enum
+        memory_limit_mb: Memory limit in MB
+        **kwargs: Additional FrameCache parameters
+        
+    Returns:
+        Configured FrameCache instance
+    """
+    if isinstance(mode, str):
+        mode = CacheMode.from_string(mode)
+    
+    if memory_limit_mb is not None:
+        kwargs['memory_limit_mb'] = memory_limit_mb
+    
+    return FrameCache(mode=mode, **kwargs)
+
+
+def validate_cache_config(mode: Union[str, CacheMode], memory_limit_mb: float) -> Dict[str, Any]:
+    """
+    Validate cache configuration parameters.
+    
+    Args:
+        mode: Cache mode to validate
+        memory_limit_mb: Memory limit to validate
+        
+    Returns:
+        Dict with 'valid', 'errors', and 'warnings' keys
+    """
+    result = {
+        "valid": True,
+        "errors": [],
+        "warnings": []
+    }
+    
+    # Validate mode
+    try:
+        if isinstance(mode, str):
+            CacheMode.from_string(mode)
+    except ValueError as e:
+        result["valid"] = False
+        result["errors"].append(f"Invalid cache mode: {mode}")
+    
+    # Validate memory limit
+    if memory_limit_mb <= 0:
+        result["valid"] = False
+        result["errors"].append("Memory limit must be positive")
+    
+    # Add warnings for edge cases
+    if memory_limit_mb < 100:
+        result["warnings"].append("Memory limit is very low, may cause frequent evictions")
+    
+    return result
+
+
+def diagnose_cache_setup() -> Dict[str, Any]:
+    """
+    Diagnose cache setup and return system information.
+    
+    Returns:
+        Dict with diagnostic information
+    """
+    diagnostics = {
+        "cache_available": True,
+        "memory_monitoring_available": True,
+        "supported_modes": [mode.value for mode in CacheMode],
+        "recommendations": []
+    }
+    
+    # Check system memory
+    try:
+        memory = psutil.virtual_memory()
+        if memory.available < 1024 * 1024 * 1024:  # Less than 1GB
+            diagnostics["recommendations"].append("Low system memory detected, consider using smaller cache limits")
+    except:
+        diagnostics["memory_monitoring_available"] = False
+    
+    return diagnostics
+
+
+def estimate_cache_memory_usage(num_frames: int, frame_shape: Tuple[int, int, int], dtype: str = 'uint8') -> float:
+    """
+    Estimate memory usage for cache configuration.
+    
+    Args:
+        num_frames: Number of frames to cache
+        frame_shape: Shape of each frame (height, width, channels)
+        dtype: NumPy dtype string
+        
+    Returns:
+        Estimated memory usage in MB
+    """
+    dtype_map = {
+        'uint8': 1, 'int8': 1,
+        'uint16': 2, 'int16': 2,
+        'uint32': 4, 'int32': 4, 'float32': 4,
+        'uint64': 8, 'int64': 8, 'float64': 8
+    }
+    
+    bytes_per_pixel = dtype_map.get(dtype, 4)  # Default to 4 bytes
+    pixels_per_frame = np.prod(frame_shape)
+    bytes_per_frame = pixels_per_frame * bytes_per_pixel
+    total_bytes = num_frames * bytes_per_frame
+    
+    return total_bytes / (1024 * 1024)  # Convert to MB
+
+
 # Export public API
 __all__ = [
     'FrameCache',
@@ -986,5 +1096,9 @@ __all__ = [
     'CacheStatistics',
     'create_lru_cache',
     'create_preload_cache',
-    'create_no_cache'
+    'create_no_cache',
+    'create_frame_cache',
+    'validate_cache_config',
+    'diagnose_cache_setup',
+    'estimate_cache_memory_usage'
 ]
