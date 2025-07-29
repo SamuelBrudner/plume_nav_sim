@@ -88,7 +88,7 @@ recording = [
 ]
 debug = [
     # Debug GUI interface dependencies for interactive debugging
-    "PySide6>=6.0.0",
+    # "PySide6>=6.0.0",  # Temporarily disabled due to Python 3.12 compatibility issue
     "streamlit>=1.0.0",
 ]
 analysis = [
@@ -164,6 +164,7 @@ mypy = ">=1.5.0"
 # RL-specific testing and validation tools for Gymnasium API compliance
 gymnasium = {version = "==0.29.*", extras = ["classic-control"]}
 stable-baselines3 = {version = ">=2.0.0", extras = ["extra"]}
+hypothesis = "^6.136.6"
 
 [tool.poetry.group.docs.dependencies]
 sphinx = ">=8.0.0"
@@ -193,7 +194,7 @@ h5py = ">=3.0.0"
 
 [tool.poetry.group.debug.dependencies]
 # Debug GUI interface dependencies for interactive debugging
-PySide6 = ">=6.0.0"
+# PySide6 = ">=6.0.0"  # Temporarily disabled due to Python 3.12 compatibility issue
 streamlit = ">=1.0.0"
 
 [tool.poetry.group.analysis.dependencies]
@@ -213,7 +214,7 @@ viz = ["plotly", "seaborn"]
 rl = ["gymnasium", "stable-baselines3", "shimmy"]
 performance = ["numba"]
 recording = ["pandas", "pyarrow", "h5py"]
-debug = ["PySide6", "streamlit"]
+debug = ["streamlit"]
 analysis = ["scipy", "pandas"]
 
 [tool.pytest.ini_options]
