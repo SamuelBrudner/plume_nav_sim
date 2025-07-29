@@ -29,6 +29,6 @@ Integration:
     configuration workflows.
 """
 from odor_plume_nav.domain.navigator import Navigator
-from odor_plume_nav.core.protocols import NavigatorFactory
+from odor_plume_nav.core.protocols import NavigatorFactory, NavigatorProtocol
 
-__all__ = ["Navigator", "NavigatorFactory"]
+__all__ = ["Navigator", "NavigatorFactory", "NavigatorProtocol"]
