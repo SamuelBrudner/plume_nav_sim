@@ -59,7 +59,10 @@ from odor_plume_nav.environments.spaces import (
     ActionType, ObservationType
 )
 from odor_plume_nav.utils.seed_utils import (
-    set_global_seed, get_seed_context, scoped_seed, SeedConfig
+    set_global_seed, get_seed_context
+)
+from odor_plume_nav.utils.seed_manager import (
+    scoped_seed, SeedConfig
 )
 
 # Frame caching imports for performance optimization
