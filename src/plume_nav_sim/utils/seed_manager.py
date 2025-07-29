@@ -1108,6 +1108,43 @@ def get_last_seed() -> Optional[int]:
     return context.last_seed_value
 
 
+def get_current_seed() -> Optional[int]:
+    """
+    Get the current seed value (alias for get_last_seed).
+    
+    This function provides compatibility with test code that expects
+    a get_current_seed function. It returns the same value as get_last_seed.
+    
+    Returns:
+        Current seed value, or None if no seed has been set
+        
+    Example:
+        >>> print(f"Current seed: {get_current_seed()}")  # None
+        >>> set_global_seed(42)
+        >>> print(f"Current seed: {get_current_seed()}")  # 42
+    """
+    return get_last_seed()
+
+
+def get_seed_manager() -> SeedContext:
+    """
+    Get the current seed manager context.
+    
+    Returns the SeedContext object that manages seed state for the current thread.
+    This provides access to the full seed management functionality including
+    state stack, performance metrics, and configuration.
+    
+    Returns:
+        SeedContext: The current thread's seed management context
+        
+    Example:
+        >>> manager = get_seed_manager()
+        >>> print(f"Is seeded: {manager.is_seeded}")
+        >>> print(f"Last seed: {manager.last_seed_value}")
+    """
+    return get_seed_context()
+
+
 def generate_experiment_seed(experiment_name: str, base_seed: Optional[int] = None) -> int:
     """
     Generate deterministic seed for named experiments.
@@ -1389,6 +1426,7 @@ __all__ = [
     # Context managers and scoped operations
     "scoped_seed",
     "get_seed_context",
+    "get_seed_manager",
     "seed_sensitive_operation",
     
     # Configuration and setup
@@ -1404,6 +1442,7 @@ __all__ = [
     "validate_determinism",
     "is_seeded",
     "get_last_seed",
+    "get_current_seed",
     "generate_experiment_seed",
     
     # Hydra integration
