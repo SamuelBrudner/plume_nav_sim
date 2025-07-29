@@ -126,6 +126,11 @@ DEFAULT_TEST_SEED = 42
 TEST_CORRELATION_ID = f"test_gymnasium_api_{uuid.uuid4().hex[:8]}"
 
 
+def _is_numeric(value):
+    """Check if value is numeric (including numpy numeric types)."""
+    return isinstance(value, (int, float)) or np.issubdtype(type(value), np.number)
+
+
 @pytest.fixture(scope="session")
 def mock_video_file():
     """Create temporary mock video file for testing."""
@@ -312,7 +317,7 @@ class TestGymnasiumAPICompliance:
         
         # Validate types and structures
         assert gymnasium_env.observation_space.contains(obs), "Observation not in observation space"
-        assert isinstance(reward, (int, float)), f"Reward must be numeric, got {type(reward)}"
+        assert _is_numeric(reward), f"Reward must be numeric, got {type(reward)}"
         assert isinstance(terminated, bool), f"Terminated must be boolean, got {type(terminated)}"
         assert isinstance(truncated, bool), f"Truncated must be boolean, got {type(truncated)}"
         assert isinstance(info, dict), f"Info must be dict, got {type(info)}"
@@ -379,10 +384,10 @@ class TestGymnasiumAPICompliance:
         assert obs_space.contains(obs), "Generated observation not in observation space"
         
         # Validate individual components
-        assert isinstance(obs["odor_concentration"], (np.ndarray, float)), "Odor concentration type invalid"
+        assert isinstance(obs["odor_concentration"], np.ndarray) or _is_numeric(obs["odor_concentration"]), "Odor concentration type invalid"
         assert isinstance(obs["agent_position"], np.ndarray), "Agent position must be numpy array"
         assert len(obs["agent_position"]) == 2, "Agent position must be 2D"
-        assert isinstance(obs["agent_orientation"], (np.ndarray, float)), "Agent orientation type invalid"
+        assert isinstance(obs["agent_orientation"], np.ndarray) or _is_numeric(obs["agent_orientation"]), "Agent orientation type invalid"
     
     def test_action_space_compliance(self, gymnasium_env):
         """Test action space structure and bounds."""
@@ -455,7 +460,7 @@ class TestDualAPISupport:
         
         # Validate types
         assert legacy_env.observation_space.contains(obs), "Observation not in observation space"
-        assert isinstance(reward, (int, float)), f"Reward must be numeric, got {type(reward)}"
+        assert _is_numeric(reward), f"Reward must be numeric, got {type(reward)}"
         assert isinstance(done, bool), f"Done must be boolean, got {type(done)}"
         assert isinstance(info, dict), f"Info must be dict, got {type(info)}"
         
