@@ -107,7 +107,7 @@ from odor_plume_nav.utils.seed_utils import (
     get_gymnasium_seed_parameter
 )
 from odor_plume_nav.environments.compat import (
-    detect_api_version, create_compatibility_wrapper, 
+    detect_api_version, wrap_environment, 
     CompatibilityMode, PerformanceViolationError
 )
 from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
@@ -986,7 +986,7 @@ class TestCompatibilityLayer:
             )
             
             # Test wrapper creation
-            wrapped_env = create_compatibility_wrapper(env, compat_mode)
+            wrapped_env = wrap_environment(env, compat_mode)
             assert wrapped_env is not None
 
     def test_dual_api_support_simulation_execution(self):
