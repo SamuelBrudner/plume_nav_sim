@@ -116,7 +116,7 @@ except ImportError:
 from ..core.protocols import NavigatorProtocol
 from ..core.controllers import SingleAgentController, MultiAgentController
 from ..environments.video_plume import VideoPlume
-from ..config.schemas import (
+from ..config.models import (
     NavigatorConfig, 
     SingleAgentConfig, 
     MultiAgentConfig, 
@@ -139,7 +139,7 @@ except ImportError:
     except ImportError:
         SEED_UTILS_AVAILABLE = False
 
-from ..utils.visualization import visualize_simulation_results, visualize_trajectory
+from ..utils.visualization import visualize_trajectory
 
 # Gymnasium environment imports for RL integration
 try:
