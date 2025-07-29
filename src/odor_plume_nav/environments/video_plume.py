@@ -9,8 +9,8 @@ import pathlib
 import cv2
 import numpy as np
 
-# Import from the existing video_plume module for now
-from odor_plume_nav.video_plume import VideoPlume as LegacyVideoPlume
+# Import from the data.video_plume module for backward compatibility
+from odor_plume_nav.data.video_plume import VideoPlume as LegacyVideoPlume
 
 
 class VideoPlume(LegacyVideoPlume):
