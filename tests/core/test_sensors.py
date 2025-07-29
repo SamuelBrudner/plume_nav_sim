@@ -41,7 +41,7 @@ import numpy as np
 import numpy.testing as npt
 
 # Import test infrastructure and utilities
-from tests.core import (
+from tests.core.test_helpers import (
     TestPerformanceMonitor,
     performance_timer,
     requires_performance_validation,
