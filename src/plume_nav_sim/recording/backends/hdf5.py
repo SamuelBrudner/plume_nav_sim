@@ -293,10 +293,10 @@ class HDF5Recorder(BaseRecorder):
             self._fallback_mode = False
         
         # HDF5-specific state
-        self._h5_file: Optional[h5py.File] = None
+        self._h5_file: Optional["h5py.File"] = None
         self._file_lock = threading.RLock()
-        self._dataset_cache: Dict[str, h5py.Dataset] = {}
-        self._group_cache: Dict[str, h5py.Group] = {}
+        self._dataset_cache: Dict[str, "h5py.Dataset"] = {}
+        self._group_cache: Dict[str, "h5py.Group"] = {}
         
         # Performance monitoring
         self._write_times: List[float] = []
@@ -373,7 +373,7 @@ class HDF5Recorder(BaseRecorder):
                 # JSON encode complex types
                 self._h5_file.attrs[key] = json.dumps(value)
     
-    def create_group(self, group_path: str, **metadata: Any) -> Optional[h5py.Group]:
+    def create_group(self, group_path: str, **metadata: Any) -> Optional["h5py.Group"]:
         """
         Create HDF5 group with optional metadata attributes.
         
@@ -382,7 +382,7 @@ class HDF5Recorder(BaseRecorder):
             **metadata: Metadata attributes to attach to the group
             
         Returns:
-            Optional[h5py.Group]: Created group or None if in fallback mode
+            Optional["h5py.Group"]: Created group or None if in fallback mode
         """
         if self._fallback_mode or not self._h5_file:
             return None
@@ -414,7 +414,7 @@ class HDF5Recorder(BaseRecorder):
         dataset_path: str, 
         data: np.ndarray,
         **metadata: Any
-    ) -> Optional[h5py.Dataset]:
+    ) -> Optional["h5py.Dataset"]:
         """
         Create HDF5 dataset with chunking, compression, and metadata.
         
@@ -424,7 +424,7 @@ class HDF5Recorder(BaseRecorder):
             **metadata: Metadata attributes to attach to the dataset
             
         Returns:
-            Optional[h5py.Dataset]: Created dataset or None if in fallback mode
+            Optional["h5py.Dataset"]: Created dataset or None if in fallback mode
         """
         if self._fallback_mode or not self._h5_file:
             return None
