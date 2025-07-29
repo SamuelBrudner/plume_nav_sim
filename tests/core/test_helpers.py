@@ -9,7 +9,7 @@ import warnings
 # Performance threshold constants
 STEP_LATENCY_THRESHOLD_MS = 10.0  # 10ms threshold for step operations
 
-class TestPerformanceMonitor:
+class PerformanceMonitor:
     """Monitor performance metrics during tests."""
     
     def __init__(self):
