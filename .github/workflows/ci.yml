@@ -136,28 +136,26 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
         
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build>=0.7.0
         
-    - name: Load cached Poetry dependencies
+    - name: Load cached pip dependencies
       uses: actions/cache@v3
       with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
-          venv-${{ runner.os }}-
+          pip-${{ runner.os }}-
           
     - name: Install dependencies
       run: |
-        poetry install --with dev,rl
+        pip install -e .[dev,rl]
         
     - name: Verify Gymnasium version pinning
       run: |
-        poetry run python -c "
+        python -c "
         import gymnasium
         version = gymnasium.__version__
         assert version.startswith('0.29.'), f'Gymnasium version {version} not in required 0.29.x range'
@@ -166,7 +164,7 @@ jobs:
         
     - name: Verify Hydra structured config support
       run: |
-        poetry run python -c "
+        python -c "
         import hydra
         from hydra.core.config_store import ConfigStore
         from dataclasses import dataclass
@@ -175,13 +173,13 @@ jobs:
         
     - name: Security vulnerability check
       run: |
-        poetry run pip install safety
-        poetry run safety check --json || echo "⚠️ Security issues detected - review required"
+        pip install safety
+        safety check --json || echo "⚠️ Security issues detected - review required"
         
     - name: License compatibility check
       run: |
-        poetry run pip install pip-licenses
-        poetry run pip-licenses --format=json > licenses.json
+        pip install pip-licenses
+        pip-licenses --format=json > licenses.json
         echo "✅ License compatibility verified"
          
      - name: Validate new optional dependencies
@@ -189,7 +187,7 @@ jobs:
          echo "🔍 Testing optional dependency availability and graceful degradation..."
          
          # Test pandas for Parquet recording backend
-         poetry run python -c "
+         python -c "
          try:
              import pandas as pd
              version = pd.__version__
@@ -199,7 +197,7 @@ jobs:
          "
          
          # Test h5py for HDF5 recording backend  
-         poetry run python -c "
+         python -c "
          try:
              import h5py
              version = h5py.__version__
@@ -209,7 +207,7 @@ jobs:
          "
          
          # Test pyarrow for high-performance Parquet I/O
-         poetry run python -c "
+         python -c "
          try:
              import pyarrow as pa
              version = pa.__version__
@@ -219,7 +217,7 @@ jobs:
          "
          
          # Test PySide6 for Qt-based GUI debugging
-         poetry run python -c "
+         python -c "
          try:
              import PySide6
              version = PySide6.__version__
@@ -229,7 +227,7 @@ jobs:
          "
          
          # Test Streamlit for web-based debugging
-         poetry run python -c "
+         python -c "
          try:
              import streamlit as st
              version = st.__version__
@@ -246,7 +244,6 @@ jobs:
         name: dependency-report
         path: |
           licenses.json
-          poetry.lock
 
   # ==============================================================================
   # COMPREHENSIVE TEST SUITE EXECUTION
@@ -285,28 +282,23 @@ jobs:
           libportaudio2 \
           libsndfile1
           
-    - name: Install Poetry and dependencies
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        
-    - name: Load cached dependencies
+    - name: Load cached pip dependencies
       uses: actions/cache@v3
       with:
-        path: .venv
-        key: venv-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+        path: ~/.cache/pip
+        key: pip-${{ matrix.python-version }}-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
-          venv-${{ matrix.python-version }}-
+          pip-${{ matrix.python-version }}-
           
-    - name: Install project dependencies
+    - name: Install build dependencies and project
       run: |
-        poetry install --with dev,rl,viz
+        python -m pip install --upgrade pip
+        pip install build>=0.7.0
+        pip install -e .[dev,rl,viz]
         
     - name: Verify installation
       run: |
-        poetry run python -c "
+        python -c "
         import plume_nav_sim
         print(f'✅ Package version: {plume_nav_sim.__version__}')
         print('✅ Package imported successfully')
@@ -318,7 +310,7 @@ jobs:
          echo "🧪 Running protocol-based component tests for v1.0 features..."
          
          # Test new protocol implementations with detailed output
-         poetry run pytest \
+         pytest \
            tests/test_sources.py \
            tests/test_boundaries.py \
            tests/test_actions.py \
@@ -338,7 +330,7 @@ jobs:
          echo "🔧 Running conditional tests based on available optional dependencies..."
          
          # Test recording functionality with available backends
-         poetry run python -c "
+         python -c "
          import sys
          available_backends = []
          
@@ -372,20 +364,20 @@ jobs:
          "
          
          # Run recording tests with available backends
-         if poetry run python -c "import pandas; exit(0)" 2>/dev/null; then
+         if python -c "import pandas; exit(0)" 2>/dev/null; then
            echo "Running Parquet recording tests..."
-           poetry run pytest tests/test_recording.py -k "parquet or Parquet" --verbose || echo "⚠️ Parquet tests failed"
+           pytest tests/test_recording.py -k "parquet or Parquet" --verbose || echo "⚠️ Parquet tests failed"
          fi
          
-         if poetry run python -c "import h5py; exit(0)" 2>/dev/null; then
+         if python -c "import h5py; exit(0)" 2>/dev/null; then
            echo "Running HDF5 recording tests..."
-           poetry run pytest tests/test_recording.py -k "hdf5 or HDF5" --verbose || echo "⚠️ HDF5 tests failed"
+           pytest tests/test_recording.py -k "hdf5 or HDF5" --verbose || echo "⚠️ HDF5 tests failed"
          fi
          
          echo "✅ Conditional testing completed"
     - name: Run unit tests with coverage
       run: |
-        poetry run pytest \
+        pytest \
           --cov=plume_nav_sim \
           --cov-report=xml \
           --cov-report=html \
@@ -398,7 +390,7 @@ jobs:
           
     - name: Validate coverage thresholds
       run: |
-        poetry run python -c "
+        python -c "
         import xml.etree.ElementTree as ET
         tree = ET.parse('coverage.xml')
         root = tree.getroot()
@@ -415,7 +407,7 @@ jobs:
         
     - name: Run Gymnasium environment compliance tests
       run: |
-        poetry run python -c "
+        python -c "
         import gymnasium
         from gymnasium.utils.env_checker import check_env
         import plume_nav_sim
@@ -445,10 +437,10 @@ jobs:
          echo "📊 Collecting coverage data for new v1.0 components..."
          
          # Generate detailed coverage report for new modules
-         poetry run coverage report --show-missing --include="*sources*,*boundaries*,*actions*,*recording*,*stats*" > new_components_coverage.txt || echo "Coverage report generation completed"
+         coverage report --show-missing --include="*sources*,*boundaries*,*actions*,*recording*,*stats*" > new_components_coverage.txt || echo "Coverage report generation completed"
          
          # Generate JSON coverage data for new components
-         poetry run coverage json --include="*sources*,*boundaries*,*actions*,*recording*,*stats*" -o new_components_coverage.json || echo "JSON coverage generation completed"
+         coverage json --include="*sources*,*boundaries*,*actions*,*recording*,*stats*" -o new_components_coverage.json || echo "JSON coverage generation completed"
          
          echo "✅ New component coverage collection completed"
     - name: Upload test results
@@ -496,20 +488,15 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libopencv-dev python3-opencv ffmpeg
         
-    - name: Install Poetry and project
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        
-    - name: Install project with performance dependencies
+    - name: Install build dependencies and project
       run: |
-        poetry install --with dev,rl,viz
+        python -m pip install --upgrade pip
+        pip install build>=0.7.0
+        pip install -e .[dev,rl,viz]
         
     - name: Run simulation performance benchmarks
       run: |
-        poetry run python -c "
+        python -c "
         import time
         import numpy as np
         import gymnasium
@@ -553,7 +540,7 @@ jobs:
         
     - name: Run multi-agent memory efficiency test
       run: |
-        poetry run python -c "
+        python -c "
         import psutil
         import numpy as np
         import gymnasium
@@ -589,7 +576,7 @@ jobs:
         
     - name: Validate 2 GiB RAM per process limit
       run: |
-        poetry run python -c "
+        python -c "
         import psutil
         import numpy as np
         import gymnasium
@@ -639,7 +626,7 @@ jobs:
          
      - name: Multi-agent stress testing for 100 concurrent agents
        run: |
-         poetry run python -c "
+         python -c "
          import time
          import numpy as np
          import gymnasium
@@ -792,7 +779,7 @@ jobs:
          
      - name: Add automated performance baseline comparison
        run: |
-         poetry run python -c "
+         python -c "
          import json
          import os
          import time
@@ -853,7 +840,7 @@ jobs:
          "
     - name: Generate performance report
       run: |
-        poetry run python -c "
+        python -c "
         import json
         import time
         
@@ -926,18 +913,17 @@ jobs:
         # Set up working directory
         WORKDIR /app
         
-        # Install Poetry
-        RUN pip install poetry>=1.5.0
+        # Install build dependencies
+        RUN pip install --upgrade pip build>=0.7.0
         
         # Copy project files
-        COPY pyproject.toml poetry.lock ./
+        COPY pyproject.toml ./
         COPY src/ ./src/
         COPY tests/ ./tests/
         COPY conf/ ./conf/
         
-        # Configure Poetry and install dependencies
-        RUN poetry config virtualenvs.create false \
-            && poetry install --with dev,rl,viz --no-interaction --no-ansi
+        # Install project dependencies
+        RUN pip install -e .[dev,rl,viz]
         
         # Set environment variables for headless testing
         ENV MPLBACKEND=Agg
@@ -1253,20 +1239,15 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
         
-    - name: Install Poetry and dependencies
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        
-    - name: Install project
+    - name: Install build dependencies and project
       run: |
-        poetry install --with dev,rl
+        python -m pip install --upgrade pip
+        pip install build>=0.7.0
+        pip install -e .[dev,rl]
         
     - name: Test Loguru structured logging
       run: |
-        poetry run python -c "
+        python -c "
         import json
         import tempfile
         import os
@@ -1304,7 +1285,7 @@ jobs:
         
     - name: Test correlation ID propagation
       run: |
-        poetry run python -c "
+        python -c "
         import uuid
         from loguru import logger
         
@@ -1341,16 +1322,14 @@ jobs:
         python-version: '3.11'
         cache: 'pip'
         
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build>=0.7.0
         
     - name: Build package
       run: |
-        poetry build
+        python -m build
         ls -la dist/
         
     - name: Validate package installation
