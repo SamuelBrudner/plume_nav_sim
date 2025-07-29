@@ -60,6 +60,29 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
+    
+    # Mock strategies object to handle @given decorators when hypothesis is not available
+    class MockStrategies:
+        def floats(self, **kwargs):
+            return None
+        def integers(self, **kwargs):
+            return None
+        def text(self, **kwargs):
+            return None
+        def booleans(self, **kwargs):
+            return None
+        def lists(self, *args, **kwargs):
+            return None
+        def sampled_from(self, *args, **kwargs):
+            return None
+    
+    st = MockStrategies()
+    assume = lambda x: None
+    
+    # Mock stateful testing components
+    RuleBasedStateMachine = object
+    rule = lambda *args, **kwargs: lambda f: f
+    invariant = lambda *args, **kwargs: lambda f: f
 
 # Import pytest-benchmark for performance testing if available
 try:
