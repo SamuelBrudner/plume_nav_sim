@@ -1064,6 +1064,10 @@ class GymnasiumEnv(gym.Env):
         if self._use_legacy_api:
             # Return 4-tuple for legacy gym API compatibility
             done = terminated or truncated
+            # Preserve terminated/truncated flags in info for debugging
+            info = dict(info)  # Make a copy to avoid modifying original
+            info["terminated"] = terminated
+            info["truncated"] = truncated
             return observation, reward, done, info
         else:
             # Return 5-tuple for modern Gymnasium API
