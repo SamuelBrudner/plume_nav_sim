@@ -235,7 +235,13 @@ class BaseRecorder(abc.ABC, RecorderProtocol):
             else:
                 logger.warning(f"Unknown configuration parameter: {key}")
     
-    def record_step(self, step_data: Dict[str, Any]) -> None:
+    def record_step(
+        self, 
+        step_data: Dict[str, Any], 
+        step_number: int,
+        episode_id: Optional[int] = None,
+        **metadata: Any
+    ) -> None:
         """
         Record step-level data with performance-optimized buffering.
         
@@ -245,6 +251,9 @@ class BaseRecorder(abc.ABC, RecorderProtocol):
         
         Args:
             step_data: Dictionary containing step-level simulation data
+            step_number: Sequential step index within current episode (0-based)
+            episode_id: Optional episode identifier for data organization
+            **metadata: Additional metadata for step context and debugging
         """
         # Ultra-fast early exit for disabled mode (F-017-RQ-001)
         if not self.enabled:
@@ -260,9 +269,11 @@ class BaseRecorder(abc.ABC, RecorderProtocol):
             # Add metadata
             enriched_data = {
                 'timestamp': time.time(),
-                'episode_id': self.current_episode_id,
+                'episode_id': episode_id if episode_id is not None else self.current_episode_id,
+                'step_number': step_number,
                 'run_id': self.run_id,
-                **step_data
+                **step_data,
+                **metadata
             }
             
             # Add to buffer with thread safety
