@@ -441,6 +441,16 @@ else:
     
     def speed_strategy():
         return 1.0
+    
+    def controller_config_strategy():
+        """Fallback strategy for controller config when Hypothesis is not available."""
+        return {
+            'position': (50.0, 50.0),
+            'orientation': 45.0,
+            'speed': 1.0,
+            'max_speed': 5.0,
+            'angular_velocity': 0.0
+        }
 
 
 # Import validation and module structure tests
