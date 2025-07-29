@@ -716,6 +716,9 @@ class GymnasiumEnv(gym.Env):
             Reset operations are performance-critical and target <10ms completion
             time for real-time training workflows.
         """
+        # Call super().reset(seed=seed) first to properly initialize gymnasium's RNG
+        super().reset(seed=seed)
+        
         if self.performance_monitoring:
             reset_start = time.time()
         
@@ -885,12 +888,14 @@ class GymnasiumEnv(gym.Env):
             self.navigator.speeds[0] = speed
             self.navigator.angular_velocities[0] = angular_velocity
             
-            # Get current environment frame
+            # Get current environment frame with timing measurement
+            frame_start = time.time()
             current_frame = self.video_plume.get_frame(self.current_frame_index)
             if current_frame is None:
                 # Handle end of video by cycling or terminating
                 self.current_frame_index = 0
                 current_frame = self.video_plume.get_frame(0)
+            frame_retrieval_time = time.time() - frame_start
             
             # Execute navigator step
             self.navigator.step(current_frame, dt=1.0)
