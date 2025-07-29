@@ -937,9 +937,7 @@ def visualize_trajectory(
         }
         
         # Format-specific optimizations
-        if save_format in ['png', 'jpg', 'jpeg']:
-            save_kwargs['optimize'] = True
-        elif save_format == 'pdf':
+        if save_format == 'pdf':
             save_kwargs['metadata'] = {'Creator': 'Odor Plume Navigation Visualization'}
         elif save_format == 'svg':
             save_kwargs['metadata'] = {'Creator': 'Odor Plume Navigation'}
