@@ -30,7 +30,7 @@ import hashlib
 import threading
 from typing import Dict, Any, Optional, Tuple, Union, ContextManager, Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import warnings
 import platform
@@ -256,8 +256,33 @@ class SeedConfig(BaseModel):
     )
 
 
+@dataclass 
+class SeedConfigDataclass:
+    """
+    Dataclass version of SeedConfig for Hydra structured config compatibility.
+    
+    This is required for Hydra ConfigStore registration as Hydra expects
+    structured configs to be dataclasses, not Pydantic models.
+    """
+    global_seed: Optional[int] = None
+    python_seed: Optional[int] = None
+    numpy_seed: Optional[int] = None
+    hash_seed: Optional[int] = None
+    enable_validation: bool = True
+    strict_mode: bool = False
+    cross_platform_determinism: bool = True
+    validation_iterations: int = DETERMINISM_TEST_ITERATIONS
+    performance_monitoring: bool = True
+    auto_seed_on_import: bool = False
+    warn_on_unset_seed: bool = True
+    _target_: str = "odor_plume_nav.utils.seed_manager.setup_global_seed"
+
+
 # Thread-local storage for seed management context
 _seed_context = threading.local()
+
+# Global seed manager instance
+_global_seed_manager = None
 
 
 class SeedContext:
@@ -1074,7 +1099,7 @@ def register_seed_config_schema():
         cs.store(
             group="seed",
             name="default",
-            node=SeedConfig,
+            node=SeedConfigDataclass,
             package="seed"
         )
         
@@ -1143,6 +1168,80 @@ def seed_sensitive_operation(
     return decorator
 
 
+class SeedManager:
+    """
+    Centralized seed management class for reproducible experiments.
+    
+    Provides a singleton interface for managing random seeds across all
+    randomness sources with thread-safe operations and performance monitoring.
+    """
+    
+    def __init__(self):
+        self._context = get_seed_context()
+        self._logger = logger
+        self._current_seed = None
+        self._numpy_generator = None
+        
+    def set_seed(self, seed: int, validate: bool = True) -> Dict[str, Any]:
+        """Set global seed for all randomness sources."""
+        results = set_global_seed(seed, validate=validate)
+        self._current_seed = seed
+        # Create a new NumPy generator with the seed
+        self._numpy_generator = np.random.default_rng(seed)
+        return results
+    
+    def get_seed(self) -> Optional[int]:
+        """Get the current seed value."""
+        return self._current_seed or get_last_seed()
+    
+    def get_numpy_generator(self) -> np.random.Generator:
+        """Get the current NumPy random generator."""
+        if self._numpy_generator is None:
+            # Create default generator if none exists
+            self._numpy_generator = np.random.default_rng()
+        return self._numpy_generator
+    
+    def is_seeded(self) -> bool:
+        """Check if a seed has been set."""
+        return self._current_seed is not None or is_seeded()
+    
+    def reset(self) -> bool:
+        """Reset the seed manager to unseeded state."""
+        success = reset_random_state()
+        if success:
+            self._current_seed = None
+            self._numpy_generator = None
+        return success
+    
+    def capture_state(self) -> RandomState:
+        """Capture current random state."""
+        return capture_random_state()
+    
+    def restore_state(self, state: RandomState) -> bool:
+        """Restore random state."""
+        return restore_random_state(state)
+
+
+def get_seed_manager() -> SeedManager:
+    """Get or create the global seed manager instance."""
+    global _global_seed_manager
+    if _global_seed_manager is None:
+        _global_seed_manager = SeedManager()
+    return _global_seed_manager
+
+
+def get_current_seed() -> Optional[int]:
+    """Get the current global seed value."""
+    manager = get_seed_manager()
+    return manager.get_seed()
+
+
+def get_numpy_generator() -> np.random.Generator:
+    """Get the current NumPy random generator."""
+    manager = get_seed_manager()
+    return manager.get_numpy_generator()
+
+
 # Initialize module with performance tracking
 _module_init_start = time.time()
 
@@ -1180,12 +1279,19 @@ __all__ = [
     
     # Configuration and setup
     "SeedConfig",
+    "SeedConfigDataclass",
     "setup_global_seed",
     "create_seed_config_from_hydra",
     
     # State management
     "RandomState",
     "SeedContext",
+    "SeedManager",
+    
+    # Manager functions
+    "get_seed_manager",
+    "get_current_seed",
+    "get_numpy_generator",
     
     # Validation and utilities
     "validate_determinism",
