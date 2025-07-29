@@ -57,11 +57,12 @@ import numpy as np
 
 # Core protocol imports
 try:
-    from ..protocols import NavigatorProtocol
+    from ..protocols import NavigatorProtocol, SensorProtocol
     PROTOCOLS_AVAILABLE = True
 except ImportError:
     # Handle case where protocols don't exist yet
     NavigatorProtocol = object
+    SensorProtocol = object
     PROTOCOLS_AVAILABLE = False
 
 # Hydra integration for configuration management
@@ -93,66 +94,7 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 
 
-@runtime_checkable
-class SensorProtocol(Protocol):
-    """
-    Protocol defining the interface for all sensor implementations.
-    
-    This protocol establishes the contract for environmental sensing systems,
-    enabling pluggable sensor implementations with standardized interfaces.
-    All sensors must provide detection/measurement capabilities with
-    configurable parameters and performance monitoring integration.
-    
-    Key Design Principles:
-    - Uniform interface for different sensing modalities
-    - Vectorized operations for multi-agent scenarios
-    - Configuration-driven parameter management
-    - Performance monitoring and metadata collection
-    - Type safety for enhanced IDE tooling
-    """
-    
-    def detect(
-        self, 
-        concentration_values: np.ndarray, 
-        positions: np.ndarray,
-        **kwargs: Any
-    ) -> Union[np.ndarray, bool, float]:
-        """
-        Perform sensor detection/measurement at specified positions.
-        
-        Args:
-            concentration_values: Odor concentration values at positions
-            positions: Agent positions with shape (num_agents, 2)
-            **kwargs: Additional sensor-specific parameters
-            
-        Returns:
-            Union[np.ndarray, bool, float]: Sensor readings in appropriate format
-        """
-        ...
-    
-    def configure(self, **parameters: Any) -> None:
-        """
-        Configure sensor parameters dynamically.
-        
-        Args:
-            **parameters: Sensor-specific configuration parameters
-        """
-        ...
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """
-        Get sensor metadata including performance metrics and configuration.
-        
-        Returns:
-            Dict[str, Any]: Sensor metadata and performance statistics
-        """
-        ...
-    
-    def reset(self) -> None:
-        """
-        Reset sensor internal state for new episode.
-        """
-        ...
+
 
 
 @dataclass
@@ -798,6 +740,185 @@ class BinarySensor:
             'performance_violations': int(np.sum(detection_times > 1.0))  # Count of >1μs per agent
         }
 
+    def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+        """
+        Perform quantitative measurements using binary sensor (compatibility method).
+        
+        This method provides SensorProtocol compatibility by converting binary
+        detection results to quantitative measurements. Returns threshold values
+        for detected positions and zero for non-detected positions.
+        
+        Args:
+            plume_state: Current plume model state providing concentration field access
+            positions: Agent positions as array with shape (n_agents, 2) or (2,) for single agent
+                
+        Returns:
+            np.ndarray: Quantitative measurement values - threshold value for detections,
+                0.0 for non-detections. Shape matches detection output.
+                
+        Notes:
+            BinarySensor provides binary detection as its primary functionality.
+            This method enables compatibility with quantitative measurement interfaces
+            by mapping detection results to simple threshold-based values.
+            
+            For true quantitative measurements, use ConcentrationSensor instead.
+            
+        Examples:
+            Single agent measurement:
+            >>> position = np.array([15, 25])
+            >>> measurement = sensor.measure(plume_state, position)
+            
+            Multi-agent measurements:
+            >>> positions = np.array([[10, 20], [15, 25], [20, 30]])
+            >>> measurements = sensor.measure(plume_state, positions)
+        """
+        # Extract concentration values from plume state  
+        try:
+            # Try to get concentration values from plume state
+            if hasattr(plume_state, 'get_concentration_values'):
+                concentration_values = plume_state.get_concentration_values(positions)
+            elif hasattr(plume_state, 'concentration'):
+                # Try direct concentration access 
+                if hasattr(plume_state.concentration, '__call__'):
+                    concentration_values = plume_state.concentration(positions)
+                else:
+                    concentration_values = plume_state.concentration
+            elif hasattr(plume_state, '__call__'):
+                # Plume state is callable
+                concentration_values = plume_state(positions)
+            else:
+                # Fallback: assume plume_state is array-like concentration values
+                concentration_values = np.asarray(plume_state)
+                
+            # Get binary detections using primary detect() method
+            detections = self.detect(concentration_values, positions)
+        except Exception as e:
+            # If we can't extract concentrations, return zero measurements
+            if isinstance(positions, np.ndarray) and positions.ndim == 1:
+                return np.array([0.0], dtype=np.float64)
+            else:
+                return np.zeros(positions.shape[0] if positions.ndim == 2 else 1, dtype=np.float64)
+        
+        # Convert boolean detections to quantitative values
+        # Detected = threshold value, Not detected = 0.0
+        if isinstance(detections, (bool, np.bool_)):
+            measurements = np.array([float(self.config.threshold) if detections else 0.0])
+            return measurements.astype(np.float64)
+        else:
+            measurements = np.where(detections, self.config.threshold, 0.0)
+            return measurements.astype(np.float64)
+    
+    def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+        """
+        Compute concentration gradients using binary sensor (compatibility method).
+        
+        This method provides SensorProtocol compatibility by estimating gradients
+        from binary detection patterns. Uses finite difference approximation with
+        small spatial offsets to detect concentration gradient directions.
+        
+        Args:
+            plume_state: Current plume model state providing concentration field access  
+            positions: Agent positions as array with shape (n_agents, 2) or (2,) for single agent
+                
+        Returns:
+            np.ndarray: Estimated gradient vectors with shape (n_agents, 2) or (2,) for single agent.
+                Components represent approximate [∂c/∂x, ∂c/∂y] directions based on detection patterns.
+                
+        Notes:
+            BinarySensor provides binary detection as its primary functionality.
+            This gradient estimation is approximate and limited compared to dedicated
+            gradient sensors. For accurate gradient computation, use GradientSensor instead.
+            
+            The method uses small spatial offsets (0.1 units) to sample neighboring
+            positions and estimate gradient direction from detection differences.
+            
+        Examples:
+            Single agent gradient:
+            >>> position = np.array([15, 25])  
+            >>> gradient = sensor.compute_gradient(plume_state, position)
+            
+            Multi-agent gradients:
+            >>> positions = np.array([[10, 20], [15, 25], [20, 30]])
+            >>> gradients = sensor.compute_gradient(plume_state, positions)
+        """
+        # Ensure positions is 2D array for consistent processing
+        positions = np.atleast_2d(positions)
+        is_single_agent = positions.shape[0] == 1
+        
+        # Spatial offset for finite difference approximation
+        offset = 0.1  # Small offset for gradient estimation
+        
+        gradients = np.zeros((positions.shape[0], 2))
+        
+        for i, pos in enumerate(positions):
+            try:
+                # Extract concentration values for center position
+                if hasattr(plume_state, 'get_concentration_values'):
+                    center_conc = plume_state.get_concentration_values(pos.reshape(1, -1))
+                elif hasattr(plume_state, 'concentration'):
+                    if hasattr(plume_state.concentration, '__call__'):
+                        center_conc = plume_state.concentration(pos.reshape(1, -1))
+                    else:
+                        center_conc = plume_state.concentration
+                elif hasattr(plume_state, '__call__'):
+                    center_conc = plume_state(pos.reshape(1, -1))
+                else:
+                    center_conc = np.asarray(plume_state)
+                
+                center_detection = self.detect(center_conc, pos.reshape(1, -1))[0]
+                
+                # Sample neighboring positions for gradient estimation
+                pos_x_plus = pos + np.array([offset, 0])
+                pos_x_minus = pos - np.array([offset, 0])  
+                pos_y_plus = pos + np.array([0, offset])
+                pos_y_minus = pos - np.array([0, offset])
+                
+                # Get concentration values at neighboring positions  
+                if hasattr(plume_state, 'get_concentration_values'):
+                    conc_x_plus = plume_state.get_concentration_values(pos_x_plus.reshape(1, -1))
+                    conc_x_minus = plume_state.get_concentration_values(pos_x_minus.reshape(1, -1))
+                    conc_y_plus = plume_state.get_concentration_values(pos_y_plus.reshape(1, -1))
+                    conc_y_minus = plume_state.get_concentration_values(pos_y_minus.reshape(1, -1))
+                elif hasattr(plume_state, 'concentration'):
+                    if hasattr(plume_state.concentration, '__call__'):
+                        conc_x_plus = plume_state.concentration(pos_x_plus.reshape(1, -1))
+                        conc_x_minus = plume_state.concentration(pos_x_minus.reshape(1, -1))
+                        conc_y_plus = plume_state.concentration(pos_y_plus.reshape(1, -1))
+                        conc_y_minus = plume_state.concentration(pos_y_minus.reshape(1, -1))
+                    else:
+                        # Use same concentration for all positions if not callable
+                        conc_x_plus = conc_x_minus = conc_y_plus = conc_y_minus = plume_state.concentration
+                elif hasattr(plume_state, '__call__'):
+                    conc_x_plus = plume_state(pos_x_plus.reshape(1, -1))
+                    conc_x_minus = plume_state(pos_x_minus.reshape(1, -1))
+                    conc_y_plus = plume_state(pos_y_plus.reshape(1, -1))
+                    conc_y_minus = plume_state(pos_y_minus.reshape(1, -1))
+                else:
+                    # Use same concentration for all positions
+                    conc_x_plus = conc_x_minus = conc_y_plus = conc_y_minus = np.asarray(plume_state)
+                
+                # Get detections at neighboring positions
+                det_x_plus = self.detect(conc_x_plus, pos_x_plus.reshape(1, -1))[0]
+                det_x_minus = self.detect(conc_x_minus, pos_x_minus.reshape(1, -1))[0]
+                det_y_plus = self.detect(conc_y_plus, pos_y_plus.reshape(1, -1))[0] 
+                det_y_minus = self.detect(conc_y_minus, pos_y_minus.reshape(1, -1))[0]
+            except Exception:
+                # If concentration extraction fails, assume no gradient
+                center_detection = det_x_plus = det_x_minus = det_y_plus = det_y_minus = False
+            
+            # Estimate gradient components using finite differences
+            # Convert boolean to float for arithmetic
+            grad_x = (float(det_x_plus) - float(det_x_minus)) / (2 * offset)
+            grad_y = (float(det_y_plus) - float(det_y_minus)) / (2 * offset)
+            
+            gradients[i] = [grad_x, grad_y]
+        
+        # Return appropriate shape based on input
+        if is_single_agent and positions.shape[0] == 1:
+            return gradients[0]
+        else:
+            return gradients
+
 
 # Factory functions for configuration-driven instantiation
 
@@ -853,7 +974,6 @@ __all__ = [
     # Core sensor classes
     "BinarySensor",
     "BinarySensorConfig",
-    "SensorProtocol",
     
     # Factory functions
     "create_binary_sensor_from_config",
