@@ -45,11 +45,33 @@ import tempfile
 import json
 
 # Core testing framework imports from test infrastructure
-from tests.core import (
-    TestPerformanceMonitor, performance_timer,
-    HYPOTHESIS_AVAILABLE, GYMNASIUM_AVAILABLE,
-    coordinate_strategy, position_strategy, angle_strategy, speed_strategy
+from tests.core.test_helpers import (
+    TestPerformanceMonitor, performance_timer
 )
+
+# Check for optional dependencies
+try:
+    import hypothesis
+    HYPOTHESIS_AVAILABLE = True
+    from hypothesis import given, strategies as st
+    
+    # Define testing strategies
+    coordinate_strategy = st.floats(min_value=-1000.0, max_value=1000.0, allow_infinity=False, allow_nan=False)
+    position_strategy = st.tuples(coordinate_strategy, coordinate_strategy)
+    angle_strategy = st.floats(min_value=0.0, max_value=2*3.14159, allow_infinity=False, allow_nan=False)
+    speed_strategy = st.floats(min_value=0.0, max_value=100.0, allow_infinity=False, allow_nan=False)
+except ImportError:
+    HYPOTHESIS_AVAILABLE = False
+    coordinate_strategy = None
+    position_strategy = None
+    angle_strategy = None
+    speed_strategy = None
+
+try:
+    import gymnasium
+    GYMNASIUM_AVAILABLE = True
+except ImportError:
+    GYMNASIUM_AVAILABLE = False
 
 # Property-based testing with Hypothesis
 if HYPOTHESIS_AVAILABLE:
