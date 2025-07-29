@@ -117,7 +117,7 @@ CONCENTRATION_FIELD_THRESHOLD_MS = 8.0 # ≤8ms for concentration field generati
 
 # Test environment configuration for modular components
 MODULAR_TEST_CONFIG = {
-    "environment": "modular_testing",
+    "environment": "testing",
     "level": "INFO", 
     "format": "minimal",
     "console_enabled": True,
