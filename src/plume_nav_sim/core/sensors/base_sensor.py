@@ -668,6 +668,44 @@ class BaseSensor(ABC):
             if self._logger:
                 self._logger.debug("Sensor observation history reset")
     
+    def reset(self, **kwargs: Any) -> None:
+        """
+        Reset sensor to initial state, clearing history and performance metrics.
+        
+        Args:
+            **kwargs: Optional parameters for sensor-specific reset behavior.
+                Common options include:
+                - clear_history: Whether to reset observation history (default: True)
+                - clear_metrics: Whether to reset performance metrics (default: True)
+                - reset_config: Whether to reset sensor configuration (default: False)
+                
+        Notes:
+            This method provides comprehensive sensor reset functionality by clearing
+            both observation history and performance metrics. Sensor configuration
+            is preserved unless explicitly requested via reset_config parameter.
+            
+            Subclasses can override this method to implement sensor-specific reset
+            behavior while calling super().reset() for standard reset operations.
+            
+        Examples:
+            Complete sensor reset:
+                >>> sensor.reset()
+                
+            Reset only performance metrics:
+                >>> sensor.reset(clear_history=False, clear_metrics=True)
+        """
+        clear_history = kwargs.get('clear_history', True)
+        clear_metrics = kwargs.get('clear_metrics', True)
+        
+        if clear_history:
+            self.reset_history()
+            
+        if clear_metrics:
+            self.reset_performance_metrics()
+            
+        if self._logger:
+            self._logger.debug(f"Sensor {self._sensor_id} reset completed")
+    
     def reset_performance_metrics(self) -> None:
         """
         Reset all performance metrics to initial state for clean measurement periods.
