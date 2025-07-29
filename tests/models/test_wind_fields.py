@@ -46,7 +46,7 @@ import json
 
 # Core testing framework imports from test infrastructure
 from tests.core.test_helpers import (
-    TestPerformanceMonitor, performance_timer
+    PerformanceMonitor, performance_timer
 )
 
 # Check for optional dependencies
@@ -182,7 +182,7 @@ MAX_MEMORY_USAGE_MB = 50.0               # <50MB memory usage for typical repres
 @pytest.fixture
 def performance_monitor():
     """Enhanced performance monitor for wind field operation timing validation."""
-    return TestPerformanceMonitor
+    return PerformanceMonitor
 
 @pytest.fixture  
 def test_positions():
