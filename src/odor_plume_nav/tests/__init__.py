@@ -188,7 +188,6 @@ def check_test_dependencies():
     # Optional enhanced testing dependencies
     optional_deps = {
         'pytest_hydra': 'Hydra configuration testing',
-        'click.testing': 'CLI interface testing', 
         'sqlalchemy': 'Database session testing',
         'pytest_mock': 'Workflow orchestration mocking'
     }
