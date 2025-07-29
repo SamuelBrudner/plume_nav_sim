@@ -5442,7 +5442,7 @@ navigator: {memory_enabled: true, strategy: infotaxis}
 - **CLI Interface**: Comprehensive command-line tools with Click framework
 - **Multi-Framework Support**: Integration patterns for Kedro, RL, and ML workflows
 - **Docker Support**: Containerized development and deployment environments
-- **Dual Workflows**: Poetry and pip installation support
+- **Setuptools Build System**: Modern PEP 621-compliant packaging with setuptools>=61
 - **Enhanced Documentation**: Comprehensive usage examples and migration guides
 
 For detailed changes, see [CHANGELOG.md](CHANGELOG.md).
