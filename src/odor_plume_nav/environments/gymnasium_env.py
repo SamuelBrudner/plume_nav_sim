@@ -113,29 +113,60 @@ def _detect_legacy_gym_caller() -> bool:
     """
     Detect if environment is being created via legacy gym interface.
     
+    This function examines the call stack to determine if the caller is using
+    the legacy gym API or the modern gymnasium API. It prioritizes explicit
+    usage patterns over import presence.
+    
     Returns:
         bool: True if legacy gym is detected, False for modern Gymnasium
     """
     try:
         # Inspect call stack to detect caller context
         frame = inspect.currentframe()
+        gymnasium_usage_detected = False
+        
         while frame:
             frame = frame.f_back
             if frame and frame.f_globals:
                 module_name = frame.f_globals.get('__name__', '')
                 
-                # Check for legacy gym imports or usage patterns
-                if 'gym' in module_name and 'gymnasium' not in module_name:
-                    return True
+                # Look for explicit gymnasium usage in local variables
+                if frame.f_locals:
+                    # Check if gymnasium is being used explicitly in this frame
+                    for var_name, var_value in frame.f_locals.items():
+                        if hasattr(var_value, '__module__'):
+                            module_path = getattr(var_value, '__module__', '')
+                            if 'gymnasium' in module_path:
+                                gymnasium_usage_detected = True
+                                break
                 
-                # Check for legacy gym package in frame globals
-                if 'gym' in frame.f_globals and 'gymnasium' not in frame.f_globals:
-                    # Further validate it's the legacy gym
-                    gym_module = frame.f_globals.get('gym')
-                    if hasattr(gym_module, 'make') and not hasattr(gym_module, 'version'):
+                # Check if gymnasium module is actively used (not just imported)
+                if 'gymnasium' in frame.f_globals:
+                    gymnasium_module = frame.f_globals.get('gymnasium')
+                    # If gymnasium is imported and being used, prefer it
+                    if gymnasium_module and hasattr(gymnasium_module, 'make'):
+                        gymnasium_usage_detected = True
+                
+                # Only consider legacy gym if no gymnasium usage is detected
+                if not gymnasium_usage_detected:
+                    # Look for pure legacy gym usage
+                    if 'gym' in frame.f_globals and 'gymnasium' not in frame.f_globals:
+                        gym_module = frame.f_globals.get('gym')
+                        # Verify it's actually the legacy gym package
+                        if (hasattr(gym_module, 'make') and 
+                            hasattr(gym_module, '__version__') and 
+                            not hasattr(gym_module, 'vector')):  # vector is gymnasium-specific
+                            return True
+                            
+                    # Check module name patterns for legacy usage
+                    if ('gym' in module_name and 
+                        'gymnasium' not in module_name and 
+                        'test' not in module_name.lower()):
                         return True
-                        
+        
+        # Default to modern gymnasium if any gymnasium usage detected
         return False
+        
     except Exception:
         # If detection fails, default to modern Gymnasium API
         return False
