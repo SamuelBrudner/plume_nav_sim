@@ -110,7 +110,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol imports
-from .protocols import NavigatorProtocol, BoundaryPolicyProtocol
+from .protocols import NavigatorProtocol, BoundaryPolicyProtocol, SourceProtocol
 
 # Boundary policy factory import
 from .boundaries import create_boundary_policy
@@ -541,7 +541,18 @@ class BaseController:
         else:
             self._logger = None
     
-    # NavigatorProtocol boundary policy property for v1.0 architecture
+    # NavigatorProtocol properties for v1.0 architecture
+    
+    @property
+    def source(self) -> Optional[SourceProtocol]:
+        """
+        Get current source implementation for odor emission modeling.
+        
+        Returns:
+            Optional[SourceProtocol]: Source instance providing emission data and
+                position information, or None if no source is configured.
+        """
+        return getattr(self, '_source', None)
     
     @property
     def boundary_policy(self) -> Optional[BoundaryPolicyProtocol]:
