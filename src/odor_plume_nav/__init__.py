@@ -109,7 +109,7 @@ from odor_plume_nav.api import (
     create_navigator,
     create_video_plume,
     run_plume_simulation,
-    visualize_simulation_results,
+    visualize_trajectory,
 )
 
 # Enhanced API factory functions from merged application-layer components
@@ -132,7 +132,7 @@ from odor_plume_nav.core import (
     run_simulation
 )
 from odor_plume_nav.environments import VideoPlume
-from odor_plume_nav.visualization import visualize_trajectory
+from odor_plume_nav.utils.visualization import visualize_trajectory
 from odor_plume_nav.config import (
     NavigatorConfig, 
     SingleAgentConfig,
@@ -528,7 +528,7 @@ _base_exports = [
     'create_navigator',
     'create_video_plume', 
     'run_plume_simulation',
-    'visualize_simulation_results',
+    'visualize_trajectory',
     
     # Core navigation classes
     'Navigator',
