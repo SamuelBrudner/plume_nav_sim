@@ -38,8 +38,8 @@ class SingleAgentController:
         angular_velocity : float, optional
             Initial angular velocity in degrees/second, by default 0.0
         """
-        self._position = np.array([position]) if position is not None else np.array([[0.0, 0.0]])
-        self._orientation = np.array([orientation])
+        self._position = np.array([position], dtype=np.float64) if position is not None else np.array([[0.0, 0.0]], dtype=np.float64)
+        self._orientation = np.array([orientation], dtype=np.float64)
         self._speed = np.array([speed])
         self._max_speed = np.array([max_speed])
         self._angular_velocity = np.array([angular_velocity])
@@ -286,14 +286,14 @@ class MultiAgentController:
         """
         # Ensure we have at least one agent position
         if positions is None:
-            self._positions = np.array([[0.0, 0.0]])
+            self._positions = np.array([[0.0, 0.0]], dtype=np.float64)
         else:
-            self._positions = np.array(positions)
+            self._positions = np.array(positions, dtype=np.float64)
 
         num_agents = self._positions.shape[0]
 
         # Set defaults for other parameters if not provided
-        self._orientations = np.zeros(num_agents) if orientations is None else np.array(orientations)
+        self._orientations = np.zeros(num_agents, dtype=np.float64) if orientations is None else np.array(orientations, dtype=np.float64)
         self._speeds = np.zeros(num_agents) if speeds is None else np.array(speeds)
         self._max_speeds = np.ones(num_agents) if max_speeds is None else np.array(max_speeds)
         self._angular_velocities = np.zeros(num_agents) if angular_velocities is None else np.array(angular_velocities)
