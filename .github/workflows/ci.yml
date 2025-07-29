@@ -182,8 +182,8 @@ jobs:
         pip-licenses --format=json > licenses.json
         echo "✅ License compatibility verified"
          
-     - name: Validate new optional dependencies
-       run: |
+    - name: Validate new optional dependencies
+      run: |
          echo "🔍 Testing optional dependency availability and graceful degradation..."
          
          # Test pandas for Parquet recording backend
@@ -304,9 +304,8 @@ jobs:
         print('✅ Package imported successfully')
         "
         
-         
-     - name: Run protocol-based component tests
-       run: |
+    - name: Run protocol-based component tests
+      run: |
          echo "🧪 Running protocol-based component tests for v1.0 features..."
          
          # Test new protocol implementations with detailed output
@@ -325,8 +324,8 @@ jobs:
          
          echo "✅ Protocol-based component testing completed"
          
-     - name: Run conditional tests based on optional dependencies
-       run: |
+    - name: Run conditional tests based on optional dependencies
+      run: |
          echo "🔧 Running conditional tests based on available optional dependencies..."
          
          # Test recording functionality with available backends
@@ -432,8 +431,8 @@ jobs:
         "
         
          
-     - name: Collect new component test coverage
-       run: |
+    - name: Collect new component test coverage
+      run: |
          echo "📊 Collecting coverage data for new v1.0 components..."
          
          # Generate detailed coverage report for new modules
@@ -624,8 +623,8 @@ jobs:
         "
         
          
-     - name: Multi-agent stress testing for 100 concurrent agents
-       run: |
+    - name: Multi-agent stress testing for 100 concurrent agents
+      run: |
          python -c "
          import time
          import numpy as np
@@ -777,8 +776,8 @@ jobs:
          print(f'Successfully tested up to {max(valid_results.keys()) if valid_results else 0} concurrent agents')
          "
          
-     - name: Add automated performance baseline comparison
-       run: |
+    - name: Add automated performance baseline comparison
+      run: |
          python -c "
          import json
          import os
