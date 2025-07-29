@@ -354,7 +354,6 @@ def create_navigator(
     
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "create_navigator",
             "correlation_id": correlation_id,
             "request_id": request_id,
             "cfg_provided": cfg is not None,
@@ -365,7 +364,7 @@ def create_navigator(
         }
         
         with correlation_context("create_navigator", **context_data):
-            func_logger = logger.bind(**context_data)
+            func_logger = logger
     else:
         func_logger = logger.bind(
             module=__name__,
@@ -518,9 +517,7 @@ def create_navigator(
                         orientation=validated_config.orientation,
                         speed=validated_config.speed,
                         max_speed=validated_config.max_speed,
-                        angular_velocity=validated_config.angular_velocity,
-                        config=validated_config,
-                        seed_manager=get_seed_context()
+                        angular_velocity=validated_config.angular_velocity
                     )
                 else:
                     navigator = SingleAgentController(
@@ -528,8 +525,7 @@ def create_navigator(
                         orientation=validated_config.orientation,
                         speed=validated_config.speed,
                         max_speed=validated_config.max_speed,
-                        angular_velocity=validated_config.angular_velocity,
-                        config=validated_config
+                        angular_velocity=validated_config.angular_velocity
                     )
 
             func_logger.info(
@@ -655,7 +651,6 @@ def create_video_plume(
     
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "create_video_plume",
             "correlation_id": correlation_id,
             "request_id": request_id,
             "cfg_provided": cfg is not None,
@@ -663,7 +658,7 @@ def create_video_plume(
         }
         
         with correlation_context("create_video_plume", **context_data):
-            func_logger = logger.bind(**context_data)
+            func_logger = logger
     else:
         func_logger = logger.bind(
             module=__name__,
@@ -896,7 +891,6 @@ def run_plume_simulation(
     
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "run_plume_simulation",
             "correlation_id": correlation_id,
             "episode_id": episode_id,
             "request_id": request_id,
@@ -907,7 +901,7 @@ def run_plume_simulation(
         }
         
         with correlation_context("run_plume_simulation", **context_data):
-            sim_logger = logger.bind(**context_data)
+            sim_logger = logger
     else:
         sim_logger = logger.bind(
             module=__name__,
@@ -1219,7 +1213,6 @@ def visualize_plume_simulation(
     
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "visualize_plume_simulation",
             "correlation_id": correlation_id,
             "request_id": request_id,
             "num_agents": positions.shape[0],
@@ -1228,7 +1221,7 @@ def visualize_plume_simulation(
         }
         
         with correlation_context("visualize_plume_simulation", **context_data):
-            viz_logger = logger.bind(**context_data)
+            viz_logger = logger
     else:
         viz_logger = logger.bind(
             module=__name__,
@@ -1485,7 +1478,6 @@ def create_gymnasium_environment(
 
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "create_gymnasium_environment",
             "correlation_id": correlation_id,
             "request_id": request_id,
             "environment_id": environment_id,
@@ -1496,7 +1488,7 @@ def create_gymnasium_environment(
         }
         
         with correlation_context("create_gymnasium_environment", **context_data):
-            func_logger = logger.bind(**context_data)
+            func_logger = logger
     else:
         func_logger = logger.bind(
             module=__name__,
@@ -1841,7 +1833,6 @@ def from_legacy(
 
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
-            "operation": "from_legacy",
             "correlation_id": correlation_id,
             "request_id": request_id,
             "navigator_type": type(navigator).__name__,
@@ -1852,7 +1843,7 @@ def from_legacy(
         }
         
         with correlation_context("from_legacy", **context_data):
-            func_logger = logger.bind(**context_data)
+            func_logger = logger
     else:
         func_logger = logger.bind(
             module=__name__,
