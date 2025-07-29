@@ -22,9 +22,48 @@ Tests cover:
 import math
 import numpy as np
 import pytest
-from hypothesis import given, strategies as st, assume, note, example
-from hypothesis.extra.numpy import arrays, array_shapes
 from typing import Tuple, List, Optional
+
+# Hypothesis for property-based testing
+try:
+    from hypothesis import given, strategies as st, assume, note, example
+    from hypothesis.extra.numpy import arrays, array_shapes
+    HYPOTHESIS_AVAILABLE = True
+except ImportError:
+    HYPOTHESIS_AVAILABLE = False
+    given = lambda *args, **kwargs: lambda f: f
+    assume = lambda x: None
+    note = lambda x: None
+    example = lambda *args, **kwargs: lambda f: f
+    
+    # Mock strategies object to handle @given decorators when hypothesis is not available
+    class MockStrategies:
+        def floats(self, **kwargs):
+            return None
+        def integers(self, **kwargs):
+            return None
+        def text(self, **kwargs):
+            return None
+        def booleans(self, **kwargs):
+            return None
+        def lists(self, *args, **kwargs):
+            return None
+        def sampled_from(self, *args, **kwargs):
+            return None
+        def composite(self, func):
+            # Return a function that can be called without the 'draw' parameter
+            def mock_strategy(*args, **kwargs):
+                return None
+            return mock_strategy
+    
+    st = MockStrategies()
+    
+    # Mock numpy extra functions
+    def arrays(*args, **kwargs):
+        return None
+    
+    def array_shapes(*args, **kwargs):
+        return None
 
 # Import the dependencies we need to test
 from src.odor_plume_nav.core.navigator import Navigator
