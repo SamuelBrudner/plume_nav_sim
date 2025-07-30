@@ -596,15 +596,29 @@ def capture_random_state() -> RandomState:
         # Capture NumPy random state (use legacy format for compatibility)
         numpy_state = np.random.get_state()
         # Convert to serializable format for cross-platform compatibility
-        numpy_state_dict = {
-            'bit_generator': numpy_state[0],
-            'state': {
-                'state': numpy_state[1]['state'].tolist(),
-                'pos': int(numpy_state[1]['pos'])
-            },
-            'has_gauss': int(numpy_state[2]),
-            'gauss': float(numpy_state[3]) if numpy_state[3] is not None else None
-        }
+        # Handle both old and new NumPy random state formats
+        if len(numpy_state) == 5:
+            # New format (NumPy 2.x): (bit_generator, state_array, pos, has_gauss, gauss)
+            numpy_state_dict = {
+                'bit_generator': numpy_state[0],
+                'state': {
+                    'state': numpy_state[1].tolist(),  # numpy_state[1] is the array directly
+                    'pos': int(numpy_state[2])         # numpy_state[2] is the position
+                },
+                'has_gauss': int(numpy_state[3]),
+                'gauss': float(numpy_state[4]) if numpy_state[4] is not None else None
+            }
+        else:
+            # Old format (NumPy 1.x): (bit_generator, {'state': array, 'pos': int}, has_gauss, gauss)
+            numpy_state_dict = {
+                'bit_generator': numpy_state[0],
+                'state': {
+                    'state': numpy_state[1]['state'].tolist(),
+                    'pos': int(numpy_state[1]['pos'])
+                },
+                'has_gauss': int(numpy_state[2]),
+                'gauss': float(numpy_state[3]) if numpy_state[3] is not None else None
+            }
         
         # Capture environment hash seed
         hash_seed = os.environ.get('PYTHONHASHSEED', 'random')
@@ -673,16 +687,31 @@ def restore_random_state(state: RandomState) -> bool:
         # Restore NumPy random state
         if state.numpy_state:
             # Convert from serializable format back to NumPy format
-            numpy_state_tuple = (
-                state.numpy_state['bit_generator'],
-                {
-                    'state': np.array(state.numpy_state['state']['state'], dtype=np.uint32),
-                    'pos': state.numpy_state['state']['pos']
-                },
-                state.numpy_state['has_gauss'],
-                state.numpy_state['gauss']
-            )
-            np.random.set_state(numpy_state_tuple)
+            # Handle both old and new NumPy random state formats
+            state_array = np.array(state.numpy_state['state']['state'], dtype=np.uint32)
+            
+            # Try new format first (NumPy 2.x): (bit_generator, state_array, pos, has_gauss, gauss)
+            try:
+                numpy_state_tuple = (
+                    state.numpy_state['bit_generator'],
+                    state_array,
+                    state.numpy_state['state']['pos'],
+                    state.numpy_state['has_gauss'],
+                    state.numpy_state['gauss']
+                )
+                np.random.set_state(numpy_state_tuple)
+            except (ValueError, TypeError):
+                # Fallback to old format (NumPy 1.x): (bit_generator, {'state': array, 'pos': int}, has_gauss, gauss)
+                numpy_state_tuple = (
+                    state.numpy_state['bit_generator'],
+                    {
+                        'state': state_array,
+                        'pos': state.numpy_state['state']['pos']
+                    },
+                    state.numpy_state['has_gauss'],
+                    state.numpy_state['gauss']
+                )
+                np.random.set_state(numpy_state_tuple)
         
         # Note: PYTHONHASHSEED restoration requires process restart
         if state.python_hash_seed and state.python_hash_seed != 'random':
@@ -906,11 +935,19 @@ def scoped_seed(
         
         # Record performance metrics
         if ENHANCED_LOGGING_AVAILABLE:
-            metrics = PerformanceMetrics(
-                operation=f"scoped_seed_{operation_name}",
-                duration_ms=op_time
-            )
-            context.record_performance(operation_name, metrics)
+            try:
+                metrics = PerformanceMetrics(
+                    operation=f"scoped_seed_{operation_name}",
+                    duration_ms=op_time
+                )
+                context.record_performance(operation_name, metrics)
+            except TypeError:
+                # Fallback for PerformanceMetrics without operation parameter
+                metrics = PerformanceMetrics(
+                    f"scoped_seed_{operation_name}",
+                    op_time
+                )
+                context.record_performance(operation_name, metrics)
         
         # Check performance threshold
         if op_time > SEED_PERFORMANCE_THRESHOLDS["scoped_operation"] * 1000:
