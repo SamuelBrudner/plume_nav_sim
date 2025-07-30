@@ -814,43 +814,6 @@ class TestVisualizationIntegration:
 
 class TestGymnasiumAPICompliance:
     """Test suite for Gymnasium 0.29.x API compliance and PlumeNavSim-v0 environment."""
-    
-    @pytest.fixture
-    def mock_environment_components(self):
-        """Mock environment components for testing."""
-        with patch('odor_plume_nav.environments.gymnasium_env.VideoPlume') as mock_video_plume, \
-             patch('odor_plume_nav.core.controllers.SingleAgentController') as mock_navigator, \
-             patch('cv2.VideoCapture') as mock_cv_cap:
-            
-            # Configure VideoPlume mock
-            mock_plume_instance = MagicMock()
-            mock_plume_instance.get_metadata.return_value = {
-                'width': 640, 'height': 480, 'fps': 30.0, 'frame_count': 100
-            }
-            mock_plume_instance.get_frame.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
-            mock_video_plume.return_value = mock_plume_instance
-            
-            # Configure Navigator mock
-            mock_nav_instance = MagicMock()
-            mock_nav_instance.positions = np.array([[320.0, 240.0]])
-            mock_nav_instance.orientations = np.array([0.0])
-            mock_nav_instance.speeds = np.array([0.0])
-            mock_nav_instance.max_speeds = np.array([2.0])
-            mock_nav_instance.num_agents = 1
-            mock_navigator.return_value = mock_nav_instance
-            
-            # Configure OpenCV mock
-            mock_cap_instance = MagicMock()
-            mock_cap_instance.isOpened.return_value = True
-            mock_cap_instance.get.return_value = 100
-            mock_cap_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
-            mock_cv_cap.return_value = mock_cap_instance
-            
-            yield {
-                'video_plume': mock_video_plume,
-                'navigator': mock_navigator,
-                'cv_cap': mock_cv_cap
-            }
 
     @pytest.mark.skipif(not GYMNASIUM_AVAILABLE, reason="Gymnasium not available")
     def test_gymnasium_environment_creation_plume_nav_sim_v0(self, mock_environment_components):
@@ -1445,6 +1408,44 @@ def temp_config_files(tmp_path):
             OmegaConf.save(config=base_config, f=f)
     
     return config_dir
+
+
+@pytest.fixture
+def mock_environment_components():
+    """Mock environment components for testing."""
+    with patch('odor_plume_nav.environments.gymnasium_env.VideoPlume') as mock_video_plume, \
+         patch('odor_plume_nav.core.controllers.SingleAgentController') as mock_navigator, \
+         patch('cv2.VideoCapture') as mock_cv_cap:
+        
+        # Configure VideoPlume mock
+        mock_plume_instance = MagicMock()
+        mock_plume_instance.get_metadata.return_value = {
+            'width': 640, 'height': 480, 'fps': 30.0, 'frame_count': 100
+        }
+        mock_plume_instance.get_frame.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
+        mock_video_plume.return_value = mock_plume_instance
+        
+        # Configure Navigator mock
+        mock_nav_instance = MagicMock()
+        mock_nav_instance.positions = np.array([[320.0, 240.0]])
+        mock_nav_instance.orientations = np.array([0.0])
+        mock_nav_instance.speeds = np.array([0.0])
+        mock_nav_instance.max_speeds = np.array([2.0])
+        mock_nav_instance.num_agents = 1
+        mock_navigator.return_value = mock_nav_instance
+        
+        # Configure OpenCV mock
+        mock_cap_instance = MagicMock()
+        mock_cap_instance.isOpened.return_value = True
+        mock_cap_instance.get.return_value = 100
+        mock_cap_instance.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
+        mock_cv_cap.return_value = mock_cap_instance
+        
+        yield {
+            'video_plume': mock_video_plume,
+            'navigator': mock_navigator,
+            'cv_cap': mock_cv_cap
+        }
 
 
 class TestIntegrationWithTempFiles:
