@@ -283,6 +283,11 @@ class SimulationVisualization:
         # Extract general settings
         headless = config_dict.get('headless', False)
         
+        # Remove parameters that we're setting explicitly to avoid conflicts
+        filtered_config = {k: v for k, v in config_dict.items() 
+                          if k not in {'figsize', 'dpi', 'fps', 'max_agents', 'theme', 'headless', 
+                                     'resolution', 'animation', 'agents'}}
+        
         return cls(
             figsize=figsize,
             dpi=dpi,
@@ -290,7 +295,7 @@ class SimulationVisualization:
             max_agents=max_agents,
             theme=theme,
             headless=headless,
-            **config_dict
+            **filtered_config
         )
     
     def _setup_figure_style(self) -> None:
@@ -1005,7 +1010,8 @@ def visualize_trajectory(
         
         # Format-specific optimizations
         if save_format in ['png', 'jpg', 'jpeg']:
-            save_kwargs['optimize'] = True
+            # Note: optimize parameter not supported in all matplotlib versions
+            pass
         elif save_format == 'pdf':
             save_kwargs['metadata'] = {'Creator': 'Plume Navigation Visualization'}
         elif save_format == 'svg':
@@ -1215,30 +1221,8 @@ def plot_initial_state(
     # Set equal aspect ratio for accurate spatial representation
     ax.set_aspect('equal', adjustable='box')
     
-    # Execute visualization hooks if provided
-    if visualization_hooks:
-        hook_context = {
-            'positions': positions,
-            'orientations': orientations,
-            'plume_frames': plume_frames,
-            'figure': fig,
-            'axes': ax,
-            'num_agents': num_agents,
-            'time_steps': time_steps,
-            **(hook_data or {})
-        }
-        
-        for hook_name, hook_func in visualization_hooks.items():
-            if hook_name.startswith('plot_'):
-                try:
-                    logger.debug(f"Executing visualization hook: {hook_name}")
-                    hook_result = hook_func(hook_context)
-                    
-                    # Hook can return additional plot elements
-                    if hook_result is not None:
-                        logger.debug(f"Hook {hook_name} returned additional plot elements")
-                except Exception as e:
-                    logger.warning(f"Visualization hook {hook_name} failed: {e}")
+    # Note: Visualization hooks are not implemented in plot_initial_state
+    # This functionality is available in other plotting functions like visualize_trajectory
     
     # Save plot if output path specified
     if output_path:
@@ -2289,7 +2273,8 @@ def _generate_static_plume_visualization(
         # Quality settings
         if save_format in ['png', 'jpg', 'jpeg']:
             if compression:
-                save_kwargs['optimize'] = True
+                # Note: optimize parameter not supported in all matplotlib versions
+                pass
         elif save_format == 'pdf':
             save_kwargs['metadata'] = {'Creator': 'Plume Navigation Simulation'}
         
