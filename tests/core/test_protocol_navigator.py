@@ -197,7 +197,7 @@ class TestSingleAgentController:
         controller = SingleAgentController(position=(10.0, 20.0), orientation=45.0)
         controller.reset(position=(30.0, 40.0), orientation=90.0)
         assert controller.positions[0, 0] == 30.0
-        assert controller.positions[0, 1] == 20.0
+        assert controller.positions[0, 1] == 40.0
         assert controller.orientations[0] == 90.0
     
     def test_reset_with_seed_parameter(self) -> None:
