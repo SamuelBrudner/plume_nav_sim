@@ -1,7 +1,18 @@
-"""Database utilities and session management for plume_nav_sim.
+"""
+Database package for plume navigation simulation.
 
-This package provides database connection management, session handling,
-and persistence utilities for the plume navigation simulation framework.
+This package provides database session management, connection lifecycle, 
+transaction management, and persistence hooks for the plume navigation simulation system.
+
+Key Components:
+- SessionManager: Database session management with connection pooling
+- DatabaseBackend: Backend detection and configuration
+- Database protocols: Type-safe interfaces for database operations
+- Connection utilities: Helper functions for database connectivity
+
+Authors: Blitzy Platform  
+License: MIT
+Version: 1.0.0
 """
 
 from .session import (
@@ -11,9 +22,7 @@ from .session import (
     PersistenceHooks,
     SessionManager,
     cleanup_database,
-    create_session_manager,
     get_async_session,
-    get_default_database_config,
     get_session,
     get_session_manager,
     is_database_enabled,
@@ -31,9 +40,7 @@ __all__ = [
     "PersistenceHooks",
     "SessionManager",
     "cleanup_database",
-    "create_session_manager",
-    "get_async_session",
-    "get_default_database_config",
+    "get_async_session", 
     "get_session",
     "get_session_manager",
     "is_database_enabled",
