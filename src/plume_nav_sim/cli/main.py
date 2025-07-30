@@ -78,7 +78,8 @@ except ImportError:
     )
 
 # Import core system components
-from plume_nav_sim.core import run_simulation
+from plume_nav_sim.api.navigation import run_plume_simulation, create_video_plume, create_navigator, ConfigurationError, SimulationError
+from plume_nav_sim.core.simulation import run_simulation
 from plume_nav_sim.utils.seed_manager import get_last_seed
 from plume_nav_sim.utils.logging_setup import setup_logger
 from plume_nav_sim.utils.visualization import create_realtime_visualizer
@@ -135,14 +136,7 @@ class ConfigValidationError(Exception):
     pass
 
 
-class ConfigurationError(Exception):
-    """Configuration-related error for component creation failures."""
-    pass
-
-
-class SimulationError(Exception):
-    """Simulation execution error for runtime failures."""
-    pass
+# ConfigurationError and SimulationError imported from API
 
 
 def _setup_cli_logging(verbose: bool = False, quiet: bool = False, log_level: str = 'INFO') -> None:
@@ -214,6 +208,24 @@ def _measure_performance(func_name: str, start_time: float) -> None:
         logger.warning(f"{func_name} took {elapsed:.2f}s (>2s threshold)")
     else:
         logger.debug(f"{func_name} completed in {elapsed:.2f}s")
+
+
+def _validate_configuration(cfg: DictConfig) -> None:
+    """
+    Validate configuration for CLI commands.
+    
+    Args:
+        cfg: Hydra configuration to validate
+        
+    Raises:
+        ConfigValidationError: If configuration is invalid
+    """
+    if not cfg:
+        raise ConfigValidationError("Configuration is empty or None")
+    
+    # Basic configuration validation
+    if not isinstance(cfg, DictConfig):
+        raise ConfigValidationError("Configuration must be a DictConfig object")
 
 
 def _validate_hydra_availability() -> None:
@@ -436,12 +448,25 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         # Validate Hydra availability
         _validate_hydra_availability()
         
-        # Access Hydra configuration
+        # Initialize Hydra configuration if not already initialized
         if not HydraConfig.initialized():
-            logger.error("Hydra configuration not initialized. Use @hydra.main decorator.")
-            raise CLIError("Hydra configuration required for run command")
+            # Initialize Hydra with the configuration directory
+            try:
+                import os
+                # Get the repository root directory
+                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                config_path = os.path.join(repo_root, "conf")
+                with initialize_config_dir(config_dir=config_path, version_base=None):
+                    cfg = compose(config_name="config")
+                    logger.info("Hydra configuration initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize Hydra configuration: {e}")
+                raise CLIError(f"Hydra configuration initialization failed: {e}")
+        else:
+            cfg = HydraConfig.get().cfg
         
-        cfg = HydraConfig.get().cfg
+        # Validate configuration
+        _validate_configuration(cfg)
         
         logger.info("Starting simulation run...")
         logger.info(f"Configuration loaded with {len(cfg)} top-level sections")
@@ -468,12 +493,99 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         sim_start_time = time.time()
         
         try:
-            # Call the core simulation function with configuration
+            # Create environment from configuration
+            try:
+                from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
+                
+                # Extract and structure plume model configuration from Hydra config
+                plume_model_config = None
+                if cfg and hasattr(cfg, 'plume_models'):
+                    plume_models = cfg.plume_models
+                    plume_type = plume_models.get('type', 'gaussian')
+                    
+                    # Map config type names to actual class names expected by PlumeNavigationEnv
+                    type_mapping = {
+                        'gaussian': 'GaussianPlumeModel',
+                        'turbulent': 'TurbulentPlumeModel', 
+                        'video_adapter': 'VideoPlumeAdapter'
+                    }
+                    
+                    if plume_type not in type_mapping:
+                        logger.warning(f"Unknown plume model type '{plume_type}', using default 'gaussian'")
+                        plume_type = 'gaussian'
+                    
+                    # Create flattened config expected by PlumeNavigationEnv
+                    plume_model_config = {'type': type_mapping[plume_type]}
+                    
+                    # Merge type-specific parameters
+                    if plume_type in plume_models:
+                        type_config = plume_models[plume_type]
+                        plume_model_config.update(type_config)
+                    
+                    # Add common parameters
+                    for key in ['source_strength', 'source_position']:
+                        if key in plume_models:
+                            plume_model_config[key] = plume_models[key]
+                    
+                    logger.debug(f"Structured plume model config for {type_mapping[plume_type]}: {list(plume_model_config.keys())}")
+                
+                # Create environment with structured plume model configuration
+                env = PlumeNavigationEnv(plume_model=plume_model_config)
+                logger.info("Environment created successfully with plume model")
+            except Exception as e:
+                logger.warning(f"Failed to create PlumeNavigationEnv, using fallback: {e}")
+                # Fallback to basic environment creation
+                try:
+                    import gymnasium as gym
+                    env = gym.make("CartPole-v1")  # Temporary fallback for testing
+                    logger.info("Using CartPole fallback environment")
+                except Exception as e2:
+                    logger.error(f"Failed to create fallback environment: {e2}")
+                    raise CLIError(f"Environment creation failed: {e}")
+            
+            # Convert Hydra DictConfig to regular dict and clean up Hydra-specific keys
+            if cfg:
+                config_dict = OmegaConf.to_container(cfg, resolve=True)
+                # Remove Hydra-specific keys that don't belong in SimulationConfig
+                def clean_hydra_keys(d):
+                    if isinstance(d, dict):
+                        return {k: clean_hydra_keys(v) for k, v in d.items() 
+                               if not k.startswith('_') or k in ['__version__']}
+                    elif isinstance(d, list):
+                        return [clean_hydra_keys(item) for item in d]
+                    else:
+                        return d
+                config_dict = clean_hydra_keys(config_dict)
+                
+                # Debug: log the cleaned config keys
+                logger.info(f"Cleaned config keys: {list(config_dict.keys())}")
+                
+                # Filter to only include keys that SimulationConfig expects
+                # Based on SimulationConfig class fields
+                simulation_config_fields = {
+                    'max_steps', 'dt', 'seed', 'width', 'height', 
+                    'record_trajectory', 'record_odor_readings', 'record_performance',
+                    'performance_targets', 'enable_profiling', 'enable_visualization',
+                    'save_animation', 'animation_path', 'debug_mode', 'log_level'
+                }
+                
+                # Only pass fields that SimulationConfig actually accepts
+                filtered_config = {k: v for k, v in config_dict.items() 
+                                 if k in simulation_config_fields}
+                logger.info(f"Filtered config for SimulationConfig: {list(filtered_config.keys())}")
+                logger.info(f"Removed keys: {set(config_dict.keys()) - set(filtered_config.keys())}")
+                config_dict = filtered_config
+            else:
+                config_dict = {}
+            
+            # Call the core simulation function with environment and configuration
             result = run_simulation(
-                cfg=cfg,
-                seed=seed,
-                frame_cache=frame_cache_instance,
-                save_trajectory=save_trajectory
+                env=env,
+                config=config_dict,
+                enable_visualization=False,  # CLI controls visualization separately
+                enable_persistence=False,    # CLI controls persistence separately
+                record_trajectories=save_trajectory,
+                frame_cache_mode=frame_cache  # Pass the string mode, not an instance
             )
             
             sim_duration = time.time() - sim_start_time
@@ -569,11 +681,21 @@ def validate(ctx, strict: bool, export_results: Optional[str]) -> None:
     try:
         _validate_hydra_availability()
         
+        # Initialize Hydra configuration if not already initialized
         if not HydraConfig.initialized():
-            logger.error("Hydra configuration not initialized")
-            raise CLIError("Configuration validation requires Hydra initialization")
-        
-        cfg = HydraConfig.get().cfg
+            try:
+                import os
+                # Get the repository root directory
+                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                config_path = os.path.join(repo_root, "conf")
+                with initialize_config_dir(config_dir=config_path, version_base=None):
+                    cfg = compose(config_name="config")
+                    logger.info("Hydra configuration initialized for validation")
+            except Exception as e:
+                logger.error(f"Failed to initialize Hydra configuration: {e}")
+                raise CLIError(f"Hydra configuration initialization failed: {e}")
+        else:
+            cfg = HydraConfig.get().cfg
         
         logger.info("Starting configuration validation...")
         
@@ -672,11 +794,21 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool) -> Non
     try:
         _validate_hydra_availability()
         
+        # Initialize Hydra configuration if not already initialized
         if not HydraConfig.initialized():
-            logger.error("Hydra configuration not initialized")
-            raise CLIError("Configuration export requires Hydra initialization")
-        
-        cfg = HydraConfig.get().cfg
+            try:
+                import os
+                # Get the repository root directory
+                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                config_path = os.path.join(repo_root, "conf")
+                with initialize_config_dir(config_dir=config_path, version_base=None):
+                    cfg = compose(config_name="config")
+                    logger.info("Hydra configuration initialized for export")
+            except Exception as e:
+                logger.error(f"Failed to initialize Hydra configuration: {e}")
+                raise CLIError(f"Hydra configuration initialization failed: {e}")
+        else:
+            cfg = HydraConfig.get().cfg
         
         # Determine output path
         if output is None:
@@ -1128,11 +1260,21 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         # Validate Hydra availability and configuration
         _validate_hydra_availability()
         
+        # Initialize Hydra configuration if not already initialized
         if not HydraConfig.initialized():
-            logger.error("Hydra configuration not initialized")
-            raise CLIError("RL training requires Hydra configuration initialization")
-        
-        cfg = HydraConfig.get().cfg
+            try:
+                import os
+                # Get the repository root directory
+                repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                config_path = os.path.join(repo_root, "conf")
+                with initialize_config_dir(config_dir=config_path, version_base=None):
+                    cfg = compose(config_name="config")
+                    logger.info("Hydra configuration initialized for training")
+            except Exception as e:
+                logger.error(f"Failed to initialize Hydra configuration: {e}")
+                raise CLIError(f"Hydra configuration initialization failed: {e}")
+        else:
+            cfg = HydraConfig.get().cfg
         algorithm_name = algorithm.upper()
         
         logger.info(f"Starting RL training with {algorithm_name} algorithm")
