@@ -99,7 +99,8 @@ from plume_nav_sim.cli import (
     get_version,
     is_available,
     validate_environment,
-    register_command
+    register_command,
+    list_commands
 )
 
 # Import dependencies for testing
@@ -1375,13 +1376,13 @@ class TestCLIUtilityFunctions:
 
     def test_cli_version_information(self):
         """Test CLI version information utilities."""
-        version = get_cli_version()
+        version = get_version()
         assert isinstance(version, str)
         assert len(version) > 0
 
     def test_cli_availability_check(self):
         """Test CLI availability checking."""
-        available = is_cli_available()
+        available = is_available()
         assert isinstance(available, bool)
         
         # Should be True since we're running CLI tests
@@ -1389,25 +1390,29 @@ class TestCLIUtilityFunctions:
 
     def test_cli_environment_validation(self):
         """Test CLI environment validation."""
-        validation_results = validate_cli_environment()
+        validation_results = validate_environment()
         
         assert isinstance(validation_results, dict)
-        assert 'cli_available' in validation_results
-        assert 'dependencies' in validation_results
+        assert 'checks' in validation_results
+        assert 'environment' in validation_results
         assert 'warnings' in validation_results
         assert 'errors' in validation_results
+        
+        # Check that cli_available is in the checks section
+        assert 'cli_available' in validation_results['checks']
 
     def test_available_commands_listing(self):
-        """Test get_available_commands utility."""
-        commands = get_available_commands()
+        """Test list_commands utility."""
+        commands = list_commands()
         
-        assert isinstance(commands, dict)
+        assert isinstance(commands, list)
         assert len(commands) > 0
         
         # Verify expected commands are present
         expected_commands = ['run', 'config', 'visualize', 'batch']
+        command_names = [cmd.get('name', '') for cmd in commands if isinstance(cmd, dict)]
         for cmd in expected_commands:
-            assert cmd in commands
+            assert cmd in command_names
 
 
 class TestCLIIntegrationScenarios:
