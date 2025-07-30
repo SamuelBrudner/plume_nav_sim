@@ -176,6 +176,7 @@ ENHANCED_FORMAT = (
     "<level>{level: <8}</level> | "
     "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
     "<magenta>correlation_id={extra[correlation_id]}</magenta> | "
+    "<yellow>request_id={extra[request_id]}</yellow> | "
     "<blue>module={extra[module]}</blue> - "
     "<level>{message}</level>"
 )
@@ -185,7 +186,8 @@ HYDRA_FORMAT = (
     "<level>{level: <8}</level> | "
     "<cyan>{name}</cyan> | "
     "<yellow>config_hash={extra[config_hash]}</yellow> | "
-    "<magenta>correlation_id={extra[correlation_id]}</magenta> - "
+    "<magenta>correlation_id={extra[correlation_id]}</magenta> | "
+    "<yellow>request_id={extra[request_id]}</yellow> - "
     "<level>{message}</level>"
 )
 
@@ -207,7 +209,8 @@ PRODUCTION_FORMAT = (
 )
 
 # JSON format for structured logging in production environments with machine parsing
-JSON_FORMAT = "{time} | {level} | {name} | {message} | {extra}"
+# Use _create_json_serializer() for JSON formatting in setup_logger
+JSON_FORMAT = "{time} | {level} | {name} | {message}"  # Safe fallback format without {extra}
 
 # Log levels with enhanced metadata for performance correlation
 LOG_LEVELS = {
@@ -531,7 +534,7 @@ class LoggingConfig(BaseModel):
             "cli": CLI_FORMAT,
             "minimal": MINIMAL_FORMAT,
             "production": PRODUCTION_FORMAT,
-            "json": JSON_FORMAT,
+            "json": ENHANCED_FORMAT,  # Use enhanced format as fallback for JSON (handlers will override)
         }
         return format_patterns.get(self.format, ENHANCED_FORMAT)
     
@@ -1248,6 +1251,90 @@ class EnhancedLogger:
         extra = kwargs.pop('extra', {})
         bound_logger = self._get_bound_logger(**extra)
         bound_logger.exception(message, **kwargs)
+    
+    @contextmanager
+    def performance_timer(self, operation: str, threshold: Optional[float] = None):
+        """Context manager for performance timing with automatic logging."""
+        start_time = time.time()
+        metrics = PerformanceMetrics(operation_name=operation, start_time=start_time)
+        
+        self.info(f"Starting operation: {operation}")
+        
+        try:
+            yield metrics
+        finally:
+            end_time = time.time()
+            metrics.end_time = end_time
+            metrics = metrics.complete()
+            
+            if threshold and metrics.is_slow(threshold):
+                self.warning(f"Slow operation completed: {operation}", 
+                           performance_metrics=metrics.to_dict(),
+                           operation_complete=True)
+            else:
+                self.info(f"Operation completed: {operation}", 
+                         performance_metrics=metrics.to_dict(),
+                         operation_complete=True)
+    
+    def log_legacy_api_usage(self, operation: str, legacy_call: str, recommended_call: str):
+        """Log usage of legacy API with deprecation warning."""
+        message = f"Legacy API usage detected in {operation}: {legacy_call} → {recommended_call}"
+        
+        warnings.warn(
+            f"DEPRECATION WARNING: {message}. Please migrate to the recommended call.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
+        self.warning(f"Legacy API usage: {operation}", 
+                    legacy_call=legacy_call,
+                    recommended_call=recommended_call,
+                    deprecation_warning=True)
+    
+    def log_step_latency_violation(self, actual_time: float, threshold: float):
+        """Log environment step latency violations."""
+        self.warning(f"Step latency violation: {actual_time:.3f}s > {threshold:.3f}s threshold",
+                    actual_latency=actual_time,
+                    threshold=threshold,
+                    violation_type="step_latency")
+    
+    def log_frame_rate_measurement(self, actual_fps: float, target_fps: float):
+        """Log frame rate measurements."""
+        if actual_fps < target_fps:
+            self.warning(f"Frame rate below target: {actual_fps:.1f} FPS < {target_fps:.1f} FPS target",
+                        actual_fps=actual_fps,
+                        target_fps=target_fps,
+                        performance_warning=True)
+        else:
+            self.info(f"Frame rate nominal: {actual_fps:.1f} FPS",
+                     actual_fps=actual_fps,
+                     target_fps=target_fps)
+    
+    def log_memory_usage_delta(self, delta_mb: float, operation: str, threshold: float = 100.0):
+        """Log memory usage deltas with threshold warnings."""
+        if delta_mb > threshold:
+            self.warning(f"High memory usage increase: {delta_mb:.1f}MB in {operation}",
+                        memory_delta_mb=delta_mb,
+                        operation=operation,
+                        threshold=threshold,
+                        memory_warning=True)
+        else:
+            self.debug(f"Memory usage delta: {delta_mb:.1f}MB in {operation}",
+                      memory_delta_mb=delta_mb,
+                      operation=operation)
+    
+    def log_database_operation_latency(self, operation: str, duration: float, threshold: float):
+        """Log database operation latency with threshold monitoring."""
+        if duration > threshold:
+            self.warning(f"Slow database operation: {operation} took {duration:.3f}s",
+                        operation=operation,
+                        duration_s=duration,
+                        threshold_s=threshold,
+                        db_latency_violation=True)
+        else:
+            self.debug(f"Database operation completed: {operation} in {duration:.3f}s",
+                      operation=operation,
+                      duration_s=duration)
 
 
 def setup_logger(
@@ -1330,12 +1417,22 @@ def setup_logger(
             config_dict["file_path"] = sink
             config_dict["file_enabled"] = True
         if format is not None:
-            # Map old format names to new format types
+            # Map old format names to new format types and validate format parameter
             format_mapping = {
                 DEFAULT_FORMAT: "default",
                 MODULE_FORMAT: "module",
             }
-            config_dict["format"] = format_mapping.get(format, "enhanced")
+            
+            # Valid format literals from LoggingConfig
+            valid_formats = {"default", "module", "enhanced", "hydra", "cli", "minimal", "production", "json"}
+            
+            # Use format_mapping for constants, direct value for valid strings, otherwise default to enhanced
+            if format in format_mapping:
+                config_dict["format"] = format_mapping[format]
+            elif format in valid_formats:
+                config_dict["format"] = format
+            else:
+                config_dict["format"] = "enhanced"
         if rotation is not None:
             config_dict["rotation"] = rotation
         if retention is not None:
@@ -1377,23 +1474,36 @@ def setup_logger(
     
     # Configure console logging
     if config.console_enabled:
-        console_format = format_pattern
-        
-        # Use simpler format for CLI environment
-        if config.format == "cli":
-            console_format = CLI_FORMAT
-        elif config.format == "minimal":
-            console_format = MINIMAL_FORMAT
-        
-        logger.add(
-            sys.stderr,
-            format=console_format,
-            level=config.level,
-            backtrace=config.backtrace,
-            diagnose=config.diagnose,
-            enqueue=config.enqueue,
-            filter=_create_context_filter(default_context)
-        )
+        if config.format == "json":
+            # Use custom JSON formatter for structured console logging
+            logger.add(
+                sys.stderr,
+                format=_create_json_serializer(),
+                level=config.level,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                enqueue=config.enqueue,
+                filter=_create_context_filter(default_context)
+            )
+        else:
+            # Use standard text format for console
+            console_format = format_pattern
+            
+            # Use simpler format for CLI environment
+            if config.format == "cli":
+                console_format = CLI_FORMAT
+            elif config.format == "minimal":
+                console_format = MINIMAL_FORMAT
+            
+            logger.add(
+                sys.stderr,
+                format=console_format,
+                level=config.level,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                enqueue=config.enqueue,
+                filter=_create_context_filter(default_context)
+            )
     
     # Configure file logging
     if config.file_enabled and config.file_path:
@@ -1401,26 +1511,40 @@ def setup_logger(
         log_path = Path(config.file_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         
-        file_format = format_pattern
         if config.format == "json":
-            file_format = _create_json_formatter()
-        
-        logger.add(
-            str(log_path),
-            format=file_format,
-            level=config.level,
-            rotation=config.rotation,
-            retention=config.retention,
-            enqueue=config.enqueue,
-            backtrace=config.backtrace,
-            diagnose=config.diagnose,
-            filter=_create_context_filter(default_context),
-            serialize=(config.format == "json")
-        )
+            # Use custom JSON formatter for structured logging
+            logger.add(
+                str(log_path),
+                format=_create_json_serializer(),
+                level=config.level,
+                rotation=config.rotation,
+                retention=config.retention,
+                enqueue=config.enqueue,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                filter=_create_context_filter(default_context)
+            )
+        else:
+            # Use standard text format
+            logger.add(
+                str(log_path),
+                format=format_pattern,
+                level=config.level,
+                rotation=config.rotation,
+                retention=config.retention,
+                enqueue=config.enqueue,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                filter=_create_context_filter(default_context)
+            )
     
     # Configure dual sink architecture from YAML if available
+    logger.debug(f"YAML config available: {yaml_config is not None}")
     if yaml_config and "sinks" in yaml_config:
+        logger.debug(f"Found YAML sinks configuration: {list(yaml_config['sinks'].keys())}")
         _setup_yaml_sinks(yaml_config["sinks"], default_context)
+    else:
+        logger.debug("No YAML sinks configuration found, using default setup only")
     
     # Configure performance monitoring if enabled
     if config.enable_performance:
@@ -1445,8 +1569,16 @@ def setup_logger(
 
 
 def _create_context_filter(default_context: Dict[str, Any]):
-    """Create a filter function that ensures required context fields are present."""
+    """Create a filter function that ensures required context fields are present and merges correlation context."""
     def context_filter(record):
+        # Merge current correlation context if available
+        current_context = getattr(_context_storage, 'context', None)
+        if current_context:
+            correlation_data = current_context.bind_context()
+            for key, value in correlation_data.items():
+                if key not in record["extra"]:
+                    record["extra"][key] = value
+        
         # Ensure all required context fields are present
         for key, default_value in default_context.items():
             if key not in record["extra"]:
@@ -1455,9 +1587,9 @@ def _create_context_filter(default_context: Dict[str, Any]):
     return context_filter
 
 
-def _create_json_formatter():
-    """Create a JSON formatter function for structured logging with cache statistics, enhanced correlation tracking, and debug session support."""
-    def json_formatter(record):
+def _create_json_serializer():
+    """Create a JSON serializer function for structured logging with cache statistics, enhanced correlation tracking, and debug session support."""
+    def json_serializer(record):
         # Extract relevant fields for JSON output with enhanced correlation support
         json_record = {
             "timestamp": record["time"].isoformat(),
@@ -1469,8 +1601,8 @@ def _create_json_formatter():
             "correlation_id": record["extra"].get("correlation_id", "none"),
             "request_id": record["extra"].get("request_id", "none"),
             "module": record["extra"].get("module", "unknown"),
-            "thread_id": record["extra"].get("thread_id"),
-            "process_id": record["extra"].get("process_id"),
+            "thread_id": record["thread"].id,
+            "process_id": record["process"].id,
             "step_count": record["extra"].get("step_count", 0),
         }
         
@@ -1530,9 +1662,56 @@ def _create_json_formatter():
             if key not in json_record and not key.startswith("_") and key not in cache_fields:
                 json_record[key] = value
         
-        return json.dumps(json_record, default=str)
+        # Generate JSON string 
+        json_str = json.dumps(json_record, default=str)
+        
+        # Escape any characters that Loguru might interpret as markup or format strings
+        # Replace angle brackets and curly braces
+        escaped_json = (json_str
+                       .replace("<", "&lt;")
+                       .replace(">", "&gt;")
+                       .replace("{", "{{")
+                       .replace("}", "}}"))
+        
+        return escaped_json + "\n"
     
-    return json_formatter
+    return json_serializer
+
+
+def _resolve_environment_variables(value: Any) -> Any:
+    """
+    Recursively resolve environment variables in YAML configuration values.
+    
+    Supports syntax: ${VAR_NAME:default_value}
+    
+    Args:
+        value: Configuration value that may contain environment variables
+        
+    Returns:
+        Value with environment variables resolved
+    """
+    if isinstance(value, str):
+        # Handle ${VAR:default} syntax
+        import re
+        def replace_env_var(match):
+            var_expr = match.group(1)
+            if ':' in var_expr:
+                var_name, default_value = var_expr.split(':', 1)
+            else:
+                var_name, default_value = var_expr, ''
+            return os.getenv(var_name, default_value)
+        
+        # Replace all ${VAR:default} patterns
+        return re.sub(r'\$\{([^}]+)\}', replace_env_var, value)
+    
+    elif isinstance(value, dict):
+        return {k: _resolve_environment_variables(v) for k, v in value.items()}
+    
+    elif isinstance(value, list):
+        return [_resolve_environment_variables(item) for item in value]
+    
+    else:
+        return value
 
 
 def _load_logging_yaml(config_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
@@ -1571,6 +1750,9 @@ def _load_logging_yaml(config_path: Union[str, Path]) -> Optional[Dict[str, Any]
             logger.error(f"Invalid YAML configuration structure in {config_path}")
             return None
         
+        # Resolve environment variables
+        yaml_config = _resolve_environment_variables(yaml_config)
+        
         logger.info(f"Successfully loaded logging configuration from {config_path}")
         return yaml_config
         
@@ -1590,10 +1772,17 @@ def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, A
         sinks_config: Sink configuration dictionary from YAML
         default_context: Default context fields for filtering
     """
+    logger.debug(f"=== _setup_yaml_sinks called with {len(sinks_config)} sinks: {list(sinks_config.keys())}")
     try:
         for sink_name, sink_config in sinks_config.items():
+            logger.debug(f"Processing sink: {sink_name}")
             if not isinstance(sink_config, dict):
                 logger.warning(f"Invalid sink configuration for {sink_name}")
+                continue
+            
+            # Skip if sink is disabled
+            if not sink_config.get("enabled", True):
+                logger.debug(f"Skipping disabled sink {sink_name}")
                 continue
             
             # Extract sink parameters with defaults
@@ -1603,6 +1792,13 @@ def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, A
             # Determine sink target
             if sink_name == "console" or sink_config.get("target") == "console":
                 sink_target = sys.stderr
+            elif "sink" in sink_config:  # Handle 'sink' field from YAML
+                sink_target = sink_config["sink"]
+                if sink_target != "sys.stderr":
+                    # It's a file path, ensure directory exists
+                    Path(sink_target).parent.mkdir(parents=True, exist_ok=True)
+                else:
+                    sink_target = sys.stderr
             elif "file_path" in sink_config:
                 sink_target = sink_config["file_path"]
                 # Ensure directory exists
@@ -1611,10 +1807,32 @@ def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, A
                 logger.warning(f"No valid target specified for sink {sink_name}")
                 continue
             
-            # Determine format
-            if format_type == "json":
-                format_func = _create_json_formatter()
-                serialize = True
+            # Determine format - always use proper formatter functions, never raw format strings
+            # Enhanced detection for JSON format with explicit protection against raw format strings
+            
+            # Handle YAML literal block scalars that may contain JSON format strings
+            actual_format_content = format_type
+            if isinstance(format_type, str):
+                # Remove YAML literal block scalar indicators and get actual content
+                cleaned_format = format_type.strip()
+                if cleaned_format.startswith('|') or cleaned_format.startswith('>'):
+                    # Extract content after YAML scalar indicator
+                    lines = cleaned_format.split('\n')[1:]  # Skip first line with indicator
+                    actual_format_content = '\n'.join(line.strip() for line in lines if line.strip())
+            
+            is_json_format = (
+                format_type == "json" or 
+                sink_name == "json" or 
+                (isinstance(actual_format_content, str) and actual_format_content.strip().startswith("{"))
+            )
+            
+            if is_json_format:
+                # Use custom JSON formatter for structured logging
+                json_formatter = _create_json_serializer()
+                format_func = json_formatter
+                serialize = False  # Don't use serialize when using custom format function
+                logger.debug(f"Using JSON formatter for sink {sink_name} (detected: {format_type[:50] if isinstance(format_type, str) else format_type}...)")
+                logger.debug(f"JSON formatter type: {type(json_formatter)}")
             else:
                 format_patterns = {
                     "default": DEFAULT_FORMAT,
@@ -1624,22 +1842,35 @@ def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, A
                 }
                 format_func = format_patterns.get(format_type, ENHANCED_FORMAT)
                 serialize = False
+                logger.debug(f"Using format pattern {format_type} for sink {sink_name}")
+            
+            # Prepare sink configuration - rotation/retention only for file sinks
+            sink_kwargs = {
+                "format": format_func,
+                "level": level,
+                "enqueue": sink_config.get("enqueue", True),
+                "backtrace": sink_config.get("backtrace", True),
+                "diagnose": sink_config.get("diagnose", True),
+                "filter": _create_context_filter(default_context),
+            }
+            
+            # Only add rotation/retention for file sinks, not console sinks
+            if sink_target != sys.stderr and sink_target != sys.stdout:
+                sink_kwargs["rotation"] = sink_config.get("rotation", "10 MB")
+                sink_kwargs["retention"] = sink_config.get("retention", "1 week")
+                if "compression" in sink_config:
+                    sink_kwargs["compression"] = sink_config["compression"]
             
             # Add sink with configuration
-            logger.add(
-                sink_target,
-                format=format_func,
-                level=level,
-                rotation=sink_config.get("rotation", "10 MB"),
-                retention=sink_config.get("retention", "1 week"),
-                enqueue=sink_config.get("enqueue", True),
-                backtrace=sink_config.get("backtrace", True),
-                diagnose=sink_config.get("diagnose", True),
-                filter=_create_context_filter(default_context),
-                serialize=serialize
-            )
+            logger.debug(f"About to add sink '{sink_name}' with target: {sink_target}, serialize: {serialize}")
+            logger.debug(f"Sink kwargs: {sink_kwargs}")
             
-            logger.debug(f"Configured {sink_name} sink with format {format_type}")
+            try:
+                handler_id = logger.add(sink_target, **sink_kwargs)
+                logger.debug(f"Successfully added {sink_name} sink with handler ID {handler_id} and level {level}")
+            except Exception as e:
+                logger.error(f"Failed to add sink '{sink_name}': {e}")
+                logger.exception("Sink addition error details:")
             
     except Exception as e:
         logger.error(f"Failed to setup YAML sinks: {e}")
@@ -2089,6 +2320,113 @@ except Exception:
     logger.add(sys.stderr, format=DEFAULT_FORMAT, level="INFO")
 
 
+@contextmanager
+def memory_usage_timer(operation: str, threshold_mb: float = 100.0):
+    """Context manager for memory usage monitoring with automatic warnings."""
+    try:
+        import psutil
+        process = psutil.Process()
+        start_memory = process.memory_info().rss / 1024 / 1024  # MB
+    except ImportError:
+        logger.warning("psutil not available for memory monitoring")
+        start_memory = 0
+    
+    start_time = time.time()
+    
+    try:
+        yield
+    finally:
+        end_time = time.time()
+        try:
+            end_memory = process.memory_info().rss / 1024 / 1024  # MB
+            memory_delta = end_memory - start_memory
+            duration = end_time - start_time
+            
+            context = get_correlation_context()
+            bound_logger = logger.bind(**context.bind_context())
+            
+            if memory_delta > threshold_mb:
+                bound_logger.warning(
+                    f"High memory usage in {operation}: {memory_delta:.1f}MB increase",
+                    memory_delta_mb=memory_delta,
+                    operation=operation,
+                    duration_s=duration,
+                    threshold_mb=threshold_mb,
+                    memory_warning=True
+                )
+            else:
+                bound_logger.debug(
+                    f"Memory usage in {operation}: {memory_delta:.1f}MB",
+                    memory_delta_mb=memory_delta,
+                    operation=operation,
+                    duration_s=duration
+                )
+        except Exception as e:
+            logger.debug(f"Failed to monitor memory for {operation}: {e}")
+
+
+@contextmanager
+def database_operation_timer(operation: str, threshold_s: float = 0.1):
+    """Context manager for database operation timing with automatic warnings."""
+    start_time = time.time()
+    
+    try:
+        yield
+    finally:
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        context = get_correlation_context()
+        bound_logger = logger.bind(**context.bind_context())
+        
+        if duration > threshold_s:
+            bound_logger.warning(
+                f"Slow database operation: {operation} took {duration:.3f}s",
+                operation=operation,
+                duration_s=duration,
+                threshold_s=threshold_s,
+                db_latency_violation=True
+            )
+        else:
+            bound_logger.debug(
+                f"Database operation: {operation} completed in {duration:.3f}s",
+                operation=operation,
+                duration_s=duration
+            )
+
+
+def create_configuration_from_hydra(hydra_config):
+    """Create LoggingConfig from Hydra configuration object."""
+    try:
+        # Extract logging configuration from Hydra config
+        if hasattr(hydra_config, 'logging'):
+            logging_cfg = hydra_config.logging
+        else:
+            # Fallback to defaults if no logging config
+            return LoggingConfig()
+        
+        # Convert Hydra config to LoggingConfig
+        config_dict = {}
+        
+        # Map common fields
+        if hasattr(logging_cfg, 'level'):
+            config_dict['level'] = logging_cfg.level
+        if hasattr(logging_cfg, 'format'):
+            config_dict['format'] = logging_cfg.format
+        if hasattr(logging_cfg, 'file_path'):
+            config_dict['file_path'] = logging_cfg.file_path
+        if hasattr(logging_cfg, 'enable_performance'):
+            config_dict['enable_performance'] = logging_cfg.enable_performance
+        if hasattr(logging_cfg, 'memory_tracking'):
+            config_dict['memory_tracking'] = logging_cfg.memory_tracking
+        
+        return LoggingConfig(**config_dict)
+        
+    except Exception as e:
+        logger.warning(f"Failed to create LoggingConfig from Hydra config: {e}")
+        return LoggingConfig()
+
+
 # Enhanced exports for comprehensive functionality
 __all__ = [
     # Configuration classes
@@ -2105,6 +2443,7 @@ __all__ = [
     "get_module_logger",
     "get_enhanced_logger", 
     "get_logger",
+    "create_configuration_from_hydra",
     
     # Context managers and utilities
     "correlation_context",
@@ -2115,6 +2454,8 @@ __all__ = [
     "create_step_timer",
     "step_performance_timer",
     "frame_rate_timer",
+    "memory_usage_timer",
+    "database_operation_timer",
     
     # Enhanced CLI debug performance monitoring per Section 7.6.4.1
     "debug_command_timer",
