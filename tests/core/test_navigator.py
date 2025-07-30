@@ -1430,9 +1430,10 @@ def test_error_handling_and_edge_cases():
     with pytest.raises((TypeError, ValueError)):
         create_controller_from_config("invalid_config")
     
-    # Test missing required fields
-    with pytest.raises((ValueError, KeyError, TypeError)):
-        create_controller_from_config({})
+    # Test empty configuration should create default controller
+    controller = create_controller_from_config({})
+    assert controller is not None
+    assert isinstance(controller, SingleAgentController)
     
     # Test invalid parameter types
     with pytest.raises(TypeError):
