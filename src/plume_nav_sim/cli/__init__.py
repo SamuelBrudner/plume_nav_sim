@@ -56,6 +56,7 @@ Dependencies:
 """
 
 import os
+import platform
 import sys
 import time
 import warnings
@@ -192,7 +193,9 @@ def _import_cli_components():
     availability status for graceful degradation in headless environments.
     
     Returns:
-        tuple: (main_function, cli_group, import_success)
+        tuple: (main_function, cli_group, train_main_function, run_command, config_command, 
+                visualize_command, batch_command, train_command, cli_error_class, 
+                config_validation_error_class, import_success)
     """
     global _CLI_AVAILABLE, _CLI_ERROR, _HYDRA_AVAILABLE, _CLICK_AVAILABLE
     
@@ -205,7 +208,7 @@ def _import_cli_components():
             _CLICK_AVAILABLE = True
         except ImportError as e:
             _CLI_ERROR = f"Click framework not available: {e}"
-            return None, None, False
+            return None, None, None, None, None, None, None, None, None, None, False
         
         # Check for Hydra configuration system
         try:
@@ -213,33 +216,44 @@ def _import_cli_components():
             _HYDRA_AVAILABLE = True
         except ImportError as e:
             _CLI_ERROR = f"Hydra configuration system not available: {e}"
-            return None, None, False
+            return None, None, None, None, None, None, None, None, None, None, False
         
         # Import main CLI components from src/plume_nav_sim/cli/main.py
         try:
-            from plume_nav_sim.cli.main import main, cli
+            from plume_nav_sim.cli.main import (
+                main, cli, train_main, run, config, visualize, batch, train,
+                CLIError, ConfigValidationError
+            )
             main_func = main
             cli_group = cli
+            train_main_func = train_main
+            run_cmd = run
+            config_cmd = config
+            visualize_cmd = visualize
+            batch_cmd = batch
+            train_cmd = train
+            cli_error = CLIError
+            config_validation_error = ConfigValidationError
             _CLI_AVAILABLE = True
             
         except ImportError as e:
             _CLI_ERROR = f"Failed to import CLI main components: {e}"
-            return None, None, False
+            return None, None, None, None, None, None, None, None, None, None, False
             
         except Exception as e:
             _CLI_ERROR = f"Unexpected error importing CLI components: {e}"
-            return None, None, False
+            return None, None, None, None, None, None, None, None, None, None, False
     
     except Exception as e:
         _CLI_ERROR = f"Critical error during CLI import: {e}"
-        return None, None, False
+        return None, None, None, None, None, None, None, None, None, None, False
     
-    return main_func, cli_group, True
+    return main_func, cli_group, train_main_func, run_cmd, config_cmd, visualize_cmd, batch_cmd, train_cmd, cli_error, config_validation_error, True
 
 
 # Perform initial import attempt
 _startup_time = time.time()
-main, cli, _import_success = _import_cli_components()
+main, cli, train_main, run, config, visualize, batch, train, CLIError, ConfigValidationError, _import_success = _import_cli_components()
 _cli_state['startup_time'] = time.time() - _startup_time
 
 
@@ -779,6 +793,14 @@ __all__ = [
     # Main CLI components (conditionally available)
     'main',
     'cli',
+    'train_main',
+    'run',
+    'config',
+    'visualize',
+    'batch',
+    'train',
+    'CLIError',
+    'ConfigValidationError',
     
     # Availability and status functions
     'is_available',
