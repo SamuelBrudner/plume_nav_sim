@@ -1341,6 +1341,16 @@ def train_main() -> None:
         sys.exit(1)
 
 
+# Fix __module__ attributes for Click commands to ensure proper import validation
+# This is necessary because Click decorators set __module__ to 'click.core'
+# but tests expect them to be from 'plume_nav_sim.cli.main'
+run.__module__ = __name__
+config.__module__ = __name__
+visualize.__module__ = __name__
+batch.__module__ = __name__
+train.__module__ = __name__
+cli.__module__ = __name__
+
 # Entry point for direct module execution
 if __name__ == "__main__":
     main()
