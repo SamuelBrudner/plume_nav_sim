@@ -909,8 +909,8 @@ class TestGymnasiumAPICompliance:
             assert isinstance(info, dict), "Info should be dictionary"
 
     @pytest.mark.skipif(not GYMNASIUM_AVAILABLE, reason="Gymnasium not available")
-    def test_legacy_gym_step_returns_4_tuple(self, mock_environment_components):
-        """Test that step() returns 4-tuple (obs, reward, done, info) for legacy gym API."""
+    def test_gymnasium_context_overrides_legacy_detection(self, mock_environment_components):
+        """Test that when created via gymnasium.make(), environment returns 5-tuple regardless of legacy detection."""
         with patch('pathlib.Path.exists', return_value=True), \
              patch('plume_nav_sim.envs.plume_navigation_env._detect_legacy_gym_caller', return_value=True):
             
@@ -922,17 +922,20 @@ class TestGymnasiumAPICompliance:
             # Reset environment
             obs = env.reset()
             
-            # Step should return 4-tuple for legacy gym API
+            # When created via gymnasium.make(), should ALWAYS return 5-tuple
+            # even when legacy detection is mocked to True, because gymnasium
+            # context takes priority to ensure wrapper compatibility
             action = np.array([1.0, 0.0])  # [speed, angular_velocity]
             result = env.step(action)
             
-            assert len(result) == 4, f"Expected 4-tuple, got {len(result)}-tuple"
-            obs, reward, done, info = result
+            assert len(result) == 5, f"Expected 5-tuple for gymnasium.make(), got {len(result)}-tuple"
+            obs, reward, terminated, truncated, info = result
             
             assert isinstance(obs, dict), "Observation should be dictionary"
             # Accept both Python native numeric types and NumPy scalar types
             assert isinstance(reward, (int, float)) or np.isscalar(reward), "Reward should be numeric"
-            assert isinstance(done, bool), "Done should be boolean"
+            assert isinstance(terminated, bool), "Terminated should be boolean"
+            assert isinstance(truncated, bool), "Truncated should be boolean"
             assert isinstance(info, dict), "Info should be dictionary"
 
     @pytest.mark.skipif(not GYMNASIUM_AVAILABLE, reason="Gymnasium not available")
