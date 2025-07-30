@@ -1230,7 +1230,8 @@ def reset_navigator_state(
         angular_velocities_attr = '_angular_velocities'
 
     # Define common valid keys and param mapping for both controller types
-    valid_keys = {position_key, orientation_key, speed_key, max_speed_key, angular_velocity_key}
+    # Note: 'seed' is accepted for Gymnasium 0.29.x compatibility but handled elsewhere
+    valid_keys = {position_key, orientation_key, speed_key, max_speed_key, angular_velocity_key, 'seed'}
     param_mapping = [
         (position_key, positions_attr),
         (orientation_key, orientations_attr),
