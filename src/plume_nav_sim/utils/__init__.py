@@ -194,7 +194,7 @@ except ImportError as e:
 try:
     from plume_nav_sim.utils.seed_manager import (
         set_global_seed,
-        get_global_seed_manager,
+        get_seed_manager as get_global_seed_manager,
         get_random_state,
         restore_random_state,
         capture_random_state,
