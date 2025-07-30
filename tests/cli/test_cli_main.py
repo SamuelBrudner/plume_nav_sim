@@ -70,30 +70,36 @@ from tests.helpers.import_validator import (
 from plume_nav_sim.cli.main import (
     cli,
     main,
+    train_main,
     run,
     config,
     visualize,
     batch,
+    train,
     CLIError,
     ConfigValidationError,
+    ConfigurationError,
+    SimulationError,
     _setup_cli_logging,
     _validate_hydra_availability,
-    _validate_configuration,
-    _export_config_documentation,
     _measure_performance,
     _safe_config_access,
-    _CLI_CONFIG
+    _CLI_CONFIG,
+    HYDRA_AVAILABLE,
+    GYMNASIUM_AVAILABLE,
+    SB3_AVAILABLE
 )
 
 from plume_nav_sim.cli import (
-    get_cli_version,
-    is_cli_available,
-    validate_cli_environment,
-    register_command,
-    extend_cli,
-    run_command,
-    get_available_commands,
-    CLI_CONFIG as CLI_MODULE_CONFIG
+    main as cli_main,
+    train_main as cli_train_main,
+    cli as cli_group,
+    CLIError as cli_CLIError,
+    ConfigValidationError as cli_ConfigValidationError,
+    get_version,
+    is_available,
+    validate_environment,
+    register_command
 )
 
 # Import dependencies for testing
@@ -147,11 +153,10 @@ class TestCLIImportValidation:
     def test_cli_init_imports(self):
         """Validate that CLI module utilities are imported from correct locations."""
         cli_module_imports = {
-            'get_cli_version': get_cli_version,
-            'is_cli_available': is_cli_available,
-            'validate_cli_environment': validate_cli_environment,
-            'register_command': register_command,
-            'extend_cli': extend_cli
+            'get_version': get_version,
+            'is_available': is_available,
+            'validate_environment': validate_environment,
+            'register_command': register_command
         }
         
         assert_all_imported_from(
