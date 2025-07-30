@@ -371,6 +371,21 @@ def get_version_info() -> Dict[str, str]:
     return version_info
 
 
+def get_cli_version() -> str:
+    """
+    Alias for get_version() for backward compatibility.
+    
+    Returns:
+        Version string
+        
+    Example:
+        >>> version = get_cli_version()
+        >>> print(version)  
+        '1.0.0'
+    """
+    return get_version()
+
+
 @_measure_time('environment_validation')
 def validate_environment() -> Dict[str, Any]:
     """
@@ -809,6 +824,7 @@ __all__ = [
     # Version and metadata
     'get_version',
     'get_version_info',
+    'get_cli_version',  # Alias for compatibility
     '__version__',
     '__author__',
     '__description__',
