@@ -867,19 +867,26 @@ class FrameCache:
         """
         return self.memory_usage_mb / self.memory_limit_mb
     
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_statistics(self) -> Dict[str, Any]:
         """
-        Get comprehensive performance statistics for monitoring.
+        Get comprehensive cache statistics for CLI integration and monitoring.
+        
+        This method provides the primary statistics interface for CLI frame caching
+        integration as specified in Section 0.3.1 technical approach requirements.
         
         Returns:
-            Dictionary containing detailed performance metrics
+            Dictionary containing comprehensive cache performance metrics including:
+            - Hit/miss rates and counts
+            - Memory usage and limits
+            - Cache size and performance timing
+            - Preload state and configuration
         """
         if self.statistics:
             stats = self.statistics.get_summary()
         else:
             stats = {}
         
-        # Add cache-specific metrics
+        # Add cache-specific metrics for CLI integration
         stats.update({
             'cache_mode': self.mode.value,
             'cache_size': self.cache_size,
@@ -894,6 +901,16 @@ class FrameCache:
         })
         
         return stats
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """
+        Get comprehensive performance statistics for monitoring.
+        
+        Returns:
+            Dictionary containing detailed performance metrics
+        """
+        # Delegate to get_statistics for consistency
+        return self.get_statistics()
     
     def _update_logging_metrics(self) -> None:
         """Update logging context with current cache metrics."""
