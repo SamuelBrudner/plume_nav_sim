@@ -79,6 +79,9 @@ class NavigatorConfig(BaseModel):
     
     This is maintained for backward compatibility.
     """
+    # Mode selection - can be 'single', 'multi', or 'auto' for auto-detection
+    mode: Optional[str] = "auto"
+    
     # Single agent parameters
     position: Optional[Tuple[float, float]] = None
     orientation: Optional[float] = 0.0  # degrees
@@ -94,11 +97,44 @@ class NavigatorConfig(BaseModel):
     angular_velocities: Optional[List[float]] = None
     num_agents: Optional[int] = None
 
+    @field_validator('orientation')
+    @classmethod
+    def validate_orientation(cls, v):
+        """Validate that orientation is within valid range."""
+        if v is not None and (v < 0 or v >= 360):
+            raise ValueError("orientation must be between 0 and 360 degrees")
+        return v
+
+    @field_validator('orientations')
+    @classmethod
+    def validate_orientations(cls, v):
+        """Validate that all orientations are within valid range."""
+        if v is not None:
+            for orient in v:
+                if orient < 0 or orient >= 360:
+                    raise ValueError("orientation must be between 0 and 360 degrees")
+        return v
+
     @model_validator(mode="after")
     def check_agent_params(cls, values):
-        """Verify that either single agent or multi-agent parameters are provided."""
+        """Verify that either single agent or multi-agent parameters are provided and auto-detect mode."""
         has_multi = values.positions is not None
         has_single = values.position is not None
+        
+        # Auto-detect mode if set to "auto"
+        if values.mode == "auto":
+            if has_multi:
+                values.mode = "multi"
+            else:
+                values.mode = "single"
+        
+        # Validate mode consistency
+        if values.mode == "multi" and not has_multi:
+            if has_single:
+                raise ValueError("Cannot use single-agent parameters with multi mode")
+        elif values.mode == "single" and has_multi:
+            raise ValueError("Cannot use multi-agent parameters with single mode")
+        
         if has_multi and has_single:
             raise ValueError("Cannot specify both single-agent and multi-agent parameters")
         if values.positions is not None:
@@ -126,6 +162,10 @@ class VideoPlumeConfig(BaseModel):
     kernel_sigma: Optional[float] = None
     threshold: Optional[float] = None
     normalize: Optional[bool] = True
+    
+    # Frame range parameters
+    start_frame: Optional[int] = None
+    end_frame: Optional[int] = None
 
     @field_validator('kernel_size')
     @classmethod
@@ -137,6 +177,22 @@ class VideoPlumeConfig(BaseModel):
             if v % 2 == 0:
                 raise ValueError("kernel_size must be odd")
         return v
+
+    @field_validator('threshold')
+    @classmethod
+    def validate_threshold(cls, v):
+        """Validate that threshold is within valid range [0, 1]."""
+        if v is not None and (v < 0 or v > 1):
+            raise ValueError("ensure this value is less than or equal to 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_frame_range(cls, values):
+        """Validate that end_frame is greater than start_frame."""
+        if values.start_frame is not None and values.end_frame is not None:
+            if values.end_frame <= values.start_frame:
+                raise ValueError("end_frame must be greater than start_frame")
+        return values
 
     model_config = ConfigDict(extra="allow")
 
