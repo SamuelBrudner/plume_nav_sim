@@ -964,7 +964,7 @@ def _create_vectorized_environment(
     n_envs: int = 4,
     vec_env_type: str = 'dummy',
     frame_cache: Optional[FrameCache] = None
-) -> Union[DummyVecEnv, SubprocVecEnv]:
+) -> Any:
     """
     Create vectorized environment for parallel RL training.
     
@@ -1010,6 +1010,11 @@ def _setup_training_callbacks(
         List of configured callbacks
     """
     callbacks = []
+    
+    # Only setup callbacks if stable-baselines3 is available
+    if not SB3_AVAILABLE:
+        logger.warning("Stable-baselines3 not available - no training callbacks will be configured")
+        return callbacks
     
     # Model checkpointing
     checkpoint_callback = CheckpointCallback(
