@@ -14,6 +14,9 @@ from .navigation import (
     create_gymnasium_environment,
     ConfigurationError,
     SimulationError,
+    # Legacy compatibility aliases
+    run_simulation,
+    visualize_simulation_results,
 )
 
 __version__ = "1.0.0"
@@ -26,4 +29,7 @@ __all__ = [
     "navigation",
     "ConfigurationError",
     "SimulationError",
+    # Legacy compatibility aliases
+    "run_simulation",
+    "visualize_simulation_results",
 ]
