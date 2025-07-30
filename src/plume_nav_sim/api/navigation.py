@@ -65,9 +65,10 @@ def create_navigator(config: Optional[Dict[str, Any]] = None, cfg: Optional[Any]
     # Merge config and kwargs, with kwargs taking precedence
     merged_config = {**config, **kwargs}
     
-    # Handle conflicting position arguments - raise error for clarity
+    # Handle conflicting position arguments - prioritize multi-agent mode
     if 'position' in merged_config and 'positions' in merged_config:
-        raise ValueError("Cannot specify both 'position' (single-agent) and 'positions' (multi-agent). Please provide only one.")
+        # Multi-agent mode takes precedence - remove single-agent position
+        merged_config = {k: v for k, v in merged_config.items() if k != 'position'}
     
     # Validate configuration values
     _validate_navigator_config(merged_config)
@@ -520,8 +521,20 @@ def visualize_trajectory(
     if not isinstance(positions, np.ndarray):
         positions = np.array(positions)
     
-    if positions.ndim != 2 or positions.shape[1] != 2:
-        raise ValueError(f"positions must be shape (N, 2), got {positions.shape}")
+    # Handle both single-agent (N, 2) and multi-agent (time_steps, agents, 2) formats
+    if positions.ndim == 3:
+        # Multi-agent format: flatten to single trajectory by concatenating all agents
+        time_steps, num_agents, coords = positions.shape
+        if coords != 2:
+            raise ValueError(f"positions must have 2 coordinates, got {coords}")
+        # Reshape to (time_steps * num_agents, 2)
+        positions = positions.reshape(-1, 2)
+    elif positions.ndim == 2:
+        # Single-agent format: validate shape
+        if positions.shape[1] != 2:
+            raise ValueError(f"positions must be shape (N, 2), got {positions.shape}")
+    else:
+        raise ValueError(f"positions must be 2D (N, 2) or 3D (time_steps, agents, 2), got {positions.shape}")
     
     # Placeholder visualization implementation
     try:
