@@ -1034,7 +1034,25 @@ def read_odor_values(
     # Read values for positions within bounds
     for i in range(num_positions):
         if within_bounds[i]:
-            odor_values[i] = env_array[y_pos[i], x_pos[i]]
+            # Convert array indices to Python scalars for NumPy 2.x compatibility
+            y_idx = y_pos[i].item() if hasattr(y_pos[i], 'item') else int(y_pos[i])
+            x_idx = x_pos[i].item() if hasattr(x_pos[i], 'item') else int(x_pos[i])
+            
+            # Get value from environment array
+            pixel_value = env_array[y_idx, x_idx]
+            
+            # Handle multi-channel arrays (e.g., RGB images)
+            if isinstance(pixel_value, np.ndarray) and pixel_value.size > 1:
+                # For multi-channel arrays, use the first channel or convert to grayscale
+                if len(pixel_value) == 3:  # RGB image
+                    # Convert RGB to grayscale using standard weights
+                    odor_values[i] = 0.299 * pixel_value[0] + 0.587 * pixel_value[1] + 0.114 * pixel_value[2]
+                else:
+                    # For other multi-channel arrays, just use the first channel
+                    odor_values[i] = pixel_value[0]
+            else:
+                # Single value (scalar or 0-d array)
+                odor_values[i] = pixel_value
 
             # Normalize if uint8
             if hasattr(env_array, 'dtype') and env_array.dtype == np.uint8:
