@@ -71,7 +71,7 @@ except ImportError:
 
 # Import spaces factory - handle case where it doesn't exist yet
 try:
-    from ..envs.spaces import SpacesFactory
+    from ..envs.spaces import SpaceFactory as SpacesFactory
     SPACES_FACTORY_AVAILABLE = True
 except ImportError:
     # This will be created by other agents - define minimal fallback
