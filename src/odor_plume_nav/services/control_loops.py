@@ -43,6 +43,10 @@ class SingleAgentController:
         self._speed = np.array([speed])
         self._max_speed = np.array([max_speed])
         self._angular_velocity = np.array([angular_velocity])
+        
+        # Initialize sensor attributes for test compatibility
+        self._sensors = []  # List of sensor configurations
+        self._primary_sensor = None  # Primary sensor for odor sampling
     
     @property
     def positions(self) -> np.ndarray:
@@ -252,6 +256,22 @@ class SingleAgentController:
         
         # Return as a 1D array
         return odor_values[0]
+    
+    def load_memory(self) -> Optional[Any]:
+        """Load memory state for the navigator.
+        
+        Returns:
+            Optional[Any]: Memory state or None if not initialized
+        """
+        return getattr(self, '_memory_state', None)
+    
+    def save_memory(self, memory_state: Any) -> None:
+        """Save memory state for the navigator.
+        
+        Parameters:
+            memory_state: Memory state to save
+        """
+        self._memory_state = memory_state
 
 
 class MultiAgentController:
@@ -297,6 +317,10 @@ class MultiAgentController:
         self._speeds = np.zeros(num_agents) if speeds is None else np.array(speeds)
         self._max_speeds = np.ones(num_agents) if max_speeds is None else np.array(max_speeds)
         self._angular_velocities = np.zeros(num_agents) if angular_velocities is None else np.array(angular_velocities)
+        
+        # Initialize sensor attributes for test compatibility
+        self._sensors = []  # List of sensor configurations
+        self._primary_sensor = None  # Primary sensor for odor sampling
     
     @property
     def positions(self) -> np.ndarray:
@@ -506,3 +530,19 @@ class MultiAgentController:
             num_sensors=num_sensors,
             layout_name=layout_name
         )
+    
+    def load_memory(self) -> Optional[Any]:
+        """Load memory state for the navigator.
+        
+        Returns:
+            Optional[Any]: Memory state or None if not initialized
+        """
+        return getattr(self, '_memory_state', None)
+    
+    def save_memory(self, memory_state: Any) -> None:
+        """Save memory state for the navigator.
+        
+        Parameters:
+            memory_state: Memory state to save
+        """
+        self._memory_state = memory_state
