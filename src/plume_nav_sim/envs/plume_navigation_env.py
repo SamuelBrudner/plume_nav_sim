@@ -1533,8 +1533,25 @@ class PlumeNavigationEnv(gym.Env):
                         obs_spaces[f"sensor_{i}_{sensor_name}_detection"] = Box(
                             low=0, high=1, shape=(1,), dtype=bool
                         )
+                    elif 'concentration' in sensor_name:
+                        # Match the observation generation logic for concentration sensors
+                        obs_spaces[f"sensor_{i}_{sensor_name}_concentration"] = Box(
+                            low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                        )
+                    elif 'gradient' in sensor_name:
+                        # Match the observation generation logic for gradient sensors  
+                        obs_spaces[f"sensor_{i}_{sensor_name}_gradient"] = Box(
+                            low=-10.0, high=10.0, shape=(2,), dtype=np.float32
+                        )
+                        obs_spaces[f"sensor_{i}_{sensor_name}_magnitude"] = Box(
+                            low=0.0, high=10.0, shape=(1,), dtype=np.float32
+                        )
+                        obs_spaces[f"sensor_{i}_{sensor_name}_direction"] = Box(
+                            low=0.0, high=360.0, shape=(1,), dtype=np.float32
+                        )
                     else:
-                        obs_spaces[f"sensor_{i}_{sensor_name}_measurement"] = Box(
+                        # Generic sensor fallback - matches observation generation logic
+                        obs_spaces[f"sensor_{i}_{sensor_name}_output"] = Box(
                             low=0.0, high=1.0, shape=(1,), dtype=np.float32
                         )
                 
