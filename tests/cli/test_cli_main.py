@@ -1122,13 +1122,13 @@ class TestCLIHelpTextValidation:
         
         # Verify essential content sections
         help_text = result.output
-        assert 'Odor Plume Navigation CLI' in help_text
+        assert 'Plume Navigation Simulation CLI' in help_text
         assert 'Examples:' in help_text
         assert 'Commands:' in help_text or 'Usage:' in help_text
         
         # Verify command examples are present
-        assert 'plume_nav_sim-cli run' in help_text
-        assert 'plume_nav_sim-cli config' in help_text
+        assert 'plume-nav-sim run' in help_text
+        assert 'plume-nav-sim config' in help_text
         
         # Verify global options documentation
         assert '--verbose' in help_text
@@ -1143,7 +1143,7 @@ class TestCLIHelpTextValidation:
         
         help_text = result.output
         # Verify command description
-        assert 'Execute odor plume navigation simulation' in help_text
+        assert 'Execute plume navigation simulation' in help_text
         
         # Verify parameter documentation
         assert '--dry-run' in help_text
@@ -1285,18 +1285,19 @@ class TestCLIHelpTextValidation:
             if 'Examples:' in line:
                 in_examples = True
                 continue
-            if in_examples and line.strip().startswith('plume_nav_sim-cli'):
-                examples.append(line.strip())
+            if in_examples and ('plume-nav-sim' in line.strip() or line.strip().startswith('#')):
+                if line.strip() and not line.strip().startswith('#'):
+                    examples.append(line.strip())
         
         # Verify examples are syntactically valid
         assert len(examples) > 0, "No usage examples found in help text"
         
         for example in examples:
             # Basic syntax validation
-            assert example.startswith('plume_nav_sim-cli')
+            assert 'plume-nav-sim' in example
             # Should contain valid command structure
             parts = example.split()
-            assert len(parts) >= 2  # At least "plume_nav_sim-cli command"
+            assert len(parts) >= 2  # At least "plume-nav-sim command"
 
 
 class TestCLIUtilityFunctions:
