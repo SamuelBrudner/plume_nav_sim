@@ -892,7 +892,8 @@ class TestGymnasiumAPICompliance:
             obs, reward, terminated, truncated, info = result
             
             assert isinstance(obs, dict), "Observation should be dictionary"
-            assert isinstance(reward, (int, float)), "Reward should be numeric"
+            # Accept both Python native numeric types and NumPy scalar types
+            assert isinstance(reward, (int, float)) or np.isscalar(reward), "Reward should be numeric"
             assert isinstance(terminated, bool), "Terminated should be boolean"
             assert isinstance(truncated, bool), "Truncated should be boolean"
             assert isinstance(info, dict), "Info should be dictionary"
@@ -919,7 +920,8 @@ class TestGymnasiumAPICompliance:
             obs, reward, done, info = result
             
             assert isinstance(obs, dict), "Observation should be dictionary"
-            assert isinstance(reward, (int, float)), "Reward should be numeric"
+            # Accept both Python native numeric types and NumPy scalar types
+            assert isinstance(reward, (int, float)) or np.isscalar(reward), "Reward should be numeric"
             assert isinstance(done, bool), "Done should be boolean"
             assert isinstance(info, dict), "Info should be dictionary"
 
