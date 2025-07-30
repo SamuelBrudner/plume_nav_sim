@@ -323,8 +323,8 @@ def create_plume_model(
         Configuration with validation disabled:
         >>> plume_model = create_plume_model(config, validate_protocol=False)
     """
-    if not config:
-        raise ValueError("Configuration cannot be empty")
+    if config is None:
+        raise ValueError("Configuration cannot be None")
     
     # Convert DictConfig to regular dict if needed
     if hasattr(config, 'to_container') and HYDRA_AVAILABLE:
@@ -577,9 +577,9 @@ def validate_model_config(
     """
     errors = []
     
-    # Check for empty configuration
-    if not config:
-        errors.append("Configuration cannot be empty")
+    # Check for None configuration
+    if config is None:
+        errors.append("Configuration cannot be None")
         return False, errors
     
     # Convert to dict if needed
