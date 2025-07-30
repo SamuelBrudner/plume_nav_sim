@@ -157,9 +157,9 @@ def validate_env_interpolation(value: str) -> bool:
     if not isinstance(value, str):
         return True
         
-    # Check for ${env:VAR_NAME} pattern
+    # Check for ${oc.env:VAR_NAME} or ${oc.env:VAR_NAME,default} pattern
     import re
-    pattern = r'\$\{env:([A-Z_][A-Z0-9_]*)\}'
+    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
     return bool(re.search(pattern, value))
 
 
@@ -181,9 +181,17 @@ def resolve_env_value(value: str, default: str = "") -> str:
     
     def replacer(match):
         env_var = match.group(1)
-        return os.environ.get(env_var, default)
+        inline_default = match.group(2)
+        
+        # Extract default value from inline syntax (e.g., ",default_value")
+        if inline_default and inline_default.startswith(','):
+            inline_default = inline_default[1:]  # Remove leading comma
+        else:
+            inline_default = default
+            
+        return os.environ.get(env_var, inline_default)
     
-    pattern = r'\$\{env:([A-Z_][A-Z0-9_]*)\}'
+    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
     return re.sub(pattern, replacer, value)
 
 
