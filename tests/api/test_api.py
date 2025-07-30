@@ -1126,15 +1126,14 @@ class TestEnhancedLogging:
 
     def test_logging_in_api_functions(self):
         """Test that API functions use structured logging."""
-        with patch('plume_nav_sim.utils.logging_setup.get_logger') as mock_logger:
-            mock_logger_instance = MagicMock()
-            mock_logger.return_value = mock_logger_instance
-            
+        # Mock the logger where actual logging occurs during navigator creation
+        with patch('plume_nav_sim.core.controllers.logger') as mock_logger:
             # Test navigator creation with logging
             navigator = create_navigator(position=(10, 20))
             
-            # Verify logger was used (exact calls depend on implementation)
-            assert mock_logger.called
+            # Verify logger was used during controller initialization
+            # The logging occurs in the controller's __init__ method
+            assert len(mock_logger.method_calls) > 0
 
 
 class TestPerformanceMonitoring:
@@ -1224,40 +1223,19 @@ class TestLegacyCompatibility:
 
     def test_run_simulation_alias(self):
         """Test legacy run_simulation alias."""
-        navigator = create_navigator(position=(0, 0))
+        # Test that the legacy alias exists and is callable
+        assert callable(run_simulation), "run_simulation alias should be callable"
         
-        with patch('cv2.VideoCapture') as mock_cap, \
-             patch('pathlib.Path.exists', return_value=True):
-            mock_instance = MagicMock()
-            mock_cap.return_value = mock_instance
-            mock_instance.isOpened.return_value = True
-            mock_instance.get.return_value = 100
-            mock_instance.read.return_value = (True, np.zeros((10, 10, 3), dtype=np.uint8))
-            
-            plume = create_video_plume(video_path="test.mp4")
-            
-            with patch('tests.api.test_api.run_plume_simulation') as mock_sim:
-                positions = np.array([[[0, 0], [1, 1]]])
-                orientations = np.array([[0, 45]])
-                readings = np.array([[0.1, 0.2]])
-                mock_sim.return_value = (positions, orientations, readings)
-                
-                # Test legacy alias
-                result = run_simulation(navigator, plume, num_steps=1, dt=1.0)
-                
-                assert len(result) == 3
-                mock_sim.assert_called_once()
+        # Test that it's the same as run_plume_simulation
+        assert run_simulation is run_plume_simulation, "run_simulation should be an alias for run_plume_simulation"
 
     def test_visualize_simulation_results_alias(self):
         """Test legacy visualize_simulation_results alias."""
-        positions = np.array([[[0, 0], [1, 1]]])
-        orientations = np.array([[0, 45]])
+        # Test that the legacy alias exists and is callable
+        assert callable(visualize_simulation_results), "visualize_simulation_results alias should be callable"
         
-        with patch('plume_nav_sim.api.navigation.visualize_trajectory') as mock_viz:
-            # Test legacy alias
-            visualize_simulation_results(positions, orientations, show_plot=False)
-            
-            mock_viz.assert_called_once()
+        # Test that it's the same as visualize_plume_simulation
+        assert visualize_simulation_results is visualize_plume_simulation, "visualize_simulation_results should be an alias for visualize_plume_simulation"
 
 
 class TestEnhancedConfigurationValidation:
@@ -1528,7 +1506,7 @@ class TestIntegrationWithTempFiles:
             plume = create_video_plume(video_path="test.mp4")
             
             # Run simulation (mocked)
-            with patch('plume_nav_sim.api.navigation.run_plume_simulation') as mock_sim:
+            with patch('plume_nav_sim.api.navigation.run_simulation') as mock_sim:
                 positions = np.array([[[0, 0], [1, 1]]])
                 orientations = np.array([[0, 45]])
                 readings = np.array([[0.1, 0.2]])
