@@ -103,9 +103,9 @@ except ImportError:
 
 # Import sensor implementations for type checking
 try:
-    from ..core.sensors.binary_sensor import BinarySensor
-    from ..core.sensors.concentration_sensor import ConcentrationSensor
-    from ..core.sensors.gradient_sensor import GradientSensor
+    from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
+    from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
+    from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
     SENSOR_IMPLEMENTATIONS_AVAILABLE = True
 except ImportError:
     # Handle case where sensor implementations don't exist yet
