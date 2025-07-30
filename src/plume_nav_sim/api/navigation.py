@@ -62,10 +62,14 @@ def create_navigator(config: Optional[Dict[str, Any]] = None, cfg: Optional[Any]
     if config is None:
         config = {}
     
+    # Check for conflicting direct arguments in kwargs - this should raise an error
+    if 'position' in kwargs and 'positions' in kwargs:
+        raise ValueError("Cannot specify both 'position' (single-agent) and 'positions' (multi-agent). Please provide only one.")
+    
     # Merge config and kwargs, with kwargs taking precedence
     merged_config = {**config, **kwargs}
     
-    # Handle conflicting position arguments - prioritize multi-agent mode
+    # Handle conflicting position arguments from config merging - prioritize multi-agent mode
     if 'position' in merged_config and 'positions' in merged_config:
         # Multi-agent mode takes precedence - remove single-agent position
         merged_config = {k: v for k, v in merged_config.items() if k != 'position'}
