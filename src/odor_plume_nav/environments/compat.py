@@ -176,10 +176,10 @@ def _analyze_caller_frame(frame_globals: frozenset, frame_locals: frozenset) -> 
         import_context = "gym"
         debug_info["import_pattern"] = "gym_only"
     elif has_gym and has_gymnasium:
-        # Both imports present - check for usage patterns
-        confidence = 0.60
-        detection_method = "mixed_imports"
-        import_context = "mixed"
+        # Both imports present - prefer gymnasium for modern API
+        confidence = 0.80
+        detection_method = "mixed_imports_prefer_gymnasium"
+        import_context = "gymnasium"
         debug_info["import_pattern"] = "both_present"
     
     # Additional heuristics for module naming patterns
@@ -200,8 +200,9 @@ def _analyze_caller_frame(frame_globals: frozenset, frame_locals: frozenset) -> 
         import_context = "gymnasium"  # SB3 prefers Gymnasium
         debug_info["framework"] = "stable_baselines3"
     
-    # Default to legacy for low confidence
-    is_legacy = confidence < 0.75 if confidence > 0 else True
+    # Default to gymnasium (modern) for better forward compatibility
+    # Only use legacy if explicitly detected or very low confidence
+    is_legacy = confidence < 0.75 if confidence > 0 and detection_method == "explicit_gym_import" else False
     
     return APIDetectionResult(
         is_legacy=is_legacy,

@@ -347,6 +347,15 @@ class VideoPlume:
         if HYDRA_AVAILABLE and isinstance(cfg, DictConfig):
             # Resolve any remaining interpolations and convert to dict
             config_dict = OmegaConf.to_container(cfg, resolve=True)
+        elif hasattr(cfg, 'model_dump'):  # Pydantic v2 model
+            # Already a validated Pydantic model, convert to dict
+            config_dict = cfg.model_dump()
+        elif hasattr(cfg, 'dict'):  # Pydantic v1 model
+            # Already a validated Pydantic model, convert to dict
+            config_dict = cfg.dict()
+        elif hasattr(cfg, '__dict__'):  # Generic object with attributes
+            # Convert object attributes to dict
+            config_dict = cfg.__dict__
         else:
             config_dict = dict(cfg)
         
@@ -354,12 +363,26 @@ class VideoPlume:
             # Validate configuration through Pydantic schema
             # Note: _skip_validation=True prevents file existence check during validation
             # since we want to handle that in the main constructor
-            validated_config = VideoPlumeConfig.model_validate(
-                {**config_dict, "_skip_validation": True}
-            )
+            config_for_validation = {**config_dict, "_skip_validation": True}
             
-            # Create instance with validated parameters
-            validated_params = validated_config.model_dump(exclude={"_skip_validation"})
+            # Handle different Pydantic versions for validation
+            if hasattr(VideoPlumeConfig, 'model_validate'):  # Pydantic v2
+                validated_config = VideoPlumeConfig.model_validate(config_for_validation)
+                validated_params = validated_config.model_dump(exclude={"_skip_validation"})
+            elif hasattr(VideoPlumeConfig, 'parse_obj'):  # Pydantic v1
+                validated_config = VideoPlumeConfig.parse_obj(config_for_validation)
+                validated_params = validated_config.dict(exclude={"_skip_validation"})
+            else:
+                # Fallback: direct instantiation (exclude _skip_validation as it's not a real field)
+                config_for_direct_validation = {k: v for k, v in config_for_validation.items() 
+                                              if k != "_skip_validation"}
+                validated_config = VideoPlumeConfig(**config_for_direct_validation)
+                if hasattr(validated_config, 'dict'):
+                    validated_params = validated_config.dict()
+                elif hasattr(validated_config, 'model_dump'):
+                    validated_params = validated_config.model_dump()
+                else:
+                    validated_params = validated_config.__dict__.copy()
             
             # Handle cache parameter separately if present in original config
             if isinstance(cfg, dict) and 'cache' in cfg:

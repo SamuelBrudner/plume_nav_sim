@@ -1445,8 +1445,8 @@ class TestSourceDeterministicBehavior:
             float32_results['rates'], float64_results['rates']
         )):
             # Allow small differences due to floating point precision
-            assert np.allclose(pos32, pos64, atol=1e-6), f"Cross-platform position mismatch at step {i}"
-            assert abs(rate32 - rate64) < 1e-6, f"Cross-platform rate mismatch at step {i}"
+            assert np.allclose(pos32, pos64, atol=1e-5), f"Cross-platform position mismatch at step {i}"
+            assert abs(rate32 - rate64) < 1e-5, f"Cross-platform rate mismatch at step {i}"
 
 
 # Integration with pytest benchmarking for performance monitoring

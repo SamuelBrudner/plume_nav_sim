@@ -57,7 +57,7 @@ Example Usage:
 
 import warnings
 import numpy as np
-from typing import Dict, Any, Union, Tuple, Optional, List, Literal, Type, cast
+from typing import Dict, Any, Union, Tuple, Optional, List, Literal, Type, cast, TYPE_CHECKING
 from pathlib import Path
 import threading
 from dataclasses import dataclass, field
@@ -92,20 +92,24 @@ from plume_nav_sim.utils.logging_setup import (
     log_legacy_api_deprecation
 )
 
-# Import sensor protocol for dynamic space construction
-try:
+# Import sensor protocol for dynamic space construction - use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
     from ..core.protocols import SensorProtocol
-    SENSOR_PROTOCOL_AVAILABLE = True
-except ImportError:
-    # Handle case where protocols don't exist yet
-    SensorProtocol = object
-    SENSOR_PROTOCOL_AVAILABLE = False
+else:
+    # Try runtime import but handle circular imports gracefully
+    try:
+        from ..core.protocols import SensorProtocol
+        SENSOR_PROTOCOL_AVAILABLE = True
+    except ImportError:
+        # Handle case where protocols don't exist yet or circular import
+        SensorProtocol = object
+        SENSOR_PROTOCOL_AVAILABLE = False
 
 # Import sensor implementations for type checking
 try:
-    from ..core.sensors.binary_sensor import BinarySensor
-    from ..core.sensors.concentration_sensor import ConcentrationSensor
-    from ..core.sensors.gradient_sensor import GradientSensor
+    from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
+    from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
+    from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
     SENSOR_IMPLEMENTATIONS_AVAILABLE = True
 except ImportError:
     # Handle case where sensor implementations don't exist yet

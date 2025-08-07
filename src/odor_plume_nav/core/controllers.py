@@ -597,7 +597,7 @@ class MultiAgentController(_BaseMultiAgentController):
 
 
 def create_controller_from_config(
-    config: Union[DictConfig, Dict[str, Any], NavigatorConfig],
+    config: Union[DictConfig, Dict[str, Any], NavigatorConfig, "SingleAgentConfig", "MultiAgentConfig"],
     controller_id: Optional[str] = None,
     enable_logging: bool = True
 ) -> Union[SingleAgentController, MultiAgentController]:
@@ -655,6 +655,9 @@ def create_controller_from_config(
         if isinstance(config, NavigatorConfig):
             # Pydantic model - extract relevant parameters
             config_dict = config.model_dump(exclude_none=True)
+        elif hasattr(config, 'model_dump') and hasattr(config, '__class__'):
+            # Handle SingleAgentConfig, MultiAgentConfig, and other Pydantic models
+            config_dict = config.model_dump(exclude_none=True)
         elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
             # Hydra OmegaConf configuration
             config_dict = OmegaConf.to_container(config, resolve=True)
@@ -664,7 +667,7 @@ def create_controller_from_config(
         else:
             raise TypeError(
                 f"Unsupported configuration type: {type(config)}. "
-                f"Expected DictConfig, dict, or NavigatorConfig"
+                f"Expected DictConfig, dict, NavigatorConfig, SingleAgentConfig, or MultiAgentConfig"
             )
         
         # Detect controller type based on configuration parameters

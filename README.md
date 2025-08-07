@@ -46,7 +46,7 @@ The Plume Navigation Simulation library (v1.0.0) provides a comprehensive toolki
 - **Multi-Framework Integration**: Compatible with Kedro, RL frameworks, and ML/neural network analyses
 - **CLI Interface**: Command-line tools for automation, batch processing, and RL training workflows
 - **Docker-Ready**: Containerized development and deployment environments
-- **Dual Workflow Support**: Poetry and pip installation methods
+
 - **Research-Grade Quality**: Type-safe, well-documented, and thoroughly tested
 
 ## Modular Architecture Overview
@@ -489,33 +489,12 @@ This v1.0 protocol-based architecture enables researchers to focus on algorithm 
 ### Prerequisites
 
 - Python 3.10 or higher (minimum requirement upgraded for Gymnasium 0.29.x compatibility)
-- Poetry (recommended) or pip for dependency management
+- pip for dependency management (setuptools>=61 used as build backend)
 - Docker and docker-compose (optional, for containerized development)
 
 ### Installation Methods
 
-#### Poetry Installation (Recommended)
-
-```bash
-# Install from PyPI
-poetry add plume_nav_sim
-
-# For development with all optional dependencies
-poetry add plume_nav_sim --group dev,docs,viz
-
-# For reinforcement learning capabilities
-poetry add plume_nav_sim --group rl
-
-# v1.0 Optional dependency groups for enhanced capabilities
-poetry add plume_nav_sim --group recording  # Multi-backend data persistence
-poetry add plume_nav_sim --group debug      # Interactive debugging GUI
-poetry add plume_nav_sim --group analysis   # Automated statistics collection
-
-# Full v1.0 installation with all components
-poetry add plume_nav_sim --group dev,docs,viz,rl,recording,debug,analysis
-```
-
-#### Pip Installation
+#### Standard Installation
 
 ```bash
 # Standard installation
@@ -543,11 +522,12 @@ pip install "plume_nav_sim[dev,docs,viz,rl,recording,debug,analysis]"
 git clone https://github.com/organization/plume_nav_sim.git
 cd plume_nav_sim
 
-# Poetry development setup (recommended)
-poetry install --with dev,docs,viz,rl
-poetry shell
+# Development setup with editable install
+pip install -e ".[dev,docs,viz,rl]"
 
-# Alternative: pip development setup
+# Or with virtual environment (recommended)
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev,docs,viz,rl]"
 ```
 
@@ -1738,9 +1718,7 @@ model.learn(total_timesteps=100000)
 ```python
 # Problem: ModuleNotFoundError for gymnasium
 # Solution: Install RL dependencies
-pip install "odor_plume_nav[rl]"
-# or
-poetry add "odor_plume_nav[rl]"
+pip install "plume_nav_sim[rl]"
 ```
 
 #### Issue 2: Step Return Tuple Length
@@ -4237,9 +4215,7 @@ video_plume:
 
 ```bash
 # Ensure you have the latest version with structured config support
-pip install "odor_plume_nav[rl]>=0.2.0"
-# or
-poetry add "odor_plume_nav[rl]>=0.2.0"
+pip install "plume_nav_sim[rl]>=0.2.0"
 ```
 
 ##### Step 2: Update Configuration Directory Structure
@@ -4508,9 +4484,10 @@ conf/
 git clone https://github.com/organization/odor_plume_nav.git
 cd odor_plume_nav
 
-# Poetry setup (recommended)
-poetry install --with dev,docs,viz,rl
-poetry shell
+# Standard development setup
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e ".[dev,docs,viz,rl]"
 
 # Install pre-commit hooks
 pre-commit install
@@ -4525,9 +4502,9 @@ The project includes comprehensive Makefile automation:
 
 ```bash
 # Development commands
-make install-dev       # Poetry install with dev dependencies
+make install-dev       # pip install with dev dependencies
 make setup-dev         # Complete development environment setup
-make install          # Traditional pip install (fallback)
+make install          # Standard pip install
 
 # Code quality
 make format           # Run black and isort formatting
@@ -4537,8 +4514,7 @@ make test            # Run pytest with coverage
 make test-all        # Run all quality checks
 
 # Build and distribution
-make build           # Build wheel and sdist
-make poetry-build    # Build using Poetry
+make build           # Build wheel and sdist using python -m build
 make clean           # Clean build artifacts
 
 # Documentation
@@ -5466,7 +5442,7 @@ navigator: {memory_enabled: true, strategy: infotaxis}
 - **CLI Interface**: Comprehensive command-line tools with Click framework
 - **Multi-Framework Support**: Integration patterns for Kedro, RL, and ML workflows
 - **Docker Support**: Containerized development and deployment environments
-- **Dual Workflows**: Poetry and pip installation support
+- **Setuptools Build System**: Modern PEP 621-compliant packaging with setuptools>=61
 - **Enhanced Documentation**: Comprehensive usage examples and migration guides
 
 For detailed changes, see [CHANGELOG.md](CHANGELOG.md).

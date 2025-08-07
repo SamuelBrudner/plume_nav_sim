@@ -120,7 +120,44 @@ try:
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
     given = lambda *args, **kwargs: lambda f: f
-    st = None
+    assume = lambda x: None
+    
+    # Mock strategies object to handle @given decorators when hypothesis is not available
+    class MockStrategies:
+        def floats(self, **kwargs):
+            return None
+        def integers(self, **kwargs):
+            return None
+        def text(self, **kwargs):
+            return None
+        def booleans(self, **kwargs):
+            return None
+        def lists(self, *args, **kwargs):
+            return None
+        def sampled_from(self, *args, **kwargs):
+            return None
+    
+    st = MockStrategies()
+    
+    # Mock settings and HealthCheck for test configuration
+    class MockSettings:
+        def __init__(self, **kwargs):
+            pass
+        def __call__(self, func):
+            return func
+    
+    settings = MockSettings
+    
+    class MockHealthCheck:
+        too_slow = None
+    
+    HealthCheck = MockHealthCheck()
+    
+    # Mock stateful testing components
+    RuleBasedStateMachine = object
+    Bundle = None
+    rule = lambda *args, **kwargs: lambda f: f
+    initialize = lambda *args, **kwargs: lambda f: f
 
 try:
     import gymnasium as gym

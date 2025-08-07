@@ -41,8 +41,8 @@ import numpy as np
 import numpy.testing as npt
 
 # Import test infrastructure and utilities
-from tests.core import (
-    TestPerformanceMonitor,
+from tests.core.test_helpers import (
+    PerformanceMonitor,
     performance_timer,
     requires_performance_validation,
     STEP_LATENCY_THRESHOLD_MS,

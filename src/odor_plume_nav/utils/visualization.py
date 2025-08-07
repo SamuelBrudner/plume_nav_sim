@@ -937,9 +937,7 @@ def visualize_trajectory(
         }
         
         # Format-specific optimizations
-        if save_format in ['png', 'jpg', 'jpeg']:
-            save_kwargs['optimize'] = True
-        elif save_format == 'pdf':
+        if save_format == 'pdf':
             save_kwargs['metadata'] = {'Creator': 'Odor Plume Navigation Visualization'}
         elif save_format == 'svg':
             save_kwargs['metadata'] = {'Creator': 'Odor Plume Navigation'}
@@ -1181,7 +1179,7 @@ if HYDRA_AVAILABLE:
     
     # Register visualization configuration schemas
     try:
-        from dataclasses import dataclass
+        from dataclasses import dataclass, field
         from typing import Optional
         
         @dataclass
@@ -1204,9 +1202,9 @@ if HYDRA_AVAILABLE:
             
         @dataclass
         class VisualizationConfig:
-            animation: AnimationConfig = AnimationConfig()
-            static: StaticConfig = StaticConfig()
-            agents: AgentConfig = AgentConfig()
+            animation: AnimationConfig = field(default_factory=AnimationConfig)
+            static: StaticConfig = field(default_factory=StaticConfig)
+            agents: AgentConfig = field(default_factory=AgentConfig)
             headless: bool = False
             resolution: str = "720p"
             theme: str = "scientific"

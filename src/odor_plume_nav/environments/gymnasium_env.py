@@ -59,7 +59,10 @@ from odor_plume_nav.environments.spaces import (
     ActionType, ObservationType
 )
 from odor_plume_nav.utils.seed_utils import (
-    set_global_seed, get_seed_context, scoped_seed, SeedConfig
+    set_global_seed, get_seed_context
+)
+from odor_plume_nav.utils.seed_manager import (
+    scoped_seed, SeedConfig
 )
 
 # Frame caching imports for performance optimization
@@ -110,29 +113,60 @@ def _detect_legacy_gym_caller() -> bool:
     """
     Detect if environment is being created via legacy gym interface.
     
+    This function examines the call stack to determine if the caller is using
+    the legacy gym API or the modern gymnasium API. It prioritizes explicit
+    usage patterns over import presence.
+    
     Returns:
         bool: True if legacy gym is detected, False for modern Gymnasium
     """
     try:
         # Inspect call stack to detect caller context
         frame = inspect.currentframe()
+        gymnasium_usage_detected = False
+        
         while frame:
             frame = frame.f_back
             if frame and frame.f_globals:
                 module_name = frame.f_globals.get('__name__', '')
                 
-                # Check for legacy gym imports or usage patterns
-                if 'gym' in module_name and 'gymnasium' not in module_name:
-                    return True
+                # Look for explicit gymnasium usage in local variables
+                if frame.f_locals:
+                    # Check if gymnasium is being used explicitly in this frame
+                    for var_name, var_value in frame.f_locals.items():
+                        if hasattr(var_value, '__module__'):
+                            module_path = getattr(var_value, '__module__', '')
+                            if 'gymnasium' in module_path:
+                                gymnasium_usage_detected = True
+                                break
                 
-                # Check for legacy gym package in frame globals
-                if 'gym' in frame.f_globals and 'gymnasium' not in frame.f_globals:
-                    # Further validate it's the legacy gym
-                    gym_module = frame.f_globals.get('gym')
-                    if hasattr(gym_module, 'make') and not hasattr(gym_module, 'version'):
+                # Check if gymnasium module is actively used (not just imported)
+                if 'gymnasium' in frame.f_globals:
+                    gymnasium_module = frame.f_globals.get('gymnasium')
+                    # If gymnasium is imported and being used, prefer it
+                    if gymnasium_module and hasattr(gymnasium_module, 'make'):
+                        gymnasium_usage_detected = True
+                
+                # Only consider legacy gym if no gymnasium usage is detected
+                if not gymnasium_usage_detected:
+                    # Look for pure legacy gym usage
+                    if 'gym' in frame.f_globals and 'gymnasium' not in frame.f_globals:
+                        gym_module = frame.f_globals.get('gym')
+                        # Verify it's actually the legacy gym package
+                        if (hasattr(gym_module, 'make') and 
+                            hasattr(gym_module, '__version__') and 
+                            not hasattr(gym_module, 'vector')):  # vector is gymnasium-specific
+                            return True
+                            
+                    # Check module name patterns for legacy usage
+                    if ('gym' in module_name and 
+                        'gymnasium' not in module_name and 
+                        'test' not in module_name.lower()):
                         return True
-                        
+        
+        # Default to modern gymnasium if any gymnasium usage detected
         return False
+        
     except Exception:
         # If detection fails, default to modern Gymnasium API
         return False
@@ -713,6 +747,9 @@ class GymnasiumEnv(gym.Env):
             Reset operations are performance-critical and target <10ms completion
             time for real-time training workflows.
         """
+        # Call super().reset(seed=seed) first to properly initialize gymnasium's RNG
+        super().reset(seed=seed)
+        
         if self.performance_monitoring:
             reset_start = time.time()
         
@@ -882,12 +919,14 @@ class GymnasiumEnv(gym.Env):
             self.navigator.speeds[0] = speed
             self.navigator.angular_velocities[0] = angular_velocity
             
-            # Get current environment frame
+            # Get current environment frame with timing measurement
+            frame_start = time.time()
             current_frame = self.video_plume.get_frame(self.current_frame_index)
             if current_frame is None:
                 # Handle end of video by cycling or terminating
                 self.current_frame_index = 0
                 current_frame = self.video_plume.get_frame(0)
+            frame_retrieval_time = time.time() - frame_start
             
             # Execute navigator step
             self.navigator.step(current_frame, dt=1.0)
@@ -1025,6 +1064,10 @@ class GymnasiumEnv(gym.Env):
         if self._use_legacy_api:
             # Return 4-tuple for legacy gym API compatibility
             done = terminated or truncated
+            # Preserve terminated/truncated flags in info for debugging
+            info = dict(info)  # Make a copy to avoid modifying original
+            info["terminated"] = terminated
+            info["truncated"] = truncated
             return observation, reward, done, info
         else:
             # Return 5-tuple for modern Gymnasium API

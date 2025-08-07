@@ -343,15 +343,42 @@ class Navigator:
     
     def _create_controller_from_kwargs(self, **kwargs: Any) -> NavigatorProtocol:
         """Create appropriate controller based on kwargs configuration."""
-        # Determine if multi-agent based on presence of 'positions'
+        # Determine if multi-agent based on positions structure
         if 'positions' in kwargs:
-            return MultiAgentController(
-                enable_extensibility_hooks=self.enable_extensibility_hooks,
-                frame_cache_mode=self.frame_cache_mode,
-                custom_observation_keys=self.custom_observation_keys,
-                reward_shaping=self.reward_shaping,
-                **kwargs
-            )
+            positions = kwargs['positions']
+            
+            # Check if positions indicate multi-agent or single-agent
+            is_multi_agent = self._detect_multi_agent_mode(positions)
+            
+            if is_multi_agent:
+                return MultiAgentController(
+                    enable_extensibility_hooks=self.enable_extensibility_hooks,
+                    frame_cache_mode=self.frame_cache_mode,
+                    custom_observation_keys=self.custom_observation_keys,
+                    reward_shaping=self.reward_shaping,
+                    **kwargs
+                )
+            else:
+                # Convert single-agent positions format and use position/y instead
+                if isinstance(positions, (list, tuple)) and len(positions) == 2:
+                    kwargs_copy = kwargs.copy()
+                    kwargs_copy.pop('positions')
+                    kwargs_copy['position'] = positions
+                    return SingleAgentController(
+                        enable_extensibility_hooks=self.enable_extensibility_hooks,
+                        frame_cache_mode=self.frame_cache_mode,
+                        custom_observation_keys=self.custom_observation_keys,
+                        reward_shaping=self.reward_shaping,
+                        **kwargs_copy
+                    )
+                else:
+                    return MultiAgentController(
+                        enable_extensibility_hooks=self.enable_extensibility_hooks,
+                        frame_cache_mode=self.frame_cache_mode,
+                        custom_observation_keys=self.custom_observation_keys,
+                        reward_shaping=self.reward_shaping,
+                        **kwargs
+                    )
         else:
             return SingleAgentController(
                 enable_extensibility_hooks=self.enable_extensibility_hooks,
@@ -836,6 +863,47 @@ class Navigator:
             metrics.update(self.controller.get_performance_metrics())
         
         return metrics
+    
+    def _detect_multi_agent_mode(self, positions) -> bool:
+        """Detect if positions indicate multi-agent or single-agent mode.
+        
+        Args:
+            positions: Position data in various formats
+            
+        Returns:
+            bool: True if multi-agent mode should be used, False for single-agent
+        """
+        try:
+            positions_array = np.array(positions)
+            
+            # If 1D array with length 2, treat as single agent (x, y)
+            if positions_array.ndim == 1 and len(positions_array) == 2:
+                return False
+                
+            # If 2D array, check if it's a single position or multiple positions
+            if positions_array.ndim == 2:
+                # If shape is (1, 2), it's a single agent
+                if positions_array.shape == (1, 2):
+                    return False
+                # If shape is (n, 2) where n > 1, it's multi-agent
+                elif positions_array.shape[1] == 2:
+                    return True
+                    
+            # If it's a list/tuple of coordinate pairs, check the structure
+            if isinstance(positions, (list, tuple)):
+                # If it's just two numbers, treat as single agent
+                if len(positions) == 2 and all(isinstance(x, (int, float)) for x in positions):
+                    return False
+                # If it's a list of coordinate pairs, it's multi-agent
+                elif all(isinstance(x, (list, tuple)) and len(x) == 2 for x in positions):
+                    return True
+                    
+            # Default to multi-agent for complex structures
+            return True
+            
+        except Exception:
+            # If we can't parse it, let the controller handle the error
+            return True
 
 
 class NavigatorFactory(BaseNavigatorFactory):
@@ -994,8 +1062,7 @@ class NavigatorFactory(BaseNavigatorFactory):
                 reward_shaping=reward_shaping,
                 **kwargs
             )
-        else:
-            raise ValueError(f"Invalid navigator_type: {navigator_type}. Must be 'single' or 'multi'.")
+
 
 
 # Utility functions for configuration processing (imported from protocols)

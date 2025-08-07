@@ -61,11 +61,10 @@ from odor_plume_nav.utils.logging_setup import (
 # Export seed management utilities for reproducibility (F-009 integration)
 from odor_plume_nav.utils.seed_manager import (
     set_global_seed,
-    get_global_seed_manager,
-    configure_from_hydra,
-    seed_context,
-    get_reproducibility_report,
-    SeedManager,
+    setup_global_seed,
+    get_seed_context,
+    SeedConfig,
+    SeedContext,
     RandomState,
 )
 

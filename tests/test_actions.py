@@ -711,7 +711,7 @@ class TestActionSpaceIntegration:
         boundary_actions = [
             action_space.low,
             action_space.high,
-            np.array([0.0, 0.0])  # Center
+            np.array([0.0, 0.0], dtype=action_space.dtype)  # Center with correct dtype
         ]
         
         for action in boundary_actions:
@@ -883,7 +883,8 @@ class TestActionConfiguration:
     
     def test_create_action_interface_continuous2d(self, mock_action_config):
         """Test factory creation of Continuous2DAction."""
-        config = mock_action_config['continuous2d']
+        config = mock_action_config['continuous2d'].copy()
+        config['type'] = 'Continuous2D'  # Add the required type field
         action_interface = create_action_interface(config)
         
         assert isinstance(action_interface, Continuous2DAction)
@@ -1086,8 +1087,8 @@ class TestDynamicReconfiguration:
             
             # Test translation
             translated = action_interface.translate_action(test_action)
-            assert translated['linear_velocity'] == 2.8
-            assert translated['angular_velocity'] == 55.0
+            assert abs(translated['linear_velocity'] - 2.8) < 1e-6
+            assert abs(translated['angular_velocity'] - 55.0) < 1e-6
             
             # Test validation
             validated = action_interface.validate_action(np.array([4.0, 80.0]))

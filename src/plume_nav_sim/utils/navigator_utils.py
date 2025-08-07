@@ -36,8 +36,41 @@ import threading
 from pathlib import Path
 
 # Core imports - updated for plume_nav_sim namespace
-from plume_nav_sim.core.protocols import NavigatorProtocol
-from plume_nav_sim.core.navigator import Navigator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from plume_nav_sim.core.protocols import NavigatorProtocol
+    from plume_nav_sim.core.navigator import Navigator
+else:
+    # At runtime, import lazily to avoid circular imports
+    NavigatorProtocol = None
+    Navigator = None
+
+def _get_navigator_protocol():
+    """Lazy import of NavigatorProtocol to avoid circular imports."""
+    global NavigatorProtocol
+    if NavigatorProtocol is None:
+        try:
+            from plume_nav_sim.core.protocols import NavigatorProtocol as _NavigatorProtocol
+            NavigatorProtocol = _NavigatorProtocol
+        except ImportError:
+            # If still can't import, create a dummy class
+            class NavigatorProtocol:
+                pass
+    return NavigatorProtocol
+
+def _get_navigator():
+    """Lazy import of Navigator to avoid circular imports."""
+    global Navigator
+    if Navigator is None:
+        try:
+            from plume_nav_sim.core.navigator import Navigator as _Navigator
+            Navigator = _Navigator
+        except ImportError:
+            # If still can't import, create a dummy class
+            class Navigator:
+                pass
+    return Navigator
 
 # Configuration imports with fallback handling
 try:
@@ -121,7 +154,7 @@ PREDEFINED_SENSOR_LAYOUTS: Dict[str, np.ndarray] = {
 
 
 # Enhanced configuration-driven navigator creation
-T = TypeVar('T', bound=NavigatorProtocol)
+T = TypeVar('T', bound='NavigatorProtocol')
 
 
 @dataclass
@@ -151,7 +184,7 @@ def create_navigator_from_config(
     validate_config: bool = True,
     enable_logging: bool = True,
     experiment_id: Optional[str] = None
-) -> NavigatorCreationResult[NavigatorProtocol]:
+) -> NavigatorCreationResult['NavigatorProtocol']:
     """
     Create navigator from configuration with comprehensive validation and seed management.
     
@@ -499,7 +532,8 @@ def create_navigator_from_params(
         max_speeds = normalize_array_parameter(max_speeds, num_agents)
         angular_velocities = normalize_array_parameter(angular_velocities, num_agents)
 
-        navigator = Navigator(
+        NavigatorClass = _get_navigator()
+        navigator = NavigatorClass(
             positions=positions,
             orientations=orientations,
             speeds=speeds,
@@ -507,7 +541,8 @@ def create_navigator_from_params(
             angular_velocities=angular_velocities
         )
     else:
-        navigator = Navigator(
+        NavigatorClass = _get_navigator()
+        navigator = NavigatorClass(
             position=positions,
             orientation=orientations,
             speed=speeds,
@@ -636,7 +671,7 @@ def _is_multi_agent_config_dict(config_dict: Dict[str, Any]) -> bool:
     return False
 
 
-def _create_single_agent_from_dict(config_dict: Dict[str, Any]) -> NavigatorProtocol:
+def _create_single_agent_from_dict(config_dict: Dict[str, Any]) -> 'NavigatorProtocol':
     """Create single-agent navigator from configuration dictionary."""
     # Extract single-agent parameters
     kwargs = {}
@@ -661,10 +696,11 @@ def _create_single_agent_from_dict(config_dict: Dict[str, Any]) -> NavigatorProt
             if isinstance(values, (list, tuple, np.ndarray)) and len(values) > 0:
                 kwargs[param] = values[0]
     
-    return Navigator(**kwargs)
+    NavigatorClass = _get_navigator()
+    return NavigatorClass(**kwargs)
 
 
-def _create_multi_agent_from_dict(config_dict: Dict[str, Any]) -> NavigatorProtocol:
+def _create_multi_agent_from_dict(config_dict: Dict[str, Any]) -> 'NavigatorProtocol':
     """Create multi-agent navigator from configuration dictionary."""
     # Extract multi-agent parameters
     kwargs = {}
@@ -681,11 +717,12 @@ def _create_multi_agent_from_dict(config_dict: Dict[str, Any]) -> NavigatorProto
         if param in config_dict:
             kwargs[param] = config_dict[param]
     
-    return Navigator(**kwargs)
+    NavigatorClass = _get_navigator()
+    return NavigatorClass(**kwargs)
 
 
 def _validate_navigator_determinism(
-    navigator: NavigatorProtocol, 
+    navigator: 'NavigatorProtocol', 
     seed: int,
     validation_steps: int = 10
 ) -> Dict[str, Any]:
@@ -868,7 +905,7 @@ def rotate_offset(local_offset: np.ndarray, orientation_deg: float) -> np.ndarra
 
 
 def calculate_sensor_positions(
-    navigator: NavigatorProtocol,
+    navigator: 'NavigatorProtocol',
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
     num_sensors: int = 2,
@@ -880,7 +917,7 @@ def calculate_sensor_positions(
 
     Parameters
     ----------
-    navigator : NavigatorProtocol
+    navigator : 'NavigatorProtocol'
         Navigator with position and orientation information
     sensor_distance : float
         Distance from agent center to each sensor
@@ -1283,7 +1320,7 @@ def reset_navigator_state_with_params(
 
 
 def sample_odor_at_sensors(
-    navigator: NavigatorProtocol,
+    navigator: 'NavigatorProtocol',
     env_array: np.ndarray,
     sensor_distance: float = 5.0,
     sensor_angle: float = 45.0,
@@ -1373,7 +1410,7 @@ def create_navigator_for_cli(
     overrides: Optional[List[str]] = None,
     seed: Optional[int] = None,
     experiment_id: Optional[str] = None
-) -> Tuple[NavigatorProtocol, Dict[str, Any]]:
+) -> Tuple['NavigatorProtocol', Dict[str, Any]]:
     """
     Create navigator for CLI applications with Hydra configuration support.
     
@@ -1505,7 +1542,7 @@ def create_navigator_with_database_logging(
     experiment_id: Optional[str] = None,
     track_trajectory: bool = True,
     track_performance: bool = True
-) -> Tuple[NavigatorProtocol, Dict[str, Any]]:
+) -> Tuple['NavigatorProtocol', Dict[str, Any]]:
     """
     Create navigator with database logging and experiment tracking capabilities.
     
@@ -1713,7 +1750,7 @@ def validate_navigator_configuration(
 
 @contextmanager
 def navigator_performance_context(
-    navigator: NavigatorProtocol,
+    navigator: 'NavigatorProtocol',
     monitor_memory: bool = True,
     monitor_timing: bool = True,
     log_results: bool = True
@@ -1792,7 +1829,7 @@ def navigator_performance_context(
             ).info("Navigator performance monitoring completed")
 
 
-def get_navigator_capabilities(navigator: NavigatorProtocol) -> Dict[str, Any]:
+def get_navigator_capabilities(navigator: 'NavigatorProtocol') -> Dict[str, Any]:
     """
     Get comprehensive information about navigator capabilities and configuration.
     
@@ -1819,7 +1856,7 @@ def get_navigator_capabilities(navigator: NavigatorProtocol) -> Dict[str, Any]:
         'current_speeds': navigator.speeds.tolist(),
         'max_speeds': navigator.max_speeds.tolist(),
         'angular_velocities': navigator.angular_velocities.tolist(),
-        'protocol_compliance': isinstance(navigator, NavigatorProtocol),
+        'protocol_compliance': isinstance(navigator, _get_navigator_protocol()),
         'supports_reset': hasattr(navigator, 'reset'),
         'supports_step': hasattr(navigator, 'step'),
         'supports_sensor_sampling': hasattr(navigator, 'sample_odor'),
@@ -1849,7 +1886,7 @@ def get_navigator_capabilities(navigator: NavigatorProtocol) -> Dict[str, Any]:
 
 
 def create_navigator_comparison_report(
-    navigators: List[NavigatorProtocol],
+    navigators: List['NavigatorProtocol'],
     include_performance: bool = False
 ) -> Dict[str, Any]:
     """
@@ -1925,7 +1962,7 @@ def create_navigator_comparison_report(
     return comparison_report
 
 
-def _compare_navigator_performance(navigators: List[NavigatorProtocol]) -> Dict[str, Any]:
+def _compare_navigator_performance(navigators: List['NavigatorProtocol']) -> Dict[str, Any]:
     """
     Compare performance characteristics of multiple navigators.
     

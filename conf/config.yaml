@@ -161,7 +161,7 @@ defaults:
   # Frame caching configuration group for high-performance frame storage
   # LRU cache mode provides intelligent eviction with memory management
   # Compatible with environment flavors: memoryless, memory
-  - override frame_cache: lru
+  # - override frame_cache: lru  # Commented out: frame_cache is configured directly below
   
   # Enable this configuration file as the primary override source
   - _self_

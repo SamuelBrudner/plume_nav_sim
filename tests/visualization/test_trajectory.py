@@ -5,13 +5,28 @@ import numpy as np
 from unittest.mock import patch, MagicMock
 import matplotlib.pyplot as plt
 
-from odor_plume_nav.visualization import visualize_trajectory
+from plume_nav_sim.utils.visualization import visualize_trajectory, SimulationVisualization
+
+# Hydra imports for configuration testing
+try:
+    from omegaconf import DictConfig, OmegaConf
+    from hydra import compose, initialize
+    from hydra.core.config_store import ConfigStore
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+    DictConfig = dict
+    OmegaConf = None
 
 
 @pytest.fixture
 def mock_plt():
     """Mock matplotlib.pyplot to avoid displaying plots during tests."""
-    with patch('odor_plume_nav.visualization.trajectory.plt') as mock_plt:
+    with patch('plume_nav_sim.utils.visualization.plt') as mock_plt:
+        # Configure subplots to return mock figure and axes
+        mock_fig = MagicMock()
+        mock_ax = MagicMock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
         yield mock_plt
 
 
@@ -25,9 +40,14 @@ def test_visualize_trajectory_single_agent(mock_plt):
     visualize_trajectory(positions, orientations, show_plot=False)
     
     # Check that the plot was created and properly formatted
-    mock_plt.figure.assert_called_once()
-    mock_plt.plot.assert_called()  # Should be called at least once
-    mock_plt.quiver.assert_called()  # Should be called to show orientations
+    mock_plt.subplots.assert_called_once()
+    
+    # Get the mock axes object returned by subplots
+    mock_fig, mock_ax = mock_plt.subplots.return_value
+    
+    # Check that plot methods were called on the axes
+    mock_ax.plot.assert_called()  # Should be called to plot trajectory
+    mock_ax.quiver.assert_called()  # Should be called to show orientations
     mock_plt.savefig.assert_not_called()  # No output path was provided
 
 

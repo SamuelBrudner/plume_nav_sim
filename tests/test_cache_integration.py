@@ -62,10 +62,7 @@ except ImportError:
     GYMNASIUM_ENV_AVAILABLE = False
     GymnasiumEnv = None
 
-# Test utilities and mocks
-from conftest import (
-    mock_video_capture, mock_video_plume, mock_navigator, mock_exists
-)
+# Test utilities and mocks are available as pytest fixtures from conftest.py
 
 
 # Skip all tests if required components are not available

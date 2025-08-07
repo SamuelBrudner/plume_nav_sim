@@ -315,7 +315,7 @@ class TrainingConfig(BaseModel):
     )
     
     # Hydra target for factory instantiation
-    _target_: str = Field(
+    target_: str = Field(
         default="odor_plume_nav.rl.training.create_trainer",
         description="Hydra target for automatic instantiation"
     )

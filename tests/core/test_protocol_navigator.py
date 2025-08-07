@@ -70,7 +70,43 @@ try:
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
     given = lambda *args, **kwargs: lambda f: f
-    st = None
+    assume = lambda x: None
+    
+    # Mock strategies object to handle @given decorators when hypothesis is not available
+    class MockStrategies:
+        def floats(self, **kwargs):
+            return None
+        def integers(self, **kwargs):
+            return None
+        def text(self, **kwargs):
+            return None
+        def booleans(self, **kwargs):
+            return None
+        def lists(self, *args, **kwargs):
+            return None
+    
+    st = MockStrategies()
+    
+    # Mock settings and HealthCheck for test configuration
+    class MockSettings:
+        def __init__(self, **kwargs):
+            pass
+        def __call__(self, func):
+            return func
+    
+    settings = MockSettings
+    
+    class MockHealthCheck:
+        too_slow = None
+    
+    HealthCheck = MockHealthCheck()
+    
+    # Mock stateful testing components
+    Bundle = None
+    RuleBasedStateMachine = object
+    rule = lambda *args, **kwargs: lambda f: f
+    initialize = lambda *args, **kwargs: lambda f: f
+    precondition = lambda *args, **kwargs: lambda f: f
 
 # Gymnasium integration
 try:
@@ -161,7 +197,7 @@ class TestSingleAgentController:
         controller = SingleAgentController(position=(10.0, 20.0), orientation=45.0)
         controller.reset(position=(30.0, 40.0), orientation=90.0)
         assert controller.positions[0, 0] == 30.0
-        assert controller.positions[0, 1] == 20.0
+        assert controller.positions[0, 1] == 40.0
         assert controller.orientations[0] == 90.0
     
     def test_reset_with_seed_parameter(self) -> None:

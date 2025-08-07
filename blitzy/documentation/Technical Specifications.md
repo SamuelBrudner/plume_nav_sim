@@ -2,169 +2,191 @@
 
 # 0. SUMMARY OF CHANGES
 
-#### USER INTENT RESTATEMENT
+## 0.1 INTENT CLARIFICATION
 
-#### Core Objective
-Based on the provided requirements, the Blitzy platform understands that the objective is to refactor **Plume Nav Sim v1.0** from its current implementation—where the hook system infrastructure exists but the HookManager and Hydra configuration group selection are commented out in defaults—to a fully-functional, Hydra-configurable build with all component groups and the lifecycle-HookManager enabled by default. This refactor must preserve every existing API and runtime behavior while switching from the current ad-hoc defaults to declarative configuration-driven selection of components and hooks.
+### 0.1.1 Core Objective
 
-#### Special Instructions and Constraints
-**CRITICAL DIRECTIVES:**
-- Edit only: `plume_nav_sim/env.py`, `plume_nav_sim/hooks.py`, and YAML files under `conf/`
-- Do not touch physics kernels, rendering pipeline, or public gym API
-- Preserve existing CLI entry-point (`simulate.py`) and return signatures
-- Follow Blitzy discipline: only change code that directly implements the config & hook enablement
-- Implement HookManager with ~50 LoC maximum
-- Maintain <33 ms/step performance SLA
+Based on the provided requirements, the Blitzy platform understands that the objective is to ensure `plume_nav_sim` is properly packaged as a modern, distributable Python package following current best practices. This involves:
 
-**User Example: Test Configuration**
-The user provided a specific testing approach to validate the implementation:
-1. Run 100-step episode with default config (baseline)
-2. Run 100-step episode with custom hook set via Hydra override
-3. Assert identical trajectory arrays & reward sums when hooks are no-ops
+1. **Establishing proper package structure** with a single importable root namespace
+2. **Modernizing the build system** to use PEP 621-compliant `pyproject.toml` with recommended build backends
+3. **Implementing semantic versioning** for proper release management
+4. **Ensuring complete dependency declarations** for reliable installation
 
-#### Technical Interpretation
+### 0.1.2 Special Instructions and Constraints
+
+**User Example Provided:**
+```
+| Step | What to do | Quick example / gotcha check |
+| --- | --- | --- |
+| 1.1 | Give the code a single importable root | `plume_nav_sim/ __init__.py core.py utils/` |
+| 1.2 | Add a modern build recipe | **pyproject.toml** (PEP 621) – recommended back end is `setuptools>=61` or `hatchling` |
+| 1.3 | Pin a version | Semantic version **every commit you want to ship** – e.g. `0.1.0` |
+| 1.4 | List runtime deps | `[project] dependencies = ["` |
+```
+
+**Critical Directive:** The user specifically recommends using `setuptools>=61` or `hatchling` as the build backend, suggesting a move away from the current Poetry-based build system.
+
+### 0.1.3 Technical Interpretation
+
 These requirements translate to the following technical implementation strategy:
-- To enable hooks by default, we will uncomment and activate the `hooks` configuration group in `conf/config.yaml`, setting it to use the existing `none` configuration for backward compatibility
-- To implement the HookManager, we will create a lightweight manager class in `src/plume_nav_sim/hooks.py` that registers and dispatches pre-step, post-step, and episode-end hooks with minimal overhead
-- To integrate hooks into the environment, we will modify `src/plume_nav_sim/envs/plume_navigation_env.py` to instantiate and wire the HookManager during initialization
-- To maintain performance, we will implement early-exit patterns in the HookManager when no hooks are registered
 
-#### TECHNICAL SCOPE
+1. **To ensure single importable root**, we will verify and strengthen the existing `src/plume_nav_sim/__init__.py` structure
+2. **To modernize the build system**, we will migrate from Poetry to setuptools>=61, maintaining all existing functionality while following PEP 621 standards
+3. **To implement proper versioning**, we will establish a version management strategy that updates on each releasable commit
+4. **To complete dependency management**, we will audit and ensure all runtime dependencies are properly declared in the standardized format
 
-#### Primary Objectives with Implementation Approach
-1. **Enable Hydra-configurable hook system by default**
-   - Achieve by uncommenting the `hooks` configuration line in `conf/config.yaml`
-   - Integrate by setting default value to `"none"` to maintain backward compatibility
-   
-2. **Create lightweight HookManager class**
-   - Achieve by implementing `plume_nav_sim.hooks.HookManager` with protocol compliance
-   - Integrate by providing registration methods for pre-step, post-step, and episode-end hooks
-   
-3. **Wire HookManager into PlumeNavigationEnv**
-   - Achieve by adding hook registration calls in environment initialization
-   - Integrate by invoking hooks at appropriate lifecycle points in step() and reset()
+## 0.2 TECHNICAL SCOPE
 
-#### Component Impact Analysis
+### 0.2.1 Primary Objectives with Implementation Approach
+
+1. **Achieve proper package structure** by ensuring `src/plume_nav_sim/__init__.py` properly exports all public APIs and the package can be imported cleanly from any environment
+
+2. **Migrate build system to setuptools** by modifying `pyproject.toml` to:
+   - Replace Poetry build backend with setuptools>=61
+   - Convert Poetry-specific dependency syntax to PEP 621 standard format
+   - Preserve all existing console script entry points
+   - Maintain all optional dependency groups
+
+3. **Create missing CLI module** by implementing `src/plume_nav_sim/cli/main.py` to provide the entry points referenced in console scripts:
+   - `main` function for `plume-nav-sim` command
+   - `train_main` function for `plume-nav-train` command
+
+4. **Standardize version management** by:
+   - Ensuring version is defined in one authoritative location
+   - Making version accessible programmatically via `plume_nav_sim.__version__`
+
+### 0.2.2 Component Impact Analysis
 
 **Direct modifications required:**
-- `conf/config.yaml`: Uncomment line 106 to enable `hooks` configuration group
-- `src/plume_nav_sim/hooks.py`: Create new file implementing HookManager class
-- `src/plume_nav_sim/envs/plume_navigation_env.py`: Add HookManager instantiation and integration
+- `pyproject.toml`: Convert from Poetry to setuptools build configuration
+- `src/plume_nav_sim/cli/main.py`: Create new module with CLI entry points
+- `src/plume_nav_sim/cli/__init__.py`: Create package initializer for CLI module
+- `src/plume_nav_sim/__init__.py`: Ensure proper version export
 
 **Indirect impacts and dependencies:**
-- Hook configuration files (`conf/base/hooks/*.yaml`): Already exist and will be loaded by Hydra
-- Test suite (`tests/test_hooks.py`): Existing tests will validate the implementation
-- Documentation (`docs/api_reference/hooks.md`): Already documents the hook system
+- Build/deployment pipelines: Update to use setuptools instead of Poetry commands
+- Developer documentation: Update installation instructions
+- CI/CD workflows: Modify dependency installation steps
 
 **New components introduction:**
-- `HookManager`: Central coordinator for hook registration and execution
+- CLI module structure: Create formal CLI package to house command-line interface
 
-#### File and Path Mapping
+### 0.2.3 File and Path Mapping
 
 | Target File/Module | Source Reference | Context Dependencies | Modification Type |
-|-------------------|------------------|---------------------|------------------|
-| `conf/config.yaml` | Line 106 | `conf/base/hooks/*.yaml` | Uncomment line |
-| `src/plume_nav_sim/hooks.py` | New file | `typing.Protocol`, hooks configs | Create file |
-| `src/plume_nav_sim/envs/plume_navigation_env.py` | Constructor & methods | `HookManager`, hook configs | Add integration |
+|-------------------|------------------|---------------------|-------------------|
+| `pyproject.toml` | Current Poetry config | PEP 621 standard | Convert build system |
+| `src/plume_nav_sim/cli/main.py` | Console script refs | Click, Hydra frameworks | Create new |
+| `src/plume_nav_sim/cli/__init__.py` | N/A | Python package standards | Create new |
+| `src/plume_nav_sim/__init__.py` | Existing package init | Version management | Verify/enhance |
+| `README.md` | Installation section | Build tool changes | Update instructions |
+| `.github/workflows/ci.yml` | Poetry commands | Setuptools equivalents | Update CI steps |
 
-#### IMPLEMENTATION DESIGN
+## 0.3 IMPLEMENTATION DESIGN
 
-#### Technical Approach
-First, establish hook infrastructure by creating the HookManager class that implements the HookSystemProtocol interface with methods for registering and executing pre-step, post-step, and episode-end hooks.
+### 0.3.1 Technical Approach
 
-Next, integrate configuration by uncommenting the hooks configuration group in `conf/config.yaml` to enable Hydra-based hook selection with `none` as the default for zero overhead.
+First, establish the CLI module structure by creating `src/plume_nav_sim/cli/` directory with proper initialization files. This provides the missing targets for console script entry points.
 
-Finally, ensure environment integration by modifying PlumeNavigationEnv to instantiate HookManager from configuration and invoke registered hooks at appropriate lifecycle points.
+Next, migrate the build configuration by transforming `pyproject.toml`:
+- Replace `[build-system]` to use setuptools>=61
+- Convert `[tool.poetry]` sections to standard `[project]` format
+- Transform Poetry-specific dependency groups to `[project.optional-dependencies]`
+- Preserve all tool configurations (pytest, mypy, black, isort, coverage)
 
-#### Critical Implementation Details
-**HookManager Design Pattern:**
-- Use a dictionary-based registry for each hook type (pre_step, post_step, episode_end)
-- Implement zero-overhead early exit when no hooks are registered
-- Support both function and callable object hooks
-- Provide thread-safe registration if needed
+Then, implement minimal CLI entry points in `src/plume_nav_sim/cli/main.py` that integrate with existing functionality:
+- Import and delegate to existing navigation and training functions
+- Provide Click-based command structure
+- Support Hydra configuration integration
 
-**Integration Strategy:**
-- Load hook configuration via Hydra during environment initialization
-- Pass hook configuration to HookManager constructor
-- Call hook execution methods at appropriate points in step() and reset()
+Finally, ensure package integrity by verifying all imports work correctly and version information is accessible.
 
-**Performance Optimization:**
-- Check if hooks are registered before any iteration
-- Use direct function calls without wrapper overhead
-- Maintain <1 ms hook overhead for empty hook sets
+### 0.3.2 Critical Implementation Details
 
-#### Dependency Analysis
-**Required dependencies for implementation:**
-- `typing` module for Protocol and type hints
-- `hydra` for configuration loading
-- `time` module for performance measurement (if monitoring enabled)
+**Build System Migration Pattern:**
+- From: `build-backend = "poetry.core.masonry.api"`
+- To: `build-backend = "setuptools.build_meta"`
 
-**Version constraints and compatibility:**
-- Compatible with Python 3.10+ (existing requirement)
-- Hydra 1.3 (already in stack)
-- No new external dependencies required
+**Dependency Declaration Pattern:**
+- From: `numpy = ">=1.26.0"` (Poetry TOML format)
+- To: `"numpy>=1.26.0",` (PEP 621 list format)
 
-#### SCOPE BOUNDARIES
+**CLI Integration Strategy:**
+- Leverage existing internal APIs from `plume_nav_sim.core`, `plume_nav_sim.api`
+- Use Click for command-line parsing (already a dependency)
+- Integrate with Hydra for configuration management (already used throughout)
 
-#### Explicitly In Scope
-**Comprehensive list of ALL affected files/modules:**
-- `conf/config.yaml` - Enable hooks configuration group
-- `src/plume_nav_sim/hooks.py` - New HookManager implementation
-- `src/plume_nav_sim/envs/plume_navigation_env.py` - Hook integration points
+### 0.3.3 Dependency Analysis
 
-**All configuration changes required:**
-- Uncomment `- hooks: ${oc.env:HOOKS_CONFIG,"none"}` in defaults section
+**Build Dependencies:**
+- setuptools>=61.0.0 (replacing poetry-core)
+- wheel (for building wheel distributions)
 
-**All test modifications needed:**
-- No test modifications required (existing tests will validate)
+**Runtime Dependencies (unchanged):**
+- All existing dependencies remain the same
+- Only the declaration format changes
 
-**All documentation updates required:**
-- No documentation updates required (already documented)
+**Development Dependencies:**
+- pip-tools (recommended for dependency pinning)
+- build (PEP 517 build frontend)
 
-#### Explicitly Out of Scope
-- Modifying any physics kernels or core simulation logic
-- Changing the public Gymnasium API or method signatures
-- Implementing new hook types beyond the documented ones
-- Modifying existing hook configuration files
-- Changing the rendering pipeline or visualization components
-- Updating CLI entry points or command structure
+## 0.4 SCOPE BOUNDARIES
 
-#### VALIDATION CHECKLIST
+### 0.4.1 Explicitly In Scope
 
-#### Implementation Verification Points
-- [ ] HookManager class exists in `src/plume_nav_sim/hooks.py` with ≤50 LoC
-- [ ] Hooks configuration group is uncommented in `conf/config.yaml`
-- [ ] PlumeNavigationEnv instantiates HookManager during initialization
-- [ ] Pre-step hooks are called before environment step logic
-- [ ] Post-step hooks are called after environment step logic
-- [ ] Episode-end hooks are called on episode termination
-- [ ] No-op hooks produce identical trajectories to baseline
+- Conversion of `pyproject.toml` from Poetry to setuptools format
+- Creation of `src/plume_nav_sim/cli/` module structure
+- Implementation of `main.py` with `main()` and `train_main()` entry points
+- Verification of package importability and version accessibility
+- Update of build-related sections in documentation
 
-#### Observable changes that confirm successful implementation
-- Running with `hooks=none` produces zero overhead (<1 ms)
-- Running with `hooks=full` enables all configured hooks
-- Hydra CLI shows hooks as a configurable group
-- Performance remains within 33 ms/step SLA
+### 0.4.2 Explicitly Out of Scope
 
-#### EXECUTION PARAMETERS
+- Modification of existing core functionality
+- Changes to actual dependency versions
+- Refactoring of existing module structure (beyond CLI creation)
+- Migration of existing code from `src/` layout
+- Implementation of new features or commands
+- Modification of test suites
+- Changes to logging, configuration, or other subsystems
 
-#### Special Execution Instructions
-The user's **MINIMAL-CHANGE CLAUSE** mandates that we only change code that directly implements the config & hook enablement. This means:
-- Do not refactor existing code for style or optimization
-- Do not add features beyond hook enablement
-- Do not modify test files or documentation
-- Keep changes surgical and focused
+## 0.5 VALIDATION CHECKLIST
 
-#### Constraints and Boundaries
-**Technical constraints:**
-- HookManager must be ≤50 lines of code
-- Must maintain <33 ms/step performance
-- Must preserve all existing APIs
+### 0.5.1 Implementation Verification Points
 
-**Process constraints:**
-- Only edit the three specified files/directories
-- No modifications to physics or rendering code
-- Preserve backward compatibility
+- [ ] Package can be built with `python -m build`
+- [ ] Package can be installed with `pip install .`
+- [ ] Console scripts `plume-nav-sim` and `plume-nav-train` are accessible after installation
+- [ ] Version is accessible via `plume_nav_sim.__version__`
+- [ ] All imports work correctly: `import plume_nav_sim`
+- [ ] Optional dependencies can be installed: `pip install .[dev,docs,viz,rl]`
+
+### 0.5.2 Observable Changes
+
+- Build commands change from `poetry build` to `python -m build`
+- Installation commands change from `poetry install` to `pip install -e .`
+- Dependency management shifts from `poetry add` to manual `pyproject.toml` editing
+- CLI commands become available immediately after installation
+
+## 0.6 EXECUTION PARAMETERS
+
+### 0.6.1 Special Execution Instructions
+
+**Build System Migration:** This change affects how developers and CI/CD systems build and install the package. All Poetry-specific commands must be replaced with pip/setuptools equivalents.
+
+### 0.6.2 Constraints and Boundaries
+
+**Technical Constraints:**
+- Must maintain compatibility with Python >=3.10,<4.0
+- Must preserve all existing dependencies and version constraints
+- Must ensure all optional dependency groups remain functional
+- Console script entry points must maintain current naming
+
+**Process Constraints:**
+- Changes should be minimal and focused on packaging only
+- Existing functionality must not be altered
+- All tests must continue to pass without modification
 
 # 1. INTRODUCTION
 
@@ -172,1102 +194,1157 @@ The user's **MINIMAL-CHANGE CLAUSE** mandates that we only change code that dire
 
 ### 1.1.1 Project Overview
 
-The Plume Navigation Simulation Library (plume_nav_sim) is a production-ready Python toolkit designed to simulate agent navigation through odor plumes. This version 1.0.0 release represents a significant evolution from previous monolithic architectures, delivering a protocol-driven, modular, and extensible framework that enables researchers and developers to study autonomous agent navigation in chemical plume environments with unprecedented flexibility and performance.
+The Plume Navigation Simulation Library (plume_nav_sim) v1.0 is a revolutionary research-grade Python framework designed to advance the scientific understanding of agent navigation through odor plumes. This open-source library addresses the critical need for reproducible, high-performance simulations in biological navigation research, robotic system development, and reinforcement learning algorithm advancement.
 
 ### 1.1.2 Core Business Problem
 
-The system addresses the critical need for a high-performance, extensible simulation framework that enables reproducible and scalable odor plume navigation research. Traditional approaches to chemical plume tracking simulation have been limited by inflexible architectures, poor performance scaling, and restricted integration capabilities. This toolkit solves these challenges by providing a unified platform that reduces development time from months to days through reusable components and standardized interfaces.
+Researchers and engineers lack a unified, extensible platform for studying odor-based navigation strategies across diverse scenarios - from understanding insect flight patterns to developing search-and-rescue robots and training next-generation AI agents.
 
 ### 1.1.3 Key Stakeholders and Users
 
-| Stakeholder Group | Primary Use Cases | Expected Benefits |
-|---|---|---|
-| Research Scientists | Robotics and AI research, algorithm evaluation | Accelerated research cycles, reproducible experiments |
-| Algorithm Developers | Navigation and sensing algorithm development | Rapid prototyping, standardized benchmarking |
-| Educators | Teaching computational biology and robotics | Hands-on learning platform, curriculum integration |
-| Systems Integrators | Autonomous sensing applications | Reduced integration complexity, proven components |
+| Stakeholder Category | Primary Users | Secondary Users |
+|---------------------|---------------|-----------------|
+| Research Community | Research scientists studying biological navigation, robotics engineers developing autonomous systems | Graduate students and educators using the platform for teaching and experimentation |
+| Technical Teams | ML/AI practitioners advancing reinforcement learning algorithms | Systems integrators deploying large-scale simulations, DevOps teams managing research infrastructure |
 
 ### 1.1.4 Expected Business Impact
 
-The plume navigation simulation library delivers substantial value through multiple impact vectors. It accelerates research in chemical plume tracking and source localization by providing standardized benchmarking capabilities for navigation algorithms. The framework enables significant time savings, reducing typical development cycles from months to days through its comprehensive library of reusable components. Additionally, it facilitates collaboration across research groups by establishing common interfaces and protocols, creating a unified ecosystem for odor plume navigation research.
+The system delivers transformative value across multiple dimensions:
+- Accelerate research breakthroughs in bio-inspired navigation by 3-5x through modular experimentation
+- Enable cross-disciplinary collaboration via standardized protocols and data formats
+- Reduce development time for navigation algorithms from months to weeks
+- Facilitate reproducible research with built-in versioning and deterministic execution
 
 ## 1.2 SYSTEM OVERVIEW
 
 ### 1.2.1 Project Context
 
-#### Business Context and Market Positioning
+#### 1.2.1.1 Business Context and Market Positioning
 
-The plume navigation simulation library operates within the rapidly expanding field of autonomous sensing and chemical detection systems. As environmental monitoring, search and rescue operations, and industrial safety applications increasingly rely on autonomous agents for chemical source localization, the need for sophisticated simulation tools has become paramount. This toolkit positions itself as the definitive platform for developing and validating navigation algorithms in chemical plume environments.
+The system positions itself as the definitive open-source platform for odor plume navigation research, bridging the gap between theoretical models and practical applications in robotics and AI.
 
-#### Current System Limitations
+#### 1.2.1.2 Current System Limitations
 
-The system represents a fundamental architectural advancement over the legacy v0.3.0 VideoPlume simulator, which suffered from several critical limitations:
+The library addresses significant limitations in existing solutions:
+- Monolithic architectures requiring code modifications for new experiments
+- Lack of standardized interfaces preventing component reuse across research groups
+- Poor performance characteristics limiting large-scale multi-agent studies
+- Inadequate support for modern RL frameworks hindering AI research
 
-- **Lack of Extensibility**: Monolithic architecture prevented easy integration of new components
-- **Poor Performance Scaling**: Inefficient design limited multi-agent simulation capabilities  
-- **Limited Integration Options**: Restricted compatibility with modern ML/RL ecosystems
-- **Configuration Inflexibility**: Hard-coded parameters hindered experimentation and reproducibility
+#### 1.2.1.3 Enterprise Integration
 
-#### Integration with Existing Enterprise Landscape
-
-The toolkit integrates seamlessly with the modern machine learning and reinforcement learning ecosystem, providing native compatibility with Gymnasium 0.29.x environment APIs, Stable-Baselines3 RL algorithms, and standard Python scientific computing libraries. This integration strategy ensures compatibility with existing research workflows while enabling deployment across diverse environments, from local development setups to high-performance computing clusters and cloud platforms.
+The library seamlessly integrates with established research ecosystems including Gymnasium (OpenAI), Stable-Baselines3, Ray RLlib, Weights & Biases, and institutional HPC clusters.
 
 ### 1.2.2 High-Level Description
 
-#### Primary System Capabilities
+#### 1.2.2.1 Primary System Capabilities
 
-The simulation framework delivers comprehensive capabilities for odor plume navigation research:
+- **Protocol-Based Component Architecture**: Zero-code extensibility through standardized interfaces for sources, boundaries, actions, recording, and analysis
+- **Multi-Model Plume Simulation**: Mathematical (Gaussian), physics-based (Turbulent), biological (Filament), and empirical (Video) models
+- **Agent Intelligence Spectrum**: Support for reactive (memory-less) through cognitive (memory-based) navigation strategies
+- **Enterprise Performance**: Sub-33ms step latency with 100 concurrent agents, >90% cache efficiency
 
-- **Multi-Model Plume Simulation**: Supports Gaussian, Turbulent, and Video-based dispersion models
-- **Scalable Multi-Agent Navigation**: Vectorized operations supporting 100+ simultaneous agents
-- **High-Performance Frame Caching**: LRU, preload, and no-cache modes with ≤33ms step performance
-- **Protocol-Based Extensibility**: Runtime component selection without code modification
-- **<span style="background-color: rgba(91, 57, 243, 0.2)">Hydra-Configurable Lifecycle Hook System: Default-enabled, minimal-overhead hook execution managed by the new HookManager for pre-step, post-step, and episode-end events</span>**
-- **Comprehensive Data Recording**: Parquet, HDF5, and SQLite backends with asynchronous I/O
-- **Advanced Analytics**: Statistical analysis, visualization tools, and performance monitoring
-- **RL Framework Integration**: Native Gymnasium environment with Stable-Baselines3 compatibility
+#### 1.2.2.2 Major System Components
 
-#### Major System Components
+| Component | Purpose | Key Features |
+|-----------|---------|--------------|
+| Core Simulation Engine | Agent navigation and environment dynamics | Protocol-driven, multi-agent support, deterministic execution |
+| Plume Modeling System | Odor dispersion simulation | 4 model types, wind integration, real-time physics |
+| Recording Infrastructure | Data persistence and analysis | Multi-backend (Parquet/HDF5/SQLite), <1ms overhead |
+| RL Integration Layer | AI/ML training support | Gymnasium 0.29.x compliant, frame caching, vectorized envs |
 
-The architecture consists of three primary components working in concert:
+#### 1.2.2.3 Core Technical Approach
 
-**Core Navigation Library (odor_plume_nav)**
-The foundational component provides the Navigator API and controllers, Gymnasium environment wrappers, the high-performance frame caching subsystem, and comprehensive visualization tools. This library serves as the primary interface for researchers implementing navigation algorithms.
-
-**Simulation Framework (plume_nav_sim)**
-The simulation engine implements protocol interfaces for Source, Boundary, Action, Recorder, Stats, and Hooks components. It includes sophisticated plume and wind field models, recording and analysis engines, and debug GUI capabilities supporting both Qt and Streamlit interfaces. <span style="background-color: rgba(91, 57, 243, 0.2)">A new lightweight HookManager (<50 LoC) now orchestrates all lifecycle hooks, providing default enablement and Hydra-driven component selection without impacting the 33 ms/step SLA.</span>
-
-**Configuration System**
-A Hydra-based hierarchical configuration system enables environment variable integration and zero-code component swapping. This system ensures experiment reproducibility while maintaining maximum flexibility for research exploration.
-
-#### Core Technical Approach
-
-The system employs a protocol-driven architecture that enables runtime component selection and configuration. Hydra configuration management ensures experiment reproducibility and enables zero-code component swapping. Performance optimization through Numba JIT compilation and asynchronous I/O for data recording delivers the high-performance requirements of modern research applications. Vectorized operations support multi-agent scenarios with minimal computational overhead.
+The system employs a sophisticated technical architecture:
+- **Architecture**: Microkernel pattern with pluggable components via Python Protocols
+- **Performance**: Vectorized NumPy operations, optional Numba JIT, intelligent caching
+- **Scalability**: Linear memory scaling, distributed experiment support via Hydra multirun
+- **Quality**: >80% test coverage, property-based testing, automated performance regression detection
 
 ### 1.2.3 Success Criteria
 
-#### Measurable Objectives
+#### 1.2.3.1 Measurable Objectives
 
-| Metric Category | Target Value | Measurement Method |
-|---|---|---|
-| Performance | ≤33 ms per simulation step | Automated benchmarking suite |
-| Scalability | 100+ simultaneous agents | Load testing protocols |
-| Reliability | >99.9% uptime in production | Continuous monitoring |
-| Adoption | 10+ research groups (Year 1) | Usage analytics and surveys |
+| Metric | Target | Measurement Method |
+|--------|--------|-------------------|
+| Step Execution Performance | ≤33ms @ 100 agents | Automated benchmarks on reference hardware |
+| Frame Cache Efficiency | ≥90% hit rate | Runtime statistics via info["perf_stats"] |
+| Recording Overhead | <1ms when disabled | Performance profiling in CI pipeline |
+| Memory Scaling | Linear with agent count | Memory profiling across agent scales |
 
-#### Critical Success Factors
+#### 1.2.3.2 Critical Success Factors
 
-The system's success depends on several key factors: **Extensibility** through zero-code configuration of components, enabling researchers to adapt the framework to diverse use cases without modifying core code. **Performance** optimization ensuring real-time simulation capabilities for interactive research workflows. **Reliability** in production environments supporting critical research timelines. **Community Adoption** driving the establishment of standardized benchmarking practices across the research community.
+- Zero-code extensibility enabling rapid research iteration
+- Performance meeting real-time simulation requirements
+- Seamless integration with existing ML/RL workflows
+- Community adoption through comprehensive documentation
 
-#### Key Performance Indicators
+#### 1.2.3.3 Key Performance Indicators
 
-Primary KPIs include simulation step latency maintained below 33 milliseconds, concurrent agent support exceeding 100 agents, system uptime above 99.9%, and measurable adoption by research groups within the first year of release.
+- Time to implement new experiment: <2 hours (vs. days with custom code)
+- Simulation throughput: >1M steps/hour on consumer hardware
+- Research paper citations: >50 within first year
+- Community contributions: >20 custom components shared
 
 ## 1.3 SCOPE
 
-### 1.3.1 In-Scope Elements
+### 1.3.1 In-Scope
 
-#### Core Features and Functionalities
+#### 1.3.1.1 Core Features and Functionalities
 
-| Feature Category | Included Capabilities |
-|---|---|
-| Plume Simulation | Gaussian, Turbulent, Video-based dispersion models |
-| Agent Navigation | Multi-agent navigation with configurable behaviors |
-| RL Integration | Gymnasium-compliant environment with SB3 compatibility |
-| Data Management | Comprehensive recording, playback, and analysis |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">Hook Lifecycle Management</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Hydra-configurable pre-step, post-step, and episode-end hooks enabled by default</span> |
+**Must-Have Capabilities**:
+- Protocol-based component system with runtime selection
+- Four plume model implementations (Gaussian, Turbulent, Filament, Video)
+- Memory-based and reactive navigation strategies
+- High-performance frame caching with LRU/preload modes
+- Multi-backend recording (Parquet, HDF5, SQLite, None)
+- Automated statistics aggregation and summary export
+- Gymnasium-compliant RL environment with dual API support
+- Interactive debugging GUI (Qt desktop + Streamlit web)
+- Hydra configuration management with environment variables
+- CLI tools for automation and batch processing
+- <span style="background-color: rgba(91, 57, 243, 0.2)">PEP 621-compliant build system using setuptools (≥80) with single `pyproject.toml`, replacing the previous Poetry configuration</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Consolidated CLI module (`plume_nav_sim.cli`) providing `plume-nav-sim` and `plume-nav-train` entry points</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Semantic versioning with authoritative `plume_nav_sim.__version__` accessible at runtime</span>
 
-**Must-Have Capabilities**
-- Real-time visualization and debugging tools with interactive interfaces
-- Performance monitoring and optimization tools for research workflow optimization
-- Statistical analysis and reporting capabilities for research publication
-- Both CLI and programmatic APIs for diverse user preferences
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Default-enabled HookManager providing configurable lifecycle hooks with zero-overhead early-exit when no hooks are registered</span>
+**Primary User Workflows**:
+- Single-agent navigation experiments
+- Multi-agent swarm coordination studies
+- RL algorithm training and evaluation
+- Comparative analysis across navigation strategies
+- Performance benchmarking and optimization
+- Data export for publication and sharing
 
-**Primary User Workflows**
-The system supports essential research workflows including single-agent plume tracking experiments, multi-agent collaborative search scenarios, reinforcement learning agent training and evaluation, batch parameter sweeps for systematic exploration, performance benchmarking for algorithm comparison, and custom component development for specialized research needs.
+#### 1.3.1.2 Essential Integrations
 
-**Essential Integrations**
-- Gymnasium 0.29.x environment API for RL compatibility
-- Stable-Baselines3 RL algorithms for immediate research application
-- Hydra configuration framework for experiment management
-- NumPy/SciPy for numerical operations and scientific computing
-- Pandas/PyArrow for efficient data handling and analysis
-- Matplotlib/Seaborn for publication-quality visualization
+| Integration Category | Systems | Purpose |
+|---------------------|---------|---------|
+| ML/RL Frameworks | Stable-Baselines3, Weights & Biases | Training and experiment tracking |
+| Infrastructure | Docker, HPC schedulers (SLURM) | Deployment and cluster computing |
+| Development | Jupyter notebooks, CI/CD pipelines | Interactive research and quality assurance |
 
-#### Implementation Boundaries
+#### 1.3.1.3 Implementation Boundaries
 
-**System Boundaries**
-The system operates within a 2D Cartesian coordinate system optimized for chemical plume navigation research. It requires Python 3.10+ runtime environments and supports Linux, macOS, and Windows platforms. The architecture supports both local and distributed execution modes with deterministic and stochastic simulation capabilities.
+**System Boundaries**:
+- Simulation scope: 2D navigation in bounded domains
+- Physics fidelity: Simplified fluid dynamics suitable for real-time execution
+- Agent complexity: Single-sensor to multi-modal perception
+- Environment scale: Up to 1000x1000 grid units
 
-**User Groups Covered**
-- Research scientists conducting navigation algorithm research
-- Algorithm developers implementing novel sensing approaches
-- Educators teaching computational methods in robotics
-- Systems integrators building autonomous sensing applications
+**User Groups Covered**:
+- Academic researchers in biology, robotics, and AI
+- Graduate students learning navigation algorithms
+- Engineers prototyping autonomous systems
+- Data scientists developing RL solutions
 
-**Geographic and Market Coverage**
-The toolkit supports global deployment across academic institutions, research laboratories, and industrial R&D facilities. It accommodates diverse computational environments from individual researcher workstations to large-scale HPC clusters.
+<span style="background-color: rgba(91, 57, 243, 0.2)">**Build System Scope**: The migration from Poetry to setuptools is limited to packaging configuration and does not involve changes to core runtime functionality or existing module structure.</span>
 
-**Data Domains Included**
-- Chemical concentration fields and dispersion patterns
-- Agent state trajectories and behavioral data
-- Environmental parameters including wind fields and boundary conditions
-- Performance metrics and experimental results
+### 1.3.2 Out-of-Scope
 
-### 1.3.2 Out-of-Scope Elements
+#### 1.3.2.1 Explicitly Excluded Features
 
-#### Explicitly Excluded Features
+**Current Version Limitations**:
+- 3D navigation simulation (2D only in v1.0)
+- Real-time hardware robot control interfaces
+- Photorealistic rendering or gaming-quality graphics
+- Commercial licensing or enterprise support
+- Cloud-based simulation infrastructure
+- Mobile or embedded deployment targets
 
-**Current Version Limitations**
-- 3D navigation capabilities (reserved for planned v2.0 release)
-- Hardware sensor integration (designated for future development phases)
-- Real-time robot control interfaces (outside current scope)
-- Cloud-native orchestration features (future enhancement)
-- Mobile and embedded deployment targets (not supported)
-- Non-Python language bindings (future consideration)
+#### 1.3.2.2 Future Phase Considerations
 
-#### Future Phase Considerations
+**Planned for Future Versions**:
+- 3D environment support (v2.0)
+- Hardware-in-the-loop testing capabilities
+- Distributed multi-node simulations
+- Advanced visualization with 3D rendering
+- Commercial support offerings
 
-**Version 2.0 Planned Features**
-- Three-dimensional navigation and plume modeling
-- Enhanced hardware integration capabilities
-- Advanced cloud deployment options
-- Extended platform support
+#### 1.3.2.3 Unsupported Use Cases
 
-**Long-term Roadmap Items**
-- Real-time robotic system integration
-- Mobile platform deployment
-- Multi-language API support
-- Advanced distributed computing features
-
-#### Integration Points Not Covered
-
-- Direct hardware sensor interfaces requiring real-time data processing
-- Production robotic control systems requiring safety-critical operation
-- Enterprise-scale cloud orchestration platforms
-- Legacy system integration requiring custom protocol adaptation
-
-#### Unsupported Use Cases
-
-- Real-time robotic control applications requiring microsecond response times
-- Safety-critical systems requiring formal verification
-- Embedded systems with severe computational constraints
-- Applications requiring proprietary data formats or closed-source components
+**Excluded Applications**:
+- Production robot deployment
+- Safety-critical navigation systems
+- Commercial path planning services
+- Gaming or entertainment applications
+- Classified or sensitive research requiring security clearances
 
 #### References
 
-- `README.md` - Primary project documentation outlining purpose, features, installation, and usage
-- `pyproject.toml` - Project manifest with metadata, dependencies, and build configuration
-- `/` - Root folder containing project manifests and configuration files
-- `blitzy/` - High-level design documentation folder
-- `blitzy/documentation/` - Technical specifications and project guide
-- `src/` - Source code packages (odor_plume_nav, plume_nav_sim, cookiecutter template)
-- `docs/` - Developer documentation hub with guides and API reference
-- `docs/api_reference/` - Complete v1.0 API documentation
-- `conf/` - Hydra configuration hierarchy
-- `conf/base/` - Base configuration groups for all components
-- `examples/` - Demonstration scripts and notebooks
+- Section-specific details provided in the documentation context - Comprehensive system overview and requirements
+- User context analysis - No additional specific repository files were referenced in the provided context
+- Setuptools version information from official PyPI and GitHub releases
 
 # 2. PRODUCT REQUIREMENTS
 
 ## 2.1 FEATURE CATALOG
 
-### 2.1.1 F-001: Multi-Model Plume Simulation Engine
+### 2.1.1 Core Infrastructure Features
 
+#### Feature F-001: Protocol-Based Simulation Engine
 **Feature Metadata**
 - **Unique ID**: F-001
-- **Feature Name**: Multi-Model Plume Simulation Engine
-- **Feature Category**: Core Simulation
+- **Feature Name**: Protocol-Based Simulation Engine
+- **Feature Category**: Core Infrastructure
 - **Priority Level**: Critical
 - **Status**: Completed
 
 **Description**
-- **Overview**: Provides multiple physics-based and data-driven plume dispersion models for simulating chemical concentration fields with support for Gaussian, Turbulent, and Video-based models
-- **Business Value**: Enables researchers to select appropriate models based on computational resources and fidelity requirements, accelerating research cycles from months to days
-- **User Benefits**: Flexibility to trade off between simulation accuracy and performance based on research needs, supporting diverse experimental setups
-- **Technical Context**: Implements protocol-based plume model interface with runtime selection via Hydra configuration, enabling zero-code component swapping
+- **Overview**: Microkernel architecture implementing pluggable component system via Python Protocols, enabling zero-code extensibility for research environments
+- **Business Value**: Accelerates research breakthroughs by 3-5x through modular experimentation and cross-disciplinary collaboration
+- **User Benefits**: Researchers can swap components without modifying core code, reducing development time from months to weeks
+- **Technical Context**: Uses Protocol interfaces for all major subsystems with runtime component selection and deterministic execution
 
 **Dependencies**
-- **Prerequisite Features**: None (foundational feature)
-- **System Dependencies**: NumPy (>=1.26.0), SciPy (>=1.11.0), OpenCV (>=4.8.0)
-- **External Dependencies**: Optional Numba for JIT compilation achieving >10x speedup
-- **Integration Requirements**: Must integrate with Navigator controllers and sensor systems
+- **Prerequisite Features**: None (foundational)
+- **System Dependencies**: Python ≥3.10, NumPy ≥1.26.0
+- **External Dependencies**: Gymnasium 0.29.x, Hydra 1.3.x
+- **Integration Requirements**: All components must implement defined Protocol interfaces
 
-### 2.1.2 F-002: High-Performance Frame Caching System
+#### Feature F-012: Hierarchical Configuration Management
+**Feature Metadata**
+- **Unique ID**: F-012
+- **Feature Name**: Hierarchical Configuration Management
+- **Feature Category**: Core Infrastructure
+- **Priority Level**: Critical
+- **Status**: Completed
 
+**Description**
+- **Overview**: Hydra-based declarative YAML configuration system with environment overrides and multi-run support
+- **Business Value**: Enables reproducible research with built-in versioning and deterministic execution
+- **User Benefits**: Parameter sweeps and multi-run experiments via CLI without code modifications
+- **Technical Context**: Hydra ConfigStore with Pydantic validation and OmegaConf integration
+
+**Dependencies**
+- **Prerequisite Features**: None
+- **System Dependencies**: Hydra-core 1.3.x, OmegaConf ≥2.3.0
+- **External Dependencies**: Pydantic ≥2.5.0
+- **Integration Requirements**: All configurable components must support Hydra config injection
+
+### 2.1.2 Simulation Physics Features
+
+#### Feature F-002: Multi-Model Plume Simulation
 **Feature Metadata**
 - **Unique ID**: F-002
-- **Feature Name**: High-Performance Frame Caching System
-- **Feature Category**: Performance Optimization
+- **Feature Name**: Multi-Model Plume Simulation System
+- **Feature Category**: Simulation Physics
 - **Priority Level**: Critical
 - **Status**: Completed
 
 **Description**
-- **Overview**: Multi-mode caching system for video-based plume data with LRU, preload, and no-cache strategies optimized for real-time simulation
-- **Business Value**: Achieves ≤33ms step performance requirement for real-time simulation, enabling interactive research workflows
-- **User Benefits**: Smooth interactive simulations and faster batch processing for parameter sweeps
-- **Technical Context**: Thread-safe implementation with memory pressure monitoring via psutil, supporting concurrent access patterns
+- **Overview**: Four distinct plume dispersion models (Gaussian, Turbulent, Filament, Video) with unified PlumeModelProtocol interface
+- **Business Value**: Supports diverse research scenarios from analytical to empirical studies across biology, robotics, and AI
+- **User Benefits**: Choose appropriate fidelity/performance trade-off for specific research needs
+- **Technical Context**: Implements vectorized NumPy operations with optional Numba JIT compilation for real-time physics
 
 **Dependencies**
-- **Prerequisite Features**: F-001 (for video-based plume models)
-- **System Dependencies**: psutil (>=5.9.0), threading module
-- **External Dependencies**: None
-- **Integration Requirements**: Transparent integration with VideoPlume and Navigator components
+- **Prerequisite Features**: F-001 (Core Simulation Engine)
+- **System Dependencies**: NumPy, SciPy ≥1.11.0, OpenCV ≥4.8.0 (for video)
+- **External Dependencies**: Optional Numba for JIT compilation
+- **Integration Requirements**: Wind field integration via WindFieldProtocol
 
-### 2.1.3 F-003: Multi-Agent Navigation Framework
-
+#### Feature F-003: Environmental Wind Dynamics
 **Feature Metadata**
 - **Unique ID**: F-003
-- **Feature Name**: Multi-Agent Navigation Framework
-- **Feature Category**: Core Navigation
-- **Priority Level**: Critical
-- **Status**: Completed
-
-**Description**
-- **Overview**: Scalable navigation system supporting single and multi-agent (100+) scenarios with vectorized operations for high-performance simulation
-- **Business Value**: Enables collaborative search research and swarm behavior studies, supporting scalable research applications
-- **User Benefits**: Efficient simulation of complex multi-agent scenarios with minimal computational overhead
-- **Technical Context**: Optimized controllers with sub-millisecond step performance per agent using NumPy vectorization
-
-**Dependencies**
-- **Prerequisite Features**: F-001, F-008 (Sensor Systems)
-- **System Dependencies**: NumPy (vectorized operations)
-- **External Dependencies**: None
-- **Integration Requirements**: Must work with all boundary policies, action interfaces, and sensor types
-
-### 2.1.4 F-004: Reinforcement Learning Integration
-
-**Feature Metadata**
-- **Unique ID**: F-004
-- **Feature Name**: Reinforcement Learning Integration
-- **Feature Category**: Machine Learning
+- **Feature Name**: Environmental Wind Dynamics System
+- **Feature Category**: Simulation Physics
 - **Priority Level**: High
 - **Status**: Completed
 
 **Description**
-- **Overview**: Native integration with Gymnasium API and Stable-Baselines3 algorithms for RL research with custom observation/action spaces
-- **Business Value**: Accelerates development of intelligent navigation algorithms, reducing integration complexity
-- **User Benefits**: Direct access to state-of-the-art RL algorithms without custom integration work
-- **Technical Context**: Gymnasium-compliant environment with vectorized environments for parallel training
+- **Overview**: Three wind field models (Constant, Turbulent, TimeVarying) providing realistic environmental conditions
+- **Business Value**: Enables realistic atmospheric conditions for navigation research
+- **User Benefits**: Model various environmental conditions from simple to complex scenarios
+- **Technical Context**: Implements WindFieldProtocol with spatial/temporal variation support
 
 **Dependencies**
-- **Prerequisite Features**: F-003, F-008, F-009
-- **System Dependencies**: gymnasium (==0.29.*), stable-baselines3
-- **External Dependencies**: PyTorch (via stable-baselines3)
-- **Integration Requirements**: Must maintain compatibility with Gymnasium API standards
+- **Prerequisite Features**: F-001 (Core Simulation Engine)
+- **System Dependencies**: NumPy, SciPy (for turbulence modeling)
+- **External Dependencies**: Optional Pandas for time-series data
+- **Integration Requirements**: Couples with plume models for advection calculations
 
-### 2.1.5 F-005: Comprehensive Data Recording Framework
+### 2.1.3 Agent Control Features
 
+#### Feature F-004: Agent Navigation Controllers
+**Feature Metadata**
+- **Unique ID**: F-004
+- **Feature Name**: Single/Multi-Agent Navigation System
+- **Feature Category**: Agent Control
+- **Priority Level**: Critical
+- **Status**: Completed
+
+**Description**
+- **Overview**: Unified navigation API supporting both reactive and cognitive agent strategies with memory hooks
+- **Business Value**: Enables comparative studies across navigation algorithms and swarm coordination research
+- **User Benefits**: Seamless switching between single and multi-agent scenarios up to 100 agents
+- **Technical Context**: NavigatorProtocol with memory hooks, sensor integration, and boundary enforcement
+
+**Dependencies**
+- **Prerequisite Features**: F-001, F-005 (Sensor System)
+- **System Dependencies**: NumPy for state management
+- **External Dependencies**: None
+- **Integration Requirements**: Sensor data sampling, boundary enforcement, action interface
+
+#### Feature F-005: Multi-Modal Sensor System
 **Feature Metadata**
 - **Unique ID**: F-005
-- **Feature Name**: Comprehensive Data Recording Framework
+- **Feature Name**: Configurable Multi-Modal Sensor Suite
+- **Feature Category**: Agent Perception
+- **Priority Level**: High
+- **Status**: Completed
+
+**Description**
+- **Overview**: Binary, Concentration, Gradient, and Historical sensor implementations with noise models
+- **Business Value**: Models realistic perception constraints for bio-inspired navigation research
+- **User Benefits**: Mix and match sensors for different agent capabilities and research scenarios
+- **Technical Context**: SensorProtocol with noise models and vectorized sampling operations
+
+**Dependencies**
+- **Prerequisite Features**: F-001, F-002 (for plume sampling)
+- **System Dependencies**: NumPy
+- **External Dependencies**: None
+- **Integration Requirements**: Frame cache for efficient repeated sampling
+
+#### Feature F-006: Action Space Interface
+**Feature Metadata**
+- **Unique ID**: F-006
+- **Feature Name**: Unified Action Translation Layer
+- **Feature Category**: Agent Control
+- **Priority Level**: High
+- **Status**: Completed
+
+**Description**
+- **Overview**: Continuous and discrete action spaces with RL framework compatibility
+- **Business Value**: Seamless integration with multiple RL training frameworks
+- **User Benefits**: Train with any RL algorithm without action space modifications
+- **Technical Context**: ActionInterfaceProtocol with automatic Gymnasium space generation
+
+**Dependencies**
+- **Prerequisite Features**: F-001
+- **System Dependencies**: Gymnasium spaces
+- **External Dependencies**: None
+- **Integration Requirements**: Controller movement command translation
+
+### 2.1.4 Performance and Data Management Features
+
+#### Feature F-007: High-Performance Frame Caching
+**Feature Metadata**
+- **Unique ID**: F-007
+- **Feature Name**: Memory-Efficient Video Frame Cache
+- **Feature Category**: Performance Optimization
+- **Priority Level**: High
+- **Status**: Completed
+
+**Description**
+- **Overview**: LRU and preload caching strategies for video-based plume models
+- **Business Value**: Enables real-time performance with large video datasets
+- **User Benefits**: >90% cache hit rate with <1ms retrieval latency
+- **Technical Context**: Thread-safe cache with memory pressure monitoring via psutil
+
+**Dependencies**
+- **Prerequisite Features**: F-002 (Video plume support)
+- **System Dependencies**: psutil ≥5.9.0 for memory monitoring
+- **External Dependencies**: None
+- **Integration Requirements**: VideoPlume adapter interface
+
+#### Feature F-008: Multi-Backend Recording System
+**Feature Metadata**
+- **Unique ID**: F-008
+- **Feature Name**: Extensible Data Recording Framework
 - **Feature Category**: Data Management
 - **Priority Level**: High
 - **Status**: Completed
 
 **Description**
-- **Overview**: Multi-backend recording system supporting Parquet, HDF5, SQLite, and null backends with asynchronous I/O
-- **Business Value**: Enables reproducible research and comprehensive data analysis for publication-quality results
-- **User Benefits**: Flexible data export formats for various analysis workflows and research publication
-- **Technical Context**: Asynchronous I/O with compression support and performance budgets for minimal simulation overhead
+- **Overview**: Pluggable recording backends (Parquet, HDF5, SQLite, None) with async buffering
+- **Business Value**: Flexible data storage for different analysis workflows and publication requirements
+- **User Benefits**: Choose optimal format for specific use cases and analysis tools
+- **Technical Context**: RecorderProtocol with async buffering and compression support
 
 **Dependencies**
-- **Prerequisite Features**: F-003
-- **System Dependencies**: pandas, pyarrow, h5py, sqlite3
+- **Prerequisite Features**: F-001
+- **System Dependencies**: Backend-specific (pyarrow, h5py, sqlite3)
 - **External Dependencies**: None
-- **Integration Requirements**: RecorderProtocol compliance for all backends
+- **Integration Requirements**: Simulation step/episode hooks
 
-### 2.1.6 F-006: Advanced Visualization Suite
-
+#### Feature F-009: Performance Monitoring System
 **Feature Metadata**
-- **Unique ID**: F-006
-- **Feature Name**: Advanced Visualization Suite
-- **Feature Category**: Visualization
-- **Priority Level**: High
+- **Unique ID**: F-009
+- **Feature Name**: Real-time Performance Tracking
+- **Feature Category**: Performance Optimization
+- **Priority Level**: Medium
 - **Status**: Completed
 
 **Description**
-- **Overview**: Real-time animation and static plotting capabilities for simulation analysis with publication-quality output
-- **Business Value**: Facilitates research insights and publication-quality figures for academic dissemination
-- **User Benefits**: Interactive debugging capabilities and professional visualization outputs
-- **Technical Context**: Backend-agnostic design supporting Matplotlib, Qt, and Streamlit interfaces
+- **Overview**: Comprehensive metrics for step latency, memory usage, and throughput
+- **Business Value**: Ensures research-grade performance requirements are met (≤33ms @ 100 agents)
+- **User Benefits**: Automatic detection of performance degradation and optimization opportunities
+- **Technical Context**: Integrated profiling with <1ms overhead when recording disabled
 
 **Dependencies**
-- **Prerequisite Features**: F-003, F-005
-- **System Dependencies**: matplotlib (>=3.7.0), optional PySide6/Streamlit
-- **External Dependencies**: None
-- **Integration Requirements**: Must support headless operation for CI/CD environments
+- **Prerequisite Features**: F-001
+- **System Dependencies**: psutil, time.perf_counter
+- **External Dependencies**: Loguru ≥0.7.0
+- **Integration Requirements**: All major subsystems report performance metrics
 
-### 2.1.7 F-007: Configuration Management System
+### 2.1.5 Machine Learning and Integration Features
 
+#### Feature F-010: RL Training Integration
 **Feature Metadata**
-- **Unique ID**: F-007
-- **Feature Name**: Configuration Management System
-- **Feature Category**: Infrastructure
+- **Unique ID**: F-010
+- **Feature Name**: Gymnasium-Compliant RL Environment
+- **Feature Category**: Machine Learning
 - **Priority Level**: Critical
 - **Status**: Completed
 
 **Description**
-- **Overview**: Hydra-based hierarchical configuration with environment variable integration and schema validation
-- **Business Value**: Ensures experiment reproducibility and enables zero-code component swapping for research flexibility
-- **User Benefits**: Easy parameter tuning and experiment management without code modification
-- **Technical Context**: Three-layer override hierarchy (Base → User → Runtime) with Pydantic validation. <span style="background-color: rgba(91, 57, 243, 0.2)">The hooks configuration group (default "none") is now uncommented and active by default.</span>
+- **Overview**: Full Gymnasium 0.29.x API compliance with stable-baselines3 integration
+- **Business Value**: Enables state-of-the-art RL algorithm training and evaluation
+- **User Benefits**: Train PPO, SAC, TD3, etc. without modifications or custom wrappers
+- **Technical Context**: Automatic legacy Gym compatibility shim with vectorized environment support
 
 **Dependencies**
-- **Prerequisite Features**: None (foundational)
-- **System Dependencies**: hydra-core (==1.3.*), omegaconf (>=2.3.0), pydantic (>=2.5.0)
-- **External Dependencies**: None
-- **Integration Requirements**: All components must support Hydra instantiation
+- **Prerequisite Features**: F-001, F-004, F-006
+- **System Dependencies**: Gymnasium, stable-baselines3
+- **External Dependencies**: Optional shimmy for vectorization
+- **Integration Requirements**: All navigation components must support RL workflows
 
-### 2.1.8 F-008: Modular Sensor Systems
-
+#### Feature F-011: Visualization Suite
 **Feature Metadata**
-- **Unique ID**: F-008
-- **Feature Name**: Modular Sensor Systems
-- **Feature Category**: Sensing
-- **Priority Level**: High
+- **Unique ID**: F-011
+- **Feature Name**: Multi-Mode Visualization System
+- **Feature Category**: Analysis Tools
+- **Priority Level**: Medium
 - **Status**: Completed
 
 **Description**
-- **Overview**: Extensible sensor framework with concentration, gradient, and binary sensor types supporting diverse research scenarios
-- **Business Value**: Enables diverse sensing strategy research and algorithm development
-- **User Benefits**: Plug-and-play sensor configurations for different experimental scenarios
-- **Technical Context**: Protocol-based design with noise modeling and calibration drift simulation
+- **Overview**: Real-time animation, static plots, and interactive debug GUI
+- **Business Value**: Enables visual validation and publication-quality graphics
+- **User Benefits**: Interactive exploration and high-quality figure export for papers
+- **Technical Context**: Matplotlib-based with Qt desktop and Streamlit web GUI options
 
 **Dependencies**
 - **Prerequisite Features**: F-001
-- **System Dependencies**: NumPy
-- **External Dependencies**: None
-- **Integration Requirements**: Must integrate with Navigator controllers and plume models
+- **System Dependencies**: matplotlib ≥3.7.0
+- **External Dependencies**: Optional PySide6, Streamlit
+- **Integration Requirements**: Simulation state access and rendering hooks
 
-### 2.1.9 F-009: Boundary Policy Framework
+### 2.1.6 User Interface and Analysis Features
 
+#### Feature F-013: Command-Line Interface
 **Feature Metadata**
-- **Unique ID**: F-009
-- **Feature Name**: Boundary Policy Framework
-- **Feature Category**: Environment
-- **Priority Level**: High
-- **Status**: Completed
-
-**Description**
-- **Overview**: Configurable domain boundary behaviors (Terminate, Bounce, Wrap, Clip) for flexible experimental setups
-- **Business Value**: Supports diverse experimental setups and boundary conditions without code modification
-- **User Benefits**: Flexible environment constraints adaptable to research requirements
-- **Technical Context**: Vectorized operations for multi-agent efficiency with minimal computational overhead
-
-**Dependencies**
-- **Prerequisite Features**: F-003
-- **System Dependencies**: NumPy
-- **External Dependencies**: None
-- **Integration Requirements**: Must work with all navigator types
-
-### 2.1.10 F-010: CLI Command Interface
-
-**Feature Metadata**
-- **Unique ID**: F-010
-- **Feature Name**: CLI Command Interface
+- **Unique ID**: F-013
+- **Feature Name**: Comprehensive CLI Toolkit
 - **Feature Category**: User Interface
 - **Priority Level**: High
 - **Status**: Completed
 
 **Description**
-- **Overview**: Comprehensive command-line interface for all simulation operations with intuitive command structure
-- **Business Value**: Enables automation and scripting of experiments for batch processing
-- **User Benefits**: Intuitive command structure for common research workflows
-- **Technical Context**: Click-based CLI with full Hydra integration for configuration management
+- **Overview**: Commands for simulation, training, visualization, and batch processing
+- **Business Value**: Enables automation and headless operation for HPC environments
+- **User Benefits**: Script complex workflows without Python coding knowledge
+- **Technical Context**: Click-based framework with Hydra integration and rich output formatting
 
 **Dependencies**
-- **Prerequisite Features**: F-007, all core features
-- **System Dependencies**: click (>=8.2.1)
-- **External Dependencies**: None
-- **Integration Requirements**: Must expose all major functionality through CLI
+- **Prerequisite Features**: F-012 (Configuration Management)
+- **System Dependencies**: Click ≥8.2.1
+- **External Dependencies**: Rich for enhanced terminal output
+- **Integration Requirements**: All major features must be exposed via CLI
 
-### 2.1.11 F-011: Wind Field Models
-
+#### Feature F-014: Statistical Analysis Engine
 **Feature Metadata**
-- **Unique ID**: F-011
-- **Feature Name**: Wind Field Models
-- **Feature Category**: Environment
+- **Unique ID**: F-014
+- **Feature Name**: Automated Metrics Aggregation
+- **Feature Category**: Analysis Tools
 - **Priority Level**: Medium
 - **Status**: Completed
 
 **Description**
-- **Overview**: Multiple wind field models (Constant, Turbulent, Time-Varying) for realistic dispersion simulation
-- **Business Value**: Increases simulation fidelity for real-world scenario modeling
-- **User Benefits**: Accurate environmental conditions for navigation research
-- **Technical Context**: SciPy-based interpolation with optional data-driven temporal profiles
+- **Overview**: Episode and run-level statistics with custom metrics and multi-format export
+- **Business Value**: Standardized analysis pipeline for research publications
+- **User Benefits**: Automatic trajectory and performance analysis with publication-ready outputs
+- **Technical Context**: StatsAggregatorProtocol with extensible metric definitions
 
 **Dependencies**
-- **Prerequisite Features**: F-001
-- **System Dependencies**: SciPy, pandas (for time-varying profiles)
+- **Prerequisite Features**: F-008 (Recording System)
+- **System Dependencies**: NumPy, SciPy
 - **External Dependencies**: None
-- **Integration Requirements**: Must couple with plume dispersion models
+- **Integration Requirements**: Recorder data ingestion and analysis pipeline
 
-### 2.1.12 F-012: Debug and Analysis Tools
-
+#### Feature F-015: Database Persistence Layer
 **Feature Metadata**
-- **Unique ID**: F-012
-- **Feature Name**: Debug and Analysis Tools
-- **Feature Category**: Development Tools
-- **Priority Level**: Medium
+- **Unique ID**: F-015
+- **Feature Name**: SQLAlchemy Experiment Tracking
+- **Feature Category**: Data Management
+- **Priority Level**: Low
 - **Status**: Completed
 
 **Description**
-- **Overview**: Interactive debugging GUI and statistical analysis engine for research development
-- **Business Value**: Reduces development time and improves research quality through real-time inspection
-- **User Benefits**: Real-time inspection capabilities and comprehensive performance analysis
-- **Technical Context**: Multi-backend GUI support (Qt/Streamlit) with statistical aggregation
+- **Overview**: Optional relational database for experiment metadata and long-term tracking
+- **Business Value**: Long-term experiment tracking and SQL-based querying capabilities
+- **User Benefits**: Historical analysis and experiment comparison across time
+- **Technical Context**: SQLAlchemy 2.0+ with multiple backend support (PostgreSQL/MySQL/SQLite)
 
 **Dependencies**
-- **Prerequisite Features**: F-005, F-006
-- **System Dependencies**: Optional PySide6/Streamlit, SciPy
-- **External Dependencies**: None
-- **Integration Requirements**: Must work with all recording backends
+- **Prerequisite Features**: None (optional feature)
+- **System Dependencies**: SQLAlchemy ≥2.0.41
+- **External Dependencies**: Database backend drivers
+- **Integration Requirements**: Opt-in via configuration with automatic schema management
 
-### 2.1.13 F-013: Legacy Compatibility Layer
+## 2.2 FUNCTIONAL REQUIREMENTS TABLE
 
-**Feature Metadata**
-- **Unique ID**: F-013
-- **Feature Name**: Legacy Compatibility Layer
-- **Feature Category**: Compatibility
-- **Priority Level**: Medium
-- **Status**: Completed
+### 2.2.1 Core Simulation Engine Requirements
 
-**Description**
-- **Overview**: Shim layer for backward compatibility with OpenAI Gym API during migration period
-- **Business Value**: Protects existing research investments during migration to Gymnasium
-- **User Benefits**: Gradual migration path from legacy systems without immediate code changes
-- **Technical Context**: Automatic API detection and conversion with deprecation warnings
-
-**Dependencies**
-- **Prerequisite Features**: F-004
-- **System Dependencies**: gymnasium, optional gym
-- **External Dependencies**: None
-- **Integration Requirements**: Transparent operation with appropriate deprecation warnings
-
-### 2.1.14 F-014: Lifecycle Hook System (updated)
-
-**Feature Metadata**
-- **Unique ID**: <span style="background-color: rgba(91, 57, 243, 0.2)">F-014</span>
-- **Feature Name**: <span style="background-color: rgba(91, 57, 243, 0.2)">Lifecycle Hook System</span>
-- **Feature Category**: <span style="background-color: rgba(91, 57, 243, 0.2)">Infrastructure</span>
-- **Priority Level**: <span style="background-color: rgba(91, 57, 243, 0.2)">Critical</span>
-- **Status**: <span style="background-color: rgba(91, 57, 243, 0.2)">Completed</span>
-
-**Description**
-- **Overview**: <span style="background-color: rgba(91, 57, 243, 0.2)">Hydra-configurable HookManager providing pre-step, post-step, and episode-end lifecycle callbacks</span>
-- **Business Value**: <span style="background-color: rgba(91, 57, 243, 0.2)">Enables configuration-driven extension without code changes while preserving performance SLA</span>
-- **User Benefits**: <span style="background-color: rgba(91, 57, 243, 0.2)">Experimenters can inject custom logic via Hydra overrides</span>
-- **Technical Context**: <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager ≤50 LoC with zero-overhead early exit when no hooks are configured</span>
-
-**Dependencies**
-- **Prerequisite Features**: <span style="background-color: rgba(91, 57, 243, 0.2)">F-007 (Configuration Management System)</span>
-- **System Dependencies**: <span style="background-color: rgba(91, 57, 243, 0.2)">None new (re-uses hydra-core, typing)</span>
-- **External Dependencies**: None
-- **Integration Requirements**: <span style="background-color: rgba(91, 57, 243, 0.2)">Must be instantiated by PlumeNavigationEnv during init and invoked in step/reset</span>
-
-## 2.2 FUNCTIONAL REQUIREMENTS TABLES
-
-### 2.2.1 F-001: Multi-Model Plume Simulation Engine
-
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-001-RQ-001 | Gaussian plume model | Analytically correct concentration fields | Must-Have |
-| F-001-RQ-002 | Turbulent plume model | Stochastic filaments with proper dispersion | Must-Have |
-| F-001-RQ-003 | Video-based plume model | Loads MP4/AVI files via OpenCV | Must-Have |
-| F-001-RQ-004 | Runtime model selection | Configuration-based selection without code changes | Must-Have |
+| Requirement ID | Description | Acceptance Criteria | Priority | Complexity |
+|----------------|-------------|-------------------|----------|------------|
+| F-001-RQ-001 | Protocol-based component system | All major subsystems implement Protocol interfaces with runtime validation | Must-Have | High |
+| F-001-RQ-002 | Runtime component selection | Components swappable via configuration without code changes | Must-Have | Medium |
+| F-001-RQ-003 | Deterministic execution | Same seed produces identical results across runs and platforms | Must-Have | Medium |
+| F-001-RQ-004 | Multi-agent support | Handle 1-100 agents in single simulation with linear memory scaling | Must-Have | High |
 
 **Technical Specifications**
-- **Input Parameters**: Source position, emission rate, wind field, domain bounds
-- **Output/Response**: 2D concentration field array (numpy.ndarray)
-- **Performance Criteria**: <10ms per field update for 100x100 grid
-- **Data Requirements**: Video files (MP4/AVI) for video-based model
+- **Input Parameters**: Hydra configuration, component selections, random seed
+- **Output/Response**: Initialized simulation environment with selected components
+- **Performance Criteria**: <100ms initialization time, <33ms step execution @ 100 agents
+- **Data Requirements**: Component registry with Protocol compliance verification
 
 **Validation Rules**
-- **Business Rules**: Concentration values must be non-negative
-- **Data Validation**: Source position within domain bounds
-- **Security Requirements**: Video file path validation to prevent directory traversal
-- **Compliance Requirements**: None
+- **Business Rules**: Components must implement required Protocol methods
+- **Data Validation**: Type checking via Protocol runtime validation
+- **Security Requirements**: Safe dynamic loading without arbitrary code execution
+- **Compliance Requirements**: Python typing standards and PEP 544 compliance
 
-### 2.2.2 F-002: High-Performance Frame Caching System
+### 2.2.2 Plume Simulation Requirements
 
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-002-RQ-001 | LRU cache mode | Maintains most recently used frames | Must-Have |
-| F-002-RQ-002 | Preload cache mode | Loads all frames on initialization | Must-Have |
-| F-002-RQ-003 | No-cache mode | Direct frame access without caching | Must-Have |
-| F-002-RQ-004 | Memory pressure monitoring | Automatic cache eviction under pressure | Should-Have |
+| Requirement ID | Description | Acceptance Criteria | Priority | Complexity |
+|----------------|-------------|-------------------|----------|------------|
+| F-002-RQ-001 | Gaussian plume model | Analytical solution with configurable diffusion parameters | Must-Have | Low |
+| F-002-RQ-002 | Turbulent plume model | Lagrangian filaments with stochastic dispersion | Must-Have | High |
+| F-002-RQ-003 | Video plume adapter | Frame-based empirical plume from video data with interpolation | Should-Have | Medium |
+| F-002-RQ-004 | Unified sampling interface | All models provide concentration_at(positions) method | Must-Have | Low |
 
 **Technical Specifications**
-- **Input Parameters**: Cache mode, size limit (MB), pressure threshold
-- **Output/Response**: Cached frame arrays with <1ms access time
-- **Performance Criteria**: ≤33ms step latency with caching enabled
-- **Data Requirements**: Available system memory for cache allocation
+- **Input Parameters**: Source location, emission rate, diffusion coefficients, wind field
+- **Output/Response**: Concentration values at query positions with spatial interpolation
+- **Performance Criteria**: <1ms for 100 position queries, vectorized operations
+- **Data Requirements**: Model-specific parameters, optional video frame sequences
 
 **Validation Rules**
-- **Business Rules**: Cache size must not exceed available memory
-- **Data Validation**: Frame indices within video bounds
-- **Security Requirements**: None
-- **Compliance Requirements**: None
+- **Business Rules**: Concentration values must be non-negative, physically plausible
+- **Data Validation**: Parameter bounds checking, video frame format validation
+- **Security Requirements**: Input sanitization for video file paths and parameters
+- **Compliance Requirements**: NumPy array interfaces and scientific computing standards
 
-### 2.2.3 F-003: Multi-Agent Navigation Framework
+### 2.2.3 Navigation Controller Requirements
 
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-003-RQ-001 | Single-agent navigation | Smooth trajectory generation with sensor feedback | Must-Have |
-| F-003-RQ-002 | Multi-agent support | Vectorized operations for 100+ agents | Must-Have |
-| F-003-RQ-003 | State management | Efficient position, velocity, sensor state tracking | Must-Have |
-| F-003-RQ-004 | Action execution | Configurable action spaces (continuous/discrete) | Must-Have |
+| Requirement ID | Description | Acceptance Criteria | Priority | Complexity |
+|----------------|-------------|-------------------|----------|------------|
+| F-004-RQ-001 | Single-agent navigation | Control one agent with sensor feedback and memory support | Must-Have | Medium |
+| F-004-RQ-002 | Multi-agent coordination | Control up to 100 agents independently with collision avoidance | Must-Have | High |
+| F-004-RQ-003 | Memory hook support | Optional state persistence between simulation steps | Should-Have | Medium |
+| F-004-RQ-004 | Boundary enforcement | Respect domain boundaries per configurable policy | Must-Have | Low |
 
 **Technical Specifications**
-- **Input Parameters**: Initial positions, velocities, sensor configurations
-- **Output/Response**: Updated agent states, sensor readings
-- **Performance Criteria**: <1ms per step for 100 agents
-- **Data Requirements**: Agent configuration parameters
+- **Input Parameters**: Agent positions, orientations, sensor configurations, memory state
+- **Output/Response**: Updated positions, sensor readings, rewards, navigation decisions
+- **Performance Criteria**: <1ms single agent, <10ms for 100 agents
+- **Data Requirements**: Agent state arrays, sensor specifications, boundary definitions
 
 **Validation Rules**
-- **Business Rules**: Agents must respect max speed constraints
-- **Data Validation**: Valid initial positions within domain
-- **Security Requirements**: None
-- **Compliance Requirements**: None
+- **Business Rules**: Agent positions must remain within domain boundaries
+- **Data Validation**: Position and orientation bounds checking
+- **Security Requirements**: Parameter validation to prevent simulation crashes
+- **Compliance Requirements**: NavigatorProtocol interface compliance
 
-### 2.2.4 F-004: Reinforcement Learning Integration
+### 2.2.4 RL Environment Requirements
 
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-004-RQ-001 | Gymnasium environment | Full API compliance with reset/step/render | Must-Have |
-| F-004-RQ-002 | Custom observation space | Multi-modal observations (position, velocity, sensors) | Must-Have |
-| F-004-RQ-003 | Configurable rewards | Flexible reward shaping for different objectives | Must-Have |
-| F-004-RQ-004 | Algorithm compatibility | Works with PPO, SAC, TD3, A2C, DQN | Must-Have |
+| Requirement ID | Description | Acceptance Criteria | Priority | Complexity |
+|----------------|-------------|-------------------|----------|------------|
+| F-010-RQ-001 | Gymnasium API compliance | Pass gymnasium.utils.env_checker validation | Must-Have | Medium |
+| F-010-RQ-002 | Stable-baselines3 compatibility | Train PPO/SAC/TD3 algorithms without modifications | Must-Have | High |
+| F-010-RQ-003 | Legacy Gym support | Support deprecated gym.make calls via compatibility shim | Should-Have | Medium |
+| F-010-RQ-004 | Vectorized environments | Support parallel environment execution for training | Could-Have | High |
 
 **Technical Specifications**
-- **Input Parameters**: Environment config, algorithm parameters
-- **Output/Response**: Trained policy, performance metrics
-- **Performance Criteria**: >1000 environment steps/second
-- **Data Requirements**: Training hyperparameters
+- **Input Parameters**: Actions from RL agent, environment configuration
+- **Output/Response**: Observations, rewards, termination flags, info dictionaries
+- **Performance Criteria**: <10ms per step, >1M steps/hour throughput
+- **Data Requirements**: Observation/action space definitions, reward function parameters
 
 **Validation Rules**
-- **Business Rules**: Observation/action spaces must be valid
-- **Data Validation**: Hyperparameter ranges validation
-- **Security Requirements**: None
-- **Compliance Requirements**: Gymnasium API v0.29 compliance
+- **Business Rules**: Action spaces must be valid Gymnasium spaces
+- **Data Validation**: Action bounds checking, observation space validation
+- **Security Requirements**: Action sanitization to prevent invalid environment states
+- **Compliance Requirements**: Gymnasium 0.29.x API specifications
 
-### 2.2.5 F-005: Comprehensive Data Recording Framework
+### 2.2.5 Recording System Requirements
 
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-005-RQ-001 | Parquet backend | Columnar storage with compression | Must-Have |
-| F-005-RQ-002 | HDF5 backend | Hierarchical data with chunking | Must-Have |
-| F-005-RQ-003 | SQLite backend | Relational storage with transactions | Must-Have |
-| F-005-RQ-004 | Asynchronous writes | Non-blocking recording during simulation | Must-Have |
+| Requirement ID | Description | Acceptance Criteria | Priority | Complexity |
+|----------------|-------------|-------------------|----------|------------|
+| F-008-RQ-001 | Multi-backend support | Support Parquet, HDF5, SQLite, and None backends | Must-Have | Medium |
+| F-008-RQ-002 | Async buffering | Non-blocking data writing with configurable buffer sizes | Must-Have | High |
+| F-008-RQ-003 | Compression support | Optional data compression for storage efficiency | Should-Have | Medium |
+| F-008-RQ-004 | Minimal overhead | <1ms recording overhead when disabled | Must-Have | Low |
 
 **Technical Specifications**
-- **Input Parameters**: Backend selection, buffer size, compression settings
-- **Output/Response**: Structured data files in selected format
-- **Performance Criteria**: <1ms recording overhead per step
-- **Data Requirements**: Sufficient disk space for recordings
-
-**Validation Rules**
-- **Business Rules**: Data integrity across all backends
-- **Data Validation**: Schema compliance for each backend
-- **Security Requirements**: File permissions management
-- **Compliance Requirements**: None
-
-### 2.2.6 F-007: Configuration Management System
-
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| F-007-RQ-001 | Hierarchical configs | Base → User → Runtime override precedence | Must-Have |
-| F-007-RQ-002 | Environment variables | Full interpolation support | Must-Have |
-| F-007-RQ-003 | Schema validation | Pydantic-based type checking | Must-Have |
-| F-007-RQ-004 | Zero-code swapping | Component selection via configuration | Must-Have |
-
-**Technical Specifications**
-- **Input Parameters**: YAML configuration files, CLI overrides
-- **Output/Response**: Validated configuration objects
-- **Performance Criteria**: <100ms configuration loading
-- **Data Requirements**: Configuration schema definitions
-
-**Validation Rules**
-- **Business Rules**: Required parameters must be present
-- **Data Validation**: Type checking and range validation
-- **Security Requirements**: Path traversal prevention
-- **Compliance Requirements**: None
-
-### 2.2.14 F-014: Lifecycle Hook System (updated)
-
-| Requirement ID | Description | Acceptance Criteria | Priority |
-|---|---|---|---|
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014-RQ-001</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Default HookManager enablement</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager automatically instantiated from Hydra config with hooks=none producing identical trajectories to baseline</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Must-Have</span> |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014-RQ-002</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Hook registration API</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Supports register_pre_step, register_post_step, register_episode_end methods</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Must-Have</span> |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014-RQ-003</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Hook dispatch</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Executes registered hooks at appropriate lifecycle points with <1 ms overhead when hooks present</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Must-Have</span> |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014-RQ-004</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Hydra override support</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Users can swap hook sets via CLI "+hooks=<group>" without code changes</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Must-Have</span> |
-
-**Technical Specifications**
-- **Input Parameters**: <span style="background-color: rgba(91, 57, 243, 0.2)">Hook list from Hydra configuration</span>
-- **Output/Response**: <span style="background-color: rgba(91, 57, 243, 0.2)">None/side-effects</span>
-- **Performance Criteria**: <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager overhead <1 ms when hooks list is empty</span>
-- **Data Requirements**: <span style="background-color: rgba(91, 57, 243, 0.2)">N/A</span>
-
-**Validation Rules**
-- **Business Rules**: <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager must maintain simulation performance SLA</span>
-- **Data Validation**: <span style="background-color: rgba(91, 57, 243, 0.2)">Hook configuration must be valid Hydra group</span>
-- **Security Requirements**: <span style="background-color: rgba(91, 57, 243, 0.2)">Hook instantiation must validate class types</span>
-- **Compliance Requirements**: <span style="background-color: rgba(91, 57, 243, 0.2)">Must maintain backward compatibility with existing environments</span>
+- **Input Parameters**: Trajectory data, episode metadata, recording configuration
+- **Output/Response**: Persisted data files in specified format
+- **Performance Criteria**: <1ms overhead when disabled, async write operations
+- **Data Requirements**: Schema definitions for trajectory and metadata storage
 
 ## 2.3 FEATURE RELATIONSHIPS
 
-### 2.3.1 Feature Dependencies Map
+### 2.3.1 Core Dependencies Map
 
 ```mermaid
 graph TD
-    F007[F-007: Configuration Management] --> F001[F-001: Multi-Model Plume Simulation]
-    F007 --> F014[F-014: Lifecycle Hook System]
-    F014 --> F003[F-003: Multi-Agent Navigation]
-    F001 --> F008[F-008: Sensor Systems]
-    F001 --> F011[F-011: Wind Field Models]
-    F001 --> F002[F-002: Frame Caching System]
+    F001[F-001: Core Engine] --> F002[F-002: Plume Models]
+    F001 --> F003[F-003: Wind Fields]
+    F001 --> F004[F-004: Navigation]
+    F001 --> F005[F-005: Sensors]
+    F001 --> F006[F-006: Actions]
+    F001 --> F008[F-008: Recording]
+    F001 --> F009[F-009: Performance]
     
-    F008 --> F003
-    F009[F-009: Boundary Policies] --> F003
-    F001 --> F003
+    F004 --> F005
+    F002 --> F007[F-007: Frame Cache]
     
-    F003 --> F004[F-004: RL Integration]
-    F008 --> F004
-    F009 --> F004
+    F010[F-010: RL Environment] --> F001
+    F010 --> F004
+    F010 --> F006
+    F010 --> F007
     
-    F003 --> F005[F-005: Data Recording]
-    F005 --> F006[F-006: Visualization Suite]
-    F003 --> F006
+    F012[F-012: Configuration] --> F001
+    F012 --> F002
+    F012 --> F003
+    F012 --> F004
+    F012 --> F005
+    F012 --> F006
+    F012 --> F008
+    F012 --> F009
+    F012 --> F010
+    F012 --> F011[F-011: Visualization]
+    F012 --> F013[F-013: CLI]
+    F012 --> F014[F-014: Analysis]
+    F012 --> F015[F-015: Database]
     
-    F004 --> F013[F-013: Legacy Compatibility]
-    F005 --> F012[F-012: Debug Tools]
-    F006 --> F012
+    F013 --> F001
+    F013 --> F010
+    F013 --> F011
+    F013 --> F014
     
-    F007 --> F010[F-010: CLI Interface]
-    F003 --> F010
-    F004 --> F010
-    F005 --> F010
-    F006 --> F010
+    F014 --> F008
+    F008 --> F015
 ```
 
 ### 2.3.2 Integration Points
 
-| Feature A | Feature B | Integration Type | Shared Components |
-|---|---|---|---|
-| F-001 | F-003 | Data Flow | Concentration fields |
-| F-003 | F-008 | Bidirectional | Sensor readings/Agent states |
-| F-003 | F-009 | Control Flow | Position validation |
-| F-004 | F-003 | Wrapper | Environment abstraction |
-| **F-014** | **F-003** | **Lifecycle Callback** | **Pre-step/Post-step/Episode-end hooks** |
+**Primary Integration Points**
+- **Plume-Wind Integration**: Plume models query wind fields for advection calculations using WindFieldProtocol
+- **Navigation-Sensor Integration**: Controllers sample sensors at agent positions using SensorProtocol
+- **Cache-Video Integration**: Video plumes utilize frame cache for performance optimization
+- **Recording-Analysis Integration**: Analysis engine ingests recorded trajectory data for statistics
+- **RL-Environment Integration**: RL training requires coordination between navigation, actions, and sensors
 
-### 2.3.3 Common Services
+**Secondary Integration Points**
+- **Configuration-All Systems**: Hydra configuration system provides unified parameter management
+- **CLI-Core Features**: Command-line interface exposes all user-facing functionality
+- **Visualization-Simulation**: Real-time rendering requires access to simulation state
+- **Performance-All Systems**: Monitoring hooks integrated throughout system architecture
 
-- **Logging Service**: Structured logging via loguru across all features
-- **Seed Management**: Deterministic seeding shared by F-003, F-004, F-001
-- **Performance Monitoring**: Shared metrics collection across F-002, F-003, F-005
-- **Protocol Interfaces**: Common contracts for F-001, F-008, F-009, F-005
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**Hook Execution Service**: Centralized lifecycle callback dispatcher provided by F-014</span>
+### 2.3.3 Shared Components
+
+**Protocol Interface System**
+- All pluggable components implement standardized Protocol interfaces
+- Runtime component selection and validation
+- Type safety and interface compliance checking
+
+**Configuration Management**
+- Hydra configuration shared across all subsystems
+- Environment variable overrides and multi-run support
+- Hierarchical configuration with validation
+
+**Logging and Monitoring**
+- Structured logging infrastructure used throughout
+- Performance metrics collection in all critical paths
+- Correlation context for request tracking
+
+**Common Services**
+- Global random seed management for reproducibility
+- Shared frame caching service for video-based features
+- Optional database sessions for persistence
+- Error handling and exception management
+
+### 2.3.4 Component Communication Patterns
+
+**Protocol-Based Communication**
+- Components communicate via well-defined Protocol interfaces
+- Loose coupling enables component swapping without code changes
+- Type safety enforced at runtime via Protocol validation
+
+**Event-Driven Updates**
+- Simulation step events trigger component updates
+- Performance metrics collected via event hooks
+- Recording and analysis triggered by simulation events
+
+**Data Flow Patterns**
+- Unidirectional data flow from sensors to controllers to actions
+- Centralized state management in simulation engine
+- Immutable data structures for thread safety
 
 ## 2.4 IMPLEMENTATION CONSIDERATIONS
 
-### 2.4.1 Technical Constraints
+### 2.4.1 Core Infrastructure Implementation
 
-| Feature | Constraint | Impact |
-|---|---|---|
-| F-001 | 2D-only simulation | 3D reserved for v2.0 |
-| F-002 | Memory-bound caching | Limited by system RAM |
-| F-003 | Vectorization requirements | Homogeneous agent types |
-| F-004 | Gymnasium API compatibility | Version 0.29.x required |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager ≤50 LoC, code changes limited to env.py/hooks.py/conf</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Enforces minimal-change clause</span> |
+**F-001: Core Simulation Engine**
+- **Technical Constraints**: Python 3.10+ required for Protocol support and structural pattern matching; <span style="background-color: rgba(91, 57, 243, 0.2)">Packaging must follow PEP 621 using a single pyproject.toml with build-backend = 'setuptools.build_meta' (setuptools>=61). Poetry is no longer used.</span>; <span style="background-color: rgba(91, 57, 243, 0.2)">All builds and CI pipelines must invoke 'python -m build' instead of any Poetry commands.</span>; <span style="background-color: rgba(91, 57, 243, 0.2)">Runtime dependency declarations must reside under [project] dependencies in pyproject.toml; optional groups under [project.optional-dependencies].</span>
+- **Performance Requirements**: Minimal overhead for component dispatch (<5% total execution time)
+- **Scalability Considerations**: Linear memory scaling with agent count, O(1) component lookup
+- **Security Implications**: Safe configuration loading with input validation, no arbitrary code execution
+- **Maintenance Requirements**: Protocol versioning strategy for backward compatibility; <span style="background-color: rgba(91, 57, 243, 0.2)">Semantic versioning: single authoritative version string stored in plume_nav_sim.__version__ and surfaced in pyproject.toml; increment on every releasable commit.</span>
 
-### 2.4.2 Performance Requirements
+**F-012: Configuration Management**
+- **Technical Constraints**: Hydra framework patterns and OmegaConf compatibility
+- **Performance Requirements**: <2s configuration loading and validation
+- **Scalability Considerations**: Support for large parameter sweeps and multi-run experiments
+- **Security Implications**: Configuration file validation and sanitization
+- **Maintenance Requirements**: Schema evolution and migration support
 
-| Feature | Requirement | Measurement |
-|---|---|---|
-| F-001 | <10ms field updates | 100x100 grid |
-| F-002 | ≤33ms step latency | Real-time simulation |
-| F-003 | <1ms per agent step | 100 agents |
-| F-004 | >1000 steps/second | Training throughput |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">F-014</span> | <span style="background-color: rgba(91, 57, 243, 0.2)"><1 ms overhead when no hooks registered; overall simulation still ≤33 ms/step</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">100-step episode benchmark</span> |
+### 2.4.2 Simulation Physics Implementation
 
-### 2.4.3 Scalability Considerations
+**F-002: Plume Models**
+- **Technical Constraints**: NumPy vectorization required for performance, SciPy for advanced mathematics
+- **Performance Requirements**: Sub-millisecond query times for 100 positions
+- **Scalability Considerations**: Efficient spatial data structures for large domains (>1000x1000)
+- **Security Implications**: Video input validation to prevent malicious frame injection
+- **Maintenance Requirements**: Model parameter validation and scientific accuracy verification
 
-- **F-002**: Cache size vs. performance tradeoff analysis required
-- **F-003**: GPU acceleration potential for >1000 agents
-- **F-004**: Vectorized environments for parallel training
-- **F-005**: Disk space management for long experimental runs
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**F-014**: Supports O(100) hooks with constant-time dispatch via early-exit check</span>
+**F-007: Frame Cache**
+- **Technical Constraints**: Thread-safe implementation required for concurrent access
+- **Performance Requirements**: O(1) lookup time with >90% hit rate
+- **Scalability Considerations**: Configurable memory limits up to available system RAM
+- **Security Implications**: Memory exhaustion prevention and input sanitization
+- **Maintenance Requirements**: Cache performance statistics and health monitoring
 
-### 2.4.4 Security Implications
+### 2.4.3 Machine Learning Integration Implementation
 
-- **F-001**: Video file path validation to prevent directory traversal
-- **F-004**: Model checkpoint validation for training artifacts
-- **F-005**: File permission management for data recording
-- **F-007**: Environment variable exposure considerations
+**F-010: RL Environment**
+- **Technical Constraints**: Strict Gymnasium API compliance and stable-baselines3 compatibility
+- **Performance Requirements**: Real-time step execution (<10ms) for training efficiency
+- **Scalability Considerations**: Vectorized environment support for parallel training
+- **Security Implications**: Action validation to prevent invalid environment states
+- **Maintenance Requirements**: API version compatibility checks and deprecation handling
 
-## 2.5 TRACEABILITY MATRIX
+**F-008: Recording System**
+- **Technical Constraints**: Backend-specific format requirements and async I/O patterns
+- **Performance Requirements**: <1ms overhead when disabled, non-blocking write operations
+- **Scalability Considerations**: Configurable buffer sizes and compression ratios
+- **Security Implications**: File path sanitization and disk space monitoring
+- **Maintenance Requirements**: Data format versioning and migration tools
 
-The traceability matrix establishes clear relationships between requirement categories, technical specification sections, implementation components, and test coverage. This matrix ensures comprehensive coverage of all system capabilities while maintaining clear audit trails for requirement fulfillment.
+### 2.4.4 User Interface Implementation
 
-### 2.5.1 Requirements to Implementation Mapping
+**F-013: CLI Interface**
+- **Technical Constraints**: Click framework patterns and Hydra integration requirements; <span style="background-color: rgba(91, 57, 243, 0.2)">CLI source code located at src/plume_nav_sim/cli/ with entry-point functions main() and train_main() to satisfy console-script definitions.</span>
+- **Performance Requirements**: <2s startup time for responsive user experience
+- **Scalability Considerations**: Batch processing support for large experiment sets
+- **Security Implications**: Input sanitization for file paths and command parameters
+- **Maintenance Requirements**: Help text synchronization with feature updates; <span style="background-color: rgba(91, 57, 243, 0.2)">Keep Click/Hydra CLI help text in sync with new packaging layout (src/plume_nav_sim/cli).</span>
 
-The following matrix maps each major requirement category to its corresponding technical documentation, implementation files, and testing approach:
+**F-011: Visualization System**
+- **Technical Constraints**: Matplotlib compatibility and optional GUI framework integration
+- **Performance Requirements**: Real-time rendering for interactive exploration
+- **Scalability Considerations**: Efficient rendering for large agent populations
+- **Security Implications**: Safe file I/O for figure export and data visualization
+- **Maintenance Requirements**: Cross-platform compatibility and dependency management
 
-| Requirement Category | Technical Spec Section | Implementation Component | Test Coverage |
-|---|---|---|---|
-| Plume Simulation | 1.2.2, 3.1 | src/plume_nav_sim/models/plume/ | Unit + Integration |
-| Frame Caching | 1.2.2, 5.2 | src/odor_plume_nav/cache/ | Performance + Load |
-| Multi-Agent Navigation | 1.2.2, 3.1 | src/odor_plume_nav/core/controllers.py | Functional + Performance |
-| RL Integration | 1.2.2, 3.1 | src/odor_plume_nav/rl/ | API + Compatibility |
-| Data Recording | 1.2.2, 5.3 | src/plume_nav_sim/recording/ | Backend + Integration |
-| Configuration | 1.2.2, 7.1 | conf/, src/odor_plume_nav/config/ | Schema + Validation |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">Hook System</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">0. SUMMARY OF CHANGES – Primary Objectives 1-3</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">src/plume_nav_sim/hooks.py, plume_nav_sim/envs/plume_navigation_env.py, conf/config.yaml</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Unit + Integration (tests/test_hooks.py)</span> |
+### 2.4.5 Performance and Monitoring Implementation
 
-### 2.5.2 Test Coverage Strategy
-
-Each requirement category employs tailored testing approaches based on its technical characteristics:
-
-**Unit + Integration Testing**: Applied to core simulation components (Plume Simulation, Hook System) and data recording systems to ensure individual component functionality and proper integration with the broader system.
-
-**Performance + Load Testing**: Dedicated to Frame Caching and Multi-Agent Navigation systems where performance requirements are critical to system success.
-
-**Functional + Performance Testing**: Multi-Agent Navigation combines both functional correctness validation and performance benchmarking to ensure scalable operation.
-
-**API + Compatibility Testing**: RL Integration focuses on maintaining compatibility with external frameworks while ensuring proper API behavior.
-
-**Schema + Validation Testing**: Configuration Management emphasizes data integrity and validation rule compliance.
-
-**Backend + Integration Testing**: Data Recording systems verify functionality across multiple storage backends and integration points.
+**F-009: Performance Monitoring**
+- **Technical Constraints**: Minimal overhead profiling with system resource monitoring
+- **Performance Requirements**: <1% overhead for metrics collection
+- **Scalability Considerations**: Efficient metrics aggregation for long-running experiments
+- **Security Implications**: Resource usage monitoring to prevent system overload
+- **Maintenance Requirements**: Performance regression detection and alerting
 
 #### References
 
-**Technical Specification Sections**
-- Section 1.1: Executive Summary - Project overview and impact
-- Section 1.2: System Overview - Capabilities and architecture
-- Section 1.3: Scope - Implementation boundaries and limitations
-
-**Implementation Files**
-- `src/odor_plume_nav/__init__.py` - Package initialization and feature detection
-- `src/plume_nav_sim/__init__.py` - Simulation framework initialization
-- `src/odor_plume_nav/cli/main.py` - CLI command definitions and orchestration
-- `src/odor_plume_nav/api/navigation.py` - Public API functions
-- `src/plume_nav_sim/recording/__init__.py` - Recording framework definitions
-- `src/odor_plume_nav/rl/training.py` - RL training orchestration
-- `conf/config.yaml` - User-facing configuration template
-- `conf/base.yaml` - Foundational configuration defaults
-- `README.md` - Primary user documentation
-- `pyproject.toml` - Project metadata and dependencies
-
-**Configuration and Documentation**
-- `conf/` - Hydra configuration hierarchy
-- `conf/base/` - Base configuration groups
-- `src/` - Top-level source packages
-- `src/odor_plume_nav/` - Core navigation library structure
-- `src/plume_nav_sim/` - Simulation framework structure
-- `src/plume_nav_sim/recording/` - Recording subsystem
+- `src/plume_nav_sim/` - Core simulation library with Protocol-based architecture and setuptools packaging
+- `src/plume_nav_sim/core/` - Core engine implementation and simulation management
+- `src/plume_nav_sim/models/` - Plume models and wind field implementations
+- `src/plume_nav_sim/agents/` - Navigation controllers and sensor implementations
+- `src/plume_nav_sim/recording/` - Multi-backend recording system
+- `src/plume_nav_sim/rl/` - Gymnasium environment and RL integration
+- `src/plume_nav_sim/visualization/` - Visualization and GUI components
+- `src/plume_nav_sim/cli/` - Command-line interface implementation with entry points
+- `pyproject.toml` - PEP 621 compliant build configuration with setuptools backend
+- `tests/` - Comprehensive test suite with property-based testing
+- Section 0.2 Technical Scope - Build system migration objectives and file mapping
+- Section 0.3 Implementation Design - Setuptools migration patterns and CLI integration strategy
+- Section 1.1 Executive Summary - Project overview and business impact
+- Section 1.2 System Overview - Technical architecture and capabilities
+- Section 1.3 Scope - Feature boundaries and implementation scope
 
 # 3. TECHNOLOGY STACK
 
-## 3.1 OVERVIEW
+## 3.1 PROGRAMMING LANGUAGES
 
-The plume navigation simulation framework employs a carefully selected technology stack optimized for high-performance scientific computing, reinforcement learning research, and real-time simulation capabilities. The architecture prioritizes extensibility through zero-code configuration of components and performance optimization ensuring real-time simulation capabilities, while maintaining compatibility with modern machine learning ecosystems.
+### 3.1.1 Core Language Selection
 
-The stack supports the core system requirements of ≤33 ms per simulation step performance, 100+ simultaneous agents scalability, and >99.9% reliability, enabling researchers to conduct sophisticated multi-agent navigation experiments with minimal computational overhead.
+**Python 3.10-3.11**
+- **Primary Language**: Python serves as the exclusive programming language for the simulation library
+- **Version Constraints**: Python 3.10 minimum requirement driven by Protocol support and structural pattern matching features
+- **Upper Bound**: Python 3.11 maximum to ensure compatibility with critical dependencies like NumPy 1.26.0
+- **Selection Rationale**: Python provides the optimal balance of scientific computing ecosystem maturity, protocol-based architecture support, and research community adoption
 
-### 3.1.1 Architecture Philosophy
+### 3.1.2 Language-Specific Features
 
-The technology selections follow a protocol-driven architecture that enables runtime component selection and configuration. This approach ensures that researchers can adapt the framework to diverse use cases without modifying core code, while maintaining the performance characteristics required for interactive research workflows.
+**Advanced Python Features**
+- **Protocols**: Leverages Python 3.10+ Protocol typing for zero-code extensibility architecture
+- **Structural Pattern Matching**: Utilizes Python 3.10+ match statements for efficient component dispatch
+- **Type Hints**: Comprehensive type annotations with Pydantic 2.5+ for runtime validation
+- **Async/Await**: Asynchronous I/O patterns for non-blocking recording operations
 
-## 3.2 PROGRAMMING LANGUAGES
+## 3.2 FRAMEWORKS & LIBRARIES
 
-### 3.2.1 Primary Language: Python
+### 3.2.1 Core Scientific Computing Stack
 
-**Version Requirements**: Python ≥3.10, <4.0
+**NumPy 1.26.0+**
+- **Role**: Primary numerical computing foundation
+- **Justification**: Vectorized operations essential for <33ms step latency requirements
+- **Integration**: Underpins all mathematical operations, plume calculations, and agent state management
+- **Performance Impact**: Enables vectorized processing for 100+ concurrent agents
 
-**Justification**: Python serves as the exclusive programming language for this system, selected for its:
-- **Scientific Computing Ecosystem**: Native integration with NumPy, SciPy, and Matplotlib for high-performance numerical operations
-- **Machine Learning Compatibility**: Seamless integration with modern RL frameworks (Stable-Baselines3, Gymnasium)
-- **Research Community Adoption**: Standard language for reinforcement learning and simulation research
-- **Performance Optimization**: Support for JIT compilation through Numba, achieving >10x performance improvements
+**SciPy 1.11.0+**
+- **Role**: Advanced mathematical functions and algorithms
+- **Justification**: Required for turbulent wind field modeling and Gaussian plume calculations
+- **Integration**: Complements NumPy for specialized scientific computing needs
 
-**Platform Distribution**: All three main packages (odor_plume_nav, plume_nav_sim, and cookiecutter scaffold) are implemented in Python, ensuring consistent development and deployment experiences across the entire framework.
+**Matplotlib 3.7.0+**
+- **Role**: Visualization and plotting framework
+- **Justification**: Publication-quality graphics for research documentation
+- **Integration**: Powers real-time simulation visualization and static analysis plots
 
-**Validation**: CI/CD pipeline validates compatibility against Python 3.10 and 3.11, with Stable-Baselines3 requiring Python 3.9+ for optimal performance and library compatibility.
+### 3.2.2 Machine Learning Integration
 
-## 3.3 FRAMEWORKS & LIBRARIES
+**Gymnasium 0.29.x**
+- **Role**: Reinforcement learning environment framework
+- **Version Constraint**: Exact version pinning for API stability
+- **Justification**: Industry standard for RL research with stable-baselines3 compatibility
+- **Integration**: Provides standardized RL environment interface for agent training
 
-### 3.3.1 Core Scientific Computing Stack
+**Stable-Baselines3 2.0.0+**
+- **Role**: State-of-the-art RL algorithm implementations
+- **Justification**: Enables PPO, SAC, TD3 training without custom implementations
+- **Integration**: Seamless integration with Gymnasium-compliant environments
 
-**NumPy (≥1.26.0)**
-- **Purpose**: Foundation for all vectorized operations and array processing
-- **Justification**: Enables vectorized operations supporting multi-agent scenarios with minimal computational overhead
-- **Performance Impact**: Critical for achieving sub-millisecond step performance per agent
-- **Compatibility**: Version 1.26.0+ required for NumPy v2 compatibility with modern PyTorch and Stable-Baselines3
+**Shimmy 1.0.0+**
+- **Role**: Environment wrapper and compatibility layer
+- **Justification**: Provides vectorized environment support for parallel training
+- **Integration**: Enables efficient multi-environment training workflows
 
-**SciPy (≥1.11.0)**
-- **Purpose**: Advanced interpolation and physics modeling capabilities
-- **Integration**: Powers wind field interpolation and turbulent plume dispersion models
-- **Dependencies**: Required for Features F-001 (Multi-Model Plume Simulation) and F-011 (Wind Field Models)
+### 3.2.3 Configuration and Orchestration
 
-**Matplotlib (≥3.7.0)**
-- **Purpose**: Comprehensive visualization and animation framework
-- **Capabilities**: Real-time animation, publication-quality static plots, and interactive debugging
-- **Integration**: Supports Feature F-006 (Advanced Visualization Suite) with backend-agnostic design
+**Hydra-core 1.3.x**
+- **Role**: Configuration management and experiment orchestration
+- **Version Constraint**: Exact version for configuration schema stability
+- **Justification**: Enables reproducible research with parameter sweeps and multi-run experiments
+- **Integration**: Provides declarative YAML configuration with dependency injection
 
-### 3.3.2 Reinforcement Learning Framework
+**OmegaConf 2.3.0+**
+- **Role**: Configuration object framework
+- **Justification**: Hierarchical configuration management with type safety
+- **Integration**: Seamlessly integrates with Hydra for complex configuration scenarios
 
-**Gymnasium (==0.29.*)**
-- **Purpose**: Modern RL environment API standard (maintained fork of OpenAI Gym)
-- **Version Justification**: Gymnasium 0.29.1+ is the minimum required version for current Stable-Baselines3 compatibility
-- **Integration**: Provides native compatibility with Feature F-004 (Reinforcement Learning Integration)
-- **Migration**: Supports legacy OpenAI Gym environments via shimmy compatibility layer
+**PyYAML 6.0+**
+- **Role**: YAML parsing and serialization
+- **Justification**: Human-readable configuration format for research workflows
+- **Integration**: Supports Hydra configuration files and logging configuration
 
-**Stable-Baselines3**
-- **Purpose**: State-of-the-art reinforcement learning algorithms in PyTorch
-- **Requirements**: Python 3.9+ and PyTorch >= 2.3 for optimal performance
-- **Algorithms**: Comprehensive suite including PPO, A2C, DQN, and vectorized environments for parallel training
-- **Integration**: Native Gymnasium-compliant environment with custom observation/action spaces
+### 3.2.4 Data Processing and Validation
 
-**Shimmy**
-- **Purpose**: Compatibility layer for legacy OpenAI Gym environments
-- **Function**: Enables gradual migration from legacy systems during transition period
-- **Integration**: Supports Feature F-013 (Legacy Compatibility Layer)
+**Pydantic 2.5.0+**
+- **Role**: Data validation and settings management
+- **Justification**: Runtime type checking and automatic validation for configuration objects
+- **Integration**: Validates all configuration parameters and API inputs
 
-### 3.3.3 Configuration and Orchestration
+**Pandas 1.5.0+** (Optional)
+- **Role**: Data analysis and time-series processing
+- **Justification**: Time-varying wind field data processing and analysis workflows
+- **Integration**: Optional dependency for advanced data analysis features
 
-**Hydra-core (==1.3.*)**
-- **Purpose**: Hierarchical configuration management with runtime component selection
-- **Architecture**: Three-layer override hierarchy (Base → User → Runtime)
-- **Business Value**: Enables zero-code component swapping and experiment reproducibility
-- **Integration**: Central to Feature F-007 (Configuration Management System)
+**PyArrow 10.0.0+** (Optional)
+- **Role**: Columnar data format support
+- **Justification**: High-performance Parquet format for large dataset recording
+- **Integration**: Backend option for recording system with compression support
 
-**OmegaConf (≥2.3.0)**
-- **Purpose**: Configuration interpolation and resolution
-- **Integration**: Works with Hydra for advanced configuration features
-- **Capabilities**: Environment variable integration and schema validation
+### 3.2.5 Performance Optimization
 
-**Pydantic (≥2.5.0)**
-- **Purpose**: Data validation and settings management
-- **Integration**: Provides schema validation for configuration system
-- **Benefits**: Type safety and automatic validation for all configuration parameters
+**Numba 0.59.0+** (Optional)
+- **Role**: Just-in-time compilation for numerical code
+- **Justification**: Accelerates critical simulation loops for real-time performance
+- **Integration**: Optional JIT compilation for plume model calculations
 
-### 3.3.4 Performance Optimization
+**psutil 5.9.0+**
+- **Role**: System monitoring and resource management
+- **Justification**: Memory pressure monitoring for frame cache and performance metrics
+- **Integration**: Provides system resource statistics for optimization decisions
 
-**Numba (Optional)**
-- **Purpose**: Just-in-time (JIT) compilation for Python
-- **Performance Impact**: Achieves >10x speedup for numerical computations
-- **Integration**: Optional dependency for performance-critical simulation components
-- **Targeting**: Optimizes vectorized operations and physics calculations
+## 3.3 OPEN SOURCE DEPENDENCIES
 
-**psutil (≥5.9.0)**
-- **Purpose**: System monitoring and memory pressure detection
-- **Integration**: Supports Feature F-002 (High-Performance Frame Caching System)
-- **Capabilities**: Thread-safe memory monitoring with concurrent access patterns
+### 3.3.1 Core Dependencies
 
-## 3.4 OPEN SOURCE DEPENDENCIES
+```python
+# Core simulation dependencies
+numpy = ">=1.26.0"
+gymnasium = "==0.29.*"
+matplotlib = ">=3.7.0"
+opencv-python = ">=4.8.0"
+scipy = ">=1.11.0"
 
-### 3.4.1 Core Dependencies
+#### Configuration and validation
+hydra-core = "==1.3.*"
+omegaconf = ">=2.3.0"
+pydantic = ">=2.5.0"
+pyyaml = ">=6.0"
 
-**Command Line Interface**
-- **Click (≥8.2.1)**: Comprehensive CLI framework with Hydra integration
-- **python-dotenv (≥1.1.0)**: Environment variable management for configuration
+#### Database and persistence
+sqlalchemy = ">=2.0.41"
+loguru = ">=0.7.0"
+psutil = ">=5.9.0"
+```
 
-**Logging and Monitoring**
-- **Loguru (≥0.7.0)**: Structured logging framework with advanced formatting
-- **GitHub Actions Integration**: Special log formatting for CI/CD environments
+### 3.3.2 Optional Feature Dependencies
 
-**Database and ORM**
-- **SQLAlchemy (≥2.0.41)**: Modern ORM for database operations
-- **Integration**: Supports Feature F-005 (Comprehensive Data Recording Framework)
+```python
+# ML/RL features
+stable-baselines3 = ">=2.0.0"
+shimmy = ">=1.0.0"
 
-### 3.4.2 Optional Dependencies
+#### Performance optimization
+numba = ">=0.59.0"
 
-**Data Processing and Storage**
-- **pandas**: Data manipulation and analysis for experimental results
-- **pyarrow**: Parquet file support for efficient columnar storage
-- **h5py**: HDF5 file format support for hierarchical data structures
+#### Data recording and analysis
+pandas = ">=1.5.0"
+pyarrow = ">=10.0.0"
+h5py = ">=3.0.0"
 
-**Advanced Visualization**
-- **plotly**: Interactive visualizations for research analysis
-- **seaborn**: Statistical data visualization enhancements
-- **PySide6**: Qt-based GUI framework for debug interfaces
-- **streamlit**: Web-based interactive dashboards
+#### Visualization and GUI
+plotly = ">=5.17.0"
+seaborn = ">=0.12.0"
+PySide6 = ">=6.0.0"
+streamlit = ">=1.0.0"
+```
 
-**Development and Testing**
-- **pytest**: Primary testing framework with coverage and benchmarking
-- **pytest-cov**: Coverage reporting for code quality assurance
-- **pytest-benchmark**: Performance benchmarking with defined SLAs
-- **pre-commit**: Git hook framework for code quality
+### 3.3.3 Development Dependencies
 
-**Code Quality Tools**
-- **black**: Code formatter for consistent styling
+```python
+# Testing framework
+pytest = ">=7.0.0"
+pytest-cov = ">=4.0.0"
+pytest-benchmark = ">=4.0.0"
+
+#### Code quality
+black = ">=23.0.0"
+isort = ">=5.12.0"
+ruff = ">=0.1.0"
+mypy = ">=1.7.0"
+pre-commit = ">=3.0.0"
+
+#### Documentation
+sphinx = ">=7.0.0"
+sphinx-rtd-theme = ">=1.3.0"
+```
+
+### 3.3.4 Dependency Management Strategy
+
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Setuptools Build System</span>**
+- **Build Backend**: <span style="background-color: rgba(91, 57, 243, 0.2)">set `build-backend = "setuptools.build_meta"` with `setuptools>=61.0.0`</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Lock-file / Reproducibility</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">reference `requirements.txt` or `pip-tools` generated `requirements.lock` instead of `poetry.lock`</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build / Packaging Commands</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">use `python -m build` for wheel/sdist generation</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Installation Workflow</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">use `pip install -e .` (editable) or `pip install .` for production</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Optional Dependency Groups</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">clarify they are now declared under `[project.optional-dependencies]` in `pyproject.toml` per PEP 621</span>
+
+<span style="background-color: rgba(91, 57, 243, 0.2)">All dependency declarations now follow the PEP 621 `[project]` and `[project.optional-dependencies]` format.</span>
+
+## 3.4 THIRD-PARTY SERVICES
+
+### 3.4.1 Database Support
+
+**Multi-Backend Database Architecture**
+- **PostgreSQL**: Production-grade relational database for experiment metadata
+- **MySQL**: Alternative relational database backend for institutional preferences
+- **SQLite**: Lightweight embedded database for development and testing
+- **Integration**: SQLAlchemy 2.0+ ORM provides database-agnostic access layer
+
+### 3.4.2 Optional Integration Services
+
+**Weights & Biases**
+- **Role**: Experiment tracking and visualization platform
+- **Integration**: Optional integration for ML workflow tracking
+- **Justification**: Industry-standard MLOps platform for research collaboration
+
+**TensorBoard**
+- **Role**: Training metrics visualization
+- **Integration**: Optional integration for deep learning workflows
+- **Justification**: Standard visualization tool for neural network training
+
+**Institutional HPC Clusters**
+- **Integration**: Hydra multirun support for distributed experiments
+- **Justification**: Enables large-scale research on institutional computing resources
+- **Compatibility**: SLURM, PBS, and other job scheduling systems
+
+## 3.5 DATABASES & STORAGE
+
+### 3.5.1 Primary Database Architecture
+
+**SQLAlchemy 2.0+ ORM**
+- **Architecture**: Database-agnostic ORM layer with async support
+- **Schema Management**: Automatic schema creation and migration support
+- **Query Optimization**: Dialect-specific optimizations for performance
+- **JSON Support**: Native JSON field support for configuration and metadata storage
+
+### 3.5.2 Data Storage Strategies
+
+**Multi-Format Recording System**
+- **Parquet Format**: Columnar storage for large-scale trajectory data
+- **HDF5 Format**: Hierarchical data format for complex scientific datasets
+- **SQLite Format**: Embedded database for lightweight recording needs
+- **In-Memory**: Zero-overhead recording disabled mode for performance testing
+
+**Frame Cache Architecture**
+- **Cache Strategy**: LRU and preload caching for video-based plume models
+- **Memory Management**: Configurable memory limits with pressure monitoring
+- **Thread Safety**: Concurrent access support for multi-agent scenarios
+- **Performance**: >90% cache hit rate with <1ms retrieval latency
+
+### 3.5.3 Data Persistence Features
+
+**Logging Infrastructure**
+- **Loguru Framework**: Structured logging with JSON and console output
+- **Dual-Sink Architecture**: Machine-readable JSON and human-readable console
+- **Correlation Tracking**: Distributed tracing with correlation IDs
+- **Performance Monitoring**: Configurable performance metrics collection
+
+## 3.6 DEVELOPMENT & DEPLOYMENT
+
+### 3.6.1 Development Toolchain
+
+**Code Quality Management**
+- **Black**: Uncompromising code formatting for consistency
 - **isort**: Import sorting and organization
-- **ruff**: Fast Python linter for code quality
-- **mypy**: Static type checking for improved reliability
+- **Ruff**: High-performance linting with comprehensive rule sets
+- **MyPy**: Static type checking for type safety validation
+- **Pre-commit**: Automated code quality checks before commits
 
-## 3.5 THIRD-PARTY SERVICES
+**Testing Framework**
+- **pytest**: Primary testing framework with fixture support
+- **pytest-cov**: Code coverage measurement and reporting
+- **pytest-benchmark**: Performance regression testing
+- **Property-Based Testing**: Hypothesis integration for comprehensive testing
 
-### 3.5.1 Optional External Integrations
+### 3.6.2 Setuptools Build System (updated)
 
-**Experiment Tracking**
-- **TensorBoard**: ML experiment visualization (configurable via TENSORBOARD_LOG_DIR)
-- **Weights & Biases**: Advanced experiment tracking and collaboration (configurable via WANDB_PROJECT)
-- **Integration**: Optional services activated through environment variables
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Build Backend Configuration</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build System</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">`setuptools>=61` specified in `[build-system]` with `build-backend = "setuptools.build_meta"`</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Standards Compliance</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">PEP 621 project metadata format for modern Python packaging</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Configuration Location</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">All project metadata consolidated in `pyproject.toml` using `[project]` table</span>
 
-**Development Services**
-- **Codecov**: Coverage reporting and analysis for code quality metrics
-- **GitHub Actions**: Primary CI/CD platform with comprehensive workflow automation
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Packaging Workflow</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build Command</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Use `python -m build` to create both wheel and source distribution artifacts</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Development Installation</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">`pip install -e .` for editable development mode with immediate code changes</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Production Installation</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">`pip install plume_nav_sim-<version>-py3-none-any.whl` for production deployments</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Artifact Generation</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Automated wheel and sdist creation in `dist/` directory</span>
 
-**High-Performance Computing**
-- **SLURM**: HPC cluster job management support for large-scale experiments
-- **Integration**: Automatic detection and optimization for cluster environments
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Version Management</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Single-Source Versioning</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Version definition located in `plume_nav_sim/__init__.py` as authoritative source</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Programmatic Access</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Version accessible via `plume_nav_sim.__version__` for runtime inspection</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build Integration</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Dynamic version discovery during package building process</span>
 
-### 3.5.2 CI/CD Infrastructure
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Optional Dependencies</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Declaration Format</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Organized under `[project.optional-dependencies]` following PEP 621 standard</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Installation Pattern</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">`pip install .[dev,docs,viz,rl]` for feature-specific dependency groups</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Dependency Groups</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Modular installation supporting development, documentation, visualization, and reinforcement learning features</span>
 
-**GitHub Actions Workflow**
-- **Primary Platform**: GitHub-hosted Ubuntu runners for continuous integration
-- **Key Actions**: 
-  - `actions/checkout@v4`, `actions/setup-python@v4`: Repository and Python setup
-  - `actions/cache@v3`, `actions/upload-artifact@v3`: Caching and artifact management
-  - `snok/install-poetry@v1`: Poetry dependency management
-  - `docker/setup-buildx-action@v2`: Container build support
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Publishing Workflow</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">PyPI Publishing</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">`twine upload dist/*` for direct package repository uploads</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">GitHub Integration</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">GitHub release workflows for automated distribution and version tagging</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Release Automation</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">CI/CD integration for automated testing and publishing pipeline</span>
 
-**Performance Monitoring**
-- **Benchmarking SLAs**: ≤33ms per simulation step, ≥30 FPS target performance
-- **Memory Constraints**: ≤10MB memory per 100 agents
-- **Automated Validation**: Continuous performance regression testing
+### 3.6.3 Continuous Integration
 
-## 3.6 DATABASES & STORAGE
+**GitHub Actions Pipeline**
+- **Platform Support**: Ubuntu-based CI/CD with Python 3.10-3.11 matrix
+- **Test Automation**: Comprehensive test suite execution with coverage reporting
+- **Performance Benchmarking**: Automated performance regression detection
+- **Quality Gates**: Code quality checks and dependency vulnerability scanning
 
-### 3.6.1 Primary Storage Solutions
+**Docker Integration**
+- **Containerization**: Docker support for reproducible environments
+- **Multi-Stage Builds**: Optimized container images for development and production
+- **CI Integration**: Docker builds validated in GitHub Actions pipeline
+- **Deployment**: Container-ready artifacts for cloud deployment
 
-**SQLite**
-- **Purpose**: Lightweight embedded database for local development and testing
-- **Integration**: Supports Feature F-005 data recording with minimal overhead
-- **Use Cases**: Configuration persistence, experimental metadata, and result indexing
+### 3.6.4 Deployment Architecture
 
-**File-Based Storage**
-- **Parquet Files (via pyarrow)**: Columnar storage optimized for analytical workloads
-- **HDF5 Files (via h5py)**: Hierarchical data format for complex scientific datasets
-- **JSON Files**: Configuration storage and structured logging
-- **CSV Files**: Legacy compatibility and simple data exchange
+**Environment Management**
+- **Development**: Local development with hot reloading and debugging
+- **Testing**: Isolated testing environments with mock dependencies
+- **Production**: Optimized production deployment with performance monitoring
+- **Research**: HPC cluster deployment with distributed experiment support
 
-### 3.6.2 Caching Solutions
+**Configuration Management**
+- **Environment Variables**: Secure configuration for production deployments
+- **Hydra Integration**: Declarative configuration with environment overrides
+- **Secret Management**: Secure handling of database credentials and API keys
+- **Multi-Environment**: Environment-specific configuration management
 
-**Custom FrameCache Subsystem**
-- **Architecture**: Multi-mode caching system with performance optimization
-- **Cache Modes**:
-  - **LRU (Least Recently Used)**: Memory-efficient caching for limited resources
-  - **Preload Cache**: Full memory loading for maximum performance
-  - **No-Cache Mode**: Direct disk access for memory-constrained environments
-- **Performance**: Thread-safe implementation with memory pressure monitoring
-- **Integration**: Transparent integration with VideoPlume and Navigator components
+## 3.7 INTEGRATION REQUIREMENTS
 
-### 3.6.3 Data Persistence Strategies
-
-**Multi-Backend Recording**
-- **Backends**: Parquet, HDF5, SQLite, and null backends for diverse research needs
-- **Asynchronous I/O**: Minimizes simulation overhead through non-blocking operations
-- **Compression**: Configurable compression for storage efficiency
-- **Performance Budget**: Designed for minimal impact on simulation performance
-
-## 3.7 DEVELOPMENT & DEPLOYMENT
-
-### 3.7.1 Build System and Package Management
-
-**Poetry (poetry-core ≥1.8.0)**
-- **Purpose**: Modern dependency management and packaging
-- **Features**: Reproducible builds, virtual environment management, and dependency resolution
-- **Integration**: Primary build system for all three packages
-
-**Traditional Python Packaging**
-- **setuptools (≥42)**: Package distribution and installation
-- **wheel**: Built distribution format for efficient installation
-- **pip**: Package installation and dependency management
-
-### 3.7.2 CI/CD Pipeline
-
-**GitHub Actions Platform**
-- **Operating System**: Ubuntu-latest GitHub-hosted runners
-- **Python Versions**: Automated testing against Python 3.10 and 3.11
-- **Coverage**: Codecov integration for comprehensive test coverage reporting
-- **Artifact Management**: Build artifacts and test results preservation
-
-**Docker Support**
-- **Containerization**: Docker Buildx support for multi-platform builds
-- **Resource Monitoring**: Container resource monitoring and optimization
-- **Deployment**: Containerized deployment support for production environments
-
-### 3.7.3 Development Tools
-
-**Documentation Generation**
-- **Sphinx**: Primary documentation generator with auto-generated API reference
-- **sphinx-autodoc-typehints**: Type hint documentation integration
-- **sphinx-rtd-theme**: ReadTheDocs theme for professional documentation
-
-**Testing Infrastructure**
-- **pytest**: Comprehensive testing framework with fixtures and plugins
-- **Coverage Reporting**: Automated coverage analysis and reporting
-- **Performance Testing**: Benchmarking suite with defined performance SLAs
-
-## 3.8 INTEGRATION REQUIREMENTS
-
-### 3.8.1 Component Integration
+### 3.7.1 Inter-Component Integration
 
 **Protocol-Based Architecture**
-- **Runtime Selection**: All components support Hydra instantiation for zero-code swapping
-- **Interface Compliance**: Standardized protocols for Source, Boundary, Action, Recorder, Stats, and Hooks
-- **Compatibility**: All components must maintain interface compliance across versions
+- **Component Interfaces**: Standardized Protocol definitions for all major components
+- **Runtime Selection**: Dynamic component selection based on configuration
+- **Backward Compatibility**: Protocol versioning for component evolution
+- **Extension Points**: Well-defined extension points for custom components
 
-**Environment Integration**
-- **Gymnasium API**: Native compatibility with standard RL environment interfaces
-- **Vectorized Operations**: Support for multi-agent scenarios with homogeneous agent types
-- **Performance Optimization**: Vectorized operations for 100+ simultaneous agents
+**Performance Integration**
+- **Latency Requirements**: <33ms step execution for 100 concurrent agents
+- **Memory Efficiency**: Linear memory scaling with agent count
+- **Cache Coherency**: Efficient frame cache integration with plume models
+- **Resource Monitoring**: Real-time performance metrics collection
 
-### 3.8.2 Security Considerations
+### 3.7.2 External System Integration
 
-**Input Validation**
-- **File Path Validation**: Directory traversal prevention for video file access
-- **Model Checkpoint Validation**: Security validation for training artifacts
-- **Environment Variable Exposure**: Controlled exposure of sensitive configuration
+**Research Ecosystem Integration**
+- **Gymnasium Compliance**: Full API compatibility with OpenAI Gymnasium
+- **RL Framework Support**: Stable-baselines3, Ray RLlib integration
+- **Data Analysis**: Pandas, NumPy, SciPy ecosystem compatibility
+- **Visualization**: Matplotlib, Plotly, Seaborn integration
 
-**Data Security**
-- **File Permission Management**: Appropriate permissions for data recording
-- **Configuration Security**: Secure handling of sensitive configuration parameters
-- **Access Control**: Controlled access to system resources and external services
-
-## 3.9 TECHNOLOGY JUSTIFICATION
-
-### 3.9.1 Performance Optimization Decisions
-
-The selection of NumPy as the foundation enables vectorized operations that achieve sub-millisecond performance per agent, critical for the system's scalability requirements. The optional Numba integration provides JIT compilation capabilities, delivering >10x performance improvements for computationally intensive operations.
-
-The Gymnasium framework selection ensures compatibility with modern reinforcement learning ecosystems while maintaining the performance characteristics required for real-time simulation. The minimum version requirement of 0.29.1+ aligns with current Stable-Baselines3 compatibility requirements.
-
-### 3.9.2 Extensibility and Maintainability
-
-The Hydra-based configuration system enables zero-code component swapping, allowing researchers to adapt the framework to diverse use cases without modifying core code. This protocol-driven architecture ensures that new components can be integrated seamlessly while maintaining backward compatibility.
-
-The Poetry build system provides reproducible builds and dependency management, ensuring consistent development experiences across different environments and team members.
-
-### 3.9.3 Research Ecosystem Integration
-
-The technology stack prioritizes integration with the broader scientific computing and machine learning ecosystem. Native compatibility with Stable-Baselines3 algorithms, standard data formats (Parquet, HDF5), and visualization tools (Matplotlib, TensorBoard) ensures that researchers can leverage existing tools and workflows.
-
-The optional integration with external services (Weights & Biases, TensorBoard) provides flexibility for different research workflows while maintaining the system's core independence.
+**Institutional Integration**
+- **HPC Compatibility**: SLURM, PBS job scheduler support
+- **Database Systems**: PostgreSQL, MySQL, SQLite backend support
+- **Cloud Platforms**: AWS, GCP, Azure deployment compatibility
+- **Version Control**: Git-based workflow with pre-commit hooks
 
 #### References
 
-**Technical Specification Sections**:
-- `1.2 SYSTEM OVERVIEW` - System context and architectural requirements
-- `2.1 FEATURE CATALOG` - Detailed feature specifications and technology dependencies
-- `2.4 IMPLEMENTATION CONSIDERATIONS` - Technical constraints and performance requirements
+**Files Examined:**
+- `pyproject.toml` - Complete dependency specification and build configuration
+- `logging.yaml` - Structured logging configuration with dual-sink architecture
+- `.github/workflows/ci.yml` - CI/CD pipeline configuration with Docker integration
+- `src/odor_plume_nav/db/models.py` - Database models and SQLAlchemy ORM implementation
 
-**Web Search Results**:
-- Stable-Baselines3 documentation and release notes - Version compatibility and Gymnasium requirements
-- Python version requirements for modern ML libraries - Current best practices for Python and PyTorch versions
+**Folders Analyzed:**
+- `.github/` - GitHub Actions workflows and configuration
+- `.github/workflows/` - Detailed CI/CD pipeline definitions
+
+**Technical Specification Sections:**
+- `1.2 SYSTEM OVERVIEW` - Architecture and performance requirements
+- `2.1 FEATURE CATALOG` - Complete feature set and technical dependencies
+- `2.4 IMPLEMENTATION CONSIDERATIONS` - Technical constraints and performance requirements
 
 # 4. PROCESS FLOWCHART
 
@@ -1275,1218 +1352,905 @@ The optional integration with external services (Weights & Biases, TensorBoard) 
 
 ### 4.1.1 Core Business Processes
 
-#### Simulation Execution Workflow
+#### 4.1.1.1 High-Level System Workflow
 
-The core simulation execution workflow orchestrates the complete lifecycle of a plume navigation simulation from initialization through completion, achieving the critical ≤33ms per simulation step performance requirement.
+The Plume Navigation Simulation Library employs a sophisticated execution model that supports multiple operational modes through a unified CLI interface. The system's protocol-based architecture (F-001) enables seamless component integration across all workflow phases.
 
 ```mermaid
-flowchart TD
-    Start([User Initiates Simulation]) --> LoadConfig[Load Hydra Configuration]
+flowchart TB
+    Start([User Initiates System]) --> CLI{CLI Command}
+    
+    CLI -->|run| RunSim[Execute Simulation]
+    CLI -->|train| RLTrain[RL Training Mode]
+    CLI -->|batch| BatchProc[Batch Processing]
+    CLI -->|visualize| VizExport[Visualization Export]
+    CLI -->|config| ConfigMgmt[Configuration Management]
+    
+    RunSim --> HydraInit[Initialize Hydra Configuration]
+    RLTrain --> HydraInit
+    BatchProc --> HydraInit
+    VizExport --> HydraInit
+    ConfigMgmt --> HydraInit
+    
+    HydraInit --> LoadConfig[Load Hierarchical Config]
     LoadConfig --> ValidateConfig{Validate Configuration}
-    ValidateConfig -->|Invalid| ConfigError[Raise ConfigurationError]
-    ConfigError --> END([Terminate])
     
-    ValidateConfig -->|Valid| InitComponents[Initialize Protocol Components]
+    ValidateConfig -->|Invalid| ErrorHandler[Configuration Error Handler]
+    ValidateConfig -->|Valid| InitProtocols[Initialize Protocol Components]
     
-    InitComponents --> HooksRegistered{Any Hooks Registered?}
-    HooksRegistered -->|No| InitPlume[Instantiate Plume Model]
-    HooksRegistered -->|Yes| InitHookMgr[Instantiate HookManager]
-    InitHookMgr --> InitPlume
+    InitProtocols --> CreateContext[Create Simulation Context]
+    CreateContext --> ExecWorkflow[Execute Workflow]
+    ExecWorkflow --> CollectResults[Collect Results]
+    CollectResults --> RecordData[Record Data via Multi-Backend System]
     
-    InitComponents --> InitWind[Instantiate Wind Field]
-    InitComponents --> InitSensors[Instantiate Sensor Suite]
-    InitComponents --> InitNavigator[Instantiate Navigator]
-    InitComponents --> InitRecorder[Instantiate Recorder Backend]
-    InitComponents --> InitBoundary[Instantiate Boundary Policy]
-    InitComponents --> InitAction[Instantiate Action Interface]
+    ErrorHandler --> Recovery{Recovery Possible?}
+    Recovery -->|Yes| LoadConfig
+    Recovery -->|No| ExitError([Exit with Error])
     
-    InitNavigator --> CheckMode{Single or Multi Agent?}
-    CheckMode -->|Single| CreateSingle[Create SingleAgentController]
-    CheckMode -->|Multi| CreateMulti[Create MultiAgentController]
-    
-    CreateSingle --> SetupCache
-    CreateMulti --> SetupCache[Setup Frame Cache System]
-    
-    SetupCache --> CacheMode{Cache Strategy?}
-    CacheMode -->|LRU| InitLRU[Initialize LRU Cache with psutil Monitoring]
-    CacheMode -->|Preload| LoadAllFrames[Preload All Video Frames]
-    CacheMode -->|None| NoCache[Configure Direct Frame Access]
-    
-    InitLRU --> SimContext
-    LoadAllFrames --> SimContext
-    NoCache --> SimContext[Create SimulationContext]
-    
-    SimContext --> ResetEnv[Reset Environment State]
-    ResetEnv --> InitAgents[Initialize Agent Positions]
-    
-    InitAgents --> MainLoop[Main Simulation Loop]
-    
-    MainLoop --> CheckEpisode{Episode Complete?}
-    CheckEpisode -->|No| StepTime[Advance Time Step]
-    CheckEpisode -->|Yes| RecordEpisode[Record Episode Data]
-    
-    StepTime --> GetFrame[Get Current Video Frame]
-    GetFrame --> CheckCache{Frame in Cache?}
-    CheckCache -->|Yes| ReturnCached[Return Cached Frame]
-    CheckCache -->|No| LoadFrame[Load from Video File]
-    LoadFrame --> CacheFrame[Cache Frame with LRU Policy]
-    CacheFrame --> ReturnCached
-    
-    ReturnCached --> UpdatePlume[Update Plume Model State]
-    UpdatePlume --> UpdateWind[Update Wind Field State]
-    UpdateWind --> GetAction[Get Agent Actions via Interface]
-    GetAction --> ValidateAction{Valid Action Range?}
-    ValidateAction -->|No| ClipAction[Clip to Valid Range]
-    ValidateAction -->|Yes| ApplyAction
-    ClipAction --> ApplyAction[Apply Actions to Agents]
-    
-    ApplyAction --> UpdatePositions[Update Agent Positions]
-    UpdatePositions --> CheckBoundary[Check Boundary Violations]
-    CheckBoundary --> ApplyPolicy[Apply Boundary Policy]
-    
-    ApplyPolicy --> PolicyType{Policy Type?}
-    PolicyType -->|Terminate| MarkTerminated[Mark Agent Terminated]
-    PolicyType -->|Bounce| ReflectPosition[Reflect Position/Velocity]
-    PolicyType -->|Wrap| WrapPosition[Wrap to Opposite Side]
-    PolicyType -->|Clip| ClipPosition[Clip to Boundary]
-    
-    MarkTerminated --> SampleSensors
-    ReflectPosition --> SampleSensors
-    WrapPosition --> SampleSensors
-    ClipPosition --> SampleSensors[Sample All Sensors]
-    
-    SampleSensors --> ComputeReward[Compute Step Rewards]
-    ComputeReward --> RecordStep[Record Step Data Async]
-    RecordStep --> CheckPerf[Check Performance Budget]
-    CheckPerf --> PerfOK{Step Time ≤ 33ms?}
-    PerfOK -->|No| LogWarning[Log Performance Warning]
-    PerfOK -->|Yes| MainLoop
-    LogWarning --> MainLoop
-    
-    RecordEpisode --> EpisodeHooksRegistered{Episode-End Hooks Registered?}
-    EpisodeHooksRegistered -->|No| CheckRun{Run Complete?}
-    EpisodeHooksRegistered -->|Yes| DispatchEpisodeEndHooks[Execute Episode-End Hooks]
-    DispatchEpisodeEndHooks --> CheckRun
-    
-    CheckRun -->|No| ResetEnv
-    CheckRun -->|Yes| FinalizeRecording[Finalize Recording Backend]
-    
-    FinalizeRecording --> ExportData[Export to Data Format]
-    ExportData --> RunAnalysis[Run Statistical Analysis]
-    RunAnalysis --> GenerateReport[Generate Summary Report]
-    GenerateReport --> Cleanup[Cleanup Resources]
-    Cleanup --> END
+    RecordData --> ExitSuccess([Exit Successfully])
 ```
 
-#### Hydra Configuration Loading Workflow
+#### 4.1.1.2 Simulation Execution Process
 
-The Hydra-based configuration system implements a hierarchical loading and composition strategy with three-layer override hierarchy (Base → User → Runtime).
+The core simulation engine implements a protocol-based microkernel architecture that enables zero-code extensibility while maintaining sub-33ms step latency requirements.
 
 ```mermaid
 flowchart TD
-    Start([Configuration Request]) --> CheckHydra{Hydra Available?}
-    CheckHydra -->|No| UseDefaults[Use Hard-coded Defaults]
-    CheckHydra -->|Yes| InitHydra[Initialize Hydra Core]
-    
-    InitHydra --> LoadBase[Load conf/base.yaml]
-    LoadBase --> LoadConfig[Load conf/config.yaml]
-    LoadConfig --> CheckLocal{Local Configs Exist?}
-    CheckLocal -->|Yes| LoadLocal[Load conf/local/*.yaml]
-    CheckLocal -->|No| SkipLocal[Skip Local Configs]
-    
-    LoadLocal --> LoadGroups
-    SkipLocal --> LoadGroups[Load Configuration Groups]
-    
-    LoadGroups --> LoadBoundary[Load conf/boundary/*.yaml]
-    LoadGroups --> LoadPlume[Load conf/plume_models/*.yaml]
-    LoadGroups --> LoadWind[Load conf/wind_fields/*.yaml]
-    LoadGroups --> LoadSensors[Load conf/sensors/*.yaml]
-    LoadGroups --> LoadAction[Load conf/action/*.yaml]
-    LoadGroups --> LoadRecord[Load conf/record/*.yaml]
-    LoadGroups --> LoadHooks[Load conf/hooks/*.yaml]
-    LoadGroups --> LoadInit[Load conf/agent_init/*.yaml]
-    
-    LoadBoundary --> ApplyEnv
-    LoadPlume --> ApplyEnv
-    LoadWind --> ApplyEnv
-    LoadSensors --> ApplyEnv
-    LoadAction --> ApplyEnv
-    LoadRecord --> ApplyEnv
-    LoadHooks --> ApplyEnv
-    LoadInit --> ApplyEnv[Apply Environment Variables]
-    
-    ApplyEnv --> ResolvePlaceholders["Resolve ${oc.env:} Placeholders"]
-    ResolvePlaceholders --> ApplyCLI[Apply CLI Overrides]
-    ApplyCLI --> ValidateSchema[Validate with Pydantic Schema]
-    
-    ValidateSchema --> SchemaValid{Schema Valid?}
-    SchemaValid -->|No| RaiseError[Raise Validation Error]
-    SchemaValid -->|Yes| ComposeConfig[Compose Final DictConfig]
-    
-    ComposeConfig --> InstantiateTargets[Instantiate _target_ Classes]
-    InstantiateTargets --> ReturnConfig[Return Validated Config]
-    
-    UseDefaults --> ReturnConfig
-    RaiseError --> END([Configuration Failed])
-    ReturnConfig --> END([Configuration Complete])
+    subgraph "Simulation Execution Pipeline"
+        Start([Initialize Simulation]) --> CreateContext[Create SimulationContext]
+        
+        CreateContext --> InitPerf[Initialize Performance Monitor]
+        InitPerf --> InitCache[Initialize Frame Cache System]
+        InitCache --> InitViz[Initialize Visualization Backend]
+        InitViz --> InitRecorder[Initialize Recording System]
+        
+        InitRecorder --> ResetEnv[Reset Environment State]
+        ResetEnv --> MainLoop{Simulation Loop}
+        
+        MainLoop --> SampleSensors[Sample Multi-Modal Sensors]
+        SampleSensors --> ProcessActions[Process Agent Actions]
+        ProcessActions --> UpdatePlume[Update Plume Dynamics]
+        UpdatePlume --> UpdateWind[Update Wind Field]
+        UpdateWind --> StepEnv[Environment Step]
+        
+        StepEnv --> ProcessReturn[Process Step Return]
+        ProcessReturn --> CheckAPI{API Version?}
+        CheckAPI -->|Gymnasium 0.29.x| Parse5Tuple[Parse 5-Tuple Return]
+        CheckAPI -->|Legacy Gym| Parse4Tuple[Parse 4-Tuple Return]
+        
+        Parse5Tuple --> ExecuteHooks[Execute Extensibility Hooks]
+        Parse4Tuple --> ExecuteHooks
+        
+        ExecuteHooks --> RecordTrajectory[Record Trajectory Data]
+        RecordTrajectory --> UpdateViz[Update Real-Time Visualization]
+        UpdateViz --> MonitorPerf[Monitor Performance Metrics]
+        
+        MonitorPerf --> CheckPerf{Performance ≤33ms?}
+        CheckPerf -->|Violation| LogPerfWarning[Log Performance Warning]
+        CheckPerf -->|Compliant| CheckTermination{Episode Complete?}
+        LogPerfWarning --> CheckTermination
+        
+        CheckTermination -->|Continue| MainLoop
+        CheckTermination -->|Complete| FinalizeEpisode[Finalize Episode]
+        
+        FinalizeEpisode --> CleanupResources[Cleanup Resources]
+        CleanupResources --> GenerateStats[Generate Statistics]
+        GenerateStats --> End([Simulation Complete])
+    end
+```
+
+#### 4.1.1.3 Multi-Agent Coordination Process
+
+The system supports up to 100 concurrent agents through vectorized operations and efficient state management protocols.
+
+```mermaid
+flowchart TD
+    subgraph "Multi-Agent Coordination"
+        Start([Initialize Multi-Agent System]) --> CreateAgents[Create Agent Instances]
+        
+        CreateAgents --> AssignPositions[Assign Initial Positions]
+        AssignPositions --> InitNavigators[Initialize Navigation Controllers]
+        InitNavigators --> ParallelLoop{Parallel Processing Loop}
+        
+        ParallelLoop --> VectorSample[Vectorized Sensor Sampling]
+        VectorSample --> ParallelDecision[Parallel Decision Making]
+        ParallelDecision --> CollectActions[Collect Agent Actions]
+        
+        CollectActions --> ValidateActions{Actions Valid?}
+        ValidateActions -->|Invalid| ApplyConstraints[Apply Boundary Constraints]
+        ValidateActions -->|Valid| ApplyActions[Apply Actions to Environment]
+        
+        ApplyConstraints --> ApplyActions
+        ApplyActions --> UpdateStates[Update All Agent States]
+        UpdateStates --> CheckCollisions{Inter-Agent Collisions?}
+        
+        CheckCollisions -->|Detected| ResolveCollisions[Resolve Collision Dynamics]
+        CheckCollisions -->|None| CheckBoundaries{Boundary Violations?}
+        
+        ResolveCollisions --> CheckBoundaries
+        CheckBoundaries -->|Violations| ApplyBoundaryPolicy[Apply Boundary Policies]
+        CheckBoundaries -->|Compliant| RecordMultiAgentStep[Record Multi-Agent Step]
+        
+        ApplyBoundaryPolicy --> RecordMultiAgentStep
+        RecordMultiAgentStep --> CheckAllDone{All Agents Complete?}
+        
+        CheckAllDone -->|No| ParallelLoop
+        CheckAllDone -->|Yes| AggregateResults[Aggregate Multi-Agent Results]
+        AggregateResults --> End([Multi-Agent Episode Complete])
+    end
 ```
 
 ### 4.1.2 Integration Workflows
 
-#### Gymnasium Environment Creation Workflow
+#### 4.1.2.1 Reinforcement Learning Training Pipeline
 
-The Gymnasium-compliant environment creation process supports both legacy Gym and modern Gymnasium APIs with automatic detection and compatibility shimming.
+The system provides full Gymnasium 0.29.x API compliance with seamless integration to stable-baselines3 and other RL frameworks.
 
 ```mermaid
 flowchart TD
-    Start(["gym.make() or gymnasium.make()"]) --> ParseID[Parse Environment ID]
-    ParseID --> CheckRegistry{ID Registered?}
-    CheckRegistry -->|No| RaiseNotFound[Raise Environment Not Found]
-    CheckRegistry -->|Yes| GetSpec[Get Environment Spec]
-    
-    GetSpec --> CreateEnv[Create PlumeNavigationEnv]
-    CreateEnv --> LoadConfig[Load Environment Config via Hydra]
-    
-    LoadConfig --> InitModels[Initialize Protocol Models]
-    InitModels --> InitPlume[Create Plume Model Instance]
-    InitModels --> InitWind[Create Wind Field Instance]
-    InitModels --> InitSensors[Create Sensor Suite Instance]
-    
-    InitPlume --> CheckVideo{Video-based Plume?}
-    CheckVideo -->|Yes| LoadVideo[Load Video File with OpenCV]
-    CheckVideo -->|No| CreateAnalytic[Create Analytic Model]
-    LoadVideo --> SetupCache[Setup Frame Cache System]
-    CreateAnalytic --> CreateSpaces
-    
-    SetupCache --> CacheStrategy{Cache Strategy?}
-    CacheStrategy -->|LRU| ConfigLRU[Configure LRU Cache with psutil]
-    CacheStrategy -->|Preload| PreloadFrames[Preload All Frames to Memory]
-    CacheStrategy -->|None| DirectAccess[Configure Direct Access]
-    
-    ConfigLRU --> CreateSpaces
-    PreloadFrames --> CreateSpaces
-    DirectAccess --> CreateSpaces[Create Action/Observation Spaces]
-    
-    CreateSpaces --> ActionType{Action Interface Type?}
-    ActionType -->|Continuous2D| CreateBox[Create Box Action Space]
-    ActionType -->|Discrete| CreateDiscrete[Create Discrete Action Space]
-    
-    CreateBox --> CreateObs
-    CreateDiscrete --> CreateObs[Create Observation Space]
-    
-    CreateObs --> ObsMode{Observation Mode?}
-    ObsMode -->|Simple| CreateSimpleObs[Position + Odor Vector]
-    ObsMode -->|Multi-Modal| CreateMultiModal[Dict Space with All Sensors]
-    
-    CreateSimpleObs --> InitNavigator
-    CreateMultiModal --> InitNavigator[Initialize Navigator Controller]
-    
-    InitNavigator --> AgentMode{Agent Mode?}
-    AgentMode -->|Single| CreateSingleNav[SingleAgentController]
-    AgentMode -->|Multi| CreateMultiNav[MultiAgentController]
-    
-    CreateSingleNav --> SetupHooks
-    CreateMultiNav --> SetupHooks[Setup Extension Hooks]
-    
-    SetupHooks --> CheckCompat{Check API Compatibility}
-    CheckCompat --> APIMode{Gym or Gymnasium?}
-    APIMode -->|Legacy Gym| WrapLegacy[Wrap with Shimmy Adapter]
-    APIMode -->|Gymnasium| DirectReturn[Return Environment]
-    
-    WrapLegacy --> ValidateEnv
-    DirectReturn --> ValidateEnv[Validate Environment]
-    
-    ValidateEnv --> RunChecks[Run gym.utils.env_checker]
-    RunChecks --> ChecksPass{Checks Pass?}
-    ChecksPass -->|No| RaiseInvalid[Raise Invalid Environment]
-    ChecksPass -->|Yes| ReturnEnv[Return Ready Environment]
-    
-    RaiseNotFound --> END([Failed])
-    RaiseInvalid --> END
-    ReturnEnv --> END([Environment Ready])
+    subgraph "RL Training Integration"
+        Start([Initialize RL Training]) --> ParseCLI[Parse Training CLI Arguments]
+        ParseCLI --> LoadRLConfig[Load RL Configuration]
+        
+        LoadRLConfig --> CreateEnv[Create Gymnasium Environment]
+        CreateEnv --> WrapEnv[Apply Environment Wrappers]
+        
+        WrapEnv --> InitAlgorithm{Select RL Algorithm}
+        InitAlgorithm -->|PPO| CreatePPO[Initialize PPO Agent]
+        InitAlgorithm -->|SAC| CreateSAC[Initialize SAC Agent]
+        InitAlgorithm -->|TD3| CreateTD3[Initialize TD3 Agent]
+        InitAlgorithm -->|Custom| CreateCustom[Initialize Custom Agent]
+        
+        CreatePPO --> SetupCallbacks[Setup Training Callbacks]
+        CreateSAC --> SetupCallbacks
+        CreateTD3 --> SetupCallbacks
+        CreateCustom --> SetupCallbacks
+        
+        SetupCallbacks --> TrainingLoop{Training Loop}
+        TrainingLoop --> CollectExperience[Collect Training Experience]
+        CollectExperience --> UpdatePolicy[Update Policy Networks]
+        UpdatePolicy --> EvaluatePolicy[Evaluate Policy Performance]
+        
+        EvaluatePolicy --> CheckConvergence{Training Converged?}
+        CheckConvergence -->|No| TrainingLoop
+        CheckConvergence -->|Yes| SaveModel[Save Trained Model]
+        
+        SaveModel --> GenerateMetrics[Generate Training Metrics]
+        GenerateMetrics --> ExportResults[Export Training Results]
+        ExportResults --> End([Training Complete])
+    end
 ```
 
-#### Asynchronous Data Recording Workflow
+#### 4.1.2.2 Data Recording and Analysis Pipeline
 
-The asynchronous data recording system supports multiple backends (Parquet, HDF5, SQLite) with performance guarantees and graceful degradation.
+The multi-backend recording system (F-008) supports Parquet, HDF5, SQLite, and None backends with <1ms recording overhead.
+
+```mermaid
+flowchart LR
+    subgraph "Data Recording Pipeline"
+        SimStep[Simulation Step] --> RecordManager{Recording Manager}
+        
+        RecordManager --> BufferData[Buffer Step Data]
+        BufferData --> CheckBuffer{Buffer Threshold?}
+        
+        CheckBuffer -->|Below| ContinueBuffering[Continue Buffering]
+        CheckBuffer -->|Exceeded| FlushBuffer[Flush Buffer]
+        
+        FlushBuffer --> SelectBackend{Recording Backend}
+        SelectBackend -->|Parquet| WriteParquet[Write Parquet Files]
+        SelectBackend -->|HDF5| WriteHDF5[Write HDF5 Dataset]
+        SelectBackend -->|SQLite| WriteSQLite[Write SQLite Database]
+        SelectBackend -->|None| NoOp[No Operation]
+        
+        WriteParquet --> CompressData[Apply Compression]
+        WriteHDF5 --> CompressData
+        WriteSQLite --> CompressData
+        NoOp --> ClearBuffer[Clear Buffer]
+        
+        CompressData --> ClearBuffer
+        ClearBuffer --> ContinueBuffering
+        
+        ContinueBuffering --> CheckComplete{Episode Complete?}
+        CheckComplete -->|No| SimStep
+        CheckComplete -->|Yes| FinalizeRecording[Finalize Recording]
+        
+        FinalizeRecording --> RunAnalysis[Run Statistical Analysis]
+        RunAnalysis --> GenerateReport[Generate Analysis Report]
+        GenerateReport --> End([Recording Complete])
+    end
+```
+
+#### 4.1.2.3 Batch Processing Workflow
+
+The system supports distributed execution via Hydra multirun capabilities for parameter sweeps and large-scale experiments.
 
 ```mermaid
 flowchart TD
-    Start([Recording Initiated]) --> CheckEnabled{Recording Enabled?}
-    CheckEnabled -->|No| UseNull[Use NullRecorder]
-    CheckEnabled -->|Yes| SelectBackend[Select Recording Backend]
-    
-    UseNull --> ReturnRecorder[Return Recorder Instance]
-    
-    SelectBackend --> Backend{Backend Type?}
-    Backend -->|Parquet| CreateParquet[Create ParquetRecorder]
-    Backend -->|HDF5| CreateHDF5[Create HDF5Recorder]
-    Backend -->|SQLite| CreateSQLite[Create SQLiteRecorder]
-    Backend -->|None| UseNull
-    
-    CreateParquet --> CheckDeps1{PyArrow Available?}
-    CheckDeps1 -->|No| FallbackNull1[Fallback to NullRecorder]
-    CheckDeps1 -->|Yes| InitParquet[Initialize Parquet Backend]
-    
-    CreateHDF5 --> CheckDeps2{h5py Available?}
-    CheckDeps2 -->|No| FallbackNull2[Fallback to NullRecorder]
-    CheckDeps2 -->|Yes| InitHDF5[Initialize HDF5 Backend]
-    
-    CreateSQLite --> InitSQLite[Initialize SQLite Backend]
-    
-    InitParquet --> SetupBuffer1[Setup Async Write Buffer]
-    InitHDF5 --> SetupBuffer2[Setup Async Write Buffer]
-    InitSQLite --> SetupBuffer3[Setup Async Write Buffer]
-    FallbackNull1 --> ReturnRecorder
-    FallbackNull2 --> ReturnRecorder
-    
-    SetupBuffer1 --> StartThread1[Start Background Thread]
-    SetupBuffer2 --> StartThread2[Start Background Thread]
-    SetupBuffer3 --> StartThread3[Start Background Thread]
-    
-    StartThread1 --> RecordLoop
-    StartThread2 --> RecordLoop
-    StartThread3 --> RecordLoop[Recording Loop]
-    
-    RecordLoop --> WaitData{Data in Queue?}
-    WaitData -->|No| Sleep[Sleep 1ms]
-    Sleep --> CheckStop{Stop Signal?}
-    CheckStop -->|No| WaitData
-    CheckStop -->|Yes| FlushBuffer[Flush Remaining Data]
-    
-    WaitData -->|Yes| GetData[Get Data from Queue]
-    GetData --> CheckBuffer{Buffer Full?}
-    CheckBuffer -->|No| AddToBuffer[Add to Buffer]
-    CheckBuffer -->|Yes| WriteBatch[Write Batch to Disk]
-    
-    WriteBatch --> CheckPerf{Write Time OK?}
-    CheckPerf -->|No| LogPerfWarn[Log Performance Warning]
-    CheckPerf -->|Yes| ClearBuffer[Clear Buffer]
-    LogPerfWarn --> ClearBuffer
-    
-    AddToBuffer --> RecordLoop
-    ClearBuffer --> RecordLoop
-    
-    FlushBuffer --> WriteFinal[Write Final Batch]
-    WriteFinal --> CloseFile[Close Output File]
-    CloseFile --> UpdateMetadata[Update Metadata]
-    UpdateMetadata --> ReturnRecorder
+    subgraph "Batch Processing System"
+        Start([Initialize Batch Processing]) --> LoadBatchConfig[Load Batch Configuration]
+        
+        LoadBatchConfig --> ParseParameters[Parse Parameter Sweeps]
+        ParseParameters --> ValidateConfigs{All Configs Valid?}
+        
+        ValidateConfigs -->|Invalid| ReportErrors[Report Configuration Errors]
+        ValidateConfigs -->|Valid| InitScheduler[Initialize Job Scheduler]
+        
+        ReportErrors --> PartialExecution{Execute Valid Configs?}
+        PartialExecution -->|No| ExitError([Exit with Errors])
+        PartialExecution -->|Yes| InitScheduler
+        
+        InitScheduler --> CreateJobQueue[Create Job Queue]
+        CreateJobQueue --> CheckResources{System Resources Available?}
+        
+        CheckResources -->|Insufficient| WaitResources[Wait for Resources]
+        CheckResources -->|Available| SpawnWorkers[Spawn Worker Processes]
+        
+        WaitResources --> CheckResources
+        SpawnWorkers --> AssignJobs[Assign Jobs to Workers]
+        
+        AssignJobs --> ExecuteJobs[Execute Parallel Jobs]
+        ExecuteJobs --> MonitorProgress[Monitor Job Progress]
+        
+        MonitorProgress --> CheckJobStatus{Jobs Complete?}
+        CheckJobStatus -->|Running| MonitorProgress
+        CheckJobStatus -->|Complete| CollectResults[Collect All Results]
+        
+        CollectResults --> AggregateData[Aggregate Batch Data]
+        AggregateData --> GenerateBatchReport[Generate Batch Report]
+        GenerateBatchReport --> End([Batch Processing Complete])
+    end
 ```
 
 ## 4.2 FLOWCHART REQUIREMENTS
 
-### 4.2.1 Navigation Step Workflow (updated)
+### 4.2.1 CLI Command Processing and Validation
 
-The core navigation control loop executes with strict performance requirements (≤33ms per step) and includes comprehensive validation and error handling. <span style="background-color: rgba(91, 57, 243, 0.2)">The workflow now incorporates pre-step and post-step hook dispatch points managed by the HookManager system, ensuring extensibility while maintaining performance SLA compliance through efficient early exit paths when hooks are disabled.</span>
-
-```mermaid
-flowchart TD
-    Start([Step Called]) --> StartTimer[Start Performance Timer]
-    StartTimer --> RunPreHooks[Execute Pre-Step Hooks]
-    RunPreHooks --> GetCurrentState[Get Current Agent State]
-    
-    GetCurrentState --> AgentType{Agent Type?}
-    AgentType -->|Single| GetSingleState[Get Position, Orientation, Speed]
-    AgentType -->|Multi| GetMultiState[Get Vectorized State Arrays]
-    
-    GetSingleState --> ProcessAction
-    GetMultiState --> ProcessAction[Process Actions via Interface]
-    
-    ProcessAction --> ActionInterface{Action Interface Type?}
-    ActionInterface -->|Continuous2D| TranslateCont[Translate to dx, dy, dtheta]
-    ActionInterface -->|Discrete| TranslateDisc[Map to Cardinal Direction]
-    
-    TranslateCont --> ValidateAct
-    TranslateDisc --> ValidateAct[Validate Action Values]
-    
-    ValidateAct --> CheckNaN{Contains NaN?}
-    CheckNaN -->|Yes| ReplaceNaN[Replace with Zero Action]
-    CheckNaN -->|No| CheckBounds[Check Action Bounds]
-    ReplaceNaN --> CheckBounds
-    
-    CheckBounds --> InBounds{Within Valid Range?}
-    InBounds -->|No| ClipActions[Clip to Valid Range]
-    InBounds -->|Yes| UpdateState
-    ClipActions --> UpdateState[Update Agent State]
-    
-    UpdateState --> ComputeNewPos[Compute New Positions]
-    ComputeNewPos --> ComputeNewOrient[Compute New Orientations]
-    ComputeNewOrient --> CheckMaxSpeed[Check Speed Constraints]
-    
-    CheckMaxSpeed --> SpeedOK{Speed ≤ Maximum?}
-    SpeedOK -->|No| ScaleVelocity[Scale to Maximum Speed]
-    SpeedOK -->|Yes| ApplyBoundary
-    ScaleVelocity --> ApplyBoundary[Apply Boundary Policy]
-    
-    ApplyBoundary --> GetPolicy[Get Boundary Policy Instance]
-    GetPolicy --> CheckViolation[Check Boundary Violations]
-    CheckViolation --> Violated{Boundary Violated?}
-    
-    Violated -->|No| SampleEnv
-    Violated -->|Yes| ApplyCorrection[Apply Policy Correction]
-    ApplyCorrection --> CheckTerm{Agent Terminated?}
-    CheckTerm -->|Yes| SetDone[Set Done Flag]
-    CheckTerm -->|No| SampleEnv
-    SetDone --> SampleEnv[Sample Environment State]
-    
-    SampleEnv --> GetFrame[Get Current Frame]
-    GetFrame --> SampleSensors[Sample All Sensor Types]
-    
-    SampleSensors --> SensorLoop[For Each Sensor Instance]
-    SensorLoop --> SensorType{Sensor Type?}
-    SensorType -->|Concentration| SampleConc[Get Concentration Value]
-    SensorType -->|Gradient| ComputeGrad[Compute Local Gradient]
-    SensorType -->|Binary| CheckThresh[Check Detection Threshold]
-    
-    SampleConc --> AddNoise1[Add Sensor Noise Model]
-    ComputeGrad --> AddNoise2[Add Sensor Noise Model]
-    CheckThresh --> AddNoise3[Add Detection Error Model]
-    
-    AddNoise1 --> NextSensor{More Sensors?}
-    AddNoise2 --> NextSensor
-    AddNoise3 --> NextSensor
-    NextSensor -->|Yes| SensorLoop
-    NextSensor -->|No| BuildObs[Build Observation Vector]
-    
-    BuildObs --> ComputeReward[Compute Step Reward]
-    ComputeReward --> CheckPostHooks{Post-Step Hooks Active?}
-    CheckPostHooks -->|Yes| RunPostHooks[Execute Post-Step Hooks]
-    CheckPostHooks -->|No| BuildInfo
-    RunPostHooks --> BuildInfo[Build Info Dictionary]
-    
-    BuildInfo --> CheckTimer[Check Step Time]
-    CheckTimer --> TimeOK{Time ≤ 33ms?}
-    TimeOK -->|No| LogViolation[Log Performance Violation]
-    TimeOK -->|Yes| ReturnStep
-    LogViolation --> ReturnStep[Return Step Results]
-    
-    ReturnStep --> END([Step Complete])
-```
-
-### 4.2.2 Sensor Data Processing Workflow
-
-The sensor system supports multiple sensor types with noise modeling and calibration drift simulation.
+The comprehensive CLI toolkit (F-013) integrates Click framework with Hydra configuration management for enterprise-grade command processing.
 
 ```mermaid
 flowchart TD
-    Start([Sensor Sample Request]) --> CheckSensorType{Sensor Type?}
-    
-    CheckSensorType -->|Concentration| ConcSensor[Concentration Sensor]
-    CheckSensorType -->|Gradient| GradSensor[Gradient Sensor]
-    CheckSensorType -->|Binary| BinarySensor[Binary Detection Sensor]
-    
-    ConcSensor --> GetPosition[Get Agent Position]
-    GradSensor --> GetPosition
-    BinarySensor --> GetPosition
-    
-    GetPosition --> SamplePlume[Sample Plume Model at Position]
-    SamplePlume --> CheckPlumeType{Plume Model Type?}
-    
-    CheckPlumeType -->|Gaussian| GaussianModel[Gaussian Plume Model]
-    CheckPlumeType -->|Turbulent| TurbulentModel[Turbulent Plume Model]
-    CheckPlumeType -->|Video| VideoModel[Video-based Plume Model]
-    
-    GaussianModel --> ComputeConc[Compute Concentration]
-    TurbulentModel --> ComputeConc
-    VideoModel --> InterpolateFrame[Interpolate Frame Value]
-    
-    InterpolateFrame --> ComputeConc
-    ComputeConc --> ApplyWind[Apply Wind Field Effects]
-    
-    ApplyWind --> ProcessSensorSpecific{Return to Sensor Type}
-    ProcessSensorSpecific -->|Concentration| DirectValue[Return Direct Value]
-    ProcessSensorSpecific -->|Gradient| ComputeGradient[Compute Spatial Gradient]
-    ProcessSensorSpecific -->|Binary| ApplyThreshold[Apply Detection Threshold]
-    
-    DirectValue --> AddNoise1[Add Sensor Noise]
-    ComputeGradient --> AddNoise2[Add Sensor Noise]
-    ApplyThreshold --> AddDetectionError[Add Detection Error]
-    
-    AddNoise1 --> ApplyDrift1[Apply Calibration Drift]
-    AddNoise2 --> ApplyDrift2[Apply Calibration Drift]
-    AddDetectionError --> ApplyDrift3[Apply Calibration Drift]
-    
-    ApplyDrift1 --> ValidateRange1[Validate Sensor Range]
-    ApplyDrift2 --> ValidateRange2[Validate Sensor Range]
-    ApplyDrift3 --> ValidateRange3[Validate Sensor Range]
-    
-    ValidateRange1 --> ReturnValue[Return Sensor Value]
-    ValidateRange2 --> ReturnValue
-    ValidateRange3 --> ReturnValue
-    
-    ReturnValue --> END([Sensor Reading Complete])
+    subgraph "CLI Command Processing"
+        UserInput[User Command Input] --> ClickParser[Click Command Parser]
+        
+        ClickParser --> ValidateCommand{Command Valid?}
+        ValidateCommand -->|Invalid| ShowHelp[Display Help Information]
+        ValidateCommand -->|Valid| HydraDecorator["@hydra.main Decorator"]
+        
+        HydraDecorator --> ComposeConfig[Compose Hierarchical Config]
+        ComposeConfig --> ApplyOverrides[Apply CLI Overrides]
+        ApplyOverrides --> ValidateParams[Validate Parameters]
+        
+        ValidateParams --> EnvInterpolation[Environment Variable Interpolation]
+        EnvInterpolation --> ExecuteCommand[Execute Command Handler]
+        
+        ExecuteCommand --> CommandRouter{Command Type}
+        CommandRouter -->|run| RunHandler[Simulation Run Handler]
+        CommandRouter -->|train| TrainHandler[RL Training Handler]
+        CommandRouter -->|batch| BatchHandler[Batch Processing Handler]
+        CommandRouter -->|visualize| VizHandler[Visualization Handler]
+        CommandRouter -->|config| ConfigHandler[Configuration Handler]
+        
+        RunHandler --> ErrorCheck{Execution Error?}
+        TrainHandler --> ErrorCheck
+        BatchHandler --> ErrorCheck
+        VizHandler --> ErrorCheck
+        ConfigHandler --> ErrorCheck
+        
+        ErrorCheck -->|Error| ErrorRecovery[Error Recovery Handler]
+        ErrorCheck -->|Success| CommandSuccess[Command Success]
+        
+        ErrorRecovery --> LogError[Log Error Details]
+        LogError --> SetExitCode[Set Error Exit Code]
+        
+        CommandSuccess --> SetExitCode
+        SetExitCode --> End([Exit Process])
+        ShowHelp --> End
+    end
 ```
 
-### 4.2.3 Validation Rules
+### 4.2.2 Configuration Management and Validation
 
-#### Business Rules at Each Step
+The hierarchical configuration system (F-012) ensures reproducible research with built-in validation and type checking.
 
-The navigation workflow enforces strict validation rules at critical decision points to ensure system reliability and performance:
-
-**Pre-Step Validation Rules:**
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Pre-step hooks must complete within 5ms of the total 33ms step budget</span>
-- Agent state must be valid (non-NaN position, orientation, speed)
-- Action interface must be properly initialized and responsive
-- Performance timer must be active and tracking cumulative execution time
-
-**Action Processing Rules:**
-- All action values must be finite (no NaN, infinity, or undefined values)
-- Continuous actions must fall within configured bounds [-1.0, 1.0] for normalized interfaces
-- Discrete actions must map to valid cardinal directions or configured discrete options
-- Action clipping must preserve relative magnitudes when scaling to valid ranges
-
-**State Update Rules:**
-- Position updates must not exceed maximum speed constraints
-- Orientation changes must maintain valid angular ranges [0, 2π]
-- Boundary violations must trigger appropriate policy responses (terminate, bounce, wrap, clip)
-- Agent termination states must be properly propagated to the episode management system
-
-**Post-Step Validation Rules:**
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Post-step hooks must complete within 10ms of the total 33ms step budget</span>
-- Observation vectors must maintain consistent dimensionality across steps
-- Reward computation must produce finite values within expected ranges
-- Performance monitoring must log violations exceeding the 33ms SLA threshold
-
-#### Data Validation Requirements
-
-**Sensor Data Validation:**
-- Concentration values must be non-negative and within physical plausibility bounds
-- Gradient vectors must have valid magnitude and direction components
-- Binary detection values must be properly thresholded boolean outputs
-- Noise models must produce statistically valid perturbations within configured parameters
-
-**Configuration Validation:**
-- All Hydra configuration parameters must pass Pydantic schema validation
-- Protocol component selections must resolve to valid implementation classes
-- Cache configuration must align with available system memory and performance requirements
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook configuration must specify valid hook types and execution priorities</span>
-
-#### Authorization Checkpoints
-
-**Component Access Control:**
-- Protocol implementations must validate proper interface compliance
-- Extension hooks must authenticate against registered callback systems
-- Data recording backends must verify write permissions and disk space availability
-- Cache systems must enforce memory limits and eviction policies
-
-**Runtime Authorization:**
-- Environment creation must validate Gymnasium/Gym API compatibility
-- Multi-agent controllers must verify agent count limits and resource allocation
-- Performance monitoring must authorize logging and telemetry collection
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution must validate callback registration and priority ordering</span>
-
-#### Regulatory Compliance Checks
-
-**Data Privacy and Security:**
-- Recorded simulation data must comply with institutional data retention policies
-- Configuration files must not contain sensitive credentials or personal information
-- Performance telemetry must be anonymized for research usage analytics
-- Export formats must support data anonymization and privacy protection requirements
-
-**Research Ethics Compliance:**
-- Simulation parameters must align with approved research protocols
-- Data sharing configurations must respect institutional collaboration agreements
-- Performance benchmarking must follow established research community standards
-- Publication-ready data exports must maintain reproducibility requirements
-
-### 4.2.4 State Management
-
-#### State Transitions
-
-The navigation system manages complex state transitions across multiple hierarchical levels, ensuring consistency and performance across the entire simulation lifecycle.
-
-**Agent State Transitions:**
-```mermaid
-stateDiagram-v2
-    [*] --> Initialized
-    Initialized --> Active: Start Episode
-    Active --> Moving: Process Action
-    Moving --> Sampling: Update Position
-    Sampling --> Evaluating: Sample Sensors
-    Evaluating --> Active: Compute Reward
-    Active --> Terminated: Boundary Violation
-    Active --> Terminated: Max Steps Reached
-    Terminated --> [*]: Episode Complete
-    
-    Moving --> Boundary_Violation: Position Invalid
-    Boundary_Violation --> Terminated: Terminate Policy
-    Boundary_Violation --> Moving: Bounce/Wrap/Clip Policy
-```
-
-**Episode State Management:**
-- Episode initialization resets all agent states to configured starting positions
-- Step progression maintains deterministic state evolution through the navigation workflow
-- Episode termination triggers cleanup of transient state and data recording finalization
-- Multi-episode runs maintain statistical continuity while resetting simulation state
-
-**Cache State Management:**
-- LRU cache maintains frame access patterns with automatic eviction based on memory pressure
-- Preload cache ensures deterministic access times by eliminating runtime I/O operations
-- Direct access mode bypasses caching for minimal memory footprint scenarios
-- Cache invalidation handles video file changes and configuration updates
-
-#### Data Persistence Points
-
-**Critical Persistence Checkpoints:**
-- Episode initialization state (agent positions, environment configuration, random seeds)
-- Step-level state snapshots (position, orientation, sensor readings, rewards)
-- Performance metrics (step timing, cache hit rates, memory usage)
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution metrics (pre-step timing, post-step timing, callback success rates)</span>
-
-**Asynchronous Recording Strategy:**
-- Primary simulation thread maintains performance SLA through non-blocking data queuing
-- Background recording thread handles batch writing to persistent storage backends
-- Buffer management prevents memory exhaustion during high-frequency data generation
-- Graceful degradation handles storage failures without simulation interruption
-
-#### Caching Requirements
-
-**Frame Cache Management:**
-- LRU eviction policy maintains optimal memory utilization while maximizing cache hit rates
-- Preload strategy eliminates I/O latency for deterministic performance requirements
-- Cache size automatically adapts to available system memory using psutil monitoring
-- Cache warming strategies optimize startup performance for video-based simulations
-
-**Configuration Cache:**
-- Hydra configuration trees are cached post-validation to eliminate repeated parsing overhead
-- Protocol component instances are cached for reuse across simulation episodes
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook manager instances maintain callback registrations across episode boundaries</span>
-
-#### Transaction Boundaries
-
-**Atomic Operations:**
-- Individual navigation steps execute as atomic units with rollback capability on failures
-- Episode state changes maintain ACID properties for data consistency
-- Configuration updates require explicit transaction boundaries to prevent partial application
-- Cache operations maintain consistency through proper locking mechanisms
-
-**Concurrency Control:**
-- Multi-threaded recording operations use appropriate synchronization primitives
-- Cache access patterns prevent race conditions through reader-writer locks
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook callback execution maintains thread safety for concurrent hook dispatching</span>
-- Performance monitoring avoids contention through lock-free data structures
-
-### 4.2.5 Error Handling
-
-#### Retry Mechanisms
-
-**Automatic Retry Strategies:**
-- Sensor sampling failures trigger exponential backoff retry with maximum attempt limits
-- Frame loading errors implement immediate retry with fallback to cached or default frames
-- Configuration validation failures provide detailed error messages with suggested corrections
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution failures implement configurable retry policies with circuit breaker patterns</span>
-
-**Retry Configuration:**
-- Maximum retry attempts: 3 for sensor operations, 5 for frame loading, 1 for configuration
-- Backoff intervals: 1ms, 4ms, 16ms progression for sensor retries
-- Timeout limits: 10ms for individual operations, 33ms for complete step execution
-- Failure thresholds: 10% failure rate triggers degraded mode operation
-
-#### Fallback Processes
-
-**Graceful Degradation Strategies:**
-- Missing sensor data defaults to zero concentration with appropriate uncertainty flags
-- Frame loading failures fall back to last successful frame or analytical model approximation
-- Configuration errors revert to validated default configurations with warning notifications
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution failures disable problematic hooks while maintaining core functionality</span>
-
-**Fallback Hierarchy:**
-1. **Primary Operation**: Normal execution path with full functionality
-2. **Retry Operation**: Automatic retry with exponential backoff
-3. **Degraded Operation**: Reduced functionality with warning notifications
-4. **Safe Mode**: Minimal functionality with extensive logging
-5. **Emergency Shutdown**: Controlled termination with state preservation
-
-#### Error Notification Flows
-
-**Error Classification and Routing:**
 ```mermaid
 flowchart TD
-    Error([Error Detected]) --> Classify{Error Type?}
-    
-    Classify -->|Performance| PerfError[Performance Violation]
-    Classify -->|Validation| ValidError[Validation Failure]
-    Classify -->|Resource| ResourceError[Resource Exhaustion]
-    Classify -->|Configuration| ConfigError[Configuration Error]
-    
-    PerfError --> LogPerf[Log Performance Metrics]
-    ValidError --> LogValid[Log Validation Details]
-    ResourceError --> LogResource[Log Resource Usage]
-    ConfigError --> LogConfig[Log Configuration State]
-    
-    LogPerf --> CheckSeverity{Severity Level?}
-    LogValid --> CheckSeverity
-    LogResource --> CheckSeverity
-    LogConfig --> CheckSeverity
-    
-    CheckSeverity -->|Warning| LogWarn[Log Warning Message]
-    CheckSeverity -->|Error| LogError[Log Error Message]
-    CheckSeverity -->|Critical| LogCritical[Log Critical Message]
-    
-    LogWarn --> Continue[Continue Operation]
-    LogError --> Degrade[Enter Degraded Mode]
-    LogCritical --> Shutdown[Initiate Shutdown]
-    
-    Continue --> Monitor[Monitor Recovery]
-    Degrade --> Monitor
-    Shutdown --> SaveState[Save Current State]
-    
-    Monitor --> Recovered{Recovery Detected?}
-    Recovered -->|Yes| Resume[Resume Normal Operation]
-    Recovered -->|No| Continue
-    
-    SaveState --> Exit[Exit Safely]
+    subgraph "Configuration Validation Pipeline"
+        ConfigInput[Configuration Input] --> IdentifySource{Configuration Source}
+        
+        IdentifySource -->|YAML File| LoadYAML[Load YAML Configuration]
+        IdentifySource -->|Dictionary| ParseDict[Parse Dictionary Object]
+        IdentifySource -->|Hydra Config| ComposeHydra[Compose Hydra Configuration]
+        
+        LoadYAML --> MergeDefaults[Merge with Default Values]
+        ParseDict --> MergeDefaults
+        ComposeHydra --> MergeDefaults
+        
+        MergeDefaults --> PydanticValidation[Pydantic Schema Validation]
+        
+        PydanticValidation --> CheckRequired{Required Fields Present?}
+        CheckRequired -->|Missing| RaiseFieldError[Raise Field Error]
+        CheckRequired -->|Present| TypeValidation{Type Validation}
+        
+        TypeValidation -->|Invalid| RaiseTypeError[Raise Type Error]
+        TypeValidation -->|Valid| RangeValidation{Range Validation}
+        
+        RangeValidation -->|Out of Range| RangeError[Raise Range Error]
+        RangeValidation -->|Valid| DependencyCheck{Dependencies Available?}
+        
+        DependencyCheck -->|Missing| DependencyError[Raise Dependency Error]
+        DependencyCheck -->|Available| ConfigurationValid[Configuration Valid]
+        
+        RaiseFieldError --> ConfigurationInvalid([Configuration Invalid])
+        RaiseTypeError --> ConfigurationInvalid
+        RangeError --> ConfigurationInvalid
+        DependencyError --> ConfigurationInvalid
+        
+        ConfigurationValid --> Success([Configuration Success])
+    end
 ```
 
-**Notification Channels:**
-- Console logging with structured format and severity levels
-- File-based logging with rotation and retention policies
-- Performance monitoring integration with alerting capabilities
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook system notifications for custom error handling and recovery procedures</span>
+### 4.2.3 Performance Monitoring and Optimization
 
-#### Recovery Procedures
+The real-time performance tracking system (F-009) ensures research-grade performance requirements are maintained throughout execution.
 
-**Automated Recovery Mechanisms:**
-- Cache invalidation and rebuild for frame loading failures
-- Agent state reset for position validation failures
-- Configuration reload for parameter validation errors
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook re-registration for callback execution failures</span>
+```mermaid
+flowchart LR
+    subgraph "Performance Monitoring System"
+        StepStart[Step Execution Start] --> RecordStartTime[Record Start Timestamp]
+        
+        RecordStartTime --> ExecuteStep[Execute Simulation Step]
+        ExecuteStep --> RecordEndTime[Record End Timestamp]
+        
+        RecordEndTime --> CalculateDuration[Calculate Step Duration]
+        CalculateDuration --> CheckThreshold{Duration ≤33ms?}
+        
+        CheckThreshold -->|Exceeded| RecordViolation[Record Performance Violation]
+        CheckThreshold -->|Compliant| UpdateStatistics[Update Performance Statistics]
+        
+        RecordViolation --> UpdateStatistics
+        UpdateStatistics --> CalculateFPS[Calculate Current FPS]
+        
+        CalculateFPS --> CheckFPS{FPS ≥ Target?}
+        CheckFPS -->|Below| LogFPSWarning[Log FPS Warning]
+        CheckFPS -->|Above| MemoryCheck{Memory Usage OK?}
+        
+        LogFPSWarning --> MemoryCheck
+        MemoryCheck -->|Pressure| MemoryWarning[Memory Pressure Warning]
+        MemoryCheck -->|Normal| UpdateMetrics[Update Performance Metrics]
+        
+        MemoryWarning --> UpdateMetrics
+        UpdateMetrics --> CheckCacheEfficiency{Cache Hit Rate ≥90%?}
+        
+        CheckCacheEfficiency -->|Below| CacheOptimization[Optimize Cache Strategy]
+        CheckCacheEfficiency -->|Above| ContinueExecution[Continue Execution]
+        
+        CacheOptimization --> ContinueExecution
+    end
+```
 
-**Manual Recovery Procedures:**
-- Environment reset for persistent state corruption
-- Configuration validation using Hydra schema checking
-- Performance profiling for persistent SLA violations
-- System resource monitoring for memory or storage exhaustion
+### 4.2.4 Component Initialization and Protocol Binding
 
-**Recovery Verification:**
-- Automated testing of core functionality post-recovery
-- Performance benchmarking to verify SLA compliance restoration
-- Configuration validation to ensure parameter consistency
-- <span style="background-color: rgba(91, 57, 243, 0.2)">Hook system validation to verify callback registration and execution paths</span>
+The protocol-based architecture enables zero-code extensibility through standardized component interfaces.
+
+```mermaid
+flowchart TD
+    subgraph "Protocol-Based Component Initialization"
+        Start([Start Initialization]) --> LoadConfiguration[Load System Configuration]
+        
+        LoadConfiguration --> InitializePlume{Plume Model Type}
+        InitializePlume -->|Gaussian| CreateGaussianPlume[Create Gaussian Plume Model]
+        InitializePlume -->|Turbulent| CreateTurbulentPlume[Create Turbulent Plume Model]
+        InitializePlume -->|Filament| CreateFilamentPlume[Create Filament Plume Model]
+        InitializePlume -->|Video| CreateVideoPlume[Create Video Plume Adapter]
+        
+        CreateGaussianPlume --> InitializeWind{Wind Field Type}
+        CreateTurbulentPlume --> InitializeWind
+        CreateFilamentPlume --> InitializeWind
+        CreateVideoPlume --> InitializeWind
+        
+        InitializeWind -->|Constant| CreateConstantWind[Create Constant Wind Field]
+        InitializeWind -->|Turbulent| CreateTurbulentWind[Create Turbulent Wind Field]
+        InitializeWind -->|TimeVarying| CreateTimeVaryingWind[Create Time-Varying Wind Field]
+        InitializeWind -->|None| NoWindField[No Wind Field]
+        
+        CreateConstantWind --> InitializeSensors[Initialize Sensor Suite]
+        CreateTurbulentWind --> InitializeSensors
+        CreateTimeVaryingWind --> InitializeSensors
+        NoWindField --> InitializeSensors
+        
+        InitializeSensors --> CreateNavigators[Create Navigation Controllers]
+        CreateNavigators --> InitializeEnvironment[Initialize Environment]
+        
+        InitializeEnvironment --> BindProtocols[Bind Protocol Interfaces]
+        BindProtocols --> ValidateBindings[Validate Protocol Bindings]
+        
+        ValidateBindings --> InitializationComplete[Initialization Complete]
+    end
+```
 
 ## 4.3 TECHNICAL IMPLEMENTATION
 
-### 4.3.1 State Management
+### 4.3.1 State Management and Transitions
 
-The system maintains complex state across multiple protocol-based components with clear transition boundaries and error recovery mechanisms. <span style="background-color: rgba(91, 57, 243, 0.2)">The state management now includes comprehensive hook lifecycle management through the HookManager system, enabling extensible pre-step, post-step, and episode-end processing while maintaining the critical ≤33ms performance SLA.</span>
+#### 4.3.1.1 Simulation State Machine
+
+The simulation engine maintains deterministic state transitions to ensure reproducible research outcomes.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Uninitialized
     
-    Uninitialized --> Configuring: load_hydra_config()
-    Configuring --> Configured: validate_schema()
-    Configured --> ComponentInit: create_protocol_components()
+    Uninitialized --> Initializing: start()
+    Initializing --> Ready: initialization_success
+    Initializing --> InitializationError: initialization_failure
     
-    ComponentInit --> Ready: all_components_ready()
-    Ready --> Running: start_simulation()
+    Ready --> Running: run()
+    Running --> Paused: pause()
+    Running --> Completed: episode_complete
+    Running --> RuntimeError: runtime_error
     
-    Running --> Paused: pause_simulation()
-    Paused --> Running: resume_simulation()
+    Paused --> Running: resume()
+    Paused --> Stopped: stop()
     
-    Running --> EpisodeEnd: episode_complete()
-    EpisodeEnd --> Running: reset_episode()
-    EpisodeEnd --> Finalizing: run_complete()
+    Completed --> Ready: reset()
+    RuntimeError --> ErrorRecovery: attempt_recovery
+    ErrorRecovery --> Ready: recovery_success
+    ErrorRecovery --> FatalError: recovery_failure
     
-    Finalizing --> Analyzing: export_recording_data()
-    Analyzing --> Complete: generate_analysis_report()
+    InitializationError --> Stopped: fatal_initialization_error
+    FatalError --> Stopped: fatal_runtime_error
     
-    Running --> Error: exception_raised()
-    Paused --> Error: exception_raised()
-    Configuring --> Error: validation_failed()
-    ComponentInit --> Error: component_failed()
-    
-    Error --> Recovery: handle_error()
-    Recovery --> Running: recover_successful()
-    Recovery --> Terminated: unrecoverable_error()
-    
-    Complete --> [*]
-    Terminated --> [*]
-    
-    state Running {
-        [*] --> StepInit
-        StepInit --> PreStepHooks: run_pre_step_hooks()
-        PreStepHooks --> ActionProcessing: get_actions()
-        ActionProcessing --> StateUpdate: apply_actions()
-        StateUpdate --> BoundaryCheck: check_boundaries()
-        BoundaryCheck --> SensorSampling: sample_sensors()
-        SensorSampling --> RewardComputation: compute_rewards()
-        RewardComputation --> PostStepHooks: run_post_step_hooks()
-        PostStepHooks --> DataRecording: record_step_data()
-        DataRecording --> PerformanceCheck: check_step_time()
-        PerformanceCheck --> StepComplete: validate_performance()
-        StepComplete --> [*]
-    }
-    
-    state ComponentInit {
-        [*] --> LoadingPlume
-        LoadingPlume --> LoadingWind: plume_ready()
-        LoadingWind --> LoadingSensors: wind_ready()
-        LoadingSensors --> LoadingNavigator: sensors_ready()
-        LoadingNavigator --> LoadingRecorder: navigator_ready()
-        LoadingRecorder --> LoadingHooks: recorder_ready()
-        LoadingHooks --> LoadingBoundary: hook_manager_ready()
-        LoadingBoundary --> LoadingAction: boundary_ready()
-        LoadingAction --> ComponentsReady: action_ready()
-        ComponentsReady --> [*]
-    }
+    Stopped --> [*]
 ```
 
-#### State Transition Details
+#### 4.3.1.2 Episode Management State Machine
 
-**Component Initialization Enhancements**
+Individual episodes maintain their own state management for proper data collection and analysis.
 
-The component initialization sequence now includes <span style="background-color: rgba(91, 57, 243, 0.2)">hook manager initialization as a critical system component, ensuring all registered hooks are properly validated and configured before simulation begins</span>. The LoadingHooks state performs comprehensive validation of hook configurations, verifies callback registration integrity, and establishes performance budgets for hook execution within the overall system SLA.
+```mermaid
+stateDiagram-v2
+    [*] --> EpisodeInitialization
+    
+    EpisodeInitialization --> EpisodeStart: reset()
+    
+    EpisodeStart --> StepExecution: begin_step()
+    StepExecution --> StepProcessing: process_step()
+    StepProcessing --> TerminationCheck: check_termination()
+    
+    TerminationCheck --> StepExecution: continue_episode
+    TerminationCheck --> EpisodeTerminated: terminated
+    TerminationCheck --> EpisodeTruncated: truncated
+    
+    EpisodeTerminated --> ResultRecording: record_terminated_episode
+    EpisodeTruncated --> ResultRecording: record_truncated_episode
+    
+    ResultRecording --> EpisodeComplete: finalize_episode
+    EpisodeComplete --> EpisodeStart: new_episode
+    EpisodeComplete --> [*]: simulation_complete
+```
 
-**Runtime Hook Integration**
+#### 4.3.1.3 Multi-Agent State Coordination
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">The Running state now incorporates two distinct hook execution phases: PreStepHooks and PostStepHooks, each with specific performance allocations and error handling strategies</span>. The PreStepHooks phase executes registered callbacks before action processing, enabling custom initialization, logging, or validation logic. The PostStepHooks phase operates after reward computation but before data recording, allowing for custom analytics, state modification, or external system integration.
+The multi-agent system maintains synchronized state across all agents while preserving individual agent autonomy.
 
-**Performance Budget Management**
+```mermaid
+stateDiagram-v2
+    [*] --> MultiAgentInitialization
+    
+    MultiAgentInitialization --> AgentCreation: create_agents()
+    AgentCreation --> AgentSynchronization: synchronize_agents()
+    
+    AgentSynchronization --> ParallelExecution: begin_parallel_step()
+    ParallelExecution --> ActionCollection: collect_actions()
+    ActionCollection --> CollisionResolution: resolve_collisions()
+    
+    CollisionResolution --> StateUpdate: update_states()
+    StateUpdate --> TerminationCheck: check_all_agents()
+    
+    TerminationCheck --> ParallelExecution: continue_execution
+    TerminationCheck --> MultiAgentComplete: all_agents_complete
+    
+    MultiAgentComplete --> [*]
+```
 
-The hook system maintains strict performance budgets to preserve the critical 33ms step performance requirement. <span style="background-color: rgba(91, 57, 243, 0.2)">PreStepHooks are allocated up to 5ms of execution time, while PostStepHooks receive up to 10ms, ensuring the majority of the performance budget remains available for core simulation operations</span>. Hook execution includes automatic timeout mechanisms and graceful degradation when performance thresholds are exceeded.
+### 4.3.2 Error Handling and Recovery
 
-**Error Recovery Integration**
+#### 4.3.2.1 Comprehensive Error Recovery Flow
 
-Hook-related errors are integrated into the comprehensive error recovery system, with specific handling for callback failures, timeout violations, and configuration errors. <span style="background-color: rgba(91, 57, 243, 0.2)">The system supports dynamic hook disabling for problematic callbacks while maintaining core functionality, and provides detailed error reporting for debugging and system monitoring</span>.
-
-### 4.3.2 Error Handling Workflow
-
-The system implements comprehensive error handling with recovery mechanisms and graceful degradation for different error categories, <span style="background-color: rgba(91, 57, 243, 0.2)">now including specialized handling for hook execution failures and performance violations</span>.
+The system implements robust error handling with multiple recovery strategies to ensure research continuity.
 
 ```mermaid
 flowchart TD
-    Start([Error Detected]) --> ClassifyError[Classify Error Type]
-    
-    ClassifyError --> ErrorType{Error Category?}
-    ErrorType -->|Configuration| ConfigError[Configuration Error]
-    ErrorType -->|Resource| ResourceError[Resource Error]
-    ErrorType -->|Performance| PerfError[Performance Error]
-    ErrorType -->|Data| DataError[Data Error]
-    ErrorType -->|Component| CompError[Component Error]
-    ErrorType -->|Dependency| DepError[Dependency Error]
-    ErrorType -->|Hook| HookError[Hook Execution Error]
-    
-    HookError --> HookType{Hook Error Type?}
-    HookType -->|Timeout| HookTimeout[Hook Execution Timeout]
-    HookType -->|Callback| HookCallback[Callback Failure]
-    HookType -->|Registration| HookRegistration[Registration Error]
-    
-    HookTimeout --> DisableHook[Disable Problematic Hook]
-    HookCallback --> LogCallback[Log Callback Error Details]
-    HookRegistration --> ValidateRegistration[Validate Hook Registration]
-    
-    LogCallback --> RetryCallback{Retry Callback?}
-    RetryCallback -->|Yes| RetryHook[Retry Hook Execution]
-    RetryCallback -->|No| DisableHook
-    
-    ValidateRegistration --> FixRegistration[Fix Registration Issues]
-    FixRegistration --> RecoverCheck
-    
-    RetryHook --> RetrySuccess{Retry Successful?}
-    RetrySuccess -->|Yes| RecoverCheck
-    RetrySuccess -->|No| DisableHook
-    
-    DisableHook --> LogHookDisabled[Log Hook Disabled]
-    LogHookDisabled --> RecoverCheck
-    
-    ConfigError --> LogConfig[Log Configuration Details]
-    LogConfig --> CheckDefaults{Can Use Defaults?}
-    CheckDefaults -->|Yes| ApplyDefaults[Apply Default Configuration]
-    CheckDefaults -->|No| TerminateConfig[Terminate with Error]
-    
-    ResourceError --> ResourceType{Resource Type?}
-    ResourceType -->|Memory| HandleMemory[Handle Memory Pressure]
-    ResourceType -->|File| HandleFile[Handle File Access Error]
-    ResourceType -->|Network| HandleNetwork[Handle Network Error]
-    
-    HandleMemory --> ReduceCache[Reduce Cache Size]
-    ReduceCache --> TriggerGC[Trigger Garbage Collection]
-    TriggerGC --> RetryOp[Retry Operation]
-    
-    HandleFile --> FileExists{File Exists?}
-    FileExists -->|No| UseAlternative[Use Alternative Source]
-    FileExists -->|Yes| CheckPerms[Check File Permissions]
-    CheckPerms --> FixPerms[Fix Permissions if Possible]
-    
-    HandleNetwork --> RetryCount{Retry Count < 3?}
-    RetryCount -->|Yes| WaitRetry[Wait and Retry Connection]
-    RetryCount -->|No| UseOffline[Switch to Offline Mode]
-    
-    PerfError --> PerfType{Performance Issue?}
-    PerfType -->|Step Time| ReduceLoad[Reduce Computation Load]
-    PerfType -->|Memory Usage| OptimizeMemory[Optimize Memory Usage]
-    PerfType -->|I/O Bottleneck| BufferWrites[Increase Buffer Size]
-    PerfType -->|Hook Timeout| HandleHookTimeout[Handle Hook Performance]
-    
-    HandleHookTimeout --> CheckHookBudget[Check Hook Budget Usage]
-    CheckHookBudget --> ReduceHookLoad[Reduce Hook Execution Load]
-    ReduceHookLoad --> RecoverCheck
-    
-    DataError --> DataType{Data Issue?}
-    DataType -->|Corrupt| TryBackup[Try Backup Data Source]
-    DataType -->|Missing| UseDefault[Use Default Values]
-    DataType -->|Invalid| Sanitize[Sanitize Invalid Data]
-    
-    CompError --> CompType{Component Type?}
-    CompType -->|Recorder| DisableRecording[Disable Recording Backend]
-    CompType -->|Visualization| HeadlessMode[Switch to Headless Mode]
-    CompType -->|Sensor| UseFallback[Use Fallback Sensor]
-    CompType -->|Plume| UseSimpleModel[Use Simple Plume Model]
-    CompType -->|HookManager| ResetHookManager[Reset Hook Manager]
-    
-    ResetHookManager --> ClearHooks[Clear All Hook Registrations]
-    ClearHooks --> RecoverCheck
-    
-    DepError --> DepType{Dependency Type?}
-    DepType -->|Optional| DisableFeature[Disable Optional Feature]
-    DepType -->|Required| FallbackImpl[Use Fallback Implementation]
-    
-    ApplyDefaults --> RecoverCheck
-    UseAlternative --> RecoverCheck
-    FixPerms --> RecoverCheck
-    WaitRetry --> RecoverCheck
-    UseOffline --> RecoverCheck
-    ReduceLoad --> RecoverCheck
-    OptimizeMemory --> RecoverCheck
-    BufferWrites --> RecoverCheck
-    TryBackup --> RecoverCheck
-    UseDefault --> RecoverCheck
-    Sanitize --> RecoverCheck
-    DisableRecording --> RecoverCheck
-    HeadlessMode --> RecoverCheck
-    UseFallback --> RecoverCheck
-    UseSimpleModel --> RecoverCheck
-    DisableFeature --> RecoverCheck
-    FallbackImpl --> RecoverCheck[Check Recovery Success]
-    
-    RecoverCheck --> Recovered{Recovery Successful?}
-    Recovered -->|Yes| LogRecovery[Log Recovery Action]
-    Recovered -->|No| EscalateError[Escalate Error Level]
-    
-    LogRecovery --> ResumeOp[Resume Operation]
-    EscalateError --> NotifyUser[Notify User of Error]
-    NotifyUser --> SaveState[Save Current State]
-    SaveState --> GracefulShutdown[Graceful Shutdown]
-    
-    TerminateConfig --> GracefulShutdown
-    RetryOp --> RetryOpSuccess{Operation Success?}
-    RetryOpSuccess -->|Yes| ResumeOp
-    RetryOpSuccess -->|No| EscalateError
-    
-    ResumeOp --> END([Continue Execution])
-    GracefulShutdown --> END([Terminate])
+    subgraph "Error Handling and Recovery System"
+        ErrorDetected[Error Detected] --> ClassifyError{Error Classification}
+        
+        ClassifyError -->|Configuration Error| ConfigurationRecovery[Configuration Recovery]
+        ClassifyError -->|Runtime Error| RuntimeRecovery[Runtime Recovery]
+        ClassifyError -->|Resource Error| ResourceRecovery[Resource Recovery]
+        ClassifyError -->|Protocol Error| ProtocolRecovery[Protocol Recovery]
+        ClassifyError -->|Fatal Error| FatalErrorHandler[Fatal Error Handler]
+        
+        ConfigurationRecovery --> ReloadDefaults[Reload Default Configuration]
+        ReloadDefaults --> ValidateDefaults[Validate Default Configuration]
+        ValidateDefaults --> RetryInitialization[Retry Initialization]
+        
+        RuntimeRecovery --> CheckRetryCount{Retry Count < Max?}
+        CheckRetryCount -->|Yes| LogRetryAttempt[Log Retry Attempt]
+        CheckRetryCount -->|No| EscalateToFatal[Escalate to Fatal]
+        
+        LogRetryAttempt --> RestoreLastState[Restore Last Known Good State]
+        RestoreLastState --> RetryOperation[Retry Failed Operation]
+        
+        ResourceRecovery --> ReleaseResources[Release All Resources]
+        ReleaseResources --> ExponentialBackoff[Apply Exponential Backoff]
+        ExponentialBackoff --> RetryResourceAllocation[Retry Resource Allocation]
+        
+        ProtocolRecovery --> RevalidateProtocols[Revalidate Protocol Bindings]
+        RevalidateProtocols --> RebindProtocols[Rebind Protocol Interfaces]
+        
+        RetryInitialization --> CheckRecoverySuccess{Recovery Successful?}
+        RetryOperation --> CheckRecoverySuccess
+        RetryResourceAllocation --> CheckRecoverySuccess
+        RebindProtocols --> CheckRecoverySuccess
+        
+        CheckRecoverySuccess -->|Success| ResumeNormalOperation[Resume Normal Operation]
+        CheckRecoverySuccess -->|Failure| EscalateToFatal
+        
+        EscalateToFatal --> FatalErrorHandler
+        FatalErrorHandler --> LogFatalError[Log Fatal Error]
+        LogFatalError --> InitiateCleanup[Initiate System Cleanup]
+        InitiateCleanup --> ExitWithError([Exit with Error Code])
+        
+        ResumeNormalOperation --> ContinueExecution([Continue Execution])
+    end
 ```
 
-#### Hook-Specific Error Handling
+#### 4.3.2.2 Resource Cleanup and Management
 
-**Hook Execution Timeout Management**
+Comprehensive resource management ensures proper cleanup under all termination conditions.
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution timeouts are handled through a multi-tier approach that preserves system performance while providing graceful degradation</span>. When a hook exceeds its allocated time budget, the system immediately terminates the callback execution and logs the timeout event. Subsequent hook invocations for the same callback are subject to progressive timeout reduction, eventually disabling persistent violators.
+```mermaid
+flowchart TD
+    subgraph "Resource Cleanup Process"
+        CleanupInitiated[Cleanup Initiated] --> SaveCurrentState[Save Current State]
+        
+        SaveCurrentState --> CheckDatabaseConnection{Database Connection Active?}
+        CheckDatabaseConnection -->|Yes| FlushPendingWrites[Flush Pending Database Writes]
+        CheckDatabaseConnection -->|No| CheckVisualization{Visualization Active?}
+        
+        FlushPendingWrites --> CloseDatabaseConnection[Close Database Connection]
+        CloseDatabaseConnection --> CheckVisualization
+        
+        CheckVisualization -->|Yes| SaveVisualizationState[Save Visualization State]
+        CheckVisualization -->|No| CheckFrameCache{Frame Cache Active?}
+        
+        SaveVisualizationState --> CloseVisualization[Close Visualization Backend]
+        CloseVisualization --> CheckFrameCache
+        
+        CheckFrameCache -->|Yes| FlushCacheToDisk[Flush Cache to Disk]
+        CheckFrameCache -->|No| CheckEnvironment{Environment Active?}
+        
+        FlushCacheToDisk --> ClearCacheMemory[Clear Cache Memory]
+        ClearCacheMemory --> CheckEnvironment
+        
+        CheckEnvironment -->|Yes| CloseEnvironment[Close Environment]
+        CheckEnvironment -->|No| FinalizeLogging[Finalize Logging]
+        
+        CloseEnvironment --> FinalizeLogging
+        FinalizeLogging --> ReleaseSystemMemory[Release System Memory]
+        ReleaseSystemMemory --> CleanupComplete([Cleanup Complete])
+    end
+```
 
-**Callback Failure Recovery**
+### 4.3.3 Performance Optimization Workflows
 
-Hook callback failures are categorized by exception type and handled through specific recovery strategies. <span style="background-color: rgba(91, 57, 243, 0.2)">Transient failures (network timeouts, temporary resource unavailability) trigger automatic retry with exponential backoff, while persistent failures (programming errors, configuration issues) result in permanent hook disabling with detailed error logging</span>.
+#### 4.3.3.1 Frame Cache Optimization Process
 
-**Performance Impact Mitigation**
+The high-performance frame caching system (F-007) maintains >90% cache hit rates with intelligent memory management.
 
-The error handling system includes specialized logic for minimizing performance impact during hook-related error recovery. <span style="background-color: rgba(91, 57, 243, 0.2)">Hook manager resets are performed asynchronously when possible, and emergency hook disabling bypasses normal shutdown procedures to preserve the critical simulation step performance SLA</span>.
+```mermaid
+flowchart LR
+    subgraph "Frame Cache Optimization"
+        CacheRequest[Cache Request] --> CheckCache{Frame in Cache?}
+        
+        CheckCache -->|Hit| UpdateLRU[Update LRU Position]
+        CheckCache -->|Miss| CheckMemory{Memory Available?}
+        
+        UpdateLRU --> ReturnFrame[Return Cached Frame]
+        
+        CheckMemory -->|Available| LoadFrame[Load Frame from Storage]
+        CheckMemory -->|Pressure| EvictLRU[Evict LRU Frame]
+        
+        EvictLRU --> LoadFrame
+        LoadFrame --> CacheFrame[Cache New Frame]
+        CacheFrame --> ReturnFrame
+        
+        ReturnFrame --> UpdateMetrics[Update Cache Metrics]
+        UpdateMetrics --> CheckEfficiency{Hit Rate ≥90%?}
+        
+        CheckEfficiency -->|Below| OptimizeStrategy[Optimize Cache Strategy]
+        CheckEfficiency -->|Above| ContinueOperation[Continue Operation]
+        
+        OptimizeStrategy --> AdjustCacheSize[Adjust Cache Size]
+        AdjustCacheSize --> ContinueOperation
+    end
+```
 
-### 4.3.3 Transaction Boundaries and Concurrency Control
+#### 4.3.3.2 Vectorized Operations Pipeline
 
-#### Hook System Transaction Management
+The system leverages NumPy vectorization for efficient multi-agent processing and plume calculations.
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">The hook system implements sophisticated transaction boundaries to ensure data consistency and prevent race conditions during concurrent hook execution</span>. Hook registration and deregistration operations are treated as atomic transactions, with rollback capabilities for partial failures during bulk operations.
-
-**Concurrent Hook Execution**
-
-The HookManager supports concurrent hook execution for performance optimization while maintaining strict ordering guarantees where required. <span style="background-color: rgba(91, 57, 243, 0.2)">Pre-step hooks execute in parallel when no ordering dependencies exist, while post-step hooks maintain sequential execution order for data consistency</span>. Thread-safe callback registration ensures dynamic hook management during simulation execution.
-
-**Lock-Free Performance Monitoring**
-
-Performance monitoring for hook execution utilizes lock-free data structures to prevent contention during high-frequency measurements. <span style="background-color: rgba(91, 57, 243, 0.2)">Hook execution times are recorded using atomic operations, and performance budget tracking maintains consistency without blocking the main simulation thread</span>.
-
-#### Integration with Existing Systems
-
-**Configuration System Integration**
-
-The hook system integrates seamlessly with the existing Hydra configuration management, supporting runtime component selection and zero-code hook registration. <span style="background-color: rgba(91, 57, 243, 0.2)">Hook configurations are validated during the component initialization phase, ensuring all registered hooks are properly instantiated before simulation begins</span>.
-
-**Data Recording Integration**
-
-Hook execution metrics are automatically integrated into the existing data recording system, providing comprehensive performance analytics and debugging capabilities. <span style="background-color: rgba(91, 57, 243, 0.2)">Hook timing data, execution success rates, and error frequencies are recorded alongside simulation data, enabling detailed performance analysis and system optimization</span>.
-
-### 4.3.4 Performance Optimization Strategies
-
-#### Hook Execution Optimization
-
-**Dynamic Performance Budgeting**
-
-<span style="background-color: rgba(91, 57, 243, 0.2)">The hook system implements dynamic performance budgeting that adapts hook execution time limits based on current system performance</span>. When simulation steps consistently complete under the 33ms SLA, hook budgets are temporarily increased to allow for more comprehensive processing. Conversely, when performance pressure increases, hook budgets are reduced to preserve core simulation performance.
-
-**Callback Prioritization**
-
-Hook callbacks are assigned priority levels that determine execution order and resource allocation. <span style="background-color: rgba(91, 57, 243, 0.2)">Critical hooks (performance monitoring, error detection) receive higher priority and guaranteed execution, while optional hooks (logging, analytics) are subject to early termination under performance pressure</span>.
-
-**Asynchronous Hook Processing**
-
-Where appropriate, hook processing is moved to asynchronous execution contexts to minimize impact on the main simulation thread. <span style="background-color: rgba(91, 57, 243, 0.2)">Post-step hooks that perform I/O operations or complex computations are queued for background processing, with results available for subsequent simulation steps</span>.
-
-#### Memory Management
-
-**Hook Context Pooling**
-
-The hook system implements object pooling for hook execution contexts, reducing garbage collection pressure during high-frequency callback execution. <span style="background-color: rgba(91, 57, 243, 0.2)">Hook contexts are pre-allocated and reused across simulation steps, with automatic cleanup and validation to prevent memory leaks</span>.
-
-**Resource Monitoring Integration**
-
-Hook execution includes automatic resource monitoring to detect memory leaks and resource exhaustion. <span style="background-color: rgba(91, 57, 243, 0.2)">The system tracks memory usage patterns for individual hooks and implements automatic cleanup for hooks that exhibit abnormal resource consumption</span>.
+```mermaid
+flowchart TD
+    subgraph "Vectorized Operations Pipeline"
+        MultiAgentInput[Multi-Agent Input] --> VectorizeStates[Vectorize Agent States]
+        
+        VectorizeStates --> ParallelSensorSampling[Parallel Sensor Sampling]
+        ParallelSensorSampling --> VectorizedPlumeCalculation[Vectorized Plume Calculation]
+        
+        VectorizedPlumeCalculation --> CheckNumba{Numba Available?}
+        CheckNumba -->|Yes| JITCompilation[JIT Compilation]
+        CheckNumba -->|No| NumpyVectorization[NumPy Vectorization]
+        
+        JITCompilation --> ExecuteVectorizedOps[Execute Vectorized Operations]
+        NumpyVectorization --> ExecuteVectorizedOps
+        
+        ExecuteVectorizedOps --> ParallelActionProcessing[Parallel Action Processing]
+        ParallelActionProcessing --> VectorizedStateUpdate[Vectorized State Update]
+        
+        VectorizedStateUpdate --> CheckPerformance{Performance ≤33ms?}
+        CheckPerformance -->|Exceeded| ProfileBottlenecks[Profile Performance Bottlenecks]
+        CheckPerformance -->|Compliant| ContinueProcessing[Continue Processing]
+        
+        ProfileBottlenecks --> OptimizeOperations[Optimize Operations]
+        OptimizeOperations --> ContinueProcessing
+    end
+```
 
 ## 4.4 REQUIRED DIAGRAMS
 
-### 4.4.1 CLI Command Execution Flow
+### 4.4.1 Component Integration Sequence
 
-The CLI provides multiple entry points for different simulation workflows with comprehensive argument parsing and validation.
-
-```mermaid
-flowchart TD
-    Start([CLI Command Executed]) --> ParseArgs[Parse Command Arguments]
-    ParseArgs --> LoadHydra[Load Hydra Configuration]
-    
-    LoadHydra --> ValidateArgs[Validate Arguments]
-    ValidateArgs --> Command{Command Type?}
-    
-    Command -->|run| RunCmd[Run Simulation Command]
-    Command -->|train| TrainCmd[Train RL Agent Command]
-    Command -->|visualize| VizCmd[Visualize Results Command]
-    Command -->|config| ConfigCmd[Configuration Operations]
-    Command -->|batch| BatchCmd[Batch Processing Command]
-    Command -->|analyze| AnalyzeCmd[Data Analysis Command]
-    
-    RunCmd --> CheckDryRun{Dry Run Mode?}
-    CheckDryRun -->|Yes| ValidateOnly[Validate Configuration Only]
-    CheckDryRun -->|No| InitSim[Initialize Simulation]
-    InitSim --> RunSim[Execute Simulation]
-    RunSim --> SaveResults[Save Results to Backend]
-    
-    TrainCmd --> SelectAlgo[Select RL Algorithm]
-    SelectAlgo --> AlgoType{Algorithm Type?}
-    AlgoType -->|PPO| InitPPO[Initialize PPO with Stable-Baselines3]
-    AlgoType -->|SAC| InitSAC[Initialize SAC with Stable-Baselines3]
-    AlgoType -->|TD3| InitTD3[Initialize TD3 with Stable-Baselines3]
-    AlgoType -->|DQN| InitDQN[Initialize DQN with Stable-Baselines3]
-    
-    InitPPO --> CreateEnvs[Create Vectorized Environments]
-    InitSAC --> CreateEnvs
-    InitTD3 --> CreateEnvs
-    InitDQN --> CreateEnvs
-    
-    CreateEnvs --> TrainLoop[Execute Training Loop]
-    TrainLoop --> Checkpoint[Save Model Checkpoint]
-    Checkpoint --> EvalCheck{Evaluation Interval?}
-    EvalCheck -->|Yes| Evaluate[Evaluate Policy Performance]
-    EvalCheck -->|No| CheckComplete{Training Complete?}
-    Evaluate --> CheckComplete
-    CheckComplete -->|No| TrainLoop
-    CheckComplete -->|Yes| SaveModel[Save Final Model]
-    
-    VizCmd --> VizType{Visualization Type?}
-    VizType -->|export| ExportViz[Export Static Images]
-    VizType -->|animate| CreateAnim[Create Animation]
-    VizType -->|live| LiveViz[Live Visualization]
-    VizType -->|plot| CreatePlots[Create Analysis Plots]
-    
-    ConfigCmd --> ConfigOp{Configuration Operation?}
-    ConfigOp -->|validate| ValidateConfig[Validate Configuration Schema]
-    ConfigOp -->|export| ExportConfig[Export Configuration YAML]
-    ConfigOp -->|show| ShowConfig[Display Configuration Tree]
-    ConfigOp -->|diff| DiffConfig[Compare Configurations]
-    
-    BatchCmd --> LoadBatchConfig[Load Batch Configuration]
-    LoadBatchConfig --> ParallelExec{Parallel Execution?}
-    ParallelExec -->|Yes| SpawnWorkers[Spawn Worker Processes]
-    ParallelExec -->|No| SequentialExec[Sequential Execution]
-    
-    SpawnWorkers --> WorkerLoop[Execute Worker Loop]
-    WorkerLoop --> CollectResults[Collect Worker Results]
-    SequentialExec --> CollectResults
-    
-    AnalyzeCmd --> LoadData[Load Recorded Data]
-    LoadData --> RunStats[Run Statistical Analysis]
-    RunStats --> GenerateReport[Generate Analysis Report]
-    
-    ValidateOnly --> END([Command Complete])
-    SaveResults --> END
-    SaveModel --> END
-    ExportViz --> END
-    CreateAnim --> END
-    LiveViz --> END
-    CreatePlots --> END
-    ValidateConfig --> END
-    ExportConfig --> END
-    ShowConfig --> END
-    DiffConfig --> END
-    CollectResults --> END
-    GenerateReport --> END
-```
-
-### 4.4.2 Stable-Baselines3 Training Integration Flow
-
-The system integrates seamlessly with Stable-Baselines3 for reinforcement learning with comprehensive monitoring and checkpointing.
+This sequence diagram illustrates the complete integration flow between all major system components during a typical simulation run.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant CLI
     participant Hydra
-    participant EnvFactory
-    participant Gymnasium
-    participant SB3
+    participant SimBuilder
+    participant Environment
+    participant PlumeModel
+    participant WindField
+    participant Navigator
+    participant SensorSuite
     participant Recorder
-    participant TensorBoard
-    participant FileSystem
+    participant PerformanceMonitor
     
-    User->>CLI: plume-nav-sim train --algo PPO --env-config config.yaml
-    CLI->>Hydra: Load Training Configuration
-    Hydra-->>CLI: Composed DictConfig
+    User->>CLI: plume-nav-sim run --config-path=configs
+    CLI->>Hydra: Initialize configuration management
+    Hydra->>Hydra: Compose hierarchical configuration
+    Hydra-->>CLI: Validated configuration object
     
-    CLI->>EnvFactory: Create Training Environments
-    EnvFactory->>Gymnasium: Register PlumeNavSim-v0
-    Gymnasium-->>EnvFactory: Environment Registered
+    CLI->>SimBuilder: Create simulation with config
+    SimBuilder->>PlumeModel: Initialize plume model (Gaussian/Turbulent/Video)
+    SimBuilder->>WindField: Initialize wind field dynamics
+    SimBuilder->>SensorSuite: Initialize multi-modal sensors
+    SimBuilder->>Navigator: Initialize navigation controller
+    SimBuilder->>Environment: Create Gymnasium environment
     
-    loop Create Vectorized Environments
-        EnvFactory->>Gymnasium: make_vec_env(n_envs=8)
-        Gymnasium-->>EnvFactory: VecEnv Instance
-    end
+    Environment->>PerformanceMonitor: Start performance tracking
     
-    EnvFactory-->>CLI: Vectorized Environment
-    
-    CLI->>SB3: Initialize PPO Algorithm
-    SB3->>SB3: Create Policy Network
-    SB3->>SB3: Setup Optimizers
-    SB3->>SB3: Initialize Replay Buffer
-    
-    CLI->>Recorder: Initialize Training Recorder
-    CLI->>TensorBoard: Setup Logging Directory
-    CLI->>FileSystem: Create Checkpoint Directory
-    
-    loop Training Episodes
-        SB3->>Gymnasium: env.reset()
-        Gymnasium-->>SB3: Initial Observations
+    loop Simulation Episode
+        Environment->>Navigator: Request action
+        Navigator->>SensorSuite: Sample sensors
+        SensorSuite->>PlumeModel: Get concentration readings
+        PlumeModel->>WindField: Apply wind dynamics
+        WindField-->>PlumeModel: Updated wind field
+        PlumeModel-->>SensorSuite: Concentration values
+        SensorSuite-->>Navigator: Sensor observations
+        Navigator-->>Environment: Agent action
         
-        loop Episode Steps
-            SB3->>SB3: policy.predict(observations)
-            SB3->>Gymnasium: env.step(actions)
-            
-            Gymnasium->>Gymnasium: Apply Actions
-            Gymnasium->>Gymnasium: Update Agent States
-            Gymnasium->>Gymnasium: Sample Sensors
-            Gymnasium->>Gymnasium: Compute Rewards
-            Gymnasium->>Gymnasium: Check Episode Termination
-            
-            Gymnasium-->>SB3: observations, rewards, dones, infos
-            
-            SB3->>SB3: Store Transition in Buffer
-            SB3->>Recorder: Record Training Step
-            Recorder-->>Recorder: Buffer Step Data
-            
-            alt Episode Complete
-                Gymnasium->>Recorder: record_episode_end()
-                Recorder->>Recorder: Flush Episode Buffer
-                Recorder->>TensorBoard: Log Episode Metrics
-            end
-        end
+        Environment->>Environment: Update agent positions
+        Environment->>Recorder: Record simulation step
+        Environment->>PerformanceMonitor: Update performance metrics
         
-        SB3->>SB3: Update Policy Networks
-        SB3->>TensorBoard: Log Training Statistics
-        
-        alt Checkpoint Interval
-            SB3->>FileSystem: Save Model Checkpoint
-            FileSystem-->>SB3: Checkpoint Saved
-            CLI-->>User: Checkpoint {timestamp} saved
-        end
-        
-        alt Evaluation Interval
-            CLI->>SB3: evaluate_policy()
-            SB3->>Gymnasium: Run Evaluation Episodes
-            Gymnasium-->>SB3: Evaluation Results
-            SB3->>TensorBoard: Log Evaluation Metrics
-            CLI-->>User: Evaluation: mean_reward={value}
-        end
-        
-        alt Training Complete
-            SB3->>FileSystem: Save Final Model
-            CLI->>Recorder: Export Training Data
-            Recorder->>FileSystem: Export to Parquet/HDF5
-            CLI-->>User: Training Complete: {total_steps} steps
+        PerformanceMonitor->>PerformanceMonitor: Check performance thresholds
+        alt Performance violation
+            PerformanceMonitor->>CLI: Log performance warning
         end
     end
     
-    CLI-->>User: Training Session Complete
+    Environment->>Recorder: Finalize episode recording
+    Recorder->>Recorder: Generate analysis statistics
+    Recorder-->>CLI: Simulation results
+    CLI-->>User: Simulation complete with results
 ```
 
-### 4.4.3 Multi-Agent Vectorized Operations Flow
+### 4.4.2 Batch Processing Orchestration
 
-The system supports scalable multi-agent simulation with vectorized operations for optimal performance.
+This diagram shows the distributed execution model for large-scale parameter sweeps and multi-run experiments.
 
 ```mermaid
 flowchart TD
-    Start([Multi-Agent Step]) --> GetStates[Get All Agent States]
-    GetStates --> VectorizeOps[Vectorize Operations]
-    
-    VectorizeOps --> BatchActions[Batch Process Actions]
-    BatchActions --> ValidateActions[Validate Action Batch]
-    ValidateActions --> ClipActions[Clip Invalid Actions]
-    
-    ClipActions --> UpdateBatch[Batch Update Positions]
-    UpdateBatch --> CheckBoundaries[Vectorized Boundary Check]
-    CheckBoundaries --> ApplyPolicies[Apply Boundary Policies]
-    
-    ApplyPolicies --> TerminateCheck[Check Terminated Agents]
-    TerminateCheck --> ActiveAgents{Active Agents?}
-    ActiveAgents -->|None| END([All Agents Terminated])
-    ActiveAgents -->|Some| ContinueActive[Continue with Active Agents]
-    
-    ContinueActive --> SampleBatch[Batch Sample Sensors]
-    SampleBatch --> ComputeBatch[Batch Compute Rewards]
-    ComputeBatch --> RecordBatch[Batch Record Data]
-    
-    RecordBatch --> CheckPerformance[Check Batch Performance]
-    CheckPerformance --> PerfOK{Performance Within Budget?}
-    PerfOK -->|No| OptimizeBatch[Optimize Batch Size]
-    PerfOK -->|Yes| ReturnResults[Return Batch Results]
-    
-    OptimizeBatch --> AdjustSize[Adjust Batch Size]
-    AdjustSize --> ReturnResults
-    
-    ReturnResults --> END([Multi-Agent Step Complete])
+    subgraph "Batch Processing Orchestration"
+        BatchStart([Initialize Batch Processing]) --> LoadBatchConfiguration[Load Batch Configuration]
+        
+        LoadBatchConfiguration --> ParseParameterSweep[Parse Parameter Sweep Definition]
+        ParseParameterSweep --> ValidateBatchConfigs{Validate All Configurations}
+        
+        ValidateBatchConfigs -->|Invalid Configs| ReportConfigErrors[Report Configuration Errors]
+        ValidateBatchConfigs -->|All Valid| InitializeJobScheduler[Initialize Job Scheduler]
+        
+        ReportConfigErrors --> PromptUserAction{Continue with Valid Configs?}
+        PromptUserAction -->|No| ExitBatchProcessing([Exit Batch Processing])
+        PromptUserAction -->|Yes| InitializeJobScheduler
+        
+        InitializeJobScheduler --> CreateJobQueue[Create Job Queue]
+        CreateJobQueue --> AssessSystemResources[Assess System Resources]
+        
+        AssessSystemResources --> CheckResourceAvailability{Sufficient Resources?}
+        CheckResourceAvailability -->|Insufficient| WaitForResources[Wait for Resource Availability]
+        CheckResourceAvailability -->|Available| SpawnWorkerProcesses[Spawn Worker Processes]
+        
+        WaitForResources --> ResourceMonitoring[Monitor Resource Usage]
+        ResourceMonitoring --> CheckResourceAvailability
+        
+        SpawnWorkerProcesses --> DistributeJobs[Distribute Jobs to Workers]
+        DistributeJobs --> MonitorJobExecution[Monitor Job Execution]
+        
+        MonitorJobExecution --> CheckJobCompletion{All Jobs Complete?}
+        CheckJobCompletion -->|In Progress| UpdateProgressMetrics[Update Progress Metrics]
+        CheckJobCompletion -->|Complete| CollectWorkerResults[Collect Worker Results]
+        
+        UpdateProgressMetrics --> MonitorJobExecution
+        CollectWorkerResults --> AggregateResults[Aggregate Batch Results]
+        
+        AggregateResults --> GenerateStatistics[Generate Batch Statistics]
+        GenerateStatistics --> CreateBatchReport[Create Batch Report]
+        CreateBatchReport --> CleanupWorkers[Cleanup Worker Processes]
+        CleanupWorkers --> BatchComplete([Batch Processing Complete])
+    end
 ```
+
+### 4.4.3 Visualization Export and Rendering Pipeline
+
+This flowchart demonstrates the multi-modal visualization system supporting both static and animated output formats.
+
+```mermaid
+flowchart LR
+    subgraph "Visualization Export Pipeline"
+        TrajectoryData[Trajectory Data Input] --> LoadTrajectoryData[Load Trajectory Data]
+        
+        LoadTrajectoryData --> SelectVisualizationMode{Visualization Mode}
+        SelectVisualizationMode -->|Static| CreateStaticVisualization[Create Static Visualization]
+        SelectVisualizationMode -->|Animation| CreateAnimatedVisualization[Create Animated Visualization]
+        SelectVisualizationMode -->|Interactive| CreateInteractiveVisualization[Create Interactive Visualization]
+        
+        CreateStaticVisualization --> ConfigureStaticPlot[Configure Static Plot Settings]
+        CreateAnimatedVisualization --> ConfigureAnimation[Configure Animation Parameters]
+        CreateInteractiveVisualization --> ConfigureInteractiveGUI[Configure Interactive GUI]
+        
+        ConfigureStaticPlot --> RenderStaticPlot[Render Static Plot]
+        ConfigureAnimation --> RenderAnimationFrames[Render Animation Frames]
+        ConfigureInteractiveGUI --> LaunchInteractiveGUI[Launch Interactive GUI]
+        
+        RenderStaticPlot --> SelectStaticFormat{Output Format}
+        RenderAnimationFrames --> SelectAnimationFormat{Output Format}
+        LaunchInteractiveGUI --> InteractiveSession[Interactive Session]
+        
+        SelectStaticFormat -->|PNG| ExportPNG[Export as PNG]
+        SelectStaticFormat -->|PDF| ExportPDF[Export as PDF]
+        SelectStaticFormat -->|SVG| ExportSVG[Export as SVG]
+        SelectStaticFormat -->|EPS| ExportEPS[Export as EPS]
+        
+        SelectAnimationFormat -->|MP4| ExportMP4[Export as MP4]
+        SelectAnimationFormat -->|GIF| ExportGIF[Export as GIF]
+        SelectAnimationFormat -->|AVI| ExportAVI[Export as AVI]
+        SelectAnimationFormat -->|WebM| ExportWebM[Export as WebM]
+        
+        ExportPNG --> VisualizationComplete[Visualization Export Complete]
+        ExportPDF --> VisualizationComplete
+        ExportSVG --> VisualizationComplete
+        ExportEPS --> VisualizationComplete
+        ExportMP4 --> VisualizationComplete
+        ExportGIF --> VisualizationComplete
+        ExportAVI --> VisualizationComplete
+        ExportWebM --> VisualizationComplete
+        
+        InteractiveSession --> SaveInteractiveState[Save Interactive State]
+        SaveInteractiveState --> VisualizationComplete
+    end
+```
+
+### 4.4.4 Protocol-Based Extension System
+
+This diagram illustrates the zero-code extensibility architecture that enables researchers to integrate custom components.
+
+```mermaid
+flowchart TD
+    subgraph "Protocol-Based Extension System"
+        ExtensionRequest[Extension Request] --> IdentifyProtocol{Protocol Type}
+        
+        IdentifyProtocol -->|PlumeModel| ValidatePlumeProtocol[Validate Plume Model Protocol]
+        IdentifyProtocol -->|WindField| ValidateWindProtocol[Validate Wind Field Protocol]
+        IdentifyProtocol -->|Navigator| ValidateNavigatorProtocol[Validate Navigator Protocol]
+        IdentifyProtocol -->|Sensor| ValidateSensorProtocol[Validate Sensor Protocol]
+        IdentifyProtocol -->|Recorder| ValidateRecorderProtocol[Validate Recorder Protocol]
+        
+        ValidatePlumeProtocol --> CheckProtocolCompliance{Protocol Compliant?}
+        ValidateWindProtocol --> CheckProtocolCompliance
+        ValidateNavigatorProtocol --> CheckProtocolCompliance
+        ValidateSensorProtocol --> CheckProtocolCompliance
+        ValidateRecorderProtocol --> CheckProtocolCompliance
+        
+        CheckProtocolCompliance -->|Non-Compliant| ReportProtocolError[Report Protocol Error]
+        CheckProtocolCompliance -->|Compliant| RegisterComponent[Register Component]
+        
+        ReportProtocolError --> ProtocolErrorHandling[Protocol Error Handling]
+        ProtocolErrorHandling --> FixProtocolIssues[Fix Protocol Issues]
+        FixProtocolIssues --> CheckProtocolCompliance
+        
+        RegisterComponent --> TestComponentIntegration[Test Component Integration]
+        TestComponentIntegration --> IntegrationValidation{Integration Valid?}
+        
+        IntegrationValidation -->|Invalid| IntegrationErrorHandling[Integration Error Handling]
+        IntegrationValidation -->|Valid| ComponentRegistered[Component Successfully Registered]
+        
+        IntegrationErrorHandling --> ReportIntegrationError[Report Integration Error]
+        ReportIntegrationError --> FixIntegrationIssues[Fix Integration Issues]
+        FixIntegrationIssues --> TestComponentIntegration
+        
+        ComponentRegistered --> AddToComponentRegistry[Add to Component Registry]
+        AddToComponentRegistry --> ExtensionComplete[Extension Complete]
+    end
+```
+
+## 4.5 IMPLEMENTATION NOTES
+
+### 4.5.1 Performance Considerations
+
+- All simulation steps maintain sub-33ms execution time through vectorized NumPy operations and optional Numba JIT compilation
+- Frame cache system achieves >90% hit rates with intelligent LRU eviction and memory pressure monitoring
+- Multi-agent scenarios support up to 100 concurrent agents with linear memory scaling
+- Recording system maintains <1ms overhead when disabled through efficient buffer management
+
+### 4.5.2 Error Handling Standards
+
+- All error conditions include comprehensive recovery strategies with exponential backoff
+- Protocol validation ensures runtime type safety and component compatibility
+- Resource cleanup is guaranteed through Python context managers and exception handling
+- Performance violations are logged with detailed diagnostic information for optimization
+
+### 4.5.3 Integration Requirements
+
+- All components must implement defined Protocol interfaces for zero-code extensibility
+- Gymnasium 0.29.x API compliance ensures compatibility with modern RL frameworks
+- Hydra configuration system enables parameter sweeps and multi-run experiments
+- Multi-backend recording supports diverse research workflows and analysis requirements
+
+### 4.5.4 Timing and SLA Requirements
+
+- Step execution latency: ≤33ms for 100 concurrent agents
+- Frame cache retrieval: <1ms average latency
+- Recording overhead: <1ms when disabled
+- Memory scaling: Linear with agent count
+- Cache hit rate: ≥90% for video-based plume models
 
 #### References
 
-#### Configuration System Files
-- conf/base.yaml - Base configuration hierarchy
-- conf/config.yaml - Main configuration file
-- conf/local/*.yaml - Local configuration overrides
-- conf/boundary/*.yaml - Boundary policy configurations
-- conf/plume_models/*.yaml - Plume model configurations
-
-#### Core Implementation Files
-- src/navigation/controllers.py - Navigation controller implementations
-- src/simulation/environment.py - Gymnasium environment implementation
-- src/recording/backends.py - Recording backend implementations
-- src/caching/frame_cache.py - Frame caching system
-
-#### Dependencies and Requirements
-- Hydra Core (==1.3.*) - Configuration management
-- Gymnasium (==0.29.*) - RL environment API
-- Stable-Baselines3 - RL algorithms
-- NumPy (≥1.26.0) - Vectorized operations
-- Pydantic (≥2.5.0) - Schema validation
-
-#### Web Search References
-- Mermaid.js flowchart syntax and best practices
-- Mermaid syntax validation requirements
+- **Feature F-001**: Protocol-Based Simulation Engine - Core microkernel architecture
+- **Feature F-002**: Multi-Model Plume Simulation - Gaussian, Turbulent, Filament, Video models
+- **Feature F-007**: High-Performance Frame Caching - >90% cache hit rate optimization
+- **Feature F-008**: Multi-Backend Recording System - Parquet, HDF5, SQLite support
+- **Feature F-009**: Performance Monitoring System - Real-time performance tracking
+- **Feature F-010**: RL Training Integration - Gymnasium 0.29.x API compliance
+- **Feature F-012**: Hierarchical Configuration Management - Hydra-based configuration system
+- **Feature F-013**: Command-Line Interface - Comprehensive CLI toolkit
+- **Gymnasium 0.29.x**: RL environment framework with stable API
+- **Hydra-core 1.3.x**: Configuration management and orchestration
+- **NumPy 1.26.0+**: Vectorized numerical operations for performance
+- **Stable-Baselines3**: RL algorithm implementations and training support
 
 # 5. SYSTEM ARCHITECTURE
 
@@ -2494,995 +2258,894 @@ flowchart TD
 
 ### 5.1.1 System Overview
 
-The Plume Navigation Simulation system implements a **protocol-driven, modular architecture** designed for high-performance simulation of agent navigation through odor plumes. The system has evolved from a monolithic v0.3.0 design to a highly extensible v1.0 framework that achieves exceptional performance while maintaining maximum flexibility for research applications. <span style="background-color: rgba(91, 57, 243, 0.2)">The HookManager-driven lifecycle hook system is now a first-class runtime service which is instantiated automatically by the environment and whose selection is fully governed by the newly-activated Hydra "hooks" configuration group (default value: "none" for backward compatibility).</span>
+The Plume Navigation Simulation Library implements a **microkernel architecture pattern** with protocol-based pluggable components, enabling zero-code extensibility for research environments. This architectural approach delivers maximum flexibility while maintaining strict performance guarantees (≤33ms step latency with 100 concurrent agents).
 
-#### Architecture Style and Rationale
+**Key Architectural Principles:**
+- **Protocol-driven composition**: All major subsystems implement standardized Protocol interfaces, enabling runtime component substitution without code modification
+- **Hydra-based configuration**: Declarative YAML configuration with hierarchical composition and dependency injection for reproducible experiments
+- **Performance-first design**: Vectorized NumPy operations, optional Numba JIT compilation, and intelligent caching strategies
+- **Multi-paradigm support**: Accommodates both reactive (memory-less) and cognitive (memory-based) navigation strategies
+- **Dual API compatibility**: Supports both modern Gymnasium 0.29.x and legacy Gym APIs with automatic detection
 
-The system follows a **Protocol-Oriented Architecture (POA)** pattern, where core functionalities are defined as protocol interfaces that can be implemented by different concrete components. This approach provides several key advantages:
-
-- **Runtime Component Selection**: Components can be swapped without code modification through configuration
-- **Extensibility**: New implementations can be added without modifying existing code
-- **Testability**: Protocol interfaces enable comprehensive mocking and testing
-- **Dependency Inversion**: High-level modules depend on abstractions, not concrete implementations
-
-#### Key Architectural Principles
-
-1. **Performance First**: All design decisions prioritize achieving ≤33ms simulation step performance
-2. **Configuration-Driven**: Hydra-based hierarchical configuration enables zero-code component swapping
-3. **Asynchronous Operations**: Non-blocking I/O and recording operations prevent simulation bottlenecks
-4. **Vectorized Processing**: NumPy-based operations support 100+ simultaneous agents efficiently
-5. **Graceful Degradation**: Optional components fail gracefully without impacting core functionality
-6. <span style="background-color: rgba(91, 57, 243, 0.2)">**Hook-based Extensibility**: A lightweight HookManager (<50 LoC) delivers configurable pre-step, post-step, and episode-end extension points with zero-overhead early-exit when no hooks are registered</span>
-
-#### System Boundaries and Major Interfaces
-
-The system operates within three primary boundaries:
-
-- **Internal Simulation Engine**: Protocol-based component orchestration and state management
-- **External RL Ecosystem**: Gymnasium-compliant environment API for reinforcement learning integration
-- **Data Persistence Layer**: Asynchronous recording backends for experimental data capture
+**System Boundaries:**
+- **Input Interface**: Hydra YAML configurations, video plume data, experimental parameters, <span style="background-color: rgba(91, 57, 243, 0.2)">Command-Line Interface (CLI) Module for `plume-nav-sim` and `plume-nav-train` console scripts</span>, CLI commands
+- **Processing Core**: Navigation simulation engine, multi-model plume physics, RL training integration
+- **Output Interface**: Multi-format trajectory data (Parquet/HDF5/SQLite), visualization artifacts, trained models
+- **External Integration**: Gymnasium/Gym RL frameworks, Stable-Baselines3, HPC job schedulers, monitoring systems
+- <span style="background-color: rgba(91, 57, 243, 0.2)">**CLI Module**: Click/Hydra-based command-line invocations</span>
 
 ### 5.1.2 Core Components Table
 
-| Component Name | Primary Responsibility | Key Dependencies | Integration Points | Critical Considerations |
-|---|---|---|---|---|
-| **odor_plume_nav** | Navigation API and controllers | NumPy, Gymnasium, SQLAlchemy | RL frameworks, databases | High-performance frame caching |
-| **plume_nav_sim** | Simulation framework engine | Protocol interfaces, Hydra | Configuration system, GUI | Protocol compliance validation |
-| **Configuration System** | Hierarchical config management | Hydra, OmegaConf, Pydantic | All components | Schema validation and defaults |
-| **Frame Cache** | Video frame optimization | OpenCV, psutil | Plume models, memory | Memory pressure monitoring |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">**HookManager**</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Lifecycle hook coordination (pre-step/post-step/episode-end)</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Hydra configuration, callable hooks</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">PlumeNavigationEnv step/reset</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">≤1 ms overhead when hooks="none"</span> |
+| Component Name | Primary Responsibility | Key Dependencies | Integration Points |
+|----------------|----------------------|------------------|-------------------|
+| Core Simulation Engine | Agent navigation orchestration and environment dynamics | NumPy, Gymnasium, Hydra | NavigatorProtocol, PlumeModelProtocol, RecorderProtocol |
+| Plume Modeling System | Multi-fidelity odor dispersion simulation | SciPy, NumPy, OpenCV | WindFieldProtocol, SourceProtocol, FrameCache |
+| Recording Infrastructure | Multi-backend data persistence with async buffering | PyArrow, HDF5, SQLite | RecorderProtocol, StatsAggregatorProtocol |
+| RL Integration Layer | Gymnasium-compliant environment wrapper | Gymnasium 0.29.x, Shimmy | ActionInterfaceProtocol, ObservationSpaceProtocol |
+| **CLI Module** | **Exposes console-script entry points and delegates to internal APIs** | **Click, Hydra** | **cli.main → Core Simulation Engine / RL Integration Layer** |
 
 ### 5.1.3 Data Flow Description
 
-The system implements a **synchronous simulation loop** with **asynchronous data persistence** to optimize performance while ensuring data integrity.
+The system implements a sophisticated data flow architecture prioritizing performance while maintaining research flexibility:
 
-#### Primary Data Flow
+**Primary Data Flows:**
 
-1. **Configuration Loading**: Hydra loads and composes hierarchical configuration from base defaults, user overrides, and runtime parameters
-2. **Component Instantiation**: Protocol factories create concrete implementations based on configuration selections
-3. **Simulation Execution**: Navigator controllers manage agent state through vectorized operations
-   - <span style="background-color: rgba(91, 57, 243, 0.2)">3a. HookManager dispatches pre-step hooks</span>
-   - <span style="background-color: rgba(91, 57, 243, 0.2)">3b. Core step logic executes</span>
-   - <span style="background-color: rgba(91, 57, 243, 0.2)">3c. HookManager dispatches post-step hooks</span>
-4. **Sensor Sampling**: Agents sample plume concentrations through configured sensor protocols
-5. **Boundary Enforcement**: Boundary policies handle domain constraints (Terminate/Bounce/Wrap/Clip)
-6. **Data Recording**: Asynchronous recorders persist simulation data to configured backends
-7. **Statistics Aggregation**: Stats aggregators compute performance metrics and analysis
-8. <span style="background-color: rgba(91, 57, 243, 0.2)">**Episode Hook Dispatch**: HookManager dispatches episode-end hooks upon termination</span>
+1. **Configuration Flow**: YAML configs → Hydra composition → OmegaConf DictConfig → Protocol component instantiation via dependency injection
+2. **Simulation Flow**: Environment state → Multi-modal sensor sampling → Navigation controller decisions → Action execution → State update → Multi-backend recording
+3. **Plume Dynamics Flow**: Source emission → Wind field advection → Dispersion modeling → Concentration field → Vectorized sensor queries
+4. **RL Training Flow**: Observation construction → Policy network inference → Action validation → Environment stepping → Reward calculation → Experience buffer
 
-#### Integration Patterns and Protocols
+**Integration Patterns:**
+- **Dependency Injection**: Hydra instantiates components with hierarchical configuration resolution
+- **Protocol Composition**: Components interact through well-defined Protocol interfaces for type safety
+- **Event-driven Extensibility**: Pre-step, post-step, and episode-end hooks for research extensions
+- **Asynchronous I/O**: Recording system uses buffered async operations for performance
 
-- **Protocol-Based Communication**: All component interactions use well-defined protocol interfaces
-- **Event-Driven Updates**: State changes trigger protocol-compliant event notifications
-- **Asynchronous I/O**: Recording operations use async/await patterns to prevent blocking
-- **Vectorized Operations**: Multi-agent scenarios leverage NumPy broadcast operations
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**Hook-based Event Dispatch**: HookManager invokes protocol-compliant extension points without impacting core loop latency</span>
+**Data Transformation Points:**
+- **Observation Construction**: Raw simulation state → Multi-modal sensor readings → Structured observation dictionary → Gymnasium space compliance
+- **Action Translation**: RL framework actions → Validated navigation commands → Agent controller inputs
+- **Recording Serialization**: NumPy arrays → Backend-specific formats (Parquet columns, HDF5 datasets, SQLite JSON)
 
-#### Data Transformation Points
-
-- **Configuration Resolution**: OmegaConf interpolation resolves environment variables and references
-- **Frame Caching**: OpenCV operations convert video frames to NumPy arrays for efficient access
-- **Sensor Data Processing**: Raw plume concentrations transformed to protocol-compliant observations
-- **Recording Serialization**: Simulation data serialized to Parquet, HDF5, or SQLite formats
-
-#### Key Data Stores and Caches
-
-- **Frame Cache**: LRU/Preload/None modes with memory pressure monitoring
-- **Configuration Cache**: Hydra-managed configuration composition and validation
-- **Database Persistence**: SQLAlchemy ORM with normalized schema for experimental data
-- **Performance Metrics**: In-memory aggregation with periodic persistence
+**Key Data Stores and Caches:**
+- **Frame Cache**: LRU/preload strategies for video frame access with configurable memory limits
+- **Space Cache**: Thread-local caching of Gymnasium spaces to avoid repeated construction
+- **Recording Buffers**: Backend-specific buffering (async queues for Parquet, transaction batches for SQLite)
 
 ### 5.1.4 External Integration Points
 
-| System Name | Integration Type | Data Exchange Pattern | Protocol/Format | SLA Requirements |
-|---|---|---|---|---|
-| **Gymnasium/Stable-Baselines3** | RL Environment API | Synchronous step/reset | Python API | <33ms step latency |
-| **Database Systems** | Data Persistence | Asynchronous write | SQL/SQLAlchemy | 99.9% write success |
-| **Visualization Tools** | Display/Analysis | Event-driven updates | Matplotlib/Qt | Real-time refresh |
-| **File Systems** | Configuration/Data | Synchronous read/write | YAML/Parquet/HDF5 | 99% availability |
+| System Name | Integration Type | Data Exchange Pattern | Protocol/Format |
+|-------------|-----------------|---------------------|-----------------|
+| Gymnasium/Gym | Environment API | Synchronous step/reset | Python API (4/5-tuple) |
+| Stable-Baselines3 | RL Training | Vectorized episodes | Gymnasium Env |
+| HPC Schedulers | Batch Execution | Async job submission | Hydra multirun |
+| Monitoring Systems | Metrics Collection | Async streaming | JSON/Protobuf |
 
 ## 5.2 COMPONENT DETAILS
 
-### 5.2.1 Core Navigation Library (odor_plume_nav)
+### 5.2.1 Core Simulation Engine
 
-#### Purpose and Responsibilities
+**Purpose and Responsibilities:**
+The core simulation engine serves as the microkernel orchestrating all simulation activities through protocol-based component coordination. It enforces performance requirements, manages simulation lifecycle, and provides the primary API surface for research integrations.
 
-The core navigation library serves as the primary interface for researchers implementing navigation algorithms. It provides the Navigator API and controllers, Gymnasium environment wrappers, high-performance frame caching, and comprehensive visualization tools.
+**Technologies and Frameworks:**
+- Python 3.10+ with runtime_checkable Protocol interfaces
+- NumPy 1.26.0+ for vectorized state management and mathematical operations
+- Hydra-core 1.3.x with OmegaConf for configuration management
+- Gymnasium 0.29.x for RL environment compliance
 
-#### Technologies and Frameworks
+**Key Interfaces and APIs:**
+- `NavigatorProtocol`: Core navigation controller interface with memory hooks
+- `PlumeModelProtocol`: Plume physics modeling interface supporting multiple fidelity levels
+- `RecorderProtocol`: Data persistence interface with multi-backend support
+- `BoundaryPolicyProtocol`: Domain constraint management with vectorized operations
 
-- **NumPy ≥1.26.0**: Vectorized array operations and multi-agent state management
-- **Gymnasium ==0.29.***: Modern RL environment API standard
-- **SQLAlchemy ≥2.0.41**: Database ORM for experimental data persistence
-- **OpenCV ≥4.8.0**: Video processing and frame manipulation
-- **Matplotlib ≥3.7.0**: Visualization and animation framework
+**Data Persistence Requirements:**
+- Simulation state checkpointing for long-running experiments
+- Episode metadata and configuration snapshots for reproducibility
+- Performance metrics and resource utilization logs for optimization
 
-#### Key Interfaces and APIs
+**Scaling Considerations:**
+- Linear memory scaling with agent count (validated up to 100 concurrent agents)
+- Vectorized operations for multi-agent scenarios with sub-33ms step latency
+- Protocol-based abstraction enables distributed execution across HPC clusters
 
-- **Navigator Protocol**: Abstract interface for navigation algorithm implementations
-- **Gymnasium Environment**: Standard RL environment with observation/action spaces
-- **Frame Cache API**: High-performance video frame access with multiple caching strategies
-- **Database Models**: SQLAlchemy ORM for Experiment, Simulation, Trajectory, and PerformanceMetric entities
+### 5.2.2 Plume Modeling System
 
-#### Data Persistence Requirements
+**Purpose and Responsibilities:**
+The plume modeling system provides multiple fidelity levels of odor dispersion simulation, from fast analytical models to physics-based turbulent dynamics. It integrates with wind field models and supports both mathematical and empirical (video-based) plume data.
 
-The component maintains persistent state through:
-- **Experiment Metadata**: Configuration, timestamps, and performance metrics
-- **Trajectory Data**: Agent positions, observations, and actions over time
-- **Performance Metrics**: Step latency, memory usage, and success rates
-- **Frame Cache**: Configurable persistence with memory pressure monitoring
+**Technologies and Frameworks:**
+- NumPy/SciPy for mathematical operations and scientific computing
+- OpenCV 4.8.0+ for video-based plume data processing
+- Optional Numba 0.59.0+ for JIT compilation of performance-critical loops
+- Configurable via Hydra YAML with runtime model selection
 
-#### Scaling Considerations
+**Key Interfaces and APIs:**
+- `GaussianPlumeModel`: Fast analytical solution for basic research scenarios
+- `TurbulentPlumeModel`: Lagrangian filament physics for high-fidelity simulation
+- `VideoPlumeAdapter`: Legacy video data support with frame caching
+- `FilamentPlumeModel`: Biological-inspired filament dynamics
 
-- **Vectorized Operations**: Support for 100+ simultaneous agents through NumPy broadcasting
-- **Memory Management**: Configurable cache sizes with automatic garbage collection
-- **Connection Pooling**: Database connection management for concurrent access
-- **Lazy Loading**: On-demand initialization of expensive resources
+**Data Persistence Requirements:**
+- Plume state snapshots for experiment reproducibility
+- Filament position and concentration tracking for turbulent models
+- Video frame metadata and preprocessing parameters for empirical models
 
+**Scaling Considerations:**
+- Filament count optimization for turbulent model (typically ~1000 filaments)
+- Frame cache sizing for video-based plumes with >90% hit rate targets
+- Potential GPU acceleration via CuPy for large-scale simulations
+
+### 5.2.3 Recording Infrastructure
+
+**Purpose and Responsibilities:**
+The recording infrastructure captures simulation trajectories with minimal overhead while supporting multiple storage backends optimized for different analysis workflows. It ensures data integrity and provides flexible export capabilities.
+
+**Technologies and Frameworks:**
+- PyArrow 10.0.0+ for high-performance Parquet columnar storage
+- HDF5 (h5py) for hierarchical scientific data with rich metadata
+- SQLite3 for relational queries and development workflows
+- Python threading and async I/O for non-blocking operations
+
+**Key Interfaces and APIs:**
+- `ParquetRecorder`: High-performance columnar format with compression
+- `HDF5Recorder`: Scientific data format with hierarchical organization
+- `SQLiteRecorder`: Queryable relational storage for development
+- `NoneRecorder`: Zero-overhead disabled mode for performance testing
+
+**Data Persistence Requirements:**
+- Buffered writes with configurable thresholds to minimize I/O blocking
+- Compression support (snappy, gzip, lz4) for storage optimization
+- Hierarchical data organization (run/episode/step) for analysis workflows
+- ACID transaction support for data integrity
+
+**Scaling Considerations:**
+- Async queue depth configuration for high-frequency recording scenarios
+- Compression algorithm selection balancing CPU usage vs. storage efficiency
+- Partitioning strategies for large-scale multi-run experiments
+
+### 5.2.4 Command-Line Interface (CLI) Module
+
+**Purpose and Responsibilities:**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The CLI module provides the primary user-facing interface for the Plume Navigation Simulation Library through two console script entry points: `plume-nav-sim` for running simulations and `plume-nav-train` for launching RL training workflows. It handles command-line argument parsing with Click's declarative approach while seamlessly integrating with Hydra's hierarchical configuration system to provide researchers with flexible, reproducible experiment execution.</span>
+
+**Technologies and Frameworks:**
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Click ≥8.2.1 for robust command-line interface creation with decorators and automatic help generation</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Hydra 1.3.x for configuration composition and override capabilities</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Python 3.10+ with modern type hints and runtime compatibility</span>
+
+**Key Interfaces and APIs:**
+- <span style="background-color: rgba(91, 57, 243, 0.2)">`main()` function: Primary simulation entry point that delegates to the Core Simulation Engine with parsed CLI arguments and Hydra configuration injection</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">`train_main()` function: RL training workflow entry point that interfaces with the RL Integration Layer for model training and evaluation</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">OmegaConf configuration injection: Seamless integration between Click command-line parsing and Hydra's structured configuration management</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Console script definitions: `plume-nav-sim` and `plume-nav-train` commands accessible system-wide after package installation</span>
+
+**Data Persistence Requirements:**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The CLI module maintains no persistent state and delegates all data storage responsibilities to downstream components. Configuration parameters are passed through to the appropriate subsystems (Core Simulation Engine or RL Integration Layer) which handle their respective persistence requirements according to user specifications.</span>
+
+**Scaling Considerations:**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The CLI module is designed for constant-time startup performance with negligible runtime overhead. Command-line parsing and configuration loading complete in milliseconds, ensuring that the CLI introduction does not impact the system's sub-33ms step latency requirements. The module's lightweight design supports both single-experiment executions and large-scale distributed workflows through Hydra's multirun capabilities.</span>
+
+### 5.2.5 Required Diagrams (updated)
+
+#### Component Interaction Diagram
 ```mermaid
-graph TD
-    A[Navigator API] --> B[Agent Controllers]
-    A --> C[Gymnasium Wrapper]
-    
-    B --> D[State Management]
-    B --> E[Action Processing]
-    
-    C --> F[Observation Space]
-    C --> G[Action Space]
-    C --> H[Reward Computation]
-    
-    D --> I[Frame Cache]
-    E --> I
-    
-    I --> J[LRU Cache]
-    I --> K[Preload Cache]
-    I --> L[No Cache]
-    
-    J --> M[Memory Monitor]
-    K --> M
-    
-    D --> N[Database Layer]
-    E --> N
-    H --> N
-    
-    N --> O[SQLAlchemy ORM]
-    O --> P[Experiment Model]
-    O --> Q[Trajectory Model]
-    O --> R[Performance Model]
-```
-
-### 5.2.2 Simulation Framework (plume_nav_sim)
-
-#### Purpose and Responsibilities
-
-The simulation framework implements the core protocol interfaces and orchestrates the simulation execution. It provides plume and wind field models, recording and analysis engines, and debug GUI capabilities. <span style="background-color: rgba(91, 57, 243, 0.2)">The framework now owns a lightweight HookManager responsible for coordinating lifecycle hooks and is enabled by default via configuration.</span>
-
-#### Technologies and Frameworks
-
-- **Hydra-core ==1.3.***: Hierarchical configuration management
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**HookManager (≤50 LoC, internal)**: Lightweight lifecycle hook coordination</span>
-- **Pydantic ≥2.5.0**: Data validation and settings management
-- **PyArrow/Pandas**: Parquet recording backend
-- **h5py**: HDF5 recording backend
-- **PySide6/Streamlit**: Optional debug GUI interfaces
-
-#### Key Interfaces and APIs
-
-- **Protocol Interfaces**: Source, Boundary, Action, Recorder, Stats, Hooks
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**HookManager API**: register_pre_step(), register_post_step(), register_episode_end(), dispatch_*</span>
-- **Plume Models**: Gaussian, Turbulent, and Video-based dispersion
-- **Wind Fields**: Uniform, Turbulent, and custom implementations
-- **Recording Backends**: Parquet, HDF5, SQLite, and None options
-- **Debug GUI**: Qt-based and Streamlit web interfaces
-
-#### Data Persistence Requirements
-
-- **Simulation Configuration**: Hydra-managed hierarchical settings
-- **Recording Data**: Asynchronous persistence to configured backends
-- **Performance Metrics**: Real-time statistics aggregation
-- **Debug State**: Optional GUI state persistence
-
-#### Scaling Considerations
-
-- **Asynchronous Recording**: Non-blocking I/O for high-throughput scenarios
-- **Protocol Validation**: Runtime checking with minimal performance impact
-- **Memory-Efficient Models**: Optimized plume and wind field implementations
-- **Optional Components**: Graceful degradation for missing dependencies
-
-```mermaid
-sequenceDiagram
-    participant C as Configuration
-    participant SF as Simulation Framework
-    participant PM as Plume Model
-    participant WF as Wind Field
-    participant S as Sensors
-    participant R as Recorder
-    participant N as Navigator
-    
-    C->>SF: Load configuration
-    SF->>PM: Initialize plume model
-    SF->>WF: Initialize wind field
-    SF->>S: Initialize sensors
-    SF->>R: Initialize recorder
-    SF->>N: Initialize navigator
-    
-    loop Simulation Step
-        N->>SF: Request observations
-        SF->>S: Sample sensors
-        S->>PM: Get concentration
-        PM->>WF: Apply wind effects
-        WF-->>PM: Wind-modified plume
-        PM-->>S: Concentration data
-        S-->>SF: Sensor observations
-        SF-->>N: Formatted observations
-        
-        N->>SF: Submit actions
-        SF->>SF: Process actions
-        SF->>R: Record step data
-        R->>R: Async write
-        SF->>SF: Update statistics
+graph TB
+    subgraph "Core Simulation Layer"
+        Engine[Simulation Engine]
+        Navigator[NavigatorProtocol]
+        Context[SimulationContext]
+        Hooks[Hook Manager]
     end
+    
+    subgraph "Physics Modeling"
+        Plume[PlumeModelProtocol]
+        Wind[WindFieldProtocol]
+        Source[SourceProtocol]
+        Cache[Frame Cache]
+    end
+    
+    subgraph "Agent Subsystem"
+        Sensors[SensorProtocol]
+        Actions[ActionInterfaceProtocol]
+        Boundary[BoundaryPolicyProtocol]
+        Init[AgentInitializerProtocol]
+    end
+    
+    subgraph "Data Layer"
+        Recorder[RecorderProtocol]
+        Stats[StatsAggregatorProtocol]
+        Buffer[Recording Buffer]
+    end
+    
+    subgraph "RL Integration"
+        Env[PlumeNavigationEnv]
+        Spaces[SpaceFactory]
+        Wrappers[EnvWrappers]
+    end
+    
+    Engine --> Navigator
+    Engine --> Plume
+    Engine --> Recorder
+    Engine --> Context
+    
+    Navigator --> Sensors
+    Navigator --> Actions
+    Navigator --> Boundary
+    Navigator --> Init
+    
+    Plume --> Source
+    Plume --> Wind
+    Plume --> Cache
+    
+    Env --> Engine
+    Env --> Spaces
+    Env --> Wrappers
+    
+    Hooks --> Navigator
+    Hooks --> Recorder
+    
+    Stats --> Recorder
+    Buffer --> Recorder
 ```
 
-### 5.2.3 Configuration System
-
-#### Purpose and Responsibilities
-
-The Hydra-based configuration system provides hierarchical configuration management with runtime component selection, environment variable integration, and schema validation.
-
-#### Technologies and Frameworks
-
-- **Hydra-core ==1.3.***: Configuration composition and management
-- **OmegaConf ≥2.3.0**: Configuration interpolation and resolution
-- **Pydantic ≥2.5.0**: Schema validation and type checking
-
-#### Key Interfaces and APIs
-
-- **Configuration Groups**: Organized by component type (boundary, plume_models, sensors, etc.)
-  - <span style="background-color: rgba(91, 57, 243, 0.2)">The 'hooks' configuration group is now uncommented/active in conf/config.yaml with default value "none" to preserve previous behaviour</span>
-- **Override Hierarchy**: Base → User → Runtime parameter resolution
-- **Environment Integration**: Automatic environment variable interpolation
-- **Schema Validation**: Pydantic-based configuration validation
-
-#### Data Persistence Requirements
-
-- **Configuration Files**: YAML-based hierarchical structure
-- **Default Values**: Fallback configurations for all components
-- **User Overrides**: Persistent user-specific configurations
-- **Runtime State**: Temporary configuration modifications
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**Composed Configuration**: The composed simulation configuration now always contains a resolved 'hooks' subsection, ensuring reproducible hook selection</span>
-
-#### Scaling Considerations
-
-- **Lazy Loading**: On-demand configuration resolution
-- **Caching**: Composed configuration caching for performance
-- **Validation**: Early validation to prevent runtime errors
-- **Extensibility**: Easy addition of new configuration groups
-
+#### Simulation State Transition Diagram
 ```mermaid
 stateDiagram-v2
-    [*] --> Loading
-    Loading --> Parsing: Load YAML files
-    Parsing --> Composition: Parse configuration
-    Composition --> Interpolation: Compose groups
-    Interpolation --> Validation: Resolve variables
-    Validation --> Ready: Validate schema
-    Ready --> [*]
+    [*] --> Initialized: System Start
     
-    Validation --> Error: Schema invalid
-    Error --> [*]
+    Initialized --> ConfigLoaded: Load Hydra Config
+    ConfigLoaded --> Validated: Validate Configuration
+    Validated --> Ready: Instantiate Components
     
-    state Composition {
-        [*] --> BaseConfig
-        BaseConfig --> UserConfig: Apply overrides
-        UserConfig --> RuntimeConfig: Apply runtime
-        RuntimeConfig --> [*]
-    }
+    Ready --> Running: Start Simulation
+    Running --> Stepping: Execute Step
+    Stepping --> Recording: Record Data
+    Recording --> Monitoring: Check Performance
+    Monitoring --> Running: Continue
+    
+    Running --> Paused: Pause Signal
+    Paused --> Running: Resume Signal
+    
+    Running --> EpisodeComplete: Episode End
+    EpisodeComplete --> Ready: Reset Environment
+    
+    Running --> Error: Exception Occurred
+    Error --> Recovery: Handle Error
+    Recovery --> Running: Recovered
+    Recovery --> Shutdown: Unrecoverable
+    
+    Ready --> Shutdown: Exit Signal
+    EpisodeComplete --> Shutdown: Complete All Episodes
+    Shutdown --> [*]: Cleanup Resources
 ```
 
 ## 5.3 TECHNICAL DECISIONS
 
 ### 5.3.1 Architecture Style Decisions and Tradeoffs
 
-#### Protocol-Oriented Architecture Selection
+**Microkernel with Protocol-based Plugins**
+- **Decision**: Implement microkernel pattern with Python Protocol interfaces for component contracts
+- **Rationale**: Enables zero-code extensibility crucial for research iteration cycles and cross-disciplinary collaboration
+- **Tradeoffs**:
+  - ✓ Maximum flexibility for component substitution without core modifications
+  - ✓ Clear separation of concerns with type-safe interfaces
+  - ✓ Enables distributed development across research teams
+  - ✗ Additional abstraction layer introduces minimal performance overhead
+  - ✗ More complex debugging across protocol boundaries
 
-**Decision**: Implement core functionality through protocol interfaces rather than concrete inheritance hierarchies.
+**Hydra Configuration Architecture**
+- **Decision**: Adopt Hydra for hierarchical configuration management with YAML composition
+- **Rationale**: Reproducible experiments with parameter sweeps, version control, and dependency injection
+- **Tradeoffs**:
+  - ✓ Declarative configuration without code changes
+  - ✓ Built-in multirun and parameter sweep capabilities
+  - ✓ Hierarchical composition for complex scenarios
+  - ✗ Learning curve for Hydra configuration concepts
+  - ✗ Additional framework dependency
 
-**Rationale**: 
-- Enables runtime component selection without code modification
-- Provides clear contracts for component implementations
-- Facilitates testing through protocol-compliant mocks
-- Supports extensibility without modifying existing code
-
-**Tradeoffs**:
-- **Advantages**: Maximum flexibility, improved testability, clear interfaces
-- **Disadvantages**: Slight performance overhead from protocol compliance checking
-- **Mitigation**: Runtime validation can be disabled in production environments
-
-#### Configuration-Driven Component Selection
-
-**Decision**: Use Hydra-based hierarchical configuration for runtime component selection.
-
-**Rationale**:
-- Enables zero-code component swapping for research experimentation
-- Provides reproducible experiment configurations
-- Supports environment-specific settings through override hierarchy
-- Integrates seamlessly with Python ecosystem conventions
-- <span style="background-color: rgba(91, 57, 243, 0.2)">The 'hooks' Hydra group is now part of the default configuration composition, with default variant 'none' to maintain backward compatibility while allowing user override at runtime</span>
-
-**Tradeoffs**:
-- **Advantages**: Extreme flexibility, experiment reproducibility, no code changes required
-- **Disadvantages**: Configuration complexity, potential runtime errors from misconfigurations
-- **Mitigation**: Comprehensive schema validation and default fallbacks
-
-#### Lightweight Hook Management (updated)
-
-**Decision**: Implement a ≤50 LoC HookManager providing protocol-compliant lifecycle hooks with early-exit optimization.
-
-**Rationale**:
-- Enables configurable extensibility through pre-step, post-step, and episode-end hooks
-- Provides zero-overhead performance when hooks are disabled (default 'none' configuration)
-- Maintains API compatibility with existing simulation frameworks
-- Supports runtime hook registration without code modification
-- Early-exit optimization ensures minimal performance impact when no hooks are registered
-
-**Tradeoffs**:
-- **Advantages**: Configurable extensibility, no API breakage, minimal performance overhead
-- **Disadvantages**: Additional component complexity, potential configuration overhead
-- **Mitigation**: Default 'none' configuration maintains backward compatibility with <1ms overhead
-
-```mermaid
-graph TD
-    A[Hook Registration] --> B{Hooks Configured?}
-    B -->|hooks=none| C[Early Exit - No Overhead]
-    B -->|hooks=custom| D[Protocol Validation]
-    D --> E[Pre-Step Hook Dispatch]
-    E --> F[Core Simulation Step]
-    F --> G[Post-Step Hook Dispatch]
-    G --> H[Episode End Detection]
-    H --> I{Episode Complete?}
-    I -->|Yes| J[Episode-End Hook Dispatch]
-    I -->|No| K[Continue Simulation]
-    J --> K
-    C --> F
-```
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Build System Modernisation (PEP 621 + setuptools≥61)</span>**
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Decision</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Migrate from Poetry build backend to setuptools≥61 with PEP 621 project metadata standard</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Rationale</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Align with user directive for standard Python packaging ecosystem and improved toolchain compatibility</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Tradeoffs</span>**:
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">✓ Standards compliance with PEP 621 project metadata format</span>
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">✓ Broader ecosystem compatibility and reduced vendor lock-in</span>
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">✓ Native Python packaging tools support without additional dependencies</span>
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">✗ Manual dependency version locking compared to Poetry's automatic resolution</span>
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">✗ Loss of Poetry's integrated virtual environment management</span>
 
 ### 5.3.2 Communication Pattern Choices
 
-#### Synchronous Simulation with Asynchronous Recording
+| Pattern | Implementation | Justification | Performance Impact |
+|---------|---------------|---------------|-------------------|
+| Dependency Injection | Hydra instantiation | Loose coupling between components | Minimal - startup only |
+| Protocol Interfaces | Python typing.Protocol | Type-safe contracts without inheritance | Zero runtime overhead |
+| Event Hooks | Callback registration | Extensibility without core modifications | <1ms with optimization |
+| Async I/O | Buffered queues + threads | Decouple recording from simulation | Eliminates I/O blocking |
+| <span style="background-color: rgba(91, 57, 243, 0.2)">CLI Invocation Pattern</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Click command dispatch → Hydra dependency injection</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Separation of command routing from configuration management</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Negligible - CLI startup only</span> |
 
-**Decision**: Implement synchronous simulation loops with asynchronous data persistence.
+**<span style="background-color: rgba(91, 57, 243, 0.2)">CLI Invocation Pattern Details</span>**
 
-**Rationale**:
-- Maintains deterministic simulation behavior for reproducibility
-- Prevents I/O operations from impacting simulation performance
-- Enables high-throughput data recording without blocking
-- Supports real-time performance requirements
+The system implements a hybrid approach where Click handles command and command group declaration while Hydra manages settings processing. This pattern addresses the fundamental architectural challenge that both frameworks "own the command line" by establishing clear separation of concerns:
 
-**Tradeoffs**:
-- **Advantages**: Consistent performance, deterministic behavior, scalable recording
-- **Disadvantages**: Complexity in error handling, potential data loss on failure
-- **Mitigation**: Robust error handling with graceful degradation and data recovery
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Click Layer</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Handles command parsing, argument validation, and dispatch routing for `plume-nav-sim` and `plume-nav-train` entry points</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Hydra Layer</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Manages configuration composition, dependency injection, and experimental parameter handling once command is dispatched</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Integration Point</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Click commands invoke Hydra's compose API for configuration-driven instantiation without conflicting command line ownership</span>
 
-#### Vectorized Multi-Agent Operations
-
-**Decision**: Use NumPy broadcasting for multi-agent scenario processing.
-
-**Rationale**:
-- Achieves significant performance improvements over iterative processing
-- Leverages optimized C implementations for mathematical operations
-- Enables support for 100+ simultaneous agents
-- Maintains code simplicity through expressive array operations
-
-**Tradeoffs**:
-- **Advantages**: Exceptional performance, scalability, code clarity
-- **Disadvantages**: Memory usage for large agent populations, NumPy dependency
-- **Mitigation**: Memory pressure monitoring with automatic optimization
+<span style="background-color: rgba(91, 57, 243, 0.2)">This pattern enables sophisticated CLI command structures while preserving Hydra's powerful configuration capabilities for research workflows and experiment management.</span>
 
 ### 5.3.3 Data Storage Solution Rationale
 
-#### Multi-Backend Recording Strategy
+**Multi-Backend Recording Strategy**
+The system implements multiple storage backends to optimize for different research workflows:
 
-**Decision**: Support multiple recording backends (Parquet, HDF5, SQLite, None) through protocol interfaces.
+- **Parquet**: Default choice for large-scale analysis with columnar storage, excellent compression, and Arrow ecosystem compatibility
+- **HDF5**: Scientific workflows requiring hierarchical data organization with rich metadata support
+- **SQLite**: Development and debugging scenarios with SQL query capabilities and relational data access
+- **None**: Performance testing and scenarios requiring zero recording overhead
 
-**Rationale**:
-- Different research workflows require different data formats
-- Parquet provides efficient columnar storage for analytics
-- HDF5 supports hierarchical scientific data storage
-- SQLite enables relational queries and analysis
-- None option provides zero-overhead performance testing
-
-**Tradeoffs**:
-- **Advantages**: Workflow flexibility, optimal performance for different use cases
-- **Disadvantages**: Increased complexity, multiple dependencies
-- **Mitigation**: Optional dependencies with graceful degradation
-
-#### Normalized Database Schema
-
-**Decision**: Use SQLAlchemy ORM with normalized schema for experimental data.
-
-**Rationale**:
-- Provides strong data integrity guarantees
-- Enables complex relational queries for analysis
-- Supports efficient data relationships and constraints
-- Integrates well with Python ecosystem
-
-**Tradeoffs**:
-- **Advantages**: Data integrity, powerful queries, ecosystem integration
-- **Disadvantages**: Performance overhead, ORM complexity
-- **Mitigation**: Connection pooling and lazy loading optimization
+**Backend Selection Matrix**:
+| Backend | Write Speed | Query Performance | Compression | Primary Use Case |
+|---------|------------|-------------------|-------------|------------------|
+| Parquet | High | Medium | Excellent | Production analysis |
+| HDF5 | Medium | High | Good | Scientific computing |
+| SQLite | Low | Excellent | Poor | Development/debugging |
+| None | N/A | N/A | N/A | Performance testing |
 
 ### 5.3.4 Caching Strategy Justification
 
-#### Multi-Mode Frame Caching
+**Frame Cache Implementation**
+The frame cache system provides multiple strategies optimized for different access patterns:
 
-**Decision**: Implement LRU, Preload, and None caching modes for video frame access.
+- **LRU Mode**: Default for unpredictable access patterns with automatic eviction
+- **Preload Mode**: Sequential video processing with available memory resources
+- **None Mode**: Minimal memory footprint for resource-constrained environments
 
-**Rationale**:
-- Different simulation scenarios have different memory/performance tradeoffs
-- LRU provides balanced performance for varied access patterns
-- Preload optimizes for predictable sequential access
-- None mode minimizes memory usage for memory-constrained environments
-
-**Tradeoffs**:
-- **Advantages**: Optimized performance for different scenarios, memory flexibility
-- **Disadvantages**: Implementation complexity, mode selection complexity
-- **Mitigation**: Automatic mode selection based on available memory
-
-```mermaid
-graph TD
-    A[Memory Available?] --> B{>8GB Available}
-    B -->|Yes| C[Preload Mode]
-    B -->|No| D{>4GB Available}
-    D -->|Yes| E[LRU Mode]
-    D -->|No| F[None Mode]
-    
-    C --> G[Sequential Access Pattern?]
-    G -->|Yes| H[Optimal Performance]
-    G -->|No| I[Switch to LRU]
-    
-    E --> J[Balanced Performance]
-    F --> K[Minimal Memory Usage]
+**Cache Performance Configuration**:
+```yaml
+frame_cache:
+  mode: ${oc.env:FRAME_CACHE_MODE,lru}
+  size_mb: ${oc.env:FRAME_CACHE_SIZE_MB,512}
+  preload_size: 100
+  performance_monitoring: true
 ```
 
 ### 5.3.5 Security Mechanism Selection
 
-#### Input Validation and Sanitization
+**Research-Focused Security Model**
+- **Decision**: Minimal security overhead optimized for research performance
+- **Rationale**: Trusted research environment with computational performance prioritization
+- **Implementation**:
+  - Input validation via Pydantic schemas for type safety
+  - Safe YAML loading preventing arbitrary code execution
+  - Atomic file operations ensuring data integrity
+  - No authentication layer (appropriate for research context)
 
-**Decision**: Implement comprehensive input validation using Pydantic schemas.
+### 5.3.6 Required Diagrams
 
-**Rationale**:
-- Prevents injection attacks through configuration manipulation
-- Ensures data type safety across all components
-- Provides clear error messages for invalid inputs
-- Integrates seamlessly with configuration system
-
-**Tradeoffs**:
-- **Advantages**: Strong security, type safety, clear error handling
-- **Disadvantages**: Performance overhead, schema maintenance
-- **Mitigation**: Schema caching and validation optimization
+#### Architecture Decision Tree
+```mermaid
+graph TD
+    A[System Architecture] --> B{Extensibility Requirements?}
+    B -->|High| C[Protocol-based Design]
+    B -->|Low| D[Monolithic Architecture]
+    
+    C --> E{Configuration Complexity?}
+    E -->|High| F[Hydra Framework]
+    E -->|Low| G[Simple Config Files]
+    
+    F --> H{Performance Critical?}
+    H -->|Yes| I[Vectorized NumPy]
+    H -->|No| J[Standard Python]
+    
+    I --> K{Multi-Agent Support?}
+    K -->|Yes| L[Batched Operations]
+    K -->|No| M[Single Agent Optimization]
+    
+    L --> N{Recording Requirements?}
+    N -->|High| O[Multi-Backend System]
+    N -->|Low| P[Single Backend]
+    
+    O --> Q{Build System Choice?}
+    Q -->|Standards Compliance| R[setuptools + PEP 621]
+    Q -->|Integrated Tooling| S[Poetry Backend]
+    
+    R --> T{CLI Architecture?}
+    T -->|Command Routing| U[Click + Hydra Pattern]
+    T -->|Simple Interface| V[Hydra-only CLI]
+```
 
 ## 5.4 CROSS-CUTTING CONCERNS
 
 ### 5.4.1 Monitoring and Observability Approach
 
-#### Comprehensive Performance Monitoring
+**Comprehensive Performance Monitoring**
+The system implements multi-layer monitoring to ensure research-grade performance requirements:
 
-The system implements multi-layered monitoring to ensure performance targets are met:
+- **Real-time Metrics**: Step execution time, memory utilization, cache hit rates
+- **Performance Thresholds**: Automated warnings for SLA violations (>33ms step latency)
+- **Resource Monitoring**: System memory, CPU usage, and disk I/O via psutil
+- **Integration Monitoring**: External system health checks and API response times
 
-**Simulation Performance Metrics**:
-- Step execution time tracking with <33ms target
-- Memory usage monitoring with automatic optimization
-- Agent throughput measurement for scalability validation
-- Frame cache hit rates and optimization opportunities
-
-**System Resource Monitoring**:
-- CPU utilization tracking via psutil integration
-- Memory pressure detection with automatic cache adjustment
-- I/O operation monitoring for bottleneck identification
-- Network usage tracking for distributed scenarios
-
-**Component Health Monitoring**:
-- Protocol compliance validation with error reporting
-- Component initialization success/failure tracking
-- Graceful degradation monitoring for optional components
-- Performance budget enforcement with automatic optimization
-
-#### Observability Infrastructure
-
-**Metrics Collection**:
-- Prometheus-compatible metrics export for monitoring systems
-- Custom metrics for domain-specific performance indicators
-- Automatic baseline establishment for performance regression detection
-- Real-time dashboard integration for operational visibility
-
-**Distributed Tracing**:
-- Correlation ID propagation across all system components
-- Distributed request tracing for multi-component operations
-- Performance profiling with detailed execution timelines
-- Error correlation across component boundaries
+**Key Performance Indicators**:
+- Step execution time (target: ≤33ms @ 100 agents)
+- Frame cache hit rate (target: ≥90%)
+- Recording overhead (target: <1ms when disabled)
+- Memory scaling efficiency (linear with agent count)
 
 ### 5.4.2 Logging and Tracing Strategy
 
-#### Structured Logging Framework
+**Structured Logging Framework**
+The system employs structured logging with multiple output formats and correlation tracking:
 
-The system uses **Loguru** for structured logging with comprehensive traceability:
+**Log Level Strategy**:
+| Level | Purpose | Example Usage |
+|-------|---------|---------------|
+| DEBUG | Component state details | "Navigator.step() agent positions: [...]" |
+| INFO | Normal operations | "Episode 42 completed: 245 steps, 12.3s duration" |
+| WARNING | Performance violations | "Step time 45ms exceeds 33ms SLA target" |
+| ERROR | Recoverable failures | "Frame cache miss for index 1247, loading from disk" |
+| CRITICAL | System failures | "Recording backend initialization failed" |
 
-**Logging Configuration**:
-- Environment-specific log levels (DEBUG, INFO, WARNING, ERROR)
-- JSON sink for machine-readable log processing
-- Correlation IDs for distributed request tracking
-- Performance-sensitive log filtering to minimize overhead
-
-**Log Categories**:
-- **Performance Logs**: Step timing, memory usage, cache performance
-- **Configuration Logs**: Component initialization, configuration changes
-- **Error Logs**: Exception details, recovery actions, component failures
-- **Audit Logs**: User actions, experiment modifications, data access
-
-**Distributed Tracing**:
-- Request flow tracking across protocol boundaries
-- Component interaction visualization
-- Performance bottleneck identification
-- Error propagation analysis
-
-#### Log Analysis and Alerting
-
-**Automated Analysis**:
-- Performance regression detection through log analysis
-- Error pattern recognition with automatic alerting
-- Resource utilization trends with predictive warnings
-- Experiment success/failure pattern analysis
+**Tracing Configuration**:
+```yaml
+logging:
+  sinks:
+    - type: console
+      format: human_readable
+      level: ${oc.env:LOG_LEVEL,INFO}
+    - type: structured_json
+      path: ${log_dir}/simulation.jsonl
+      correlation_id: true
+      performance_metrics: true
+```
 
 ### 5.4.3 Error Handling Patterns
 
-#### Hierarchical Error Recovery
-
+**Hierarchical Error Management**
 The system implements comprehensive error handling with graceful degradation:
 
-**Error Classification**:
-- **Configuration Errors**: Invalid settings, missing parameters
-- **Resource Errors**: Memory pressure, file access, network issues
-- **Performance Errors**: Step timeout, memory limits, I/O bottlenecks
-- **Component Errors**: Protocol violations, initialization failures
-- **Data Errors**: Corrupt files, invalid formats, missing data
+1. **Protocol Contract Violations**: Raise TypeError with detailed interface requirements
+2. **Configuration Errors**: Pydantic ValidationError with field-specific guidance
+3. **Resource Failures**: Graceful degradation with performance warnings
+4. **Performance Violations**: Metric logging with continued execution
 
 **Recovery Strategies**:
-- **Graceful Degradation**: Disable optional features to maintain core functionality
-- **Automatic Fallbacks**: Switch to alternative implementations when primary fails
-- **State Recovery**: Restore from last known good state on failure
-- **Resource Optimization**: Automatic resource adjustment under pressure
-
-```mermaid
-flowchart TD
-    A[Error Detected] --> B{Error Severity}
-    B -->|Low| C[Log Warning]
-    B -->|Medium| D[Graceful Degradation]
-    B -->|High| E[Error Recovery]
-    B -->|Critical| F[Emergency Shutdown]
-    
-    C --> G[Continue Operation]
-    
-    D --> H[Disable Optional Features]
-    H --> I[Switch to Fallback]
-    I --> J[Validate Recovery]
-    J --> K{Recovery Success?}
-    K -->|Yes| G
-    K -->|No| E
-    
-    E --> L[State Recovery]
-    L --> M[Resource Optimization]
-    M --> N[Restart Components]
-    N --> O{Recovery Success?}
-    O -->|Yes| G
-    O -->|No| F
-    
-    F --> P[Save State]
-    P --> Q[Notify Users]
-    Q --> R[Graceful Shutdown]
-```
+- Frame cache failures → Fallback to direct disk access with warning
+- Recording backend failures → Switch to backup recording system
+- Memory pressure → Automatic cache eviction and garbage collection
+- Network failures → Retry with exponential backoff
 
 ### 5.4.4 Authentication and Authorization Framework
 
-#### Research Environment Security
-
-The system implements security measures appropriate for research environments:
-
-**Access Control**:
-- Configuration-based security settings
-- File system permission validation
-- Database access control through SQLAlchemy
-- Network access restriction for distributed scenarios
-
-**Data Protection**:
-- Experiment data encryption at rest (optional)
-- Secure configuration parameter handling
-- Audit trail for data access and modifications
-- Backup and recovery procedures for critical data
-
-**Validation and Sanitization**:
-- Input validation through Pydantic schemas
-- Configuration parameter sanitization
-- File path validation to prevent directory traversal
-- Database query parameterization to prevent injection
+**Research Environment Security Model**
+- **Access Control**: Configuration-based feature access control
+- **External Services**: API key management for cloud integrations (W&B, TensorBoard)
+- **Data Protection**: File system permissions for experimental data
+- **Audit Trail**: Comprehensive logging for reproducibility requirements
 
 ### 5.4.5 Performance Requirements and SLAs
 
-#### Service Level Agreements
-
-| Performance Metric | Target SLA | Monitoring Method | Escalation Threshold |
-|---|---|---|---|
-| Simulation Step Latency | ≤33ms | Real-time monitoring | >50ms for 5 minutes |
-| Memory Usage | <8GB for 100 agents | Continuous tracking | >12GB sustained |
-| System Availability | >99.9% uptime | Health checks | 3 consecutive failures |
-| Data Recording Success | >99% write success | Async monitoring | <95% success rate |
-
-#### Performance Optimization Strategies
-
-**Automatic Optimization**:
-- Dynamic cache size adjustment based on memory pressure
-- Automatic fallback to simpler models under resource constraints
-- Load balancing for multi-agent scenarios
-- I/O optimization through buffering and batching
-
-**Performance Monitoring**:
-- Real-time performance dashboard
-- Automated performance regression detection
-- Resource usage trending and prediction
-- Bottleneck identification and resolution
+| Metric | Target | Measurement Method | Enforcement Strategy |
+|--------|--------|-------------------|---------------------|
+| Step Latency | ≤33ms @ 100 agents | PerformanceMonitor | Warning + metrics logging |
+| Cache Hit Rate | ≥90% | CacheStatistics | Adaptive cache sizing |
+| Recording Overhead | <1ms when disabled | Timer contexts | Optimization alerts |
+| Memory Scaling | Linear with agents | psutil monitoring | Resource limit warnings |
 
 ### 5.4.6 Disaster Recovery Procedures
 
-#### Data Protection and Recovery
+**Failure Scenario Mitigation**:
 
-**Backup Strategies**:
-- Automated configuration backup before changes
-- Experiment data backup to multiple storage backends
-- State checkpoint creation for long-running simulations
-- Database backup and recovery procedures
+1. **Simulation Crash Recovery**:
+   - Automatic checkpoint creation every N episodes
+   - Resume capability from last valid checkpoint
+   - Partial trajectory data preservation
 
-**Recovery Procedures**:
-- Automatic state recovery from checkpoints
-- Configuration rollback on validation failures
-- Component restart procedures with state preservation
-- Emergency shutdown with data preservation
+2. **Data Loss Prevention**:
+   - Atomic write operations for all recording backends
+   - Buffer flush on exception handling
+   - Backup recording system activation
 
-**Business Continuity**:
-- Distributed deployment support for high availability
-- Failover procedures for critical components
-- Data replication across multiple storage systems
-- Disaster recovery testing and validation
+3. **Resource Exhaustion Handling**:
+   - Memory pressure monitoring with automatic cache eviction
+   - Graceful degradation with reduced functionality
+   - Automatic worker process reduction under resource constraints
+
+### 5.4.7 Required Diagrams
+
+#### Error Handling Flow
+```mermaid
+flowchart TD
+    A[Error Detected] --> B{Error Classification}
+    
+    B -->|Protocol Violation| C[TypeError with Interface Details]
+    B -->|Configuration Error| D[ValidationError with Field Help]
+    B -->|Resource Failure| E[Resource Exception]
+    B -->|Performance Violation| F[Performance Warning]
+    
+    C --> G[Log Detailed Error Context]
+    D --> H[Display Configuration Guidance]
+    E --> I{Recovery Possible?}
+    F --> J[Log Performance Metrics]
+    
+    I -->|Yes| K[Execute Fallback Strategy]
+    I -->|No| L[Initiate Graceful Shutdown]
+    
+    K --> M[Continue Operation with Degradation]
+    J --> M
+    
+    G --> N[Raise Exception to Caller]
+    H --> N
+    L --> O[Cleanup Resources]
+    
+    O --> P[Exit with Error Code]
+    N --> P
+    M --> Q[Normal Operation Resume]
+```
 
 #### References
 
-Files Examined:
-- `src/odor_plume_nav/__init__.py` - Core navigation library package structure
-- `src/plume_nav_sim/__init__.py` - Simulation framework initialization
-- `src/plume_nav_sim/core/protocols.py` - Protocol interface definitions
-- `src/odor_plume_nav/db/models.py` - Database ORM models and schemas
-- `src/odor_plume_nav/cache/frame_cache.py` - Frame caching implementation
-- `src/plume_nav_sim/recording/backends/` - Recording backend implementations
-- `conf/config.yaml` - Hydra configuration structure
-- `conf/base.yaml` - Base configuration defaults
-- `pyproject.toml` - Project dependencies and metadata
-- `docs/performance_tuning.md` - Performance optimization guidelines
-- `docs/extending_plume_nav_sim.md` - Extension development guide
-- `docs/migration_guide.md` - System migration documentation
-- `logging.yaml` - Loguru logging configuration
-
-Sections Referenced:
-- `1.2 SYSTEM OVERVIEW` - System context and capabilities
-- `4.3 TECHNICAL IMPLEMENTATION` - Implementation details and workflows
-- `3.3 FRAMEWORKS & LIBRARIES` - Technology stack and dependencies
+- `protocols.py` - Protocol interface definitions and type contracts
+- `simulation.py` - Core simulation engine implementation
+- `models/plume/` - Multi-fidelity plume modeling system
+- `recording/` - Multi-backend data persistence infrastructure
+- `config/` - Hydra configuration management system
+- `utils/performance.py` - Performance monitoring and metrics collection
+- `envs/` - Gymnasium environment wrapper implementations
+- `agents/` - Navigation controller and multi-agent coordination
+- `visualization/` - Real-time visualization and analysis tools
+- `cli/` - Command-line interface and batch processing system
 
 # 6. SYSTEM COMPONENTS DESIGN
 
 ## 6.1 CORE SERVICES ARCHITECTURE
 
-### 6.1.1 Applicability Assessment
+### 6.1.1 Architecture Classification
 
-**Core Services Architecture is not applicable for this system.**
+**Core Services Architecture is not applicable for this system** in the traditional microservices sense. The Plume Navigation Simulation Library does not implement distributed microservices, service-oriented architecture, or distinct service components communicating over network protocols.
 
-The Plume Navigation Simulation system is designed as a **high-performance monolithic Python library** implementing a **Protocol-Oriented Architecture (POA)** pattern, not a distributed microservices architecture. This architectural decision is deliberate and optimized for the system's specific requirements and use case.
+Instead, the system implements a **microkernel architecture pattern** with protocol-based pluggable components that operate within a single process. This architectural decision was made to optimize for research flexibility and computational performance while maintaining clear component boundaries.
 
-#### 6.1.1.1 Rationale for Monolithic Architecture
+#### 6.1.1.1 Architectural Pattern Analysis
 
-The system's architecture prioritizes performance and simplicity over distributed system benefits due to several critical factors:
+| Traditional Microservices | Plume Navigation System |
+|---------------------------|-------------------------|
+| Distributed network services | Monolithic process with internal components |
+| Inter-service communication via HTTP/gRPC | Direct function calls via Protocol interfaces |
+| Independent deployment units | Single deployment unit |
+| Service discovery mechanisms | Hydra dependency injection |
+| Load balancing and circuit breakers | Vectorized operations and performance monitoring |
 
-| Factor | Requirement | Architectural Impact |
-|--------|-------------|---------------------|
-| **Performance** | ≤33ms simulation step latency | Tight coupling required for sub-millisecond operations |
-| **Use Case** | Scientific simulation library | Single-process execution for research workflows |
-| **Deployment** | Python package (pip/Poetry) | Monolithic distribution model |
-| **Integration** | Gymnasium/Stable-Baselines3 | Synchronous API compatibility required |
+### 6.1.2 Service-Like Component Architecture
 
-#### 6.1.1.2 System Boundaries and Scope
+## 6.1 CORE SERVICES ARCHITECTURE
 
-The system operates within well-defined boundaries that do not require service decomposition:
+### 6.1.1 Architecture Classification
 
-- **Internal Simulation Engine**: Protocol-based component orchestration within single process
-- **External RL Integration**: Gymnasium-compliant environment API for reinforcement learning frameworks
-- **Data Persistence Layer**: Asynchronous recording to local databases and file systems
-- **Configuration Management**: Hydra-based hierarchical configuration system
+**Core Services Architecture is not applicable for this system** in the traditional microservices sense. The Plume Navigation Simulation Library does not implement distributed microservices, service-oriented architecture, or distinct service components communicating over network protocols.
+
+Instead, the system implements a **microkernel architecture pattern** with protocol-based pluggable components that operate within a single process. This architectural decision was made to optimize for research flexibility and computational performance while maintaining clear component boundaries.
+
+#### 6.1.1.1 Architectural Pattern Analysis
+
+| Traditional Microservices | Plume Navigation System |
+|---------------------------|-------------------------|
+| Distributed network services | Monolithic process with internal components |
+| Inter-service communication via HTTP/gRPC | Direct function calls via Protocol interfaces |
+| Independent deployment units | Single deployment unit |
+| Service discovery mechanisms | Hydra dependency injection |
+| Load balancing and circuit breakers | Vectorized operations and performance monitoring |
+
+### 6.1.2 Service-Like Component Architecture
+
+While not implementing distributed services, the system does maintain service-like components with clear boundaries, responsibilities, and interfaces. These components are organized using a microkernel pattern that provides similar benefits to microservices within a single process.
+
+#### 6.1.2.1 Component Service Boundaries
+
+The system implements <span style="background-color: rgba(91, 57, 243, 0.2)">five</span> primary service-like components:
+
+| Component | Responsibility Domain | Interface Protocol | Primary Dependencies |
+|-----------|----------------------|-------------------|---------------------|
+| Core Simulation Engine | Orchestration and lifecycle management | NavigatorProtocol, PlumeModelProtocol | NumPy, Gymnasium, Hydra |
+| Plume Modeling System | Physics simulation and concentration fields | PlumeModelProtocol, WindFieldProtocol | SciPy, OpenCV, Numba |
+| Recording Infrastructure | Data persistence and analytics | RecorderProtocol, StatsAggregatorProtocol | PyArrow, HDF5, SQLite |
+| RL Integration Layer | Environment wrapper and RL framework compatibility | ActionInterfaceProtocol, ObservationSpaceProtocol | Gymnasium, Stable-Baselines3 |
+| <span style="background-color: rgba(91, 57, 243, 0.2)">CLI Command Interface</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">User-facing entry points for simulation & training orchestration</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Click-based CLI, Hydra configuration hand-off</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Click, Hydra</span> |
+
+#### 6.1.2.2 Component Communication Patterns
+
+Components communicate through well-defined Protocol interfaces that provide type safety and loose coupling:
 
 ```mermaid
 graph TB
+    CLI[CLI Command Interface]
+    
     subgraph "Single Process Boundary"
-        A[Navigation Library<br/>odor_plume_nav] --> B[Simulation Framework<br/>plume_nav_sim]
-        B --> C[Configuration System<br/>Hydra + OmegaConf]
-        A --> D[Frame Cache<br/>OpenCV + NumPy]
-        B --> E[Protocol Interfaces<br/>Source, Boundary, Action, etc.]
+        subgraph "Core Simulation Engine"
+            Engine[SimulationContext]
+            Manager[EpisodeManager]
+            Monitor[PerformanceMonitor]
+        end
+        
+        subgraph "Plume Modeling System"
+            Gaussian[GaussianPlumeModel]
+            Turbulent[TurbulentPlumeModel]
+            Video[VideoPlumeAdapter]
+            Wind[WindFieldProtocol]
+        end
+        
+        subgraph "Recording Infrastructure"
+            Parquet[ParquetRecorder]
+            HDF5[HDF5Recorder]
+            SQLite[SQLiteRecorder]
+            Buffer[AsyncBufferManager]
+        end
+        
+        subgraph "RL Integration Layer"
+            Env[PlumeNavigationEnv]
+            Spaces[SpaceFactory]
+            Wrappers[EnvWrappers]
+        end
     end
     
-    subgraph "External Integrations"
-        F[RL Frameworks<br/>Stable-Baselines3] --> A
-        G[Databases<br/>SQLite, PostgreSQL] --> A
-        H[File Systems<br/>Parquet, HDF5] --> B
-        I[Visualization<br/>Matplotlib, Qt] --> A
-    end
+    CLI -->|Hydra Config & Args| Engine
+    CLI -->|Hydra Config & Args| Env
+    Engine -->|NavigatorProtocol| Gaussian
+    Engine -->|RecorderProtocol| Parquet
+    Engine -->|RecorderProtocol| HDF5
+    Engine -->|RecorderProtocol| SQLite
+    Env -->|Direct API| Engine
+    Monitor -->|Performance Metrics| Buffer
     
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#e8f5e8
+    style CLI fill:#f9f
+    style Engine fill:#e1f5fe
+    style Gaussian fill:#f3e5f5
+    style Parquet fill:#e8f5e8
+    style Env fill:#fff3e0
 ```
 
-### 6.1.2 Actual Architecture Pattern
+#### 6.1.2.3 Component Interaction Mechanisms
 
-#### 6.1.2.1 Protocol-Oriented Architecture (POA)
+**Protocol-Based Communication:**
+- All major components implement standardized Protocol interfaces
+- Type-safe contracts enable runtime component substitution
+- Zero inheritance overhead with duck typing validation
 
-Instead of microservices, the system implements a sophisticated **Protocol-Oriented Architecture** that provides flexibility without distributed system complexity:
+**Dependency Injection:**
+- Hydra framework manages component instantiation and wiring
+- Declarative YAML configuration enables zero-code modifications
+- Hierarchical composition supports complex experimental scenarios
+- <span style="background-color: rgba(91, 57, 243, 0.2)">CLI Command Interface instantiates core components via Hydra, passing command-line overrides to the same configuration tree used by notebooks and scripts.</span>
 
-#### Core Protocol Interfaces
-
-| Protocol | Responsibility | Implementation Strategy |
-|----------|---------------|------------------------|
-| **Source** | Plume concentration models | Gaussian, Turbulent, Video-based |
-| **Boundary** | Domain constraint handling | Terminate, Bounce, Wrap, Clip |
-| **Action** | Agent action processing | Discrete, Continuous, Hybrid |
-| **Recorder** | Data persistence | Parquet, HDF5, SQLite, None |
-| **<span style="background-color: rgba(91, 57, 243, 0.2)">Hook</span>** | <span style="background-color: rgba(91, 57, 243, 0.2)">Lifecycle event extension points (pre-step, post-step, episode-end)</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Coordinated by **HookManager**; Hydra-configurable</span> |
-
-#### Component Selection Mechanism
-
-Runtime component selection occurs through **configuration-driven instantiation** rather than service discovery. <span style="background-color: rgba(91, 57, 243, 0.2)">The configuration system now also selects the active hook set through the newly enabled `hooks` configuration group, which defaults to `none` for backward compatibility.</span>
-
-```mermaid
-sequenceDiagram
-    participant C as Configuration System
-    participant F as Protocol Factory
-    participant H as HookManager
-    participant P as Protocol Interface
-    participant I as Implementation
-    
-    C->>F: Load component configuration
-    F->>H: Configure hook dispatch
-    H->>P: Register hook protocol
-    F->>P: Query protocol requirements
-    P->>F: Return interface contract
-    F->>I: Instantiate concrete implementation
-    I->>P: Register protocol compliance
-    P->>C: Return configured component
-```
-
-<span style="background-color: rgba(91, 57, 243, 0.2)">The lightweight **HookManager** serves as an internal coordinator that registers and dispatches hooks with near-zero overhead (<1 ms when no hooks are configured), enabling extensible lifecycle event handling without impacting the 33 ms/step performance requirement.</span>
-
-#### 6.1.2.2 Performance-Optimized Communication
-
-#### Synchronous Method Invocation
-
-Components communicate through **direct method calls** rather than network protocols:
-
-- **Zero Network Overhead**: Direct memory access between components
-- **Vectorized Operations**: NumPy broadcast operations support 100+ simultaneous agents
-- **Shared State Management**: Centralized state storage for optimal cache locality
-- **Protocol Compliance**: Interface contracts ensure consistent behavior
-
-#### Asynchronous I/O Patterns
-
-Non-blocking operations prevent simulation bottlenecks:
-
-- **Async Recording**: Data persistence uses async/await patterns
-- **Background Processing**: Statistics aggregation occurs asynchronously
-- **Memory Monitoring**: psutil-based memory pressure detection
-- **Frame Caching**: LRU/Preload strategies with adaptive management
+**Event-Driven Extensions:**
+- Hook system provides pre-step, post-step, and episode-end callbacks
+- Near-zero performance overhead (<1ms with optimization)
+- Enables research extensions without core modifications
 
 ### 6.1.3 Scalability Design
 
-#### 6.1.3.1 Vertical Scaling Approach
+#### 6.1.3.1 Horizontal Scaling Approach
 
-The system achieves scalability through **computational optimization** rather than horizontal distribution:
+The system achieves scalability through **vectorized operations** rather than horizontal service scaling:
 
-#### Vectorized Multi-Agent Processing
+**Multi-Agent Vectorization:**
+- Support for up to 100 concurrent agents within a single process
+- NumPy-based vectorized operations for state management
+- Linear memory scaling with agent count validation
 
-| Scaling Dimension | Implementation | Performance Impact |
-|-------------------|---------------|-------------------|
-| **Agent Count** | NumPy broadcasting | 100+ agents with minimal overhead |
-| **Computation** | Numba JIT compilation | >10x speedup for numerical operations |
-| **Memory** | Adaptive caching | Memory pressure monitoring |
-| **I/O** | Asynchronous recording | Non-blocking data persistence |
+**Experimental Parallelization:**
+- Hydra multirun enables parameter sweeps across HPC clusters
+- Individual experiments run as separate processes
+- No shared state between parallel experimental runs
 
-#### Resource Optimization Strategies
+#### 6.1.3.2 Performance Optimization Techniques
+
+| Optimization Strategy | Implementation | Performance Impact |
+|----------------------|----------------|-------------------|
+| Vectorized Operations | NumPy batch processing | ≤33ms step latency @ 100 agents |
+| Intelligent Caching | Frame cache with LRU/preload | >90% cache hit rate |
+| Async I/O Operations | Buffered recording queues | <1ms recording overhead |
+| JIT Compilation | Optional Numba acceleration | 2-5x speedup for critical loops |
+
+#### 6.1.3.3 Resource Allocation Strategy
 
 ```mermaid
-graph LR
-    subgraph "Performance Optimization"
-        A[Vectorized Operations<br/>NumPy Broadcasting] --> B[JIT Compilation<br/>Numba Acceleration]
-        B --> C[Memory Management<br/>Adaptive Caching]
-        C --> D[Async I/O<br/>Non-blocking Recording]
+flowchart TB
+    subgraph "Memory Management"
+        A[Agent State Arrays] --> B[Linear Scaling]
+        C[Frame Cache] --> D[Configurable Limits]
+        E[Recording Buffers] --> F[Async Queue Depth]
     end
     
-    subgraph "Scaling Metrics"
-        E[Agent Count<br/>100+ simultaneous] --> F[Step Latency<br/>≤33ms target]
-        F --> G[Memory Usage<br/>Adaptive pressure]
-        G --> H[Throughput<br/>Real-time simulation]
+    subgraph "CPU Optimization"
+        G[Vectorized Operations] --> H[NumPy BLAS]
+        I[JIT Compilation] --> J[Numba Optimization]
+        K[Async I/O] --> L[Thread Pool]
     end
     
-    A --> E
-    B --> F
-    C --> G
-    D --> H
+    subgraph "Configuration"
+        M[Hydra Environment Variables] --> N[Runtime Resource Tuning]
+        O[Performance Monitoring] --> P[Adaptive Adjustments]
+    end
+    
+    B --> M
+    D --> M
+    F --> M
+    H --> O
+    J --> O
+    L --> O
 ```
-
-#### 6.1.3.2 Capacity Planning Guidelines
-
-#### Performance Targets and Thresholds
-
-- **Simulation Step Latency**: ≤33ms for real-time operation
-- **Multi-Agent Support**: 100+ simultaneous agents through vectorization
-- **Memory Efficiency**: Adaptive caching with garbage collection
-- **Database Throughput**: 99.9% write success rate for experimental data
-
-#### Resource Allocation Strategy
-
-- **CPU Utilization**: Vectorized operations maximize single-core performance
-- **Memory Management**: Configurable cache sizes with automatic pressure detection
-- **Storage I/O**: Asynchronous recording prevents blocking main simulation thread
-- **Network Resources**: Minimal requirements due to local execution model
 
 ### 6.1.4 Resilience Patterns
 
 #### 6.1.4.1 Fault Tolerance Mechanisms
 
-#### Graceful Component Degradation
+**Component Isolation:**
+- Protocol interfaces provide fault isolation boundaries
+- Component failures are contained within their domain
+- Graceful degradation through NoneRecorder and fallback policies
 
-The system implements **optional component patterns** for resilience:
+**Data Integrity Protection:**
+- Atomic file operations for recording backends
+- Transaction-based SQLite writes with rollback capability
+- Buffered writes with configurable thresholds
 
-| Component | Failure Mode | Degradation Strategy |
-|-----------|-------------|---------------------|
-| **Visualization** | GUI dependency missing | Continue without visualization |
-| **Recording** | Database connection lost | Switch to file-based recording |
-| **Frame Cache** | Memory pressure | Reduce cache size or disable |
-| **Statistics** | Aggregation failure | Continue with basic metrics |
+#### 6.1.4.2 Performance Monitoring and Circuit Breaker Patterns
 
-#### Protocol Validation and Recovery
+**Performance Enforcement:**
+- Real-time step latency monitoring with ≤33ms thresholds
+- Automatic performance degradation alerts
+- Resource utilization tracking for optimization
 
-```mermaid
-stateDiagram-v2
-    [*] --> ComponentInit
-    ComponentInit --> ProtocolValidation
-    ProtocolValidation --> Active: Validation passed
-    ProtocolValidation --> Fallback: Validation failed
-    
-    Active --> HealthCheck: Periodic validation
-    HealthCheck --> Active: Healthy
-    HealthCheck --> Fallback: Unhealthy
-    
-    Fallback --> DefaultImpl: Load default implementation
-    DefaultImpl --> Active: Recovery successful
-    DefaultImpl --> Disabled: Recovery failed
-    
-    Disabled --> [*]: Graceful shutdown
+**Fallback Mechanisms:**
+- NoneRecorder for zero-overhead operation during performance issues
+- Simplified plume models for computational resource constraints
+- Configurable cache sizes for memory-limited environments
+
+#### 6.1.4.3 Configuration-Based Resilience
+
+```yaml
+# Resilience Configuration Example
+performance:
+  max_step_latency_ms: 33
+  monitoring_enabled: true
+  fallback_policies:
+    recording: "none"
+    plume_model: "gaussian"
+    cache_mode: "none"
+
+recording:
+  buffer_size: 1000
+  async_queue_depth: 100
+  error_handling: "continue"
+  backup_backends: ["sqlite", "none"]
 ```
 
-#### 6.1.4.2 Data Integrity and Recovery
+### 6.1.5 System Integration Architecture
 
-#### Persistence Layer Resilience
+#### 6.1.5.1 External Integration Points
 
-- **Multi-Backend Support**: Parquet, HDF5, SQLite backends with automatic failover
-- **Transactional Recording**: Database transactions ensure data consistency
-- **Backup Strategies**: Configurable recording to multiple destinations
-- **Recovery Procedures**: Automatic retry mechanisms with exponential backoff
+The system integrates with external frameworks through well-defined interfaces:
 
-#### Configuration System Resilience
+**RL Framework Integration:**
+- Gymnasium 0.29.x compliance with automatic legacy Gym detection
+- Stable-Baselines3 vectorized environment support
+- Custom training loop compatibility via standard API
 
-- **Default Value Fallbacks**: Comprehensive default configurations for all components
-- **Schema Validation**: Pydantic-based validation prevents invalid configurations
-- **Environment Integration**: Environment variable interpolation with fallbacks
-- **Hot Reloading**: Runtime configuration updates without restart
+**HPC Cluster Integration:**
+- Hydra multirun with distributed job scheduling
+- SLURM, PBS, and other scheduler compatibility
+- Environment variable interpolation for cluster resources
 
-### 6.1.5 Alternative Architecture Benefits
+**<span style="background-color: rgba(91, 57, 243, 0.2)">CLI Entry Point Integration:</span>**
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Console scripts `plume-nav-sim` and `plume-nav-train` expose library functionality to shell environments</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Utilises Click for argument parsing and Hydra for configuration resolution</span>
+- <span style="background-color: rgba(91, 57, 243, 0.2)">Enables non-Python users and CI pipelines to launch simulations and training runs without writing code</span>
 
-#### 6.1.5.1 Monolithic Advantages for Research Applications
+#### 6.1.5.2 Data Flow Architecture
 
-The monolithic, protocol-based architecture provides specific benefits for scientific computing:
+```mermaid
+sequenceDiagram
+    participant CLI as CLI
+    participant Config as Hydra Config
+    participant Engine as Simulation Engine
+    participant Plume as Plume Model
+    participant Agent as Navigation Agent
+    participant Recorder as Recording System
+    participant RL as RL Framework
+    
+    CLI->>Config: Parse Args & Compose Config
+    Config->>Engine: Instantiate Components
+    Engine->>Plume: Initialize Physics
+    Engine->>Agent: Initialize Navigator
+    Engine->>Recorder: Initialize Backend
+    
+    loop Simulation Step
+        RL->>Engine: Request Step
+        Engine->>Plume: Query Concentration
+        Engine->>Agent: Provide Observations
+        Agent->>Engine: Return Actions
+        Engine->>Recorder: Store Data
+        Engine->>RL: Return Observations/Rewards
+    end
+    
+    Engine->>Recorder: Finalize Data
+    Recorder->>Config: Export Results
+```
 
-#### Performance Advantages
+### 6.1.6 Architectural Evolution Strategy
 
-- **Memory Locality**: Shared memory access patterns optimize cache utilization
-- **Call Overhead**: Direct method invocation eliminates network serialization costs
-- **Vectorization**: NumPy operations across large datasets without network boundaries
-- **Real-time Constraints**: Guaranteed latency bounds for time-critical simulations
+#### 6.1.6.1 Future Distributed Architecture Support
 
-#### Development and Deployment Benefits
+The current microkernel pattern with protocol-based components is designed to enable future distributed execution if requirements change:
 
-- **Simplified Testing**: Complete stack traces without distributed tracing complexity
-- **Easy Debugging**: Single-process debugging with standard Python tools
-- **Deployment Simplicity**: pip install without container orchestration
-- **Dependency Management**: Poetry-based dependency resolution
+**Distributed Readiness:**
+- Protocol interfaces can be extended with network serialization
+- Component boundaries are suitable for service extraction
+- Configuration system supports distributed deployment scenarios
 
-#### 6.1.5.2 Research-Focused Design
+**Migration Path:**
+- Individual components can be extracted as microservices
+- Protocol interfaces provide natural service boundaries
+- Hydra configuration enables deployment-specific composition
 
-The architecture optimizes for research workflow requirements:
+#### References
 
-- **Algorithm Focus**: Scientists concentrate on navigation algorithms rather than infrastructure
-- **Experiment Reproducibility**: Hydra configuration management ensures reproducible experiments
-- **Rapid Prototyping**: Protocol interfaces enable quick algorithm iterations
-- **Educational Value**: Students can understand complete system without distributed complexity
-
-### 6.1.6 References
-
-#### Technical Specification Sections
-- **5.1 HIGH-LEVEL ARCHITECTURE** - System architecture principles and Protocol-Oriented Architecture pattern
-- **5.2 COMPONENT DETAILS** - Detailed component responsibilities and protocol interfaces
-- **3.3 FRAMEWORKS & LIBRARIES** - Core frameworks supporting the monolithic architecture
-
-#### Section-Specific Repository Details
-- **Root repository overview** - Complete system architecture and design rationale
-- **src folder structure** - Three-package monolithic application organization
-- **src/odor_plume_nav/api** - Python API functions demonstrating library interaction patterns
-- **conf folder hierarchy** - Hydra configuration system supporting runtime component selection
+- `src/plume_nav_sim/core/simulation.py` - Core simulation engine implementation
+- `src/plume_nav_sim/core/protocols.py` - Protocol interface definitions
+- `src/plume_nav_sim/envs/plume_navigation_env.py` - RL integration layer
+- `src/plume_nav_sim/recording/` - Recording infrastructure components
+- `conf/base.yaml` - Foundational configuration architecture
+- Technical Specification Section 5.1 - High-level architecture patterns
+- Technical Specification Section 5.2 - Component details and interfaces
+- Technical Specification Section 5.3 - Technical decisions and rationale
 
 ## 6.2 DATABASE DESIGN
 
 ### 6.2.1 Database Architecture Overview
 
-The Plume Navigation Simulation system implements a sophisticated multi-backend database architecture designed to support diverse research workflows while maintaining optimal performance. The database design is built around the principle of optional activation, allowing the system to operate with zero database overhead when persistence is not required, while providing comprehensive data management capabilities when research scenarios demand it.
+The Plume Navigation Simulation Library implements an optional database persistence layer that complements the default file-based recording system. This design enables researchers to choose between lightweight file-based storage or enterprise-grade database persistence depending on their experimental requirements and infrastructure capabilities.
 
-#### 6.2.1.1 Multi-Backend Architecture
+#### 6.2.1.1 Database Activation Strategy
 
-The system employs a protocol-driven database architecture supporting four distinct storage backends:
+The database system operates under a **zero-impact by default** principle, remaining completely inactive unless explicitly enabled through configuration. This approach ensures that the high-performance simulation requirements (≤33ms step latency @ 100 agents) are unaffected by database overhead for users who prefer file-based workflows.
 
-- **SQLite Backend**: Lightweight embedded database optimized for local development, testing, and single-user research scenarios
-- **Parquet Backend**: Columnar storage format optimized for analytical workloads and large-scale data analysis
-- **HDF5 Backend**: Hierarchical data format designed for complex scientific datasets with advanced compression
-- **Null Backend**: Zero-overhead backend that bypasses all database operations for performance-critical scenarios
+**Activation Methods:**
+- Environment variables: `DATABASE_URL`, `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_ECHO`
+- Hydra configuration: `database.enabled: true`
+- Runtime configuration through session management API
 
-#### 6.2.1.2 Optional Database Activation
+#### 6.2.1.2 Multi-Backend Architecture
 
-The database functionality is designed with complete optionality, enabling researchers to choose the appropriate level of data persistence based on their specific needs. When disabled, the system operates with zero performance impact, falling back to file-based operations for essential functionality.
+The system supports three primary database backends through SQLAlchemy 2.0+ ORM:
 
-#### 6.2.1.3 Performance-First Design
-
-The database architecture prioritizes simulation performance through asynchronous I/O operations, connection pooling strategies, and buffered writes with configurable flush triggers. This design ensures that data recording operations never block simulation execution, maintaining the system's target performance of ≤33ms per simulation step.
+| Backend | Use Case | Performance Characteristics | Storage Type |
+|---------|----------|---------------------------|--------------|
+| SQLite | Local development, small experiments | Single-file, embedded | File-based |
+| PostgreSQL | Production research, multi-user | ACID compliance, concurrent access | Network-based |
+| MySQL | Legacy compatibility, institutional | Mature ecosystem, clustering | Network-based |
 
 ### 6.2.2 Schema Design
 
-#### 6.2.2.1 SQLAlchemy ORM Models
+#### 6.2.2.1 Entity Relationships
 
-The system's primary data model is implemented using SQLAlchemy ORM with declarative base classes that provide consistent functionality across all entities.
-
-#### Base Model Architecture
+The database schema implements a hierarchical structure reflecting the experimental workflow from high-level experiments down to individual trajectory points:
 
 ```mermaid
 erDiagram
-    TimestampMixin {
-        datetime created_at
-        datetime updated_at
-    }
-    
-    MetadataMixin {
-        json metadata
-        json tags
-    }
+    Experiment ||--o{ Simulation : contains
+    Simulation ||--o{ Trajectory : records
+    Simulation ||--o{ PerformanceMetric : measures
     
     Experiment {
         uuid id PK
         string name
-        string description
         json configuration
+        json metadata
         datetime created_at
         datetime updated_at
-        json metadata
+        string description
         json tags
     }
     
@@ -3490,755 +3153,919 @@ erDiagram
         uuid id PK
         uuid experiment_id FK
         string name
-        json parameters
-        datetime started_at
-        datetime completed_at
+        json configuration
         json metadata
-        json tags
+        datetime created_at
+        datetime updated_at
+        int episode_count
+        json final_stats
     }
     
     Trajectory {
         uuid id PK
         uuid simulation_id FK
-        int episode_id
-        bytes compressed_data
+        string trajectory_type
+        binary trajectory_data
         json metadata
-        json tags
+        datetime created_at
+        datetime updated_at
+        int data_size
+        string compression_type
     }
     
     PerformanceMetric {
         uuid id PK
         uuid simulation_id FK
         string metric_name
+        string category
         float value
-        datetime timestamp
         json metadata
-        json tags
+        datetime created_at
+        datetime updated_at
+        int step_number
+        string unit
     }
-    
-    Experiment ||--o{ Simulation : contains
-    Simulation ||--o{ Trajectory : generates
-    Simulation ||--o{ PerformanceMetric : produces
 ```
 
-#### Entity Relationships
+#### 6.2.2.2 Data Models and Structures
 
-**Experiment Entity**
-- **Purpose**: Top-level research experiment container
-- **Key Attributes**: Unique identifier, descriptive name, hierarchical configuration storage
-- **Relationships**: One-to-many with Simulation entities
-- **Data Storage**: JSON-serialized configuration and metadata for flexible schema evolution
+**Core Table Definitions:**
 
-**Simulation Entity**
-- **Purpose**: Individual simulation runs within research experiments
-- **Key Attributes**: Experiment reference, runtime parameters, execution timestamps
-- **Relationships**: Many-to-one with Experiment, one-to-many with Trajectory and PerformanceMetric
-- **Data Storage**: Structured parameter storage with temporal tracking
+| Table | Primary Key | Foreign Keys | JSON Columns | Binary Columns |
+|-------|-------------|--------------|--------------|----------------|
+| Experiment | UUID | None | configuration, metadata, tags | None |
+| Simulation | UUID | experiment_id | configuration, metadata, final_stats | None |
+| Trajectory | UUID | simulation_id | metadata | trajectory_data (gzipped) |
+| PerformanceMetric | UUID | simulation_id | metadata | None |
 
-**Trajectory Entity**
-- **Purpose**: Agent movement and state data storage
-- **Key Attributes**: Simulation reference, episode identifier, compressed binary data
-- **Relationships**: Many-to-one with Simulation
-- **Data Storage**: Compressed binary format optimized for space efficiency
-
-**PerformanceMetric Entity**
-- **Purpose**: Runtime performance measurement storage
-- **Key Attributes**: Simulation reference, metric identification, temporal values
-- **Relationships**: Many-to-one with Simulation
-- **Data Storage**: Time-series data with flexible metadata association
-
-#### 6.2.2.2 SQLite Recording Schema
-
-The SQLite recording backend implements a normalized schema optimized for experimental data collection:
-
-```mermaid
-erDiagram
-    runs {
-        text id PK
-        text experiment_name
-        text timestamp
-        text configuration
-        text metadata
-    }
-    
-    episodes {
-        text id PK
-        text run_id FK
-        integer episode_number
-        text start_time
-        text end_time
-        text metadata
-    }
-    
-    steps {
-        text id PK
-        text episode_id FK
-        integer step_number
-        text timestamp
-        text agent_states
-        text sensor_readings
-        text actions
-        text rewards
-        text metadata
-    }
-    
-    configurations {
-        text id PK
-        text run_id FK
-        text component_name
-        text configuration_json
-        text timestamp
-    }
-    
-    metadata {
-        text id PK
-        text parent_id FK
-        text parent_type
-        text key
-        text value
-        text timestamp
-    }
-    
-    runs ||--o{ episodes : contains
-    episodes ||--o{ steps : contains
-    runs ||--o{ configurations : stores
-    runs ||--o{ metadata : describes
-    episodes ||--o{ metadata : describes
-    steps ||--o{ metadata : describes
-```
+**Data Storage Patterns:**
+- **UUID Primary Keys**: Ensures global uniqueness and prevents collision in distributed scenarios
+- **JSON Columns**: Flexible schema for configuration and metadata without rigid constraints
+- **Binary Compression**: Trajectory data stored as gzipped binary for space efficiency
+- **Timestamp Tracking**: Automatic creation and update timestamps via SQLAlchemy mixins
 
 #### 6.2.2.3 Indexing Strategy
 
-The database schema implements a comprehensive indexing strategy to optimize query performance:
+The schema implements a comprehensive indexing strategy optimized for common query patterns:
 
-| Index Name | Table | Columns | Purpose |
-|---|---|---|---|
-| idx_experiment_name | experiments | name | Fast experiment lookup |
-| idx_simulation_experiment | simulations | experiment_id, created_at | Temporal experiment queries |
-| idx_trajectory_simulation | trajectories | simulation_id, episode_id | Episode data retrieval |
-| idx_performance_metrics | performance_metrics | simulation_id, metric_name | Performance analysis |
-| idx_runs_timestamp | runs | timestamp | Temporal run queries |
-| idx_episodes_run | episodes | run_id, episode_number | Sequential episode access |
-| idx_steps_episode | steps | episode_id, step_number | Step-level data access |
+**Primary Indexes:**
+- `experiment_id` on Simulation table for experiment-based queries
+- `simulation_id` on Trajectory and PerformanceMetric tables for simulation-based queries
+- `created_at` timestamps for temporal queries
+- `trajectory_type` for trajectory filtering
+
+**Composite Indexes:**
+- `(simulation_id, metric_name)` for performance metric queries
+- `(experiment_id, created_at)` for experiment timeline queries
+- `(simulation_id, trajectory_type)` for trajectory type filtering
 
 #### 6.2.2.4 Partitioning Approach
 
-The system implements logical partitioning strategies rather than physical partitioning:
+The current schema design does not implement database partitioning, as the system is optimized for research workloads rather than high-volume production scenarios. Future partitioning strategies could include:
 
-- **Temporal Partitioning**: Experiments and simulations are logically partitioned by creation date
-- **Functional Partitioning**: Separate backends for different data types (analytical vs. operational)
-- **Research Partitioning**: Isolation of different research projects through experiment boundaries
+**Potential Partitioning Strategies:**
+- **Temporal Partitioning**: By experiment creation date for historical data management
+- **Experiment-Based Partitioning**: By experiment ID for large-scale studies
+- **Trajectory Size Partitioning**: By data size for storage optimization
 
 ### 6.2.3 Data Management
 
 #### 6.2.3.1 Migration Procedures
 
-The database system implements Alembic-based migration management for schema evolution:
+The system currently implements a **schema-on-demand** approach rather than formal database migrations:
 
-**Migration Architecture**
-- **Version Control**: Sequential migration scripts with rollback capabilities
-- **Schema Validation**: Pre-migration validation to ensure data integrity
-- **Backup Integration**: Automatic backup creation before schema changes
-- **Zero-Downtime**: Support for online schema modifications where possible
+**Current Approach:**
+- Tables created automatically via `create_all_tables()` function
+- Schema changes require manual intervention
+- No Alembic or migration framework integration
+
+**Migration Strategy:**
+```python
+# Schema creation pattern
+def create_all_tables(engine):
+    """Create all tables if they don't exist"""
+    Base.metadata.create_all(engine)
+    
+# Configuration-driven schema management
+schema:
+  create_tables: true
+  drop_existing: false
+  table_prefix: "opn_"
+```
 
 #### 6.2.3.2 Versioning Strategy
 
-The data versioning strategy encompasses multiple layers:
+Database versioning is handled through configuration management rather than traditional schema versioning:
 
-**Schema Versioning**
-- **Database Schema**: Alembic-managed database schema versions
-- **Configuration Schema**: Pydantic model versioning for configuration validation
-- **Data Format**: Versioned serialization formats with backward compatibility
+**Configuration-Based Versioning:**
+- Schema changes tracked through Hydra configuration versions
+- Backward compatibility maintained through JSON column flexibility
+- Breaking changes communicated through documentation updates
 
-**Data Versioning**
-- **Experiment Versioning**: Immutable experiment definitions with version tracking
-- **Configuration Snapshots**: Point-in-time configuration preservation
-- **Result Provenance**: Complete traceability of data generation processes
+#### 6.2.3.3 Data Storage and Retrieval Mechanisms
 
-#### 6.2.3.3 Archival Policies
+**Storage Optimization:**
+- **Trajectory Compression**: Gzip compression for large trajectory datasets
+- **JSON Normalization**: Structured metadata storage with schema validation
+- **Bulk Operations**: Batch inserts for performance-critical scenarios
 
-The system implements flexible archival policies based on research lifecycle requirements:
+**Retrieval Patterns:**
+- **Lazy Loading**: Trajectory data loaded on-demand to minimize memory usage
+- **Query Optimization**: Indexed queries for common research patterns
+- **Filtering Support**: Metadata-based filtering through JSON queries
 
-| Data Type | Retention Period | Archive Location | Compression |
-|---|---|---|---|
-| Active Experiments | Indefinite | Primary storage | None |
-| Completed Simulations | 2 years | Primary storage | Standard |
-| Historical Trajectories | 1 year | Archive storage | High |
-| Performance Metrics | 6 months | Archive storage | Standard |
+#### 6.2.3.4 Archival Policies
 
-#### 6.2.3.4 Data Storage and Retrieval Mechanisms
+The system implements flexible archival policies through configuration:
 
-**Storage Mechanisms**
-- **Asynchronous Writes**: Non-blocking data persistence with configurable buffers
-- **Compression**: Transparent compression for trajectory and metric data
-- **Batching**: Efficient batch operations for high-throughput scenarios
-- **Transaction Management**: ACID compliance for data integrity
-
-**Retrieval Mechanisms**
-- **Lazy Loading**: On-demand data loading for large datasets
-- **Caching**: Intelligent caching of frequently accessed data
-- **Pagination**: Efficient large dataset traversal
-- **Filtering**: Advanced query capabilities with multiple criteria
-
-#### 6.2.3.5 Caching Policies
-
-The system implements a multi-layered caching strategy:
-
-**Application-Level Caching**
-- **Configuration Cache**: Hydra configuration objects with 1-hour TTL
-- **Schema Cache**: SQLAlchemy metadata caching for improved query performance
-- **Result Cache**: Computed analysis results with intelligent invalidation
-
-**Database-Level Caching**
-- **Query Cache**: SQLite query result caching with size-based eviction
-- **Connection Cache**: Connection pool management with idle timeout
-- **Metadata Cache**: Table and index metadata caching
+**Archival Configuration:**
+```yaml
+database:
+  archival:
+    enabled: false
+    retention_days: 365
+    archive_strategy: "compress"
+    cleanup_policy: "manual"
+```
 
 ### 6.2.4 Compliance Considerations
 
 #### 6.2.4.1 Data Retention Rules
 
-The database design implements comprehensive data retention policies:
+**Research Data Retention:**
+- Configurable retention periods through database configuration
+- Support for indefinite retention for ongoing research
+- Automatic cleanup policies with manual override capability
 
-**Regulatory Compliance**
-- **Research Data**: 5-year minimum retention as per academic standards
-- **Audit Logs**: 3-year retention for compliance verification
-- **Configuration Data**: Permanent retention for reproducibility requirements
+**Retention Implementation:**
+- Timestamp-based retention queries
+- Soft deletion with recovery capability
+- Audit trail for deleted experiments
 
-**Operational Policies**
-- **Automatic Purging**: Configurable automatic deletion of expired data
-- **Retention Metadata**: Tracking of retention periods and deletion schedules
-- **Legal Hold**: Suspension of deletion for legal or regulatory requirements
+#### 6.2.4.2 Privacy Controls
 
-#### 6.2.4.2 Backup and Fault Tolerance Policies
+**Data Privacy Features:**
+- No personally identifiable information stored in trajectory data
+- Configurable metadata scrubbing for sensitive information
+- Support for data anonymization in research contexts
 
-**Backup Strategy**
-- **Full Backups**: Daily full database backups with compression
-- **Incremental Backups**: Hourly incremental backups during active research
-- **Point-in-Time Recovery**: Transaction log-based recovery capabilities
-- **Cross-Platform Compatibility**: Database-agnostic backup formats
+#### 6.2.4.3 Audit Mechanisms
 
-**Fault Tolerance**
-- **Connection Resilience**: Automatic reconnection with exponential backoff
-- **Data Validation**: Comprehensive data integrity checks on write operations
-- **Graceful Degradation**: Fallback to file-based storage on database failures
-- **Recovery Procedures**: Automated recovery from common failure scenarios
+**Audit Trail Implementation:**
+- Automatic timestamp tracking for all database operations
+- Metadata versioning through JSON column updates
+- Query logging through SQLAlchemy echo functionality
 
-#### 6.2.4.3 Privacy Controls
+#### 6.2.4.4 Access Controls
 
-**Data Anonymization**
-- **Automatic Anonymization**: Configurable anonymization of sensitive data
-- **Pseudonymization**: Reversible anonymization for research continuity
-- **Data Masking**: Production data masking for development environments
-
-**Access Controls**
-- **Role-Based Access**: Hierarchical access control for research teams
-- **Audit Logging**: Comprehensive logging of all data access operations
-- **Encryption**: At-rest and in-transit encryption for sensitive data
-
-#### 6.2.4.4 Audit Mechanisms
-
-**Audit Trail**
-- **Data Lineage**: Complete traceability of data transformations
-- **User Activity**: Comprehensive logging of user interactions
-- **System Events**: Detailed logging of system-level database operations
-- **Performance Metrics**: Audit of database performance and optimization
-
-**Compliance Reporting**
-- **Automated Reports**: Scheduled generation of compliance reports
-- **Data Quality Metrics**: Automated data quality assessment
-- **Access Reports**: Regular access pattern analysis and reporting
+**Database Access Control:**
+- Environment variable-based authentication
+- Connection string security with credential management
+- Role-based access through database-level permissions
 
 ### 6.2.5 Performance Optimization
 
 #### 6.2.5.1 Query Optimization Patterns
 
-The database system implements sophisticated query optimization strategies:
+**Optimized Query Patterns:**
+- Index-based filtering for common research queries
+- JSON path queries for metadata filtering
+- Batch operations for bulk data insertion
 
-**SQLAlchemy Optimization**
-- **Eager Loading**: Strategic use of `joinedload()` and `selectinload()` for reducing N+1 queries
-- **Query Batching**: Bulk operations for high-throughput scenarios
-- **Connection Pooling**: Optimized connection pool sizing based on workload patterns
-- **Statement Caching**: Prepared statement caching for repeated queries
-
-**Database-Specific Optimization**
-- **SQLite Pragmas**: Optimized PRAGMA settings for performance (`journal_mode=WAL`, `synchronous=NORMAL`)
-- **Index Optimization**: Covering indexes for common query patterns
-- **Query Planning**: EXPLAIN QUERY PLAN analysis for optimization opportunities
-
-#### 6.2.5.2 Caching Strategy
-
-**Multi-Level Caching Architecture**
-
-```mermaid
-graph TB
-    A[Application Layer] --> B[L1: Configuration Cache]
-    A --> C[L2: Query Result Cache]
-    A --> D[L3: Connection Pool Cache]
-    
-    B --> E[L4: SQLAlchemy Session Cache]
-    C --> E
-    D --> E
-    
-    E --> F[L5: Database Query Cache]
-    F --> G[L6: File System Cache]
-    
-    G --> H[Storage Layer]
+**Performance Monitoring:**
+```python
+# Query performance tracking
+session.execute(
+    text("EXPLAIN QUERY PLAN SELECT * FROM experiments WHERE created_at > :date"),
+    {"date": datetime.now() - timedelta(days=30)}
+)
 ```
 
-**Caching Policies**
-- **TTL-Based Expiration**: Time-based cache invalidation with configurable intervals
-- **Size-Based Eviction**: LRU eviction when cache size limits are reached
-- **Dependency Tracking**: Intelligent invalidation based on data dependencies
-- **Preload Strategies**: Predictive caching for common access patterns
+#### 6.2.5.2 Connection Pooling
 
-#### 6.2.5.3 Connection Pooling
+**Enterprise-Grade Connection Management:**
+- Configurable connection pool sizes (default: 5 connections)
+- Connection overflow handling (default: 10 additional connections)
+- Connection lifecycle management with automatic cleanup
 
-**Connection Pool Configuration**
-- **SQLite**: StaticPool with single connection for thread safety
-- **PostgreSQL**: QueuePool with optimized sizing (min=5, max=20)
-- **Connection Lifecycle**: Automatic connection validation and renewal
-- **Pool Monitoring**: Real-time monitoring of pool utilization and performance
-
-**Pool Management**
-- **Overflow Handling**: Configurable overflow connections for peak loads
-- **Connection Recycling**: Automatic connection recycling to prevent resource leaks
-- **Health Checks**: Periodic connection health validation
-- **Error Recovery**: Automatic recovery from connection failures
-
-#### 6.2.5.4 Read/Write Splitting
-
-**Architecture Design**
-- **Read Replicas**: Support for read-only database replicas for analytical workloads
-- **Write Concentration**: Centralized write operations to maintain data consistency
-- **Load Balancing**: Intelligent routing of read queries to optimal replicas
-- **Consistency Management**: Eventual consistency handling for read replicas
-
-#### 6.2.5.5 Batch Processing Approach
-
-**Batch Operation Strategy**
-- **Bulk Inserts**: Optimized bulk insertion for high-throughput data recording
-- **Transaction Batching**: Grouping operations into optimally-sized transactions
-- **Asynchronous Processing**: Non-blocking batch operations with queue management
-- **Error Handling**: Comprehensive error handling with partial failure recovery
-
-### 6.2.6 Database Architecture Diagrams
-
-#### 6.2.6.1 Database Schema Relationship Diagram
-
-```mermaid
-erDiagram
-    Base ||--|| TimestampMixin : inherits
-    Base ||--|| MetadataMixin : inherits
-    
-    Experiment {
-        uuid id PK
-        string name
-        string description
-        json configuration
-        datetime created_at
-        datetime updated_at
-        json metadata
-        json tags
-    }
-    
-    Simulation {
-        uuid id PK
-        uuid experiment_id FK
-        string name
-        json parameters
-        datetime started_at
-        datetime completed_at
-        json metadata
-        json tags
-    }
-    
-    Trajectory {
-        uuid id PK
-        uuid simulation_id FK
-        int episode_id
-        bytes compressed_data
-        json metadata
-        json tags
-    }
-    
-    PerformanceMetric {
-        uuid id PK
-        uuid simulation_id FK
-        string metric_name
-        float value
-        datetime timestamp
-        json metadata
-        json tags
-    }
-    
-    Experiment ||--o{ Simulation : "1:N"
-    Simulation ||--o{ Trajectory : "1:N"
-    Simulation ||--o{ PerformanceMetric : "1:N"
+**Connection Pool Configuration:**
+```yaml
+database:
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 3600
 ```
 
-#### 6.2.6.2 Data Flow Architecture
+#### 6.2.5.3 Caching Strategy
+
+**Database-Level Caching:**
+- SQLAlchemy query result caching for repeated queries
+- Session-level caching for experiment metadata
+- Integration with existing frame cache architecture
+
+**Cache Configuration:**
+- Configurable cache expiration times
+- Memory-based caching for frequently accessed data
+- Cache invalidation on data updates
+
+#### 6.2.5.4 Batch Processing Approach
+
+**Bulk Operations:**
+- Batch trajectory insertions for high-throughput scenarios
+- Bulk performance metric updates
+- Transaction-based batch processing for data integrity
+
+### 6.2.6 Database Integration Architecture
+
+#### 6.2.6.1 Integration with Recording System
+
+The database system integrates seamlessly with the existing multi-format recording infrastructure:
 
 ```mermaid
-graph TB
-    A[Simulation Engine] --> B[Recording Framework]
-    B --> C{Backend Selection}
+flowchart TB
+    subgraph "Recording Infrastructure"
+        A[RecorderProtocol] --> B[SQLiteRecorder]
+        A --> C[ParquetRecorder]
+        A --> D[HDF5Recorder]
+        A --> E[NoneRecorder]
+    end
     
-    C -->|SQLite| D[SQLite Backend]
-    C -->|Parquet| E[Parquet Backend]
-    C -->|HDF5| F[HDF5 Backend]
-    C -->|Null| G[Null Backend]
+    subgraph "Database Layer"
+        F[DatabaseSession] --> G[SQLAlchemy ORM]
+        G --> H[SQLite Backend]
+        G --> I[PostgreSQL Backend]
+        G --> J[MySQL Backend]
+    end
     
-    D --> H[Relational Storage]
-    E --> I[Columnar Storage]
-    F --> J[Hierarchical Storage]
-    G --> K[No Storage]
+    subgraph "Data Models"
+        K[Experiment Model]
+        L[Simulation Model]
+        M[Trajectory Model]
+        N[PerformanceMetric Model]
+    end
     
-    H --> L[Data Analysis]
-    I --> L
-    J --> L
+    B --> F
+    F --> K
+    F --> L
+    F --> M
+    F --> N
     
-    L --> M[Visualization]
-    L --> N[Research Outputs]
+    style A fill:#e1f5fe
+    style F fill:#f3e5f5
+    style K fill:#e8f5e8
 ```
 
-#### 6.2.6.3 Multi-Backend Architecture
+#### 6.2.6.2 Data Flow Patterns
+
+**Experimental Data Flow:**
+1. **Experiment Creation**: Metadata stored in Experiment table
+2. **Simulation Execution**: Runtime data stored in Simulation table
+3. **Trajectory Recording**: Compressed trajectory data stored in Trajectory table
+4. **Performance Tracking**: Metrics stored in PerformanceMetric table
+
+**Query Access Patterns:**
+- **Experimental Overview**: Join Experiment and Simulation tables
+- **Performance Analysis**: Query PerformanceMetric with temporal filtering
+- **Trajectory Retrieval**: On-demand decompression of trajectory data
+
+#### 6.2.6.3 Fallback Mechanisms
+
+**Graceful Degradation:**
+- Automatic fallback to file-based recording when database unavailable
+- NoneRecorder activation for zero-overhead operation
+- Error handling with continuation policies
+
+**Fallback Configuration:**
+```yaml
+database:
+  enabled: true
+  fallback_policy: "file_based"
+  error_handling: "continue"
+  backup_recording: "parquet"
+```
+
+#### 6.2.6.4 Replication Architecture
+
+**Future Replication Support:**
+The schema design supports future replication scenarios through:
+- UUID-based primary keys preventing replication conflicts
+- Timestamp-based conflict resolution
+- JSON metadata flexibility for replication metadata
 
 ```mermaid
-graph LR
-    A[Application Layer] --> B[Recording Protocol]
-    B --> C[Backend Factory]
+flowchart LR
+    subgraph "Primary Database"
+        A[Write Operations] --> B[Primary Instance]
+    end
     
-    C --> D[SQLite Backend]
-    C --> E[Parquet Backend]
-    C --> F[HDF5 Backend]
-    C --> G[Null Backend]
+    subgraph "Replica Databases"
+        C[Read Operations] --> D[Replica 1]
+        C --> E[Replica 2]
+    end
     
-    D --> H[SQLite Database]
-    E --> I[Parquet Files]
-    F --> J[HDF5 Files]
-    G --> K[Memory Only]
+    B -.->|Replication| D
+    B -.->|Replication| E
     
-    H --> L[Relational Queries]
-    I --> M[Analytical Queries]
-    J --> N[Scientific Queries]
-    K --> O[No Persistence]
+    style A fill:#ffcdd2
+    style C fill:#c8e6c9
+    style B fill:#e1f5fe
+    style D fill:#f3e5f5
+    style E fill:#f3e5f5
 ```
 
-### 6.2.7 References
+### 6.2.7 Database Maintenance and Monitoring
 
-#### Files Examined
-- `src/odor_plume_nav/db/models.py` - SQLAlchemy ORM models and schema definitions
-- `src/odor_plume_nav/db/session.py` - Database session management and connection pooling
-- `conf/base/record/sqlite.yaml` - SQLite backend configuration schema
-- `conf/base/record/parquet.yaml` - Parquet backend configuration
-- `conf/base/record/hdf5.yaml` - HDF5 backend configuration
-- `conf/base/record/none.yaml` - Null backend configuration
-- `conf/config.yaml` - Main configuration with database settings
+#### 6.2.7.1 Maintenance Procedures
 
-#### Directories Analyzed
-- `src/odor_plume_nav/db/` - Database models and session management
-- `src/plume_nav_sim/recording/backends/` - Recording backend implementations
-- `conf/base/record/` - Database configuration schemas
+**Regular Maintenance Tasks:**
+- Index optimization for query performance
+- Database vacuum operations for space reclamation
+- Connection pool health monitoring
+- Query performance analysis
 
-#### Technical Specification Sections Referenced
-- `1.2 SYSTEM OVERVIEW` - System context and architecture
-- `3.6 DATABASES & STORAGE` - Storage solutions overview
-- `2.1 FEATURE CATALOG` - F-005 Data Recording Framework
-- `2.2 FUNCTIONAL REQUIREMENTS TABLES` - Recording requirements
+#### 6.2.7.2 Monitoring Integration
+
+**Performance Monitoring:**
+- Integration with existing performance monitoring system
+- Database-specific metrics collection
+- Query execution time tracking
+- Connection pool utilization metrics
+
+#### 6.2.7.3 Backup Architecture
+
+**Backup Strategy:**
+- Automated backup scheduling through configuration
+- Point-in-time recovery capability
+- Cross-backend backup support (database to file)
+
+**Backup Configuration:**
+```yaml
+database:
+  backup:
+    enabled: true
+    schedule: "daily"
+    retention_days: 30
+    backup_location: "backups/"
+    compression: true
+```
+
+#### References
+
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/db/models.py` - Complete SQLAlchemy 2.0+ ORM schema definitions
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/db/session.py` - Enterprise database session management implementation
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/db/__init__.py` - Database module entry point with fallback handling
+- `conf/base.yaml` - Base configuration including database settings
+- `tests/test_db_session.py` - Comprehensive test coverage for session management
+- `conf/base/hooks/research.yaml` - Hook configuration referencing persistence capabilities
+- `docs/api_reference/hooks.md` - Documentation of hook system including persistence hooks
+- `tests/test_hooks.py` - Hook system test suite
+- `conf/base/record/sqlite.yaml` - SQLite recorder backend configuration
+- `tests/visualization/test_trajectory.py` - Visualization tests with data persistence
+- `src/plume_nav_sim/recording/backends/hdf5.py` - HDF5 recording backend
+- `conf/base/hooks/full.yaml` - Full hook configuration profile
+- Technical Specification Section 3.5 - Database and storage architecture
+- Technical Specification Section 6.1 - Core services architecture patterns
 
 ## 6.3 INTEGRATION ARCHITECTURE
 
 ### 6.3.1 Integration Architecture Overview
 
-The Plume Navigation Simulation system implements a **specialized integration architecture** optimized for scientific computing workflows rather than traditional web service integration patterns. The system is designed as a high-performance Python library that integrates with research frameworks, data storage systems, and computational infrastructure through well-defined protocol interfaces and configuration-driven component selection. <span style="background-color: rgba(91, 57, 243, 0.2)">Lifecycle hook coordination is now handled by a centrally-instantiated HookManager whose activation is driven by the new `hooks` Hydra configuration group (default: `none`).</span>
+The Plume Navigation Simulation Library implements a **research-oriented integration architecture** that prioritizes scientific computing framework compatibility and high-performance data processing over traditional web service integrations. This architectural approach reflects the system's primary role as a simulation research tool rather than a distributed web application.
 
-#### 6.3.1.1 Architecture Characteristics
+#### 6.3.1.1 Integration Philosophy
 
-Unlike traditional distributed systems, this integration architecture is characterized by:
+The integration architecture follows a **protocol-based composition pattern** where external systems are integrated through standardized interfaces and configuration-driven dependency injection. This design enables zero-code extensibility for research workflows while maintaining strict performance guarantees.
 
-- **Protocol-Oriented Integration**: Component communication through Python protocol interfaces rather than network APIs
-- **Configuration-Driven Activation**: External system integration activated through environment variables and configuration files
-- **Optional Dependency Management**: Graceful degradation when external systems are unavailable
-- **Research-Focused Integration**: Optimized for ML frameworks, HPC systems, and scientific data storage
-- <span style="background-color: rgba(91, 57, 243, 0.2)">**Lifecycle Hook Management**: Centralised `HookManager` dispatches pre-step, post-step, and episode-end hooks with early-exit optimisation (<1 ms overhead when no hooks are configured)</span>
+**Key Integration Principles:**
+- **Framework-agnostic design**: Compatible with multiple RL frameworks through standardized interfaces
+- **Configuration-driven integration**: Declarative YAML-based component wiring
+- **Performance-first approach**: All integrations must meet ≤33ms step latency requirements
+- **Backward compatibility**: Dual API support for legacy and modern framework versions
 
-#### 6.3.1.2 Integration Boundaries
+#### 6.3.1.2 Integration Scope Classification
 
-The system operates within three primary integration boundaries:
+| Integration Category | Scope | Purpose | Performance Impact |
+|---------------------|-------|---------|-------------------|
+| Scientific Computing | Core | RL framework compatibility | Critical path |
+| Data Persistence | Optional | Research data management | Background |
+| Development Tools | External | CI/CD and quality assurance | Build-time only |
+| Configuration Management | Core | Component orchestration | Initialization only |
 
-| Integration Layer | Purpose | Implementation Pattern |
-|---|---|---|
-| **Research Framework Layer** | ML/RL framework integration | Gymnasium API compliance |
-| **Data Persistence Layer** | Multi-backend storage integration | SQLAlchemy + async recording |
-| **Infrastructure Layer** | HPC and CI/CD system integration | Environment-based detection |
-
-<span style="background-color: rgba(91, 57, 243, 0.2)">**Note**: The HookManager operates inside the *Research Framework Layer* boundary, being instantiated by `PlumeNavigationEnv` and remaining transparent to external integration layers.</span>
-
-### 6.3.2 API Design
+### 6.3.2 API DESIGN
 
 #### 6.3.2.1 Protocol Specifications
 
-The system implements **Protocol-Oriented Architecture (POA)** using Python's `typing.Protocol` for component interfaces rather than traditional REST APIs. <span style="background-color: rgba(91, 57, 243, 0.2)">All hook implementations must comply with `HookSystemProtocol`, ensuring backward-compatible API behavior.</span>
+The system implements **Protocol-based APIs** rather than traditional REST endpoints, optimized for in-process scientific computing rather than network communication.
 
-#### Core Protocol Interfaces
+**Primary API Protocols:**
 
-| Protocol | Purpose | Implementation Strategy |
-|---|---|---|
-| **Navigator Protocol** | Agent navigation interface | Abstract base for navigation controllers |
-| **Source Protocol** | Plume concentration models | Gaussian, Turbulent, Video implementations |
-| **Boundary Protocol** | Domain constraint handling | Terminate, Bounce, Wrap, Clip policies |
-| **Recorder Protocol** | Data persistence interface | Multi-backend recording implementations |
-| <span style="background-color: rgba(91, 57, 243, 0.2)">**HookSystem Protocol**</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Simulation lifecycle hook interface</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Implemented by `plume_nav_sim.hooks.HookManager`</span> |
+| Protocol Name | Purpose | Interface Type | Performance Requirement |
+|---------------|---------|---------------|------------------------|
+| NavigatorProtocol | Agent navigation control | Synchronous method calls | <10ms per operation |
+| PlumeModelProtocol | Physics simulation interface | Vectorized NumPy operations | <5ms per query |
+| RecorderProtocol | Data persistence interface | Async buffered operations | <1ms recording overhead |
+| StatsAggregatorProtocol | Performance metrics collection | Event-driven callbacks | <0.1ms per event |
 
-#### Python API Surface
-
-The system exposes its functionality through the `odor_plume_nav.api` module. <span style="background-color: rgba(91, 57, 243, 0.2)">`HookManager` is accessed internally through `PlumeNavigationEnv` and therefore does not alter the public `odor_plume_nav.api` surface, preserving existing client code.</span>
+**API Design Patterns:**
 
 ```mermaid
-graph TB
-    A[Client Code] --> B[odor_plume_nav.api]
-    B --> C[Navigation Controllers]
-    B --> D[Environment Factory]
-    B --> E[Configuration Management]
+classDiagram
+    class NavigatorProtocol {
+        +step(observation: ndarray) ndarray
+        +reset() None
+        +get_info() dict
+    }
     
-    C --> F[DiffusionNavigator]
-    C --> G[InfotaxisNavigator]
-    C --> H[CustomNavigator]
+    class PlumeModelProtocol {
+        +get_concentration(positions: ndarray) ndarray
+        +get_gradient(positions: ndarray) ndarray
+        +update_physics(dt: float) None
+    }
     
-    D --> I[OdorPlumeNav Environment]
-    E --> J[Hydra Configuration]
+    class RecorderProtocol {
+        +record_trajectory(data: TrajectoryData) None
+        +record_performance(metrics: PerformanceMetrics) None
+        +finalize() None
+    }
     
-    style B fill:#e1f5fe
-    style I fill:#f3e5f5
+    class StatsAggregatorProtocol {
+        +collect_metric(name: str, value: float) None
+        +aggregate_stats() dict
+        +reset_stats() None
+    }
+    
+    NavigatorProtocol <|.. ConcreteNavigator
+    PlumeModelProtocol <|.. GaussianPlumeModel
+    RecorderProtocol <|.. ParquetRecorder
+    StatsAggregatorProtocol <|.. DefaultStatsAggregator
 ```
 
 #### 6.3.2.2 Authentication Methods
 
-**Authentication is not applicable** for this system as it operates as a local Python library without network-exposed endpoints. Security is handled through:
+**Configuration-Based Authentication:**
+- **Environment Variables**: DATABASE_URL with embedded credentials
+- **File-Based Configuration**: Credentials stored in YAML configuration files
+- **Runtime Configuration**: Programmatic credential management through Hydra
 
-- **File System Permissions**: Configuration and data file access controls
-- **Environment Variable Security**: Secure handling of credentials for external services
-- **Database Connection Security**: Encrypted connections to external databases when configured
+**Authentication Patterns:**
+
+| Integration Target | Authentication Method | Security Level | Usage Context |
+|-------------------|----------------------|----------------|---------------|
+| Database Systems | Connection string credentials | Medium | Optional persistence |
+| HPC Schedulers | SSH key-based authentication | High | Distributed experiments |
+| Cloud Platforms | Service account tokens | High | Production deployment |
+| CI/CD Systems | Repository secrets | High | Automated testing |
 
 #### 6.3.2.3 Authorization Framework
 
-**Traditional authorization is not applicable**. The system implements:
+**Protocol-Level Authorization:**
+- **Type Safety**: Protocol interfaces enforce method signatures
+- **Configuration Validation**: Hydra validates component compatibility
+- **Resource Constraints**: Performance monitoring enforces resource limits
 
-- **Component Access Control**: Protocol-based component registration and selection
-- **Configuration Validation**: Pydantic-based schema validation for component configurations
-- **Runtime Permission Checks**: Environment variable validation for external service access
+**Authorization Enforcement:**
+
+```yaml
+# Authorization through configuration constraints
+performance:
+  max_agents: 100
+  max_step_latency_ms: 33
+  max_memory_mb: 1024
+
+database:
+  max_connections: 10
+  query_timeout_seconds: 30
+```
 
 #### 6.3.2.4 Rate Limiting Strategy
 
-**Rate limiting is not applicable** for local library execution. The system implements:
+**Performance-Based Rate Limiting:**
+- **Step Latency Limits**: ≤33ms per simulation step
+- **Memory Usage Limits**: Linear scaling validation with agent count
+- **Database Connection Limits**: Configurable connection pool size
 
-- **Performance Throttling**: Configurable simulation step timing controls
-- **Resource Management**: Memory pressure monitoring and adaptive caching
-- **Batch Processing**: Configurable batch sizes for high-throughput operations
+**Rate Limiting Implementation:**
+
+```mermaid
+flowchart TB
+    subgraph "Performance Monitoring"
+        A[Step Latency Monitor] --> B{<33ms?}
+        B -->|Yes| C[Continue Execution]
+        B -->|No| D[Trigger Fallback]
+    end
+    
+    subgraph "Resource Limits"
+        E[Memory Usage Monitor] --> F{<Linear Scale?}
+        F -->|Yes| G[Allow More Agents]
+        F -->|No| H[Reject New Agents]
+    end
+    
+    subgraph "Database Limits"
+        I[Connection Pool Monitor] --> J{<Max Connections?}
+        J -->|Yes| K[Allow New Connections]
+        J -->|No| L[Queue Connection Request]
+    end
+    
+    D --> M[NoneRecorder Fallback]
+    H --> N[Agent Limit Warning]
+    L --> O[Connection Timeout]
+```
 
 #### 6.3.2.5 Versioning Approach
 
-The system implements **semantic versioning** for API stability:
+**Configuration-Driven Versioning:**
+- **Semantic Versioning**: Major.minor.patch for component compatibility
+- **Protocol Versioning**: Interface evolution through Protocol inheritance
+- **Backward Compatibility**: Dual API support (Gymnasium 0.29.x + legacy Gym)
 
-- **Protocol Versioning**: Protocol interface backward compatibility guarantees
-- **Configuration Versioning**: Hydra configuration schema evolution support
-- **Data Format Versioning**: Backward-compatible data serialization formats
+**Version Management:**
+
+| Component | Versioning Strategy | Backward Compatibility | Migration Path |
+|-----------|--------------------|-----------------------|----------------|
+| Gymnasium API | Dual compatibility layer | Full legacy support | Automatic detection |
+| Database Schema | JSON column flexibility | Additive changes only | Configuration updates |
+| Configuration Schema | Hydra composition | Hierarchical overrides | YAML migration |
+| Recording Formats | Multi-format support | All formats maintained | Format selection |
 
 #### 6.3.2.6 Documentation Standards
 
-Documentation follows **scientific computing standards**:
+**API Documentation Approach:**
+- **Protocol Interfaces**: Type-annotated Python docstrings
+- **Configuration Schema**: YAML schema validation with examples
+- **Integration Examples**: Comprehensive example configurations
 
-- **API Documentation**: Comprehensive docstrings with type annotations
-- **Configuration Documentation**: Hydra configuration schema documentation
-- **Protocol Documentation**: Protocol interface contracts and examples
-- **Integration Examples**: Jupyter notebooks demonstrating integration patterns
+**Documentation Generation:**
 
-### 6.3.3 Message Processing
+```python
+# Auto-generated API documentation
+class NavigatorProtocol(Protocol):
+    """Protocol for navigation agent implementations.
+    
+    Performance Requirements:
+        - step() method must complete in <10ms
+        - reset() method must complete in <5ms
+        - Memory usage must scale linearly with agent count
+    """
+    
+    def step(self, observation: np.ndarray) -> np.ndarray:
+        """Execute one navigation step.
+        
+        Args:
+            observation: Current sensor readings shape (n_sensors,)
+            
+        Returns:
+            Action array shape (n_actions,)
+            
+        Raises:
+            PerformanceError: If step takes >10ms
+        """
+        ...
+```
+
+### 6.3.3 MESSAGE PROCESSING
 
 #### 6.3.3.1 Event Processing Patterns
 
-The system implements **synchronous event processing** for simulation efficiency:
+**Hook-Based Event Processing:**
+The system implements event processing through a comprehensive hook system that enables research extensions without modifying core components.
 
-#### Internal Event Flow
+**Event Categories:**
+
+| Event Type | Trigger Condition | Processing Pattern | Performance Impact |
+|------------|-------------------|-------------------|-------------------|
+| Pre-Step Hooks | Before simulation step | Synchronous callbacks | <1ms overhead |
+| Post-Step Hooks | After simulation step | Asynchronous processing | <1ms overhead |
+| Episode-End Hooks | Episode completion | Batch processing | <5ms overhead |
+| Performance Hooks | Threshold violations | Real-time alerts | <0.1ms overhead |
+
+**Event Processing Architecture:**
 
 ```mermaid
 sequenceDiagram
-    participant S as Simulation Engine
-    participant N as Navigator
-    participant E as Environment
-    participant R as Recorder
+    participant Engine as Simulation Engine
+    participant Hook as Hook Manager
+    participant Recorder as Recording System
+    participant Monitor as Performance Monitor
     
-    S->>N: step(action)
-    N->>E: apply_action(action)
-    E->>E: update_state()
-    E->>N: return observation
-    N->>S: return step_result
-    S->>R: record_async(step_data)
+    Engine->>Hook: Pre-Step Event
+    Hook->>Recorder: Log State
+    Hook->>Monitor: Check Performance
+    Hook->>Engine: Continue
     
-    Note over R: Asynchronous recording
-    R->>R: queue_data()
-    R->>R: background_write()
+    Engine->>Engine: Execute Step
+    
+    Engine->>Hook: Post-Step Event
+    Hook->>Recorder: Record Results
+    Hook->>Monitor: Update Metrics
+    Hook->>Engine: Step Complete
+    
+    Note over Engine,Monitor: <1ms total hook overhead
 ```
-
-#### Event Processing Characteristics
-
-- **Synchronous Main Loop**: Deterministic simulation execution
-- **Asynchronous I/O**: Non-blocking data persistence operations
-- **Event Validation**: Protocol compliance checking at runtime
-- **Error Propagation**: Structured error handling through the event chain
 
 #### 6.3.3.2 Message Queue Architecture
 
-**Traditional message queues are not applicable**. The system implements:
+**In-Process Message Queues:**
+The system uses **Python asyncio queues** for internal message processing rather than external message brokers, optimized for high-performance simulation requirements.
 
-#### Asynchronous Recording Queues
+**Queue Types:**
 
-| Backend | Queue Implementation | Thread Safety |
-|---|---|---|
-| **ParquetRecorder** | `queue.Queue` + dedicated thread | Thread-safe writes |
-| **HDF5Recorder** | Internal buffer + `threading.RLock` | Synchronized access |
-| **SQLiteRecorder** | Transaction queue + connection pool | Thread-local connections |
+| Queue Type | Purpose | Capacity | Processing Mode |
+|------------|---------|----------|-----------------|
+| Recording Queue | Trajectory data buffering | 1000 items | Async batch processing |
+| Performance Queue | Metrics collection | 100 items | Real-time processing |
+| Error Queue | Error reporting | 50 items | Priority processing |
 
-#### Queue Management Patterns
+**Queue Management:**
+
+```python
+# Async queue configuration
+queues:
+  recording:
+    max_size: 1000
+    batch_size: 100
+    flush_interval: 1.0
+  performance:
+    max_size: 100
+    batch_size: 10
+    flush_interval: 0.1
+```
+
+#### 6.3.3.3 Stream Processing Design
+
+**NumPy Vectorized Stream Processing:**
+The system processes data streams through vectorized NumPy operations rather than traditional stream processing frameworks.
+
+**Stream Processing Patterns:**
+
+| Stream Type | Processing Method | Batch Size | Latency Requirement |
+|-------------|------------------|------------|-------------------|
+| Agent States | Vectorized operations | 100 agents | <33ms per batch |
+| Sensor Data | Parallel queries | 1000 sensors | <5ms per query |
+| Trajectory Data | Batch compression | 500 points | <10ms per batch |
+
+**Stream Processing Flow:**
+
+```mermaid
+flowchart LR
+    subgraph "Input Streams"
+        A[Agent Positions] --> D[Vectorized Processor]
+        B[Sensor Readings] --> D
+        C[Environment State] --> D
+    end
+    
+    subgraph "Processing Pipeline"
+        D --> E[NumPy Operations]
+        E --> F[Parallel Queries]
+        F --> G[Results Aggregation]
+    end
+    
+    subgraph "Output Streams"
+        G --> H[Action Commands]
+        G --> I[Trajectory Data]
+        G --> J[Performance Metrics]
+    end
+    
+    style D fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+```
+
+#### 6.3.3.4 Batch Processing Flows
+
+**Hydra Multi-Run Batch Processing:**
+The system supports large-scale batch processing through Hydra's multi-run capabilities, enabling parameter sweeps across HPC clusters.
+
+**Batch Processing Architecture:**
+
+| Batch Type | Execution Context | Parallelization | Resource Management |
+|------------|------------------|-----------------|-------------------|
+| Parameter Sweeps | HPC cluster | SLURM/PBS scheduling | Per-job resource limits |
+| Ablation Studies | Local multiprocessing | Process pool | CPU core allocation |
+| Sensitivity Analysis | Cloud platforms | Container orchestration | Dynamic scaling |
+
+**Batch Configuration:**
+
+```yaml
+# Hydra multirun configuration
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    _target_: hydra._internal.BasicSweeper
+    max_jobs: 100
+    
+  launcher:
+    _target_: hydra._internal.BasicLauncher
+    
+defaults:
+  - sweep: parameter_sweep
+  - launcher: slurm
+```
+
+#### 6.3.3.5 Error Handling Strategy
+
+**Multi-Layer Error Handling:**
+The system implements comprehensive error handling with graceful degradation and recovery mechanisms.
+
+**Error Handling Layers:**
+
+| Layer | Error Types | Handling Strategy | Recovery Mechanism |
+|-------|-------------|------------------|-------------------|
+| Protocol Level | Interface violations | Type checking | Fallback implementations |
+| Performance Level | Latency violations | Performance monitoring | Simplified processing |
+| Resource Level | Memory/disk limits | Resource monitoring | Graceful degradation |
+| Integration Level | External system failures | Fallback policies | Alternative backends |
+
+**Error Recovery Flow:**
+
+```mermaid
+flowchart TB
+    A[Error Detection] --> B{Error Type}
+    B -->|Performance| C[Switch to Simplified Mode]
+    B -->|Resource| D[Reduce Resource Usage]
+    B -->|Integration| E[Use Fallback Backend]
+    B -->|Critical| F[Graceful Shutdown]
+    
+    C --> G[Continue Operation]
+    D --> G
+    E --> G
+    F --> H[Error Reporting]
+    
+    G --> I[Monitor Recovery]
+    I --> J{Recovery Successful?}
+    J -->|Yes| K[Resume Normal Operation]
+    J -->|No| L[Escalate Error]
+```
+
+### 6.3.4 EXTERNAL SYSTEMS
+
+#### 6.3.4.1 Third-Party Integration Patterns
+
+**Scientific Computing Framework Integration:**
+The system integrates extensively with the Python scientific computing ecosystem through standardized interfaces and compatibility layers.
+
+**Primary Framework Integrations:**
+
+| Framework | Integration Type | Compatibility Layer | Performance Impact |
+|-----------|------------------|--------------------|--------------------|
+| OpenAI Gymnasium | Environment API | Native + legacy wrapper | <1ms overhead |
+| Stable-Baselines3 | RL algorithms | Vectorized environments | <5ms per step |
+| NumPy/SciPy | Numerical computing | Direct API usage | Zero overhead |
+| Pandas | Data analysis | DataFrame compatibility | <1ms conversion |
+
+**Integration Architecture:**
 
 ```mermaid
 graph TB
-    A[Simulation Thread] --> B[Recording Queue]
-    B --> C[Background Writer Thread]
-    C --> D{Backend Type}
+    subgraph "Plume Navigation System"
+        A[Core Simulation Engine]
+        B[Environment Wrapper]
+        C[Data Recording System]
+    end
     
-    D -->|Parquet| E[Parquet Writer]
-    D -->|HDF5| F[HDF5 Writer]
-    D -->|SQLite| G[SQLite Writer]
+    subgraph "RL Frameworks"
+        D[Gymnasium 0.29.x]
+        E[Stable-Baselines3]
+        F[Ray RLlib]
+    end
     
-    E --> H[File System]
-    F --> H
-    G --> I[Database]
+    subgraph "Scientific Computing"
+        G[NumPy/SciPy]
+        H[Pandas]
+        I[Matplotlib]
+    end
+    
+    subgraph "Infrastructure"
+        J[HPC Schedulers]
+        K[Cloud Platforms]
+        L[CI/CD Systems]
+    end
+    
+    A --> D
+    B --> E
+    B --> F
+    A --> G
+    C --> H
+    C --> I
+    A --> J
+    A --> K
+    A --> L
     
     style A fill:#e1f5fe
     style B fill:#f3e5f5
     style C fill:#e8f5e8
 ```
 
-#### 6.3.3.3 Stream Processing Design
-
-**Stream processing is not applicable** for this batch-oriented simulation system. The system implements:
-
-- **Vectorized Processing**: NumPy-based operations for multi-agent scenarios
-- **Batch Data Processing**: Configurable batch sizes for recording operations
-- **Real-time Monitoring**: Live metrics collection during simulation execution
-
-#### 6.3.3.4 Batch Processing Flows
-
-The system implements **configurable batch processing** for data operations:
-
-#### Batch Recording Strategy
-
-- **Configurable Batch Sizes**: Adjustable based on memory constraints and performance requirements
-- **Automatic Flush Triggers**: Time-based and size-based flush mechanisms
-- **Error Recovery**: Partial batch failure handling with data integrity preservation
-- **Performance Monitoring**: Batch processing metrics collection
-
-#### 6.3.3.5 Error Handling Strategy
-
-The system implements **comprehensive error handling** across all processing layers:
-
-#### Error Categories
-
-| Error Type | Handling Strategy | Recovery Mechanism |
-|---|---|---|
-| **Protocol Validation** | Immediate failure with detailed messages | Fallback to default implementations |
-| **Recording Failures** | Asynchronous retry with exponential backoff | Alternative backend selection |
-| **Configuration Errors** | Startup validation with clear error messages | Default configuration fallback |
-| **Resource Exhaustion** | Graceful degradation with monitoring | Adaptive resource management |
-
-### 6.3.4 External Systems
-
-#### 6.3.4.1 Third-Party Integration Patterns
-
-The system implements **environment-driven integration** with external services:
-
-#### ML Experiment Tracking Integration
-
-**TensorBoard Integration**
-- **Activation**: `TENSORBOARD_LOG_DIR` environment variable
-- **Data Flow**: Structured logging to TensorBoard format
-- **Configuration**: Optional dependency with graceful degradation
-
-**Weights & Biases Integration**
-- **Activation**: `WANDB_PROJECT` environment variable
-- **Data Flow**: Experiment tracking via W&B API
-- **Configuration**: Optional dependency with automatic initialization
-
-#### Database System Integration
-
-```mermaid
-graph TB
-    A[Application] --> B[Database URL Parser]
-    B --> C{Database Type}
-    
-    C -->|sqlite://| D[SQLite Backend]
-    C -->|postgresql://| E[PostgreSQL Backend]
-    C -->|mysql://| F[MySQL Backend]
-    
-    D --> G[Local File Storage]
-    E --> H[Remote PostgreSQL]
-    F --> I[Remote MySQL]
-    
-    G --> J[Connection Pool]
-    H --> J
-    I --> J
-    
-    J --> K[SQLAlchemy ORM]
-    
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style J fill:#e8f5e8
-```
-
 #### 6.3.4.2 Legacy System Interfaces
 
-**Legacy system interfaces are not applicable** for this modern Python library. The system provides:
+**Gymnasium/Gym Compatibility:**
+The system maintains full backward compatibility with legacy OpenAI Gym through automatic detection and conversion layers.
 
-- **Backward Compatibility**: Protocol interface versioning for API stability
-- **Configuration Migration**: Automatic migration of configuration formats
-- **Data Format Evolution**: Backward-compatible data serialization
+**Legacy Interface Support:**
+
+| Legacy System | Compatibility Method | Migration Path | Maintenance Burden |
+|---------------|---------------------|--------------|--------------------|
+| OpenAI Gym | Automatic detection | Transparent upgrade | Low |
+| Older NumPy versions | Version pinning | Gradual upgrade | Medium |
+| Legacy configuration | Migration utilities | Automated conversion | Low |
+
+**Compatibility Implementation:**
+
+```python
+# Automatic Gym/Gymnasium detection
+def create_environment(env_config):
+    """Create environment with automatic API detection."""
+    if gymnasium_available():
+        return GymnasiumWrapper(env_config)
+    else:
+        return LegacyGymWrapper(env_config)
+
+#### Transparent API conversion
+class CompatibilityLayer:
+    def step(self, action):
+        if self.is_gymnasium:
+            return self._gymnasium_step(action)
+        else:
+            return self._legacy_gym_step(action)
+```
 
 #### 6.3.4.3 API Gateway Configuration
 
-**API gateways are not applicable** for this local library architecture. The system implements:
+**Configuration-Based Integration Gateway:**
+The system uses Hydra configuration management as an "API gateway" for component integration, enabling declarative composition of complex experimental setups.
 
-- **Entry Point Management**: Well-defined Python API entry points
-- **Configuration Gateway**: Hydra-based configuration composition and validation
-- **Protocol Gateway**: Protocol interface registration and selection
+**Gateway Configuration Patterns:**
+
+| Configuration Layer | Purpose | Scope | Override Capability |
+|-------------------|---------|-------|-------------------|
+| Base Configuration | System defaults | Global | Full override |
+| Environment-Specific | Deployment settings | Environment | Partial override |
+| Experiment-Specific | Research parameters | Single experiment | Additive only |
+| Runtime | Dynamic adjustments | Current execution | Temporary only |
+
+**Configuration Gateway Flow:**
+
+```mermaid
+flowchart TB
+    subgraph "Configuration Sources"
+        A[Base YAML] --> E[Hydra Composer]
+        B[Environment Variables] --> E
+        C[Command Line Args] --> E
+        D[Runtime Config] --> E
+    end
+    
+    subgraph "Configuration Gateway"
+        E --> F[Schema Validation]
+        F --> G[Dependency Resolution]
+        G --> H[Component Instantiation]
+    end
+    
+    subgraph "Integrated Components"
+        H --> I[Simulation Engine]
+        H --> J[Recording System]
+        H --> K[External Frameworks]
+    end
+    
+    style E fill:#e1f5fe
+    style F fill:#f3e5f5
+    style G fill:#e8f5e8
+```
 
 #### 6.3.4.4 External Service Contracts
 
-The system defines **formal contracts** with external services:
+**Service Integration Contracts:**
+The system defines clear integration contracts for external services through Protocol interfaces and configuration schemas.
 
-#### High-Performance Computing Integration
+**Service Contract Specifications:**
 
-**SLURM Cluster Integration**
-- **Detection**: Automatic detection via `SLURM_*` environment variables
-- **Configuration**: Node-specific logging and resource allocation
-- **Contract**: Distributed experiment execution with centralized result collection
+| Service Category | Contract Type | SLA Requirements | Fallback Strategy |
+|------------------|---------------|------------------|-------------------|
+| Database Systems | Connection protocol | 99% availability | File-based fallback |
+| HPC Schedulers | Job submission API | <1 minute queue time | Local execution |
+| Cloud Platforms | Resource allocation | Auto-scaling support | Manual scaling |
+| Monitoring Systems | Metrics export | Real-time streaming | Buffered export |
 
-#### CI/CD Infrastructure Integration
+**Contract Enforcement:**
 
-**GitHub Actions Integration**
-- **Trigger**: Automated testing on code changes
-- **Contract**: Comprehensive test suite execution with coverage reporting
-- **Outputs**: Test results and coverage reports via Codecov
+```python
+# Service contract validation
+class DatabaseContract:
+    """Database service contract."""
+    
+    availability_sla: float = 0.99
+    max_connection_time: int = 30  # seconds
+    max_query_time: int = 10  # seconds
+    
+    def validate_service(self, service) -> bool:
+        """Validate service meets contract requirements."""
+        return (
+            service.test_connection() and
+            service.connection_time < self.max_connection_time and
+            service.supports_transactions()
+        )
+```
 
-#### Container Infrastructure Integration
-
-**Docker Integration**
-- **Base Images**: Multi-stage builds for production and development
-- **Contract**: Reproducible environment with locked dependencies
-- **Outputs**: Containerized simulation execution environment
-
-### 6.3.5 Integration Flow Diagrams
+### 6.3.5 INTEGRATION FLOW DIAGRAMS
 
 #### 6.3.5.1 Overall Integration Architecture
 
@@ -4247,29 +4074,36 @@ graph TB
     subgraph "Core System"
         A[Simulation Engine] --> B[Protocol Layer]
         B --> C[Component Registry]
-        C --> D[Configuration System]
+        C --> D[Configuration Manager]
     end
     
-    subgraph "ML Framework Integration"
-        E[Gymnasium API] --> A
-        F[Stable-Baselines3] --> E
-        G[TensorBoard] --> A
-        H[Weights & Biases] --> A
+    subgraph "Research Frameworks"
+        E[Gymnasium] --> F[Environment API]
+        G[Stable-Baselines3] --> H[RL Algorithms]
+        I[NumPy/SciPy] --> J[Numerical Computing]
     end
     
-    subgraph "Data Persistence Integration"
-        I[SQLAlchemy ORM] --> A
-        J[Parquet Backend] --> A
-        K[HDF5 Backend] --> A
-        L[SQLite Backend] --> A
+    subgraph "Data Systems"
+        K[Database Layer] --> L[Multi-Backend Storage]
+        M[Recording System] --> N[Multi-Format Export]
+        O[Performance Monitor] --> P[Metrics Collection]
     end
     
-    subgraph "Infrastructure Integration"
-        M[SLURM Cluster] --> A
-        N[GitHub Actions] --> A
-        O[Docker] --> A
-        P[Codecov] --> A
+    subgraph "Infrastructure"
+        Q[HPC Integration] --> R[Job Scheduling]
+        S[CI/CD Pipeline] --> T[Quality Assurance]
+        U[Cloud Platforms] --> V[Scalable Deployment]
     end
+    
+    B --> F
+    B --> H
+    B --> J
+    B --> L
+    B --> N
+    B --> P
+    B --> R
+    B --> T
+    B --> V
     
     style A fill:#e1f5fe
     style B fill:#f3e5f5
@@ -4277,3792 +4111,4673 @@ graph TB
     style D fill:#fff3e0
 ```
 
-#### 6.3.5.2 Data Flow Integration
+#### 6.3.5.2 API Integration Sequence
 
 ```mermaid
 sequenceDiagram
-    participant C as Client Application
-    participant A as API Layer
-    participant S as Simulation Engine
-    participant R as Recording System
-    participant D as Database
-    participant E as External Services
+    participant RL as RL Framework
+    participant Env as Environment Wrapper
+    participant Engine as Simulation Engine
+    participant Plume as Plume Model
+    participant Record as Recording System
+    participant DB as Database
     
-    C->>A: Initialize simulation
-    A->>S: Create environment
-    S->>R: Setup recording
-    R->>D: Initialize connections
+    RL->>Env: reset()
+    Env->>Engine: initialize_simulation()
+    Engine->>Plume: setup_physics()
+    Engine->>Record: initialize_recording()
+    Record->>DB: create_experiment()
     
-    loop Simulation Steps
-        C->>A: Execute step
-        A->>S: Process step
-        S->>R: Record data (async)
-        R->>D: Persist data
-        S->>E: Send metrics (optional)
+    loop Training Episode
+        RL->>Env: step(action)
+        Env->>Engine: execute_step(action)
+        Engine->>Plume: query_concentration()
+        Plume-->>Engine: concentration_field
+        Engine->>Record: record_trajectory()
+        Record->>DB: store_data()
+        Engine-->>Env: observation, reward, done
+        Env-->>RL: obs, reward, done, info
     end
     
-    C->>A: Finalize simulation
-    A->>R: Flush buffers
-    R->>D: Final commit
-    A->>E: Send completion metrics
+    RL->>Env: close()
+    Env->>Record: finalize_recording()
+    Record->>DB: commit_experiment()
+    
+    Note over RL,DB: <33ms per step requirement
 ```
 
-#### 6.3.5.3 External Service Integration Flow
+#### 6.3.5.3 Message Flow Architecture
+
+```mermaid
+flowchart LR
+    subgraph "Input Processing"
+        A[Configuration] --> B[Hydra Parser]
+        C[CLI Commands] --> B
+        D[Environment Variables] --> B
+    end
+    
+    subgraph "Core Processing"
+        B --> E[Component Factory]
+        E --> F[Simulation Engine]
+        F --> G[Event Manager]
+    end
+    
+    subgraph "Output Processing"
+        G --> H[Recording Queue]
+        G --> I[Performance Queue]
+        G --> J[Error Queue]
+    end
+    
+    subgraph "External Systems"
+        H --> K[Database Storage]
+        H --> L[File Export]
+        I --> M[Monitoring Systems]
+        J --> N[Error Reporting]
+    end
+    
+    style B fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+    style G fill:#fff3e0
+```
+
+### 6.3.6 PERFORMANCE INTEGRATION REQUIREMENTS
+
+#### 6.3.6.1 Integration Performance Specifications
+
+**Critical Performance Requirements:**
+
+| Integration Point | Latency Requirement | Throughput Requirement | Reliability Target |
+|------------------|-------------------|----------------------|-------------------|
+| RL Framework API | <33ms per step | 100 agents concurrent | 99.9% uptime |
+| Database Operations | <10ms per query | 1000 records/second | 99% availability |
+| File I/O Operations | <1ms buffering | 10MB/second sustained | 99.9% reliability |
+| Configuration Loading | <100ms initialization | One-time per experiment | 100% success |
+
+#### 6.3.6.2 Integration Monitoring
+
+**Performance Monitoring Integration:**
+
+```python
+# Integration performance monitoring
+class IntegrationMonitor:
+    def __init__(self):
+        self.metrics = {
+            'step_latency': [],
+            'db_query_time': [],
+            'file_io_time': [],
+            'memory_usage': []
+        }
+    
+    def track_integration_performance(self, integration_type, duration):
+        """Track performance metrics for integration points."""
+        self.metrics[f'{integration_type}_latency'].append(duration)
+        
+        if duration > self.get_threshold(integration_type):
+            self.trigger_performance_alert(integration_type, duration)
+```
+
+### 6.3.7 INTEGRATION TESTING STRATEGY
+
+#### 6.3.7.1 Integration Test Architecture
+
+**Comprehensive Integration Testing:**
+
+| Test Category | Coverage | Test Environment | Success Criteria |
+|---------------|----------|------------------|------------------|
+| Framework Compatibility | All supported versions | Automated CI/CD | 100% API compatibility |
+| Performance Integration | Critical path operations | Load testing | <33ms step latency |
+| Database Integration | All backend types | Containerized testing | Zero data loss |
+| HPC Integration | Major schedulers | Cluster simulation | Job completion |
+
+#### 6.3.7.2 Continuous Integration Pipeline
+
+**Integration CI/CD Pipeline:**
 
 ```mermaid
 flowchart TB
-    A[Application Start] --> B{Environment Variables}
+    subgraph "CI Pipeline"
+        A[Code Changes] --> B[Unit Tests]
+        B --> C[Integration Tests]
+        C --> D[Performance Tests]
+        D --> E[Compatibility Tests]
+    end
     
-    B -->|TENSORBOARD_LOG_DIR| C[Initialize TensorBoard]
-    B -->|WANDB_PROJECT| D[Initialize W&B]
-    B -->|DATABASE_URL| E[Initialize Database]
-    B -->|SLURM_*| F[Initialize SLURM]
+    subgraph "Test Environments"
+        F[Local Testing] --> G[Container Testing]
+        G --> H[Cluster Testing]
+        H --> I[Production Simulation]
+    end
     
-    C --> G[Recording Pipeline]
-    D --> G
-    E --> G
-    F --> G
+    subgraph "Quality Gates"
+        J[Performance Validation] --> K[Compatibility Check]
+        K --> L[Security Scan]
+        L --> M[Deployment Approval]
+    end
     
-    G --> H[Simulation Execution]
-    H --> I[Data Collection]
-    I --> J[External Service Updates]
-    
-    J --> K[TensorBoard Logs]
-    J --> L[W&B Experiments]
-    J --> M[Database Records]
-    J --> N[SLURM Outputs]
+    C --> F
+    D --> J
+    E --> K
+    I --> M
     
     style A fill:#e1f5fe
-    style G fill:#f3e5f5
-    style H fill:#e8f5e8
+    style J fill:#f3e5f5
+    style M fill:#e8f5e8
 ```
 
-### 6.3.6 Performance Considerations
+### 6.3.8 REFERENCES
 
-#### 6.3.6.1 Integration Performance Targets
+## 6.3 INTEGRATION ARCHITECTURE
 
-The integration architecture maintains strict performance requirements:
+### 6.3.1 Integration Architecture Overview
 
-| Integration Type | Performance Target | Measurement Method |
-|---|---|---|
-| **Simulation Step** | ≤33ms total latency | Real-time step timing |
-| **Recording Operations** | Non-blocking (async) | Queue depth monitoring |
-| **Database Operations** | 99.9% success rate | Transaction monitoring |
-| **External Service Updates** | Best-effort delivery | Retry mechanism tracking |
+The Plume Navigation Simulation Library implements a **research-oriented integration architecture** that prioritizes scientific computing framework compatibility and high-performance data processing over traditional web service integrations. This architectural approach reflects the system's primary role as a simulation research tool rather than a distributed web application.
 
-#### 6.3.6.2 Resource Management
+#### 6.3.1.1 Integration Philosophy
 
-The system implements **adaptive resource management** for integration operations:
+The integration architecture follows a **protocol-based composition pattern** where external systems are integrated through standardized interfaces and configuration-driven dependency injection. This design enables zero-code extensibility for research workflows while maintaining strict performance guarantees.
 
-- **Connection Pooling**: Optimized database connection pools with monitoring
-- **Memory Management**: Adaptive caching with pressure monitoring
-- **Thread Management**: Controlled thread pool sizing for async operations
-- **Error Recovery**: Exponential backoff and circuit breaker patterns
+**Key Integration Principles:**
+- **Framework-agnostic design**: Compatible with multiple RL frameworks through standardized interfaces
+- **Configuration-driven integration**: Declarative YAML-based component wiring
+- **Performance-first approach**: All integrations must meet ≤33ms step latency requirements
+- **Backward compatibility**: Dual API support for legacy and modern framework versions
 
-### 6.3.7 References
+#### 6.3.1.2 Integration Scope Classification
 
-#### Files Examined
-- `src/odor_plume_nav/api/__init__.py` - Public API entry point and integration surface
-- `src/odor_plume_nav/api/navigation.py` - Core navigation API implementation
-- `src/odor_plume_nav/db/session.py` - Database session management and connection pooling
-- `src/odor_plume_nav/db/models.py` - SQLAlchemy ORM models for data persistence
-- `src/plume_nav_sim/recording/backends/` - Recording backend implementations
-- `src/odor_plume_nav/cli/main.py` - CLI interface and external interaction patterns
-- `src/odor_plume_nav/core/protocols.py` - Protocol interface definitions
-- <span style="background-color: rgba(91, 57, 243, 0.2)">`src/plume_nav_sim/hooks.py` - Defines HookManager, the central coordinator for simulation hooks, referenced in Sections 6.3.1 and 6.3.2</span>
-- `logging.yaml` - Loguru configuration with external service integration
-- `pyproject.toml` - Dependencies and optional extras configuration
+| Integration Category | Scope | Purpose | Performance Impact |
+|---------------------|-------|---------|-------------------|
+| Scientific Computing | Core | RL framework compatibility | Critical path |
+| Data Persistence | Optional | Research data management | Background |
+| Development Tools | External | CI/CD and quality assurance | Build-time only |
+| Configuration Management | Core | Component orchestration | Initialization only |
 
-#### Technical Specification Sections Referenced
-- **5.1 HIGH-LEVEL ARCHITECTURE** - Protocol-Oriented Architecture pattern
-- **6.1 CORE SERVICES ARCHITECTURE** - Service patterns and component architecture
-- **6.2 DATABASE DESIGN** - Data persistence and storage integration patterns
-- **3.5 THIRD-PARTY SERVICES** - External service integration details
-- **3.8 INTEGRATION REQUIREMENTS** - Component integration requirements
+### 6.3.2 API DESIGN
 
-#### Web Searches Conducted
-- None required - comprehensive information available from repository analysis and technical specification sections
+#### 6.3.2.1 Protocol Specifications
 
-## 6.4 SECURITY ARCHITECTURE
+The system implements **Protocol-based APIs** rather than traditional REST endpoints, optimized for in-process scientific computing rather than network communication.
 
-### 6.4.1 Security Architecture Applicability Assessment
+**Primary API Protocols:**
 
-**Detailed Security Architecture is not applicable for this system.**
+| Protocol Name | Purpose | Interface Type | Performance Requirement |
+|---------------|---------|---------------|------------------------|
+| NavigatorProtocol | Agent navigation control | Synchronous method calls | <10ms per operation |
+| PlumeModelProtocol | Physics simulation interface | Vectorized NumPy operations | <5ms per query |
+| RecorderProtocol | Data persistence interface | Async buffered operations | <1ms recording overhead |
+| StatsAggregatorProtocol | Performance metrics collection | Event-driven callbacks | <0.1ms per event |
 
-The Plume Navigation Simulation system is designed as a **scientific research library** for local execution, not a multi-user web application or distributed system requiring traditional security architectures. This architectural decision is deliberate and appropriate for the system's intended use case and deployment model.
+**API Design Patterns:**
 
-#### 6.4.1.1 System Security Context
+```mermaid
+classDiagram
+    class NavigatorProtocol {
+        +step(observation: ndarray) ndarray
+        +reset() None
+        +get_info() dict
+    }
+    
+    class PlumeModelProtocol {
+        +get_concentration(positions: ndarray) ndarray
+        +get_gradient(positions: ndarray) ndarray
+        +update_physics(dt: float) None
+    }
+    
+    class RecorderProtocol {
+        +record_trajectory(data: TrajectoryData) None
+        +record_performance(metrics: PerformanceMetrics) None
+        +finalize() None
+    }
+    
+    class StatsAggregatorProtocol {
+        +collect_metric(name: str, value: float) None
+        +aggregate_stats() dict
+        +reset_stats() None
+    }
+    
+    NavigatorProtocol <|.. ConcreteNavigator
+    PlumeModelProtocol <|.. GaussianPlumeModel
+    RecorderProtocol <|.. ParquetRecorder
+    StatsAggregatorProtocol <|.. DefaultStatsAggregator
+```
 
-The system operates within a fundamentally different security context than traditional enterprise applications:
+#### 6.3.2.2 Authentication Methods
 
-| Security Aspect | Traditional Systems | Plume Navigation Simulation |
-|---|---|---|
-| **User Model** | Multi-user with authentication | Single-user research tool |
-| **Deployment** | Web servers, distributed systems | Local Python library installation |
-| **Network Exposure** | Public/private network services | No network-exposed services |
-| **Data Sensitivity** | User data, business information | Research simulation data |
-| **Threat Model** | External attacks, unauthorized access | Local development environment |
+**Configuration-Based Authentication:**
+- **Environment Variables**: DATABASE_URL with embedded credentials
+- **File-Based Configuration**: Credentials stored in YAML configuration files
+- **Runtime Configuration**: Programmatic credential management through Hydra
 
-#### 6.4.1.2 Rationale for Standard Security Practices
+**Authentication Patterns:**
 
-The system's architecture eliminates the need for traditional security components while maintaining appropriate security standards:
+| Integration Target | Authentication Method | Security Level | Usage Context |
+|-------------------|----------------------|----------------|---------------|
+| Database Systems | Connection string credentials | Medium | Optional persistence |
+| HPC Schedulers | SSH key-based authentication | High | Distributed experiments |
+| Cloud Platforms | Service account tokens | High | Production deployment |
+| CI/CD Systems | Repository secrets | High | Automated testing |
 
-#### No Authentication Framework Required
-- **Single-User Execution**: The library runs in local Python environments without multi-user scenarios
-- **No Login Mechanisms**: No user accounts, sessions, or identity management needed
-- **Local Installation**: pip/Poetry installation model eliminates authentication requirements
-- **Research Context**: Scientists work in isolated development environments
+#### 6.3.2.3 Authorization Framework
 
-#### No Authorization System Required
-- **No Role-Based Access Control**: Single researcher per execution context
-- **No Permission Management**: All library functions available to the executing user
-- **No Resource Authorization**: Local file system permissions provide adequate protection
-- **No Audit Logging**: Research simulation logging serves data analysis, not security auditing
+**Protocol-Level Authorization:**
+- **Type Safety**: Protocol interfaces enforce method signatures
+- **Configuration Validation**: Hydra validates component compatibility
+- **Resource Constraints**: Performance monitoring enforces resource limits
 
-#### No Network Security Required
-- **No Web APIs**: Only Python library APIs exposed through `odor_plume_nav.api`
-- **No Network Services**: System operates entirely within local process boundaries
-- **No Remote Access**: All interactions occur through local Python imports and function calls
-- **No Communication Protocols**: Direct memory access patterns eliminate network attack vectors
+**Authorization Enforcement:**
 
-### 6.4.2 Standard Security Practices Implementation
+```yaml
+# Authorization through configuration constraints
+performance:
+  max_agents: 100
+  max_step_latency_ms: 33
+  max_memory_mb: 1024
 
-#### 6.4.2.1 Development Security Standards
+database:
+  max_connections: 10
+  query_timeout_seconds: 30
+```
 
-The system implements comprehensive development security practices appropriate for research software:
+#### 6.3.2.4 Rate Limiting Strategy
 
-#### Dependency Management Security
-- **Poetry Dependency Resolution**: Cryptographically signed package verification
-- **Version Pinning**: Explicit version constraints prevent supply chain attacks
-- **Vulnerability Scanning**: Automated dependency vulnerability detection
-- **License Compliance**: Open source license verification and management
+**Performance-Based Rate Limiting:**
+- **Step Latency Limits**: ≤33ms per simulation step
+- **Memory Usage Limits**: Linear scaling validation with agent count
+- **Database Connection Limits**: Configurable connection pool size
 
-#### Code Quality Security
-- **Static Analysis**: mypy type checking and ruff linting for code quality
-- **Pre-commit Hooks**: Automated security checks before code commits
-- **Test Coverage**: Comprehensive test suite with >90% coverage targets
-- **Code Review**: GitHub-based code review process for all changes
+**Rate Limiting Implementation:**
 
-#### Build and Distribution Security
-- **Reproducible Builds**: Poetry lock files ensure consistent dependency resolution
-- **Signed Releases**: Package signing for distribution integrity
-- **CI/CD Pipeline**: Automated security scanning in GitHub Actions
-- **Artifact Verification**: Build artifact integrity verification
+```mermaid
+flowchart TB
+    subgraph "Performance Monitoring"
+        A[Step Latency Monitor] --> B{<33ms?}
+        B -->|Yes| C[Continue Execution]
+        B -->|No| D[Trigger Fallback]
+    end
+    
+    subgraph "Resource Limits"
+        E[Memory Usage Monitor] --> F{<Linear Scale?}
+        F -->|Yes| G[Allow More Agents]
+        F -->|No| H[Reject New Agents]
+    end
+    
+    subgraph "Database Limits"
+        I[Connection Pool Monitor] --> J{<Max Connections?}
+        J -->|Yes| K[Allow New Connections]
+        J -->|No| L[Queue Connection Request]
+    end
+    
+    D --> M[NoneRecorder Fallback]
+    H --> N[Agent Limit Warning]
+    L --> O[Connection Timeout]
+```
 
-#### 6.4.2.2 Data Protection Standards
+#### 6.3.2.5 Versioning Approach
 
-#### Research Data Security
+**Configuration-Driven Versioning:**
+- **Semantic Versioning**: Major.minor.patch for component compatibility
+- **Protocol Versioning**: Interface evolution through Protocol inheritance
+- **Backward Compatibility**: Dual API support (Gymnasium 0.29.x + legacy Gym)
+
+**Version Management:**
+
+| Component | Versioning Strategy | Backward Compatibility | Migration Path |
+|-----------|--------------------|-----------------------|----------------|
+| Gymnasium API | Dual compatibility layer | Full legacy support | Automatic detection |
+| Database Schema | JSON column flexibility | Additive changes only | Configuration updates |
+| Configuration Schema | Hydra composition | Hierarchical overrides | YAML migration |
+| Recording Formats | Multi-format support | All formats maintained | Format selection |
+
+#### 6.3.2.6 Documentation Standards
+
+**API Documentation Approach:**
+- **Protocol Interfaces**: Type-annotated Python docstrings
+- **Configuration Schema**: YAML schema validation with examples
+- **Integration Examples**: Comprehensive example configurations
+
+**Documentation Generation:**
+
+```python
+# Auto-generated API documentation
+class NavigatorProtocol(Protocol):
+    """Protocol for navigation agent implementations.
+    
+    Performance Requirements:
+        - step() method must complete in <10ms
+        - reset() method must complete in <5ms
+        - Memory usage must scale linearly with agent count
+    """
+    
+    def step(self, observation: np.ndarray) -> np.ndarray:
+        """Execute one navigation step.
+        
+        Args:
+            observation: Current sensor readings shape (n_sensors,)
+            
+        Returns:
+            Action array shape (n_actions,)
+            
+        Raises:
+            PerformanceError: If step takes >10ms
+        """
+        ...
+```
+
+### 6.3.3 MESSAGE PROCESSING
+
+#### 6.3.3.1 Event Processing Patterns
+
+**Hook-Based Event Processing:**
+The system implements event processing through a comprehensive hook system that enables research extensions without modifying core components.
+
+**Event Categories:**
+
+| Event Type | Trigger Condition | Processing Pattern | Performance Impact |
+|------------|-------------------|-------------------|-------------------|
+| Pre-Step Hooks | Before simulation step | Synchronous callbacks | <1ms overhead |
+| Post-Step Hooks | After simulation step | Asynchronous processing | <1ms overhead |
+| Episode-End Hooks | Episode completion | Batch processing | <5ms overhead |
+| Performance Hooks | Threshold violations | Real-time alerts | <0.1ms overhead |
+
+**Event Processing Architecture:**
+
+```mermaid
+sequenceDiagram
+    participant Engine as Simulation Engine
+    participant Hook as Hook Manager
+    participant Recorder as Recording System
+    participant Monitor as Performance Monitor
+    
+    Engine->>Hook: Pre-Step Event
+    Hook->>Recorder: Log State
+    Hook->>Monitor: Check Performance
+    Hook->>Engine: Continue
+    
+    Engine->>Engine: Execute Step
+    
+    Engine->>Hook: Post-Step Event
+    Hook->>Recorder: Record Results
+    Hook->>Monitor: Update Metrics
+    Hook->>Engine: Step Complete
+    
+    Note over Engine,Monitor: <1ms total hook overhead
+```
+
+#### 6.3.3.2 Message Queue Architecture
+
+**In-Process Message Queues:**
+The system uses **Python asyncio queues** for internal message processing rather than external message brokers, optimized for high-performance simulation requirements.
+
+**Queue Types:**
+
+| Queue Type | Purpose | Capacity | Processing Mode |
+|------------|---------|----------|-----------------|
+| Recording Queue | Trajectory data buffering | 1000 items | Async batch processing |
+| Performance Queue | Metrics collection | 100 items | Real-time processing |
+| Error Queue | Error reporting | 50 items | Priority processing |
+
+**Queue Management:**
+
+```python
+# Async queue configuration
+queues:
+  recording:
+    max_size: 1000
+    batch_size: 100
+    flush_interval: 1.0
+  performance:
+    max_size: 100
+    batch_size: 10
+    flush_interval: 0.1
+```
+
+#### 6.3.3.3 Stream Processing Design
+
+**NumPy Vectorized Stream Processing:**
+The system processes data streams through vectorized NumPy operations rather than traditional stream processing frameworks.
+
+**Stream Processing Patterns:**
+
+| Stream Type | Processing Method | Batch Size | Latency Requirement |
+|-------------|------------------|------------|-------------------|
+| Agent States | Vectorized operations | 100 agents | <33ms per batch |
+| Sensor Data | Parallel queries | 1000 sensors | <5ms per query |
+| Trajectory Data | Batch compression | 500 points | <10ms per batch |
+
+**Stream Processing Flow:**
+
+```mermaid
+flowchart LR
+    subgraph "Input Streams"
+        A[Agent Positions] --> D[Vectorized Processor]
+        B[Sensor Readings] --> D
+        C[Environment State] --> D
+    end
+    
+    subgraph "Processing Pipeline"
+        D --> E[NumPy Operations]
+        E --> F[Parallel Queries]
+        F --> G[Results Aggregation]
+    end
+    
+    subgraph "Output Streams"
+        G --> H[Action Commands]
+        G --> I[Trajectory Data]
+        G --> J[Performance Metrics]
+    end
+    
+    style D fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+```
+
+#### 6.3.3.4 Batch Processing Flows
+
+**Hydra Multi-Run Batch Processing:**
+The system supports large-scale batch processing through Hydra's multi-run capabilities, enabling parameter sweeps across HPC clusters.
+
+**Batch Processing Architecture:**
+
+| Batch Type | Execution Context | Parallelization | Resource Management |
+|------------|------------------|-----------------|-------------------|
+| Parameter Sweeps | HPC cluster | SLURM/PBS scheduling | Per-job resource limits |
+| Ablation Studies | Local multiprocessing | Process pool | CPU core allocation |
+| Sensitivity Analysis | Cloud platforms | Container orchestration | Dynamic scaling |
+
+**Batch Configuration:**
+
+```yaml
+# Hydra multirun configuration
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    _target_: hydra._internal.BasicSweeper
+    max_jobs: 100
+    
+  launcher:
+    _target_: hydra._internal.BasicLauncher
+    
+defaults:
+  - sweep: parameter_sweep
+  - launcher: slurm
+```
+
+#### 6.3.3.5 Error Handling Strategy
+
+**Multi-Layer Error Handling:**
+The system implements comprehensive error handling with graceful degradation and recovery mechanisms.
+
+**Error Handling Layers:**
+
+| Layer | Error Types | Handling Strategy | Recovery Mechanism |
+|-------|-------------|------------------|-------------------|
+| Protocol Level | Interface violations | Type checking | Fallback implementations |
+| Performance Level | Latency violations | Performance monitoring | Simplified processing |
+| Resource Level | Memory/disk limits | Resource monitoring | Graceful degradation |
+| Integration Level | External system failures | Fallback policies | Alternative backends |
+
+**Error Recovery Flow:**
+
+```mermaid
+flowchart TB
+    A[Error Detection] --> B{Error Type}
+    B -->|Performance| C[Switch to Simplified Mode]
+    B -->|Resource| D[Reduce Resource Usage]
+    B -->|Integration| E[Use Fallback Backend]
+    B -->|Critical| F[Graceful Shutdown]
+    
+    C --> G[Continue Operation]
+    D --> G
+    E --> G
+    F --> H[Error Reporting]
+    
+    G --> I[Monitor Recovery]
+    I --> J{Recovery Successful?}
+    J -->|Yes| K[Resume Normal Operation]
+    J -->|No| L[Escalate Error]
+```
+
+### 6.3.4 EXTERNAL SYSTEMS
+
+#### 6.3.4.1 Third-Party Integration Patterns
+
+**Scientific Computing Framework Integration:**
+The system integrates extensively with the Python scientific computing ecosystem through standardized interfaces and compatibility layers.
+
+**Primary Framework Integrations:**
+
+| Framework | Integration Type | Compatibility Layer | Performance Impact |
+|-----------|------------------|--------------------|--------------------|
+| OpenAI Gymnasium | Environment API | Native + legacy wrapper | <1ms overhead |
+| Stable-Baselines3 | RL algorithms | Vectorized environments | <5ms per step |
+| NumPy/SciPy | Numerical computing | Direct API usage | Zero overhead |
+| Pandas | Data analysis | DataFrame compatibility | <1ms conversion |
+
+**Integration Architecture:**
+
 ```mermaid
 graph TB
-    subgraph "Data Protection Layers"
-        A[File System Permissions] --> B[Configuration Security]
-        B --> C[Database Security]
-        C --> D[Environment Security]
+    subgraph "Plume Navigation System"
+        A[Core Simulation Engine]
+        B[Environment Wrapper]
+        C[Data Recording System]
     end
     
-    subgraph "Data Flow Security"
-        E[Simulation Data] --> F[Recording System]
-        F --> G[Multi-Backend Storage]
-        G --> H[Local File Protection]
+    subgraph "RL Frameworks"
+        D[Gymnasium 0.29.x]
+        E[Stable-Baselines3]
+        F[Ray RLlib]
     end
     
-    A --> E
-    D --> H
+    subgraph "Scientific Computing"
+        G[NumPy/SciPy]
+        H[Pandas]
+        I[Matplotlib]
+    end
+    
+    subgraph "Infrastructure"
+        J[HPC Schedulers]
+        K[Cloud Platforms]
+        L[CI/CD Systems]
+    end
+    
+    A --> D
+    B --> E
+    B --> F
+    A --> G
+    C --> H
+    C --> I
+    A --> J
+    A --> K
+    A --> L
     
     style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+```
+
+#### 6.3.4.2 Legacy System Interfaces
+
+**Gymnasium/Gym Compatibility:**
+The system maintains full backward compatibility with legacy OpenAI Gym through automatic detection and conversion layers.
+
+**Legacy Interface Support:**
+
+| Legacy System | Compatibility Method | Migration Path | Maintenance Burden |
+|---------------|---------------------|--------------|--------------------|
+| OpenAI Gym | Automatic detection | Transparent upgrade | Low |
+| Older NumPy versions | Version pinning | Gradual upgrade | Medium |
+| Legacy configuration | Migration utilities | Automated conversion | Low |
+
+**Compatibility Implementation:**
+
+```python
+# Automatic Gym/Gymnasium detection
+def create_environment(env_config):
+    """Create environment with automatic API detection."""
+    if gymnasium_available():
+        return GymnasiumWrapper(env_config)
+    else:
+        return LegacyGymWrapper(env_config)
+
+#### Transparent API conversion
+class CompatibilityLayer:
+    def step(self, action):
+        if self.is_gymnasium:
+            return self._gymnasium_step(action)
+        else:
+            return self._legacy_gym_step(action)
+```
+
+#### 6.3.4.3 API Gateway Configuration
+
+**Configuration-Based Integration Gateway:**
+The system uses Hydra configuration management as an "API gateway" for component integration, enabling declarative composition of complex experimental setups.
+
+**Gateway Configuration Patterns:**
+
+| Configuration Layer | Purpose | Scope | Override Capability |
+|-------------------|---------|-------|-------------------|
+| Base Configuration | System defaults | Global | Full override |
+| Environment-Specific | Deployment settings | Environment | Partial override |
+| Experiment-Specific | Research parameters | Single experiment | Additive only |
+| Runtime | Dynamic adjustments | Current execution | Temporary only |
+
+**Configuration Gateway Flow:**
+
+```mermaid
+flowchart TB
+    subgraph "Configuration Sources"
+        A[Base YAML] --> E[Hydra Composer]
+        B[Environment Variables] --> E
+        C[Command Line Args] --> E
+        D[Runtime Config] --> E
+    end
+    
+    subgraph "Configuration Gateway"
+        E --> F[Schema Validation]
+        F --> G[Dependency Resolution]
+        G --> H[Component Instantiation]
+    end
+    
+    subgraph "Integrated Components"
+        H --> I[Simulation Engine]
+        H --> J[Recording System]
+        H --> K[External Frameworks]
+    end
+    
+    style E fill:#e1f5fe
     style F fill:#f3e5f5
     style G fill:#e8f5e8
 ```
 
-#### File System Security
-- **Permission-Based Access**: Standard Unix/Windows file permissions
-- **Configuration File Protection**: Secure handling of sensitive configuration data
-- **Temporary File Management**: Secure temporary file creation and cleanup
-- **Data Directory Isolation**: Configurable data storage locations with appropriate permissions
+#### 6.3.4.4 External Service Contracts
 
-#### Environment Variable Security
-- **Credential Management**: Secure handling of database credentials and API keys
-- **Environment Isolation**: Virtual environment isolation for dependency security
-- **Secret Detection**: Pre-commit hooks detect hardcoded secrets
-- **Configuration Validation**: Pydantic-based validation prevents injection attacks
+**Service Integration Contracts:**
+The system defines clear integration contracts for external services through Protocol interfaces and configuration schemas.
 
-#### 6.4.2.3 Infrastructure Security
+**Service Contract Specifications:**
 
-#### Containerization Security
-- **Multi-stage Builds**: Docker builds with security-focused base images
-- **Non-root Execution**: Containers run with non-privileged user contexts
-- **Resource Limits**: Memory and CPU constraints prevent resource exhaustion
-- **Vulnerability Scanning**: Container image security scanning
+| Service Category | Contract Type | SLA Requirements | Fallback Strategy |
+|------------------|---------------|------------------|-------------------|
+| Database Systems | Connection protocol | 99% availability | File-based fallback |
+| HPC Schedulers | Job submission API | <1 minute queue time | Local execution |
+| Cloud Platforms | Resource allocation | Auto-scaling support | Manual scaling |
+| Monitoring Systems | Metrics export | Real-time streaming | Buffered export |
 
-#### HPC Environment Security
-- **SLURM Integration**: Secure cluster job submission and resource allocation
-- **Node Isolation**: Compute node isolation through cluster security policies
-- **Credential Management**: Secure handling of cluster authentication credentials
-- **Resource Monitoring**: Real-time monitoring of resource usage and constraints
-
-### 6.4.3 Security Control Matrix
-
-#### 6.4.3.1 Security Controls Implementation
-
-| Control Category | Control Name | Implementation Method | Compliance Level |
-|---|---|---|---|
-| **Access Control** | File System Permissions | Operating system controls | Standard |
-| **Data Protection** | Configuration Security | Environment variable isolation | Standard |
-| **Code Security** | Static Analysis | mypy, ruff, pre-commit hooks | Enhanced |
-| **Build Security** | Dependency Verification | Poetry lock files, signing | Enhanced |
-
-#### 6.4.3.2 Risk Assessment and Mitigation
-
-#### Development Environment Risks
-- **Dependency Vulnerabilities**: Mitigated through automated vulnerability scanning
-- **Code Injection**: Prevented through static analysis and code review
-- **Configuration Errors**: Addressed through Pydantic validation and schema enforcement
-- **Build Tampering**: Prevented through reproducible builds and signed releases
-
-#### Deployment Environment Risks
-- **Local File Access**: Mitigated through file system permissions and user isolation
-- **Resource Exhaustion**: Prevented through configurable resource limits and monitoring
-- **Container Security**: Addressed through security-focused base images and non-root execution
-- **Credential Exposure**: Prevented through secure environment variable handling
-
-### 6.4.4 Compliance and Standards
-
-#### 6.4.4.1 Research Software Standards
-
-The system adheres to established research software development standards:
-
-#### Open Source Security Standards
-- **OWASP Guidelines**: Application of relevant OWASP security practices
-- **NIST Cybersecurity Framework**: Implementation of appropriate framework controls
-- **CIS Controls**: Application of Center for Internet Security controls
-- **SANS Guidelines**: Implementation of SANS security development guidelines
-
-#### Scientific Computing Standards
-- **Reproducible Research**: Deterministic builds and version control
-- **Data Integrity**: Comprehensive data validation and error handling
-- **Version Control**: Git-based version control with signed commits
-- **Documentation Standards**: Comprehensive security documentation
-
-#### 6.4.4.2 Compliance Requirements
-
-#### Academic Research Compliance
-- **Data Protection**: Standard data protection practices for research environments
-- **Intellectual Property**: Open source license compliance and management
-- **Publication Standards**: Reproducible research requirements
-- **Collaboration Security**: Secure sharing of research code and data
-
-### 6.4.5 Security Monitoring and Maintenance
-
-#### 6.4.5.1 Continuous Security Assessment
-
-#### Automated Security Monitoring
-```mermaid
-sequenceDiagram
-    participant D as Developer
-    participant R as Repository
-    participant C as CI/CD
-    participant S as Security Tools
-    
-    D->>R: Push code changes
-    R->>C: Trigger pipeline
-    C->>S: Run security scans
-    S->>S: Dependency check
-    S->>S: Static analysis
-    S->>S: License compliance
-    S->>C: Return results
-    C->>R: Update security status
-    R->>D: Notify of issues
-```
-
-#### Security Maintenance Processes
-- **Regular Dependency Updates**: Monthly security updates for all dependencies
-- **Vulnerability Response**: Rapid response to security vulnerability notifications
-- **Security Documentation**: Maintenance of security-related documentation
-- **Incident Response**: Procedures for handling security-related issues
-
-#### 6.4.5.2 Security Metrics and Reporting
-
-#### Security Performance Indicators
-- **Dependency Vulnerability Count**: Monthly tracking of known vulnerabilities
-- **Code Quality Metrics**: Static analysis findings and resolution tracking
-- **Build Security Status**: Successful security scanning percentages
-- **Compliance Adherence**: Adherence to security standards and guidelines
-
-### 6.4.6 Security Architecture Evolution
-
-#### 6.4.6.1 Future Security Considerations
-
-As the system evolves, security requirements may change:
-
-#### Potential Security Enhancements
-- **Multi-User Support**: If future versions require multi-user capabilities
-- **Web Interface**: Security considerations for potential web-based interfaces
-- **Cloud Deployment**: Security requirements for cloud-based deployments
-- **Data Sharing**: Security protocols for research data sharing platforms
-
-#### Security Architecture Readiness
-- **Modular Design**: Protocol-oriented architecture supports security component addition
-- **Configuration Framework**: Hydra-based configuration supports security parameter management
-- **Extensibility**: Component-based architecture enables security module integration
-- **Monitoring Integration**: Logging framework supports security monitoring integration
-
-#### 6.4.6.2 Security Best Practices for Research Software
-
-#### Development Team Security Practices
-- **Security Training**: Regular security training for development team members
-- **Threat Modeling**: Periodic threat modeling exercises for system evolution
-- **Security Reviews**: Regular security architecture reviews and updates
-- **Community Engagement**: Participation in research software security communities
-
-### 6.4.7 References
-
-#### 6.4.7.1 Technical Specification Sections
-- **1.2 SYSTEM OVERVIEW** - System context and deployment model
-- **5.1 HIGH-LEVEL ARCHITECTURE** - Protocol-oriented architecture patterns
-- **6.1 CORE SERVICES ARCHITECTURE** - Monolithic architecture rationale
-- **6.3 INTEGRATION ARCHITECTURE** - External system integration patterns
-- **3.7 DEVELOPMENT & DEPLOYMENT** - Build system and CI/CD security practices
-
-#### 6.4.7.2 Repository Analysis
-- **Root repository (depth: 0)** - Project configuration and security tooling
-- **src folder (depth: 1)** - Source code organization and security patterns
-- **src/odor_plume_nav/api (depth: 2)** - Public API security considerations
-- **tests/test_db_session.py** - Database session security testing
-- **tests/api/test_api.py** - API security testing patterns
-- **pyproject.toml** - Dependency management and security configuration
-- **docker** - Containerization security practices
-- **.github/workflows** - CI/CD security automation
-
-#### 6.4.7.3 Security Standards Referenced
-- **OWASP Application Security Guidelines** - Web application security best practices
-- **NIST Cybersecurity Framework** - Cybersecurity risk management framework
-- **CIS Controls** - Center for Internet Security control framework
-- **SANS Security Guidelines** - Security development lifecycle practices
-- **Research Software Security Standards** - Scientific computing security practices
-
-## 6.5 MONITORING AND OBSERVABILITY
-
-### 6.5.1 Overview
-
-The Plume Navigation Simulation system implements a **research-focused monitoring architecture** designed to provide comprehensive visibility into simulation performance, data quality, and system health. Unlike traditional web applications requiring external monitoring services, this system prioritizes real-time performance metrics, debugging support, and research data integrity within a single-process execution environment.
-
-The monitoring approach is tailored for the system's core requirements:
-- **Performance Monitoring**: Real-time tracking of ≤33ms simulation step latency targets
-- **Multi-Agent Scalability**: Monitoring for 100+ simultaneous agents through vectorized operations
-- **Research Data Quality**: Comprehensive tracking of experimental data integrity and completeness
-- **Development Support**: Structured logging and performance analysis for algorithm development
-
-### 6.5.2 Monitoring Infrastructure
-
-#### 6.5.2.1 Metrics Collection
-
-The system implements a multi-layered metrics collection architecture optimized for high-frequency simulation data:
-
-#### Performance Metrics Collection
-
-| Metric Category | Collection Method | Storage Format | Retention Policy |
-|---|---|---|---|
-| **Simulation Performance** | `time.perf_counter()` timing | Structured JSON logs | Configurable via LOG_RETENTION |
-| **Memory Utilization** | `psutil.Process()` monitoring | JSON + binary metrics | Session lifetime |
-| **Agent Statistics** | Vectorized NumPy operations | StatsAggregator backend | Permanent research data |
-| **Database Performance** | SQLAlchemy ORM instrumentation | Database tables | Configurable archival |
-
-#### Real-time Metrics Architecture
-
-```mermaid
-graph TB
-    subgraph "Metrics Collection Layer"
-        A[Navigator Controller] --> E[Performance Monitor]
-        B[Frame Cache] --> E
-        C[Recording System] --> E
-        D[Database Layer] --> E
-    end
-    
-    subgraph "Metrics Processing"
-        E --> F[Loguru Logger]
-        E --> G[Stats Aggregator]
-        E --> H[Memory Monitor]
-    end
-    
-    subgraph "Storage Backends"
-        F --> I[JSON Logs]
-        G --> J[Statistical Summaries]
-        H --> K[Resource Metrics]
-    end
-    
-    subgraph "Analysis Layer"
-        I --> L[Development Analysis]
-        J --> M[Research Analytics]
-        K --> N[Performance Optimization]
-    end
-```
-
-#### Structured Metrics Schema
-
-The system implements a comprehensive metrics schema supporting both real-time monitoring and research analytics:
+**Contract Enforcement:**
 
 ```python
-# Core Performance Metrics
-PerformanceMetrics = {
-    "simulation_step_ms": float,           # Individual step execution time
-    "fps": float,                          # Frames per second achievement
-    "memory_usage_mb": float,              # Current process memory usage
-    "cache_hit_rate": float,               # Frame cache efficiency
-    "agent_count": int,                    # Active agent count
-    "correlation_id": str,                 # Request tracing identifier
-    "timestamp": datetime,                 # High-precision timestamp
-    "episode_id": str,                     # Research episode identifier
-    "optimization_flags": Dict[str, bool]   # Active optimization states
-}
+# Service contract validation
+class DatabaseContract:
+    """Database service contract."""
+    
+    availability_sla: float = 0.99
+    max_connection_time: int = 30  # seconds
+    max_query_time: int = 10  # seconds
+    
+    def validate_service(self, service) -> bool:
+        """Validate service meets contract requirements."""
+        return (
+            service.test_connection() and
+            service.connection_time < self.max_connection_time and
+            service.supports_transactions()
+        )
 ```
 
-#### 6.5.2.2 Log Aggregation
+### 6.3.5 INTEGRATION FLOW DIAGRAMS
 
-The system uses **Loguru-based structured logging** with dual-sink architecture supporting both human and machine consumption:
+#### 6.3.5.1 Overall Integration Architecture
 
-#### Logging Architecture
+```mermaid
+graph TB
+    subgraph "Core System"
+        A[Simulation Engine] --> B[Protocol Layer]
+        B --> C[Component Registry]
+        C --> D[Configuration Manager]
+    end
+    
+    subgraph "Research Frameworks"
+        E[Gymnasium] --> F[Environment API]
+        G[Stable-Baselines3] --> H[RL Algorithms]
+        I[NumPy/SciPy] --> J[Numerical Computing]
+    end
+    
+    subgraph "Data Systems"
+        K[Database Layer] --> L[Multi-Backend Storage]
+        M[Recording System] --> N[Multi-Format Export]
+        O[Performance Monitor] --> P[Metrics Collection]
+    end
+    
+    subgraph "Infrastructure"
+        Q[HPC Integration] --> R[Job Scheduling]
+        S[CI/CD Pipeline] --> T[Quality Assurance]
+        U[Cloud Platforms] --> V[Scalable Deployment]
+    end
+    
+    B --> F
+    B --> H
+    B --> J
+    B --> L
+    B --> N
+    B --> P
+    B --> R
+    B --> T
+    B --> V
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+```
 
-| Sink Type | Format | Target Audience | Configuration |
-|---|---|---|---|
-| **Console Sink** | Human-readable with colors | Developers and researchers | `LOG_LEVEL` environment variable |
-| **JSON Sink** | Machine-parseable structured | Analytics and tooling | JSON format with correlation IDs |
-| **Performance Sink** | Metrics-focused | Performance analysis | Separate threshold configuration |
-| **Research Sink** | Experiment-focused | Scientific analysis | Configurable retention policies |
-
-#### Log Aggregation Flow
+#### 6.3.5.2 API Integration Sequence
 
 ```mermaid
 sequenceDiagram
-    participant S as Simulation Engine
-    participant L as Loguru Logger
-    participant C as Console Sink
-    participant J as JSON Sink
-    participant A as Analytics System
+    participant RL as RL Framework
+    participant Env as Environment Wrapper
+    participant Engine as Simulation Engine
+    participant Plume as Plume Model
+    participant Record as Recording System
+    participant DB as Database
     
-    S->>L: Log with correlation ID
-    L->>C: Format for human reading
-    L->>J: Structured JSON output
-    C->>+Developer: Real-time feedback
-    J->>A: Machine-parseable data
-    A->>+Research: Aggregated insights
-```
-
-#### Correlation ID Propagation
-
-The system implements comprehensive correlation ID tracking for distributed trace analysis:
-
-- **Request Context**: Unique identifier per simulation request
-- **Episode Context**: Research episode tracking across multiple steps
-- **Component Context**: Per-component execution tracking
-- **Performance Context**: Cross-component performance correlation
-
-#### 6.5.2.3 Distributed Tracing
-
-While the system operates within a single process, it implements **logical distributed tracing** for component interaction analysis:
-
-#### Tracing Architecture
-
-```mermaid
-graph LR
-    subgraph "Request Flow"
-        A[API Entry] --> B[Generate Correlation ID]
-        B --> C[Context Propagation]
-        C --> D[Component Execution]
-        D --> E[Performance Logging]
-        E --> F[Trace Aggregation]
+    RL->>Env: reset()
+    Env->>Engine: initialize_simulation()
+    Engine->>Plume: setup_physics()
+    Engine->>Record: initialize_recording()
+    Record->>DB: create_experiment()
+    
+    loop Training Episode
+        RL->>Env: step(action)
+        Env->>Engine: execute_step(action)
+        Engine->>Plume: query_concentration()
+        Plume-->>Engine: concentration_field
+        Engine->>Record: record_trajectory()
+        Record->>DB: store_data()
+        Engine-->>Env: observation, reward, done
+        Env-->>RL: obs, reward, done, info
     end
     
-    subgraph "Component Instrumentation"
-        G[Navigator] --> H[Controllers]
-        H --> I[Sensors]
-        I --> J[Recording]
-        J --> K[Statistics]
-    end
+    RL->>Env: close()
+    Env->>Record: finalize_recording()
+    Record->>DB: commit_experiment()
     
-    C --> G
-    K --> F
+    Note over RL,DB: <33ms per step requirement
 ```
 
-#### Trace Data Schema
-
-```python
-# Distributed Trace Context
-TraceContext = {
-    "correlation_id": str,        # Primary trace identifier
-    "request_id": str,            # Sub-request identifier
-    "episode_id": str,            # Research episode context
-    "step_count": int,            # Current simulation step
-    "component_path": str,        # Component execution path
-    "parent_span_id": str,        # Hierarchical span tracking
-    "execution_time_ms": float,   # Component execution duration
-    "memory_delta_mb": float,     # Memory impact measurement
-    "performance_flags": dict     # Performance optimization context
-}
-```
-
-#### 6.5.2.4 Alert Management
-
-The system implements **threshold-based internal alerting** optimized for research environments:
-
-#### Alert Categories and Thresholds
-
-| Alert Type | Threshold | Action | Configuration Variable |
-|---|---|---|---|
-| **Step Latency** | >33ms (warning), >50ms (critical) | Performance optimization | `PERFORMANCE_THRESHOLD` |
-| **Memory Pressure** | >85% (warning), >95% (critical) | Cache eviction | `MEMORY_THRESHOLD` |
-| **FPS Degradation** | <30 FPS (warning), <20 FPS (critical) | Simulation adjustment | `TARGET_FPS` |
-| **Cache Efficiency** | <85% hit rate (warning) | Cache optimization | `CACHE_EFFICIENCY_THRESHOLD` |
-
-#### Alert Response Architecture
-
-```mermaid
-flowchart TD
-    A[Metrics Monitor] --> B{Threshold Check}
-    B -->|Normal| C[Continue Operation]
-    B -->|Warning| D[Log Warning + Metrics]
-    B -->|Critical| E[Performance Optimization]
-    
-    D --> F[Trend Analysis]
-    E --> G[Automatic Adjustment]
-    
-    F --> H[Research Notification]
-    G --> I[System Adaptation]
-    
-    H --> J[Analysis Reports]
-    I --> K[Performance Recovery]
-```
-
-#### 6.5.2.5 Dashboard Design
-
-The system provides **multi-modal dashboard** capabilities for different stakeholder needs:
-
-#### Real-time Console Dashboard
-
-```
-[2025-01-14 14:23:45.123] INFO | NavigationController | 
-Episode: 42/100 | Step: 1,234 | FPS: 32.5 | Memory: 512MB/2GB
-Cache: 95.2% hits | Agents: 100 | Latency: 28.5ms | Status: OPTIMAL
-Correlation: abc123-def456 | Config: gaussian_plume_v2.yaml
-```
-
-#### Structured JSON Dashboard
-
-```json
-{
-  "timestamp": "2025-01-14T14:23:45.123Z",
-  "correlation_id": "abc123-def456",
-  "episode": {"current": 42, "total": 100},
-  "performance": {
-    "step_latency_ms": 28.5,
-    "fps": 32.5,
-    "memory_usage": {"current_mb": 512, "limit_mb": 2048}
-  },
-  "cache": {"hit_rate": 95.2, "size_mb": 128},
-  "agents": {"count": 100, "active": 100},
-  "status": "OPTIMAL"
-}
-```
-
-#### Research Analytics Dashboard
-
-- **Episode Progress**: Visual progress tracking for long-running experiments
-- **Performance Trends**: Historical performance analysis with trend indicators
-- **Resource Utilization**: Memory and CPU usage patterns over time
-- **Data Quality Metrics**: Recording completeness and integrity indicators
-
-### 6.5.3 Observability Patterns
-
-#### 6.5.3.1 Health Checks
-
-The system implements **comprehensive health monitoring** across all architectural layers:
-
-#### Multi-Level Health Validation
-
-```mermaid
-graph TB
-    subgraph "System Health Layers"
-        A[System Resources] --> B[Application Health]
-        B --> C[Component Health]
-        C --> D[Integration Health]
-    end
-    
-    subgraph "Health Check Types"
-        E[Startup Validation] --> F[Runtime Monitoring]
-        F --> G[Performance Validation]
-        G --> H[Data Integrity]
-    end
-    
-    A --> E
-    D --> H
-```
-
-#### Health Check Matrix
-
-| Health Check Level | Validation Criteria | Frequency | Failure Response |
-|---|---|---|---|
-| **System Resources** | Memory available, CPU utilization | Every 100 steps | Graceful degradation |
-| **Application Health** | Component initialization, protocol compliance | Startup + on-demand | Error logging + fallback |
-| **Component Health** | Protocol validation, performance targets | Every 1000 steps | Component restart |
-| **Integration Health** | Database connectivity, file system access | Every 10,000 steps | Backend switching |
-
-#### 6.5.3.2 Performance Metrics
-
-The system tracks **comprehensive performance indicators** across all simulation components:
-
-#### Core Performance Metrics
-
-| Metric Category | Key Indicators | Target Values | Measurement Method |
-|---|---|---|---|
-| **Simulation Performance** | Step latency, FPS, agent throughput | ≤33ms, ≥30 FPS, 100+ agents | Real-time instrumentation |
-| **Memory Performance** | Process RSS, cache efficiency, GC frequency | <2GB, >90% hits, <1s GC | psutil + custom monitoring |
-| **I/O Performance** | Database write speed, file system latency | >1000 ops/sec, <10ms | Async operation timing |
-| **Component Performance** | Protocol execution time, validation overhead | <1ms per protocol call | Method-level instrumentation |
-
-#### Performance Monitoring Architecture
-
-```mermaid
-graph TB
-    subgraph "Performance Data Collection"
-        A[High-Frequency Sampling] --> B[Statistical Aggregation]
-        B --> C[Trend Analysis]
-        C --> D[Optimization Triggers]
-    end
-    
-    subgraph "Performance Metrics"
-        E[Simulation Step Timing] --> F[Memory Usage Tracking]
-        F --> G[Cache Performance]
-        G --> H[I/O Throughput]
-    end
-    
-    subgraph "Analysis and Response"
-        I[Real-time Dashboards] --> J[Performance Reports]
-        J --> K[Optimization Recommendations]
-        K --> L[Automatic Adjustments]
-    end
-    
-    A --> E
-    D --> I
-```
-
-#### 6.5.3.3 Business Metrics
-
-The system tracks **research-focused business metrics** supporting scientific objectives:
-
-#### Research Quality Metrics
-
-| Metric Category | Key Indicators | Collection Method | Research Impact |
-|---|---|---|---|
-| **Simulation Quality** | Trajectory smoothness, convergence rate | Statistical analysis | Algorithm validation |
-| **Agent Performance** | Success rate, path efficiency, learning curves | Episode aggregation | Training effectiveness |
-| **Data Quality** | Recording completeness, validation success | Integrity checking | Research reproducibility |
-| **System Efficiency** | Resource utilization, experiment throughput | Resource monitoring | Research productivity |
-
-#### Research Metrics Architecture
-
-```mermaid
-graph LR
-    subgraph "Data Collection"
-        A[Simulation Episodes] --> B[Agent Trajectories]
-        B --> C[Performance Data]
-        C --> D[Quality Metrics]
-    end
-    
-    subgraph "Analysis Pipeline"
-        E[Statistical Processing] --> F[Trend Analysis]
-        F --> G[Quality Assessment]
-        G --> H[Research Insights]
-    end
-    
-    subgraph "Research Outputs"
-        I[Performance Reports] --> J[Algorithm Validation]
-        J --> K[Research Publications]
-        K --> L[Community Sharing]
-    end
-    
-    D --> E
-    H --> I
-```
-
-#### 6.5.3.4 SLA Monitoring
-
-The system implements **research-appropriate SLA monitoring** focused on scientific workflow requirements:
-
-#### Research SLA Targets
-
-| SLA Category | Target Metric | Monitoring Method | Escalation Trigger |
-|---|---|---|---|
-| **Simulation Availability** | >99.9% uptime | Health check monitoring | >0.1% downtime |
-| **Performance Consistency** | ≤33ms step latency | Real-time measurement | >10% violations |
-| **Data Integrity** | 100% capture rate | Recording validation | Any data loss |
-| **Resource Efficiency** | <8GB per 100 agents | Memory monitoring | Resource exhaustion |
-
-#### SLA Monitoring Dashboard
-
-```mermaid
-graph TB
-    subgraph "SLA Monitoring"
-        A[Availability Tracking] --> B[Performance Monitoring]
-        B --> C[Data Integrity Checks]
-        C --> D[Resource Utilization]
-    end
-    
-    subgraph "SLA Reporting"
-        E[Real-time Status] --> F[Historical Trends]
-        F --> G[Violation Analysis]
-        G --> H[Improvement Plans]
-    end
-    
-    subgraph "Stakeholder Communication"
-        I[Research Team Dashboard] --> J[Performance Reports]
-        J --> K[System Health Reports]
-        K --> L[Optimization Recommendations]
-    end
-    
-    A --> E
-    D --> I
-```
-
-#### 6.5.3.5 Capacity Tracking
-
-The system implements **dynamic capacity monitoring** with automatic optimization:
-
-#### Capacity Management Architecture
-
-```mermaid
-flowchart TD
-    subgraph "Capacity Monitoring"
-        A[Memory Utilization] --> B[CPU Usage]
-        B --> C[I/O Throughput]
-        C --> D[Storage Capacity]
-    end
-    
-    subgraph "Threshold Management"
-        E[Warning Levels] --> F[Critical Levels]
-        F --> G[Optimization Triggers]
-        G --> H[Emergency Procedures]
-    end
-    
-    subgraph "Automatic Response"
-        I[Cache Adjustment] --> J[Feature Degradation]
-        J --> K[Resource Reallocation]
-        K --> L[Performance Recovery]
-    end
-    
-    A --> E
-    H --> I
-```
-
-#### Capacity Thresholds and Responses
-
-| Resource Type | Warning Threshold | Critical Threshold | Automatic Response |
-|---|---|---|---|
-| **Memory Usage** | 85% of limit | 95% of limit | Cache eviction + GC |
-| **Frame Cache** | 90% of capacity | 95% of capacity | LRU eviction |
-| **Database Storage** | 80% of disk space | 90% of disk space | Data archival |
-| **Recording Buffer** | 85% of buffer size | 95% of buffer size | Forced flush |
-
-### 6.5.4 Incident Response
-
-#### 6.5.4.1 Alert Routing
-
-The system implements **intelligent alert routing** based on severity and context:
-
-#### Alert Routing Architecture
-
-```mermaid
-flowchart TD
-    A[Alert Generation] --> B{Severity Assessment}
-    B -->|INFO| C[Console Logging]
-    B -->|WARNING| D[Structured Logging + Metrics]
-    B -->|ERROR| E[Enhanced Logging + State Dump]
-    B -->|CRITICAL| F[Emergency Response + Shutdown]
-    
-    C --> G[Development Monitoring]
-    D --> H[Performance Analysis]
-    E --> I[Debug Investigation]
-    F --> J[System Recovery]
-    
-    H --> K[Optimization Recommendations]
-    I --> L[Root Cause Analysis]
-    J --> M[Manual Intervention Required]
-```
-
-#### Alert Routing Matrix
-
-| Alert Severity | Response Time | Automated Actions | Human Intervention |
-|---|---|---|---|
-| **INFO** | Immediate | Log to console | Optional review |
-| **WARNING** | <1 second | Log + performance analysis | Investigation recommended |
-| **ERROR** | <5 seconds | Log + state dump + fallback | Debug investigation required |
-| **CRITICAL** | Immediate | Emergency shutdown + save state | Manual recovery required |
-
-#### 6.5.4.2 Escalation Procedures
-
-The system implements **graduated escalation** based on alert persistence and severity:
-
-#### Escalation Timeline
-
-```mermaid
-gantt
-    title Alert Escalation Timeline
-    dateFormat X
-    axisFormat %Ls
-    
-    section Performance Warnings
-    Initial Alert          :0, 1000
-    Analysis Phase         :1000, 3000
-    Optimization Phase     :3000, 10000
-    Manual Review          :10000, 30000
-    
-    section Critical Errors
-    Immediate Response     :0, 100
-    State Preservation     :100, 500
-    Emergency Shutdown     :500, 1000
-    Recovery Planning      :1000, 5000
-```
-
-#### Escalation Procedures
-
-| Escalation Level | Trigger Condition | Response Actions | Success Criteria |
-|---|---|---|---|
-| **Level 1** | Performance degradation | Automatic optimization | Return to baseline |
-| **Level 2** | Resource exhaustion | Feature degradation | Stable operation |
-| **Level 3** | Component failure | Fallback activation | Minimal functionality |
-| **Level 4** | System instability | Emergency shutdown | Safe state preservation |
-
-#### 6.5.4.3 Runbooks
-
-The system provides **comprehensive runbooks** for common operational scenarios:
-
-#### Performance Degradation Runbook
-
-
-#### Performance Degradation Response
-
-##### 1. Initial Assessment
-- Check recent configuration changes
-- Review performance metrics history
-- Analyze resource utilization patterns
-- Identify performance bottlenecks
-
-##### 2. Diagnostic Steps
-- Examine correlation ID traces
-- Check memory pressure indicators
-- Review cache hit rates
-- Analyze agent count impact
-
-##### 3. Optimization Actions
-- Adjust cache size if memory constrained
-- Disable optional features (visualization, detailed logging)
-- Optimize simulation parameters
-- Reduce agent count if necessary
-
-##### 4. Recovery Validation
-- Monitor step latency return to <33ms
-- Verify FPS recovery to >30 FPS
-- Confirm memory stabilization
-- Validate data recording integrity
-```
-
-#### Memory Pressure Runbook
-
-
-#### Memory Pressure Response
-
-##### 1. Detection
-- Monitor `log_cache_memory_pressure_violation` alerts
-- Check frame cache statistics
-- Review agent count and complexity
-- Analyze memory growth patterns
-
-##### 2. Immediate Actions
-- Clear frame cache if safe
-- Reduce recording buffer sizes
-- Enable data compression
-- Trigger garbage collection
-
-##### 3. Optimization Strategies
-- Implement LRU cache eviction
-- Reduce frame cache size
-- Optimize data structures
-- Enable memory-efficient modes
-
-##### 4. Prevention Measures
-- Implement proactive cache management
-- Monitor memory trends
-- Optimize data serialization
-- Regular performance reviews
-```
-
-#### 6.5.4.4 Post-mortem Processes
-
-The system implements **structured post-mortem analysis** for continuous improvement:
-
-#### Post-mortem Workflow
-
-```mermaid
-sequenceDiagram
-    participant I as Incident
-    participant D as Data Collection
-    participant A as Analysis
-    participant R as Reporting
-    participant P as Prevention
-    
-    I->>D: Incident occurs
-    D->>D: Collect structured logs
-    D->>D: Gather performance metrics
-    D->>D: Capture system state
-    D->>A: Provide data package
-    A->>A: Timeline reconstruction
-    A->>A: Root cause analysis
-    A->>A: Impact assessment
-    A->>R: Generate report
-    R->>P: Improvement recommendations
-    P->>P: Implement preventive measures
-```
-
-#### Post-mortem Data Collection
-
-| Data Type | Collection Method | Retention Period | Analysis Purpose |
-|---|---|---|---|
-| **Structured Logs** | JSON log aggregation | 30 days | Timeline reconstruction |
-| **Performance Metrics** | Time-series data | 90 days | Performance analysis |
-| **System State** | Memory dumps, config snapshots | 7 days | Root cause analysis |
-| **Correlation Data** | Distributed traces | 14 days | Impact assessment |
-
-#### 6.5.4.5 Improvement Tracking
-
-The system implements **continuous improvement tracking** for monitoring effectiveness:
-
-#### Improvement Metrics
-
-| Improvement Area | Tracking Method | Review Frequency | Success Metrics |
-|---|---|---|---|
-| **Alert Accuracy** | False positive rate tracking | Weekly | <5% false positives |
-| **Response Time** | MTTR measurement | Monthly | <1 minute average |
-| **Performance Optimization** | Benchmark comparisons | Per release | Consistent improvement |
-| **System Reliability** | Uptime and stability metrics | Quarterly | >99.9% availability |
-
-#### Improvement Workflow
+#### 6.3.5.3 Message Flow Architecture
 
 ```mermaid
 flowchart LR
-    A[Performance Baseline] --> B[Monitoring Implementation]
-    B --> C[Data Collection]
-    C --> D[Analysis and Insights]
-    D --> E[Optimization Implementation]
-    E --> F[Results Validation]
-    F --> G[Process Refinement]
-    G --> A
+    subgraph "Input Processing"
+        A[Configuration] --> B[Hydra Parser]
+        C[CLI Commands] --> B
+        D[Environment Variables] --> B
+    end
+    
+    subgraph "Core Processing"
+        B --> E[Component Factory]
+        E --> F[Simulation Engine]
+        F --> G[Event Manager]
+    end
+    
+    subgraph "Output Processing"
+        G --> H[Recording Queue]
+        G --> I[Performance Queue]
+        G --> J[Error Queue]
+    end
+    
+    subgraph "External Systems"
+        H --> K[Database Storage]
+        H --> L[File Export]
+        I --> M[Monitoring Systems]
+        J --> N[Error Reporting]
+    end
+    
+    style B fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+    style G fill:#fff3e0
 ```
 
-### 6.5.5 Required Diagrams
+### 6.3.6 PERFORMANCE INTEGRATION REQUIREMENTS
 
-#### 6.5.5.1 Monitoring Architecture
+#### 6.3.6.1 Integration Performance Specifications
+
+**Critical Performance Requirements:**
+
+| Integration Point | Latency Requirement | Throughput Requirement | Reliability Target |
+|------------------|-------------------|----------------------|-------------------|
+| RL Framework API | <33ms per step | 100 agents concurrent | 99.9% uptime |
+| Database Operations | <10ms per query | 1000 records/second | 99% availability |
+| File I/O Operations | <1ms buffering | 10MB/second sustained | 99.9% reliability |
+| Configuration Loading | <100ms initialization | One-time per experiment | 100% success |
+
+#### 6.3.6.2 Integration Monitoring
+
+**Performance Monitoring Integration:**
+
+```python
+# Integration performance monitoring
+class IntegrationMonitor:
+    def __init__(self):
+        self.metrics = {
+            'step_latency': [],
+            'db_query_time': [],
+            'file_io_time': [],
+            'memory_usage': []
+        }
+    
+    def track_integration_performance(self, integration_type, duration):
+        """Track performance metrics for integration points."""
+        self.metrics[f'{integration_type}_latency'].append(duration)
+        
+        if duration > self.get_threshold(integration_type):
+            self.trigger_performance_alert(integration_type, duration)
+```
+
+### 6.3.7 INTEGRATION TESTING STRATEGY
+
+#### 6.3.7.1 Integration Test Architecture
+
+**Comprehensive Integration Testing:**
+
+| Test Category | Coverage | Test Environment | Success Criteria |
+|---------------|----------|------------------|------------------|
+| Framework Compatibility | All supported versions | Automated CI/CD | 100% API compatibility |
+| Performance Integration | Critical path operations | Load testing | <33ms step latency |
+| Database Integration | All backend types | Containerized testing | Zero data loss |
+| HPC Integration | Major schedulers | Cluster simulation | Job completion |
+
+#### 6.3.7.2 Continuous Integration Pipeline
+
+**Integration CI/CD Pipeline:**
 
 ```mermaid
 flowchart TB
-    subgraph "Application Components"
-        A[Navigator Controllers] --> L[Loguru Logger]
-        B[Simulation Engine] --> L
-        C[Frame Cache] --> L
-        D[Recording System] --> L
-        E[Database Layer] --> L
+    subgraph "CI Pipeline"
+        A[Code Changes] --> B[Unit Tests]
+        B --> C[Integration Tests]
+        C --> D[Performance Tests]
+        D --> E[Compatibility Tests]
     end
     
-    subgraph "Monitoring Layer"
-        L --> F[Console Sink]
-        L --> G[JSON File Sink]
-        L --> H[Performance Sink]
-        I[Performance Monitor] --> L
-        J[Memory Monitor] --> L
-        K[Stats Aggregator] --> M[Statistical Reports]
+    subgraph "Test Environments"
+        F[Local Testing] --> G[Container Testing]
+        G --> H[Cluster Testing]
+        H --> I[Production Simulation]
     end
     
-    subgraph "Storage Layer"
-        G --> N[Structured JSON Logs]
-        H --> O[Performance Metrics]
-        M --> P[Research Statistics]
-        D --> Q[Experimental Data]
+    subgraph "Quality Gates"
+        J[Performance Validation] --> K[Compatibility Check]
+        K --> L[Security Scan]
+        L --> M[Deployment Approval]
     end
     
-    subgraph "Analysis Layer"
-        N --> R[Log Analysis Tools]
-        O --> S[Performance Analysis]
-        P --> T[Research Analytics]
-        Q --> U[Data Validation]
-    end
+    C --> F
+    D --> J
+    E --> K
+    I --> M
     
-    subgraph "Visualization Layer"
-        R --> V[Development Dashboards]
-        S --> W[Performance Reports]
-        T --> X[Research Visualizations]
-        U --> Y[Quality Reports]
-    end
-    
-    style L fill:#e1f5fe
-    style I fill:#f3e5f5
+    style A fill:#e1f5fe
+    style J fill:#f3e5f5
     style M fill:#e8f5e8
 ```
 
-#### 6.5.5.2 Alert Flow Diagram
+### 6.3.8 REFERENCES
 
-```mermaid
-flowchart TD
-    subgraph "Detection Layer"
-        A[Performance Monitor] --> D{Threshold Evaluation}
-        B[Memory Monitor] --> D
-        C[Health Checks] --> D
-        E[Resource Monitor] --> D
-    end
-    
-    subgraph "Alert Processing"
-        D -->|Threshold Exceeded| F[Alert Generation]
-        F --> G{Severity Classification}
-        G -->|INFO| H[Console Log]
-        G -->|WARNING| I[Structured Log + Metrics]
-        G -->|ERROR| J[Enhanced Log + State Dump]
-        G -->|CRITICAL| K[Emergency Response]
-    end
-    
-    subgraph "Response Actions"
-        H --> L[Development Notification]
-        I --> M[Performance Analysis]
-        J --> N[Debug Investigation]
-        K --> O[System Shutdown]
-        
-        M --> P[Optimization Triggers]
-        N --> Q[Fallback Activation]
-        O --> R[State Preservation]
-    end
-    
-    subgraph "Recovery Process"
-        P --> S[Automatic Optimization]
-        Q --> T[Component Restart]
-        R --> U[Manual Recovery]
-        
-        S --> V[Performance Validation]
-        T --> W[Health Verification]
-        U --> X[System Restoration]
-    end
-    
-    style D fill:#fff3e0
-    style G fill:#f3e5f5
-    style K fill:#ffebee
+#### 6.3.8.1 Integration Documentation Sources
+
+**Files Examined:**
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/environments/` - Gymnasium/Gym environment wrappers and compatibility layers
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/rl/` - Reinforcement learning framework integration modules
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/db/` - Database integration layer with multi-backend support
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/config/` - Hydra configuration management and component orchestration
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/adapters/` - External system adapters and video processing integration
+- <span style="background-color: rgba(91, 57, 243, 0.2)">`src/plume_nav_sim/cli/__init__.py` - CLI package initializer</span>
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/cli/main.py` - Command-line interface and batch processing integration
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/utils/logging_setup.py` - Structured logging and monitoring integration
+- `.github/workflows/ci.yml` - CI/CD pipeline configuration and integration testing
+- `logging.yaml` - Logging configuration with external monitoring integration
+- `pyproject.toml` - Dependency management and <span style="background-color: rgba(91, 57, 243, 0.2)">**setuptools-based** build system integration (PEP 621)</span>
+
+**Folders Analyzed:**
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/` - Core package structure and integration points
+- `src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/api/` - Public API surface and protocol definitions
+- `.github/workflows/` - CI/CD integration workflows and quality gates
+
+**Technical Specification Cross-References:**
+- Section 3.7 - Integration requirements and framework compatibility
+- Section 5.1 - High-level architecture and external integration points
+- Section 6.1 - Core services architecture and component integration patterns
+- Section 6.2 - Database design and persistence integration architecture
+
+## 6.4 SECURITY ARCHITECTURE
+
+### 6.4.1 Security Architecture Overview
+
+#### 6.4.1.1 Security Model Classification
+
+**Detailed Security Architecture is not applicable for this system** as it operates as a research-oriented scientific computing library in trusted environments rather than a distributed web application or network-accessible service.
+
+The Plume Navigation Simulation Library implements a **Research Environment Security Model** specifically designed for:
+- Local Python library execution in trusted research environments
+- High-performance scientific computing with <33ms step latency requirements
+- Protocol-based in-process communication rather than network-exposed APIs
+- Configuration-driven component orchestration without user-facing authentication
+
+#### 6.4.1.2 Security Scope and Boundaries
+
+The system's security boundaries align with its architectural design:
+
+| Security Domain | Scope | Implementation Approach | Rationale |
+|----------------|-------|------------------------|-----------|
+| Process Security | Local library execution | OS-level process isolation | Single-process simulation environment |
+| Configuration Security | Environment variables and YAML | Structured configuration management | Research reproducibility requirements |
+| Data Protection | File system permissions | OS-level access controls | Scientific data transparency needs |
+| Integration Security | External service credentials | API key management | Cloud platform and HPC integrations |
+
+#### 6.4.1.3 Security Philosophy
+
+The security approach prioritizes:
+- **Transparency**: Research data and configurations are openly accessible for reproducibility
+- **Minimal Attack Surface**: No network exposure or user authentication systems
+- **Standard Practices**: Leveraging OS-level security and established credential management
+- **Performance**: Security measures must not impact <33ms step latency requirements
+
+### 6.4.2 Standard Security Practices Implementation
+
+#### 6.4.2.1 Configuration Security
+
+**Environment Variable Management**
+The system implements secure configuration practices through structured environment variable handling:
+
+```yaml
+# Secure configuration pattern
+database:
+  url: ${oc.env:DATABASE_URL,sqlite:///local.db}
+  max_connections: ${oc.env:MAX_DB_CONNECTIONS,10}
+  
+external_services:
+  wandb_api_key: ${oc.env:WANDB_API_KEY,}
+  tensorboard_log_dir: ${oc.env:TENSORBOARD_LOG_DIR,./logs}
 ```
 
-#### 6.5.5.3 Dashboard Layout
+**Configuration Security Controls**:
+- Hierarchical environment file loading (.env, .env.local, .env.production)
+- No hardcoded credentials in source code
+- Secure interpolation of sensitive values
+- Configuration validation with clear error messages
+
+#### 6.4.2.2 Credential Management
+
+**External Service Authentication**
+The system manages credentials for external integrations through standardized patterns:
+
+| Service Category | Authentication Method | Storage Location | Security Level |
+|------------------|----------------------|------------------|----------------|
+| Database Systems | Connection string with embedded credentials | Environment variables | Medium |
+| Cloud Platforms | Service account tokens | Environment variables | High |
+| HPC Schedulers | SSH key-based authentication | User SSH configuration | High |
+| CI/CD Systems | Repository secrets | GitHub Actions secrets | High |
+
+**Credential Security Flow**:
+```mermaid
+flowchart TB
+    subgraph "Credential Sources"
+        A[Environment Variables] --> D[Configuration Manager]
+        B[CI/CD Secrets] --> D
+        C[SSH Key Files] --> D
+    end
+    
+    subgraph "Credential Processing"
+        D --> E[Secure Interpolation]
+        E --> F[Validation]
+        F --> G[Component Injection]
+    end
+    
+    subgraph "Usage Context"
+        G --> H[Database Connections]
+        G --> I[Cloud API Calls]
+        G --> J[HPC Job Submission]
+    end
+    
+    style D fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+```
+
+#### 6.4.2.3 Data Protection Standards
+
+**File System Security**
+The system relies on OS-level file permissions for data protection:
+
+- **Experimental Data**: Stored with user-level read/write permissions
+- **Configuration Files**: Protected through standard file system access controls
+- **Logs and Outputs**: Accessible to authorized users for research collaboration
+- **Temporary Files**: Automatically cleaned up after simulation completion
+
+**Data Protection Levels**:
+
+| Data Type | Protection Level | Access Pattern | Retention Policy |
+|-----------|------------------|---------------|------------------|
+| Simulation Results | User-level permissions | Read/write by owner | Persistent |
+| Configuration Data | User-level permissions | Read-only after validation | Persistent |
+| Performance Logs | User-level permissions | Append-only logging | Configurable rotation |
+| Temporary Cache | User-level permissions | Read/write during execution | Automatic cleanup |
+
+#### 6.4.2.4 Integration Security
+
+**External Service Integration Security**
+The system implements secure integration patterns for external services:
+
+**API Key Management**:
+```python
+# Secure API key handling pattern
+class ExternalServiceConfig:
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.getenv('SERVICE_API_KEY')
+        if not self.api_key:
+            logger.warning("API key not configured, service disabled")
+    
+    def authenticate(self):
+        if self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}
+        return {}
+```
+
+**Connection Security**:
+- SSL/TLS for all external HTTP connections
+- SSH key authentication for HPC cluster access
+- Database connection encryption when supported
+- API rate limiting to prevent abuse
+
+### 6.4.3 Security Monitoring and Audit
+
+#### 6.4.3.1 Audit Trail Implementation
+
+**Comprehensive Logging for Security Context**
+The system implements structured logging with security-relevant event tracking:
+
+```yaml
+# Security-focused logging configuration
+logging:
+  sinks:
+    - type: structured_json
+      path: ${log_dir}/security_audit.jsonl
+      fields:
+        - timestamp
+        - process_id
+        - user_id
+        - configuration_hash
+        - external_service_calls
+        - file_access_patterns
+```
+
+**Audit Event Categories**:
+
+| Event Type | Information Logged | Purpose | Retention |
+|------------|-------------------|---------|-----------|
+| Configuration Changes | Config hash, user, timestamp | Change tracking | Permanent |
+| External Service Calls | Service, endpoint, result | Integration monitoring | 90 days |
+| File Access Patterns | Path, operation, permissions | Data access audit | 30 days |
+| Performance Violations | Resource usage, thresholds | Security monitoring | 7 days |
+
+#### 6.4.3.2 Security Monitoring
+
+**Performance-Based Security Monitoring**
+The system monitors for security-relevant performance anomalies:
 
 ```mermaid
 flowchart TB
-    subgraph "Real-time Monitoring Dashboard"
-        A[Performance Metrics Panel]
-        B[System Health Panel]
-        C[Resource Utilization Panel]
-        D[Alert Status Panel]
+    subgraph "Security Monitoring"
+        A[Resource Usage Monitor] --> B{Threshold Exceeded?}
+        C[File Access Monitor] --> D{Unusual Pattern?}
+        E[Network Activity Monitor] --> F{Unexpected Connection?}
     end
     
-    subgraph "Performance Metrics Panel"
-        E[Step Latency: 28.5ms]
-        F[FPS: 32.5]
-        G[Agent Count: 100]
-        H[Memory Usage: 512MB/2GB]
-        I[Cache Hit Rate: 95.2%]
+    subgraph "Alert Processing"
+        B -->|Yes| G[Resource Alert]
+        D -->|Yes| H[Access Alert]
+        F -->|Yes| I[Network Alert]
     end
     
-    subgraph "System Health Panel"
-        J[Component Status: ALL OK]
-        K[Database: Connected]
-        L[Recording: Active]
-        M[Cache: Optimal]
-        N[Correlation ID: abc123-def456]
+    subgraph "Response Actions"
+        G --> J[Log Security Event]
+        H --> J
+        I --> J
+        J --> K[Update Audit Trail]
     end
     
-    subgraph "Resource Utilization Panel"
-        O[CPU Usage: 45%]
-        P[Memory Pressure: Low]
-        Q[Disk I/O: 125 MB/s]
-        R[Network: N/A]
+    style A fill:#e1f5fe
+    style C fill:#f3e5f5
+    style E fill:#e8f5e8
+```
+
+**Security Metrics Tracked**:
+- Unusual resource consumption patterns
+- Unexpected file access outside configured directories
+- Network connections to unrecognized endpoints
+- Configuration changes during simulation execution
+
+### 6.4.4 Compliance and Standards
+
+#### 6.4.4.1 Research Environment Compliance
+
+**Scientific Computing Security Standards**
+The system adheres to established practices for research computing environments:
+
+| Standard | Compliance Area | Implementation | Verification |
+|----------|----------------|---------------|--------------|
+| Data Management | Structured data organization | Hierarchical directory structure | Automated validation |
+| Reproducibility | Configuration version control | Git-based config management | Hash verification |
+| Collaboration | Access control | File system permissions | Permission auditing |
+| Transparency | Open data formats | Parquet, HDF5, JSON | Format validation |
+
+#### 6.4.4.2 External Service Compliance
+
+**Cloud Platform Security Requirements**
+When integrated with cloud platforms, the system follows provider-specific security guidelines:
+
+- **AWS**: IAM roles and policies for service authentication
+- **GCP**: Service account tokens with minimal required permissions
+- **Azure**: Managed identity for resource access
+- **HPC Clusters**: SSH key authentication with proper key management
+
+### 6.4.5 Security Architecture Diagrams
+
+#### 6.4.5.1 Security Boundaries
+
+```mermaid
+graph TB
+    subgraph "Trusted Research Environment"
+        subgraph "Local System"
+            A[Python Process] --> B[Configuration Manager]
+            B --> C[File System Access]
+            C --> D[Simulation Data]
+        end
+        
+        subgraph "External Integrations"
+            E[Database Server] --> F[Encrypted Connection]
+            G[Cloud Services] --> H[API Key Authentication]
+            I[HPC Cluster] --> J[SSH Key Authentication]
+        end
     end
     
-    subgraph "Alert Status Panel"
-        S[Active Alerts: 0]
-        T[Recent Warnings: 2]
-        U[Performance Trend: ↗]
-        V[Last Optimization: 2m ago]
+    subgraph "Security Controls"
+        K[Environment Variables] --> B
+        L[File Permissions] --> C
+        M[OS Process Isolation] --> A
     end
     
-    subgraph "Research Context Panel"
-        W[Episode: 42/100]
-        X[Duration: 00:15:23]
-        Y[Experiment: gaussian_plume_v2]
-        Z[Configuration: default.yaml]
+    subgraph "Audit Trail"
+        N[Structured Logging] --> O[Security Events]
+        P[Configuration Hashing] --> Q[Change Tracking]
     end
     
     A --> E
-    A --> F
     A --> G
-    A --> H
     A --> I
+    A --> N
+    B --> P
     
-    B --> J
-    B --> K
-    B --> L
-    B --> M
-    B --> N
-    
-    C --> O
-    C --> P
-    C --> Q
-    C --> R
-    
-    D --> S
-    D --> T
-    D --> U
-    D --> V
-    
-    subgraph "Additional Context"
-        W --> AA[Research Analytics]
-        X --> AA
-        Y --> AA
-        Z --> AA
-    end
-    
-    style A fill:#e3f2fd
-    style B fill:#e8f5e8
-    style C fill:#fff3e0
-    style D fill:#fce4ec
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style K fill:#e8f5e8
+    style N fill:#fff3e0
 ```
 
-### 6.5.6 Implementation Notes
+#### 6.4.5.2 Credential Flow
 
-#### 6.5.6.1 Research-Focused Monitoring Philosophy
+```mermaid
+sequenceDiagram
+    participant Config as Configuration Manager
+    participant Env as Environment Variables
+    participant Service as External Service
+    participant Logger as Audit Logger
+    
+    Config->>Env: Request credential
+    Env-->>Config: Return credential (if available)
+    Config->>Logger: Log credential request
+    
+    alt Credential Available
+        Config->>Service: Authenticate with credential
+        Service-->>Config: Authentication success
+        Config->>Logger: Log successful authentication
+    else Credential Missing
+        Config->>Logger: Log missing credential warning
+        Config->>Service: Proceed without authentication
+        Service-->>Config: Limited functionality
+    end
+    
+    Config->>Logger: Log service interaction result
+    
+    Note over Config,Logger: All credential operations audited
+```
 
-The Plume Navigation Simulation system's monitoring architecture is specifically designed for **scientific research environments** rather than traditional production systems. This approach prioritizes:
+### 6.4.6 Security Maintenance and Updates
 
-#### Key Design Principles
+#### 6.4.6.1 Dependency Security
 
-1. **Performance Visibility**: Real-time metrics for simulation quality assurance and algorithm validation
-2. **Debugging Support**: Comprehensive structured logging with correlation tracking for research development
-3. **Resource Efficiency**: Automatic optimization based on monitoring data to maintain research productivity
-4. **Data Integrity**: Complete capture and validation of experimental results for reproducible research
+**Security Update Process**
+The system maintains security through automated dependency management:
 
-#### Monitoring Integration with Research Workflow
+- **Automated Dependency Scanning**: <span style="background-color: rgba(91, 57, 243, 0.2)">GitHub Dependabot alerts for known vulnerabilities across PEP 621 dependency declarations in pyproject.toml and requirements-lock files generated via pip-tools, replacing Poetry-lock scanning</span>
+- **Regular Updates**: Monthly security update cycles for critical dependencies
+- **Version Pinning**: Exact version specifications to prevent supply chain attacks
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">Pinned requirement sets are generated with pip-tools (reqs/*.txt) and validated in CI to ensure consistent dependency resolution across environments</span>
+- **Security Audits**: <span style="background-color: rgba(91, 57, 243, 0.2)">Integration with pip-audit for Python package vulnerability detection across the complete dependency graph</span>
 
-The monitoring system integrates seamlessly with typical research workflows:
+**Build System Security Integration**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The setuptools-based build system ensures comprehensive security coverage:</span>
 
-- **Algorithm Development**: Performance metrics guide optimization decisions
-- **Experiment Execution**: Real-time monitoring ensures data quality
-- **Result Analysis**: Structured logs support post-experiment analysis
-- **Publication Preparation**: Comprehensive metrics support research publication requirements
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build-time Dependencies</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Build-time dependencies (setuptools>=61, wheel) are declared in the [build-system] table of pyproject.toml and are automatically included in the vulnerability scanning pipeline</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Installation Security</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Development installations use `pip install .` for secure editable installation with immediate security update propagation</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Release Artifacts</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Production releases are built using `python -m build` to create verified wheel and source distributions</span>
 
-#### 6.5.6.2 Performance Monitoring Optimization
+**Version Management Security**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The system implements secure version management through a single-source-of-truth approach:</span>
 
-The system implements **zero-overhead monitoring** for performance-critical operations:
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Authoritative Version Source</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Version is definitively stored in `src/plume_nav_sim/__init__.py` and surfaced in pyproject.toml through PEP 621's dynamic version field, ensuring semantic versioning consistency</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Programmatic Verification</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Version integrity can be verified at runtime through `plume_nav_sim.__version__` for security audit purposes</span>
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build Integration</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Dynamic version discovery prevents version synchronization vulnerabilities during the package building process</span>
 
-#### High-Performance Monitoring Techniques
+#### 6.4.6.2 Configuration Security Evolution
 
-- **Vectorized Metrics**: NumPy-based metrics collection for minimal overhead
-- **Asynchronous Logging**: Non-blocking log operations to prevent simulation delays
-- **Conditional Instrumentation**: Performance-sensitive code paths with configurable monitoring
-- **Batch Processing**: Efficient metrics aggregation to reduce per-operation overhead
+**Security Configuration Management**
+The system evolves security configurations through version-controlled updates:
 
-#### Monitoring Performance Targets
+```yaml
+# Security configuration versioning
+security:
+  version: "1.2.0"
+  credential_rotation_days: 90
+  log_retention_days: 30
+  audit_level: "standard"
+  
+  external_services:
+    database:
+      connection_timeout: 30
+      retry_attempts: 3
+    cloud_apis:
+      rate_limit: 100
+      timeout: 60
+```
 
-| Monitoring Operation | Target Overhead | Measurement Method | Optimization Strategy |
-|---|---|---|---|
-| **Performance Logging** | <1% of step time | Direct measurement | Vectorized operations |
-| **Memory Monitoring** | <0.1% CPU impact | psutil efficiency | Sampling-based monitoring |
-| **Structured Logging** | <5% I/O overhead | Async write measurement | Batched log operations |
-| **Correlation Tracking** | <0.01ms per operation | Method instrumentation | Lightweight context passing |
+### 6.4.7 References
 
-#### 6.5.6.3 Future Monitoring Enhancements
+## 6.4 SECURITY ARCHITECTURE
 
-The monitoring architecture is designed for **evolutionary enhancement** as the system scales:
+### 6.4.1 Security Architecture Overview
 
-#### Planned Enhancements
+#### 6.4.1.1 Security Model Classification
 
-1. **Distributed Monitoring**: Support for multi-process simulation scenarios
-2. **Advanced Analytics**: Machine learning-based performance prediction
-3. **External Integration**: Grafana/Prometheus compatibility for enterprise environments
-4. **Real-time Visualization**: Enhanced dashboard capabilities for research presentations
+**Detailed Security Architecture is not applicable for this system** as it operates as a research-oriented scientific computing library in trusted environments rather than a distributed web application or network-accessible service.
 
-#### Extensibility Design
+The Plume Navigation Simulation Library implements a **Research Environment Security Model** specifically designed for:
+- Local Python library execution in trusted research environments
+- High-performance scientific computing with <33ms step latency requirements
+- Protocol-based in-process communication rather than network-exposed APIs
+- Configuration-driven component orchestration without user-facing authentication
 
-The protocol-oriented architecture supports seamless monitoring enhancements:
+#### 6.4.1.2 Security Scope and Boundaries
 
-- **Protocol Interfaces**: New monitoring protocols can be added without core changes
-- **Configuration Integration**: Hydra-based configuration supports monitoring parameter management
-- **Component-based Design**: Monitoring components can be selectively enabled/disabled
-- **Research Focus**: Enhancements maintain research workflow compatibility
+The system's security boundaries align with its architectural design:
 
-### 6.5.7 References
+| Security Domain | Scope | Implementation Approach | Rationale |
+|----------------|-------|------------------------|-----------|
+| Process Security | Local library execution | OS-level process isolation | Single-process simulation environment |
+| Configuration Security | Environment variables and YAML | Structured configuration management | Research reproducibility requirements |
+| Data Protection | File system permissions | OS-level access controls | Scientific data transparency needs |
+| Integration Security | External service credentials | API key management | Cloud platform and HPC integrations |
 
-#### 6.5.7.1 Technical Specification Sections
-- **1.2 SYSTEM OVERVIEW** - System performance requirements and research context
-- **5.1 HIGH-LEVEL ARCHITECTURE** - Protocol-oriented architecture supporting monitoring integration
-- **6.1 CORE SERVICES ARCHITECTURE** - Monolithic architecture rationale and monitoring implications
-- **6.2 DATABASE DESIGN** - Data persistence supporting performance metrics storage
-- **6.4 SECURITY ARCHITECTURE** - Security context affecting monitoring requirements
-- **3.3 FRAMEWORKS & LIBRARIES** - Monitoring technology stack (Loguru, psutil, NumPy)
+#### 6.4.1.3 Security Philosophy
 
-#### 6.5.7.2 Repository Analysis
-- **Root repository** - Project structure and configuration supporting monitoring
-- **src/odor_plume_nav/api** - API monitoring integration points
-- **src/plume_nav_sim/recording** - Recording system performance monitoring
-- **conf/base/** - Configuration system supporting monitoring parameters
-- **pyproject.toml** - Dependency management for monitoring tools
+The security approach prioritizes:
+- **Transparency**: Research data and configurations are openly accessible for reproducibility
+- **Minimal Attack Surface**: No network exposure or user authentication systems
+- **Standard Practices**: Leveraging OS-level security and established credential management
+- **Performance**: Security measures must not impact <33ms step latency requirements
 
-#### 6.5.7.3 Monitoring Tools and Technologies
-- **Loguru** - Structured logging framework for comprehensive monitoring
-- **psutil** - System resource monitoring for performance analysis
-- **NumPy** - Vectorized operations for efficient metrics collection
-- **SQLAlchemy** - Database performance monitoring and metrics storage
-- **Hydra** - Configuration management for monitoring parameters
+### 6.4.2 Standard Security Practices Implementation
+
+#### 6.4.2.1 Configuration Security
+
+**Environment Variable Management**
+The system implements secure configuration practices through structured environment variable handling:
+
+```yaml
+# Secure configuration pattern
+database:
+  url: ${oc.env:DATABASE_URL,sqlite:///local.db}
+  max_connections: ${oc.env:MAX_DB_CONNECTIONS,10}
+  
+external_services:
+  wandb_api_key: ${oc.env:WANDB_API_KEY,}
+  tensorboard_log_dir: ${oc.env:TENSORBOARD_LOG_DIR,./logs}
+```
+
+**Configuration Security Controls**:
+- Hierarchical environment file loading (.env, .env.local, .env.production)
+- No hardcoded credentials in source code
+- Secure interpolation of sensitive values
+- Configuration validation with clear error messages
+
+#### 6.4.2.2 Credential Management
+
+**External Service Authentication**
+The system manages credentials for external integrations through standardized patterns:
+
+| Service Category | Authentication Method | Storage Location | Security Level |
+|------------------|----------------------|------------------|----------------|
+| Database Systems | Connection string with embedded credentials | Environment variables | Medium |
+| Cloud Platforms | Service account tokens | Environment variables | High |
+| HPC Schedulers | SSH key-based authentication | User SSH configuration | High |
+| CI/CD Systems | Repository secrets | GitHub Actions secrets | High |
+
+**Credential Security Flow**:
+```mermaid
+flowchart TB
+    subgraph "Credential Sources"
+        A[Environment Variables] --> D[Configuration Manager]
+        B[CI/CD Secrets] --> D
+        C[SSH Key Files] --> D
+    end
+    
+    subgraph "Credential Processing"
+        D --> E[Secure Interpolation]
+        E --> F[Validation]
+        F --> G[Component Injection]
+    end
+    
+    subgraph "Usage Context"
+        G --> H[Database Connections]
+        G --> I[Cloud API Calls]
+        G --> J[HPC Job Submission]
+    end
+    
+    style D fill:#e1f5fe
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
+```
+
+#### 6.4.2.3 Data Protection Standards
+
+**File System Security**
+The system relies on OS-level file permissions for data protection:
+
+- **Experimental Data**: Stored with user-level read/write permissions
+- **Configuration Files**: Protected through standard file system access controls
+- **Logs and Outputs**: Accessible to authorized users for research collaboration
+- **Temporary Files**: Automatically cleaned up after simulation completion
+
+**Data Protection Levels**:
+
+| Data Type | Protection Level | Access Pattern | Retention Policy |
+|-----------|------------------|---------------|------------------|
+| Simulation Results | User-level permissions | Read/write by owner | Persistent |
+| Configuration Data | User-level permissions | Read-only after validation | Persistent |
+| Performance Logs | User-level permissions | Append-only logging | Configurable rotation |
+| Temporary Cache | User-level permissions | Read/write during execution | Automatic cleanup |
+
+#### 6.4.2.4 Integration Security
+
+**External Service Integration Security**
+The system implements secure integration patterns for external services:
+
+**API Key Management**:
+```python
+# Secure API key handling pattern
+class ExternalServiceConfig:
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.getenv('SERVICE_API_KEY')
+        if not self.api_key:
+            logger.warning("API key not configured, service disabled")
+    
+    def authenticate(self):
+        if self.api_key:
+            return {"Authorization": f"Bearer {self.api_key}"}
+        return {}
+```
+
+**Connection Security**:
+- SSL/TLS for all external HTTP connections
+- SSH key authentication for HPC cluster access
+- Database connection encryption when supported
+- API rate limiting to prevent abuse
+
+### 6.4.3 Security Monitoring and Audit
+
+#### 6.4.3.1 Audit Trail Implementation
+
+**Comprehensive Logging for Security Context**
+The system implements structured logging with security-relevant event tracking:
+
+```yaml
+# Security-focused logging configuration
+logging:
+  sinks:
+    - type: structured_json
+      path: ${log_dir}/security_audit.jsonl
+      fields:
+        - timestamp
+        - process_id
+        - user_id
+        - configuration_hash
+        - external_service_calls
+        - file_access_patterns
+```
+
+**Audit Event Categories**:
+
+| Event Type | Information Logged | Purpose | Retention |
+|------------|-------------------|---------|-----------|
+| Configuration Changes | Config hash, user, timestamp | Change tracking | Permanent |
+| External Service Calls | Service, endpoint, result | Integration monitoring | 90 days |
+| File Access Patterns | Path, operation, permissions | Data access audit | 30 days |
+| Performance Violations | Resource usage, thresholds | Security monitoring | 7 days |
+
+#### 6.4.3.2 Security Monitoring
+
+**Performance-Based Security Monitoring**
+The system monitors for security-relevant performance anomalies:
+
+```mermaid
+flowchart TB
+    subgraph "Security Monitoring"
+        A[Resource Usage Monitor] --> B{Threshold Exceeded?}
+        C[File Access Monitor] --> D{Unusual Pattern?}
+        E[Network Activity Monitor] --> F{Unexpected Connection?}
+    end
+    
+    subgraph "Alert Processing"
+        B -->|Yes| G[Resource Alert]
+        D -->|Yes| H[Access Alert]
+        F -->|Yes| I[Network Alert]
+    end
+    
+    subgraph "Response Actions"
+        G --> J[Log Security Event]
+        H --> J
+        I --> J
+        J --> K[Update Audit Trail]
+    end
+    
+    style A fill:#e1f5fe
+    style C fill:#f3e5f5
+    style E fill:#e8f5e8
+```
+
+**Security Metrics Tracked**:
+- Unusual resource consumption patterns
+- Unexpected file access outside configured directories
+- Network connections to unrecognized endpoints
+- Configuration changes during simulation execution
+
+### 6.4.4 Compliance and Standards
+
+#### 6.4.4.1 Research Environment Compliance
+
+**Scientific Computing Security Standards**
+The system adheres to established practices for research computing environments:
+
+| Standard | Compliance Area | Implementation | Verification |
+|----------|----------------|---------------|--------------|
+| Data Management | Structured data organization | Hierarchical directory structure | Automated validation |
+| Reproducibility | Configuration version control | Git-based config management | Hash verification |
+| Collaboration | Access control | File system permissions | Permission auditing |
+| Transparency | Open data formats | Parquet, HDF5, JSON | Format validation |
+
+#### 6.4.4.2 External Service Compliance
+
+**Cloud Platform Security Requirements**
+When integrated with cloud platforms, the system follows provider-specific security guidelines:
+
+- **AWS**: IAM roles and policies for service authentication
+- **GCP**: Service account tokens with minimal required permissions
+- **Azure**: Managed identity for resource access
+- **HPC Clusters**: SSH key authentication with proper key management
+
+### 6.4.5 Security Architecture Diagrams
+
+#### 6.4.5.1 Security Boundaries
+
+```mermaid
+graph TB
+    subgraph "Trusted Research Environment"
+        subgraph "Local System"
+            A[Python Process] --> B[Configuration Manager]
+            B --> C[File System Access]
+            C --> D[Simulation Data]
+        end
+        
+        subgraph "External Integrations"
+            E[Database Server] --> F[Encrypted Connection]
+            G[Cloud Services] --> H[API Key Authentication]
+            I[HPC Cluster] --> J[SSH Key Authentication]
+        end
+    end
+    
+    subgraph "Security Controls"
+        K[Environment Variables] --> B
+        L[File Permissions] --> C
+        M[OS Process Isolation] --> A
+    end
+    
+    subgraph "Audit Trail"
+        N[Structured Logging] --> O[Security Events]
+        P[Configuration Hashing] --> Q[Change Tracking]
+    end
+    
+    A --> E
+    A --> G
+    A --> I
+    A --> N
+    B --> P
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style K fill:#e8f5e8
+    style N fill:#fff3e0
+```
+
+#### 6.4.5.2 Credential Flow
+
+```mermaid
+sequenceDiagram
+    participant Config as Configuration Manager
+    participant Env as Environment Variables
+    participant Service as External Service
+    participant Logger as Audit Logger
+    
+    Config->>Env: Request credential
+    Env-->>Config: Return credential (if available)
+    Config->>Logger: Log credential request
+    
+    alt Credential Available
+        Config->>Service: Authenticate with credential
+        Service-->>Config: Authentication success
+        Config->>Logger: Log successful authentication
+    else Credential Missing
+        Config->>Logger: Log missing credential warning
+        Config->>Service: Proceed without authentication
+        Service-->>Config: Limited functionality
+    end
+    
+    Config->>Logger: Log service interaction result
+    
+    Note over Config,Logger: All credential operations audited
+```
+
+### 6.4.6 Security Maintenance and Updates
+
+#### 6.4.6.1 Dependency Security (updated)
+
+**Security Update Process**
+The system maintains security through automated dependency management:
+
+- **Automated Dependency Scanning**: <span style="background-color: rgba(91, 57, 243, 0.2)">GitHub Dependabot alerts for known vulnerabilities now scan the PEP 621 dependency list in pyproject.toml plus the requirements-lock file generated via pip-tools</span>
+- **Regular Updates**: Monthly security update cycles for critical dependencies
+- **Version Pinning**: Exact version specifications to prevent supply chain attacks
+  - <span style="background-color: rgba(91, 57, 243, 0.2)">Pinned requirement sets are generated with pip-tools (reqs/*.txt) and validated in CI, ensuring reproducible builds and vulnerability tracking</span>
+- **Security Audits**: <span style="background-color: rgba(91, 57, 243, 0.2)">Integration with pip-audit for Python package vulnerability detection, scanning both PEP 621 dependencies and pip-tools generated lock files</span>
+
+**Version Management Security**
+<span style="background-color: rgba(91, 57, 243, 0.2)">The authoritative version is now stored in src/plume_nav_sim/__init__.py and surfaced in pyproject.toml through PEP 621's dynamic version field, ensuring a single source of truth for semantic versioning and eliminating version drift security vulnerabilities.</span>
+
+**Build System Security**
+<span style="background-color: rgba(91, 57, 243, 0.2)">Build-time dependencies (setuptools>=61, wheel) are included in the [build-system] table of pyproject.toml and are therefore covered by the automated vulnerability scanning pipeline, ensuring the entire build chain remains secure.</span>
+
+**Dependency Management Workflow Security**
+The migration to setuptools-based tooling enhances security through standardized practices:
+
+- **Installation Commands**: <span style="background-color: rgba(91, 57, 243, 0.2)">`pip install .` for production installation and `pip install -e .` for development</span>
+- **Build Process**: <span style="background-color: rgba(91, 57, 243, 0.2)">`python -m build` for creating release artifacts with consistent security validation</span>
+- **Lock File Validation**: <span style="background-color: rgba(91, 57, 243, 0.2)">pip-tools generated requirements files provide deterministic dependency resolution with vulnerability tracking</span>
+
+#### 6.4.6.2 Configuration Security Evolution
+
+**Security Configuration Management**
+The system evolves security configurations through version-controlled updates:
+
+```yaml
+# Security configuration versioning
+security:
+  version: "1.2.0"
+  credential_rotation_days: 90
+  log_retention_days: 30
+  audit_level: "standard"
+  
+  external_services:
+    database:
+      connection_timeout: 30
+      retry_attempts: 3
+    cloud_apis:
+      rate_limit: 100
+      timeout: 60
+```
+
+### 6.4.7 References
+
+#### 6.4.7.1 Security-Related Components
+
+**Files Examined:**
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/config/` - Configuration management with environment variable handling
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/db/` - Database connection management with credential handling
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/utils/logging_setup.py` - Structured logging for security audit trails
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/cli/main.py` - <span style="background-color: rgba(91, 57, 243, 0.2)">Command-line interface with security-relevant credential handling for CLI entry points</span>
+- `.github/workflows/` - CI/CD security practices and dependency scanning
+- <span style="background-color: rgba(91, 57, 243, 0.2)">`pyproject.toml` - **Authoritative source for dependency and build metadata**, enabling comprehensive security vulnerability scanning through PEP 621 dependency specifications</span>
+
+**Folders Analyzed:**
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/` - Core package structure with security-conscious design
+- `src/`<span style="background-color: rgba(91, 57, 243, 0.2)">`plume_nav_sim`</span>`/cli/` - <span style="background-color: rgba(91, 57, 243, 0.2)">Command-line interface module containing security-relevant credential handling components</span>
+- `conf/` - Hydra configuration files with secure credential management
+- `configs/` - YAML configuration framework with environment variable support
+
+**Technical Specification Cross-References:**
+- Section 1.2 - System overview establishing research environment context
+- Section 5.4.4 - Cross-cutting security concerns and authentication framework
+- Section 6.3 - Integration architecture with external service security patterns
+
+**Security Standards Applied:**
+- Environment variable-based credential management
+- OS-level file system permissions
+- Structured logging for audit trails
+- Secure external service integrations
+- Performance monitoring for security anomaly detection
+- <span style="background-color: rgba(91, 57, 243, 0.2)">**Modern CI/CD Security Pipeline**: Security checks now utilize `pip-audit` for Python package vulnerability detection and `python -m build` for secure artifact generation, replacing legacy Poetry-based commands while maintaining comprehensive dependency scanning coverage</span>
+
+## 6.5 MONITORING AND OBSERVABILITY
+
+### 6.5.1 Monitoring Architecture Overview
+
+#### 6.5.1.1 Simulation-Specific Monitoring Model
+
+The Plume Navigation Simulation Library implements a **Research Environment Monitoring Model** specifically designed for high-performance scientific computing rather than traditional web service monitoring. This architecture addresses the unique observability needs of real-time simulation environments operating under strict performance constraints (≤33ms step latency with 100 concurrent agents).
+
+**Key Monitoring Principles:**
+- **Performance-First Observability**: Monitoring infrastructure must not impact simulation performance targets
+- **Structured Research Logging**: Comprehensive data capture for reproducible research and debugging
+- **Configuration-Driven Thresholds**: Declarative monitoring rules through Hydra configuration
+- **Multi-Environment Adaptation**: Monitoring behavior adapts across development, testing, production, batch processing, CI/CD, and HPC environments
+
+#### 6.5.1.2 Monitoring Scope and Boundaries
+
+The system's monitoring boundaries align with its research-oriented architecture:
+
+| Monitoring Domain | Scope | Implementation Approach | Performance Impact |
+|------------------|-------|------------------------|-------------------|
+| Simulation Performance | Real-time step execution and FPS tracking | In-process performance counters | <0.1ms overhead |
+| Cache Efficiency | Frame cache hit rates and memory pressure | Statistical sampling with configurable intervals | <0.05ms overhead |
+| Resource Utilization | Memory scaling and CPU usage patterns | OS-level metrics via psutil | <0.1ms overhead |
+| Data Pipeline Health | Recording throughput and error rates | Asynchronous logging with buffering | <1ms when disabled |
+
+#### 6.5.1.3 Monitoring Architecture Components
+
+```mermaid
+graph TB
+    subgraph "Simulation Core"
+        A[PerformanceMonitor] --> B[Metrics Collection]
+        C[FrameCache] --> D[Cache Statistics]
+        E[Environment Engine] --> F[Step Latency Tracking]
+    end
+    
+    subgraph "Structured Logging Infrastructure"
+        G[Loguru Logger] --> H[Dual Sink Architecture]
+        H --> I[Console Output]
+        H --> J[JSON Structured Logs]
+        K[Correlation ID Manager] --> G
+    end
+    
+    subgraph "Configuration Management"
+        L[Hydra Config] --> M[Performance Thresholds]
+        M --> N[Environment-Specific Settings]
+        O[Environment Variables] --> L
+    end
+    
+    subgraph "External Integration"
+        P[CI/CD Pipeline] --> Q[Performance Benchmarks]
+        R[HPC Scheduler] --> S[Batch Monitoring]
+        T[Recording Backends] --> U[Data Quality Metrics]
+    end
+    
+    B --> G
+    D --> G
+    F --> G
+    M --> A
+    M --> C
+    Q --> G
+    S --> G
+    U --> G
+    
+    style A fill:#e1f5fe
+    style G fill:#f3e5f5
+    style L fill:#e8f5e8
+    style P fill:#fff3e0
+```
+
+### 6.5.2 Monitoring Infrastructure
+
+#### 6.5.2.1 Structured Logging System
+
+**Loguru-Based Logging Architecture**
+
+The system implements a sophisticated structured logging infrastructure using Loguru with dual-sink architecture optimized for research environments:
+
+```yaml
+# Core logging configuration pattern
+logging:
+  level: ${log_level}
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {name}:{function}:{line} | {message}"
+  sinks:
+    - type: console
+      colorize: true
+      backtrace: true
+      diagnose: true
+    - type: json_file
+      path: ${log_dir}/simulation_{time:YYYY-MM-DD}.jsonl
+      rotation: "1 day"
+      retention: "30 days"
+      compression: "gz"
+```
+
+**Performance Metrics Integration**
+
+The logging system integrates directly with performance monitoring through the `PerformanceMetrics` dataclass:
+
+| Metric Category | Fields Captured | Threshold Monitoring | Correlation ID |
+|----------------|-----------------|---------------------|---------------|
+| Step Execution | `step_time`, `total_steps`, `fps_current` | ≤33ms (configurable) | Per-episode correlation |
+| Memory Usage | `memory_usage_mb`, `memory_peak_mb`, `memory_delta_mb` | Linear scaling validation | Per-simulation correlation |
+| Cache Performance | `cache_hit_rate`, `cache_memory_usage`, `evictions` | ≥90% hit rate target | Per-cache-operation correlation |
+| Recording Overhead | `recording_time`, `buffer_size`, `async_queue_depth` | <1ms when disabled | Per-recording-operation correlation |
+
+#### 6.5.2.2 Multi-Environment Configuration
+
+**Environment-Specific Monitoring Profiles**
+
+The system provides pre-configured monitoring profiles for different operational contexts:
+
+```yaml
+# Environment-specific monitoring matrix
+environments:
+  development:
+    log_level: DEBUG
+    performance_warnings: true
+    cache_diagnostics: true
+    memory_tracking: verbose
+    
+  production:
+    log_level: INFO
+    performance_warnings: false
+    cache_diagnostics: false
+    memory_tracking: summary
+    
+  batch_processing:
+    log_level: WARNING
+    performance_warnings: true
+    cache_diagnostics: true
+    memory_tracking: detailed
+    
+  ci_cd:
+    log_level: INFO
+    performance_warnings: true
+    cache_diagnostics: true
+    memory_tracking: benchmark
+```
+
+#### 6.5.2.3 Distributed Tracing Implementation
+
+**Correlation ID Management**
+
+The system implements distributed tracing through correlation IDs that track operations across the simulation pipeline:
+
+```mermaid
+sequenceDiagram
+    participant Config as Configuration Manager
+    participant Sim as Simulation Engine
+    participant Cache as Frame Cache
+    participant Recorder as Recording Backend
+    participant Logger as Structured Logger
+    
+    Config->>Sim: Initialize with correlation_id
+    Sim->>Cache: Request frame (correlation_id)
+    Cache->>Logger: Log cache operation (correlation_id)
+    Sim->>Recorder: Record step data (correlation_id)
+    Recorder->>Logger: Log recording operation (correlation_id)
+    Sim->>Logger: Log performance metrics (correlation_id)
+    
+    Note over Config,Logger: All operations traceable via correlation_id
+```
+
+### 6.5.3 Observability Patterns
+
+#### 6.5.3.1 Performance Metrics Collection
+
+**Real-Time Performance Monitoring**
+
+The `PerformanceMonitor` class provides comprehensive real-time metrics collection:
+
+| Metric | Collection Method | Frequency | Threshold | Action |
+|--------|------------------|-----------|-----------|--------|
+| Step Execution Time | High-resolution timer | Every step | ≤33ms | Performance warning |
+| FPS (Frames Per Second) | Rolling window calculation | Every 100 steps | ≥30 FPS | Performance alert |
+| Memory Usage | psutil process monitoring | Every 1000 steps | Linear scaling | Memory pressure warning |
+| Cache Hit Rate | Statistical sampling | Every cache access | ≥90% | Cache optimization alert |
+
+**Performance Metrics Data Structure**
+
+```python
+@dataclass
+class PerformanceMetrics:
+    step_time: float
+    total_steps: int
+    fps_current: float
+    fps_average: float
+    memory_usage_mb: float
+    memory_peak_mb: float
+    memory_delta_mb: float
+    cache_hit_rate: float
+    cache_memory_usage: float
+    recording_overhead: float
+    correlation_id: str
+```
+
+#### 6.5.3.2 Cache Observability
+
+**Frame Cache Performance Tracking**
+
+The frame cache system implements comprehensive observability through the `CacheStatistics` class:
+
+```mermaid
+graph TB
+    subgraph "Cache Operations"
+        A[Cache Get Request] --> B{Cache Hit?}
+        B -->|Yes| C[Update Hit Counter]
+        B -->|No| D[Update Miss Counter]
+        D --> E[Load from Storage]
+        E --> F[Update Eviction Counter]
+    end
+    
+    subgraph "Memory Monitoring"
+        G[Memory Usage Check] --> H{Memory Pressure?}
+        H -->|Yes| I[Trigger Eviction]
+        H -->|No| J[Continue Operation]
+        I --> K[Log Memory Pressure Event]
+    end
+    
+    subgraph "Statistics Reporting"
+        C --> L[Update Statistics]
+        F --> L
+        K --> L
+        L --> M[Structured Logging]
+    end
+    
+    style A fill:#e1f5fe
+    style G fill:#f3e5f5
+    style M fill:#e8f5e8
+```
+
+**Cache Performance Metrics**
+
+| Statistic | Calculation | Target | Monitoring Frequency |
+|-----------|-------------|--------|---------------------|
+| Hit Rate | hits / (hits + misses) | ≥90% | Per cache access |
+| Memory Usage | Current cache size / Memory limit | <80% capacity | Every 1000 operations |
+| Eviction Rate | evictions / total_operations | <5% | Per eviction event |
+| Load Time | Average time to load from storage | <10ms | Per cache miss |
+
+#### 6.5.3.3 Health Checks and System Status
+
+**Simulation Health Monitoring**
+
+The system implements health checks appropriate for a research simulation environment:
+
+```yaml
+# Health check configuration
+health_checks:
+  simulation_engine:
+    check_interval: 1000  # steps
+    max_step_time: 33     # milliseconds
+    max_memory_growth: 10  # MB per 1000 steps
+    
+  frame_cache:
+    check_interval: 100   # operations
+    min_hit_rate: 0.90    # 90%
+    max_memory_usage: 0.80 # 80% of limit
+    
+  recording_system:
+    check_interval: 500   # operations
+    max_buffer_size: 1000 # records
+    max_async_delay: 100  # milliseconds
+```
+
+### 6.5.4 Alerting and Incident Response
+
+#### 6.5.4.1 Alert Configuration
+
+**Performance Threshold Alerts**
+
+The system implements configuration-driven alerting for performance degradation:
+
+| Alert Category | Condition | Severity | Response Action |
+|---------------|-----------|----------|-----------------|
+| Step Latency | >33ms for 10 consecutive steps | WARNING | Log performance warning |
+| Memory Growth | >10MB increase per 1000 steps | WARNING | Log memory pressure warning |
+| Cache Performance | <90% hit rate for 1000 operations | WARNING | Log cache optimization alert |
+| Recording Failure | >5 consecutive recording errors | ERROR | Disable recording, log error |
+
+#### 6.5.4.2 Alert Flow Architecture
+
+```mermaid
+flowchart TB
+    subgraph "Monitoring Sources"
+        A[Performance Monitor] --> D[Alert Processor]
+        B[Cache Statistics] --> D
+        C[Recording Backend] --> D
+    end
+    
+    subgraph "Alert Processing"
+        D --> E{Threshold Exceeded?}
+        E -->|Yes| F[Generate Alert]
+        E -->|No| G[Continue Monitoring]
+        F --> H{Alert Severity}
+    end
+    
+    subgraph "Response Actions"
+        H -->|WARNING| I[Log Warning Message]
+        H -->|ERROR| J[Log Error + Disable Component]
+        H -->|CRITICAL| K[Log Critical + Halt Simulation]
+    end
+    
+    subgraph "Logging Integration"
+        I --> L[Structured Logger]
+        J --> L
+        K --> L
+        L --> M[JSON Log Output]
+    end
+    
+    style D fill:#e1f5fe
+    style F fill:#f3e5f5
+    style L fill:#e8f5e8
+```
+
+#### 6.5.4.3 Research-Specific Incident Response
+
+**Simulation Failure Response Patterns**
+
+The system implements incident response patterns appropriate for research environments:
+
+```python
+# Incident response configuration
+incident_response:
+  performance_degradation:
+    threshold: 50ms  # 50% above target
+    action: log_warning_continue
+    escalation_after: 100_steps
+    
+  memory_pressure:
+    threshold: 90%   # of system memory
+    action: log_error_continue
+    escalation_after: 10_pressure_events
+    
+  cache_failure:
+    threshold: 50%   # hit rate
+    action: log_error_disable_cache
+    escalation_after: immediate
+    
+  recording_failure:
+    threshold: 10    # consecutive errors
+    action: log_error_disable_recording
+    escalation_after: immediate
+```
+
+### 6.5.5 CI/CD and Automated Monitoring
+
+#### 6.5.5.1 Performance Benchmarking Pipeline
+
+**Automated Performance Regression Detection**
+
+The CI/CD pipeline implements automated performance monitoring through the GitHub Actions workflow:
+
+```yaml
+# CI/CD performance monitoring
+performance_monitoring:
+  benchmark_targets:
+    - step_latency: "≤33ms @ 100 agents"
+    - cache_hit_rate: "≥90%"
+    - memory_scaling: "linear with agent count"
+    - recording_overhead: "<1ms when disabled"
+    
+  regression_detection:
+    threshold: 10%    # performance degradation
+    baseline: rolling_average_30_days
+    alert_on_failure: true
+    
+  reporting:
+    format: structured_json
+    retention: 365_days
+    integration: github_actions_summary
+```
+
+#### 6.5.5.2 Cross-Repository Integration Testing
+
+**Multi-Repository Monitoring Coordination**
+
+The system implements monitoring across multiple repository integrations:
+
+```mermaid
+graph TB
+    subgraph "Primary Repository"
+        A[Core Simulation Tests] --> D[Performance Metrics]
+        B[Cache Performance Tests] --> D
+        C[Recording Backend Tests] --> D
+    end
+    
+    subgraph "Integration Repositories"
+        E[RL Training Integration] --> F[Training Performance Metrics]
+        G[HPC Cluster Integration] --> H[Cluster Performance Metrics]
+        I[Cloud Platform Integration] --> J[Cloud Performance Metrics]
+    end
+    
+    subgraph "Monitoring Aggregation"
+        D --> K[Central Metrics Collection]
+        F --> K
+        H --> K
+        J --> K
+        K --> L[Performance Dashboard]
+    end
+    
+    style A fill:#e1f5fe
+    style E fill:#f3e5f5
+    style K fill:#e8f5e8
+```
+
+### 6.5.6 Monitoring Configuration Examples
+
+#### 6.5.6.1 Production Monitoring Configuration
+
+```yaml
+# Production monitoring configuration
+monitoring:
+  logging:
+    level: INFO
+    structured: true
+    correlation_tracking: true
+    
+  performance:
+    step_latency_threshold: 33      # milliseconds
+    fps_target: 30                  # frames per second
+    memory_scaling_factor: 1.0      # linear
+    cache_hit_rate_target: 0.90     # 90%
+    
+  alerting:
+    enabled: true
+    severity_levels:
+      - WARNING
+      - ERROR
+      - CRITICAL
+    
+  retention:
+    performance_logs: 30_days
+    error_logs: 90_days
+    debug_logs: 7_days
+```
+
+#### 6.5.6.2 Development Monitoring Configuration
+
+```yaml
+# Development monitoring configuration
+monitoring:
+  logging:
+    level: DEBUG
+    structured: true
+    correlation_tracking: true
+    backtrace: true
+    diagnose: true
+    
+  performance:
+    step_latency_threshold: 50      # relaxed for development
+    fps_target: 20                  # relaxed for development
+    memory_scaling_factor: 1.2      # allow some overhead
+    cache_hit_rate_target: 0.85     # relaxed for development
+    
+  alerting:
+    enabled: true
+    severity_levels:
+      - DEBUG
+      - INFO
+      - WARNING
+      - ERROR
+      - CRITICAL
+    
+  retention:
+    performance_logs: 7_days
+    error_logs: 30_days
+    debug_logs: 3_days
+```
+
+### 6.5.7 Monitoring Architecture Diagrams
+
+#### 6.5.7.1 Comprehensive Monitoring Flow
+
+```mermaid
+flowchart TB
+    subgraph "Simulation Environment"
+        A[Simulation Engine] --> B[Performance Monitor]
+        C[Frame Cache] --> D[Cache Statistics]
+        E[Recording Backend] --> F[Recording Metrics]
+        G[Environment Engine] --> H[Step Metrics]
+    end
+    
+    subgraph "Structured Logging Infrastructure"
+        I[Loguru Logger] --> J[Dual Sink Architecture]
+        J --> K[Console Output]
+        J --> L[JSON Structured Logs]
+        M[Correlation ID Manager] --> I
+    end
+    
+    subgraph "Configuration Management"
+        N[Hydra Config] --> O[Performance Thresholds]
+        O --> P[Environment-Specific Settings]
+        Q[Environment Variables] --> N
+    end
+    
+    subgraph "External Integration"
+        R[CI/CD Pipeline] --> S[Performance Benchmarks]
+        T[HPC Scheduler] --> U[Batch Monitoring]
+        V[Recording Backends] --> W[Data Quality Metrics]
+    end
+    
+    subgraph "Alert Processing"
+        X[Alert Processor] --> Y{Threshold Check}
+        Y -->|Exceeded| Z[Generate Alert]
+        Y -->|Normal| AA[Continue Monitoring]
+        Z --> BB[Log Alert Event]
+    end
+    
+    B --> I
+    D --> I
+    F --> I
+    H --> I
+    O --> B
+    O --> D
+    S --> I
+    U --> I
+    W --> I
+    
+    B --> X
+    D --> X
+    F --> X
+    H --> X
+    
+    style A fill:#e1f5fe
+    style I fill:#f3e5f5
+    style N fill:#e8f5e8
+    style R fill:#fff3e0
+    style X fill:#fce4ec
+```
+
+#### 6.5.7.2 Performance Metrics Dashboard Layout
+
+```mermaid
+graph TB
+    subgraph "Real-Time Performance Dashboard"
+        subgraph "Core Metrics"
+            A[Step Latency: 25ms] --> B[FPS: 35]
+            C[Memory Usage: 2.1GB] --> D[Cache Hit Rate: 92%]
+        end
+        
+        subgraph "Threshold Indicators"
+            E[Step Latency: ✓ <33ms] --> F[FPS: ✓ >30]
+            G[Memory: ✓ Linear Scale] --> H[Cache: ✓ >90%]
+        end
+        
+        subgraph "Trend Analysis"
+            I[24h Performance Trend] --> J[Memory Growth Pattern]
+            K[Cache Efficiency Trend] --> L[Recording Overhead]
+        end
+        
+        subgraph "Alert Status"
+            M[Active Alerts: 0] --> N[Last Alert: 2h ago]
+            O[Alert History] --> P[Performance Regression: None]
+        end
+    end
+    
+    style A fill:#e8f5e8
+    style B fill:#e8f5e8
+    style C fill:#e8f5e8
+    style D fill:#e8f5e8
+    style E fill:#e8f5e8
+    style F fill:#e8f5e8
+    style G fill:#e8f5e8
+    style H fill:#e8f5e8
+```
+
+### 6.5.8 Performance Monitoring Specifications
+
+#### 6.5.8.1 Performance Metrics Definition Table
+
+| Metric Name | Definition | Target Value | Measurement Method | Alert Threshold |
+|-------------|------------|--------------|-------------------|-----------------|
+| Step Latency | Time to execute one simulation step | ≤33ms | High-resolution timer | >33ms for 10 steps |
+| Simulation FPS | Frames processed per second | ≥30 FPS | Rolling window average | <30 FPS for 1000 steps |
+| Memory Usage | Current process memory consumption | Linear scaling | psutil monitoring | >10MB growth per 1000 steps |
+| Cache Hit Rate | Percentage of cache requests satisfied | ≥90% | hit/(hit+miss) ratio | <90% for 1000 operations |
+
+#### 6.5.8.2 Alert Threshold Matrix
+
+| Alert Level | Step Latency | Memory Growth | Cache Hit Rate | Recording Overhead |
+|-------------|--------------|---------------|----------------|-------------------|
+| WARNING | >33ms | >10MB/1000 steps | <90% | >1ms when disabled |
+| ERROR | >50ms | >50MB/1000 steps | <80% | >5ms when disabled |
+| CRITICAL | >100ms | >100MB/1000 steps | <70% | >10ms when disabled |
+
+#### 6.5.8.3 SLA Requirements
+
+**Research Environment SLA Specifications**
+
+| Service Level | Metric | Target | Measurement Period | Acceptable Downtime |
+|---------------|--------|--------|-------------------|-------------------|
+| Performance | Step latency ≤33ms | 99.9% | Per simulation run | <0.1% of steps |
+| Availability | Simulation completion rate | 99.5% | Per experiment batch | <0.5% failed runs |
+| Data Quality | Recording success rate | 99.9% | Per recording session | <0.1% lost records |
+| Memory Stability | Linear memory scaling | 99% | Per agent scaling test | <1% deviation |
+
+### 6.5.9 References
+
+#### 6.5.9.1 Monitoring Infrastructure Components
+
+**Files Examined:**
+- `logging.yaml` - Comprehensive Loguru configuration for structured logging
+- `src/odor_plume_nav/utils/logging_setup.py` - Enhanced logging implementation with performance metrics integration
+- `src/odor_plume_nav/core/simulation.py` - PerformanceMonitor class implementation
+- `src/odor_plume_nav/cache/frame_cache.py` - Cache performance monitoring and statistics
+- `src/odor_plume_nav/environments/gymnasium_env.py` - Environment performance tracking
+- `.github/workflows/ci.yml` - CI/CD performance monitoring pipeline
+- `.github/workflows/cross_repo_test.yml` - Cross-repository integration monitoring
+- `docs/performance_tuning.md` - Performance monitoring configuration guide
+
+**Folders Analyzed:**
+- `src/odor_plume_nav/utils/` - Logging and performance monitoring utilities
+- `src/odor_plume_nav/core/` - Core simulation performance monitoring
+- `src/odor_plume_nav/cache/` - Cache performance monitoring implementation
+- `src/odor_plume_nav/environments/` - Environment performance tracking
+- `conf/` - Hydra configuration with monitoring settings
+- `.github/workflows/` - CI/CD monitoring integration
+- `docs/` - Performance monitoring documentation
+
+**Configuration Files:**
+- `conf/base.yaml` - Base configuration with monitoring settings
+- `conf/config.yaml` - User configuration template with monitoring parameters
+- `logging.yaml` - Structured logging configuration for monitoring
+
+**Technical Specification Cross-References:**
+- Section 1.2 - System overview establishing performance targets and monitoring requirements
+- Section 5.1 - High-level architecture describing monitoring integration points
+- Section 6.4 - Security architecture covering audit logging and monitoring security
+- Section 6.1 - Core services architecture describing monitoring infrastructure integration
 
 ## 6.6 TESTING STRATEGY
 
-### 6.6.1 Testing Approach
-
-The Plume Navigation Simulation system implements a comprehensive, multi-layered testing strategy designed to ensure scientific accuracy, performance requirements, and maintainability across its modular architecture. <span style="background-color: rgba(91, 57, 243, 0.2)">The testing approach now includes dedicated coverage for the newly integrated HookManager lifecycle system, ensuring hook registration, dispatch, and performance requirements are thoroughly validated.</span>
+### 6.6.1 TESTING APPROACH
 
 #### 6.6.1.1 Unit Testing
 
 #### Testing Frameworks and Tools
 
-| Framework/Tool | Version | Purpose | Configuration |
-|---|---|---|---|
-| **pytest** | Latest | Primary test framework | pyproject.toml |
-| **pytest-cov** | Latest | Code coverage reporting | Coverage targets: 70% overall, 80% new |
-| **pytest-benchmark** | Latest | Performance benchmarking | Sub-10ms step latency validation |
-| **hypothesis** | Latest | Property-based testing | Mathematical invariant validation |
-| **pytest-mock** | Latest | Mocking and isolation | Component isolation |
+The testing infrastructure leverages a comprehensive ecosystem of Python testing tools optimized for scientific computing and performance-critical applications:
+
+**Primary Framework**: pytest ≥7.4.0 serves as the foundational testing framework, chosen for its excellent fixture system, plugin architecture, and scientific Python ecosystem integration.
+
+**Coverage Analysis**: pytest-cov ≥4.1.0 provides comprehensive code coverage reporting with XML, HTML, and terminal output formats, integrated with CI/CD pipelines for automated quality gates.
+
+**Performance Testing**: pytest-benchmark ≥4.0.0 enables micro-benchmarking with statistical analysis, crucial for validating the ≤33ms step latency requirement with 100 concurrent agents.
+
+**Property-Based Testing**: Hypothesis framework validates mathematical invariants and edge cases across the continuous parameter spaces common in navigation algorithms and plume physics.
+
+**Type Checking**: mypy ≥1.5.0 with strict mode ensures Protocol interface compliance and catches type-related errors before runtime.
 
 #### Test Organization Structure
 
+The test suite follows a domain-driven organization that mirrors the system's protocol-based architecture:
+
 ```
 tests/
-├── api/                    # Public API surface tests
-├── config/                 # Configuration validation tests
-├── core/                   # Core protocol compliance tests
-├── environments/           # Environment implementation tests
-├── <span style="background-color: rgba(91, 57, 243, 0.2)">hooks/                    # HookManager and lifecycle hook tests</span>
-├── helpers/                # Test utility modules
-├── integration/            # Cross-component integration tests
+├── api/                    # Public API surface validation
+│   ├── test_api_surface.py    # Factory methods and public interfaces
+│   ├── test_api.py            # End-to-end API behavior
+│   └── <span style="background-color: rgba(91, 57, 243, 0.2)">test_version_exposure.py   # Package version availability</span>
+├── core/                   # Core simulation engine tests
+│   ├── test_simulation_engine.py  # Main engine functionality
+│   ├── test_protocols.py         # Protocol interface validation
+│   └── test_performance.py       # Performance requirements
 ├── models/                 # Plume and wind model tests
-├── utils/                  # Utility function tests
-├── visualization/          # Visualization component tests
-├── cli/                    # CLI interface tests
-├── test_*.py              # Top-level test modules
-└── conftest.py            # Shared fixtures and configuration
-```
-
-#### HookManager Test Plan
-
-<span style="background-color: rgba(91, 57, 243, 0.2)">The dedicated HookManager testing strategy ensures comprehensive coverage of the lifecycle hook system:</span>
-
-**<span style="background-color: rgba(91, 57, 243, 0.2)">Unit Testing - Hook Registration and Dispatch</span>**
-
-```python
-# tests/hooks/test_hook_manager.py
-def test_hook_manager_registration_paths():
-    """Test hook registration and dispatch paths"""
-    manager = HookManager()
-    
-    # Test registration path
-    hook = MockHook()
-    manager.register_hook('pre_step', hook)
-    
-    # Test dispatch path
-    context = SimulationContext(agent_id=1, step=0)
-    manager.dispatch('pre_step', context)
-    
-    assert hook.called_with(context)
-
-def test_hook_manager_early_exit_logic():
-    """Test early-exit logic when no hooks registered"""
-    manager = HookManager()
-    
-    # Performance-critical path when no hooks
-    context = SimulationContext(agent_id=1, step=0)
-    start_time = time.perf_counter()
-    
-    manager.dispatch('pre_step', context)
-    
-    execution_time = time.perf_counter() - start_time
-    assert execution_time < 0.001  # <1ms overhead
-```
-
-**<span style="background-color: rgba(91, 57, 243, 0.2)">Integration Testing - Episode Trajectory Validation</span>**
-
-```python
-# tests/hooks/test_hook_integration.py
-def test_hook_trajectory_consistency():
-    """Test two 100-step episodes with identical trajectories"""
-    # Default configuration (no hooks)
-    env_default = PlumeNavigationEnv(hooks=None)
-    trajectory_default = run_episode(env_default, steps=100)
-    
-    # Hydra override with no-op hooks
-    with hydra.initialize(config_path="../conf"):
-        cfg = hydra.compose(config_name="config", overrides=["hooks=none"])
-        env_hydra = PlumeNavigationEnv(cfg.hooks)
-        trajectory_hydra = run_episode(env_hydra, steps=100)
-    
-    # Assert identical trajectories and reward sums
-    assert np.allclose(trajectory_default.positions, trajectory_hydra.positions)
-    assert np.allclose(trajectory_default.rewards, trajectory_hydra.rewards)
-    assert trajectory_default.total_reward == trajectory_hydra.total_reward
+│   ├── test_gaussian_plume.py    # Analytical plume model
+│   ├── test_turbulent_plume.py   # Physics-based simulation
+│   ├── test_filament_plume.py    # Biological-inspired model
+│   ├── test_video_plume.py       # Video-based plume data
+│   └── test_wind_fields.py       # Wind field models
+├── integration/           # End-to-end integration tests
+│   ├── test_rl_workflows.py      # RL training pipelines
+│   ├── test_multiagent.py        # Multi-agent scenarios
+│   └── test_configuration.py     # Hydra config management
+├── environments/          # Gymnasium environment tests
+│   ├── test_gym_compliance.py    # Gymnasium API compliance
+│   └── test_vectorized_envs.py   # Vectorized environment support
+├── utils/                 # Utility function tests
+├── visualization/         # Visualization component tests
+├── cli/                   # CLI command tests
+├── helpers/               # Test helper utilities
+└── conftest.py           # Shared fixtures and test configuration
 ```
 
 #### Mocking Strategy
 
-```python
-# Protocol-based mocking approach
-class MockPlumeModel:
-    """Mock implementation adhering to PlumeModelProtocol"""
-    def concentration_at(self, position: np.ndarray, time: float) -> np.ndarray:
-        return np.ones(position.shape[0])  # Deterministic response
-    
-    def step(self, dt: float, wind_field: Optional[WindFieldProtocol]) -> None:
-        pass  # No-op for isolation
-    
-    def reset(self) -> None:
-        pass  # State reset
+The testing approach employs sophisticated mocking strategies tailored to the protocol-based architecture:
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">class MockHook:
-    """Mock hook implementation for testing"""
-    def __init__(self):
-        self.call_count = 0
-        self.last_context = None
-    
-    def __call__(self, context: SimulationContext) -> None:
-        self.call_count += 1
-        self.last_context = context
-    
-    def called_with(self, context: SimulationContext) -> bool:
-        return self.last_context == context</span>
-```
+**Protocol-Based Mocks**: Mock factories implement all protocol interfaces (NavigatorProtocol, PlumeModelProtocol, WindFieldProtocol, SensorProtocol) with realistic behavior patterns while maintaining deterministic execution.
+
+**Fixture-Driven Architecture**: Centralized mock definitions in conftest.py provide consistent test data across all test modules, with parameterized fixtures supporting multiple test scenarios.
+
+**Deterministic Behavior**: All random number generation uses seeded generators (numpy.random.default_rng with fixed seeds) to ensure reproducible test execution across different environments.
+
+**Performance Monitoring**: Mock wrappers include timing instrumentation to verify that mocked components don't introduce performance bottlenecks in test execution.
 
 #### Code Coverage Requirements
 
-| Coverage Type | Target | Enforcement | Measurement |
-|---|---|---|---|
-| **Overall Coverage** | ≥70% | CI pipeline gate | coverage.py |
-| **New Code Coverage** | ≥80% | PR requirement | codecov integration |
-| **Critical Paths** | 100% | Manual review | Performance-critical code |
-| **Protocol Implementations** | 100% | Automated validation | Protocol compliance tests |
+| Coverage Type | Target | Enforcement | Rationale |
+|--------------|--------|-------------|-----------|
+| Overall Coverage | ≥70% | CI quality gate | Balances thoroughness with maintenance overhead |
+| New Code Coverage | ≥80% | PR requirement | Ensures new features maintain quality standards |
+| Critical Paths | ≥90% | Protocol implementations | Protocol compliance is essential for extensibility |
+| Performance Code | ≥85% | Cache and optimization paths | Performance optimizations must be thoroughly tested |
 
 #### Test Naming Conventions
 
-```python
-# Pattern: test_<component>_<scenario>_<expected_outcome>
-def test_navigator_single_agent_initialization_success():
-    """Test successful single agent navigator initialization"""
-    
-def test_plume_model_invalid_position_raises_error():
-    """Test plume model handles invalid positions correctly"""
-    
-def test_frame_cache_lru_eviction_under_memory_pressure():
-    """Test LRU cache eviction when memory limit exceeded"""
+The test suite follows a hierarchical naming convention that clearly communicates test intent:
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">def test_hook_manager_dispatch_early_exit_performance():
-    """Test HookManager early exit when no hooks registered"""
-    
-def test_hook_lifecycle_invocation_count_validation():
-    """Test hook invocation exactly once per lifecycle event"""</span>
+```python
+# Unit tests - Component behavior validation
+test_<component>_<behavior>_<expected_outcome>()
+test_navigator_step_updates_position_correctly()
+test_plume_model_gaussian_respects_source_strength()
+<span style="background-color: rgba(91, 57, 243, 0.2)">test_version_exposed_correctly()</span>
+
+#### Integration tests - Workflow validation
+test_integration_<workflow>_<scenario>()
+test_integration_rl_training_convergence()
+test_integration_multiagent_collision_avoidance()
+
+#### Performance tests - SLA validation
+test_performance_<component>_<metric>()
+test_performance_step_latency_under_threshold()
+test_performance_cache_hit_rate_above_target()
 ```
 
 #### Test Data Management
 
-| Data Type | Storage Method | Access Pattern | Example |
-|---|---|---|---|
-| **Mock Video Files** | Temporary fixtures | pytest tmpdir | test_plume.mp4 |
-| **Configuration Files** | YAML fixtures | Hydra compose | test_config.yaml |
-| **Numerical Data** | NumPy arrays | Deterministic generation | np.random.seed(42) |
-| **Performance Baselines** | JSON artifacts | CI artifact storage | performance_baseline.json |
+**Fixtures**: Reusable test data via pytest fixtures with appropriate scoping (session, module, function) to balance test isolation with execution efficiency.
 
-#### Performance Benchmarks - HookManager Overhead
+**Temporary Files**: pytest tmp_path fixture provides isolated file system environments for configuration, recording, and cache testing.
+
+**Configuration Management**: Hydra-based test configurations stored in temporary directories prevent interference with development configurations.
+
+**Mock Data**: Deterministic numpy arrays for plume concentration fields, wind vectors, and agent trajectories ensure consistent test behavior.
+
+<span style="background-color: rgba(91, 57, 243, 0.2)">**Package Version Testing**: Explicit validation ensures programmatic version accessibility through `plume_nav_sim.__version__` for automated dependency management and compatibility checking:</span>
 
 ```python
-<span style="background-color: rgba(91, 57, 243, 0.2)">@pytest.mark.benchmark(
-    group="hook_performance",
-    min_rounds=1000,
-    warmup_rounds=100
-)
-def test_hook_manager_zero_overhead_benchmark(benchmark):
-    """Verify HookManager introduces <1ms overhead when no hooks registered"""
-    manager = HookManager()  # No hooks registered
-    context = SimulationContext(agent_id=1, step=0)
-    
-    # Benchmark the dispatch operation
-    result = benchmark(manager.dispatch, 'pre_step', context)
-    
-    # Assert <1ms overhead for no-hook dispatch
-    assert benchmark.stats["mean"] < 0.001  # <1ms
-    
-    # Ensure overall step time remains <33ms
-    # (This would be tested in integration with full environment step)
-    
-@pytest.mark.benchmark(
-    group="simulation_with_hooks",
-    min_rounds=100,
-    warmup_rounds=10
-)
-def test_environment_step_with_hooks_performance(benchmark):
-    """Benchmark environment step performance with HookManager enabled"""
-    env = PlumeNavigationEnv(hooks_enabled=True)
-    action = env.action_space.sample()
-    
-    result = benchmark(env.step, action)
-    
-    # Ensure step time still <33ms with hooks enabled
-    assert benchmark.stats["mean"] < 0.033  # 33ms maintained</span>
+def test_version_exposed():
+    import plume_nav_sim
+    assert hasattr(plume_nav_sim, "__version__")
+    assert isinstance(plume_nav_sim.__version__, str) and plume_nav_sim.__version__
 ```
 
 #### 6.6.1.2 Integration Testing
 
 #### Service Integration Test Approach
 
-```mermaid
-graph TB
-    subgraph "Integration Test Layers"
-        A[Component Integration] --> B[Protocol Compliance]
-        B --> C[Configuration Integration]
-        C --> D[Performance Integration]
-        D --> E[End-to-End Workflows]
-    end
-    
-    subgraph "Test Execution"
-        F[Fixture Setup] --> G[Component Assembly]
-        G --> H[Interaction Testing]
-        H --> I[Validation & Teardown]
-    end
-    
-    A --> F
-    E --> I
-```
+Integration testing validates the seamless interaction between protocol-based components:
+
+**Protocol Boundary Testing**: Comprehensive validation that all protocol implementations work together correctly, including edge cases where components interact at their interface boundaries.
+
+**Configuration-Driven Testing**: Hydra's component swapping capabilities enable testing different component combinations without code modifications, validating the plug-and-play architecture.
+
+**Cross-Component Validation**: End-to-end scenarios testing Navigator + Plume + Wind + Sensor integration with realistic data flows and state transitions.
+
+**Migration Testing**: Behavioral parity validation ensuring v0.3.0 → v1.0 compatibility for existing research workflows.
 
 #### API Testing Strategy
 
-```python
-# Comprehensive API validation approach
-class TestNavigationAPI:
-    def test_create_navigator_all_parameters(self):
-        """Test navigator creation with all parameter combinations"""
-        # Direct parameter testing
-        nav = create_navigator(position=[50, 50], orientation=0)
-        
-        # Configuration-based testing
-        config = {"position": [50, 50], "orientation": 0}
-        nav_from_config = create_navigator_from_config(config)
-        
-        # Hydra integration testing
-        with hydra.initialize(config_path="../conf"):
-            cfg = hydra.compose(config_name="config")
-            nav_hydra = create_navigator_from_config(cfg.navigator)
-```
-
-#### Lifecycle Hook Integration Testing
+The API testing framework ensures compliance with established standards:
 
 ```python
-<span style="background-color: rgba(91, 57, 243, 0.2)">def test_hook_lifecycle_invocation_validation():
-    """Test pre-step, post-step, and episode-end hooks invoked exactly once per call site"""
-    # Setup tracking hooks
-    pre_step_hook = CallCountHook()
-    post_step_hook = CallCountHook()
-    episode_end_hook = CallCountHook()
-    
-    # Register hooks
-    env = PlumeNavigationEnv()
-    env.hook_manager.register_hook('pre_step', pre_step_hook)
-    env.hook_manager.register_hook('post_step', post_step_hook)
-    env.hook_manager.register_hook('episode_end', episode_end_hook)
-    
-    # Execute full episode
-    env.reset()
-    for step in range(100):
-        action = env.action_space.sample()
-        env.step(action)
-    
-    # Validate invocation counts
-    assert pre_step_hook.call_count == 100  # One per step
-    assert post_step_hook.call_count == 100  # One per step
-    assert episode_end_hook.call_count == 0  # Episode not terminated
-    
-    # Terminate episode
-    env.close()
-    assert episode_end_hook.call_count == 1  # Exactly once on termination</span>
+# API compliance testing structure
+tests/api/
+├── test_api_surface.py      # Public API exposure validation
+└── test_api.py             # Comprehensive API behavior tests
+
+#### Key test categories include:
+- Factory method validation (create_simulation, create_environment)
+- Gymnasium compliance (5-tuple/4-tuple API support)
+- Configuration schema enforcement via Pydantic
+- Backward compatibility verification across version boundaries
 ```
 
 #### Database Integration Testing
 
-```python
-# In-memory database testing for isolation
-@pytest.fixture
-def test_database():
-    """Provide isolated in-memory database for testing"""
-    engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    
-    session = SessionLocal()
-    yield session
-    
-    session.close()
-    Base.metadata.drop_all(bind=engine)
-```
+**In-Memory SQLite**: Fast, isolated database tests using SQLite's :memory: mode for rapid test execution without persistence overhead.
+
+**Session Management**: Fixture-based database session lifecycle management with automatic cleanup and transaction rollback.
+
+**Multi-Backend Support**: Validation of SQLite, PostgreSQL, and MySQL compatibility through dockerized test environments.
+
+**Performance Validation**: Connection pooling behavior and query optimization testing under realistic load conditions.
 
 #### External Service Mocking
 
-| Service Type | Mock Strategy | Implementation | Validation |
-|---|---|---|---|
-| **Video Capture** | cv2.VideoCapture mock | Returns synthetic frames | Frame dimensions/format |
-| **File System** | pathlib.Path mock | In-memory operations | Path existence/permissions |
-| **Environment Variables** | os.environ patch | Temporary overrides | Variable interpolation |
-| **Network Services** | Not applicable | System is offline | N/A |
+**Video Sources**: Mock OpenCV VideoCapture objects provide deterministic frame sequences for video-based plume model testing.
+
+**File System**: Mocked Path.exists() and file I/O operations enable configuration validation testing without file system dependencies.
+
+**Environment Variables**: Isolated environment variable manipulation prevents test contamination and enables configuration testing.
+
+**Cloud Services**: Mocked Weights & Biases and TensorBoard integrations support RL training workflow testing.
 
 #### Test Environment Management
 
 ```yaml
-# Hydra test configuration structure
-conf/
-├── test/
-│   ├── config.yaml          # Test-specific overrides
-│   ├── plume_models/        # Test plume configurations
-│   ├── wind_fields/         # Test wind configurations
-│   └── sensors/             # Test sensor configurations
-└── experiments/
-    └── test_scenarios.yaml  # Integration test scenarios
+# Environment isolation configuration
+Test Isolation:
+  - PYTHONPATH manipulation for clean module imports
+  - Temporary Hydra working directories per test
+  - Isolated logging configurations preventing interference
+  - Clean global state management between tests
 ```
 
 #### 6.6.1.3 End-to-End Testing
 
 #### E2E Test Scenarios
 
-| Scenario | Components Tested | Success Criteria | Performance Target |
-|---|---|---|---|
-| **Single Agent Navigation** | Full simulation pipeline | Episode completion | <33ms/step |
-| **Multi-Agent Scaling** | 100 agent simulation | Vectorized operations | <10MB/agent |
-| **RL Training Integration** | Gymnasium + stable-baselines3 | Training convergence | >1M steps/hour |
-| **Cross-Repository** | place_mem_rl integration | API compatibility | Feature parity |
+Critical user workflows receive comprehensive end-to-end validation:
+
+```python
+# Primary workflow scenarios
+1. Complete simulation pipeline (initialization → execution → visualization)
+2. RL training workflow (environment creation → training → evaluation)
+3. Batch experiment execution via Hydra multirun capabilities
+4. Cross-repository integration (place_mem_rl compatibility validation)
+```
 
 #### UI Automation Approach
 
-```python
-# Headless visualization testing
-def test_visualization_headless_mode():
-    """Test visualization in headless CI environment"""
-    with setup_headless_mode():
-        viz = SimulationVisualization(
-            navigator=mock_navigator,
-            video_plume=mock_plume,
-            headless=True
-        )
-        
-        # Generate frames without display
-        frames = viz.generate_frames(n_steps=100)
-        assert len(frames) == 100
-        
-        # Export to video file
-        export_animation(frames, "test_output.mp4")
-```
+**Headless Testing**: MPLBACKEND=Agg environment variable enables matplotlib testing without display requirements.
+
+**Qt Testing**: QT_QPA_PLATFORM=offscreen supports GUI component testing in headless CI environments.
+
+**Visualization Validation**: Rendered output comparison ensures visualization components produce expected graphical outputs.
+
+**Animation Export**: MP4/GIF generation verification validates the complete visualization pipeline.
 
 #### Test Data Setup/Teardown
 
 ```python
-@pytest.fixture(scope="function")
-def simulation_environment():
-    """Complete simulation environment setup and teardown"""
-    # Setup
-    temp_dir = tempfile.mkdtemp()
-    video_path = create_test_video(temp_dir)
-    
-    env = PlumeNavigationEnv(
-        video_path=video_path,
-        config=test_config
-    )
-    
-    yield env
-    
-    # Teardown
-    env.close()
-    shutil.rmtree(temp_dir)
+@pytest.fixture
+def simulation_environment(tmp_path):
+    """Complete simulation environment setup with cleanup"""
+    # Create isolated temporary directories
+    # Generate mock video files with deterministic content
+    # Initialize Hydra configuration in temporary workspace
+    # Set up logging to prevent interference
+    yield configured_environment
+    # Automatic cleanup of resources and temporary files
 ```
 
 #### Performance Testing Requirements
 
-```python
-# Performance benchmark decorators
-@pytest.mark.benchmark(
-    group="simulation",
-    min_rounds=100,
-    warmup_rounds=10
-)
-@requires_performance_validation(
-    max_time_ms=33,
-    max_memory_mb=100
-)
-def test_environment_step_performance(benchmark):
-    """Benchmark environment step performance"""
-    env = create_test_environment()
-    action = env.action_space.sample()
-    
-    result = benchmark(env.step, action)
-    
-    assert benchmark.stats["mean"] < 0.033  # 33ms
-```
+| Metric | Target | Test Method | Validation Approach |
+|--------|--------|-------------|-------------------|
+| Step Latency | ≤33ms @ 100 agents | pytest-benchmark | Statistical analysis with confidence intervals |
+| Frame Rate | ≥30 FPS | Real-time simulation | Temporal consistency validation |
+| Memory Scaling | Linear with agents | psutil monitoring | Regression analysis across agent counts |
+| Cache Hit Rate | ≥90% | CacheStatistics | Runtime performance monitoring |
 
-#### Cross-browser Testing Strategy
+#### Cross-Browser Testing Strategy
 
-Not applicable - the system is a Python-based simulation library without web interface components.
+Not applicable - Python library without web interface components.
 
-### 6.6.2 Test Automation
+### 6.6.2 TEST AUTOMATION
 
-#### CI/CD Integration
+#### 6.6.2.1 CI/CD Integration (updated)
 
-```mermaid
-graph LR
-    subgraph "GitHub Actions CI Pipeline"
-        A[Code Push] --> B[Code Quality]
-        B --> C[Unit Tests]
-        C --> D[Integration Tests]
-        D --> E[Performance Tests]
-        E --> F[Cross-Repo Tests]
-        F --> G[Quality Gate]
-    end
-    
-    subgraph "Test Stages"
-        B --> B1[Black/isort/ruff]
-        B --> B2[mypy type checking]
-        C --> C1[pytest + coverage]
-        D --> D1[Protocol compliance]
-        E --> E1[Benchmark validation]
-        F --> F1[place_mem_rl integration]
-    end
-```
-
-#### Automated Test Triggers
-
-| Trigger Type | Test Suite | Conditions | Frequency |
-|---|---|---|---|
-| **Push/PR** | Full test suite | All branches | Every commit |
-| **Nightly** | Extended integration | main/develop | 2:00 AM UTC |
-| **Performance** | Benchmark suite | Manual trigger | On demand |
-| **Cross-repo** | Compatibility tests | External changes | Daily |
-
-#### Parallel Test Execution
+The continuous integration pipeline implements a comprehensive quality assurance workflow with <span style="background-color: rgba(91, 57, 243, 0.2)">setuptools-based build (`python -m build`)</span>:
 
 ```yaml
-# GitHub Actions matrix strategy
-strategy:
-  matrix:
-    python-version: [3.10, 3.11]
-    optional-deps: [full, minimal, no_gui]
-    os: [ubuntu-latest]
-  fail-fast: false
-  max-parallel: 4
+# GitHub Actions workflow stages
+1. Code Quality Gates:
+   - pre-commit hooks (black, isort, ruff formatting)
+   - mypy type checking with strict mode
+   - Security scanning with bandit
+
+2. <span style="background-color: rgba(91, 57, 243, 0.2)">Package Build & Install:
+   - pip install --upgrade pip build wheel
+   - python -m build                      # creates sdist & wheel via setuptools
+   - pip install .[dev]                   # editable install for test suite
+   
+3. Core Testing Matrix:
+   - Python 3.10, 3.11 compatibility validation
+   - Operating system matrix (Ubuntu, macOS, Windows)
+   - Dependency version compatibility testing
+   
+4. Integration Validation:
+   - Protocol compliance testing
+   - Configuration validation across scenarios
+   - Performance benchmark execution
+   
+5. Cross-Repository Testing:
+   - place_mem_rl compatibility validation
+   - Downstream dependency impact analysis
+   
+6. Quality Gate Enforcement:
+   - Coverage threshold validation
+   - Performance regression detection
+   - Security vulnerability scanning
 ```
 
-#### Test Reporting Requirements
+The pipeline ensures robust quality assurance through automated testing and validation stages. <span style="background-color: rgba(91, 57, 243, 0.2)">All subsequent testing stages assume the package has been properly built and installed using pip/setuptools commands</span>, eliminating dependency management complexity during test execution.
 
-```json
-{
-  "test_summary": {
-    "total_tests": 1234,
-    "passed": 1230,
-    "failed": 2,
-    "skipped": 2,
-    "duration_seconds": 45.6,
-    "coverage": {
-      "overall": 85.2,
-      "new_code": 92.1
-    },
-    "performance": {
-      "avg_step_time_ms": 28.5,
-      "max_step_time_ms": 42.1,
-      "memory_usage_mb": 512
-    }
-  }
-}
+**Developer Workflow Integration**: <span style="background-color: rgba(91, 57, 243, 0.2)">Development dependencies are managed through direct `pyproject.toml` editing followed by `pip install -e .` for immediate development environment updates</span>, maintaining consistency with the CI/CD pipeline approach.
+
+#### 6.6.2.2 Automated Test Triggers
+
+**Push/PR Triggers**: All pushes to main and develop branches trigger the complete test suite with quality gate enforcement. The <span style="background-color: rgba(91, 57, 243, 0.2)">Package Build & Install stage ensures consistent testing environment setup</span> before test execution begins.
+
+**Nightly Builds**: Comprehensive test execution including extended performance benchmarks and cross-repository compatibility validation. <span style="background-color: rgba(91, 57, 243, 0.2)">Fresh package builds are created nightly to validate setuptools build stability</span> across different dependency versions.
+
+**Manual Triggers**: workflow_dispatch enables on-demand execution of specific test suites for debugging and validation, with <span style="background-color: rgba(91, 57, 243, 0.2)">optional rebuild parameters to test specific build configurations</span>.
+
+**Pre-commit Integration**: Local quality checks prevent broken code from entering the repository, complementing the <span style="background-color: rgba(91, 57, 243, 0.2)">automated build validation in the CI pipeline</span>.
+
+#### 6.6.2.3 Parallel Test Execution
+
+```ini
+# pytest configuration for parallel execution
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Optional parallel execution via pytest-xdist
+addopts = "-n auto --dist loadfile"
+# Ensure deterministic test ordering
+collect_ignore = ["build", "dist"]
 ```
 
-#### Failed Test Handling
+Parallel test execution leverages pytest-xdist for optimal resource utilization while maintaining test isolation. <span style="background-color: rgba(91, 57, 243, 0.2)">The configuration excludes setuptools build artifacts (`build/`, `dist/`) from test discovery</span> to prevent interference with test execution.
+
+**Performance Optimization**: Test parallelization scales automatically with available CPU cores, with loadfile distribution ensuring balanced test allocation across worker processes. <span style="background-color: rgba(91, 57, 243, 0.2)">The installed package environment provides consistent module import behavior across all parallel workers</span>.
+
+#### 6.6.2.4 Test Reporting Requirements
+
+**Coverage Reports**: Multi-format coverage reporting (XML for CI, HTML for local development, terminal for immediate feedback) provides comprehensive test quality metrics. <span style="background-color: rgba(91, 57, 243, 0.2)">Coverage analysis operates on the installed package, ensuring accurate measurement of production code paths</span>.
+
+**Performance Reports**: JSON-formatted benchmark results with historical trend analysis and regression detection validate system performance requirements. <span style="background-color: rgba(91, 57, 243, 0.2)">Benchmarks execute against the built package to simulate production performance characteristics</span>.
+
+**CI Artifacts**: Comprehensive test logs, coverage reports, and performance data preserved as GitHub Actions artifacts. <span style="background-color: rgba(91, 57, 243, 0.2)">Build artifacts (wheels, source distributions) are also preserved for deployment validation</span>.
+
+**PR Integration**: Automated PR comments with test summary, coverage delta, and performance impact analysis. <span style="background-color: rgba(91, 57, 243, 0.2)">Build success/failure status is prominently displayed alongside test results</span>.
+
+#### 6.6.2.5 Failed Test Handling
 
 ```python
-# Automatic test retry with diagnostics
+# Automatic retry for flaky tests
 @pytest.mark.flaky(reruns=3, reruns_delay=2)
-def test_frame_cache_concurrent_access():
-    """Test that may fail due to race conditions"""
-    # Collect diagnostics on failure
-    with pytest.raises(ConcurrencyError) as exc_info:
-        # Test implementation
-        pass
-    
-    # Log detailed diagnostics
-    logger.error(f"Test failed: {exc_info.value}")
-    logger.error(f"Thread states: {get_thread_diagnostics()}")
+def test_potentially_flaky_operation():
+    """Handle timing-sensitive operations with retry logic"""
+    pass
+
+#### Comprehensive failure reporting
+pytest --tb=short --capture=no --maxfail=10
 ```
 
-#### Flaky Test Management
+**Build Failure Isolation**: <span style="background-color: rgba(91, 57, 243, 0.2)">Build failures are distinguished from test failures, with separate reporting and escalation procedures</span>. Package build issues trigger immediate developer notification, while test failures follow standard retry and investigation workflows.
 
-| Strategy | Implementation | Monitoring | Resolution |
-|---|---|---|---|
-| **Retry Logic** | pytest-rerunfailures | CI dashboard | 3 retries max |
-| **Isolation** | Fresh fixtures | Test timing | Per-test cleanup |
-| **Diagnostics** | Enhanced logging | Failure patterns | Root cause analysis |
-| **Quarantine** | Skip unstable tests | Weekly review | Fix or remove |
+**Environment Consistency**: <span style="background-color: rgba(91, 57, 243, 0.2)">Test failures are analyzed against the consistent installed package environment</span>, eliminating development environment variability as a failure source.
 
-### 6.6.3 Quality Metrics
+**Failure Classification**: Systematic categorization of failures (build errors, import errors, test logic failures, performance regressions) enables targeted remediation strategies and improved developer productivity.
 
-#### Code Coverage Targets
+#### 6.6.2.6 Flaky Test Management
 
-```mermaid
-graph TB
-    subgraph "Coverage Requirements"
-        A[Source Code] --> B{Coverage Type}
-        B --> C[Line Coverage ≥70%]
-        B --> D[Branch Coverage ≥65%]
-        B --> E[Function Coverage ≥75%]
-        
-        F[Critical Paths] --> G[100% Coverage Required]
-        H[New Code] --> I[≥80% Coverage Required]
-    end
-    
-    subgraph "Enforcement"
-        C --> J[CI Gate]
-        D --> J
-        E --> J
-        G --> K[Manual Review]
-        I --> L[PR Requirement]
-    end
-```
+**Identification**: Systematic tracking of test failure rates across CI runs with automated flaky test detection. <span style="background-color: rgba(91, 57, 243, 0.2)">Build-related flakiness is monitored separately from test logic flakiness</span> to identify package installation or dependency resolution issues.
 
-#### Test Success Rate Requirements
+**Isolation**: Separate pytest markers for flaky tests with conditional retry logic. <span style="background-color: rgba(91, 57, 243, 0.2)">Build-dependent flaky tests receive additional retry attempts to handle transient package installation issues</span>.
 
-| Metric | Target | Measurement | Action on Failure |
-|---|---|---|---|
-| **Unit Test Pass Rate** | 100% | Per commit | Block merge |
-| **Integration Test Pass Rate** | ≥98% | Per PR | Investigation required |
-| **Performance Test Pass Rate** | ≥95% | Nightly | Performance review |
-| **Flaky Test Rate** | <2% | Weekly | Test improvement sprint |
+**Root Cause Analysis**: Focus on thread safety, timing dependencies, and resource contention issues. <span style="background-color: rgba(91, 57, 243, 0.2)">Analysis includes package import timing, dependency resolution order, and setuptools-specific build artifacts</span>.
 
-#### Performance Test Thresholds
+**Mitigation**: Deterministic seeding, proper synchronization, and resource isolation strategies. <span style="background-color: rgba(91, 57, 243, 0.2)">Build environment isolation ensures consistent package state across test executions</span>.
 
-```python
-# Performance validation constants
-PERFORMANCE_THRESHOLDS = {
-    "step_latency_ms": 33,          # Maximum step execution time
-    "fps_minimum": 30,              # Minimum frames per second
-    "memory_per_agent_mb": 10,      # Maximum memory per agent
-    "cache_hit_rate_min": 0.9,      # Minimum cache efficiency
-    "startup_time_s": 2.0,          # Maximum initialization time
-    "batch_size_minimum": 100       # Minimum vectorization size
-}
-```
+**Trend Analysis**: Historical flaky test patterns are analyzed to identify package version correlation, dependency update impacts, and seasonal failure patterns that may indicate underlying build system issues.
 
-#### Quality Gates
+### 6.6.3 QUALITY METRICS
+
+#### 6.6.3.1 Code Coverage Targets
 
 ```yaml
-# CI/CD quality gate configuration
-quality_gates:
-  unit_tests:
-    required: true
-    pass_threshold: 100%
-    
-  coverage:
-    overall_minimum: 70%
-    new_code_minimum: 80%
-    enforcement: strict
-    
-  performance:
-    step_latency_p95: 33ms
-    memory_growth: <5%
-    
-  security:
-    vulnerability_scan: required
-    dependency_audit: required
-    
-  documentation:
-    docstring_coverage: >80%
-    api_documentation: complete
+# Coverage enforcement configuration
+[tool.coverage.run]
+source = ["src/plume_nav_sim"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/conftest.py"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "raise NotImplementedError"
+]
+precision = 2
+show_missing = true
 ```
 
-#### Documentation Requirements
+#### 6.6.3.2 Test Success Rate Requirements
 
-| Documentation Type | Coverage Target | Validation Method | Update Trigger |
-|---|---|---|---|
-| **Test Docstrings** | 100% | pytest --doctest | Test changes |
-| **API Examples** | All public APIs | doctest validation | API changes |
-| **Performance Baselines** | All benchmarks | JSON artifacts | Benchmark updates |
-| **Migration Guides** | Version changes | Manual review | Release preparation |
+| Test Category | Success Rate | Action on Failure | Rationale |
+|---------------|--------------|-------------------|-----------|
+| Unit Tests | 100% | Block merge | Core functionality must be reliable |
+| Integration Tests | 100% | Block merge | Component interactions are critical |
+| Performance Tests | 95% | Warning + review | Allow for environmental variations |
+| Property Tests | 100% | Block merge | Mathematical invariants must hold |
 
-### 6.6.4 Required Diagrams
+#### 6.6.3.3 Performance Test Thresholds
 
-#### Test Execution Flow
+```python
+# Enforced performance budgets
+STEP_LATENCY_THRESHOLD_MS = 33      # @ 100 agents
+FRAME_TIME_THRESHOLD_MS = 33.33     # 30 FPS requirement
+MAX_MEMORY_PER_AGENT_MB = 0.1       # Linear scaling constraint
+CACHE_HIT_RATE_THRESHOLD = 0.9      # 90% minimum efficiency
+INITIALIZATION_TIME_MS = 1000       # Startup performance
+```
+
+#### 6.6.3.4 Quality Gates
+
+```yaml
+# CI/CD quality gate criteria
+- Minimum overall coverage: 70%
+- New code coverage: 80%
+- All critical tests passing (100%)
+- No high-severity security vulnerabilities
+- Performance metrics within established thresholds
+- Type checking compliance with mypy strict mode
+- Code formatting compliance with black/isort
+```
+
+#### 6.6.3.5 Documentation Requirements
+
+**Test Documentation**: Comprehensive docstrings for all test functions explaining purpose, setup requirements, and expected behavior.
+
+**Fixture Documentation**: Clear usage examples and scope explanations for reusable test fixtures.
+
+**Performance Baselines**: Historical performance data with trend analysis and regression detection.
+
+**Migration Guides**: Detailed procedures for updating tests when protocol interfaces evolve.
+
+### 6.6.4 REQUIRED DIAGRAMS
+
+#### 6.6.4.1 Test Execution Flow
 
 ```mermaid
 flowchart TD
-    A[Developer Push] --> B{Branch Type}
-    B -->|Feature| C[Pre-commit Hooks]
-    B -->|Main/Develop| D[Full CI Pipeline]
+    A[Code Push/PR] --> B{Trigger Type}
     
-    C --> E[Local Tests]
-    E --> F[Push Allowed]
+    B -->|Automatic| C[CI Pipeline Start]
+    B -->|Manual| D[Select Test Suite]
+    B -->|Scheduled| E[Nightly Tests]
     
-    D --> G[Code Quality]
-    G --> H[Unit Tests]
-    H --> I[Integration Tests]
-    I --> J[Performance Tests]
-    J --> K{Quality Gate}
+    C --> F[Code Quality Checks]
+    D --> F
+    E --> G[Extended Test Suite]
     
-    K -->|Pass| L[Merge Allowed]
-    K -->|Fail| M[Block & Report]
+    F --> H{Quality Pass?}
+    H -->|No| I[Block & Report]
+    H -->|Yes| J[Unit Tests]
     
-    M --> N[Developer Notification]
-    N --> O[Fix Required]
-    O --> A
+    J --> K[Integration Tests]
+    K --> L[Performance Tests]
+    L --> M[Cross-Repo Tests]
+    
+    M --> N{All Pass?}
+    N -->|No| O[Detailed Failure Report]
+    N -->|Yes| P[Coverage Analysis]
+    
+    P --> Q{Coverage Met?}
+    Q -->|No| R[Coverage Warning]
+    Q -->|Yes| S[Quality Gate]
+    
+    S --> T{Gate Pass?}
+    T -->|No| U[Block Merge]
+    T -->|Yes| V[Approve & Artifacts]
+    
+    G --> W[Memory Profiling]
+    W --> X[Scaling Analysis]
+    X --> Y[Benchmark Report]
+    
+    I --> Z[Developer Notification]
+    O --> Z
+    R --> Z
+    U --> Z
 ```
 
-#### Test Environment Architecture
+#### 6.6.4.2 Test Environment Architecture
 
 ```mermaid
 graph TB
     subgraph "Test Infrastructure"
-        A[GitHub Actions Runner] --> B[Test Container]
-        B --> C[Python Environment]
-        C --> D[Test Dependencies]
-    end
-    
-    subgraph "Test Execution Layers"
-        E[pytest Framework] --> F[Test Discovery]
-        F --> G[Fixture Setup]
-        G --> H[Test Execution]
-        H --> I[Result Collection]
+        A[pytest Framework]
+        B[Test Fixtures]
+        C[Mock Factories]
+        D[Performance Monitor]
+        E[Coverage Collector]
     end
     
     subgraph "Test Categories"
-        J[Unit Tests] --> K[Mock Dependencies]
-        L[Integration Tests] --> M[Real Components]
-        N[Performance Tests] --> O[Benchmark Framework]
+        F[Unit Tests]
+        G[Integration Tests]
+        H[API Tests]
+        I[Performance Tests]
+        J[Property Tests]
     end
     
-    D --> E
-    H --> J
-    H --> L
-    H --> N
-```
-
-#### Test Data Flow Diagrams
-
-```mermaid
-sequenceDiagram
-    participant TC as Test Case
-    participant FX as Fixture
-    participant UT as Unit Under Test
-    participant MK as Mock
-    participant AS as Assertion
-    
-    TC->>FX: Request test data
-    FX->>MK: Create mocks
-    FX->>TC: Provide fixtures
-    
-    TC->>UT: Execute with test data
-    UT->>MK: Call dependencies
-    MK->>UT: Return mock data
-    UT->>TC: Return result
-    
-    TC->>AS: Validate result
-    AS->>TC: Pass/Fail status
-    
-    TC->>FX: Cleanup
-    FX->>MK: Reset state
-```
-
-### 6.6.5 Test Strategy Matrices
-
-#### Component Test Coverage Matrix
-
-| Component | Unit Tests | Integration Tests | Performance Tests | E2E Tests |
-|---|---|---|---|---|
-| **Navigator** | Protocol compliance, movement | Multi-agent coordination | Vectorization efficiency | Full simulation |
-| **Plume Models** | Mathematical correctness | Wind field coupling | Computation speed | Visual validation |
-| **Frame Cache** | LRU logic, memory limits | Environment integration | Cache hit rates | Memory pressure |
-| **Recording** | Backend compliance | Async I/O | Write throughput | Data integrity |
-| **Configuration** | Schema validation | Hydra composition | Load time | Override behavior |
-| **HookManager** | **Registration & dispatch logic** | **Env lifecycle integration** | **Overhead (<1 ms when hooks=none)** | **No-op trajectory parity** |
-
-#### Test Tool Selection Matrix
-
-| Test Type | Primary Tool | Secondary Tool | Metrics Collection |
-|---|---|---|---|
-| **Unit Testing** | pytest | unittest.mock | coverage.py |
-| **Property Testing** | hypothesis | Custom generators | Statistical analysis |
-| **Performance** | pytest-benchmark | timeit | JSON artifacts |
-| **Integration** | pytest + fixtures | Real components | Loguru structured logs |
-| **Code Quality** | Black, isort, ruff | mypy | Pre-commit hooks |
-
-#### Example Test Patterns
-
-```python
-# Pattern 1: Protocol Compliance Testing
-class TestProtocolCompliance:
-    @pytest.fixture
-    def protocol_validator(self):
-        return ProtocolComplianceValidator()
-    
-    def test_plume_model_protocol(self, protocol_validator):
-        """Validate PlumeModelProtocol implementation"""
-        model = GaussianPlumeModel()
-        protocol_validator.validate(model, PlumeModelProtocol)
-
-#### Pattern 2: Performance Regression Testing
-@requires_performance_validation(
-    step_time_ms=10,
-    memory_mb=50
-)
-def test_multi_agent_performance():
-    """Ensure multi-agent scaling meets targets"""
-    agents = create_agents(count=100)
-    with performance_timer() as timer:
-        results = simulate_step(agents)
-    
-    assert timer.elapsed_ms < 10
-    assert timer.memory_delta_mb < 50
-
-#### Pattern 3: Property-Based Testing
-@given(
-    position=arrays(np.float32, (2,), min_value=0, max_value=100),
-    time=floats(min_value=0, max_value=1000)
-)
-def test_plume_concentration_properties(position, time):
-    """Concentration must be non-negative and decay with distance"""
-    model = GaussianPlumeModel(source=[50, 50])
-    concentration = model.concentration_at(position, time)
-    
-    assert concentration >= 0
-    assert concentration <= model.source_strength
-```
-
-### 6.6.6 Security Testing Requirements
-
-While the Plume Navigation Simulation system operates offline without external network dependencies, security testing focuses on:
-
-#### Input Validation Testing
-
-| Test Category | Validation Type | Test Approach | Risk Mitigation |
-|---|---|---|---|
-| **Configuration** | Schema validation | Pydantic models | Invalid config rejection |
-| **File Paths** | Path traversal | pathlib validation | Sandboxed file access |
-| **Array Inputs** | Bounds checking | NumPy assertions | Buffer overflow prevention |
-| **Command Line** | Argument validation | Click type checking | Injection prevention |
-
-#### Resource Protection Testing
-
-```python
-def test_memory_exhaustion_protection():
-    """Test system handles memory exhaustion gracefully"""
-    with pytest.raises(MemoryError):
-        # Attempt to allocate excessive memory
-        large_cache = FrameCache(memory_limit_mb=100_000)
-    
-    # Verify graceful degradation
-    assert system_still_operational()
-```
-
-### 6.6.7 Test Environment Needs
-
-#### Development Environment
-
-```yaml
-# Development test requirements
-development:
-  python_version: ">=3.10"
-  dependencies:
-    - pytest>=7.0
-    - pytest-cov>=4.0
-    - pytest-benchmark>=4.0
-    - hypothesis>=6.0
-    - pre-commit>=3.0
-  optional:
-    - pytest-xdist  # Parallel execution
-    - pytest-timeout  # Test timeouts
-    - pytest-mock  # Enhanced mocking
-```
-
-#### CI/CD Environment
-
-```yaml
-# GitHub Actions environment
-ci_environment:
-  runner: ubuntu-latest
-  python_matrix: [3.10, 3.11]
-  system_deps:
-    - libopencv-dev
-    - ffmpeg
-    - xvfb  # Headless display
-  caching:
-    - pip dependencies
-    - pre-commit hooks
-    - test artifacts
-```
-
-#### Resource Requirements
-
-| Resource Type | Development | CI/CD | Performance Testing |
-|---|---|---|---|
-| **CPU Cores** | 4+ recommended | 2 (GitHub runner) | 8+ for benchmarks |
-| **Memory** | 8GB minimum | 7GB available | 16GB for scaling tests |
-| **Storage** | 10GB for test data | 14GB runner disk | 50GB for artifacts |
-| **GPU** | Not required | Not required | Optional for future |
-
-#### References
-
-- `tests/` - Comprehensive test suite organization and structure
-- `pyproject.toml` - Testing framework configuration and dependencies
-- `.github/workflows/` - CI/CD pipeline configuration for automated testing
-- `conf/test/` - Hydra test configuration overrides and scenarios
-- `src/odor_plume_nav/` - Core navigation library testing requirements
-- `src/plume_nav_sim/` - Simulation framework protocol testing
-- Protocol interfaces - Performance and compliance validation requirements
-- GitHub Actions CI pipeline - Automated test execution and quality gates
-
-# 7. USER INTERFACE DESIGN
-
-## 7.1 UI ARCHITECTURE OVERVIEW
-
-### 7.1.1 User Interface Philosophy
-
-The Plume Navigation Simulation system implements multiple complementary user interface modalities designed to support sophisticated research workflows in autonomous chemical detection systems. The UI architecture follows the system's protocol-driven design principles, enabling runtime selection of interface backends while maintaining consistent user experiences across different interaction paradigms.
-
-The interface design prioritizes research productivity by providing intuitive access to complex simulation capabilities while preserving the high-performance characteristics required for real-time navigation algorithm development. Each UI modality serves distinct use cases within the research workflow, from command-line automation to interactive debugging and comprehensive data visualization.
-
-### 7.1.2 Core UI Technologies
-
-The system implements a modular UI technology stack optimized for scientific computing workflows:
-
-```mermaid
-graph TB
-    subgraph "User Interface Architecture"
-        A[CLI Framework] --> A1[Click ≥8.2.1]
-        A --> A2[Hydra Configuration 1.3.*]
-        A --> A3[Rich Terminal UI]
-        
-        B[Debug GUI Systems] --> B1[PySide6/Qt ≥6.9.0]
-        B --> B2[Streamlit ≥1.46.0] 
-        B --> B3[Console Fallback]
-        
-        C[Visualization Suite] --> C1[Matplotlib ≥3.7.0]
-        C --> C2[Plotly Optional]
-        C --> C3[Animation Framework]
-        
-        D[Monitoring Systems] --> D1[Console Real-time Display]
-        D --> D2[JSON Structured Output]
-    end
-    
-    subgraph "Backend Integration"
-        E[Protocol Interfaces] --> F[Simulation Engine]
-        F --> G[Data Recording Systems]
-        G --> H[Performance Monitoring]
-    end
-    
-    A1 --> E
-    B1 --> E
-    B2 --> E
-    C1 --> E
-    D1 --> H
-```
-
-**Technology Selection Rationale:**
-- **Click Framework**: Provides sophisticated command-line argument parsing with type validation
-- **Hydra Configuration**: Enables hierarchical configuration management with runtime overrides
-- **PySide6/Qt**: Delivers native desktop performance for real-time debugging interfaces
-- **Streamlit**: Offers web-based accessibility for remote research collaboration
-- **Matplotlib**: Supports publication-quality scientific visualization with animation capabilities
-
-### 7.1.3 UI Selection Logic
-
-The system implements automatic backend selection based on availability and performance requirements:
-
-```python
-# Automatic UI Backend Selection Hierarchy
-UI_SELECTION_HIERARCHY = {
-    "debug_gui": ["qt", "streamlit", "console"],
-    "visualization": ["interactive", "headless", "export"],
-    "monitoring": ["rich_console", "json_logs", "text"]
-}
-```
-
-This hierarchy ensures graceful degradation when optimal UI components are unavailable while maintaining full functionality across diverse deployment environments.
-
-## 7.2 USER INTERFACE MODALITIES
-
-### 7.2.1 Command-Line Interface (CLI)
-
-The CLI serves as the primary interface for automated research workflows and batch processing operations, implementing the Click framework for sophisticated argument parsing and validation.
-
-#### 7.2.1.1 CLI Command Architecture
-
-```yaml
-# Comprehensive CLI Command Structure
-cli_commands:
-  run:
-    description: "Execute simulation with specified configuration"
-    options:
-      - name: --config
-        type: path
-        help: "Path to configuration file"
-        validation: file_exists
-      - name: --seed
-        type: int
-        help: "Random seed for reproducibility"
-        default: null
-      - name: --episodes
-        type: int
-        default: 100
-        validation: positive_integer
-      - name: --dry-run
-        type: flag
-        help: "Validate configuration without execution"
-      - name: --frame-cache
-        type: choice
-        choices: [lru, preload, none]
-        default: lru
-        help: "Frame caching strategy selection"
-        
-  train:
-    description: "Train reinforcement learning agents"
-    subcommands:
-      algorithm:
-        choices: [PPO, SAC, TD3, A2C, DDPG]
-        options:
-          - name: --timesteps
-            type: int
-            default: 1000000
-            validation: positive_integer
-          - name: --checkpoint-freq
-            type: int
-            default: 10000
-            help: "Checkpoint saving frequency"
-          - name: --tensorboard-log
-            type: path
-            help: "TensorBoard logging directory"
-            
-  visualize:
-    description: "Generate visualization outputs"
-    subcommands:
-      export:
-        options:
-          - name: --format
-            choices: [mp4, gif, png, pdf]
-            default: mp4
-          - name: --fps
-            type: int
-            default: 30
-            validation: fps_range
-          - name: --quality
-            choices: [draft, preview, publication]
-            default: preview
-```
-
-#### 7.2.1.2 CLI User Experience Design
-
-The CLI implements progressive disclosure principles, providing simple defaults while enabling sophisticated parameter tuning through hierarchical configuration overrides:
-
-```bash
-# Basic simulation execution
-$ plume-nav-sim run --episodes 100 --config experiments/baseline.yaml
-
-#### Runtime parameter override via Hydra
-$ plume-nav-sim run navigator.max_speed=2.0 plume_model=gaussian
-
-#### Multi-run experiments with parameter sweeps
-$ plume-nav-sim run --multirun seed=range(0,10) agent_count=10,50,100
-
-#### Interactive configuration validation
-$ plume-nav-sim config validate --interactive
-```
-
-### 7.2.2 Debug GUI Interface
-
-The debug GUI provides real-time visualization and interactive control for algorithm development, supporting both desktop Qt and web-based Streamlit backends.
-
-#### 7.2.2.1 Qt Desktop Interface
-
-The Qt-based interface delivers native desktop performance for intensive debugging sessions:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Plume Navigation Debug GUI - Episode 42                [─][□][×]│
-├─────────────────────────────────────────────────────────────┤
-│ Menu: File | View | Simulation | Analysis | Help             │
-├─────────────────────────────────────────────────────────────┤
-│ ┌───────────────────────┬─────────────────────────────────┐ │
-│ │                       │  State Inspector                 │ │
-│ │                       ├─────────────────────────────────┤ │
-│ │   Simulation          │ Agent Positions:                │ │
-│ │   Visualization       │  Agent 0: (45.2, 67.8)         │ │
-│ │                       │  Agent 1: (23.1, 89.4)         │ │
-│ │   [Plume Heatmap]     │  ...                           │ │
-│ │   [Agent Positions]   │                                │ │
-│ │   [Trajectories]      │ Sensor Readings:               │ │
-│ │                       │  Concentration: [0.23, 0.45...] │ │
-│ │                       │  Gradient: [(0.1, 0.2), ...]   │ │
-│ │                       │                                │ │
-│ └───────────────────────┴─────────────────────────────────┤ │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ Performance Monitor                              [Real-time]│ │
-│ │ ┌─[Step Latency]──┐ ┌─[Memory Usage]──┐ ┌─[FPS]────────┐│ │
-│ │ │    ▁▃▅▇▅▃▁      │ │  ▁▂▃▄▅▆▇█▇▆▅   │ │ ▇▇▇▇▇▇▇▇▇▇ ││ │
-│ │ │ 28.5ms          │ │ 512MB          │ │ 32.5       ││ │
-│ │ └─────────────────┘ └─────────────────┘ └──────────────┘│ │
-│ └─────────────────────────────────────────────────────────┘ │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ Controls:                                                │ │
-│ │ [▶ Play] [⏸ Pause] [⏭ Step] [⏮ Back] [⏹ Stop]         │ │
-│ │ Speed: [────────|─] 1.0x  Breakpoint: [Set] [Clear]     │ │
-│ └─────────────────────────────────────────────────────────┘ │
-│ Status: Running | Frame: 1234/5000 | Session: debug_42      │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### 7.2.2.2 Streamlit Web Interface
-
-The Streamlit interface enables remote access and collaborative debugging sessions:
-
-```html
-<!-- Streamlit Dashboard Layout Structure -->
-┌─────────────────────────────────────────────────────────────┐
-│ 🧭 Plume Navigation Debug Dashboard                         │
-├─────────────────────────────────────────────────────────────┤
-│ ┌─── Sidebar ────┐  ┌──── Main Content Area ─────────────┐ │
-│ │                │  │                                     │ │
-│ │ Session Info   │  │    📊 Real-time Visualization      │ │
-│ │ ─────────────  │  │  ┌─────────────────────────────┐  │ │
-│ │ ID: debug_42   │  │  │                             │  │ │
-│ │ Episode: 42    │  │  │   [Plotly Interactive]     │  │ │
-│ │ Step: 1234     │  │  │   [Plume + Agents Plot]    │  │ │
-│ │                │  │  │                             │  │ │
-│ │ Controls       │  │  └─────────────────────────────┘  │ │
-│ │ ─────────────  │  │                                     │ │
-│ │ ▶ Play         │  │    📈 Performance Metrics          │ │
-│ │ ⏸ Pause        │  │  ┌─────────────────────────────┐  │ │
-│ │ ⏭ Step Forward │  │  │ • Step Latency: 28.5ms ✅   │  │ │
-│ │                │  │  │ • FPS: 32.5 ✅              │  │ │
-│ │ Breakpoints    │  │  │ • Memory: 512MB/2GB ✅      │  │ │
-│ │ ─────────────  │  │  │ • Cache Hit: 95.2% ✅       │  │ │
-│ │ □ On Source    │  │  └─────────────────────────────┘  │ │
-│ │ □ On Boundary  │  │                                     │ │
-│ │ □ Custom...    │  │    🔍 State Inspector              │ │
-│ │                │  │  ┌─────────────────────────────┐  │ │
-│ │ Export         │  │  │ > Agent States              │  │ │
-│ │ ─────────────  │  │  │ > Sensor Readings           │  │ │
-│ │ 💾 Save State  │  │  │ > Environment State         │  │ │
-│ │ 📊 Export Data │  │  │ > Performance History       │  │ │
-│ │                │  │  └─────────────────────────────┘  │ │
-│ └────────────────┘  └─────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 7.2.3 Terminal Monitoring Interface
-
-The rich console interface provides real-time monitoring for long-running simulations:
-
-```
-╔═══════════════════════════════════════════════════════════════╗
-║             Plume Navigation Simulation v1.0.0                 ║
-╠═══════════════════════════════════════════════════════════════╣
-║ Episode: 42/100 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 42%     ║
-║                                                                ║
-║ Performance Metrics:                                           ║
-║ ├─ Step Latency: 28.5ms [✓]                                   ║
-║ ├─ FPS: 32.5 [✓]                                              ║
-║ ├─ Memory: 512MB/2GB [✓]                                      ║
-║ └─ Cache Hit Rate: 95.2% [✓]                                  ║
-║                                                                ║
-║ Simulation Status:                                             ║
-║ ├─ Agents: 100 active                                         ║
-║ ├─ Environment: gaussian_plume                                ║
-║ ├─ Wind: turbulent_field                                      ║
-║ └─ Recording: parquet [active]                                ║
-║                                                                ║
-║ Recent Events:                                                 ║
-║ [14:23:45] Agent 42 found source                              ║
-║ [14:23:44] Performance optimization triggered                  ║
-║ [14:23:43] Episode 41 completed (success rate: 85%)          ║
-║                                                                ║
-║ Controls: [Q]uit | [P]ause | [S]tats | [H]elp               ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-
-## 7.3 UI BACKEND INTEGRATION
-
-### 7.3.1 Communication Architecture
-
-The UI systems integrate with the simulation backend through well-defined protocol interfaces that maintain performance guarantees while enabling rich interactive experiences.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant CLI
-    participant Hydra
-    participant Core
-    participant Backend
-    
-    User->>CLI: plume-nav-sim run
-    CLI->>Hydra: Load Configuration
-    Hydra->>CLI: Validated DictConfig
-    CLI->>Core: create_navigator()
-    Core->>Backend: Initialize Protocol Components
-    Backend-->>CLI: Status Updates via Async Queue
-    CLI-->>User: Rich Console Progress Display
-    
-    Note over User,Backend: Debug GUI follows similar pattern with Qt/Streamlit
-```
-
-### 7.3.2 Debug GUI Protocol Interface
-
-```python
-# Protocol Interface for UI/Backend Communication
-@dataclass
-class DebugConfig:
-    """Debug GUI configuration schema"""
-    backend: Literal["qt", "streamlit", "console"] = "qt"
-    window_size: Tuple[int, int] = (1200, 800)
-    refresh_rate_ms: int = 33
-    theme: Literal["light", "dark", "auto"] = "auto"
-    enable_profiling: bool = True
-    export_format: Literal["json", "csv", "hdf5"] = "json"
-    max_history_steps: int = 1000
-    performance_targets: Dict[str, float] = field(default_factory=lambda: {
-        "step_latency_ms": 33.0,
-        "memory_usage_mb": 2048.0,
-        "fps": 30.0
-    })
-
-class DebugGUIProtocol:
-    """Defines UI/Backend communication contract"""
-    
-    def update_state(self, state: Dict[str, Any]) -> None:
-        """Push state updates to UI with performance monitoring"""
-        
-    def handle_command(self, command: str, args: Dict) -> Any:
-        """Process UI commands with async execution"""
-        
-    def stream_metrics(self) -> Iterator[PerformanceMetrics]:
-        """Stream performance data to UI at 30Hz refresh rate"""
-```
-
-### 7.3.3 Visualization Data Schemas
-
-```python
-# Comprehensive Visualization Configuration Schema
-VisualizationSchema = {
-    "figure": {
-        "size": (10, 8),      # inches for publication quality
-        "dpi": 100,           # dots per inch
-        "backend": "Agg"      # matplotlib backend selection
-    },
-    "animation": {
-        "fps": 30,            # frames per second
-        "interval_ms": 33,    # milliseconds between frames
-        "blit": True,         # optimize with blitting
-        "repeat": True        # loop animation
-    },
-    "plume_display": {
-        "colormap": "viridis", # perceptually uniform colormap
-        "alpha": 0.7,         # transparency for overlay
-        "vmin": 0.0,          # minimum concentration value
-        "vmax": "auto"        # automatic maximum scaling
-    },
-    "agent_display": {
-        "marker": "o",         # circle markers for agents
-        "size": 50,           # marker size in points
-        "color": "red",       # active agent color
-        "trajectory_color": "blue",    # path visualization
-        "trajectory_alpha": 0.5       # trajectory transparency
-    }
-}
-```
-
-## 7.4 USER INTERACTION PATTERNS
-
-### 7.4.1 CLI Interaction Workflows
-
-The command-line interface supports both simple operations and complex parameter sweeps through Hydra's configuration system:
-
-```bash
-# Progressive complexity examples:
-
-##### 1. Basic execution with defaults
-$ plume-nav-sim run
-
-##### 2. Configuration file specification
-$ plume-nav-sim run --config experiments/baseline.yaml
-
-##### 3. Runtime parameter override
-$ plume-nav-sim run navigator.max_speed=2.0 plume_model=gaussian
-
-##### 4. Multi-run parameter sweeps
-$ plume-nav-sim run --multirun seed=range(0,10) agent_count=10,50,100
-
-##### 5. Interactive configuration mode
-$ plume-nav-sim config validate --interactive
-? Select plume model: (Use arrow keys)
-  > gaussian
-    turbulent
-    video_based
-
-##### 6. Reinforcement learning training
-$ plume-nav-sim train algorithm PPO --env-config envs/training.yaml \
-    --timesteps 1000000 --tensorboard-log ./logs
-```
-
-### 7.4.2 Debug GUI Interaction Design
-
-#### 7.4.2.1 Mouse Interactions
-
-```python
-# Comprehensive Mouse Interaction Mapping
-MOUSE_ACTIONS = {
-    "left_click": "Select agent or simulation point for inspection",
-    "right_click": "Open contextual menu with analysis options", 
-    "drag": "Pan visualization viewport smoothly",
-    "scroll": "Zoom in/out with center-point preservation",
-    "double_click": "Center viewport on clicked point",
-    "ctrl+click": "Multi-select agents for comparison",
-    "shift+drag": "Rectangle selection of multiple agents"
-}
-```
-
-#### 7.4.2.2 Keyboard Shortcuts
-
-```python
-# Professional Keyboard Shortcut Mapping
-KEYBOARD_SHORTCUTS = {
-    # Simulation Control
-    "Space": "Toggle play/pause simulation state",
-    "S": "Step forward one simulation frame",
-    "B": "Step backward one frame (if history available)",
-    "R": "Reset simulation to initial state",
-    "F": "Toggle fullscreen visualization mode",
-    
-    # Display Options
-    "G": "Toggle coordinate grid overlay",
-    "T": "Toggle agent trajectory display",
-    "P": "Toggle performance metrics overlay",
-    "V": "Cycle through visualization color schemes",
-    "H": "Toggle help overlay with shortcuts",
-    
-    # Data Operations
-    "Ctrl+S": "Save current simulation state",
-    "Ctrl+E": "Export current visualization frame",
-    "Ctrl+R": "Start/stop session recording",
-    "F1": "Display comprehensive help documentation"
-}
-```
-
-#### 7.4.2.3 Breakpoint System
-
-```python
-# Advanced Breakpoint Configuration
-BREAKPOINT_TYPES = {
-    "position": {
-        "description": "Break when agent reaches specified coordinates",
-        "parameters": ["x", "y", "tolerance_radius"],
-        "validation": "coordinate_bounds_check"
-    },
-    "source_detection": {
-        "description": "Break immediately upon source detection",
-        "parameters": ["detection_threshold", "confirmation_steps"],
-        "validation": "concentration_threshold_valid"
-    },
-    "boundary_contact": {
-        "description": "Break on any boundary collision event",
-        "parameters": ["boundary_type", "contact_distance"],
-        "validation": "boundary_policy_compatibility"
-    },
-    "performance": {
-        "description": "Break when performance metrics exceed thresholds",
-        "parameters": ["metric_type", "threshold", "duration"],
-        "validation": "performance_target_range"
-    },
-    "custom": {
-        "description": "User-defined Python expression evaluation",
-        "parameters": ["expression", "evaluation_context"],
-        "validation": "python_expression_safety"
-    }
-}
-```
-
-### 7.4.3 Streamlit Web Interface Interactions
-
-```python
-# Streamlit Interactive Widget Configuration
-def configure_streamlit_interface():
-    """Configure Streamlit web interface with comprehensive controls"""
-    
-    # Sidebar controls
-    st.sidebar.header("Simulation Controls")
-    
-    # Play/Pause state management
-    session_state = st.session_state
-    if st.sidebar.button("▶ Play" if session_state.paused else "⏸ Pause"):
-        session_state.simulation.toggle_pause()
-    
-    # Step-by-step navigation
-    col1, col2 = st.sidebar.columns(2)
-    if col1.button("⏮ Previous"):
-        session_state.simulation.step_backward()
-    if col2.button("⏭ Next"):
-        session_state.simulation.step_forward()
-    
-    # Speed control with validation
-    speed = st.sidebar.slider(
-        "Playback Speed",
-        min_value=0.1,
-        max_value=5.0,
-        value=1.0,
-        step=0.1,
-        help="Simulation speed multiplier"
-    )
-    
-    # Visualization options with state persistence
-    st.sidebar.subheader("Display Options")
-    display_options = {
-        "show_trajectories": st.sidebar.checkbox("Agent Trajectories", True),
-        "show_plume": st.sidebar.checkbox("Plume Visualization", True),
-        "show_wind": st.sidebar.checkbox("Wind Vectors", False),
-        "show_grid": st.sidebar.checkbox("Coordinate Grid", True),
-        "show_performance": st.sidebar.checkbox("Performance Overlay", False)
-    }
-    
-    # Agent selection and tracking
-    selected_agent = st.selectbox(
-        "Track Specific Agent",
-        options=range(session_state.simulation.agent_count),
-        format_func=lambda x: f"Agent {x}",
-        help="Center visualization on selected agent"
-    )
-    
-    return display_options, selected_agent, speed
-```
-
-## 7.5 VISUAL DESIGN PRINCIPLES
-
-### 7.5.1 Scientific Visualization Color Schemes
-
-The system implements research-grade color schemes optimized for scientific accuracy and accessibility:
-
-```python
-# Research-Grade Color Palette Configuration
-COLOR_SCHEMES = {
-    "plume_visualization": {
-        "primary_colormap": "viridis",    # Perceptually uniform
-        "secondary_colormap": "plasma",   # Alternative for comparison
-        "bad_color": "#808080",          # Invalid/missing data (gray)
-        "under_color": "#FFFFFF",        # Below threshold (white)
-        "over_color": "#FF0000",         # Above threshold (red)
-        "transparency_alpha": 0.7        # Overlay transparency
-    },
-    "agent_representation": {
-        "active_agent": "#FF4B4B",       # Bright red for visibility
-        "terminated_agent": "#808080",   # Gray for inactive
-        "selected_agent": "#FFD700",     # Gold for selection highlight
-        "trajectory_color": "#0068C9",   # Blue for path history
-        "trajectory_alpha": 0.5          # Path transparency
-    },
-    "performance_indicators": {
-        "excellent": "#28A745",          # Green for optimal performance
-        "good": "#17A2B8",              # Cyan for acceptable
-        "warning": "#FFC107",           # Amber for attention needed
-        "critical": "#DC3545",          # Red for immediate action
-        "unknown": "#6C757D"            # Gray for undefined state
-    },
-    "interface_themes": {
-        "light_mode": {
-            "background": "#FFFFFF",     # Pure white background
-            "foreground": "#000000",     # Black text for contrast
-            "grid_lines": "#E0E0E0",     # Light gray grid
-            "panel_border": "#CCCCCC"    # Medium gray borders
-        },
-        "dark_mode": {
-            "background": "#1E1E1E",     # Dark gray background
-            "foreground": "#FFFFFF",     # White text for contrast
-            "grid_lines": "#404040",     # Medium gray grid
-            "panel_border": "#666666"    # Light gray borders
-        }
-    }
-}
-```
-
-### 7.5.2 Layout Design Principles
-
-```yaml
-# Professional UI Layout Guidelines
-layout_principles:
-  responsive_design:
-    minimum_resolution: "800x600"     # Minimum supported display
-    optimal_resolution: "1200x800"    # Recommended for full features
-    maximum_resolution: "1920x1080"   # Maximum tested resolution
-    scaling_strategy: "proportional"   # Maintain aspect ratios
-    
-  information_hierarchy:
-    level_1_primary: "Real-time simulation visualization"
-    level_2_secondary: "Performance metrics and status"
-    level_3_tertiary: "Detailed state inspection data"
-    level_4_quaternary: "Configuration and control interfaces"
-    
-  spacing_standards:
-    component_padding: "8px"          # Internal component spacing
-    section_margin: "16px"            # Between major sections
-    panel_gap: "4px"                  # Between related panels
-    button_spacing: "2px"             # Between action buttons
-    
-  accessibility_compliance:
-    - "High contrast mode support"
-    - "Keyboard-only navigation capability"
-    - "Screen reader compatibility (CLI focus)"
-    - "Colorblind-friendly palette options"
-    - "Scalable font size configuration"
-```
-
-### 7.5.3 Performance Visualization Standards
-
-```python
-# Real-time Performance Indicator Configuration
-PERFORMANCE_INDICATORS = {
-    "sparkline_charts": {
-        "width_pixels": 100,          # Compact horizontal space
-        "height_pixels": 30,          # Single-line height
-        "sample_count": 60,           # One minute at 1Hz sampling
-        "update_frequency": "1Hz",    # Refresh rate
-        "smoothing": "moving_average" # Noise reduction
-    },
-    "gauge_displays": {
-        "style": "arc",               # Semi-circular arc style
-        "range_indicators": {
-            "optimal": (0, 33),       # Green zone (0-33% of max)
-            "acceptable": (33, 66),   # Yellow zone (33-66% of max)
-            "warning": (66, 90),      # Orange zone (66-90% of max)
-            "critical": (90, 100)     # Red zone (90-100% of max)
-        },
-        "animation": "smooth_transition"  # Smooth value changes
-    },
-    "status_iconography": {
-        "✓": "Performance within target parameters",
-        "⚠": "Performance approaching warning threshold", 
-        "✗": "Performance violating critical threshold",
-        "◐": "System actively optimizing performance",
-        "⟳": "Performance data updating/loading"
-    }
-}
-```
-
-### 7.5.4 Animation Quality Configuration
-
-```python
-# Multi-tier Animation Quality Settings
-ANIMATION_QUALITY_TIERS = {
-    "draft_mode": {
-        "fps": 15,                    # Reduced frame rate
-        "resolution": (640, 480),     # SD resolution
-        "antialiasing": False,        # Disable AA for speed
-        "compression": "high",        # Prioritize file size
-        "use_case": "rapid_prototyping"
-    },
-    "preview_mode": {
-        "fps": 30,                    # Standard frame rate
-        "resolution": (1280, 720),    # HD resolution
-        "antialiasing": True,         # Enable AA for quality
-        "compression": "medium",      # Balance size/quality
-        "use_case": "interactive_debugging"
-    },
-    "publication_mode": {
-        "fps": 60,                    # High frame rate
-        "resolution": (1920, 1080),   # Full HD resolution
-        "antialiasing": True,         # Maximum quality
-        "compression": "lossless",    # Preserve all detail
-        "use_case": "research_publication"
-    }
-}
-```
-
-## 7.6 VISUAL DESIGN SYMBOL KEY
-
-### 7.6.1 Interface Element Symbols
-
-```
-Terminal UI Box Drawing Characters:
-═ ║ ╔ ╗ ╚ ╝ ╠ ╣ ╦ ╩ ╬    : Primary box drawing for main panels
-─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼    : Secondary box drawing for nested elements
-━ ┃ ┏ ┓ ┗ ┛ ┣ ┫ ┳ ┻ ╋    : Heavy box drawing for emphasis
-
-Data Representation Symbols:
-░ ▒ ▓ █                    : Shade blocks for heatmap concentration levels
-▁ ▂ ▃ ▄ ▅ ▆ ▇ █           : Vertical bars for sparkline data visualization
-▏ ▎ ▍ ▌ ▋ ▊ ▉ █           : Horizontal bars for progress indicators
-
-Media Control Symbols:
-▶ ⏸ ⏭ ⏮ ⏹ ⏺ ⏯          : Standard media control buttons
-⏩ ⏪ ⏫ ⏬                : Fast forward/rewind and speed controls
-
-Agent and Object Markers:
-● ○ ◉ ◐ ◑ ◒ ◓ ◔ ◕       : Circle variants for agents, sources, waypoints
-■ □ ▢ ▣ ▤ ▥ ▦ ▧ ▨ ▩     : Square variants for boundaries, obstacles
-▲ △ ▼ ▽ ◆ ◇ ★ ☆         : Geometric shapes for special markers
-
-Directional Indicators:
-→ ← ↑ ↓ ↗ ↖ ↘ ↙         : Basic directional arrows
-⇒ ⇐ ⇑ ⇓ ⇗ ⇖ ⇘ ⇙         : Heavy directional arrows for emphasis
-➤ ➜ ➨ ➪ ➫ ➬ ➭ ➮       : Curved and styled arrows for flow
-
-Status and Action Indicators:
-✓ ✗ ⚠ ❌ ❓ ❗ ⭐         : Status symbols for states and alerts
-📊 📈 📉 🔍 💾 ⚙ 🔧     : Action icons for functions and tools
-🎯 🚀 ⏱ 🔄 📋 📁 💡    : Context-specific action indicators
-```
-
-### 7.6.2 Performance and Layout Markers
-
-```
-Progress and Loading Indicators:
-━━━━━━━━━━                 : Filled progress bar sections
-────────────               : Empty progress bar sections  
-│████████│                 : Progress bar with borders
-[████████────]            : Bracketed progress with percentage
-
-Interactive Element Markers:
-[Button] (Option) {Menu}   : Different interaction element types
-<Input> |Slider| ⟨Select⟩  : Form control representations
-[✓] [ ] [?]               : Checkbox states (checked/unchecked/indeterminate)
-( ) (●) (○)               : Radio button states
-
-Window and Panel Structure:
-┌─ Title ─┐                : Panel title bars
-│ Content │                : Panel content areas
-├─ Section ─┤              : Internal section dividers
-└─────────┘                : Panel closing borders
-
-Hierarchy and Organization:
-├─ Item                    : Tree structure branches
-│  ├─ Sub-item            : Nested tree items
-│  └─ Last sub-item       : Terminal tree branches
-└─ Final item             : Tree structure termination
-```
-
-### 7.6.3 Data Visualization Legend
-
-```
-Concentration Heatmap Scale:
-████ : Maximum concentration (1.0 relative units)
-▓▓▓▓ : High concentration (0.75-1.0)
-▒▒▒▒ : Medium concentration (0.5-0.75) 
-░░░░ : Low concentration (0.25-0.5)
-.... : Trace concentration (0.0-0.25)
-
-Agent State Indicators:
-● : Active agent (current position)
-○ : Inactive/terminated agent
-◉ : Source location marker
-◐ : Agent currently sensing
-⟲ : Agent in motion (animated)
-
-Performance Status Colors:
-🟢 : Optimal performance (green)
-🟡 : Acceptable performance (yellow)
-🟠 : Warning threshold (orange)  
-🔴 : Critical performance (red)
-⚫ : Unknown/undefined state (black)
-```
-
-## 7.7 REFERENCES
-
-#### Files and Components Examined:
-- Configuration schemas from `conf/` directory structure
-- CLI implementation using Click framework in main modules
-- Debug GUI protocol interfaces for Qt and Streamlit backends
-- Visualization system integration with Matplotlib and animation frameworks
-- Performance monitoring systems with real-time metrics collection
-- Terminal UI implementation using Rich console library for progress display
-- Streamlit web interface components for remote debugging access
-- Protocol-based UI backend communication architecture
-- Color scheme and accessibility configuration systems
-
-#### External Dependencies Referenced:
-- Click Framework (≥8.2.1) for command-line interface construction
-- PySide6/Qt (≥6.9.0) for native desktop GUI implementation  
-- Streamlit (≥1.46.0) for web-based debugging interface
-- Matplotlib (≥3.7.0) for scientific visualization and animation
-- Rich console library for terminal user interface enhancement
-- Hydra configuration system (1.3.*) for hierarchical UI configuration
-
-# 8. INFRASTRUCTURE
-
-## 8.1 INFRASTRUCTURE ASSESSMENT
-
-### 8.1.1 System Classification
-
-**Detailed Infrastructure Architecture is not applicable for this system.** The Plume Navigation Simulation (plume_nav_sim v1.0.0) is a standalone Python research library and toolkit designed for local execution and high-performance computing environments, not a deployed web application or service requiring traditional infrastructure components.
-
-The system operates as:
-- **Python Package Library**: Distributed via PyPI for pip installation
-- **Research Simulation Toolkit**: Designed for local execution by researchers and scientists
-- **Single-Process Application**: Monolithic architecture optimized for simulation performance
-- **Academic Research Tool**: Focused on algorithm development and validation
-
-### 8.1.2 Infrastructure Scope Justification
-
-Traditional infrastructure components are not required because:
-
-- **No Server Deployment**: The system runs locally on researcher workstations or HPC clusters
-- **No Web Services**: No HTTP endpoints, REST APIs, or web interfaces requiring hosting
-- **No External Dependencies**: Core functionality operates independently without cloud services
-- **No Persistent Services**: Simulations are batch jobs that start, execute, and terminate
-- **No Network Services**: Communication occurs through local file systems and process interfaces
-- **No Multi-User Deployment**: Each researcher runs their own isolated instance
-
-## 8.2 BUILD AND DISTRIBUTION INFRASTRUCTURE
-
-### 8.2.1 Package Management and Build System
-
-#### Poetry-Based Build System
-
-The system utilizes **Poetry (poetry-core ≥1.8.0)** as the primary build and dependency management system:
-
-| Component | Version | Purpose | Configuration |
-|---|---|---|---|
-| poetry-core | ≥1.8.0 | Build backend | pyproject.toml |
-| Python | ≥3.10,<4.0 | Runtime requirement | Cross-platform |
-| Package Version | 1.0.0 | Release version | Semantic versioning |
-| Console Scripts | plume-nav-sim, plume-nav-train | Entry points | Auto-generated |
-
-#### Traditional Python Packaging Support
-
-**Compatible Distribution Methods**:
-- **setuptools (≥42)**: Package distribution and installation compatibility
-- **wheel**: Built distribution format for efficient installation across platforms
-- **pip**: Standard package installation for end users
-
-#### Distribution Pipeline
-
-```mermaid
-graph TD
-    A[Source Code] --> B[Poetry Build]
-    B --> C[Wheel Distribution]
-    B --> D[Source Distribution]
-    C --> E[PyPI Repository]
-    D --> E
-    E --> F[pip install plume-nav-sim]
-    F --> G[Local Installation]
-    
-    H[GitHub Release] --> I[Automated PyPI Upload]
-    I --> E
-```
-
-### 8.2.2 Development Environment Requirements
-
-#### Minimal System Requirements
-
-| Resource | Minimum | Recommended | Purpose |
-|---|---|---|---|
-| Memory | 2GB | 8GB | Agent simulation capacity |
-| CPU | Single-core | Multi-core | Vectorized operations |
-| Storage | 1GB | 10GB | Simulation data storage |
-| Python | 3.10 | 3.11+ | Runtime environment |
-
-#### Development Setup
-
-**Local Development Environment**:
-- Virtual environment isolation (Poetry, venv, or conda)
-- Git for version control
-- IDE with Python support
-- Optional: Docker for containerized development
-
-**High-Performance Computing Environment**:
-- SLURM job scheduler support (automatic detection)
-- Shared file systems for data storage
-- Module loading systems for Python environments
-- Batch job submission capabilities
-
-## 8.3 CI/CD PIPELINE
-
-### 8.3.1 Continuous Integration Architecture
-
-#### GitHub Actions Pipeline
-
-**Primary CI Workflow (ci.yml)**:
-
-```mermaid
-graph TD
-    A[Push/PR Trigger] --> B[Code Quality Gates]
-    B --> C[Security Audits]
-    C --> D[Test Suite Execution]
-    D --> E[Performance Benchmarks]
-    E --> F[Docker Validation]
-    F --> G[Integration Tests]
-    G --> H[Build Validation]
-    H --> I[Artifact Generation]
-    
-    J[Pre-commit Hooks] --> K[Black Formatting]
-    K --> L[isort Import Sorting]
-    L --> M[Ruff Linting]
-    M --> N[MyPy Type Checking]
-    
-    B --> J
-```
-
-**Pipeline Specifications**:
-
-| Stage | Tools | Success Criteria | Performance SLA |
-|---|---|---|---|
-| Code Quality | Pre-commit, Black, isort, ruff, mypy | All checks pass | <5 minutes |
-| Security | Safety, license validation | No vulnerabilities | <2 minutes |
-| Testing | pytest, coverage | ≥70% overall, ≥80% new code | <10 minutes |
-| Performance | Custom benchmarks | ≤33ms step time, ≥30 FPS | <5 minutes |
-| Integration | Cross-repository tests | All scenarios pass | <15 minutes |
-
-#### Cross-Repository Integration Testing
-
-**Integration Test Matrix**:
-- **Trigger Schedule**: Push/PR, nightly cron (02:00 UTC), manual dispatch
-- **Python Versions**: 3.10, 3.11
-- **Architecture Modes**: Multiple configuration modes
-- **External Integration**: place_mem_rl repository compatibility
-- **Performance Validation**: Latency, FPS, memory usage benchmarks
-
-### 8.3.2 Build and Release Pipeline
-
-#### Automated Build Process
-
-**Build Triggers**:
-- Version tag creation in Git repository
-- Manual release dispatch
-- Scheduled nightly builds for development branches
-
-**Build Steps**:
-1. **Environment Setup**: Ubuntu-latest runners with Python matrix
-2. **Dependency Installation**: Poetry dependency resolution and installation
-3. **Quality Validation**: Complete CI pipeline execution
-4. **Package Building**: Poetry build with wheel and source distribution generation
-5. **Artifact Validation**: Installation testing and import verification
-6. **Release Preparation**: Changelog generation and version validation
-
-#### Release Management
-
-**Release Strategy**:
-- **Semantic Versioning**: Major.Minor.Patch version scheme
-- **GitHub Releases**: Tagged releases with changelog and artifacts
-- **PyPI Distribution**: Automated upload to Python Package Index
-- **Documentation**: Automatic documentation updates on ReadTheDocs
-
-## 8.4 DATA STORAGE AND PERSISTENCE
-
-### 8.4.1 Local Storage Architecture
-
-#### File-Based Storage Solutions
-
-The system implements a comprehensive file-based storage strategy optimized for research workflows:
-
-| Storage Type | Technology | Use Case | Performance |
-|---|---|---|---|
-| Metadata | SQLite | Experiment indexing | Embedded, zero-config |
-| Scientific Data | HDF5 | Large numerical datasets | High-performance I/O |
-| Analytics Data | Parquet | Columnar analytics | Compressed, fast queries |
-| Configuration | YAML/JSON | Human-readable settings | Git-friendly formats |
-
-#### Caching Infrastructure
-
-**Frame Cache Subsystem**:
-```mermaid
-graph LR
-    A[Video Source] --> B[Frame Cache]
-    B --> C[LRU Mode]
-    B --> D[Preload Mode]
-    B --> E[No-Cache Mode]
-    
-    F[Memory Monitor] --> G[Automatic Fallback]
-    G --> B
-    
-    C --> H[Agent Sampling]
-    D --> H
-    E --> H
-```
-
-**Cache Performance Specifications**:
-- **LRU Mode**: Memory-efficient with automatic eviction
-- **Preload Mode**: Maximum performance for repeated access
-- **No-Cache Mode**: Zero memory overhead for large datasets
-- **Performance Target**: ≤33ms step latency maintenance
-- **Memory Management**: Automatic pressure detection and fallback
-
-### 8.4.2 Data Recording Infrastructure
-
-#### Asynchronous Recording Architecture
-
-**Recording Pipeline**:
-- **Asynchronous I/O**: Non-blocking write operations to prevent simulation bottlenecks
-- **Multiple Backends**: Parquet, HDF5, and SQLite output formats
-- **Batch Processing**: Efficient bulk data operations
-- **Error Handling**: Graceful degradation with data integrity preservation
-
-## 8.5 MONITORING AND OBSERVABILITY
-
-### 8.5.1 Logging Infrastructure
-
-#### Loguru-Based Structured Logging
-
-**Dual-Sink Architecture**:
-```mermaid
-graph TD
-    A[Application Events] --> B[Loguru Router]
-    B --> C[Console Sink]
-    B --> D[JSON File Sink]
-    
-    E[Correlation ID] --> F[Request Tracking]
-    F --> B
-    
-    G[Performance Metrics] --> H[Metric Collection]
-    H --> B
-```
-
-**Environment-Specific Configuration**:
-
-| Environment | Console Output | File Output | Retention |
-|---|---|---|---|
-| Development | Colored, formatted | Optional JSON | 7 days |
-| CI/CD | Minimal | ${GITHUB_WORKSPACE}/logs/ | Build lifecycle |
-| HPC | Structured | ${SLURM_SUBMIT_DIR}/ | Job lifecycle |
-| Production | JSON structured | Configurable path | 30 days |
-
-#### Performance Monitoring
-
-**Built-in Metrics Collection**:
-- **Simulation Step Latency**: Real-time performance tracking
-- **Memory Usage**: Automatic memory pressure detection
-- **Agent Performance**: Per-agent and aggregate statistics
-- **I/O Performance**: Data recording and loading benchmarks
-- **Cache Efficiency**: Hit rates and memory utilization
-
-### 8.5.2 Optional External Monitoring
-
-#### Experiment Tracking Integration
-
-**TensorBoard Integration**:
-- Environment variable: `TENSORBOARD_LOG_DIR`
-- Automatic metric logging for experiment visualization
-- Performance trend analysis and comparison
-
-**Weights & Biases Integration**:
-- Environment variable: `WANDB_PROJECT`
-- Advanced experiment tracking and collaboration
-- Hyperparameter optimization integration
-
-## 8.6 DEPLOYMENT WORKFLOW
-
-### 8.6.1 Installation and Distribution
-
-#### End-User Installation Process
-
-```mermaid
-graph TD
-    A[pip install plume-nav-sim] --> B[PyPI Download]
-    B --> C[Dependency Resolution]
-    C --> D[Package Installation]
-    D --> E[Console Script Registration]
-    E --> F[Ready for Use]
-    
-    G[Research Workflow] --> H[Local Execution]
-    H --> I[Data Generation]
-    I --> J[Analysis and Visualization]
-```
-
-#### Alternative Installation Methods
-
-**Development Installation**:
-```bash
-git clone <repository>
-cd plume-nav-sim
-poetry install --with dev,test,docs
-```
-
-**HPC Environment**:
-```bash
-module load python/3.11
-pip install --user plume-nav-sim
-```
-
-**Containerized Environment**:
-```bash
-docker pull <container-registry>/plume-nav-sim:latest
-docker run -v $(pwd):/workspace plume-nav-sim:latest
-```
-
-### 8.6.2 Environment Promotion
-
-#### Development to Production Workflow
-
-**Research Environment Progression**:
-1. **Local Development**: Individual researcher workstations
-2. **Collaborative Testing**: Shared development environments
-3. **HPC Validation**: High-performance computing cluster testing
-4. **Production Research**: Formal experiment execution environments
-
-**Configuration Management**:
-- **Hydra Configuration**: Hierarchical configuration composition
-- **Environment Variables**: Runtime configuration override
-- **Version Pinning**: Reproducible environment specification
-- **Documentation**: Environment setup and usage guidelines
-
-## 8.7 COST ANALYSIS
-
-### 8.7.1 Infrastructure Cost Breakdown
-
-#### Zero-Cost Infrastructure Model
-
-| Component | Provider | Cost | Justification |
-|---|---|---|---|
-| Development | Local machines | $0 | Researcher-owned hardware |
-| CI/CD | GitHub Actions | $0 | Free tier sufficient |
-| Documentation | ReadTheDocs | $0 | Open source project |
-| Distribution | PyPI | $0 | Free package hosting |
-| Version Control | GitHub | $0 | Public repository |
-
-#### Optional Service Costs
-
-| Service | Pricing Model | Estimated Cost | Use Case |
-|---|---|---|---|
-| TensorBoard | Self-hosted | $0 | Local experiment tracking |
-| Weights & Biases | Freemium/Paid | $0-$50/user/month | Advanced collaboration |
-| Cloud Storage | Pay-per-use | $0.01-$0.10/GB/month | Large dataset storage |
-| HPC Resources | Institutional | Variable | High-performance computing |
-
-### 8.7.2 Cost Optimization Strategy
-
-**Resource Efficiency**:
-- **Local-First Architecture**: Minimize external service dependencies
-- **Efficient Algorithms**: Vectorized operations reduce computational requirements
-- **Smart Caching**: Memory-efficient data access patterns
-- **Asynchronous I/O**: Prevent resource blocking and improve utilization
-
-## 8.8 SECURITY AND COMPLIANCE
-
-### 8.8.1 Security Infrastructure
-
-#### Code Security Pipeline
-
-**Automated Security Scanning**:
-- **Safety**: Python package vulnerability scanning
-- **License Validation**: Open source license compliance
-- **Dependency Auditing**: Regular security update checks
-- **Code Quality**: Static analysis security patterns
-
-#### Data Security
-
-**Local Data Protection**:
-- **File System Permissions**: Standard OS-level access controls
-- **No Network Transmission**: Data remains on local/institutional systems
-- **Encryption**: Optional file-level encryption for sensitive data
-- **Access Control**: User-managed access through file system permissions
-
-### 8.8.2 Compliance Considerations
-
-#### Academic and Research Compliance
-
-**Open Source Compliance**:
-- **MIT License**: Permissive licensing for research use
-- **Dependency Auditing**: All dependencies reviewed for license compatibility
-- **Attribution Requirements**: Clear citation and attribution guidelines
-
-**Data Handling Compliance**:
-- **Local Processing**: No data transmission to external services
-- **Researcher Control**: Complete data ownership and management
-- **Audit Trail**: Comprehensive logging for research reproducibility
-
-## 8.9 INFRASTRUCTURE DIAGRAMS
-
-### 8.9.1 Build and Distribution Architecture
-
-```mermaid
-graph TB
-    subgraph "Development Environment"
-        A[Developer Workstation]
-        B[Local Git Repository]
-        C[Poetry Environment]
+    subgraph "Test Data Management"
+        K[Temp Directories]
+        L[Mock Video Files]
+        M[Config Templates]
+        N[Fixture Data]
+        O[Random Seeds]
     end
     
     subgraph "CI/CD Pipeline"
-        D[GitHub Actions]
-        E[Code Quality Gates]
-        F[Test Execution]
-        G[Build Validation]
+        P[GitHub Actions]
+        Q[Test Matrix]
+        R[Coverage Reports]
+        S[Performance Artifacts]
+        T[Quality Gates]
     end
     
-    subgraph "Distribution Infrastructure"
-        H[PyPI Repository]
-        I[GitHub Releases]
-        J[Documentation Site]
+    subgraph "Mocking Layer"
+        U[Protocol Mocks]
+        V[Service Mocks]
+        W[File System Mocks]
+        X[Environment Mocks]
     end
     
-    subgraph "End User Environment"
-        K[Researcher Workstation]
-        L[HPC Cluster]
-        M[Container Environment]
-    end
+    A --> F
+    A --> G
+    A --> H
+    A --> I
+    A --> J
     
-    A --> B
-    B --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    G --> I
-    G --> J
+    B --> K
+    B --> L
+    B --> M
+    B --> N
+    B --> O
     
-    H --> K
-    H --> L
-    H --> M
+    C --> U
+    C --> V
+    C --> W
+    C --> X
+    
+    D --> I
+    E --> R
+    
+    F --> P
+    G --> P
+    H --> P
+    I --> P
+    J --> P
+    
+    P --> Q
+    Q --> R
+    Q --> S
+    Q --> T
+    
+    U --> F
+    U --> G
+    V --> H
+    W --> F
+    X --> I
 ```
 
-### 8.9.2 Data Flow and Storage Architecture
+#### 6.6.4.3 Test Data Flow
+
+```mermaid
+flowchart LR
+    subgraph "Input Generation"
+        A[Hypothesis Strategies]
+        B[Fixture Factories]
+        C[Config Generators]
+        D[Mock Providers]
+        E[Random Seed Control]
+    end
+    
+    subgraph "Test Execution"
+        F[Test Setup]
+        G[Test Run]
+        H[Assertions]
+        I[Teardown]
+        J[Resource Cleanup]
+    end
+    
+    subgraph "Result Collection"
+        K[Coverage Data]
+        L[Performance Metrics]
+        M[Test Logs]
+        N[Failure Details]
+        O[Memory Profiles]
+    end
+    
+    subgraph "Reporting & Analysis"
+        P[XML Reports]
+        Q[HTML Coverage]
+        R[JSON Metrics]
+        S[CI Artifacts]
+        T[Trend Analysis]
+    end
+    
+    A --> F
+    B --> F
+    C --> F
+    D --> F
+    E --> F
+    
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    
+    G --> K
+    G --> L
+    G --> M
+    H --> N
+    G --> O
+    
+    K --> P
+    K --> Q
+    L --> R
+    M --> S
+    N --> S
+    O --> T
+    
+    P --> S
+    Q --> S
+    R --> S
+    T --> S
+```
+
+### 6.6.5 OUTPUT FORMAT REQUIREMENTS
+
+#### 6.6.5.1 Test Requirements Matrix
+
+| Requirement | Test Type | Coverage | Tools | Priority |
+|-------------|-----------|----------|-------|----------|
+| Protocol Compliance | Unit | 100% | pytest, mock | Critical |
+| API Compatibility | Integration | 100% | gymnasium | Critical |
+| Performance SLAs | Benchmark | 95% | pytest-benchmark | High |
+| Configuration | Unit | 90% | Hydra, Pydantic | High |
+
+#### 6.6.5.2 Test Strategy Summary
+
+| Component | Strategy | Priority | Automation | Coverage Target |
+|-----------|----------|----------|------------|----------------|
+| Core Navigation | Property-based + Unit | High | Full CI | 90% |
+| Plume Models | Mathematical validation | High | Full CI | 85% |
+| RL Integration | E2E workflows | High | Nightly | 80% |
+| Visualization | Snapshot testing | Medium | PR only | 70% |
+
+#### 6.6.5.3 Testing Tools and Frameworks
+
+| Tool | Version | Purpose | Integration |
+|------|---------|---------|-------------|
+| pytest | ≥7.4.0 | Core testing framework | CI/CD pipeline |
+| pytest-cov | ≥4.1.0 | Coverage analysis | Quality gates |
+| pytest-benchmark | ≥4.0.0 | Performance testing | Nightly builds |
+| Hypothesis | Latest | Property-based testing | Unit tests |
+
+#### 6.6.5.4 Example Test Patterns
+
+#### Unit Test with Performance Monitoring
+
+```python
+@pytest.mark.unit
+@pytest.mark.benchmark
+def test_navigator_step_performance(benchmark, mock_navigator):
+    """Verify step execution meets performance SLA."""
+    plume = np.zeros((100, 100))
+    
+    def step_operation():
+        return mock_navigator.step(plume, action=[1.0, 0.0])
+    
+    result = benchmark(step_operation)
+    assert benchmark.stats['mean'] < 0.033  # 33ms threshold
+```
+
+#### Property-Based Test with Hypothesis
+
+```python
+@given(
+    position=arrays(np.float32, (2,), elements=st.floats(0, 100)),
+    orientation=st.floats(0, 360)
+)
+def test_navigator_position_invariants(position, orientation):
+    """Verify navigator maintains position constraints."""
+    navigator = Navigator.single(position, orientation)
+    new_state = navigator.step(plume, action=[1, 0])
+    assert 0 <= new_state['position'][0] <= 100
+    assert 0 <= new_state['position'][1] <= 100
+```
+
+#### Integration Test with Hydra Configuration
+
+```python
+@pytest.mark.integration
+def test_modular_component_switching(temp_config_dir):
+    """Verify runtime component swapping via configuration."""
+    with initialize(config_path=str(temp_config_dir)):
+        cfg = compose(config_name="config", 
+                     overrides=["plume_model=gaussian"])
+        env1 = PlumeNavigationEnv(cfg)
+        
+        cfg = compose(config_name="config", 
+                     overrides=["plume_model=turbulent"])
+        env2 = PlumeNavigationEnv(cfg)
+        
+        assert type(env1.plume_model).__name__ == "GaussianPlumeModel"
+        assert type(env2.plume_model).__name__ == "TurbulentPlumeModel"
+```
+
+#### References
+
+Files Examined:
+- `pyproject.toml` - Testing dependencies, pytest configuration, coverage settings
+- `.github/workflows/ci.yml` - CI/CD pipeline configuration and test automation
+
+Folders Explored:
+- `tests/` (depth: 1) - Comprehensive test suite organization
+- `tests/api/` (depth: 2) - API surface and compliance testing
+- `tests/integration/` (depth: 2) - End-to-end integration scenarios
+- `tests/core/` (depth: 2) - Core protocol and unit tests
+- `tests/models/` (depth: 2) - Model validation and benchmarks
+- `.github/workflows/` (depth: 2) - CI/CD automation workflows
+- `tests/conftest.py` - Shared test fixtures and utilities
+
+Technical Specification Sections Referenced:
+- Section 1.2 SYSTEM OVERVIEW - System architecture and performance requirements
+- Section 2.1 FEATURE CATALOG - Complete feature inventory and dependencies
+- Section 5.2 COMPONENT DETAILS - Detailed component specifications and interfaces
+
+# 7. USER INTERFACE DESIGN
+
+## 7.1 CORE UI TECHNOLOGIES
+
+### 7.1.1 Primary Visualization Framework
+
+#### 7.1.1.1 Matplotlib-Based Visualization Engine
+The system implements a sophisticated visualization framework centered on **Matplotlib ≥3.7.0** as the primary rendering engine. This choice aligns with the scientific computing requirements and provides publication-quality graphics essential for research documentation.
+
+**Core Technology Stack:**
+- **Primary Library**: Matplotlib (≥3.7.0) with interactive backend support
+- **Backend Configuration**: 
+  - Interactive environments: Qt5Agg (via PySide6)
+  - Headless/server environments: Agg backend for CI/batch processing
+- **Animation Framework**: matplotlib.animation.FuncAnimation for real-time visualization
+- **Performance Target**: 30+ FPS real-time rendering with sub-33ms frame generation
+
+#### 7.1.1.2 Multi-Modal Interface Support
+The system supports four distinct UI interface types:
+
+1. **Scientific Visualization UI**: Matplotlib-based real-time simulation rendering
+2. **Debug GUI Interfaces**: 
+   - Qt Desktop Application (PySide6-based)
+   - Streamlit Web Application
+3. **Command-Line Interface**: Click-based CLI with Rich output formatting
+4. **Interactive Notebooks**: Jupyter widgets for parameter exploration
+
+## 7.2 UI USE CASES
+
+### 7.2.1 Research Visualization Workflows
+
+#### 7.2.1.1 Real-Time Simulation Monitoring
+The primary use case involves real-time visualization of odor plume navigation simulations supporting:
+- **Multi-agent visualization**: Up to 100 concurrent agents with trajectory tracking
+- **Environmental visualization**: 2D odor concentration heatmaps with dynamic ranges
+- **Performance monitoring**: Real-time step latency and throughput metrics
+- **Research documentation**: Publication-quality figure export in multiple formats
+
+#### 7.2.1.2 Debugging and Analysis
+Interactive debugging interfaces support:
+- **State inspection**: Real-time agent state monitoring with breakpoint support
+- **Performance profiling**: Memory usage, execution timing, and bottleneck identification
+- **Parameter exploration**: Interactive parameter adjustment with immediate visual feedback
+- **Experiment comparison**: Side-by-side visualization of different configurations
+
+### 7.2.2 Automation and Batch Processing
+
+#### 7.2.2.1 Headless Operation
+The CLI interface enables:
+- **Batch simulation execution**: Automated parameter sweeps and multi-run experiments
+- **Visualization export**: Programmatic generation of analysis graphics
+- **Configuration management**: Validation and export of experiment configurations
+- **Integration workflows**: HPC cluster integration and CI/CD pipeline support
+
+## 7.3 UI/BACKEND INTERACTION BOUNDARIES
+
+### 7.3.1 API Integration Layer
+
+#### 7.3.1.1 Core Simulation Interface
+The UI components interact with the simulation engine through a standardized API layer located in `/src/odor_plume_nav/api/`:
+
+**Primary API Functions:**
+- `create_navigator()`: Navigator instantiation with protocol-based configuration
+- `create_video_plume()`: Environment setup with plume model selection
+- `run_plume_simulation()`: Simulation execution with real-time state updates
+
+#### 7.3.1.2 Data Flow Architecture
+The system implements a bidirectional data flow pattern:
+
+1. **UI → Backend**: Configuration parameters, control commands, simulation triggers
+2. **Backend → UI**: State updates, performance metrics, visualization data frames
+3. **Update Frequency**: Configurable refresh rate (default: 30 Hz) with adaptive performance scaling
+
+### 7.3.2 State Management Protocol
+
+#### 7.3.2.1 Simulation State Structure
+The backend provides structured state information to UI components:
+
+```python
+simulation_state = {
+    'observation': numpy.ndarray,     # Agent sensor readings
+    'reward': float,                  # Episode reward value
+    'terminated': bool,               # Episode completion status
+    'info': dict,                     # Performance and debug metadata
+    'step_count': int,               # Current simulation step
+    'step_time_ms': float            # Execution timing metrics
+}
+```
+
+#### 7.3.2.2 Performance Metrics Integration
+Real-time performance data flows through the `info` dictionary:
+
+```python
+performance_metrics = {
+    'avg_step_time_ms': float,       # Average step execution time
+    'current_fps': float,            # Visualization frame rate
+    'memory_usage_mb': float,        # System memory consumption
+    'cache_hit_rate': float,         # Frame cache efficiency
+    'performance_violations': int     # Performance threshold breaches
+}
+```
+
+## 7.4 UI SCHEMAS AND DATA STRUCTURES
+
+### 7.4.1 Visualization Data Schema
+
+#### 7.4.1.1 Frame Data Structure
+Each visualization frame contains structured data for rendering:
+
+```python
+frame_data = {
+    'agents': List[{
+        'position': Tuple[float, float],     # Agent x,y coordinates
+        'orientation': float,                # Heading in degrees
+        'odor_reading': float,              # Current sensor value
+        'trajectory': List[Tuple[float, float]],  # Historical positions
+        'agent_id': int                     # Unique identifier
+    }],
+    'environment': {
+        'odor_field': numpy.ndarray,        # 2D concentration grid
+        'wind_field': numpy.ndarray,        # 2D velocity vectors
+        'boundaries': List[Polygon],        # Environmental constraints
+        'sources': List[Point]              # Odor source locations
+    },
+    'metadata': {
+        'timestamp': float,                 # Simulation time
+        'step_count': int,                  # Current step number
+        'total_steps': int                  # Maximum steps
+    }
+}
+```
+
+### 7.4.2 Debug Session Schema
+
+#### 7.4.2.1 Debug Interface State
+The debug GUI maintains session state for interactive debugging:
+
+```python
+debug_session = {
+    'session_id': str,                  # Unique session identifier
+    'start_time': float,                # Session initiation timestamp
+    'duration': float,                  # Elapsed session time
+    'current_step': int,                # Current simulation step
+    'is_paused': bool,                  # Execution state flag
+    'breakpoints': List[int],           # Active breakpoint steps
+    'performance_log': List[dict],      # Historical performance data
+    'user_interactions': List[dict]     # Interaction history
+}
+```
+
+## 7.5 SCREENS AND USER INTERFACE COMPONENTS
+
+### 7.5.1 Primary Visualization Interface
+
+#### 7.5.1.1 Main Visualization Canvas
+The SimulationVisualization class provides the primary visual interface with:
+
+**Visual Components:**
+- **Environment Heatmap**: 2D odor concentration visualization using scientifically accurate colormaps (viridis)
+- **Agent Representation**: 
+  - Position markers: Red circles for current location
+  - Orientation vectors: Arrows indicating heading direction
+  - Trajectory trails: Blue path history with configurable length (default: 50 steps)
+- **Real-time Annotations**: Odor concentration values displayed as text overlays
+- **Dynamic Colorbar**: Concentration scale with automatic range adjustment
+
+#### 7.5.1.2 Export and Resolution Options
+The visualization system supports multiple output formats optimized for different use cases:
+
+```python
+RESOLUTION_PRESETS = {
+    '480p': (854, 480, 72),           # Quick preview
+    '720p': (1280, 720, 150),         # Standard display
+    '1080p': (1920, 1080, 300),       # High definition
+    'presentation': (1024, 768, 150), # Presentation slides
+    'publication': (1200, 900, 300)   # Academic papers
+}
+```
+
+### 7.5.2 Debug GUI Interface Layout
+
+#### 7.5.2.1 Qt Desktop Application (QtDebugGUI)
+The desktop debug interface provides a comprehensive debugging environment:
+
+**Window Structure:**
+- **Main Window**: 1200x800 pixels with responsive resizing
+- **Left Panel**: Matplotlib visualization canvas with navigation toolbar
+- **Right Panel**: Control interface (maximum width: 400px)
+
+**Control Panel Organization:**
+1. **Playback Controls**: Play/Pause (▶/⏸), Step Forward (⏭), Reset (🔄)
+2. **Performance Monitor**: FPS control spinbox (range: 1-60)
+3. **Tabbed Interface**:
+   - **State Inspector**: Real-time agent state monitoring
+   - **Performance Monitor**: System resource tracking
+   - **Breakpoints**: Step-based debugging controls
+   - **Export**: Visualization and data export options
+
+#### 7.5.2.2 Streamlit Web Application
+The web-based debug interface provides remote debugging capabilities:
+
+**Page Configuration:**
+```python
+st.set_page_config(
+    page_title="Plume Navigation Debug Dashboard",
+    layout="wide",                    # Full-width layout
+    initial_sidebar_state="expanded"  # Sidebar visible by default
+)
+```
+
+**Dashboard Layout:**
+- **Header Section**: Session information and status indicators
+- **Sidebar**: Session controls and configuration options
+- **Main Area**: 2-column layout with 2:1 aspect ratio
+  - Primary visualization area (left column)
+  - Control panel and metrics (right column)
+
+### 7.5.3 Command-Line Interface
+
+#### 7.5.3.1 CLI Command Structure (updated)
+The Click-based CLI provides hierarchical command organization through <span style="background-color: rgba(91, 57, 243, 0.2)">two primary console script entry points defined in `pyproject.toml`</span>:
+
+```
+plume-nav-sim
+├── run              # Execute simulation with parameters
+├── config           # Configuration management
+│   ├── validate     # Validate configuration files
+│   └── export       # Export configuration templates
+├── visualize        # Visualization operations
+│   └── export       # Export visualization outputs
+└── batch            # Batch processing operations
+```
+
+```
+plume-nav-train      # RL training workflows
+```
+
+<span style="background-color: rgba(91, 57, 243, 0.2)">These two commands correspond to the new console-script entry points defined in `pyproject.toml`, with the CLI implementation located in `src/plume_nav_sim/cli/` providing the `main()` and `train_main()` entry-point functions respectively.</span>
+
+#### 7.5.3.2 Enhanced Terminal Output
+The CLI uses Rich library for enhanced terminal presentation:
+- **Progress Indicators**: Multi-stage progress bars with time estimates
+- **Colored Output**: Status-based coloring (Error: red, Warning: yellow, Success: green)
+- **Formatted Tables**: Performance metrics and results in structured tables
+- **Interactive Prompts**: Confirmation dialogs for destructive operations
+
+## 7.6 USER INTERACTIONS
+
+### 7.6.1 Navigation and Control Interactions
+
+#### 7.6.1.1 Visualization Navigation
+The matplotlib-based interface supports standard navigation patterns:
+- **Mouse Interactions**:
+  - Pan: Left-click and drag
+  - Zoom: Mouse wheel or right-click and drag
+  - Reset view: Middle-click or toolbar button
+- **Keyboard Shortcuts**:
+  - Space: Play/pause simulation
+  - Right arrow: Single step forward
+  - 'R': Reset simulation to initial state
+  - 'S': Save current frame
+
+#### 7.6.1.2 Parameter Adjustment Workflows
+Interactive parameter modification supports:
+- **Real-time Updates**: Slider changes immediately affect simulation
+- **Preset Management**: Quick selection of predefined parameter sets
+- **Validation Feedback**: Immediate visual feedback for invalid parameter combinations
+- **Undo/Redo**: Parameter change history with rollback capability
+
+### 7.6.2 Data Export and Analysis
+
+#### 7.6.2.1 Export Capabilities
+The system provides comprehensive export functionality:
+- **Visual Exports**:
+  - Screenshot capture: PNG, PDF, SVG, EPS formats
+  - Animation export: MP4, AVI, GIF with quality presets
+  - Batch export: Automated generation of analysis figures
+- **Data Exports**:
+  - Trajectory data: JSON, CSV, HDF5 formats
+  - Performance metrics: Structured data for external analysis
+  - Configuration snapshots: Reproducible experiment parameters
+
+#### 7.6.2.2 Analysis Integration
+Export workflows integrate with common analysis tools:
+- **Pandas compatibility**: CSV export for dataframe analysis
+- **Matplotlib integration**: Saved figures maintain formatting for publication
+- **Jupyter notebook support**: Exported data directly loadable in analysis notebooks
+
+## 7.7 VISUAL DESIGN CONSIDERATIONS
+
+### 7.7.1 Scientific Visualization Principles
+
+#### 7.7.1.1 Perceptual Accuracy
+The visualization system adheres to scientific visualization best practices:
+- **Colormap Selection**: Perceptually uniform colormaps (viridis, plasma) for accurate data representation
+- **Contrast Optimization**: High contrast agent markers against environment background
+- **Scale Consistency**: Proportional scaling maintains spatial relationships
+- **Annotation Clarity**: Text overlays with automatic positioning to avoid occlusion
+
+#### 7.7.1.2 Accessibility Design
+Visual accessibility features include:
+- **High Contrast Mode**: Alternative color schemes for visual impairments
+- **Scalable Text**: Font sizes adjustable for different display densities
+- **Color Independence**: Shape and pattern coding supplement color information
+- **Screen Reader Support**: Alt-text descriptions for exported graphics
+
+### 7.7.2 Performance-Optimized Rendering
+
+#### 7.7.2.1 Rendering Optimization
+The visualization system implements several performance optimizations:
+- **Selective Redraw**: Only modified regions update during animation
+- **Level-of-Detail**: Reduced complexity for distant or small objects
+- **Batch Operations**: Vectorized drawing commands for multi-agent scenarios
+- **Memory Management**: Efficient buffer management for trajectory trails
+
+#### 7.7.2.2 Adaptive Quality Control
+Dynamic quality adjustment based on performance metrics:
+- **Frame Rate Targets**: Automatic quality reduction below 20 FPS
+- **Memory Pressure**: Reduced trail length and annotation density under memory constraints
+- **CPU Load**: Simplified rendering modes for resource-constrained environments
+
+### 7.7.3 Branding and Consistency
+
+#### 7.7.3.1 Visual Identity
+Consistent branding elements across all interface types:
+- **Application Title**: "Odor Plume Navigation" consistently displayed
+- **Icon Set**: Unicode symbols for universal compatibility (▶, ⏸, ⏭, 🔄)
+- **Color Palette**: Consistent color scheme across Qt, Streamlit, and CLI interfaces
+- **Typography**: Standard system fonts with fallback options
+
+#### 7.7.3.2 Layout Consistency
+Standardized layout patterns ensure familiar user experience:
+- **Control Placement**: Consistent positioning of playback controls
+- **Information Hierarchy**: Similar organization of primary and secondary information
+- **Responsive Design**: Adaptive layouts for different screen sizes and orientations
+
+## 7.8 CONFIGURATION AND CUSTOMIZATION
+
+### 7.8.1 Visualization Configuration
+
+#### 7.8.1.1 Base Configuration Structure
+The visualization system configuration is defined in `/conf/base.yaml`:
+
+```yaml
+visualization:
+  animation:
+    enabled: false              # Disabled by default for performance
+    fps: 30                     # Target frame rate
+    real_time: false            # Synchronized with simulation timing
+    show_trails: true           # Agent trajectory display
+    trail_length: 50            # Number of historical positions
+    show_sensors: false         # Sensor visualization overlay
+    show_plume_overlay: true    # Odor concentration display
+    save_animation: false       # Automatic animation export
+    animation_format: "mp4"     # Export format
+    animation_quality: "high"   # Quality preset
+  plotting:
+    figure_size: [12, 8]        # Figure dimensions in inches
+    dpi: 150                    # Resolution for rasterized output
+    color_scheme: "viridis"     # Default colormap
+    background_color: "white"   # Canvas background
+```
+
+#### 7.8.1.2 Advanced Customization Options
+Extended configuration options support research-specific requirements:
+
+```yaml
+advanced_visualization:
+  color_schemes:
+    scientific: ['#1f77b4', '#ff7f0e', '#2ca02c']
+    presentation: ['#e41a1c', '#377eb8', '#4daf4a']
+    high_contrast: ['#000000', '#e60049', '#0bb4ff']
+  performance:
+    max_agents_full_detail: 25  # Switch to simplified rendering above threshold
+    trail_memory_limit_mb: 100  # Maximum memory for trajectory storage
+    update_interval_ms: 33      # Minimum time between frame updates
+  export:
+    default_format: "png"       # Default export format
+    compression_level: 6        # PNG compression level
+    vector_format: "svg"        # Vector graphics format
+```
+
+### 7.8.2 Debug Interface Configuration
+
+#### 7.8.2.1 GUI-Specific Settings
+Debug interface customization options:
+
+```yaml
+debug_gui:
+  qt_interface:
+    window_size: [1200, 800]    # Default window dimensions
+    theme: "system"             # UI theme (system/light/dark)
+    font_size: 10               # Interface font size
+    update_rate_hz: 30          # GUI refresh rate
+  streamlit_interface:
+    port: 8501                  # Web server port
+    host: "localhost"           # Server host address
+    auto_refresh: true          # Automatic page refresh
+    session_timeout_min: 30     # Session timeout
+```
+
+## 7.9 INTEGRATION WITH RESEARCH WORKFLOWS
+
+### 7.9.1 Jupyter Notebook Integration
+
+#### 7.9.1.1 Interactive Widget Support
+The system provides ipywidgets integration for parameter exploration:
+
+**Widget Types and Applications:**
+- **Sliders**: Continuous parameter adjustment (speed, angles, distances)
+- **Buttons**: Simulation control ("Run Simulation", "Reset Parameters")
+- **Dropdowns**: Algorithm selection and preset configurations
+- **Text Areas**: Configuration display and validation
+
+**Example Parameter Interface:**
+```python
+class AlgorithmParameterWidget:
+    directions_to_test: IntSlider(min=4, max=16, value=8)
+    test_distance: FloatSlider(min=0.5, max=5.0, value=2.0)
+    base_speed: FloatSlider(min=0.0, max=1.0, value=0.5)
+    speed_multiplier: FloatSlider(min=0.1, max=2.0, value=1.0)
+    convergence_threshold: FloatSlider(min=0.5, max=0.95, value=0.8)
+```
+
+#### 7.9.1.2 Inline Visualization
+Jupyter integration supports inline visualization with:
+- **Matplotlib Backend**: `%matplotlib inline` for static plots
+- **Interactive Plots**: `%matplotlib widget` for interactive exploration
+- **Multi-panel Displays**: Trajectory analysis, sensor readings, performance metrics
+- **Animation Support**: Embedded animations using HTML5 video
+
+### 7.9.2 Publication and Documentation Support
+
+#### 7.9.2.1 Publication-Quality Exports
+The system generates research-ready outputs:
+- **Vector Graphics**: SVG and PDF for scalable publication figures
+- **High-Resolution Raster**: PNG with configurable DPI for print media
+- **LaTeX Integration**: TikZ export for direct LaTeX document inclusion
+- **Multi-format Batch Export**: Simultaneous generation of multiple formats
+
+#### 7.9.2.2 Documentation Integration
+Visualization outputs integrate with documentation workflows:
+- **Automated Figure Generation**: CI/CD pipeline integration for documentation updates
+- **Version Control**: Git-friendly formats with minimal binary changes
+- **Metadata Preservation**: Embedded parameter information for reproducibility
+
+## 7.10 PERFORMANCE MONITORING AND OPTIMIZATION
+
+### 7.10.1 Real-Time Performance Tracking
+
+#### 7.10.1.1 UI Performance Metrics
+The system continuously monitors UI-specific performance indicators:
+- **Frame Rate**: Target 30 FPS with degradation warnings below 20 FPS
+- **Render Time**: Individual frame generation timing (<33ms target)
+- **Memory Usage**: Visualization buffer and trail memory consumption
+- **User Interaction Latency**: Response time to user inputs (<100ms target)
+
+#### 7.10.1.2 Performance Optimization Strategies
+Automatic optimization mechanisms:
+- **Adaptive Quality**: Reduced visual complexity under performance stress
+- **Selective Updates**: Only modified screen regions refresh during animation
+- **Memory Management**: Automatic cleanup of trajectory trails and cached frames
+- **Background Processing**: Non-critical updates moved to background threads
+
+### 7.10.2 Scalability Considerations
+
+#### 7.10.2.1 Multi-Agent Visualization Scaling
+The system maintains performance with increasing agent counts:
+- **Level-of-Detail Rendering**: Simplified representation for distant agents
+- **Batch Processing**: Vectorized drawing operations for agent groups
+- **Spatial Culling**: Off-screen agents excluded from rendering pipeline
+- **Progressive Loading**: Staggered loading of agent trails and annotations
+
+#### 7.10.2.2 Large Dataset Handling
+For extensive simulation datasets:
+- **Streaming Visualization**: On-demand loading of simulation frames
+- **Data Compression**: Efficient storage and transmission of visualization data
+- **Parallel Processing**: Multi-threaded rendering for complex scenes
+- **Memory Pooling**: Reusable buffers for frequent allocations
+
+#### References
+
+**Core Implementation Files:**
+- `/src/odor_plume_nav/interfaces/visualization/visualization.py` - Primary visualization engine implementation
+- `/src/plume_nav_sim/debug/gui.py` - Debug GUI implementations (Qt and Streamlit)
+- `/src/plume_nav_sim/debug/cli.py` - Debug CLI interface implementation
+- `/src/<span style="background-color: rgba(91, 57, 243, 0.2)">plume_nav_sim</span>/cli/main.py` - Main CLI framework and command structure
+- `/src/odor_plume_nav/utils/visualization.py` - Extended visualization utilities and helpers
+
+**Configuration and Examples:**
+- `/conf/base.yaml` - Base visualization configuration parameters
+- `/examples/agent_visualization_demo.py` - Visualization usage demonstration
+- `/notebooks/demos/02_odor_following_demo.ipynb` - Interactive widget examples
+- `/notebooks/demos/03_multi_agent_demo.ipynb` - Multi-agent visualization examples
+
+**Supporting Infrastructure:**
+- `/src/odor_plume_nav/api/` - API integration layer for UI/backend communication
+- `/src/odor_plume_nav/interfaces/` - Protocol definitions for UI component integration
+- `/tests/test_visualization.py` - UI component validation and testing
+
+# 8. INFRASTRUCTURE
+
+## 8.1 INFRASTRUCTURE APPLICABILITY ASSESSMENT
+
+### 8.1.1 System Classification
+
+**Detailed Infrastructure Architecture is not applicable for this system.** The Plume Navigation Simulation Library is a standalone Python library and research toolkit designed for local development, research computing, and high-performance computing (HPC) environments. It operates as a distributed package rather than a deployed service requiring infrastructure provisioning.
+
+### 8.1.2 Rationale for Limited Infrastructure Requirements
+
+The system's microkernel architecture with protocol-based pluggable components is specifically designed for:
+
+- **Local Development**: Researchers and developers install the library via PyPI for local experimentation
+- **Research Computing**: Integration with institutional HPC clusters through job schedulers (SLURM, PBS)
+- **Containerized Environments**: Docker support for reproducible research environments
+- **Package Distribution**: Standard Python package distribution model rather than service deployment
+
+## 8.2 BUILD AND DISTRIBUTION INFRASTRUCTURE
+
+### 8.2.1 Package Management Architecture
+
+**<span style="background-color: rgba(91, 57, 243, 0.2)">Setuptools Build System (PEP 621 compliant)</span>**
+The library utilizes <span style="background-color: rgba(91, 57, 243, 0.2)">setuptools for comprehensive dependency management and package building, requiring minimum version `setuptools>=61`</span>:
+
+| Component | Technology | Purpose | Configuration |
+|-----------|------------|---------|--------------|
+| Dependency Resolution | <span style="background-color: rgba(91, 57, 243, 0.2)">Setuptools + pip</span> | Automatic dependency management | <span style="background-color: rgba(91, 57, 243, 0.2)">pyproject.toml (PEP 621 format)</span> |
+| Virtual Environment | <span style="background-color: rgba(91, 57, 243, 0.2)">venv / virtualenv</span> | Isolated development environments | <span style="background-color: rgba(91, 57, 243, 0.2)">local directory `.venv/` (optional)</span> |
+| Package Building | <span style="background-color: rgba(91, 57, 243, 0.2)">python -m build (PEP 517 front-end)</span> | Wheel and source distribution | <span style="background-color: rgba(91, 57, 243, 0.2)">pyproject.toml (PEP 621 format)</span> |
+| Publishing | <span style="background-color: rgba(91, 57, 243, 0.2)">twine upload dist/*</span> | PyPI publishing automation | <span style="background-color: rgba(91, 57, 243, 0.2)">pyproject.toml (PEP 621 format)</span> |
+
+**Distribution Strategy**
+- **Primary Distribution**: PyPI (Python Package Index) for public availability
+- **Version Management**: <span style="background-color: rgba(91, 57, 243, 0.2)">Semantic versioning with single authoritative version specified in `pyproject.toml` and exported via `plume_nav_sim.__version__`</span>
+- **Dependency Locking**: <span style="background-color: rgba(91, 57, 243, 0.2)">Reproducible locking is achieved via `pip-tools`-generated `requirements.txt` (optional) or by relying on pinned versions in `pyproject.toml`</span>
+- **Platform Support**: Cross-platform compatibility (Linux, macOS, Windows)
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">Build Command Change</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">wheels/sdists are built with `python -m build`, not `poetry build`</span>
+
+### 8.2.2 Development Environment Infrastructure
+
+**Local Development Setup**
+```mermaid
+graph TD
+    A[Developer Machine] --> B["Setuptools + pip Install"]
+    B --> C[Virtual Environment]
+    C --> D[Pre-commit Hooks]
+    D --> E[Code Quality Tools]
+    E --> F[Testing Framework]
+    F --> G[Local Development]
+    
+    H[IDE Integration] --> C
+    I[Docker Environment] --> C
+    J[HPC Cluster] --> K[Hydra Multirun]
+    K --> L[Distributed Experiments]
+```
+
+**Development Toolchain**
+| Tool | Purpose | Integration Point |
+|------|---------|------------------|
+| Black | Code formatting | Pre-commit hook |
+| isort | Import sorting | Pre-commit hook |
+| Ruff | High-performance linting | Pre-commit hook |
+| MyPy | Static type checking | Pre-commit hook |
+| pytest | Testing framework | CI/CD pipeline |
+
+### 8.2.3 CI/CD Pipeline Architecture
+
+**Build Pipeline**
+The build pipeline leverages modern Python packaging standards to ensure reliable artifact creation:
 
 ```mermaid
 graph LR
-    subgraph "Input Sources"
-        A[Configuration Files]
-        B[Video Data]
-        C[Environment Parameters]
-    end
+    A[Source Control Trigger] --> B[Environment Setup]
+    B --> C[Dependency Installation]
+    C --> D[Code Quality Gates]
+    D --> E[Test Execution]
+    E --> F[Package Building]
+    F --> G[Artifact Storage]
     
-    subgraph "Processing Layer"
-        D[Frame Cache]
-        E[Simulation Engine]
-        F[Analysis Tools]
-    end
-    
-    subgraph "Storage Layer"
-        G[SQLite Metadata]
-        H[Parquet Analytics]
-        I[HDF5 Scientific Data]
-        J[Local File System]
-    end
-    
-    subgraph "Output Interfaces"
-        K[Visualization]
-        L[Research Reports]
-        M[Exported Data]
-    end
-    
-    A --> E
-    B --> D
-    C --> E
-    D --> E
-    E --> F
-    E --> G
-    E --> H
-    E --> I
-    G --> J
-    H --> J
-    I --> J
-    F --> K
-    F --> L
-    J --> M
+    H[Pre-commit Hooks] --> A
+    I[Version Validation] --> F
+    J[Security Scanning] --> G
 ```
 
-### 8.9.3 Deployment and Execution Flow (updated)
+**Build Environment Requirements**
+| Component | Specification | Purpose |
+|-----------|---------------|---------|
+| Python Version | 3.10-3.11 | Runtime compatibility |
+| Build Backend | setuptools>=61 | PEP 621 compliance |
+| Build Frontend | python -m build | Standardized packaging |
+| Virtual Environment | venv or virtualenv | Isolation |
+
+**Dependency Management**
+- **Resolution Strategy**: pip-based dependency resolution with version pinning
+- **Lock File Generation**: Optional `requirements.txt` via pip-tools for reproducibility
+- **Cache Management**: pip cache optimization for faster CI builds
+- **Security Scanning**: Automated vulnerability detection in dependencies
+
+**Quality Gates**
+- **Code Formatting**: Black formatting validation
+- **Import Organization**: isort compliance checking  
+- **Linting**: Ruff comprehensive rule enforcement
+- **Type Safety**: MyPy static analysis validation
+- **Test Coverage**: pytest with coverage threshold enforcement
+
+### 8.2.4 Deployment Pipeline
+
+**Artifact Generation**
+The deployment pipeline creates distributable packages following Python packaging standards:
 
 ```mermaid
 graph TD
-    A[Package Installation] --> B[Environment Setup]
-    B --> C[Configuration Loading]
-    C --> D[Component Initialization]
-    D --> E["HookManager<br/>Pre-step | Post-step | Episode-end"]
-    E --> F[Simulation Execution]
-    F --> G[Data Recording]
-    G --> H[Analysis and Visualization]
+    A[Version Tag Creation] --> B[Build Trigger]
+    B --> C[Clean Environment]
+    C --> D[python -m build]
+    D --> E[Wheel Generation]
+    D --> F[Source Distribution]
+    E --> G[Artifact Validation]
+    F --> G
+    G --> H[twine upload dist/*]
+    H --> I[PyPI Publication]
     
-    I[Local Development] --> A
-    J[HPC Cluster] --> A
-    K[Container Environment] --> A
-    
-    L[Configuration Files] --> C
-    M[Environment Variables] --> C
-    
-    N[Performance Monitoring] --> F
-    O[Logging System] --> F
-    P[Error Handling] --> F
-    
-    G --> Q[Local Storage]
-    G --> R[Shared Storage]
-    
-    H --> S[Research Output]
-    H --> T[Publication Data]
+    J[Manual Release] --> A
+    K[Automated Release] --> A
 ```
 
-#### 8.9.3.1 HookManager Integration Details
+**Deployment Strategy**
+- **Release Automation**: GitHub Actions-based automated publishing
+- **Version Management**: Single-source version from `plume_nav_sim.__version__`
+- **Distribution Validation**: Automated testing of published packages
+- **Rollback Procedures**: Git tag-based version rollback capability
 
-The <span style="background-color: rgba(91, 57, 243, 0.2)">HookManager component provides lightweight lifecycle hook coordination</span> within the execution flow, offering three primary dispatch phases:
+**Environment Promotion Workflow**
+| Stage | Purpose | Validation | Promotion Trigger |
+|-------|---------|------------|------------------|
+| Development | Local testing | Unit tests | Manual |
+| Integration | CI validation | Full test suite | Automated |
+| Staging | Pre-release validation | Integration tests | Manual approval |
+| Production | PyPI publication | Post-release validation | Tag creation |
 
-| Hook Phase | Trigger Point | Use Cases | Performance Impact |
-|---|---|---|---|
-| **Pre-step** | Before simulation step execution | Setup, validation, logging | ≤0.3ms overhead |
-| **Post-step** | After simulation step completion | Analysis, recording, monitoring | ≤0.3ms overhead |
-| **Episode-end** | Upon episode termination | Cleanup, aggregation, reporting | ≤0.4ms overhead |
+### 8.2.5 Infrastructure Monitoring
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">The HookManager is instantiated automatically during component initialization and maintains zero-overhead operation when no hooks are registered (default "none" configuration).</span> This design preserves the system's performance-first architecture while providing extensibility for research applications.
+**Build Performance Monitoring**
+- **Build Time Tracking**: CI/CD pipeline duration monitoring
+- **Dependency Resolution Time**: pip install performance metrics
+- **Test Execution Metrics**: Test suite performance regression detection
+- **Artifact Size Monitoring**: Package size optimization tracking
 
-#### 8.9.3.2 Execution Environment Compatibility
+**Distribution Monitoring**
+- **PyPI Download Statistics**: Package adoption and usage metrics
+- **Version Distribution**: Active version usage tracking across user base
+- **Platform Compatibility**: Cross-platform installation success rates
+- **Dependency Health**: Upstream dependency vulnerability monitoring
 
-The deployment and execution flow supports multiple runtime environments with consistent behavior:
+**Development Environment Health**
+- **Local Setup Success Rates**: Installation failure pattern analysis
+- **IDE Integration Status**: Development toolchain compatibility monitoring
+- **HPC Cluster Performance**: Distributed execution performance metrics
+- **Container Build Success**: Docker environment validation tracking
 
-| Environment Type | Deployment Method | Resource Characteristics | Hook Support |
-|---|---|---|---|
-| **Local Development** | Poetry/pip installation | Single-user, interactive | Full hook system |
-| **HPC Cluster** | Module/container deployment | Multi-user, batch processing | Full hook system |
-| **Container Environment** | Docker/Singularity | Isolated, reproducible | Full hook system |
+**Cost Optimization**
+- **CI/CD Resource Usage**: GitHub Actions minutes consumption tracking
+- **Storage Optimization**: Artifact repository space management
+- **Bandwidth Monitoring**: Distribution bandwidth usage analysis
+- **Infrastructure Efficiency**: Resource utilization optimization recommendations
 
-Each environment maintains identical HookManager functionality, ensuring consistent behavior across development, testing, and production scenarios.
+## 8.3 CONTAINERIZATION INFRASTRUCTURE
 
-#### 8.9.3.3 Performance Monitoring Integration
+### 8.3.1 Container Architecture
 
-<span style="background-color: rgba(91, 57, 243, 0.2)">The HookManager integrates seamlessly with the existing performance monitoring infrastructure</span>, providing hook-specific metrics and maintaining the system's ≤33ms simulation step performance requirement. Performance monitoring captures hook execution times and provides early warning for performance degradation.
+**Docker Integration**
+The system supports containerization for reproducible research environments:
 
-## 8.10 MAINTENANCE AND SUPPORT
+- **Base Image Strategy**: Python 3.10/3.11 official images with optimized layers
+- **Multi-Stage Builds**: <span style="background-color: rgba(91, 57, 243, 0.2)">Development and production-optimized containers using `pip install .` in build stage to install wheel produced by `python -m build`</span>
+- **Environment Variables**: Configurable through environment variables for container deployment
+- **Volume Management**: Persistent storage for experiment data and model artifacts
 
-### 8.10.1 Infrastructure Maintenance
+**Container Configuration**
+```mermaid
+graph LR
+    A[Base Python Image] --> B[System Dependencies]
+    B --> C[Package Installation via pip]
+    C --> D[Application Code]
+    D --> E[Environment Config]
+    E --> F[Entry Points]
+    
+    G[Development Stage] --> D
+    H[Production Stage] --> F
+```
 
-#### Automated Maintenance Tasks
+### 8.3.2 Container Optimization
 
-**Dependency Management**:
-- **Dependabot**: Automated dependency updates and security patches
-- **Version Compatibility**: Continuous testing against supported Python versions
-- **License Monitoring**: Ongoing compliance verification
+**Performance Optimization**
+- **Memory Management**: Configurable memory limits for frame caching (≤2 GiB per process)
+- **Layer Caching**: Optimized Dockerfile layers for faster builds
+- **Security Scanning**: Automated vulnerability scanning in CI/CD pipeline
+- **Resource Constraints**: CPU and memory limits for HPC cluster deployment
 
-**Performance Monitoring**:
-- **Benchmark Regression**: Automated performance regression detection
-- **Resource Usage**: Memory and CPU utilization tracking
-- **Scalability Testing**: Multi-agent scenario validation
+### 8.3.3 Container Build Strategy
 
-#### Manual Maintenance Procedures
+**Image Composition**
+The containerization approach follows modern Python packaging standards and supports both development and production deployment scenarios:
 
-**Release Management**:
-- **Quarterly Reviews**: Dependency audit and update cycles
-- **Performance Profiling**: Periodic optimization assessment
-- **Documentation Updates**: Accuracy and completeness verification
+- **Base Layer Strategy**: Multi-stage builds optimize image size and security posture
+- **Dependency Management**: <span style="background-color: rgba(91, 57, 243, 0.2)">Setuptools/Pip Installation (PEP 621 build)</span> ensures reproducible environments
+- **Build Process**: Leverages `python -m build` for wheel generation followed by `pip install` for clean dependency resolution
+- **Layer Optimization**: Strategic layer ordering minimizes rebuild time during development iterations
 
-### 8.10.2 Support Infrastructure
+**Development Container Features**
+```mermaid
+graph TD
+    A[Development Base Image] --> B[Development Dependencies]
+    B --> C[Source Code Mount]
+    C --> D[Live Reload Support]
+    D --> E[Debug Tools]
+    E --> F[Interactive Environment]
+    
+    G[Volume Mounts] --> C
+    H[Port Forwarding] --> F
+    I[Environment Variables] --> A
+```
 
-#### Community Support Model
+**Production Container Features**
+| Component | Configuration | Purpose | Optimization |
+|-----------|---------------|---------|--------------|
+| Base Image | python:3.10-slim | Minimal runtime | Reduced attack surface |
+| Package Installation | pip install dist/*.whl | Clean wheel-based install | Faster startup time |
+| Security Scanning | Trivy/Snyk integration | Vulnerability detection | Automated security validation |
+| Resource Limits | Memory/CPU constraints | Resource governance | Predictable performance |
 
-**Documentation Infrastructure**:
-- **API Documentation**: Auto-generated from code comments
-- **User Guides**: Step-by-step usage instructions
-- **Examples Repository**: Comprehensive example implementations
-- **FAQ and Troubleshooting**: Common issue resolution
+### 8.3.4 Container Registry Strategy
 
-**Issue Management**:
-- **GitHub Issues**: Bug reports and feature requests
-- **Discussion Forums**: Community Q&A and collaboration
-- **Version Release Notes**: Detailed change documentation
+**Image Management**
+- **Registry Selection**: Docker Hub for public images, GitHub Container Registry for development
+- **Tagging Strategy**: Semantic versioning aligned with library releases
+- **Multi-Architecture Support**: AMD64 and ARM64 builds for cross-platform compatibility
+- **Image Scanning**: Automated vulnerability scanning before publication
 
-## 8.11 REFERENCES
+**Deployment Integration**
+- **HPC Integration**: Container images optimized for Singularity/Apptainer runtime environments
+- **CI/CD Integration**: Automated image builds triggered by version tags
+- **Development Workflows**: Local development containers with live code mounting
+- **Research Reproducibility**: Versioned containers ensure experimental reproducibility across research teams
 
-#### Files and Components Examined
+## 8.4 CI/CD PIPELINE INFRASTRUCTURE
 
-- `pyproject.toml` - Package build configuration and dependencies
-- `.github/workflows/ci.yml` - Primary CI/CD pipeline configuration
-- `.github/workflows/cross_repo_test.yml` - Integration testing workflow
-- `src/plume_nav_sim/` - Core simulation framework implementation
-- `src/odor_plume_nav/` - Navigation library implementation
-- <span style="background-color: rgba(91, 57, 243, 0.2)">`src/plume_nav_sim/hooks.py` - New HookManager implementation</span>
-- <span style="background-color: rgba(91, 57, 243, 0.2)">`conf/config.yaml` - Hooks group uncommented</span>
-- Configuration management system documentation
-- Performance monitoring and logging implementation
-- Cache subsystem architecture and implementation
+### 8.4.1 Build Pipeline Architecture
 
-#### External References
+**GitHub Actions Configuration**
+The comprehensive CI/CD pipeline operates on Ubuntu-based runners with Python 3.10-3.11 matrix testing:
 
-- Poetry Build System Documentation
-- GitHub Actions CI/CD Platform
-- PyPI Package Distribution Platform
-- Python Package Management Standards
-- High-Performance Computing Integration Patterns
-- Research Software Engineering Best Practices
+| Stage | Purpose | Tools | Artifacts |
+|-------|---------|-------|-----------|
+| Code Quality | Linting and formatting | Black, isort, Ruff, MyPy | Quality reports |
+| <span style="background-color: rgba(91, 57, 243, 0.2)">Dependency Installation</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Package installation and setup</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">pip, setuptools</span> | <span style="background-color: rgba(91, 57, 243, 0.2)">Installed dependencies, wheels built with `python -m build`*</span> |
+| Testing | Unit and integration tests | pytest, pytest-cov | Coverage reports |
+| Performance | Benchmark validation | pytest-benchmark | Performance metrics |
+| Security | Dependency scanning | Safety, Bandit | Security reports |
+
+<span style="background-color: rgba(91, 57, 243, 0.2)">*Build artifacts generated using PEP 517 compliant `python -m build` command for wheel and source distribution creation</span>
+
+**Build Workflow**
+```mermaid
+graph TD
+    A[Code Push/PR] --> B[Code Quality Checks]
+    B --> C[Dependency Installation]
+    C --> D[Unit Testing]
+    D --> E[Integration Testing]
+    E --> F[Build Dist python -m build]
+    F --> G[Performance Benchmarks]
+    G --> H[Security Scanning]
+    H --> I[Docker Build]
+    I --> J[Cross-Repository Testing]
+    J --> K[Artifact Generation]
+```
+
+**Pipeline Execution Environment**
+The CI/CD infrastructure leverages modern Python packaging standards to ensure reliable and reproducible builds:
+
+- **Build Backend**: setuptools>=61 with PEP 621 compliance for metadata management
+- **Dependency Resolution**: pip-based installation with version constraint enforcement
+- **Artifact Creation**: Standardized wheel and source distribution generation via `python -m build`
+- **Environment Isolation**: Virtual environment-based builds for dependency isolation
+- **Cache Optimization**: pip cache utilization for faster dependency resolution
+
+**Quality Gate Integration**
+Each pipeline stage implements comprehensive validation to maintain code quality and security standards:
+
+- **Static Analysis**: MyPy type checking with strict configuration for type safety
+- **Code Style**: Black and isort enforcement for consistent formatting standards  
+- **Linting**: Ruff comprehensive rule set execution for code quality validation
+- **Security Scanning**: Bandit and Safety integration for vulnerability detection
+- **Performance Validation**: Automated benchmark execution with regression detection
+
+### 8.4.2 Deployment Pipeline
+
+**Release Management Process**
+- **Semantic Versioning**: Automated version bumping based on conventional commits
+- **<span style="background-color: rgba(91, 57, 243, 0.2)">PyPI Publishing</span>**: <span style="background-color: rgba(91, 57, 243, 0.2)">Automated package publishing on tagged releases using `twine upload dist/*`</span>
+- **Documentation Deployment**: GitHub Pages deployment for API documentation
+- **Container Registry**: Docker Hub publishing for containerized environments
+
+**Deployment Automation Workflow**
+The deployment pipeline orchestrates comprehensive release management with automated quality validation:
+
+```mermaid
+graph TD
+    A[Version Tag Creation] --> B[Release Trigger]
+    B --> C[Build Environment Setup]
+    C --> D[Dependency Installation]
+    D --> E[Full Test Suite Execution]
+    E --> F[Package Building python -m build]
+    F --> G[Artifact Validation]
+    G --> H[Security Scanning]
+    H --> I[twine upload dist/*]
+    I --> J[PyPI Publication]
+    J --> K[Container Image Build]
+    K --> L[Documentation Update]
+    L --> M[Release Notification]
+```
+
+**Environment Promotion Strategy**
+The system implements a structured promotion workflow ensuring code quality at each stage:
+
+| Environment | Purpose | Validation Requirements | Promotion Trigger |
+|-------------|---------|------------------------|-------------------|
+| Development | Local development and testing | Unit tests, code quality checks | Manual developer workflow |
+| Integration | Automated CI validation | Full test suite, cross-repository testing | Automated on PR merge |
+| Staging | Pre-release validation | Integration tests, performance benchmarks | Manual approval process |
+| Production | PyPI publication | Complete validation suite, security scanning | Git tag creation |
+
+**Quality Gates**
+- **Code Coverage**: Minimum 90% test coverage requirement with detailed reporting
+- **Performance Validation**: ≤33ms step latency with 100 concurrent agents maintained
+- **Security Compliance**: Zero high-severity vulnerabilities allowed in dependencies
+- **Cross-Repository Compatibility**: Integration testing with `place_mem_rl` repository validation
+- **Documentation Compliance**: API documentation completeness and accuracy validation
+
+**Rollback and Recovery Procedures**
+The deployment infrastructure supports comprehensive rollback capabilities:
+
+- **Version Rollback**: Git tag-based version restoration with automated dependency resolution
+- **Artifact Recovery**: Historical artifact preservation in PyPI with version pinning support
+- **Environment Restoration**: Automated environment recreation using locked dependency specifications
+- **Database Migration Rollback**: Coordinated schema rollback procedures for breaking changes
+- **Monitoring Integration**: Automated rollback triggering based on performance degradation detection
+
+### 8.4.3 Pipeline Monitoring and Observability
+
+**Build Performance Metrics**
+Comprehensive monitoring ensures optimal pipeline performance and early issue detection:
+
+- **Build Duration Tracking**: Stage-level timing analysis with trend identification
+- **Dependency Resolution Performance**: pip installation time monitoring and optimization
+- **Test Execution Metrics**: Test suite performance regression detection and reporting  
+- **Artifact Generation Time**: Package building performance optimization tracking
+- **Resource Utilization**: GitHub Actions runner efficiency and cost optimization
+
+**Deployment Success Monitoring**
+- **Release Success Rate**: Automated tracking of successful vs failed deployments
+- **PyPI Publication Validation**: Post-publication installation testing across platforms
+- **Container Build Success**: Docker image creation and registry publication monitoring
+- **Documentation Deployment**: GitHub Pages update success and accessibility validation
+- **Cross-Repository Impact**: Downstream dependency compatibility monitoring
+
+**Alert and Notification System**
+- **Pipeline Failure Alerts**: Immediate notification for critical pipeline failures
+- **Performance Degradation Detection**: Automated alerts for benchmark regression
+- **Security Vulnerability Notifications**: Real-time alerts for dependency vulnerabilities
+- **Deployment Success Confirmation**: Automated success notifications with deployment metrics
+- **Maintenance Scheduling**: Proactive alerts for infrastructure maintenance requirements
+
+### 8.4.4 Infrastructure Optimization
+
+**Resource Efficiency**
+The CI/CD infrastructure implements cost-effective resource utilization strategies:
+
+- **Build Cache Optimization**: pip cache and Docker layer caching for reduced build times
+- **Parallel Execution**: Matrix-based testing across Python versions with optimal resource allocation
+- **Resource Scheduling**: Efficient GitHubActions runner utilization with cost monitoring
+- **Artifact Storage Management**: Automated cleanup of outdated build artifacts and intermediate files
+
+**Scalability Considerations**
+- **Concurrent Build Support**: Multiple simultaneous builds with resource isolation
+- **Load Distribution**: Intelligent build scheduling across available runner capacity
+- **Geographic Distribution**: Multi-region build execution for reduced latency
+- **Auto-scaling Integration**: Dynamic resource allocation based on build queue depth
+
+**Cost Management**
+| Resource Category | Optimization Strategy | Monitoring Approach | Cost Impact |
+|-------------------|----------------------|---------------------|-------------|
+| GitHub Actions Minutes | Build cache optimization, selective triggering | Monthly usage tracking | Primary cost driver |
+| Storage | Automated artifact cleanup, compression | Storage utilization monitoring | Minimal impact |
+| Bandwidth | Efficient artifact distribution, CDN usage | Transfer volume tracking | Low to moderate |
+| External Services | Rate limiting, caching strategies | API usage monitoring | Variable based on usage |
+
+**Performance Optimization Recommendations**
+- **Build Time Reduction**: Implement advanced caching strategies and dependency optimization
+- **Resource Allocation**: Right-size runner specifications based on workload characteristics  
+- **Pipeline Parallelization**: Maximize concurrent execution within resource constraints
+- **Monitoring Enhancement**: Implement detailed performance metrics for continuous optimization
+
+## 8.5 RESEARCH COMPUTING INFRASTRUCTURE
+
+### 8.5.1 HPC Integration Architecture
+
+**Job Scheduler Support**
+The system integrates with institutional HPC clusters through Hydra multirun:
+
+| Scheduler | Integration | Configuration | Resource Management |
+|-----------|-------------|---------------|-------------------|
+| SLURM | Hydra launcher | `hydra/launcher=slurm` | Node allocation |
+| PBS | Hydra launcher | `hydra/launcher=pbs` | Queue management |
+| SGE | Hydra launcher | `hydra/launcher=sge` | Grid engine |
+| Local | Hydra launcher | `hydra/launcher=basic` | Process pool |
+
+**Distributed Experiment Architecture**
+```mermaid
+graph TD
+    A[Researcher] --> B[Hydra Configuration]
+    B --> C[Job Scheduler]
+    C --> D[Compute Nodes]
+    D --> E[Parallel Experiments]
+    E --> F[Results Aggregation]
+    F --> G[Data Analysis]
+    
+    H[Shared Storage] --> D
+    I[Environment Modules] --> D
+    J[Container Runtime] --> D
+```
+
+### 8.5.2 Performance Infrastructure
+
+**Resource Requirements**
+- **Memory**: 2 GiB RAM per simulation process
+- **CPU**: Single-threaded with optional Numba JIT compilation
+- **Storage**: Configurable output formats (Parquet, HDF5, SQLite)
+- **Network**: Minimal requirements for HPC cluster communication
+
+**Scaling Characteristics**
+- **Horizontal Scaling**: Embarrassingly parallel experiment execution
+- **Vertical Scaling**: Single-process optimization through vectorized operations
+- **Memory Scaling**: Configurable frame cache with LRU eviction policies
+- **I/O Scaling**: Asynchronous recording with backend-specific buffering
+
+## 8.6 MONITORING AND OBSERVABILITY
+
+### 8.6.1 Logging Infrastructure
+
+**Loguru Framework Integration**
+- **Structured Logging**: JSON format for machine-readable logs
+- **Dual-Sink Architecture**: Console output for development, JSON for production
+- **Correlation Tracking**: Distributed tracing with correlation IDs
+- **Performance Metrics**: Configurable performance monitoring
+
+**Monitoring Architecture**
+```mermaid
+graph LR
+    A[Application] --> B[Loguru Logger]
+    B --> C[Console Sink]
+    B --> D[JSON Sink]
+    D --> E[Log Aggregation]
+    E --> F[Metrics Dashboard]
+    
+    G[Performance Hooks] --> B
+    H[Error Tracking] --> B
+    I[Resource Monitoring] --> B
+```
+
+### 8.6.2 Optional Integration Services
+
+**Experiment Tracking**
+- **Weights & Biases**: Optional MLOps platform integration
+- **TensorBoard**: Training metrics visualization
+- **Prometheus/Grafana**: Optional metrics collection and dashboards
+- **Custom Metrics**: Built-in performance monitoring and alerting
+
+## 8.7 INFRASTRUCTURE COST CONSIDERATIONS
+
+### 8.7.1 Cost Analysis
+
+**Development Costs**
+- **GitHub Actions**: ~$0 (included in public repository)
+- **Docker Hub**: ~$0 (public repositories)
+- **PyPI**: ~$0 (open-source package hosting)
+- **Documentation Hosting**: ~$0 (GitHub Pages)
+
+**Research Computing Costs**
+- **HPC Cluster Access**: Institution-dependent (typically allocated resources)
+- **Cloud Computing**: Optional (AWS/GCP/Azure for large-scale experiments)
+- **Storage**: Minimal (research data on institutional storage)
+
+### 8.7.2 Cost Optimization Strategies
+
+**Resource Efficiency**
+- **Vectorized Operations**: NumPy operations minimize CPU usage
+- **Intelligent Caching**: Frame cache reduces memory allocation overhead
+- **Configurable Recording**: Disable recording for performance testing
+- **Batch Processing**: Hydra multirun for efficient resource utilization
+
+## 8.8 REQUIRED INFRASTRUCTURE DIAGRAMS
+
+### 8.8.1 Build and Distribution Workflow
+
+```mermaid
+graph TB
+    A[Developer] --> B[Code Changes]
+    B --> C[Pre-commit Hooks]
+    C --> D[GitHub Push]
+    D --> E[GitHub Actions]
+    E --> F[Code Quality]
+    F --> G[Testing]
+    G --> H[Docker Build]
+    H --> I[Performance Tests]
+    I --> J[Security Scan]
+    J --> K{Release?}
+    K -->|Yes| L[PyPI Publish]
+    K -->|No| M[PR Review]
+    L --> N[Documentation Deploy]
+    N --> O[Docker Push]
+    
+    P[Cross-Repo Test] --> E
+    Q[Dependency Update] --> E
+```
+
+### 8.8.2 Research Computing Environment
+
+```mermaid
+graph TD
+    A[Researcher] --> B[Local Development]
+    B --> C[Configuration]
+    C --> D[HPC Submission]
+    D --> E[Job Scheduler]
+    E --> F[Compute Nodes]
+    F --> G[Parallel Experiments]
+    G --> H[Shared Storage]
+    H --> I[Results Collection]
+    I --> J[Local Analysis]
+    
+    K[Container Registry] --> F
+    L[Environment Modules] --> F
+    M[Monitoring] --> F
+```
+
+## 8.9 MAINTENANCE AND SUPPORT
+
+### 8.9.1 Infrastructure Maintenance
+
+**Automated Maintenance**
+- **Dependency Updates**: Automated dependency vulnerability scanning
+- **Performance Monitoring**: Continuous performance regression detection
+- **Security Updates**: Automated security patch integration
+- **Documentation Updates**: Automated API documentation generation
+
+**Manual Maintenance**
+- **HPC Cluster Compatibility**: Periodic testing with institutional clusters
+- **Container Image Updates**: Regular base image security updates
+- **CI/CD Pipeline Updates**: GitHub Actions workflow maintenance
+- **Third-Party Integration**: Optional service integration updates
+
+### 8.9.2 Support Infrastructure
+
+**Community Support**
+- **GitHub Issues**: Primary support channel for bug reports and feature requests
+- **Documentation**: Comprehensive API documentation and user guides
+- **Examples**: Reference implementations and tutorials
+- **Migration Guides**: Version upgrade documentation
+
+#### References
+
+- `.github/workflows/ci.yml` - Comprehensive CI/CD pipeline configuration
+- `.github/workflows/cross_repo_test.yml` - Cross-repository integration testing
+- `docs/performance_tuning.md` - Docker configuration and deployment settings
+- `docs/extending_plume_nav_sim.md` - Extension and deployment patterns
+- `docs/migration_guide.md` - Infrastructure migration guidance
+- `pyproject.toml` - <span style="background-color: rgba(91, 57, 243, 0.2)">PEP 621 setuptools configuration and dependencies</span>
+- `conf/base/` - Hydra configuration infrastructure
+- Technical Specification Section 3.6 - Development & Deployment toolchain
+- Technical Specification Section 5.1 - High-Level Architecture overview
+- Technical Specification Section 3.4 - Third-Party Services integration
+- Technical Specification Section 3.5 - Databases & Storage infrastructure
 
 # APPENDICES
 
 ## 9.1 ADDITIONAL TECHNICAL INFORMATION
 
-### 9.1.1 Environment Variables Reference
+### 9.1.1 Hook System Architecture
 
-The plume_nav_sim system supports extensive configuration through environment variables across all subsystems, enabling fine-tuned control over system behavior without code modifications.
+The system implements a sophisticated hook architecture enabling extensible lifecycle management throughout the simulation pipeline. The HookManager provides a centralized registry for callback functions with near-zero overhead (<1ms per callback execution). The implementation supports three primary lifecycle events:
 
-#### Core System Environment Variables
+- **Pre-step hooks**: Execute before each simulation step
+- **Post-step hooks**: Execute after each simulation step completion  
+- **Episode-end hooks**: Execute upon episode termination
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `ENVIRONMENT_TYPE` | Deployment environment (development/production/testing) | development | Core |
-| `DEBUG` | Enable debug mode | false | Core |
-| `VERBOSE` | Enable verbose logging | false | Core |
-| `PLATFORM` | Target platform (local/cluster/cloud) | local | Core |
+The NullHookSystem provides a high-performance no-op implementation for production environments where hooks are disabled, ensuring minimal runtime impact through compile-time optimization.
 
-#### Directory Configuration
+### 9.1.2 Frame Cache Implementation
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `DATA_DIR` | Data directory path | ./data | Core |
-| `OUTPUT_DIR` | Output directory path | ./outputs | Core |
-| `VIDEO_DIR` | Video files directory | ./videos | Core |
-| `TEMP_DIR` | Temporary files directory | ./tmp | Core |
+The frame cache subsystem provides dual-mode operation optimized for different memory constraints and access patterns:
 
-#### Frame Cache Configuration
+**LRU Mode**: Implements Least Recently Used eviction policy with configurable capacity limits and memory pressure monitoring via psutil integration.
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `FRAME_CACHE_MODE` | Cache mode (lru/preload/disabled) | lru | Frame Cache |
-| `FRAME_CACHE_SIZE_MB` | Maximum cache size in MB | 1024 | Frame Cache |
-| `FRAME_CACHE_STATS` | Enable cache statistics | true | Frame Cache |
-| `MEMORY_PRESSURE_ALERT` | Memory pressure threshold (%) | 85 | Frame Cache |
+**Preload Mode**: Loads entire frame sequences into memory for zero-latency access during training and evaluation phases.
 
-#### Navigation and Physics Parameters
+The implementation provides zero-copy NumPy array access and thread-safe operations using RLock synchronization primitives.
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `NAVIGATOR_MAX_SPEED` | Maximum agent speed | 1.0 | Navigator |
-| `MIN_SOURCE_DISTANCE` | Minimum distance to source | 0.1 | Navigator |
-| `SOURCE_POSITION` | Source position (x,y) | 0,0 | Source |
-| `SOURCE_STRENGTH` | Emission rate | 1.0 | Source |
+### 9.1.3 Correlation ID System
 
-#### Action and Control Configuration
+A distributed tracing system enables request correlation across the entire simulation pipeline. The implementation utilizes thread-local storage for correlation context propagation and automatic integration with the structured logging infrastructure. Each simulation run receives a unique correlation identifier enabling distributed debugging and performance analysis.
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `ACTION_TYPE` | Action interface type | continuous2d | Action |
-| `MAX_ACCELERATION` | Maximum acceleration | 0.5 | Action |
-| `NUM_ACTIONS` | Number of discrete actions | 8 | Action |
-| `ACTION_MAGNITUDE` | Discrete action magnitude | 0.1 | Action |
+### 9.1.4 Performance Monitoring Infrastructure
 
-#### Recording and Data Persistence
+The system includes comprehensive performance monitoring capabilities through the PerformanceMetrics dataclass:
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `RECORD_BACKEND` | Recording backend type | parquet | Recording |
-| `RECORD_ENABLED` | Enable data recording | true | Recording |
-| `RECORD_FULL` | Record all data fields | false | Recording |
-| `RECORD_FREQ` | Recording frequency (Hz) | 10 | Recording |
+- **Rolling window FPS calculations**: Maintains moving averages for frame rate analysis
+- **Memory delta tracking**: Monitors memory usage patterns and validates linear scaling assumptions
+- **Step performance timers**: Configurable timing thresholds for performance regression detection
+- **Resource utilization metrics**: CPU and memory usage tracking for optimization analysis
 
-#### Reinforcement Learning Configuration
+### 9.1.5 Legacy Compatibility Shim Layer
 
-| Variable | Purpose | Default Value | Component |
-|---|---|---|---|
-| `ENABLE_ML` | Enable ML features | false | RL |
-| `ML_DEVICE` | PyTorch device | cpu | RL |
-| `TENSORBOARD_LOG_DIR` | TensorBoard log directory | ./tensorboard | RL |
-| `CHECKPOINT_DIR` | Model checkpoint directory | ./checkpoints | RL |
+A transparent compatibility layer automatically converts between gym and gymnasium API formats:
 
-### 9.1.2 CLI Commands Reference
+- **4-tuple to 5-tuple conversion**: Handles return format differences between legacy and modern environments
+- **Stack frame inspection**: Automatically detects legacy code patterns and applies appropriate conversions
+- **Deprecation warnings**: Provides migration guidance for legacy API usage
+- **Zero-code migration**: Enables seamless transition without code modifications
 
-The system provides comprehensive command-line interfaces supporting both automated workflows and interactive development.
+### 9.1.6 Protocol-Based Plugin Architecture
 
-#### Main Simulation Commands
-
-```bash
-# Execute simulation with configuration
-plume-nav-sim run [OPTIONS]
-  --config-path PATH      # Path to configuration file
-  --dry-run              # Run without executing simulation
-  --multirun             # Enable Hydra multirun mode
-  --frame-cache MODE     # Frame cache mode (lru/preload/disabled)
-  --save-trajectory      # Save agent trajectories
-  --export-video        # Export simulation video
-
-#### Configuration validation and management
-plume-nav-sim config validate [CONFIG_PATH]  # Validate configuration
-plume-nav-sim config export [OUTPUT_PATH]    # Export configuration
-
-#### Parameter sweeps and batch processing
-plume-nav-sim run --multirun seed=range(0,10) agent_count=10,50,100
-```
-
-#### Reinforcement Learning Commands
-
-```bash
-# Train RL agents
-plume-nav-sim train algorithm [ALGORITHM] [OPTIONS]
-  --env-config PATH     # Environment configuration
-  --timesteps N         # Training timesteps
-  --eval-freq N         # Evaluation frequency
-  --save-freq N         # Checkpoint save frequency
-
-#### Supported algorithms: PPO, SAC, TD3, A2C, DDPG
-plume-nav-sim train algorithm PPO --timesteps 1000000
-```
-
-#### Debug and Visualization Commands
-
-```bash
-# Launch debug viewer
-python -m plume_nav_sim.debug.cli launch-viewer [OPTIONS]
-  --backend BACKEND      # GUI backend (qt/streamlit/console)
-  --config-path PATH     # Debug configuration path
-  --frame-range START:END # Frame range to debug
-  --enable-profiling     # Enable performance profiling
-
-#### Generate visualizations
-plume-nav-sim visualize export [OPTIONS]
-  --trajectory-path PATH  # Path to trajectory data
-  --output-path PATH     # Output path for visualization
-  --format FORMAT        # Output format (png/mp4/gif)
-```
-
-### 9.1.3 Configuration Group Reference
-
-The Hydra configuration system supports hierarchical configuration composition through predefined configuration groups:
-
-| Group | Available Options | Purpose |
-|---|---|---|
-| `source` | point_source, multi_source, dynamic_source | Odor source configuration |
-| `agent_init` | uniform_random, grid, fixed_list, from_dataset | Agent initialization strategy |
-| `boundary` | terminate, bounce, wrap, clip | Domain boundary behavior |
-| `action` | continuous2d, cardinal_discrete | Action space interface |
-
-| Group | Available Options | Purpose |
-|---|---|---|
-| `record` | none, parquet, hdf5, sqlite | Data recording backend |
-| `hooks` | none, research, debug, full | Extension hooks profile |
-| `plume_models` | gaussian, turbulent | Plume dispersion model |
-| `wind_fields` | constant, turbulent, time_varying | Wind field model |
-
-### 9.1.4 Performance Thresholds and SLAs
-
-The system maintains strict performance targets to ensure real-time simulation capabilities:
-
-| Metric | Target | Critical Threshold | Component |
-|---|---|---|---|
-| Simulation Step Latency | ≤33 ms | >50 ms | Core |
-| Frames Per Second | ≥30 FPS | <20 FPS | Core |
-| Memory Usage (100 agents) | <2 GB | >8 GB | System |
-| Cache Hit Rate | >90% | <85% | Frame Cache |
-
-| Metric | Target | Critical Threshold | Component |
-|---|---|---|---|
-| Recording Buffer Flush | <100 ms | >500 ms | Recording |
-| Component Initialization | <1 s | >5 s | System |
-| Database Write Throughput | >1000 ops/s | <100 ops/s | Database |
-| Protocol Call Overhead | <1 ms | >5 ms | Core |
-
-### 9.1.5 Protocol Interface Signatures
-
-The system implements type-safe protocol interfaces enabling runtime component substitution:
-
-#### Core Navigation Protocol
-
-```python
-NavigatorProtocol:
-  - reset() -> NavigatorState
-  - step(action: np.ndarray) -> NavigatorState
-  - sample_odor() -> Union[float, np.ndarray]
-  - get_state() -> NavigatorState
-  - set_state(state: NavigatorState) -> None
-```
-
-#### Component Protocols
-
-```python
-SourceProtocol:
-  - get_emission_rate(t: float) -> float
-  - get_position(t: float) -> Tuple[float, float]
-  - update_state(dt: float) -> None
-
-BoundaryPolicyProtocol:
-  - apply_policy(positions, velocities) -> Tuple[positions, velocities, terminated]
-  - check_violations(positions) -> np.ndarray
-  - get_termination_status() -> bool
-
-ActionInterfaceProtocol:
-  - get_action_space() -> gymnasium.spaces.Space
-  - transform_action(raw_action) -> np.ndarray
-  - validate_action(action) -> bool
-```
-
-#### Data Management Protocols
-
-```python
-RecorderProtocol:
-  - record_step(step_data: Dict) -> None
-  - record_episode(episode_data: Dict) -> None
-  - flush() -> None
-  - close() -> None
-
-StatsAggregatorProtocol:
-  - calculate_episode_stats(data) -> Dict
-  - calculate_run_stats(episodes) -> Dict
-  - export_summary(path) -> None
-```
-
-### 9.1.6 Database Backend Specifications
-
-The multi-backend database architecture provides optimized storage for different research workflows:
-
-#### Backend Characteristics
-
-| Backend | Use Case | Performance | Storage Efficiency |
-|---|---|---|---|
-| SQLite | Local development, testing | Medium | Good |
-| Parquet | Analytical workloads | High (read) | Excellent |
-| HDF5 | Scientific datasets | High | Very Good |
-| Null | Performance-critical | Highest | N/A |
-
-#### Schema Structure
-
-The database implements a normalized schema optimized for research workflows:
+The system implements a protocol-based plugin architecture enabling extensible component integration:
 
 ```mermaid
-erDiagram
-    Experiment {
-        uuid id PK
-        string name
-        string description
-        json configuration
-        datetime created_at
-        datetime updated_at
-    }
-    
-    Simulation {
-        uuid id PK
-        uuid experiment_id FK
-        string name
-        json parameters
-        datetime started_at
-        datetime completed_at
-    }
-    
-    Trajectory {
-        uuid id PK
-        uuid simulation_id FK
-        int episode_id
-        bytes compressed_data
-    }
-    
-    PerformanceMetric {
-        uuid id PK
-        uuid simulation_id FK
-        string metric_name
-        float value
-        datetime timestamp
-    }
-    
-    Experiment ||--o{ Simulation : contains
-    Simulation ||--o{ Trajectory : generates
-    Simulation ||--o{ PerformanceMetric : produces
+graph TD
+    A[NavigatorProtocol] --> B[Factory Registration]
+    C[SourceProtocol] --> B
+    D[BoundaryPolicyProtocol] --> B
+    B --> E[Hydra Configuration]
+    E --> F[Runtime Instantiation]
+    F --> G[Protocol Compliance Validation]
 ```
+
+### 9.1.7 Environment Variable Resolution
+
+Configuration management utilizes OmegaConf interpolation for environment variable resolution with hierarchical override capabilities:
+
+- **${oc.env:VAR,default}** syntax for environment variable interpolation
+- **Profile-based configuration**: Environment-specific configuration selection
+- **Hierarchical overrides**: Multi-level configuration inheritance and composition
+
+### 9.1.8 Recording Backend Architecture
+
+The recording system provides multi-format export capabilities with performance optimization:
+
+**Supported Formats**:
+- Parquet: Columnar storage with compression
+- HDF5: Hierarchical data format with SWMR support
+- SQLite: Embedded database with transaction support
+- JSON/JSONL: Human-readable interchange formats
+
+**Performance Features**:
+- Buffered I/O with configurable flush intervals
+- Asynchronous processing with queue-based architecture
+- Compression support with performance metrics
+- Memory-mapped file access for large datasets
+
+### 9.1.9 Filament-Based Turbulent Plume Physics
+
+The plume modeling system implements Lagrangian particle advection with Ornstein-Uhlenbeck turbulence processes:
+
+- **Operator-splitting time integration**: Separates advection and diffusion processes for numerical stability
+- **Filament tracking**: Individual particle trajectories with concentration computation
+- **Numba JIT compilation**: Optional just-in-time compilation for performance optimization
+- **Configurable physics parameters**: Adjustable turbulence intensity and dissipation rates
+
+### 9.1.10 CI/CD Performance Gates
+
+The continuous integration pipeline includes automated performance regression detection:
+
+- **10% threshold monitoring**: Automatic detection of performance degradation
+- **Memory scaling validation**: Ensures linear scaling for multi-agent scenarios
+- **Cross-repository integration testing**: Validates compatibility across dependent projects
+- **Docker containerized validation**: Ensures consistent runtime environments
 
 ## 9.2 GLOSSARY
 
-**Agent**: An autonomous entity navigating through the odor plume environment, implementing specific navigation strategies and sensor models
+# APPENDICES
 
-**Boundary Policy**: A configurable behavior component that defines how agents interact with domain boundaries, supporting terminate, bounce, wrap, and clip behaviors
+## 9.1 ADDITIONAL TECHNICAL INFORMATION
 
-**Cache Hit Rate**: The percentage of frame requests served from memory cache versus disk reads, critical for maintaining real-time performance
+### 9.1.1 Hook System Architecture
 
-**Correlation ID**: A unique identifier used to track related operations across different system components for debugging and performance analysis
+The system implements a sophisticated hook architecture enabling extensible lifecycle management throughout the simulation pipeline. The HookManager provides a centralized registry for callback functions with near-zero overhead (<1ms per callback execution). The implementation supports three primary lifecycle events:
 
-**Episode**: A single simulation run from agent initialization to termination condition, representing one complete navigation scenario
+- **Pre-step hooks**: Execute before each simulation step
+- **Post-step hooks**: Execute after each simulation step completion  
+- **Episode-end hooks**: Execute upon episode termination
 
-**Frame Cache**: High-performance caching system for video-based plume data with configurable operating modes (LRU, preload, disabled)
+The NullHookSystem provides a high-performance no-op implementation for production environments where hooks are disabled, ensuring minimal runtime impact through compile-time optimization.
 
-**Gymnasium Environment**: Modern reinforcement learning environment API standard, successor to OpenAI Gym, providing standardized observation and action spaces
+### 9.1.2 Frame Cache Implementation
 
-**Hook System**: Extension mechanism allowing custom code injection at predefined execution points without modifying core system components
+The frame cache subsystem provides dual-mode operation optimized for different memory constraints and access patterns:
 
-**Hydra Configuration**: Hierarchical configuration management system enabling runtime component selection and parameter composition
+**LRU Mode**: Implements Least Recently Used eviction policy with configurable capacity limits and memory pressure monitoring via psutil integration.
 
-**JIT Compilation**: Just-In-Time compilation using Numba for performance-critical numerical computations, achieving >10x speedup
+**Preload Mode**: Loads entire frame sequences into memory for zero-latency access during training and evaluation phases.
 
-**LRU Cache**: Least Recently Used cache eviction strategy for optimal memory management under resource constraints
+The implementation provides zero-copy NumPy array access and thread-safe operations using RLock synchronization primitives.
 
-**Multi-Agent Scenario**: Simulation configuration supporting multiple simultaneous navigating agents with independent behavior policies
+### 9.1.3 Correlation ID System
 
-**Odor Plume**: Spatial and temporal distribution of chemical concentration in the simulation environment, following physical dispersion models
+A distributed tracing system enables request correlation across the entire simulation pipeline. The implementation utilizes thread-local storage for correlation context propagation and automatic integration with the structured logging infrastructure. Each simulation run receives a unique correlation identifier enabling distributed debugging and performance analysis.
 
-**Protocol Interface**: Type-safe interface definition enabling runtime component substitution and system extensibility
+### 9.1.4 Performance Monitoring Infrastructure
 
-**Recording Backend**: Pluggable data persistence layer supporting multiple storage formats optimized for different research workflows
+The system includes comprehensive performance monitoring capabilities through the PerformanceMetrics dataclass:
 
-**Sensor Model**: Configurable perception component simulating different sensor types, noise characteristics, and sampling patterns
+- **Rolling window FPS calculations**: Maintains moving averages for frame rate analysis
+- **Memory delta tracking**: Monitors memory usage patterns and validates linear scaling assumptions
+- **Step performance timers**: Configurable timing thresholds for performance regression detection
+- **Resource utilization metrics**: CPU and memory usage tracking for optimization analysis
 
-**Shim Layer**: Compatibility layer providing backward compatibility with legacy OpenAI Gym API during transition period
+### 9.1.5 Legacy Compatibility Shim Layer
 
-**Source Model**: Component defining odor emission characteristics, positioning, and temporal behavior patterns
+A transparent compatibility layer automatically converts between gym and gymnasium API formats:
 
-**Stats Aggregator**: Component calculating episode and run-level statistics for comprehensive research analysis and benchmarking
+- **4-tuple to 5-tuple conversion**: Handles return format differences between legacy and modern environments
+- **Stack frame inspection**: Automatically detects legacy code patterns and applies appropriate conversions
+- **Deprecation warnings**: Provides migration guidance for legacy API usage
+- **Zero-code migration**: Enables seamless transition without code modifications
 
-**Step Latency**: Time required to execute one simulation timestep, critical for maintaining real-time performance targets
+### 9.1.6 Protocol-Based Plugin Architecture
 
-**Vectorized Operations**: NumPy-based parallel operations enabling efficient multi-agent processing and high-throughput scenarios
+The system implements a protocol-based plugin architecture enabling extensible component integration:
 
-**Wind Field**: Environmental wind model affecting plume dispersion dynamics, supporting constant, turbulent, and time-varying patterns
+```mermaid
+graph TD
+    A[NavigatorProtocol] --> B[Factory Registration]
+    C[SourceProtocol] --> B
+    D[BoundaryPolicyProtocol] --> B
+    B --> E[Hydra Configuration]
+    E --> F[Runtime Instantiation]
+    F --> G[Protocol Compliance Validation]
+```
+
+### 9.1.7 Environment Variable Resolution
+
+Configuration management utilizes OmegaConf interpolation for environment variable resolution with hierarchical override capabilities:
+
+- **${oc.env:VAR,default}** syntax for environment variable interpolation
+- **Profile-based configuration**: Environment-specific configuration selection
+- **Hierarchical overrides**: Multi-level configuration inheritance and composition
+
+### 9.1.8 Recording Backend Architecture
+
+The recording system provides multi-format export capabilities with performance optimization:
+
+**Supported Formats**:
+- Parquet: Columnar storage with compression
+- HDF5: Hierarchical data format with SWMR support
+- SQLite: Embedded database with transaction support
+- JSON/JSONL: Human-readable interchange formats
+
+**Performance Features**:
+- Buffered I/O with configurable flush intervals
+- Asynchronous processing with queue-based architecture
+- Compression support with performance metrics
+- Memory-mapped file access for large datasets
+
+### 9.1.9 Filament-Based Turbulent Plume Physics
+
+The plume modeling system implements Lagrangian particle advection with Ornstein-Uhlenbeck turbulence processes:
+
+- **Operator-splitting time integration**: Separates advection and diffusion processes for numerical stability
+- **Filament tracking**: Individual particle trajectories with concentration computation
+- **Numba JIT compilation**: Optional just-in-time compilation for performance optimization
+- **Configurable physics parameters**: Adjustable turbulence intensity and dissipation rates
+
+### 9.1.10 CI/CD Performance Gates
+
+The continuous integration pipeline includes automated performance regression detection:
+
+- **10% threshold monitoring**: Automatic detection of performance degradation
+- **Memory scaling validation**: Ensures linear scaling for multi-agent scenarios
+- **Cross-repository integration testing**: Validates compatibility across dependent projects
+- **Docker containerized validation**: Ensures consistent runtime environments
+
+## 9.2 GLOSSARY
+
+# APPENDICES
+
+## 9.1 ADDITIONAL TECHNICAL INFORMATION
+
+### 9.1.1 Hook System Architecture
+
+The system implements a sophisticated hook architecture enabling extensible lifecycle management throughout the simulation pipeline. The HookManager provides a centralized registry for callback functions with near-zero overhead (<1ms per callback execution). The implementation supports three primary lifecycle events:
+
+- **Pre-step hooks**: Execute before each simulation step
+- **Post-step hooks**: Execute after each simulation step completion  
+- **Episode-end hooks**: Execute upon episode termination
+
+The NullHookSystem provides a high-performance no-op implementation for production environments where hooks are disabled, ensuring minimal runtime impact through compile-time optimization.
+
+### 9.1.2 Frame Cache Implementation
+
+The frame cache subsystem provides dual-mode operation optimized for different memory constraints and access patterns:
+
+**LRU Mode**: Implements Least Recently Used eviction policy with configurable capacity limits and memory pressure monitoring via psutil integration.
+
+**Preload Mode**: Loads entire frame sequences into memory for zero-latency access during training and evaluation phases.
+
+The implementation provides zero-copy NumPy array access and thread-safe operations using RLock synchronization primitives.
+
+### 9.1.3 Correlation ID System
+
+A distributed tracing system enables request correlation across the entire simulation pipeline. The implementation utilizes thread-local storage for correlation context propagation and automatic integration with the structured logging infrastructure. Each simulation run receives a unique correlation identifier enabling distributed debugging and performance analysis.
+
+### 9.1.4 Performance Monitoring Infrastructure
+
+The system includes comprehensive performance monitoring capabilities through the PerformanceMetrics dataclass:
+
+- **Rolling window FPS calculations**: Maintains moving averages for frame rate analysis
+- **Memory delta tracking**: Monitors memory usage patterns and validates linear scaling assumptions
+- **Step performance timers**: Configurable timing thresholds for performance regression detection
+- **Resource utilization metrics**: CPU and memory usage tracking for optimization analysis
+
+### 9.1.5 Legacy Compatibility Shim Layer
+
+A transparent compatibility layer automatically converts between gym and gymnasium API formats:
+
+- **4-tuple to 5-tuple conversion**: Handles return format differences between legacy and modern environments
+- **Stack frame inspection**: Automatically detects legacy code patterns and applies appropriate conversions
+- **Deprecation warnings**: Provides migration guidance for legacy API usage
+- **Zero-code migration**: Enables seamless transition without code modifications
+
+### 9.1.6 Protocol-Based Plugin Architecture
+
+The system implements a protocol-based plugin architecture enabling extensible component integration:
+
+```mermaid
+graph TD
+    A[NavigatorProtocol] --> B[Factory Registration]
+    C[SourceProtocol] --> B
+    D[BoundaryPolicyProtocol] --> B
+    B --> E[Hydra Configuration]
+    E --> F[Runtime Instantiation]
+    F --> G[Protocol Compliance Validation]
+```
+
+### 9.1.7 Environment Variable Resolution
+
+Configuration management utilizes OmegaConf interpolation for environment variable resolution with hierarchical override capabilities:
+
+- **${oc.env:VAR,default}** syntax for environment variable interpolation
+- **Profile-based configuration**: Environment-specific configuration selection
+- **Hierarchical overrides**: Multi-level configuration inheritance and composition
+
+### 9.1.8 Recording Backend Architecture
+
+The recording system provides multi-format export capabilities with performance optimization:
+
+**Supported Formats**:
+- Parquet: Columnar storage with compression
+- HDF5: Hierarchical data format with SWMR support
+- SQLite: Embedded database with transaction support
+- JSON/JSONL: Human-readable interchange formats
+
+**Performance Features**:
+- Buffered I/O with configurable flush intervals
+- Asynchronous processing with queue-based architecture
+- Compression support with performance metrics
+- Memory-mapped file access for large datasets
+
+### 9.1.9 Filament-Based Turbulent Plume Physics
+
+The plume modeling system implements Lagrangian particle advection with Ornstein-Uhlenbeck turbulence processes:
+
+- **Operator-splitting time integration**: Separates advection and diffusion processes for numerical stability
+- **Filament tracking**: Individual particle trajectories with concentration computation
+- **Numba JIT compilation**: Optional just-in-time compilation for performance optimization
+- **Configurable physics parameters**: Adjustable turbulence intensity and dissipation rates
+
+### 9.1.10 CI/CD Performance Gates
+
+The continuous integration pipeline includes automated performance regression detection:
+
+- **10% threshold monitoring**: Automatic detection of performance degradation
+- **Memory scaling validation**: Ensures linear scaling for multi-agent scenarios
+- **Cross-repository integration testing**: Validates compatibility across dependent projects
+- **Docker containerized validation**: Ensures consistent runtime environments
+
+## 9.2 GLOSSARY
+
+# APPENDICES
+
+## 9.1 ADDITIONAL TECHNICAL INFORMATION
+
+### 9.1.1 Hook System Architecture
+
+The system implements a sophisticated hook architecture enabling extensible lifecycle management throughout the simulation pipeline. The HookManager provides a centralized registry for callback functions with near-zero overhead (<1ms per callback execution). The implementation supports three primary lifecycle events:
+
+- **Pre-step hooks**: Execute before each simulation step
+- **Post-step hooks**: Execute after each simulation step completion  
+- **Episode-end hooks**: Execute upon episode termination
+
+The NullHookSystem provides a high-performance no-op implementation for production environments where hooks are disabled, ensuring minimal runtime impact through compile-time optimization.
+
+### 9.1.2 Frame Cache Implementation
+
+The frame cache subsystem provides dual-mode operation optimized for different memory constraints and access patterns:
+
+**LRU Mode**: Implements Least Recently Used eviction policy with configurable capacity limits and memory pressure monitoring via psutil integration.
+
+**Preload Mode**: Loads entire frame sequences into memory for zero-latency access during training and evaluation phases.
+
+The implementation provides zero-copy NumPy array access and thread-safe operations using RLock synchronization primitives.
+
+### 9.1.3 Correlation ID System
+
+A distributed tracing system enables request correlation across the entire simulation pipeline. The implementation utilizes thread-local storage for correlation context propagation and automatic integration with the structured logging infrastructure. Each simulation run receives a unique correlation identifier enabling distributed debugging and performance analysis.
+
+### 9.1.4 Performance Monitoring Infrastructure
+
+The system includes comprehensive performance monitoring capabilities through the PerformanceMetrics dataclass:
+
+- **Rolling window FPS calculations**: Maintains moving averages for frame rate analysis
+- **Memory delta tracking**: Monitors memory usage patterns and validates linear scaling assumptions
+- **Step performance timers**: Configurable timing thresholds for performance regression detection
+- **Resource utilization metrics**: CPU and memory usage tracking for optimization analysis
+
+### 9.1.5 Legacy Compatibility Shim Layer
+
+A transparent compatibility layer automatically converts between gym and gymnasium API formats:
+
+- **4-tuple to 5-tuple conversion**: Handles return format differences between legacy and modern environments
+- **Stack frame inspection**: Automatically detects legacy code patterns and applies appropriate conversions
+- **Deprecation warnings**: Provides migration guidance for legacy API usage
+- **Zero-code migration**: Enables seamless transition without code modifications
+
+### 9.1.6 Protocol-Based Plugin Architecture
+
+The system implements a protocol-based plugin architecture enabling extensible component integration:
+
+```mermaid
+graph TD
+    A[NavigatorProtocol] --> B[Factory Registration]
+    C[SourceProtocol] --> B
+    D[BoundaryPolicyProtocol] --> B
+    B --> E[Hydra Configuration]
+    E --> F[Runtime Instantiation]
+    F --> G[Protocol Compliance Validation]
+```
+
+### 9.1.7 Environment Variable Resolution
+
+Configuration management utilizes OmegaConf interpolation for environment variable resolution with hierarchical override capabilities:
+
+- **${oc.env:VAR,default}** syntax for environment variable interpolation
+- **Profile-based configuration**: Environment-specific configuration selection
+- **Hierarchical overrides**: Multi-level configuration inheritance and composition
+
+### 9.1.8 Recording Backend Architecture
+
+The recording system provides multi-format export capabilities with performance optimization:
+
+**Supported Formats**:
+- Parquet: Columnar storage with compression
+- HDF5: Hierarchical data format with SWMR support
+- SQLite: Embedded database with transaction support
+- JSON/JSONL: Human-readable interchange formats
+
+**Performance Features**:
+- Buffered I/O with configurable flush intervals
+- Asynchronous processing with queue-based architecture
+- Compression support with performance metrics
+- Memory-mapped file access for large datasets
+
+### 9.1.9 Filament-Based Turbulent Plume Physics
+
+The plume modeling system implements Lagrangian particle advection with Ornstein-Uhlenbeck turbulence processes:
+
+- **Operator-splitting time integration**: Separates advection and diffusion processes for numerical stability
+- **Filament tracking**: Individual particle trajectories with concentration computation
+- **Numba JIT compilation**: Optional just-in-time compilation for performance optimization
+- **Configurable physics parameters**: Adjustable turbulence intensity and dissipation rates
+
+### 9.1.10 CI/CD Performance Gates
+
+The continuous integration pipeline includes automated performance regression detection:
+
+- **10% threshold monitoring**: Automatic detection of performance degradation
+- **Memory scaling validation**: Ensures linear scaling for multi-agent scenarios
+- **Cross-repository integration testing**: Validates compatibility across dependent projects
+- **Docker containerized validation**: Ensures consistent runtime environments
+
+## 9.2 GLOSSARY
+
+### 9.2.1 Core Terms
+
+| Term | Definition |
+|------|------------|
+| **Actor-Critic Policy** | Reinforcement learning algorithm combining value function estimation with policy optimization |
+| **Correlation ID** | Unique identifier enabling distributed request tracing across system components |
+| **Feature Extractor** | Neural network component that transforms raw observations into learned representations |
+| **Filament** | Individual particle trajectory in Lagrangian plume modeling representing odor concentration |
+
+### 9.2.2 Technical Terms (updated)
+
+| Term | Definition |
+|------|------------|
+| **Frame Cache** | High-performance memory system for storing and retrieving simulation frame sequences |
+| **Gymnasium Environment** | OpenAI Gym-compatible interface for reinforcement learning environment integration |
+| **Hook System** | Extensible callback architecture enabling lifecycle event handling throughout simulation |
+| **Hydra Composition** | Configuration management system enabling hierarchical parameter organization |
+| **Semantic Versioning** | Versioning scheme that encodes compatibility in a MAJOR.MINOR.PATCH pattern, e.g. 0.1.0 |
+| **Setuptools (Build Backend)** | Standard Python packaging and build system (≥ v61) used as the PEP 621-compliant build backend replacing Poetry |
+
+### 9.2.3 Physics and Modeling Terms
+
+| Term | Definition |
+|------|------------|
+| **JIT Compilation** | Just-in-time code compilation for runtime performance optimization |
+| **Lagrangian Advection** | Physics simulation method tracking individual particle trajectories through flow fields |
+| **LRU Cache** | Least Recently Used caching strategy for memory-constrained environments |
+| **Memory Pressure** | System condition indicating approaching memory capacity limits |
+
+### 9.2.4 System Architecture Terms
+
+| Term | Definition |
+|------|------------|
+| **Multirun Experiment** | Parallel execution of multiple simulation configurations for parameter exploration |
+| **Operator Splitting** | Numerical method separating complex differential equations into simpler components |
+| **Ornstein-Uhlenbeck Process** | Stochastic process used for modeling turbulent velocity fluctuations |
+| **Protocol** | Python typing system defining interface contracts for component interoperability |
+
+### 9.2.5 Performance and Monitoring Terms
+
+| Term | Definition |
+|------|------------|
+| **Rolling Window Average** | Statistical method computing moving averages over fixed-size data windows |
+| **Shim Layer** | Compatibility interface providing transparent API conversion between system versions |
+| **Structured Logging** | Logging format using consistent key-value pairs for automated analysis |
+| **Zero-Copy Access** | Memory access pattern avoiding data duplication for performance optimization |
 
 ## 9.3 ACRONYMS
 
-**API** - Application Programming Interface  
-**CI/CD** - Continuous Integration/Continuous Deployment  
-**CLI** - Command Line Interface  
-**CPU** - Central Processing Unit  
-**CUDA** - Compute Unified Device Architecture  
-**DQN** - Deep Q-Network  
-**DVC** - Data Version Control  
-**FPS** - Frames Per Second  
-**GC** - Garbage Collection  
-**GUI** - Graphical User Interface  
-**HDF5** - Hierarchical Data Format version 5  
-**HPC** - High Performance Computing  
-**I/O** - Input/Output  
-**JIT** - Just-In-Time (compilation)  
-**JSON** - JavaScript Object Notation  
-**KPI** - Key Performance Indicator  
-**LRU** - Least Recently Used  
-**ML** - Machine Learning  
-**MTTR** - Mean Time To Recovery  
-**OOM** - Out Of Memory  
-**ORM** - Object-Relational Mapping  
-**PEP** - Python Enhancement Proposal  
-**PPO** - Proximal Policy Optimization  
-**PyPI** - Python Package Index  
-**Qt** - Cross-platform application framework  
-**RL** - Reinforcement Learning  
-**RSS** - Resident Set Size  
-**SAC** - Soft Actor-Critic  
-**SB3** - Stable-Baselines3  
-**SLA** - Service Level Agreement  
-**SQL** - Structured Query Language  
-**TD3** - Twin Delayed Deep Deterministic Policy Gradient  
-**TTL** - Time To Live  
-**UI** - User Interface  
-**UUID** - Universally Unique Identifier  
-**W&B** - Weights & Biases  
-**YAML** - Yet Another Markup Language
+### 9.3.1 Programming and Development
 
-### 9.3.1 References
+| Acronym | Expansion |
+|---------|-----------|
+| **API** | Application Programming Interface |
+| **CI/CD** | Continuous Integration/Continuous Deployment |
+| **CLI** | Command Line Interface |
+| **GUI** | Graphical User Interface |
+| **<span style="background-color: rgba(91, 57, 243, 0.2)">SemVer</span>** | <span style="background-color: rgba(91, 57, 243, 0.2)">Semantic Versioning</span> |
 
-#### Files Examined
-- `src/odor_plume_nav/db/models.py` - SQLAlchemy ORM models and database schema definitions
-- `src/odor_plume_nav/db/session.py` - Database session management and connection pooling
-- `src/plume_nav_sim/recording/backends/` - Recording backend implementations
-- `conf/base/record/` - Database and recording configuration schemas
-- `conf/config.yaml` - Main system configuration file
-- `src/plume_nav_sim/debug/cli.py` - Debug CLI command implementations
+### 9.3.2 Data Formats and Standards
 
-#### Directories Analyzed
-- `src/odor_plume_nav/` - Core navigation library components
-- `src/plume_nav_sim/` - Simulation framework and protocols
-- `conf/base/` - Configuration group definitions
-- `conf/` - Hydra configuration hierarchy
+| Acronym | Expansion |
+|---------|-----------|
+| **CSV** | Comma-Separated Values |
+| **HDF5** | Hierarchical Data Format version 5 |
+| **JSON** | JavaScript Object Notation |
+| **JSONL** | JSON Lines |
 
-#### Technical Specification Sections Referenced
-- Section 1.1 EXECUTIVE SUMMARY - System overview and context
-- Section 3.2 PROGRAMMING LANGUAGES - Python version requirements
-- Section 3.3 FRAMEWORKS & LIBRARIES - Technology stack details
-- Section 5.2 COMPONENT DETAILS - System architecture and protocols
-- Section 6.2 DATABASE DESIGN - Multi-backend data persistence
-- Section 7.2 USER INTERFACE MODALITIES - CLI and GUI interfaces
+### 9.3.3 System and Hardware
+
+| Acronym | Expansion |
+|---------|-----------|
+| **CPU** | Central Processing Unit |
+| **HPC** | High-Performance Computing |
+| **HTTP** | Hypertext Transfer Protocol |
+| **I/O** | Input/Output |
+
+### 9.3.4 Machine Learning and AI
+
+| Acronym | Expansion |
+|---------|-----------|
+| **ML** | Machine Learning |
+| **MLOps** | Machine Learning Operations |
+| **PPO** | Proximal Policy Optimization |
+| **RL** | Reinforcement Learning |
+
+### 9.3.5 File and Media Formats
+
+| Acronym | Expansion |
+|---------|-----------|
+| **MP4** | MPEG-4 Part 14 |
+| **MPEG** | Moving Picture Experts Group |
+| **XML** | eXtensible Markup Language |
+| **YAML** | YAML Ain't Markup Language |
+
+### 9.3.6 Specialized Technical Terms
+
+| Acronym | Expansion |
+|---------|-----------|
+| **DVC** | Data Version Control |
+| **JIT** | Just-In-Time |
+| **LRU** | Least Recently Used |
+| **ORM** | Object-Relational Mapping |
+
+### 9.3.7 Research and Scientific Computing
+
+| Acronym | Expansion |
+|---------|-----------|
+| **OU** | Ornstein-Uhlenbeck |
+| **PBS** | Portable Batch System |
+| **ROI** | Region of Interest |
+| **SLURM** | Simple Linux Utility for Resource Management |
+
+### 9.3.8 Performance and Quality Metrics
+
+| Acronym | Expansion |
+|---------|-----------|
+| **FPS** | Frames Per Second |
+| **QA** | Quality Assurance |
+| **RAM** | Random Access Memory |
+| **RSS** | Resident Set Size |
+
+### 9.3.9 Advanced ML Algorithms
+
+| Acronym | Expansion |
+|---------|-----------|
+| **SAC** | Soft Actor-Critic |
+| **SB3** | Stable-Baselines3 |
+| **TD3** | Twin Delayed Deep Deterministic Policy Gradient |
+| **W&B** | Weights & Biases |
+
+### 9.3.10 System and Standards
+
+| Acronym | Expansion |
+|---------|-----------|
+| **PEP** | Python Enhancement Proposal |
+| **PyPI** | Python Package Index |
+| **SDK** | Software Development Kit |
+| **SLA** | Service Level Agreement |
+
+### 9.3.11 Concurrency and Data Access
+
+| Acronym | Expansion |
+|---------|-----------|
+| **RLock** | Reentrant Lock |
+| **SQL** | Structured Query Language |
+| **SWMR** | Single Writer Multiple Reader |
+| **UUID** | Universally Unique Identifier |
+
+#### References
+
+**Technical Specification Sections Retrieved:**
+- `1.1 EXECUTIVE SUMMARY` - Project overview and stakeholder context
+- `3.1 PROGRAMMING LANGUAGES` - Python version requirements and language features
+- `3.2 FRAMEWORKS & LIBRARIES` - Core framework dependencies and integration patterns
+- `3.3 OPEN SOURCE DEPENDENCIES` - Complete dependency catalog and version constraints
+- `3.4 THIRD-PARTY SERVICES` - External service integrations and API dependencies
+- `3.5 DATABASES & STORAGE` - Storage architecture and data persistence strategies
+- `3.6 DEVELOPMENT & DEPLOYMENT` - Development toolchain and deployment infrastructure
+- `6.5 MONITORING AND OBSERVABILITY` - Comprehensive monitoring and logging architecture
+- `8.1 INFRASTRUCTURE APPLICABILITY ASSESSMENT` - System classification and deployment context
+
+**Source Files Examined:**
+- `conf/base.yaml` - Foundational Hydra configuration with baseline defaults
+- `conf/config.yaml` - User configuration template with environment variable interpolation
+- `src/odor_plume_nav/cache/frame_cache.py` - High-performance frame caching implementation
+- `src/odor_plume_nav/utils/logging_setup.py` - Enhanced structured logging system
+- `src/odor_plume_nav/db/models.py` - SQLAlchemy ORM models for experiment persistence
+- `src/odor_plume_nav/cli/main.py` - Command-line interface with Hydra integration
+- `src/odor_plume_nav/rl/policies.py` - Custom reinforcement learning policies
+- `src/plume_nav_sim/recording/__init__.py` - Multi-backend recording framework
+- `src/odor_plume_nav/environments/gymnasium_env.py` - Gymnasium environment wrapper
+- `src/plume_nav_sim/models/plume/turbulent_plume.py` - Filament-based turbulent plume physics
+- <span style="background-color: rgba(91, 57, 243, 0.2)">`src/plume_nav_sim/cli/main.py` - Command-line interface for simulation package</span>
+- `.github/workflows/ci.yml` - Comprehensive CI/CD pipeline configuration
+- `.github/workflows/cross_repo_test.yml` - Cross-repository integration testing
+- `src/plume_nav_sim/__init__.py` - Core simulation package initialization
+- `src/plume_nav_sim/hooks.py` - Lightweight hook system implementation
+- `src/odor_plume_nav/__init__.py` - Navigation package initialization
+
+**Source Directories Explored:**
+- `src/` - Root source directory containing three main packages
+- `src/plume_nav_sim/` - Core simulation package structure
+- `src/odor_plume_nav/` - Navigation library package structure
+- `conf/base/` - Hydra configuration groups for system components

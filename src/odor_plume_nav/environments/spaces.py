@@ -32,7 +32,7 @@ except ImportError:
 try:
     import gymnasium as gym
     from gymnasium.spaces import Box, Dict as DictSpace
-    from gymnasium.utils.env_checker import check_environment_deterministic_reset
+    from gymnasium.utils.env_checker import check_env  # Updated to correct function name
     GYMNASIUM_AVAILABLE = True
     
     # Import environment checker utilities for comprehensive validation
@@ -40,7 +40,7 @@ try:
         from gymnasium.utils.env_checker import (
             check_action_space,
             check_observation_space,
-            check_environment
+            check_env as check_environment  # Alias for backward compatibility
         )
         ENV_CHECKER_AVAILABLE = True
         logger.debug("Gymnasium environment checker utilities loaded successfully")

@@ -111,7 +111,11 @@ def _emit_legacy_gym_warning():
 
 # Perform legacy gym detection on import
 _legacy_gym_detected = _detect_legacy_gym_import()
-if _legacy_gym_detected:
+# Suppress warnings during test execution to prevent spam
+import os
+import sys
+_is_testing = any(x in sys.modules for x in ['pytest', '_pytest']) or 'PYTEST_RUNNING' in os.environ
+if _legacy_gym_detected and not _is_testing:
     _emit_legacy_gym_warning()
 
 # =============================================================================

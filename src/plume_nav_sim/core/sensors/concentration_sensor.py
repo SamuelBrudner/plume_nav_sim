@@ -584,11 +584,8 @@ class ConcentrationSensor(BaseSensor):
                         performance_degradation=True
                     )
             
-            # Return scalar for single agent, array for multiple agents
-            if num_agents == 1:
-                return float(measured_concentrations[0])
-            else:
-                return measured_concentrations
+            # Always return array for consistent API with vectorized operations
+            return measured_concentrations
                 
         except Exception as e:
             if self._enable_logging and LOGURU_AVAILABLE:
@@ -598,11 +595,11 @@ class ConcentrationSensor(BaseSensor):
                     positions_shape=getattr(positions, 'shape', 'unknown'),
                     plume_state_type=type(plume_state).__name__
                 )
-            # Return safe default values
+            # Return safe default values - always as array
             if hasattr(positions, 'shape') and len(positions.shape) > 1:
                 return np.zeros(positions.shape[0])
             else:
-                return 0.0
+                return np.array([0.0])
     
     def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
         """
@@ -924,6 +921,56 @@ class ConcentrationSensor(BaseSensor):
             self._last_calibration_time = current_time
             self._performance_metrics['drift_updates'] += 1
     
+    def reset(self, **kwargs: Any) -> None:
+        """
+        Reset sensor to initial state, clearing history and performance metrics.
+        
+        Args:
+            **kwargs: Optional parameters for sensor-specific reset behavior.
+                Common options include:
+                - clear_history: Whether to reset measurement history (default: True)
+                - clear_metrics: Whether to reset performance metrics (default: True)
+                - reset_config: Whether to reset sensor configuration (default: False)
+                - reset_calibration: Whether to reset calibration drift (default: True)
+                
+        Notes:
+            This method provides comprehensive sensor reset functionality by clearing
+            measurement history, performance metrics, and calibration drift. Sensor 
+            configuration is preserved unless explicitly requested via reset_config parameter.
+            
+        Examples:
+            Complete sensor reset:
+                >>> sensor.reset()
+                
+            Reset only history:
+                >>> sensor.reset(clear_history=True, clear_metrics=False, reset_calibration=False)
+        """
+        clear_history = kwargs.get('clear_history', True)
+        clear_metrics = kwargs.get('clear_metrics', True)
+        reset_calibration = kwargs.get('reset_calibration', True)
+        
+        if clear_history and hasattr(self, '_measurement_history'):
+            self._measurement_history.clear()
+            
+        if clear_metrics:
+            self._performance_metrics = {
+                'measurement_count': 0,
+                'total_measurement_time': 0.0,
+                'vectorized_operations': 0,
+                'mean_noise_level': 0.0,
+                'drift_updates': 0,
+                'saturation_events': 0,
+                'filter_operations': 0,
+                'outlier_detections': 0
+            }
+            
+        if reset_calibration:
+            self._total_drift = 0.0
+            self._last_calibration_time = time.time()
+            
+        if hasattr(self, '_logger') and self._logger:
+            self._logger.debug(f"Sensor {getattr(self, '_sensor_id', 'unknown')} reset completed")
+    
     def get_performance_metrics(self) -> Dict[str, Any]:
         """
         Get comprehensive performance metrics for monitoring and optimization.
@@ -964,7 +1011,7 @@ class ConcentrationSensor(BaseSensor):
         # Concentration sensor specific metrics
         sensor_metrics = {
             'sensor_type': 'ConcentrationSensor',
-            'total_measurements': self._performance_metrics['total_measurements'],
+            'total_measurements': self._performance_metrics['measurement_count'],
             'measurement_count': self._measurement_count,
             'drift_updates': self._performance_metrics['drift_updates'],
             'filter_operations': self._performance_metrics['filter_operations'],

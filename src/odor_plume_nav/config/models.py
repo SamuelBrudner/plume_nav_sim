@@ -33,14 +33,34 @@ logger = logging.getLogger(__name__)
 # Dataclass validation utilities to replace Pydantic validators
 def validate_speed_constraints(value: float, field_name: str) -> float:
     """Validate speed parameters are non-negative with enhanced error messaging."""
-    if value is not None and value < 0:
+    if value is None:
+        return value
+    
+    # Convert string values to float (handles environment variable resolution)
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"{field_name} must be a valid numeric value, got '{value}': {e}")
+    
+    if value < 0:
         raise ValueError(f"{field_name} must be non-negative, got {value}")
     return value
 
 
 def validate_orientation_range(value: float) -> float:
     """Validate orientation is within valid degree range."""
-    if value is not None and not (0.0 <= value <= 360.0):
+    if value is None:
+        return value
+    
+    # Convert string values to float (handles environment variable resolution)
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Orientation must be a valid numeric value, got '{value}': {e}")
+    
+    if not (0.0 <= value <= 360.0):
         raise ValueError(f"Orientation must be between 0.0 and 360.0 degrees, got {value}")
     return value
 
@@ -52,17 +72,80 @@ def validate_numeric_list(value: List[Union[int, float]], field_name: str) -> Li
     if not isinstance(value, list):
         raise ValueError(f"{field_name} must be a list")
     
+    validated_list = []
     for i, val in enumerate(value):
-        if not isinstance(val, (int, float)):
-            raise ValueError(f"{field_name}[{i}] must be numeric")
+        # Convert string values to float (handles environment variable resolution)
+        if isinstance(val, str):
+            try:
+                val = float(val)
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"{field_name}[{i}] must be a valid numeric value, got '{val}': {e}")
+        elif not isinstance(val, (int, float)):
+            raise ValueError(f"{field_name}[{i}] must be numeric, got {type(val).__name__}")
         
         # Enhanced validation for specific fields
         if field_name == 'orientations' and not (0 <= val <= 360):
             raise ValueError(f"Orientation {i} must be between 0 and 360 degrees, got {val}")
         elif field_name in ['speeds', 'max_speeds'] and val < 0:
             raise ValueError(f"{field_name}[{i}] must be non-negative, got {val}")
+        
+        validated_list.append(val)
     
-    return value
+    return validated_list
+
+
+def validate_position(position_value: Union[Tuple[float, float], List[float], List[str]]) -> Tuple[float, float]:
+    """Validate position tuple with string-to-float conversion for environment variable support."""
+    if position_value is None:
+        return None
+    
+    # Convert various input formats to list for processing
+    if isinstance(position_value, (tuple, list)):
+        pos_list = list(position_value)
+    else:
+        raise ValueError(f"Position must be a tuple or list, got {type(position_value).__name__}")
+    
+    if len(pos_list) != 2:
+        raise ValueError(f"Position must have exactly 2 coordinates [x, y], got {len(pos_list)}")
+    
+    validated_coords = []
+    for i, coord in enumerate(pos_list):
+        # Convert string values to float (handles environment variable resolution)
+        if isinstance(coord, str):
+            try:
+                coord = float(coord)
+            except (ValueError, TypeError) as e:
+                coord_name = "x" if i == 0 else "y"
+                raise ValueError(f"Position {coord_name} coordinate must be a valid numeric value, got '{coord}': {e}")
+        elif not isinstance(coord, (int, float)):
+            coord_name = "x" if i == 0 else "y"
+            raise ValueError(f"Position {coord_name} coordinate must be numeric, got {type(coord).__name__}")
+        
+        validated_coords.append(coord)
+    
+    return tuple(validated_coords)
+
+
+def validate_positions(positions_value: List[List[float]]) -> List[List[float]]:
+    """Validate list of positions with string-to-float conversion for environment variable support."""
+    if positions_value is None:
+        return None
+    
+    # Handle numpy arrays by converting to list
+    if hasattr(positions_value, 'tolist'):  # numpy array or similar
+        positions_value = positions_value.tolist()
+    elif not isinstance(positions_value, list):
+        raise ValueError(f"Positions must be a list or numpy array, got {type(positions_value).__name__}")
+    
+    validated_positions = []
+    for i, position in enumerate(positions_value):
+        try:
+            validated_position = validate_position(position)
+            validated_positions.append(list(validated_position))
+        except ValueError as e:
+            raise ValueError(f"Invalid position {i}: {e}")
+    
+    return validated_positions
 
 
 def validate_video_path(path_value: Union[str, Path]) -> str:
@@ -168,10 +251,13 @@ def validate_eviction_policy(policy: str) -> str:
 def __post_init_single_agent_config__(self):
     """Post-initialization validation for SingleAgentConfig."""
     if hasattr(self, 'speed') and hasattr(self, 'max_speed'):
-        if (self.speed is not None and 
-            self.max_speed is not None and 
-            self.speed > self.max_speed):
-            raise ValueError(f"Initial speed ({self.speed}) cannot exceed max_speed ({self.max_speed})")
+        if self.speed is not None and self.max_speed is not None:
+            # Convert to float if they are strings (from environment variable resolution)
+            speed_val = float(self.speed) if isinstance(self.speed, str) else self.speed
+            max_speed_val = float(self.max_speed) if isinstance(self.max_speed, str) else self.max_speed
+            
+            if speed_val > max_speed_val:
+                raise ValueError(f"Initial speed ({speed_val}) cannot exceed max_speed ({max_speed_val})")
 
 
 def __post_init_multi_agent_config__(self):
@@ -194,8 +280,12 @@ def __post_init_multi_agent_config__(self):
     # Validate speed constraints for each agent
     if self.speeds is not None and self.max_speeds is not None:
         for i, (speed, max_speed) in enumerate(zip(self.speeds, self.max_speeds)):
-            if speed > max_speed:
-                raise ValueError(f"Agent {i} speed ({speed}) exceeds max_speed ({max_speed})")
+            # Convert to float if they are strings (from environment variable resolution)
+            speed_val = float(speed) if isinstance(speed, str) else speed
+            max_speed_val = float(max_speed) if isinstance(max_speed, str) else max_speed
+            
+            if speed_val > max_speed_val:
+                raise ValueError(f"Agent {i} speed ({speed_val}) exceeds max_speed ({max_speed_val})")
 
 
 def __post_init_navigator_config__(self):
@@ -251,6 +341,26 @@ def __post_init_navigator_config__(self):
 
 def __post_init_video_plume_config__(self):
     """Post-initialization validation for VideoPlumeConfig."""
+    # Validate boolean parameters
+    if self.flip is not None and not isinstance(self.flip, bool):
+        raise ValueError(f"flip must be a boolean value, got {type(self.flip).__name__}: {self.flip}")
+    
+    if self.grayscale is not None and not isinstance(self.grayscale, bool):
+        raise ValueError(f"grayscale must be a boolean value, got {type(self.grayscale).__name__}: {self.grayscale}")
+    
+    if self.normalize is not None and not isinstance(self.normalize, bool):
+        raise ValueError(f"normalize must be a boolean value, got {type(self.normalize).__name__}: {self.normalize}")
+    
+    # Validate numeric parameters
+    if self.kernel_size is not None and not isinstance(self.kernel_size, int):
+        raise ValueError(f"kernel_size must be an integer, got {type(self.kernel_size).__name__}: {self.kernel_size}")
+    
+    if self.kernel_sigma is not None and not isinstance(self.kernel_sigma, (int, float)):
+        raise ValueError(f"kernel_sigma must be a numeric value, got {type(self.kernel_sigma).__name__}: {self.kernel_sigma}")
+    
+    if self.threshold is not None and not isinstance(self.threshold, (int, float)):
+        raise ValueError(f"threshold must be a numeric value, got {type(self.threshold).__name__}: {self.threshold}")
+    
     has_kernel_size = self.kernel_size is not None
     has_kernel_sigma = self.kernel_sigma is not None
     
@@ -367,15 +477,19 @@ class SingleAgentConfig:
     
     def __post_init__(self):
         """Post-initialization validation for all field constraints."""
+        # Validate position coordinates
+        if self.position is not None:
+            self.position = validate_position(self.position)
+        
         # Validate speed constraints
         if self.speed is not None:
-            validate_speed_constraints(self.speed, "speed")
+            self.speed = validate_speed_constraints(self.speed, "speed")
         if self.max_speed is not None:
-            validate_speed_constraints(self.max_speed, "max_speed")
+            self.max_speed = validate_speed_constraints(self.max_speed, "max_speed")
         
         # Validate orientation range
         if self.orientation is not None:
-            validate_orientation_range(self.orientation)
+            self.orientation = validate_orientation_range(self.orientation)
         
         # Validate speed relationship
         __post_init_single_agent_config__(self)
@@ -441,15 +555,19 @@ class MultiAgentConfig:
     
     def __post_init__(self):
         """Post-initialization validation for all field constraints."""
+        # Validate positions list
+        if self.positions is not None:
+            self.positions = validate_positions(self.positions)
+        
         # Validate numeric lists
         if self.orientations is not None:
-            validate_numeric_list(self.orientations, "orientations")
+            self.orientations = validate_numeric_list(self.orientations, "orientations")
         if self.speeds is not None:
-            validate_numeric_list(self.speeds, "speeds")
+            self.speeds = validate_numeric_list(self.speeds, "speeds")
         if self.max_speeds is not None:
-            validate_numeric_list(self.max_speeds, "max_speeds")
+            self.max_speeds = validate_numeric_list(self.max_speeds, "max_speeds")
         if self.angular_velocities is not None:
-            validate_numeric_list(self.angular_velocities, "angular_velocities")
+            self.angular_velocities = validate_numeric_list(self.angular_velocities, "angular_velocities")
         
         # Apply multi-agent specific validation
         __post_init_multi_agent_config__(self)

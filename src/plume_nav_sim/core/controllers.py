@@ -110,7 +110,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol imports
-from .protocols import NavigatorProtocol, BoundaryPolicyProtocol
+from .protocols import NavigatorProtocol, BoundaryPolicyProtocol, SourceProtocol
 
 # Boundary policy factory import
 from .boundaries import create_boundary_policy
@@ -541,7 +541,18 @@ class BaseController:
         else:
             self._logger = None
     
-    # NavigatorProtocol boundary policy property for v1.0 architecture
+    # NavigatorProtocol properties for v1.0 architecture
+    
+    @property
+    def source(self) -> Optional[SourceProtocol]:
+        """
+        Get current source implementation for odor emission modeling.
+        
+        Returns:
+            Optional[SourceProtocol]: Source instance providing emission data and
+                position information, or None if no source is configured.
+        """
+        return getattr(self, '_source', None)
     
     @property
     def boundary_policy(self) -> Optional[BoundaryPolicyProtocol]:
@@ -1083,14 +1094,38 @@ class SingleAgentController(BaseController):
             **kwargs
         )
         
+        # Ensure proper type conversion for parameters (handle Hydra environment variable interpolation)
+        try:
+            speed = float(speed)
+            max_speed = float(max_speed)
+            orientation = float(orientation)
+            angular_velocity = float(angular_velocity)
+            
+            # Handle position conversion properly (may be tuple of strings from env vars)
+            if position is not None:
+                if isinstance(position, (list, tuple)):
+                    position = [float(x) for x in position]
+                else:
+                    # Handle scalar position 
+                    position = [float(position), 0.0]
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid parameter type conversion: {e}")
+        
         # Validate parameters
         if speed > max_speed:
             raise ValueError(f"speed ({speed}) cannot exceed max_speed ({max_speed})")
         
-        # Initialize state arrays for API consistency
-        self._position = np.array([position]) if position is not None else np.array([[0.0, 0.0]])
-        if self._position.ndim == 1:
-            self._position = self._position.reshape(1, -1)
+        # Initialize state arrays for API consistency with proper shape (1, 2)
+        if position is not None:
+            self._position = np.array([position], dtype=np.float64)
+            if self._position.shape[1] != 2:
+                # Pad or truncate to ensure shape (1, 2)
+                if self._position.shape[1] == 1:
+                    self._position = np.column_stack([self._position, np.zeros((1, 1))])
+                else:
+                    self._position = self._position[:, :2]
+        else:
+            self._position = np.array([[0.0, 0.0]], dtype=np.float64)
         
         self._orientation = np.array([orientation % 360.0])  # Normalize to [0, 360)
         self._speed = np.array([speed])

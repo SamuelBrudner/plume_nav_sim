@@ -24,7 +24,7 @@ from typing import Dict, Any
 from unittest.mock import patch, MagicMock, mock_open
 
 import yaml
-from hydra import initialize, compose
+from hydra import initialize, compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
@@ -310,7 +310,7 @@ class TestHydraConfigurationComposition:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        with initialize(version_base=None, config_path=str(mock_config_directory)):
+        with initialize_config_dir(version_base=None, config_dir=str(mock_config_directory)):
             cfg = compose(config_name="config")
             
             # Verify base configuration inherited
@@ -328,7 +328,7 @@ class TestHydraConfigurationComposition:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        with initialize(version_base=None, config_path=str(mock_config_directory)):
+        with initialize_config_dir(version_base=None, config_dir=str(mock_config_directory)):
             # Test CLI-style override syntax
             cfg = compose(
                 config_name="config",
@@ -343,10 +343,10 @@ class TestHydraConfigurationComposition:
             assert cfg.video_plume.flip is True
             assert cfg.simulation.fps == 60
             
-            # Test nested override
+            # Test nested override - use + to add new field
             cfg = compose(
                 config_name="config", 
-                overrides=["navigator.position=[100,200]"]
+                overrides=["+navigator.position=[100,200]"]
             )
             
             assert cfg.navigator.position == [100, 200]
@@ -356,7 +356,7 @@ class TestHydraConfigurationComposition:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        with initialize(version_base=None, config_path=str(mock_config_directory)):
+        with initialize_config_dir(version_base=None, config_dir=str(mock_config_directory)):
             # Test parameter sweep simulation
             sweep_params = [
                 "navigator.speed=0.5,1.0,1.5",
@@ -379,11 +379,10 @@ class TestHydraConfigurationComposition:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        # Register schemas for testing
-        cs = ConfigStore.instance()
-        cs.store(name="navigator_schema", node=NavigatorConfig)
+        # Test Pydantic schema validation with Hydra configs
+        # Note: ConfigStore registration not needed for validation testing
         
-        with initialize(version_base=None, config_path=str(mock_config_directory)):
+        with initialize_config_dir(version_base=None, config_dir=str(mock_config_directory)):
             cfg = compose(config_name="config")
             
             # Validate configuration against Pydantic schema
@@ -398,11 +397,14 @@ class TestHydraConfigurationComposition:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        with initialize(version_base=None, config_path=str(mock_config_directory)):
+        with initialize_config_dir(version_base=None, config_dir=str(mock_config_directory)):
             cfg = compose(config_name="config")
             
             # Test validate_config function with DictConfig
-            assert validate_config(cfg) is True
+            validated_config = validate_config(cfg.navigator, NavigatorConfig)
+            assert isinstance(validated_config, NavigatorConfig)
+            assert validated_config.max_speed == 2.0
+            assert validated_config.speed == 1.0
             
             # Test with invalid configuration
             invalid_cfg = compose(
@@ -410,8 +412,8 @@ class TestHydraConfigurationComposition:
                 overrides=["navigator.speed=5.0", "navigator.max_speed=2.0"]  # Speed > max_speed
             )
             
-            with pytest.raises(ValueError, match="validation failed"):
-                validate_config(invalid_cfg)
+            with pytest.raises(ValueError, match="speed.*cannot exceed.*max_speed"):
+                validate_config(invalid_cfg.navigator, NavigatorConfig)
 
 
 class TestEnvironmentVariableInterpolation:

@@ -194,7 +194,7 @@ except ImportError as e:
 try:
     from plume_nav_sim.utils.seed_manager import (
         set_global_seed,
-        get_global_seed_manager,
+        get_seed_manager as get_global_seed_manager,
         get_random_state,
         restore_random_state,
         capture_random_state,
@@ -715,14 +715,21 @@ def _initialize_module():
     
     This function sets up basic logging and seed management if they're
     available, providing immediate functionality for common use cases.
+    
+    Note: Logger initialization is conditional to avoid interfering with
+    test scenarios or explicit configurations.
     """
-    # Set up basic logging if enhanced logging is available
+    # Set up basic logging if enhanced logging is available AND no handlers are configured
     if LOGGING_AVAILABLE:
         try:
-            # Configure basic enhanced logging with sane defaults
-            setup_logger()
+            # Only configure logging if Loguru has no handlers (default state)
+            # This prevents interference with tests or explicit configurations
+            from loguru import logger
+            if len(logger._core.handlers) == 0:
+                # Configure basic enhanced logging with sane defaults
+                setup_logger()
         except Exception:
-            # Silently fall back to standard logging
+            # Silently fall back to standard logging or no initialization
             pass
     
     # Initialize global seed manager with default if available
