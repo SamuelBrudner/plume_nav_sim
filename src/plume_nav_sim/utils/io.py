@@ -20,6 +20,7 @@ import pathlib
 import tempfile
 import warnings
 from typing import Any, Dict, Optional, Union
+import os
 
 import numpy as np
 import yaml
@@ -105,7 +106,7 @@ def _atomic_write(content: bytes, file_path: pathlib.Path) -> None:
             temp_file.write(content)
             temp_file.flush()
             # Ensure data is written to disk
-            temp_file.file.fsync()
+            os.fsync(temp_file.fileno())
         
         # Atomic move from temporary file to final destination
         temp_path.replace(file_path)
@@ -396,7 +397,7 @@ def save_numpy(
             
             temp_file.flush()
             # Ensure data is written to disk
-            temp_file.file.fsync()
+            os.fsync(temp_file.fileno())
         
         # Atomic move from temporary file to final destination
         temp_path.replace(path_obj)
