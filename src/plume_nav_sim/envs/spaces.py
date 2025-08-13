@@ -656,6 +656,9 @@ class ReturnFormatConverter:
         info_copy["_terminated"] = terminated
         info_copy["_truncated"] = truncated
         info_copy["_format_converted"] = True
+        # Also include non-underscored flags for easier debugging/validation
+        info_copy["terminated"] = terminated
+        info_copy["truncated"] = truncated
         
         # Add termination reason if not already present
         if done and "reason" not in info_copy:
