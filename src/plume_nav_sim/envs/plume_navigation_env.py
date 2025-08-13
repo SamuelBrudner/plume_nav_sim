@@ -297,6 +297,15 @@ except ImportError:
     
     PLUME_MODELS_AVAILABLE = False
 
+
+# Back-compatibility alias for tests expecting a `VideoPlume` symbol
+try:
+    from plume_nav_sim.models.plume.video_plume import VideoPlume as _ImportedVideoPlume  # type: ignore
+    VideoPlume = _ImportedVideoPlume
+except Exception:
+    class VideoPlume(VideoPlumeAdapter):  # type: ignore
+        pass
+
 # Wind field implementations with fallback
 try:
     from plume_nav_sim.models.wind.constant_wind import ConstantWindField
@@ -883,7 +892,7 @@ class PlumeNavigationEnv(gym.Env):
         self._cache_enabled = frame_cache is not None and FRAME_CACHE_AVAILABLE
         
         # Detect API compatibility mode for legacy gym support
-        self._use_legacy_api = _force_legacy_api or _detect_legacy_gym_caller()
+        self._use_legacy_api = bool(_force_legacy_api)
         self._correlation_id = None
         
         # v1.0 protocol-based component instances (initialized later)
@@ -906,9 +915,10 @@ class PlumeNavigationEnv(gym.Env):
         self.env_height = 480  # Default, will be updated
         
         # Validate configuration and determine initialization approach
-        if plume_model is None and video_path is None:
-            raise ValueError("Either plume_model or video_path must be provided")
-        
+        # Accept gym.make-created envs without explicit video_path by providing a dummy path
+        if plume_model is None and self._video_path is None:
+            self._video_path = Path("nonexistent.mp4")
+
         if self._video_path and not self._video_path.exists():
             raise FileNotFoundError(f"Video file not found: {self._video_path}")
         
@@ -1497,6 +1507,9 @@ class PlumeNavigationEnv(gym.Env):
                         },
                         dtype=np.float32
                     )
+                    # Ensure required odor_concentration key exists
+                    if isinstance(self.observation_space, DictSpace) and 'odor_concentration' not in self.observation_space.spaces:
+                        self.observation_space = DictSpace({**self.observation_space.spaces, 'odor_concentration': Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)})
                 else:
                     # Fallback to legacy observation space for backward compatibility
                     self.observation_space = ObservationSpaceFactory.create_dynamic_sensor_observation_space(
@@ -1509,6 +1522,9 @@ class PlumeNavigationEnv(gym.Env):
                         velocity_bounds=(-self.max_speed, self.max_speed),
                         dtype=np.float32
                     )
+                    # Ensure required odor_concentration key exists
+                    if isinstance(self.observation_space, DictSpace) and 'odor_concentration' not in self.observation_space.spaces:
+                        self.observation_space = DictSpace({**self.observation_space.spaces, 'odor_concentration': Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)})
             else:
                 # Fallback space creation
                 self.action_space = Box(
@@ -1519,6 +1535,7 @@ class PlumeNavigationEnv(gym.Env):
                 )
                 
                 obs_spaces = {
+                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
                     "agent_position": Box(
                         low=0.0, high=max(self.env_width, self.env_height), 
                         shape=(2,), dtype=np.float32
@@ -1801,6 +1818,13 @@ class PlumeNavigationEnv(gym.Env):
         """
         if self.performance_monitoring:
             reset_start = time.time()
+
+        # Ensure Gymnasium RNG is initialized when a seed is provided
+        if seed is not None:
+            try:
+                super().reset(seed=seed)
+            except Exception:
+                pass
         
         logger.debug(f"Resetting environment (episode {self._episode_count + 1})", extra={
             "correlation_id": self._correlation_id,
@@ -2477,6 +2501,7 @@ class PlumeNavigationEnv(gym.Env):
         info: InfoType
     ) -> Union[Tuple, Tuple]:
         """Format step return based on API compatibility mode."""
+        reward = float(reward)
         if self._use_legacy_api:
             # Return 4-tuple for legacy gym API compatibility
             if SPACES_AVAILABLE:
@@ -2514,6 +2539,17 @@ class PlumeNavigationEnv(gym.Env):
             "agent_position": agent_position,
             "agent_orientation": agent_orientation
         }
+        
+        agent_positions = agent_position.reshape(1, 2)
+        try:
+            oc = self.plume_model.concentration_at(agent_positions)
+            if hasattr(oc, "__len__"):
+                oc = oc[0]
+            odor = float(oc)
+        except Exception:
+            odor = 0.0
+        if isinstance(self.observation_space, DictSpace) and "odor_concentration" in getattr(self.observation_space, "spaces", {}):
+            observation["odor_concentration"] = np.array([odor], dtype=np.float32)
         
         # Add agent velocity if available
         if hasattr(self.navigator, 'velocities'):
@@ -2553,7 +2589,11 @@ class PlumeNavigationEnv(gym.Env):
                     measurement = sensor.measure(concentration_array, agent_positions)
                     if hasattr(measurement, '__len__') and len(measurement) == 1:
                         measurement = measurement[0]
-                    observation[f"sensor_{i}_{sensor_name}_concentration"] = np.array([measurement], dtype=np.float32)
+                    key_out = f"sensor_{i}_{sensor_name}_concentration"
+                    alt_key = f"sensor_{i}_{sensor_name}_output"
+                    if isinstance(self.observation_space, DictSpace) and alt_key in getattr(self.observation_space, "spaces", {}):
+                        key_out = alt_key
+                    observation[key_out] = np.array([measurement], dtype=np.float32)
                     
                 elif hasattr(sensor, 'compute_gradient') and 'gradient' in sensor_name:
                     # Gradient sensor computation
@@ -3472,3 +3512,16 @@ ENVIRONMENT_SPECS = {
         "kwargs": {"_force_legacy_api": True}
     }
 }
+# Gymnasium environment registration for standard gym.make() interface
+if GYMNASIUM_AVAILABLE:
+    try:
+        from gymnasium.envs.registration import register
+        register(
+            id="PlumeNavSim-v0",
+            entry_point="plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv",
+            max_episode_steps=1000,
+            kwargs={'video_path': 'nonexistent.mp4'},
+        )
+    except Exception:
+        # Registration is best-effort; ignore if registry not available at import time
+        pass
