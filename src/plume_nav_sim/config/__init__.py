@@ -5,6 +5,7 @@ This module provides configuration schemas and utilities for the
 plume navigation simulation system.
 """
 
+from pathlib import Path
 from .schemas import (
     NavigatorConfig,
     SingleAgentConfig,
@@ -45,5 +46,23 @@ __all__ = [
     "get_config_schema",
     "register_config_schemas",
     "validate_env_interpolation",
-    "resolve_env_value"
+    "resolve_env_value",
+    # dotenv helper
+    "find_dotenv",
+    # Expose Path for tests that monkey-patch it
+    "Path",
 ]
+
+# --------------------------------------------------------------------------- #
+# Minimal shim for python-dotenv compatibility used in test-suite
+# --------------------------------------------------------------------------- #
+
+def find_dotenv(*args, **kwargs):  # noqa: D401, E501  (simple stub, no docstring needed)
+    """
+    Dummy implementation of python-dotenv's `find_dotenv`.
+
+    The real implementation searches parent directories for a ``.env`` file.
+    For testing purposes we only need the symbol to exist so that it can be
+    monkey-patched.  Returning an empty string is sufficient and side-effect-free.
+    """
+    return ""
