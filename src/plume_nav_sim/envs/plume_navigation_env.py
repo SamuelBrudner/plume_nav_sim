@@ -1218,7 +1218,7 @@ class PlumeNavigationEnv(gym.Env):
                 # If the specified video file does not exist, fall back to a minimal dummy implementation
                 if isinstance(self._video_path, Path) and not self._video_path.exists():
                     class _DummyVideoPlume:
-                        \"\"\"Lightweight stand-in for VideoPlumeAdapter used when the file is absent.\"\"\"
+                        """Lightweight stand-in for VideoPlumeAdapter used when the file is absent."""
                         def __init__(self, video_path: str):
                             self.video_path = video_path
                             self.frame_count = 1000
@@ -1243,10 +1243,10 @@ class PlumeNavigationEnv(gym.Env):
 
                         def get_metadata(self) -> Dict[str, Any]:
                             return {
-                                \"width\": self.width,
-                                \"height\": self.height,
-                                \"fps\": self.fps,
-                                \"frame_count\": self.frame_count,
+                                "width": self.width,
+                                "height": self.height,
+                                "fps": self.fps,
+                                "frame_count": self.frame_count,
                             }
 
                         def close(self):
