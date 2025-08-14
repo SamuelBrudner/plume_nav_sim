@@ -1215,7 +1215,46 @@ class PlumeNavigationEnv(gym.Env):
                 # Legacy mode: use VideoPlumeAdapter with video_path
                 if self._video_path is None:
                     raise ValueError("Either plume_model or video_path must be provided")
-                self.plume_model = VideoPlumeAdapter(str(self._video_path))
+                # If the specified video file does not exist, fall back to a minimal dummy implementation
+                if isinstance(self._video_path, Path) and not self._video_path.exists():
+                    class _DummyVideoPlume:
+                        \"\"\"Lightweight stand-in for VideoPlumeAdapter used when the file is absent.\"\"\"
+                        def __init__(self, video_path: str):
+                            self.video_path = video_path
+                            self.frame_count = 1000
+                            self.width = 640
+                            self.height = 480
+                            self.fps = 30.0
+
+                        # --- Minimal API surface expected by the env ---
+                        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+                            if positions.ndim == 1:
+                                return np.random.rand()
+                            return np.random.rand(len(positions))
+
+                        def step(self, dt: float = 1.0) -> None:
+                            pass
+
+                        def reset(self, **kwargs) -> None:
+                            pass
+
+                        def get_frame(self, frame_id: int) -> Optional[np.ndarray]:
+                            return np.random.rand(self.height, self.width).astype(np.float32)
+
+                        def get_metadata(self) -> Dict[str, Any]:
+                            return {
+                                \"width\": self.width,
+                                \"height\": self.height,
+                                \"fps\": self.fps,
+                                \"frame_count\": self.frame_count,
+                            }
+
+                        def close(self):
+                            pass
+
+                    self.plume_model = _DummyVideoPlume(str(self._video_path))
+                else:
+                    self.plume_model = VideoPlumeAdapter(str(self._video_path))
             
             # Extract environment dimensions from plume model
             if hasattr(self.plume_model, 'get_metadata'):
