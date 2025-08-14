@@ -919,9 +919,6 @@ class PlumeNavigationEnv(gym.Env):
         if plume_model is None and self._video_path is None:
             self._video_path = Path("nonexistent.mp4")
 
-        if self._video_path and not self._video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {self._video_path}")
-        
         # Initialize performance tracking
         self._step_count = 0
         self._episode_count = 0
