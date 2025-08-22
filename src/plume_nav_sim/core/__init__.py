@@ -371,7 +371,7 @@ try:
         generate_summary
     )
     ANALYSIS_AVAILABLE = True
-except ImportError:
+except Exception:
     # Analysis will be created by other agents - create minimal fallback
     def generate_summary(aggregator, episodes_data, output_path=None, **export_options):
         """Placeholder until analysis module is available."""

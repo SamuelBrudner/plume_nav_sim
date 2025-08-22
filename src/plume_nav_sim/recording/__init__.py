@@ -126,6 +126,8 @@ class RecorderConfig:
     memory_limit_mb: int = 256
     warning_threshold: float = 0.8
     disabled_mode_optimization: bool = True
+    # Debug / development configuration
+    enable_debug_mode: bool = False
     
     def __post_init__(self):
         """Validate configuration parameters after initialization."""
@@ -317,7 +319,12 @@ class BaseRecorder(abc.ABC, RecorderProtocol):
                         alpha * duration + (1 - alpha) * self._metrics['average_write_time']
                     )
     
-    def record_episode(self, episode_data: Dict[str, Any]) -> None:
+    def record_episode(
+        self,
+        episode_data: Dict[str, Any],
+        episode_id: Optional[int] = None,
+        **metadata: Any
+    ) -> None:
         """
         Record episode-level data with metadata correlation.
         
@@ -338,7 +345,7 @@ class BaseRecorder(abc.ABC, RecorderProtocol):
             # Add metadata
             enriched_data = {
                 'timestamp': time.time(),
-                'episode_id': self.current_episode_id,
+                'episode_id': episode_id if episode_id is not None else self.current_episode_id,
                 'run_id': self.run_id,
                 'step_count': self._metrics['steps_recorded'],
                 **episode_data
@@ -797,6 +804,37 @@ class RecorderFactory:
             Dict[str, Any]: Validation results with recommendations
         """
         try:
+            # ------------------------------------------------------------------
+            # Special-case: Hydra style dict / DictConfig with `_target_`
+            # ------------------------------------------------------------------
+            if isinstance(config, (dict, DictConfig)) and '_target_' in config:
+                target: str = str(config['_target_'])
+
+                # Derive backend name from recorder class suffix
+                target_lower = target.lower()
+                if target_lower.endswith('nullrecorder'):
+                    backend_name = 'none'
+                elif target_lower.endswith('parquetrecorder'):
+                    backend_name = 'parquet'
+                elif target_lower.endswith(('hdf5recorder', 'hdf5recorder')):  # case-insensitive match
+                    backend_name = 'hdf5'
+                elif target_lower.endswith('sqliterecorder'):
+                    backend_name = 'sqlite'
+                else:
+                    backend_name = 'none'  # Fallback
+
+                backend_available: bool = backend_name in cls.get_available_backends()
+
+                return {
+                    'valid': True,
+                    'backend_available': backend_available,
+                    'warnings': [] if backend_available else [f"Backend '{backend_name}' is not available"],
+                    'recommendations': []
+                }
+
+            # ------------------------------------------------------------------
+            # Existing path: plain dict or RecorderConfig instance
+            # ------------------------------------------------------------------
             # Convert to RecorderConfig for validation
             if isinstance(config, dict):
                 recorder_config = RecorderConfig(**config)
@@ -833,6 +871,7 @@ class RecorderFactory:
         except Exception as e:
             return {
                 'valid': False,
+                'backend_available': False,
                 'error': str(e),
                 'warnings': [f"Configuration validation failed: {e}"],
                 'recommendations': []
@@ -999,28 +1038,43 @@ class RecorderManager:
                 'meets_target': meets_target,
                 'avg_write_time_ms': avg_write_time_ms,
                 'target_margin_ms': self.performance_target_ms - avg_write_time_ms,
-                'buffer_efficiency': recorder_metrics.get('buffer_utilization_current', 0)
+                'buffer_efficiency': recorder_metrics.get(
+                    'buffer_utilization',
+                    recorder_metrics.get('buffer_utilization_current', 0)
+                )
             }
-            
+
             # Memory analysis
-            memory_usage = recorder_metrics.get('memory_usage_peak', 0)
+            memory_usage = recorder_metrics.get(
+                'memory_usage_peak',
+                recorder_metrics.get('memory_usage_mb', 0)
+            )
             metrics['memory_analysis'] = {
                 'within_limit': memory_usage <= self.memory_limit_mb,
                 'usage_mb': memory_usage,
                 'limit_margin_mb': self.memory_limit_mb - memory_usage,
-                'utilization_percent': (memory_usage / self.memory_limit_mb) * 100 if self.memory_limit_mb > 0 else 0
+                'utilization_percent': (
+                    (memory_usage / self.memory_limit_mb) * 100
+                    if self.memory_limit_mb > 0 else 0
+                )
             }
-        
-        # Performance warnings
-        warnings = []
-        if 'performance_analysis' in metrics and not metrics['performance_analysis']['meets_target']:
-            warnings.append(f"Performance target exceeded: {metrics['performance_analysis']['avg_write_time_ms']:.2f}ms > {self.performance_target_ms}ms")
-        
-        if 'memory_analysis' in metrics and not metrics['memory_analysis']['within_limit']:
-            warnings.append(f"Memory limit exceeded: {metrics['memory_analysis']['usage_mb']:.1f}MB > {self.memory_limit_mb}MB")
-        
-        metrics['warnings'] = warnings
-        
+
+            # Warnings
+            warnings = []
+            if not metrics['performance_analysis']['meets_target']:
+                warnings.append(
+                    f"Performance target exceeded: "
+                    f"{metrics['performance_analysis']['avg_write_time_ms']:.2f}ms "
+                    f"> {self.performance_target_ms}ms"
+                )
+            if not metrics['memory_analysis']['within_limit']:
+                warnings.append(
+                    f"Memory limit exceeded: "
+                    f"{metrics['memory_analysis']['usage_mb']:.1f}MB "
+                    f"> {self.memory_limit_mb}MB"
+                )
+            metrics['warnings'] = warnings
+
         return metrics
     
     def add_cleanup_handler(self, handler: callable) -> None:

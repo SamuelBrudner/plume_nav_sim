@@ -5,6 +5,9 @@ This module provides configuration schemas and utilities for the
 plume navigation simulation system.
 """
 
+from pathlib import Path
+from dotenv import find_dotenv
+
 from .schemas import (
     NavigatorConfig,
     SingleAgentConfig,
@@ -45,5 +48,9 @@ __all__ = [
     "get_config_schema",
     "register_config_schemas",
     "validate_env_interpolation",
-    "resolve_env_value"
+    "resolve_env_value",
+    
+    # Exposed for tests
+    "Path",
+    "find_dotenv"
 ]

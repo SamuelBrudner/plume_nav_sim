@@ -809,10 +809,6 @@ class TestIntegrationScenarios:
         assert len(odor_readings) == 20
 
 
-# Test execution configuration and fixtures
-pytest_plugins = ["tests.conftest"]
-
-
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v", "--tb=short"])

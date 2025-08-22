@@ -1348,7 +1348,9 @@ def setup_logger(
             backtrace=config.backtrace,
             diagnose=config.diagnose,
             filter=_create_context_filter(default_context),
-            serialize=(config.format == "json")
+            # Always disable Loguru’s built-in JSON serialisation so our custom
+            # formatter controls the final structure expected by tests.
+            serialize=False
         )
     
     # Configure dual sink architecture from YAML if available
@@ -1431,6 +1433,8 @@ def _create_json_formatter():
         
         if cache_stats:
             json_record["cache_stats"] = cache_stats
+            # Promote cache fields to top-level for easier filtering/queries
+            json_record.update(cache_stats)
         
         # Add performance timing fields for automatic capture
         performance_fields = [
@@ -1448,7 +1452,8 @@ def _create_json_formatter():
             if key not in json_record and not key.startswith("_") and key not in cache_fields:
                 json_record[key] = value
         
-        return json.dumps(json_record, default=str)
+        # Ensure each log entry ends with a newline for file sinks
+        return json.dumps(json_record, default=str) + "\n"
     
     return json_formatter
 
@@ -1848,6 +1853,29 @@ def update_cache_metrics(
             total_requests = current_metrics.cache_hit_count + current_metrics.cache_miss_count
             if total_requests > 0:
                 current_metrics.cache_hit_rate = current_metrics.cache_hit_count / total_requests
+    else:
+        # No active performance metrics; store in experiment metadata so they
+        # propagate via CorrelationContext.bind_context()
+        cache_meta: Dict[str, Any] = {}
+        if cache_hit_count is not None:
+            cache_meta["cache_hit_count"] = cache_hit_count
+        if cache_miss_count is not None:
+            cache_meta["cache_miss_count"] = cache_miss_count
+        if cache_evictions is not None:
+            cache_meta["cache_evictions"] = cache_evictions
+        if cache_memory_usage_mb is not None:
+            cache_meta["cache_memory_usage_mb"] = cache_memory_usage_mb
+        if cache_memory_limit_mb is not None:
+            cache_meta["cache_memory_limit_mb"] = cache_memory_limit_mb
+
+        # Calculate hit rate if hits & misses provided
+        if ("cache_hit_count" in cache_meta and "cache_miss_count" in cache_meta):
+            total_requests = cache_meta["cache_hit_count"] + cache_meta["cache_miss_count"]
+            if total_requests > 0:
+                cache_meta["cache_hit_rate"] = cache_meta["cache_hit_count"] / total_requests
+
+        # Merge into experiment metadata so future logs include them
+        context.add_metadata(**cache_meta)
 
 
 def log_cache_memory_pressure_violation(

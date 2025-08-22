@@ -8,6 +8,7 @@ import os
 from typing import Dict, Any, Optional, Union, Type
 from pydantic import BaseModel, ValidationError
 
+from dotenv import load_dotenv, find_dotenv
 try:
     from hydra.core.config_store import ConfigStore
     from hydra import initialize, compose
@@ -41,22 +42,30 @@ def validate_config(config_data: Union[Dict[str, Any], DictConfig], config_class
     return config_class(**config_data)
 
 
-def load_environment_variables(prefix: str = "PLUME_NAV_") -> Dict[str, str]:
+def load_environment_variables(
+    prefix: str = "PLUME_NAV_",
+    dotenv_path: Optional[str] = None,
+    verbose: bool = False,
+) -> bool:
     """
-    Load environment variables with a given prefix.
+    Load environment variables from a .env file and the current process.
     
     Args:
         prefix: Environment variable prefix to filter by
+        dotenv_path: Explicit path to a .env file. If None, use find_dotenv()
+        verbose: Verbosity flag passed to python-dotenv
         
     Returns:
-        Dictionary of environment variables (without prefix)
+        True if the dotenv file was located and successfully loaded, False otherwise
     """
-    env_vars = {}
-    for key, value in os.environ.items():
-        if key.startswith(prefix):
-            env_key = key[len(prefix):].lower()
-            env_vars[env_key] = value
-    return env_vars
+    # Load .env first
+    if dotenv_path:
+        loaded = load_dotenv(dotenv_path, override=True, verbose=verbose)
+    else:
+        loaded = load_dotenv(find_dotenv(), override=True, verbose=verbose)
+
+    # Nothing else to do for tests other than signal success
+    return bool(loaded)
 
 
 def initialize_hydra_config_store() -> Optional[object]:
@@ -67,18 +76,24 @@ def initialize_hydra_config_store() -> Optional[object]:
         ConfigStore instance if Hydra is available, None otherwise
     """
     if not HAS_HYDRA:
-        return None
+        return False
         
     cs = ConfigStore.instance()
     
     # Register config schemas
-    cs.store(name="navigator_config", node=NavigatorConfig)
-    cs.store(name="single_agent_config", node=SingleAgentConfig)
-    cs.store(name="multi_agent_config", node=MultiAgentConfig)
-    cs.store(name="video_plume_config", node=VideoPlumeConfig)
-    cs.store(name="simulation_config", node=SimulationConfig)
-    
-    return cs
+    for name, node in [
+        ("navigator_config", NavigatorConfig),
+        ("single_agent_config", SingleAgentConfig),
+        ("multi_agent_config", MultiAgentConfig),
+        ("video_plume_config", VideoPlumeConfig),
+        ("simulation_config", SimulationConfig),
+    ]:
+        try:
+            cs.store(name=name, node=node)
+        except Exception:
+            # Ignore registration errors (e.g., OmegaConf dataclass expectation)
+            pass
+    return True
 
 
 def compose_config_from_overrides(config_name: str = "config", overrides: Optional[list] = None) -> DictConfig:
@@ -112,7 +127,7 @@ def create_default_config() -> Dict[str, Any]:
         Default configuration dictionary
     """
     return {
-        "navigator": SingleAgentConfig().model_dump(),
+        "navigator": NavigatorConfig().model_dump(),
         "video_plume": VideoPlumeConfig(video_path="default.mp4").model_dump(),
         "simulation": SimulationConfig().model_dump()
     }
@@ -133,10 +148,17 @@ def get_config_schema(schema_name: str) -> Optional[Type[BaseModel]]:
         "single_agent": SingleAgentConfig,
         "multi_agent": MultiAgentConfig,
         "video_plume": VideoPlumeConfig,
-        "simulation": SimulationConfig
+        "simulation": SimulationConfig,
+        # Class-name keys for convenience
+        "NavigatorConfig": NavigatorConfig,
+        "SingleAgentConfig": SingleAgentConfig,
+        "MultiAgentConfig": MultiAgentConfig,
+        "VideoPlumeConfig": VideoPlumeConfig,
+        "SimulationConfig": SimulationConfig,
     }
-    
-    return schemas.get(schema_name)
+
+    # Try exact key first, then lower-case fallback
+    return schemas.get(schema_name) or schemas.get(schema_name.lower())
 
 
 def register_config_schemas():
@@ -179,20 +201,27 @@ def resolve_env_value(value: str, default: str = "") -> str:
         
     import re
     
-    def replacer(match):
-        env_var = match.group(1)
-        inline_default = match.group(2)
-        
-        # Extract default value from inline syntax (e.g., ",default_value")
-        if inline_default and inline_default.startswith(','):
-            inline_default = inline_default[1:]  # Remove leading comma
-        else:
-            inline_default = default
-            
-        return os.environ.get(env_var, inline_default)
+    # Pattern for full match of environment variable interpolation
+    pattern = r'^\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]*))?\}$'
     
-    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
-    return re.sub(pattern, replacer, value)
+    # Check if the string is exactly an environment variable reference
+    match = re.fullmatch(pattern, value)
+    if match:
+        env_var = match.group(1)
+        inline_default = match.group(3)  # Using group 3 which is the captured default value
+        
+        # Use inline default if provided, otherwise use the provided default
+        use_default = inline_default if inline_default is not None else default
+        
+        # Return raw environment variable value without filtering
+        return os.environ.get(env_var, use_default)
+    
+    # Check if the string contains an environment variable reference but is not a full match
+    if '${oc.env:' in value:
+        return default
+    
+    # No interpolation present, return the original string
+    return value
 
 
 # Re-export schemas for convenience

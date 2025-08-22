@@ -19,7 +19,8 @@ patterns and direct function calls without wrapper overhead.
 
 from typing import Callable, List, Dict, Any, Optional
 from time import perf_counter
-from src.plume_nav_sim.core.protocols import EpisodeEndHookType
+# Use package-relative import to avoid absolute-path circular import issues
+from plume_nav_sim.core.protocols import EpisodeEndHookType
 
 
 class HookManager:
