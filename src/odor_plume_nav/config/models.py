@@ -18,6 +18,9 @@ from pathlib import Path
 import os
 import re
 
+# Pydantic for external validation compatibility
+from pydantic import BaseModel, Field, field_validator, model_validator
+
 # Import base models from domain layer for backward compatibility
 from odor_plume_nav.domain.models import (
     NavigatorConfig as BaseNavigatorConfig,
@@ -246,6 +249,63 @@ def validate_eviction_policy(policy: str) -> str:
     if policy not in valid_policies:
         raise ValueError(f"Eviction policy must be one of {valid_policies}, got '{policy}'")
     return policy
+
+
+# --------------------------------------------------------------------------- #
+# Pydantic compatibility layer for VideoPlumeConfig                           #
+# --------------------------------------------------------------------------- #
+
+class _VideoPlumeConfigModel(BaseModel):
+    """
+    Internal Pydantic model that mirrors VideoPlumeConfig for external libraries
+    expecting `model_validate` / `parse_obj` style APIs (e.g., tests).
+    """
+    video_path: Union[str, Path]
+    flip: Optional[bool] = False
+    grayscale: Optional[bool] = True
+    kernel_size: Optional[int] = None
+    kernel_sigma: Optional[float] = None
+    threshold: Optional[float] = None
+    normalize: Optional[bool] = True
+    frame_skip: Optional[int] = 0
+    start_frame: Optional[int] = 0
+    end_frame: Optional[int] = None
+    fourcc: Optional[str] = None
+    fps_override: Optional[float] = None
+
+    # Sentinel used by VideoPlume.from_config to bypass certain validations
+    _skip_validation: Optional[bool] = False
+
+    # --------------------------------------------------------------------- #
+    # Field-level validators                                                #
+    # --------------------------------------------------------------------- #
+    @field_validator('threshold')
+    @classmethod
+    def _validate_threshold(cls, v):
+        if v is not None and (v < 0.0 or v > 1.0):
+            raise ValueError("threshold must be between 0.0 and 1.0")
+        return v
+
+    # --------------------------------------------------------------------- #
+    # Model-level validation                                                #
+    # --------------------------------------------------------------------- #
+    @model_validator(mode='after')
+    def _validate_gaussian_and_frames(cls, values):
+        if values.get("_skip_validation"):
+            # Skip heavy validation when requested (e.g., file existence)
+            return values
+
+        kernel_size, kernel_sigma = values.get("kernel_size"), values.get("kernel_sigma")
+        if (kernel_size is not None) != (kernel_sigma is not None):
+            raise ValueError("Both kernel_size and kernel_sigma must be specified together")
+
+        sf, ef = values.get("start_frame"), values.get("end_frame")
+        if sf is not None and ef is not None and ef <= sf:
+            raise ValueError("end_frame must be greater than start_frame")
+        return values
+
+    class Config:
+        extra = "allow"
 
 
 def __post_init_single_agent_config__(self):
@@ -825,6 +885,25 @@ class VideoPlumeConfig:
         
         # Apply video plume specific validation
         __post_init_video_plume_config__(self)
+
+    # ----------------------------------------------------------------- #
+    # Pydantic compatibility helpers                                    #
+    # ----------------------------------------------------------------- #
+    @classmethod
+    def model_validate(cls, data):
+        """
+        Proxy to internal Pydantic model validation so external code/tests
+        can call `VideoPlumeConfig.model_validate(...)` directly.
+        """
+        return _VideoPlumeConfigModel.model_validate(data)
+
+    @classmethod
+    def parse_obj(cls, obj):
+        """
+        Backwards-compatibility for Pydantic v1 style `parse_obj` API that may
+        be used by downstream libraries or legacy code paths.
+        """
+        return _VideoPlumeConfigModel.model_validate(obj)
 
 
 @dataclass

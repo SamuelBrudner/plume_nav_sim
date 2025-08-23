@@ -764,16 +764,33 @@ class StatsAggregator(StatsAggregatorProtocol):
         
         for calc_name, calc_function in self.config.custom_calculations.items():
             try:
-                # Extract appropriate data for calculation
+                # ----------------------------------------------------------
+                # 1) Preferred: call the custom function with full episode
+                #    dictionary so the user can access multiple fields.
+                # ----------------------------------------------------------
+                try:
+                    result = calc_function(episode_data)
+                    custom_stats[calc_name] = self._serialize_result(result)
+                    continue  # success, proceed to next custom calc
+                except (TypeError, KeyError, ValueError, AttributeError):
+                    # Fall back to array-only signature expected by older
+                    # implementations/tests.
+                    pass
+
+                # ----------------------------------------------------------
+                # 2) Fallback: pass a primary data array (field-specific or
+                #    trajectory) converted to numpy.
+                # ----------------------------------------------------------
                 if calc_name in episode_data:
-                    data = episode_data[calc_name]
+                    primary_data = episode_data[calc_name]
                 elif 'trajectory' in episode_data:
-                    data = episode_data['trajectory']
+                    primary_data = episode_data['trajectory']
                 else:
-                    continue
-                
-                # Apply calculation with error handling
-                result = calc_function(np.asarray(data))
+                    raise KeyError(
+                        f"No suitable data found for custom calculation '{calc_name}'"
+                    )
+
+                result = calc_function(np.asarray(primary_data))
                 custom_stats[calc_name] = self._serialize_result(result)
                 
             except Exception as e:
@@ -943,7 +960,7 @@ class StatsAggregator(StatsAggregatorProtocol):
             correlations['episode_length_vs_detection_rate'] = {
                 'correlation': float(correlation),
                 'p_value': float(p_value),
-                'significant': p_value < 0.05
+                'significant': bool(p_value < 0.05)
             }
         
         if len(detection_rates) > 1 and len(movement_efficiencies) > 1:
@@ -951,7 +968,7 @@ class StatsAggregator(StatsAggregatorProtocol):
             correlations['detection_rate_vs_movement_efficiency'] = {
                 'correlation': float(correlation),
                 'p_value': float(p_value),
-                'significant': p_value < 0.05
+                'significant': bool(p_value < 0.05)
             }
         
         return correlations

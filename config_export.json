@@ -1,0 +1,12 @@
+{
+  "_metadata": {
+    "export_time": "2025-08-22 12:43:21",
+    "hydra_version": "1.3.2",
+    "resolved": true,
+    "format": "json"
+  },
+  "test": "config",
+  "nested": {
+    "value": 42
+  }
+}

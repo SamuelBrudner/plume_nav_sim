@@ -1168,6 +1168,9 @@ def mock_parquet_recorder(tmp_path, mock_recorder_config):
         'compression_ratio': 3.125,
         'compression_time_ms': 15.2
     }
+
+    # Ensure export_data behaves as successful operation for all formats
+    mock.export_data.return_value = True
     
     return mock
 
@@ -1654,6 +1657,7 @@ def compression_testing_utilities():
     
     def benchmark_algorithms(data: dict, algorithms: list = None):
         """Benchmark multiple compression algorithms against test data."""
+        import pickle  # ensure pickle available for data size calculation
         if algorithms is None:
             algorithms = ['snappy', 'gzip', 'lz4', 'zstd', 'none']
         

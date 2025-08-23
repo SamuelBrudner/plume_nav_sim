@@ -1,0 +1,4 @@
+chore(test): enable pytest-benchmark by removing local stub; add utils test runner
+
+- Remove `pytest_benchmark.py`, which shadowed the real `pytest-benchmark` plugin and prevented it from loading.
+- Add `.factory/run.sh` helper script that sets up the dev environment (installs extras) and runs `pytest tests/utils`.

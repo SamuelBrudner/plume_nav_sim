@@ -534,7 +534,9 @@ class LoggingConfig(BaseModel):
             "cli": CLI_FORMAT,
             "minimal": MINIMAL_FORMAT,
             "production": PRODUCTION_FORMAT,
-            "json": ENHANCED_FORMAT,  # Use enhanced format as fallback for JSON (handlers will override)
+            # For JSON format requests, return the dedicated JSON_FORMAT pattern
+            # (handlers may still override with serializer functions as needed)
+            "json": JSON_FORMAT,
         }
         return format_patterns.get(self.format, ENHANCED_FORMAT)
     
@@ -835,17 +837,12 @@ def set_correlation_context(context: CorrelationContext):
 def create_step_timer() -> ContextManager[PerformanceMetrics]:
     """
     Create a context manager for timing environment step() operations.
-    
+
     Automatically logs WARN messages when step() exceeds the 10ms threshold
     as required by Section 5.4.4 performance requirements for real-time operation.
-    
+
     Returns:
         Context manager that tracks step timing and issues warnings
-        
-    Example:
-        >>> with create_step_timer() as metrics:
-        ...     obs, reward, terminated, truncated, info = env.step(action)
-        >>> # Automatic warning if step took >10ms
     """
     return step_performance_timer()
 
@@ -854,20 +851,20 @@ def create_step_timer() -> ContextManager[PerformanceMetrics]:
 def step_performance_timer() -> ContextManager[PerformanceMetrics]:
     """
     Context manager for environment step() performance monitoring.
-    
+
     Tracks step latency and automatically logs structured warnings when
     the ≤10ms threshold is exceeded per Section 5.4.4 requirements for
     real-time simulation performance.
     """
     context = get_correlation_context()
     metrics = context.push_performance("environment_step")
-    
+
     try:
         yield metrics
     finally:
         completed_metrics = context.pop_performance()
         context.increment_step()
-        
+
         if completed_metrics and completed_metrics.is_slow(PERFORMANCE_THRESHOLDS["environment_step"]):
             bound_logger = logger.bind(**context.bind_context())
             bound_logger.warning(
@@ -879,8 +876,8 @@ def step_performance_timer() -> ContextManager[PerformanceMetrics]:
                     "threshold_latency_ms": PERFORMANCE_THRESHOLDS["environment_step"] * 1000,
                     "performance_metrics": completed_metrics.to_dict(),
                     "step_count": context.step_count,
-                    "overage_percent": ((completed_metrics.duration - PERFORMANCE_THRESHOLDS["environment_step"]) / PERFORMANCE_THRESHOLDS["environment_step"]) * 100
-                }
+                    "overage_percent": ((completed_metrics.duration - PERFORMANCE_THRESHOLDS["environment_step"]) / PERFORMANCE_THRESHOLDS["environment_step"]) * 100,
+                },
             )
 
 
@@ -1878,14 +1875,12 @@ def _setup_yaml_sinks(sinks_config: Dict[str, Any], default_context: Dict[str, A
 
 def _setup_performance_monitoring(config: LoggingConfig):
     """Setup performance monitoring and threshold checking with cache memory pressure tracking."""
-    # Log system information for performance baseline
     system_info = {
         "platform": platform.platform(),
         "python_version": platform.python_version(),
         "cpu_count": os.cpu_count(),
         "memory_total": _get_total_memory(),
     }
-    
     perf_logger = logger.bind(correlation_id="system_init", module="performance")
     perf_logger.info(
         "Performance monitoring enabled with cache memory tracking for plume_nav_sim",
@@ -1895,112 +1890,56 @@ def _setup_performance_monitoring(config: LoggingConfig):
             "thresholds": PERFORMANCE_THRESHOLDS,
             "cache_memory_monitoring": True,
             "gymnasium_migration": True,
-        }
+        },
     )
-    
-    # Perform initial memory pressure check
     _monitor_cache_memory_pressure()
 
 
 def _get_total_memory() -> Optional[float]:
     """Get total system memory in GB."""
     try:
-        return psutil.virtual_memory().total / (1024**3)  # Convert to GB
-    except ImportError:
+        return psutil.virtual_memory().total / (1024**3)
+    except Exception:
         return None
 
 
 def _monitor_cache_memory_pressure() -> bool:
-    """
-    Monitor cache memory pressure using psutil and log warnings when approaching limits.
-    
-    This function implements ResourceError category logging when memory usage approaches
-    the 2 GiB default limit, enabling proactive cache management and system stability.
-    
-    Returns:
-        True if memory pressure detected (>90% usage)
-    """
+    """Monitor cache memory pressure and log warnings when approaching limits."""
     try:
         process = psutil.Process()
         memory_info = process.memory_info()
-        memory_usage_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
-        memory_limit_mb = 2048  # 2 GiB default limit per Section 5.4.4
-        
-        memory_usage_ratio = memory_usage_mb / memory_limit_mb
-        
-        if memory_usage_ratio > 0.9:  # 90% threshold
+        memory_usage_mb = memory_info.rss / (1024 * 1024)
+        memory_limit_mb = 2048  # 2 GiB default limit
+        usage_ratio = memory_usage_mb / memory_limit_mb
+        if usage_ratio > 0.9:
             logger.bind(
                 metric_type="memory_pressure_warning",
                 memory_usage_mb=memory_usage_mb,
                 memory_limit_mb=memory_limit_mb,
-                memory_usage_ratio=memory_usage_ratio,
-                resource_category="cache_memory"
+                memory_usage_ratio=usage_ratio,
+                resource_category="cache_memory",
             ).warning(
-                f"Cache memory pressure detected: {memory_usage_mb:.1f}MB / {memory_limit_mb}MB ({memory_usage_ratio:.1%})"
+                f"Cache memory pressure detected: {memory_usage_mb:.1f}MB / {memory_limit_mb}MB ({usage_ratio:.1%})"
             )
             return True
-        
         return False
-        
     except Exception as e:
         logger.error(f"Failed to monitor memory pressure: {e}")
         return False
 
 
 def get_module_logger(name: str, config: Optional[LoggingConfig] = None) -> EnhancedLogger:
-    """
-    Get an enhanced logger for a specific module with automatic context binding.
-    
-    Args:
-        name: Module name (typically __name__)
-        config: Optional logging configuration
-        
-    Returns:
-        EnhancedLogger: Enhanced logger instance with automatic context binding
-        
-    Example:
-        >>> logger = get_module_logger(__name__)
-        >>> logger.info("Module initialized")
-        >>> 
-        >>> # With performance timing
-        >>> with correlation_context("database_operation") as ctx:
-        ...     logger.info("Database operation started")
-    """
+    """Get an enhanced logger for a specific module with automatic context binding."""
     return EnhancedLogger(name, config)
 
 
 def get_enhanced_logger(name: str, config: Optional[LoggingConfig] = None) -> EnhancedLogger:
-    """
-    Alias for get_module_logger for backward compatibility and clarity.
-    
-    Args:
-        name: Module name (typically __name__)
-        config: Optional logging configuration
-        
-    Returns:
-        EnhancedLogger: Enhanced logger instance
-    """
+    """Alias for get_module_logger for backward compatibility and clarity."""
     return get_module_logger(name, config)
 
 
 def get_logger(name: str) -> EnhancedLogger:
-    """
-    Simple factory function for getting enhanced loggers.
-    
-    This function provides a clean interface similar to the standard logging
-    library while returning enhanced loggers with correlation support.
-    
-    Args:
-        name: Module name (typically __name__)
-        
-    Returns:
-        EnhancedLogger: Enhanced logger instance
-        
-    Example:
-        >>> from plume_nav_sim.utils.logging_setup import get_logger
-        >>> logger = get_logger(__name__)
-        >>> logger.info("Application started")
-    """
+    """Simple factory function for getting enhanced loggers."""
     return EnhancedLogger(name)
 
 
@@ -2010,38 +1949,13 @@ def update_cache_metrics(
     cache_miss_count: Optional[int] = None,
     cache_evictions: Optional[int] = None,
     cache_memory_usage_mb: Optional[float] = None,
-    cache_memory_limit_mb: Optional[float] = None
+    cache_memory_limit_mb: Optional[float] = None,
 ) -> None:
-    """
-    Update cache metrics in the current correlation context for logging integration.
-    
-    This function enables cache implementations to report statistics that will be
-    automatically included in JSON log records and correlation context for
-    frame cache monitoring and memory pressure tracking.
-    
-    Args:
-        context: Optional correlation context (uses current thread context if None)
-        cache_hit_count: Total number of cache hits
-        cache_miss_count: Total number of cache misses  
-        cache_evictions: Total number of cache evictions
-        cache_memory_usage_mb: Current cache memory usage in MB
-        cache_memory_limit_mb: Cache memory limit in MB
-        
-    Example:
-        >>> # Update cache statistics for logging
-        >>> update_cache_metrics(
-        ...     cache_hit_count=150,
-        ...     cache_miss_count=25,
-        ...     cache_memory_usage_mb=512.5
-        ... )
-        >>> logger.info("Cache operation completed")  # Will include cache stats
-    """
+    """Update cache metrics in the current correlation context for logging integration."""
     if context is None:
         context = get_correlation_context()
-    
     if context.performance_stack:
         current_metrics = context.performance_stack[-1]
-        
         if cache_hit_count is not None:
             current_metrics.cache_hit_count = cache_hit_count
         if cache_miss_count is not None:
@@ -2052,38 +1966,25 @@ def update_cache_metrics(
             current_metrics.cache_memory_usage_mb = cache_memory_usage_mb
         if cache_memory_limit_mb is not None:
             current_metrics.cache_memory_limit_mb = cache_memory_limit_mb
-        
-        # Calculate hit rate if both hits and misses are available
-        if (current_metrics.cache_hit_count is not None and 
-            current_metrics.cache_miss_count is not None):
-            total_requests = current_metrics.cache_hit_count + current_metrics.cache_miss_count
-            if total_requests > 0:
-                current_metrics.cache_hit_rate = current_metrics.cache_hit_count / total_requests
+        if (
+            current_metrics.cache_hit_count is not None
+            and current_metrics.cache_miss_count is not None
+        ):
+            total = current_metrics.cache_hit_count + current_metrics.cache_miss_count
+            if total > 0:
+                current_metrics.cache_hit_rate = current_metrics.cache_hit_count / total
 
 
 def log_cache_memory_pressure_violation(
     current_usage_mb: float,
     limit_mb: float,
-    threshold_ratio: float = 0.9
+    threshold_ratio: float = 0.9,
 ) -> None:
-    """
-    Log cache memory pressure violation with ResourceError category.
-    
-    This function implements the specification requirement for ResourceError category
-    logging when cache memory usage approaches the 2 GiB limit per Section 5.4.4.
-    
-    Args:
-        current_usage_mb: Current memory usage in MB
-        limit_mb: Memory limit in MB
-        threshold_ratio: Threshold ratio for pressure warnings (default 0.9 = 90%)
-    """
+    """Log cache memory pressure violation with ResourceError category."""
     usage_ratio = current_usage_mb / limit_mb
-    
     if usage_ratio >= threshold_ratio:
         context = get_correlation_context()
-        bound_logger = logger.bind(**context.bind_context())
-        
-        bound_logger.warning(
+        logger.bind(**context.bind_context()).warning(
             f"Cache memory pressure violation: {current_usage_mb:.1f}MB / {limit_mb:.1f}MB ({usage_ratio:.1%})",
             extra={
                 "metric_type": "memory_pressure_violation",
@@ -2092,8 +1993,8 @@ def log_cache_memory_pressure_violation(
                 "limit_mb": limit_mb,
                 "usage_ratio": usage_ratio,
                 "threshold_ratio": threshold_ratio,
-                "requires_cache_clear": usage_ratio >= 0.95  # Suggest cache.clear() at 95%
-            }
+                "requires_cache_clear": usage_ratio >= 0.95,
+            },
         )
 
 
@@ -2101,56 +2002,27 @@ def log_debug_command_correlation(
     command_name: str,
     command_args: Optional[Dict[str, Any]] = None,
     result_status: str = "success",
-    execution_context: Optional[Dict[str, Any]] = None
+    execution_context: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """
-    Log debug command execution with correlation tracking per Section 7.6.4.1.
-    
-    This function provides comprehensive logging for CLI debug commands with correlation
-    IDs, command sequencing, and execution context for debugging session tracking
-    and collaborative debugging support.
-    
-    Args:
-        command_name: Name of the debug command executed
-        command_args: Arguments passed to the debug command
-        result_status: Execution result status ("success", "warning", "error")
-        execution_context: Additional execution context (e.g., file paths, frame ranges)
-        
-    Example:
-        >>> log_debug_command_correlation(
-        ...     "debug_viewer_launch",
-        ...     command_args={"backend": "pyside6", "results_path": "results/run1"},
-        ...     result_status="success",
-        ...     execution_context={"frame_count": 1500, "duration_seconds": 45.2}
-        ... )
-    """
+    """Log debug command execution with correlation tracking."""
     context = get_correlation_context()
-    
-    # Increment debug command sequence for correlation
-    command_sequence = context.increment_debug_command(command_name, command_args)
-    
-    # Determine log level based on result status
-    log_level = {
-        "success": "info",
-        "warning": "warning", 
-        "error": "error"
-    }.get(result_status, "info")
-    
-    bound_logger = logger.bind(**context.bind_context())
-    log_method = getattr(bound_logger, log_level)
-    
-    log_method(
+    sequence = context.increment_debug_command(command_name, command_args)
+    level = {"success": "info", "warning": "warning", "error": "error"}.get(
+        result_status, "info"
+    )
+    bound = logger.bind(**context.bind_context())
+    getattr(bound, level)(
         f"Debug command executed: {command_name}",
         extra={
             "metric_type": "debug_command_execution",
             "debug_command": command_name,
-            "command_sequence": command_sequence,
+            "command_sequence": sequence,
             "command_args": command_args or {},
             "result_status": result_status,
             "execution_context": execution_context or {},
             "debug_session_id": context.debug_session_id,
-            "collaborative_session_active": context.collaborative_session_info["shared_session_active"]
-        }
+            "collaborative_session_active": context.collaborative_session_info["shared_session_active"],
+        },
     )
 
 
@@ -2158,55 +2030,20 @@ def create_debug_session_context(
     session_name: str,
     results_path: Optional[str] = None,
     collaborative_mode: Optional[str] = None,
-    session_config: Optional[Dict[str, Any]] = None
+    session_config: Optional[Dict[str, Any]] = None,
 ) -> CorrelationContext:
-    """
-    Create a new correlation context specifically for debug session tracking.
-    
-    This function creates an enhanced correlation context with debug session
-    capabilities for collaborative debugging and session state management
-    per Section 7.6.4.1.
-    
-    Args:
-        session_name: Human-readable name for the debug session
-        results_path: Path to simulation results being debugged
-        collaborative_mode: Collaboration mode ("host", "participant", or None)
-        session_config: Debug session configuration parameters
-        
-    Returns:
-        CorrelationContext: Enhanced context with debug session capabilities
-        
-    Example:
-        >>> debug_context = create_debug_session_context(
-        ...     "analyze_run1", 
-        ...     results_path="results/run1",
-        ...     collaborative_mode="host",
-        ...     session_config={"backend": "pyside6", "auto_analyze": True}
-        ... )
-        >>> with debug_context:
-        ...     # All operations within this context will be correlated
-        ...     launch_debug_viewer()
-    """
-    # Create new correlation context with debug session ID
+    """Create a new correlation context specifically for debug session tracking."""
     debug_session_id = f"debug_{session_name}_{int(time.time())}"
     context = CorrelationContext(debug_session_id=debug_session_id)
-    
-    # Add debug session metadata
     context.add_metadata(
         debug_session_name=session_name,
         results_path=results_path,
         session_config=session_config or {},
-        session_created_at=time.time()
+        session_created_at=time.time(),
     )
-    
-    # Configure collaboration if specified
-    if collaborative_mode and collaborative_mode in ["host", "participant"]:
-        # Note: Actual host/port would be configured when enable_collaborative_debugging is called
+    if collaborative_mode in {"host", "participant"}:
         context.collaborative_session_info["collaboration_mode"] = collaborative_mode
-    
-    # Log debug session creation
-    bound_logger = logger.bind(**context.bind_context())
-    bound_logger.info(
+    logger.bind(**context.bind_context()).info(
         f"Debug session created: {session_name}",
         extra={
             "metric_type": "debug_session_created",
@@ -2214,48 +2051,23 @@ def create_debug_session_context(
             "debug_session_id": debug_session_id,
             "results_path": results_path,
             "collaborative_mode": collaborative_mode,
-            "session_config": session_config or {}
-        }
+            "session_config": session_config or {},
+        },
     )
-    
     return context
 
 
 def log_debug_session_event(
     event_type: str,
     event_data: Dict[str, Any],
-    session_context: Optional[CorrelationContext] = None
+    session_context: Optional[CorrelationContext] = None,
 ) -> None:
-    """
-    Log debug session events for collaborative debugging and session tracking.
-    
-    This function provides structured logging for debug session events such as
-    breakpoint hits, frame navigation, state inspection, and collaboration events
-    per Section 7.6.4.1.
-    
-    Args:
-        event_type: Type of debug session event
-        event_data: Event-specific data and parameters
-        session_context: Optional debug session context (uses current if None)
-        
-    Example:
-        >>> log_debug_session_event(
-        ...     "breakpoint_hit",
-        ...     {
-        ...         "condition": "odor_reading > 0.8",
-        ...         "frame_number": 245,
-        ...         "agent_id": "agent_0",
-        ...         "odor_value": 0.92
-        ...     }
-        ... )
-    """
+    """Log debug session events for collaborative debugging and session tracking."""
     context = session_context or get_correlation_context()
-    bound_logger = logger.bind(**context.bind_context())
-    
-    # Increment debug command sequence for event correlation
-    event_sequence = context.increment_debug_command(f"session_event_{event_type}", event_data)
-    
-    bound_logger.info(
+    event_sequence = context.increment_debug_command(
+        f"session_event_{event_type}", event_data
+    )
+    logger.bind(**context.bind_context()).info(
         f"Debug session event: {event_type}",
         extra={
             "metric_type": "debug_session_event",
@@ -2264,39 +2076,27 @@ def log_debug_session_event(
             "event_data": event_data,
             "debug_session_id": context.debug_session_id,
             "collaborative_session_active": context.collaborative_session_info["shared_session_active"],
-            "timestamp": time.time()
-        }
+            "timestamp": time.time(),
+        },
     )
 
 
+# --------------------------------------------------------------------------- #
+#  Hydra integration helpers, default initialization, and extra timers       #
+# --------------------------------------------------------------------------- #
+
+
 def register_logging_config_schema():
-    """
-    Register LoggingConfig with Hydra ConfigStore for structured configuration.
-    
-    This function enables automatic schema discovery and validation within Hydra's
-    configuration composition system for the plume_nav_sim project.
-    """
+    """Register LoggingConfig with Hydra ConfigStore for structured configuration."""
     try:
         from hydra.core.config_store import ConfigStore
-        
+
         cs = ConfigStore.instance()
-        cs.store(
-            group="logging",
-            name="enhanced",
-            node=LoggingConfig,
-            package="logging"
+        cs.store(group="logging", name="enhanced", node=LoggingConfig, package="logging")
+        cs.store(group="cache", name="frame_cache", node=FrameCacheConfig, package="cache")
+        logger.info(
+            "Successfully registered LoggingConfig and FrameCacheConfig schemas with Hydra ConfigStore"
         )
-        
-        # Register FrameCacheConfig for cache configuration support
-        cs.store(
-            group="cache",
-            name="frame_cache",
-            node=FrameCacheConfig,
-            package="cache"
-        )
-        
-        logger.info("Successfully registered LoggingConfig and FrameCacheConfig schemas with Hydra ConfigStore")
-        
     except ImportError:
         logger.warning("Hydra not available, skipping ConfigStore registration")
     except Exception as e:
@@ -2308,14 +2108,14 @@ _default_config = LoggingConfig(
     environment="development",
     console_enabled=True,
     file_enabled=False,
-    format="default"
+    format="default",
 )
 
 # Setup basic logging on module import
 try:
     setup_logger(_default_config)
 except Exception:
-    # Fallback to basic setup if enhanced setup fails
+    # Fallback to a minimal configuration if enhanced setup fails very early
     logger.remove()
     logger.add(sys.stderr, format=DEFAULT_FORMAT, level="INFO")
 
@@ -2324,27 +2124,21 @@ except Exception:
 def memory_usage_timer(operation: str, threshold_mb: float = 100.0):
     """Context manager for memory usage monitoring with automatic warnings."""
     try:
-        import psutil
         process = psutil.Process()
-        start_memory = process.memory_info().rss / 1024 / 1024  # MB
-    except ImportError:
-        logger.warning("psutil not available for memory monitoring")
+        start_memory = process.memory_info().rss / 1024 / 1024
+    except Exception:
         start_memory = 0
-    
     start_time = time.time()
-    
     try:
         yield
     finally:
         end_time = time.time()
         try:
-            end_memory = process.memory_info().rss / 1024 / 1024  # MB
+            end_memory = process.memory_info().rss / 1024 / 1024
             memory_delta = end_memory - start_memory
             duration = end_time - start_time
-            
             context = get_correlation_context()
             bound_logger = logger.bind(**context.bind_context())
-            
             if memory_delta > threshold_mb:
                 bound_logger.warning(
                     f"High memory usage in {operation}: {memory_delta:.1f}MB increase",
@@ -2352,14 +2146,14 @@ def memory_usage_timer(operation: str, threshold_mb: float = 100.0):
                     operation=operation,
                     duration_s=duration,
                     threshold_mb=threshold_mb,
-                    memory_warning=True
+                    memory_warning=True,
                 )
             else:
                 bound_logger.debug(
                     f"Memory usage in {operation}: {memory_delta:.1f}MB",
                     memory_delta_mb=memory_delta,
                     operation=operation,
-                    duration_s=duration
+                    duration_s=duration,
                 )
         except Exception as e:
             logger.debug(f"Failed to monitor memory for {operation}: {e}")
@@ -2369,130 +2163,82 @@ def memory_usage_timer(operation: str, threshold_mb: float = 100.0):
 def database_operation_timer(operation: str, threshold_s: float = 0.1):
     """Context manager for database operation timing with automatic warnings."""
     start_time = time.time()
-    
     try:
         yield
     finally:
         end_time = time.time()
         duration = end_time - start_time
-        
         context = get_correlation_context()
         bound_logger = logger.bind(**context.bind_context())
-        
         if duration > threshold_s:
             bound_logger.warning(
                 f"Slow database operation: {operation} took {duration:.3f}s",
                 operation=operation,
                 duration_s=duration,
                 threshold_s=threshold_s,
-                db_latency_violation=True
+                db_latency_violation=True,
             )
         else:
             bound_logger.debug(
                 f"Database operation: {operation} completed in {duration:.3f}s",
                 operation=operation,
-                duration_s=duration
+                duration_s=duration,
             )
 
 
 def create_configuration_from_hydra(hydra_config):
     """Create LoggingConfig from Hydra configuration object."""
     try:
-        # Extract logging configuration from Hydra config
-        if hasattr(hydra_config, 'logging'):
+        if hasattr(hydra_config, "logging"):
             logging_cfg = hydra_config.logging
         else:
-            # Fallback to defaults if no logging config
             return LoggingConfig()
-        
-        # Convert Hydra config to LoggingConfig
-        config_dict = {}
-        
-        # Map common fields
-        if hasattr(logging_cfg, 'level'):
-            config_dict['level'] = logging_cfg.level
-        if hasattr(logging_cfg, 'format'):
-            config_dict['format'] = logging_cfg.format
-        if hasattr(logging_cfg, 'file_path'):
-            config_dict['file_path'] = logging_cfg.file_path
-        if hasattr(logging_cfg, 'enable_performance'):
-            config_dict['enable_performance'] = logging_cfg.enable_performance
-        if hasattr(logging_cfg, 'memory_tracking'):
-            config_dict['memory_tracking'] = logging_cfg.memory_tracking
-        
+
+        config_dict: Dict[str, Any] = {}
+        if hasattr(logging_cfg, "level"):
+            config_dict["level"] = logging_cfg.level
+        if hasattr(logging_cfg, "format"):
+            config_dict["format"] = logging_cfg.format
+        if hasattr(logging_cfg, "file_path"):
+            config_dict["file_path"] = logging_cfg.file_path
+        if hasattr(logging_cfg, "enable_performance"):
+            config_dict["enable_performance"] = logging_cfg.enable_performance
+        if hasattr(logging_cfg, "memory_tracking"):
+            config_dict["memory_tracking"] = logging_cfg.memory_tracking
         return LoggingConfig(**config_dict)
-        
     except Exception as e:
         logger.warning(f"Failed to create LoggingConfig from Hydra config: {e}")
         return LoggingConfig()
 
 
-# Enhanced exports for comprehensive functionality
 __all__ = [
-    # Configuration classes
     "LoggingConfig",
     "PerformanceMetrics",
     "FrameCacheConfig",
-    
-    # Enhanced logger classes
     "EnhancedLogger",
     "CorrelationContext",
-    
-    # Main setup functions
     "setup_logger",
     "get_module_logger",
-    "get_enhanced_logger", 
+    "get_enhanced_logger",
     "get_logger",
     "create_configuration_from_hydra",
-    
-    # Context managers and utilities
     "correlation_context",
     "get_correlation_context",
     "set_correlation_context",
-    
-    # Performance monitoring context managers
     "create_step_timer",
     "step_performance_timer",
     "frame_rate_timer",
     "memory_usage_timer",
     "database_operation_timer",
-    
-    # Enhanced CLI debug performance monitoring per Section 7.6.4.1
     "debug_command_timer",
     "debug_session_timer",
-    
-    # Cache monitoring and integration functions
     "update_cache_metrics",
     "log_cache_memory_pressure_violation",
-    
-    # Debug session management and correlation tracking per Section 7.6.4.1
     "log_debug_command_correlation",
     "create_debug_session_context",
     "log_debug_session_event",
-    
-    # Legacy API detection and deprecation
     "detect_legacy_gym_import",
     "log_legacy_api_deprecation",
     "monitor_environment_creation",
-    
-    # YAML configuration support
-    "_load_logging_yaml",
-    "_setup_yaml_sinks",
-    "_monitor_cache_memory_pressure",
-    
-    # Hydra integration
     "register_logging_config_schema",
-    
-    # Constants (preserved for backward compatibility)
-    "DEFAULT_FORMAT",
-    "MODULE_FORMAT",
-    "ENHANCED_FORMAT",
-    "HYDRA_FORMAT",
-    "CLI_FORMAT",
-    "MINIMAL_FORMAT",
-    "PRODUCTION_FORMAT",
-    "JSON_FORMAT",
-    "LOG_LEVELS",
-    "PERFORMANCE_THRESHOLDS",
-    "ENVIRONMENT_DEFAULTS",
 ]
