@@ -1662,7 +1662,7 @@ class MultiAgentController(BaseController):
         if positions is None:
             self._positions = np.array([[0.0, 0.0]])
         else:
-            self._positions = np.array(positions)
+            self._positions = np.array(positions, dtype=np.float64)
             if self._positions.ndim != 2 or self._positions.shape[1] != 2:
                 raise ValueError(
                     f"positions must have shape (num_agents, 2), got {self._positions.shape}"

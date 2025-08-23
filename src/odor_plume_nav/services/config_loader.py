@@ -25,7 +25,10 @@ def get_config_dir() -> Path:
     # Look for configs in the standard location
     # Start with the package root (one level up from this file)
     package_root = Path(__file__).parent.parent.parent.parent
-    config_dir = package_root / "configs"
+    # Tests (and historical usage) expect configuration files in a directory
+    # named ``conf`` rather than ``configs``.  Align default accordingly while
+    # keeping environment-variable override behaviour unchanged.
+    config_dir = package_root / "conf"
     
     # Check if environment variable is set to override the config directory
     if env_config_dir := os.environ.get("ODOR_PLUME_NAV_CONFIG_DIR"):

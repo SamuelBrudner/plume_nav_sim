@@ -21,6 +21,7 @@ import pathlib
 import tempfile
 import warnings
 from typing import Any, Dict, Optional, Union
+import os
 
 import numpy as np
 import yaml
