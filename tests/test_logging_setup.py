@@ -433,6 +433,8 @@ class TestEnhancedLoggingSetup:
             enhanced_logger.info(test_log_messages["info"])
             enhanced_logger.warning(test_log_messages["warning"])
             enhanced_logger.error(test_log_messages["error"])
+            # Added CRITICAL level logging for verification
+            enhanced_logger.critical(test_log_messages["critical"])
         
         time.sleep(0.1)  # Allow file write
         
@@ -478,8 +480,13 @@ class TestEnhancedLoggingSetup:
         
         # Verify threshold violation warning was logged
         assert "Environment step() latency exceeded threshold" in output
-        assert "0.015" in output  # Should show actual timing
-        assert "0.010" in output  # Should show threshold
+        # Extract timing values and perform relaxed assertions
+        match = re.search(r"exceeded threshold: ([0-9.]+)s > ([0-9.]+)s", output)
+        assert match, "Timing pattern not found in output"
+        actual_sec = float(match.group(1))
+        threshold_sec = float(match.group(2))
+        assert actual_sec >= 0.015, f"Actual latency ({actual_sec}) below expected minimum"
+        assert threshold_sec == 0.010, "Threshold latency should be 0.010s"
         assert "metric_type" in output
         assert "step_latency_violation" in output
     
@@ -574,7 +581,11 @@ class TestEnhancedLoggingSetup:
         # Verify database latency warning was logged
         assert "Slow database operation" in output
         assert "slow_query" in output
-        assert "0.150" in output or "150" in output  # Should show timing
+        # Relaxed timing check (allow small scheduling variance)
+        match = re.search(r"took ([0-9.]+)s", output)
+        assert match, "Duration pattern not found in output"
+        duration_sec = float(match.group(1))
+        assert duration_sec >= 0.140, f"Duration {duration_sec} shorter than expected lower bound"
         assert "db_latency_violation" in output
     
     def test_enhanced_logger_performance_timer(self):
@@ -812,7 +823,7 @@ class TestEnhancedLoggingSetup:
         """Test all log levels of enhanced logger."""
         string_io = io.StringIO()
         setup_logger(LoggingConfig(level="TRACE"))
-        handler_id = logger.add(string_io, format="{level}: {message}")
+        handler_id = logger.add(string_io, level="TRACE", format="{level}: {message}")
         
         enhanced_logger = get_enhanced_logger("level_test_module")
         

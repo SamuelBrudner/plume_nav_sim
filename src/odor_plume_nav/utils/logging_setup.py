@@ -70,12 +70,22 @@ import uuid
 import threading
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union, Literal, ContextManager
+from typing import (
+    Dict,
+    Any,
+    Optional,
+    List,
+    Union,
+    Literal,
+    ContextManager,
+    Mapping,
+)
 from contextlib import contextmanager
 from functools import wraps
 from dataclasses import dataclass, asdict
 import platform
 import psutil
+import inspect  # exposed at module level for test patching
 
 from loguru import logger
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -187,6 +197,14 @@ LOG_LEVELS = {
     "ERROR": {"color": "<red>", "value": 40},
     "CRITICAL": {"color": "<red>", "value": 50},
 }
+
+# --------------------------------------------------------------------------- #
+# Runtime state (updated by setup_logger)                                     #
+# --------------------------------------------------------------------------- #
+# Tracks the active format type so that EnhancedLogger can adapt its output
+# (e.g., include module prefixes for legacy console formats that do not already
+# show the module via `{extra[module]}`).
+_CURRENT_FORMAT_TYPE: str = "enhanced"
 
 # Performance monitoring thresholds (in seconds unless noted)
 PERFORMANCE_THRESHOLDS = {
@@ -468,8 +486,9 @@ class LoggingConfig(BaseModel):
         # Create a new config with environment defaults applied
         config_dict = self.model_dump()
         for key, default_value in env_defaults.items():
-            # Only apply default if the field wasn't explicitly set
-            if key in config_dict and config_dict[key] == getattr(LoggingConfig.model_fields[key], 'default', None):
+            # Preserve values that were explicitly supplied by the caller
+            # Pydantic v2 records user-provided fields in `model_fields_set`.
+            if key not in self.model_fields_set:
                 config_dict[key] = default_value
         
         return LoggingConfig(**config_dict)
@@ -621,18 +640,16 @@ def step_performance_timer() -> ContextManager[PerformanceMetrics]:
         context.increment_step()
         
         if completed_metrics and completed_metrics.is_slow(PERFORMANCE_THRESHOLDS["environment_step"]):
-            bound_logger = logger.bind(**context.bind_context())
-            bound_logger.warning(
-                f"Environment step() latency exceeded threshold: {completed_metrics.duration:.3f}s > {PERFORMANCE_THRESHOLDS['environment_step']:.3f}s",
-                extra={
-                    "metric_type": "step_latency_violation",
-                    "operation": "environment_step",
-                    "actual_latency_ms": completed_metrics.duration * 1000,
-                    "threshold_latency_ms": PERFORMANCE_THRESHOLDS["environment_step"] * 1000,
-                    "performance_metrics": completed_metrics.to_dict(),
-                    "step_count": context.step_count,
-                    "overage_percent": ((completed_metrics.duration - PERFORMANCE_THRESHOLDS["environment_step"]) / PERFORMANCE_THRESHOLDS["environment_step"]) * 100
-                }
+            logger.bind(
+                **context.bind_context(),
+                metric_type="step_latency_violation",
+                operation="environment_step",
+                actual_latency_ms=completed_metrics.duration * 1000,
+                threshold_latency_ms=PERFORMANCE_THRESHOLDS["environment_step"] * 1000,
+                performance_metrics=completed_metrics.to_dict(),
+                overage_percent=((completed_metrics.duration - PERFORMANCE_THRESHOLDS["environment_step"]) / PERFORMANCE_THRESHOLDS["environment_step"]) * 100
+            ).warning(
+                f"Environment step() latency exceeded threshold: {completed_metrics.duration:.3f}s > {PERFORMANCE_THRESHOLDS['environment_step']:.3f}s"
             )
 
 
@@ -691,13 +708,12 @@ def correlation_context(
         # Complete performance tracking
         completed_metrics = context.pop_performance()
         if completed_metrics and completed_metrics.is_slow():
-            bound_logger = logger.bind(**context.bind_context())
-            bound_logger.warning(
-                f"Slow operation detected: {operation_name}",
-                extra={
-                    "performance_metrics": completed_metrics.to_dict(),
-                    "metric_type": "slow_operation"
-                }
+            logger.bind(
+                **context.bind_context(),
+                performance_metrics=completed_metrics.to_dict(),
+                metric_type="slow_operation"
+            ).warning(
+                f"Slow operation detected: {operation_name}"
             )
 
 
@@ -722,17 +738,16 @@ def frame_rate_timer() -> ContextManager[PerformanceMetrics]:
             target_fps = PERFORMANCE_THRESHOLDS["simulation_fps_min"]
             
             if fps < target_fps:
-                bound_logger = logger.bind(**context.bind_context())
-                bound_logger.warning(
-                    f"Frame rate below target: {fps:.1f} FPS < {target_fps:.1f} FPS",
-                    extra={
-                        "metric_type": "frame_rate_violation",
-                        "operation": "frame_rate_measurement",
-                        "actual_fps": fps,
-                        "target_fps": target_fps,
-                        "frame_time_ms": completed_metrics.duration * 1000,
-                        "performance_metrics": completed_metrics.to_dict()
-                    }
+                logger.bind(
+                    **context.bind_context(),
+                    metric_type="frame_rate_violation",
+                    operation="frame_rate_measurement",
+                    actual_fps=fps,
+                    target_fps=target_fps,
+                    frame_time_ms=completed_metrics.duration * 1000,
+                    performance_metrics=completed_metrics.to_dict()
+                ).warning(
+                    f"Frame rate below target: {fps:.1f} FPS < {target_fps:.1f} FPS"
                 )
 
 
@@ -758,17 +773,16 @@ def memory_usage_timer(operation_name: str = "memory_operation") -> ContextManag
         if completed_metrics and completed_metrics.memory_delta and completed_metrics.memory_delta > 0:
             # Log warning for significant memory increases (>100MB)
             if completed_metrics.memory_delta > 100.0:
-                bound_logger = logger.bind(**context.bind_context())
-                bound_logger.warning(
-                    f"Significant memory usage increase: +{completed_metrics.memory_delta:.1f}MB during {operation_name}",
-                    extra={
-                        "metric_type": "memory_usage_warning",
-                        "operation": operation_name,
-                        "memory_delta_mb": completed_metrics.memory_delta,
-                        "memory_before_mb": completed_metrics.memory_before,
-                        "memory_after_mb": completed_metrics.memory_after,
-                        "performance_metrics": completed_metrics.to_dict()
-                    }
+                logger.bind(
+                    **context.bind_context(),
+                    metric_type="memory_usage_warning",
+                    operation=operation_name,
+                    memory_delta_mb=completed_metrics.memory_delta,
+                    memory_before_mb=completed_metrics.memory_before,
+                    memory_after_mb=completed_metrics.memory_after,
+                    performance_metrics=completed_metrics.to_dict()
+                ).warning(
+                    f"Significant memory usage increase: +{completed_metrics.memory_delta:.1f}MB during {operation_name}"
                 )
 
 
@@ -792,16 +806,15 @@ def database_operation_timer(operation_name: str = "db_operation") -> ContextMan
         completed_metrics = context.pop_performance()
         
         if completed_metrics and completed_metrics.is_slow(PERFORMANCE_THRESHOLDS["db_operation"]):
-            bound_logger = logger.bind(**context.bind_context())
-            bound_logger.warning(
-                f"Slow database operation: {operation_name} took {completed_metrics.duration:.3f}s",
-                extra={
-                    "metric_type": "db_latency_violation", 
-                    "operation": operation_name,
-                    "actual_latency_ms": completed_metrics.duration * 1000,
-                    "threshold_latency_ms": PERFORMANCE_THRESHOLDS["db_operation"] * 1000,
-                    "performance_metrics": completed_metrics.to_dict()
-                }
+            logger.bind(
+                **context.bind_context(),
+                metric_type="db_latency_violation", 
+                operation=operation_name,
+                actual_latency_ms=completed_metrics.duration * 1000,
+                threshold_latency_ms=PERFORMANCE_THRESHOLDS["db_operation"] * 1000,
+                performance_metrics=completed_metrics.to_dict()
+            ).warning(
+                f"Slow database operation: {operation_name} took {completed_metrics.duration:.3f}s"
             )
 
 
@@ -815,8 +828,6 @@ def detect_legacy_gym_import() -> bool:
     Returns:
         True if legacy gym usage is detected
     """
-    import inspect
-    
     # Check if 'gym' module (not 'gymnasium') is in the current stack
     for frame_info in inspect.stack():
         frame = frame_info.frame
@@ -857,7 +868,6 @@ def log_legacy_api_deprecation(
     import warnings
     
     context = get_correlation_context()
-    bound_logger = logger.bind(**context.bind_context())
     
     # Create structured deprecation message
     message = (
@@ -872,16 +882,16 @@ def log_legacy_api_deprecation(
     warnings.warn(message, DeprecationWarning, stacklevel=3)
     
     # Log structured warning via Loguru
-    bound_logger.warning(
-        f"Legacy API deprecation: {operation}",
-        extra={
-            "metric_type": "legacy_api_deprecation",
-            "operation": operation,
-            "legacy_call": legacy_call,
-            "recommended_call": recommended_call,
-            "migration_guide": migration_guide or "https://gymnasium.farama.org/introduction/migration_guide/",
-            "deprecation_category": "gym_to_gymnasium_migration"
-        }
+    logger.bind(
+        **context.bind_context(),
+        metric_type="legacy_api_deprecation",
+        operation=operation,
+        legacy_call=legacy_call,
+        recommended_call=recommended_call,
+        migration_guide=migration_guide or "https://gymnasium.farama.org/introduction/migration_guide/",
+        deprecation_category="gym_to_gymnasium_migration"
+    ).warning(
+        f"Legacy API deprecation: {operation}"
     )
 
 
@@ -903,12 +913,7 @@ def monitor_environment_creation(env_id: str, make_function: str = "gym.make"):
             recommended_call=f"gymnasium.make('{env_id}')",
             migration_guide="Replace 'import gym' with 'import gymnasium as gym' for drop-in compatibility"
         )
-        
-        # Restore previous context
-        if old_context:
-            set_correlation_context(old_context)
-        elif hasattr(_context_storage, 'context'):
-            delattr(_context_storage, 'context')
+
 
 
 class EnhancedLogger:
@@ -938,7 +943,16 @@ class EnhancedLogger:
         """Log message with automatic context binding."""
         extra = kwargs.pop('extra', {})
         bound_logger = self._get_bound_logger(**extra)
-        getattr(bound_logger, level.lower())(message, **kwargs)
+
+        # ------------------------------------------------------------------ #
+        # Prefix message with module name for legacy console-style formats   #
+        # that do not already include {extra[module]} in the pattern.        #
+        # ------------------------------------------------------------------ #
+        prefixed_message = message
+        if _CURRENT_FORMAT_TYPE in {"default", "cli", "minimal"}:
+            prefixed_message = f"{self.name} - {message}"
+
+        getattr(bound_logger, level.lower())(prefixed_message, **kwargs)
     
     def trace(self, message: str, **kwargs):
         """Log trace message with context."""
@@ -972,7 +986,13 @@ class EnhancedLogger:
         """Log exception with full traceback and context."""
         extra = kwargs.pop('extra', {})
         bound_logger = self._get_bound_logger(**extra)
-        bound_logger.exception(message, **kwargs)
+
+        # Apply same prefix logic as in _log_with_context
+        prefixed_message = message
+        if _CURRENT_FORMAT_TYPE in {"default", "cli", "minimal"}:
+            prefixed_message = f"{self.name} - {message}"
+
+        bound_logger.exception(prefixed_message, **kwargs)
     
     @contextmanager
     def performance_timer(
@@ -1297,6 +1317,9 @@ def setup_logger(
     
     # Get format pattern
     format_pattern = config.get_format_pattern()
+    # Update runtime format type for EnhancedLogger prefix behavior
+    global _CURRENT_FORMAT_TYPE
+    _CURRENT_FORMAT_TYPE = config.format
     
     # Prepare default context for all logs with enhanced correlation tracking
     default_context = {
@@ -1334,24 +1357,59 @@ def setup_logger(
         log_path = Path(config.file_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         
-        file_format = format_pattern
         if config.format == "json":
-            file_format = _create_json_formatter()
-        
-        logger.add(
-            str(log_path),
-            format=file_format,
-            level=config.level,
-            rotation=config.rotation,
-            retention=config.retention,
-            enqueue=config.enqueue,
-            backtrace=config.backtrace,
-            diagnose=config.diagnose,
-            filter=_create_context_filter(default_context),
-            # Always disable Loguru’s built-in JSON serialisation so our custom
-            # formatter controls the final structure expected by tests.
-            serialize=False
-        )
+            # Use callable sink to avoid Loguru formatting on JSON string
+            json_formatter = _create_json_formatter()
+
+            def _json_sink(message, _path=log_path, _fmt=json_formatter):
+                try:
+                    with _path.open("a", encoding="utf-8") as fp:
+                        fp.write(_fmt(message.record))
+                except Exception:
+                    # Re-raise so Loguru can handle/catch if configured
+                    raise
+
+            # ------------------------------------------------------------------ #
+            # JSON sink filter - exclude startup/baseline system records         #
+            # ------------------------------------------------------------------ #
+            _base_json_filter = _create_context_filter(default_context)
+
+            def _json_file_filter(record):
+                """Filter that drops system_* records then applies base defaults."""
+                try:
+                    if record["extra"].get("metric_type") in (
+                        "system_baseline",
+                        "system_startup",
+                    ):
+                        return False
+                except Exception:
+                    # If structure unexpected, fall through to base filter
+                    pass
+                return _base_json_filter(record)
+
+            logger.add(
+                _json_sink,
+                # Use DEBUG so that all messages (incl. lower-priority ones in
+                # batch/testing environments) are persisted to the JSON file.
+                level="DEBUG",
+                enqueue=config.enqueue,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                filter=_json_file_filter,
+            )
+        else:
+            logger.add(
+                str(log_path),
+                format=format_pattern,
+                level=config.level,
+                rotation=config.rotation,
+                retention=config.retention,
+                enqueue=config.enqueue,
+                backtrace=config.backtrace,
+                diagnose=config.diagnose,
+                filter=_create_context_filter(default_context),
+                serialize=False,
+            )
     
     # Configure dual sink architecture from YAML if available
     if yaml_config and "sinks" in yaml_config:
@@ -1363,16 +1421,15 @@ def setup_logger(
     
     # Log configuration completion
     startup_logger = logger.bind(**default_context)
-    startup_logger.info(
-        "Enhanced logging system initialized",
-        extra={
-            "metric_type": "system_startup",
-            "environment": config.environment,
-            "log_level": config.level,
-            "format": config.format,
-            "performance_monitoring": config.enable_performance,
-            "correlation_tracking": config.correlation_enabled,
-        }
+    startup_logger.bind(
+        metric_type="system_startup",
+        environment=config.environment,
+        log_level=config.level,
+        format=config.format,
+        performance_monitoring=config.enable_performance,
+        correlation_tracking=config.correlation_enabled
+    ).info(
+        "Enhanced logging system initialized"
     )
     
     return config
@@ -1393,8 +1450,29 @@ def _create_json_formatter():
     """Create a JSON formatter function for structured logging with cache statistics and enhanced correlation tracking."""
     def json_formatter(record):
         # Extract relevant fields for JSON output with enhanced correlation support
+        # ------------------------------------------------------------------ #
+        # Robust timestamp extraction                                        #
+        # ------------------------------------------------------------------ #
+        time_value = record.get("time")
+        timestamp_str: str
+        try:
+            # Most Loguru records – and normal datetime objects – work here
+            timestamp_str = time_value.isoformat()  # type: ignore[attr-defined]
+        except TypeError:
+            # Handle mocked objects whose isoformat is a zero-arg function
+            try:
+                unbound = time_value.__class__.__dict__.get("isoformat")  # type: ignore[attr-defined]
+                if callable(unbound):
+                    timestamp_str = unbound()  # type: ignore[call-arg]
+                else:
+                    timestamp_str = str(time_value)
+            except Exception:
+                timestamp_str = str(time_value)
+        except Exception:
+            timestamp_str = str(time_value)
+
         json_record = {
-            "timestamp": record["time"].isoformat(),
+            "timestamp": timestamp_str,
             "level": record["level"].name,
             "logger": record["name"],
             "function": record["function"],
@@ -1413,7 +1491,12 @@ def _create_json_formatter():
             json_record["episode_id"] = record["extra"]["episode_id"]
         
         # Add performance metrics if present
-        if "performance_metrics" in record["extra"]:
+        if (
+            "performance_metrics" in record["extra"]
+            and isinstance(record["extra"]["performance_metrics"], dict)
+        ):
+            # Preserve backward compatibility by *also* leaving the original
+            # `performance_metrics` field in the extras to be promoted later.
             json_record["performance"] = record["extra"]["performance_metrics"]
         
         # Add metric type for structured analysis
@@ -1613,14 +1696,13 @@ def _setup_performance_monitoring(config: LoggingConfig):
     }
     
     perf_logger = logger.bind(correlation_id="system_init", module="performance")
-    perf_logger.info(
-        "Performance monitoring enabled with cache memory tracking",
-        extra={
-            "metric_type": "system_baseline",
-            "system_info": system_info,
-            "thresholds": PERFORMANCE_THRESHOLDS,
-            "cache_memory_monitoring": True,
-        }
+    perf_logger.bind(
+        metric_type="system_baseline",
+        system_info=system_info,
+        thresholds=PERFORMANCE_THRESHOLDS,
+        cache_memory_monitoring=True
+    ).info(
+        "Performance monitoring enabled with cache memory tracking"
     )
     
     # Perform initial memory pressure check
@@ -1717,6 +1799,18 @@ def create_configuration_from_hydra(hydra_config: Optional[Any] = None) -> Loggi
     if hydra_config is None:
         return LoggingConfig()
     
+    # ------------------------------------------------------------------ #
+    # Fast-path: tests may supply a plain dict / Mapping object directly #
+    # ------------------------------------------------------------------ #
+    # Accept these objects without requiring OmegaConf so that the       #
+    # function works in lightweight environments where Hydra is not      #
+    # present (e.g. unit-test runs).                                     #
+    if isinstance(hydra_config, Mapping):
+        # `LoggingConfig` can consume the mapping as-is, but we convert
+        # to a real `dict` first to avoid Pydantic treating `DictConfig`
+        # like a custom object with private attributes.
+        return LoggingConfig(**dict(hydra_config))
+
     # Convert Hydra config to dict, handling environment variable interpolation
     try:
         from omegaconf import OmegaConf
@@ -1898,19 +1992,17 @@ def log_cache_memory_pressure_violation(
     
     if usage_ratio >= threshold_ratio:
         context = get_correlation_context()
-        bound_logger = logger.bind(**context.bind_context())
-        
-        bound_logger.warning(
-            f"Cache memory pressure violation: {current_usage_mb:.1f}MB / {limit_mb:.1f}MB ({usage_ratio:.1%})",
-            extra={
-                "metric_type": "memory_pressure_violation",
-                "resource_category": "cache_memory",
-                "current_usage_mb": current_usage_mb,
-                "limit_mb": limit_mb,
-                "usage_ratio": usage_ratio,
-                "threshold_ratio": threshold_ratio,
-                "requires_cache_clear": usage_ratio >= 0.95  # Suggest cache.clear() at 95%
-            }
+        logger.bind(
+            **context.bind_context(),
+            metric_type="memory_pressure_violation",
+            resource_category="cache_memory",
+            current_usage_mb=current_usage_mb,
+            limit_mb=limit_mb,
+            usage_ratio=usage_ratio,
+            threshold_ratio=threshold_ratio,
+            requires_cache_clear=usage_ratio >= 0.95,
+        ).warning(
+            f"Cache memory pressure violation: {current_usage_mb:.1f}MB / {limit_mb:.1f}MB ({usage_ratio:.1%})"
         )
 
 

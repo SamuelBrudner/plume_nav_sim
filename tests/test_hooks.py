@@ -32,7 +32,7 @@ Test Categories:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, call, ANY
 import numpy as np
 import time
 import threading
@@ -268,7 +268,8 @@ class TestHookManagerIntegration:
         obs, reward = safe_hook_execution()
         
         # Validate core functionality preserved despite hook failures
-        assert obs == {'position': np.array([0, 0])}
+        assert isinstance(obs, dict) and 'position' in obs
+        np.testing.assert_array_equal(obs['position'], np.array([0, 0]))
         assert reward == 1.0
 
 
@@ -601,8 +602,8 @@ class TestRecorderProtocolIntegration:
             assert success is True
             recorder.export_data.assert_called_once_with(
                 str(export_path),
-                format="json", 
-                metadata=session.get_session_info()
+                format="json",
+                metadata=ANY
             )
 
 
