@@ -24,6 +24,7 @@ from pathlib import Path
 
 # Core imports
 from odor_plume_nav.core.protocols import NavigatorProtocol
+from odor_plume_nav.coordinate_frame import normalize_angle, rotate
 from odor_plume_nav.core.navigator import Navigator
 
 # Configuration imports with fallback handling
@@ -862,32 +863,23 @@ def define_sensor_offsets(
 
 
 def rotate_offset(local_offset: np.ndarray, orientation_deg: float) -> np.ndarray:
-    """
-    Rotate a local offset by an orientation (in degrees).
-    
-    Parameters
-    ----------
-    local_offset : np.ndarray
-        (2,) array representing (x, y) in local coordinates.
-    orientation_deg : float
-        Agent's orientation in degrees.
+    """Rotate a local offset by ``orientation_deg`` degrees.
 
-    Returns
-    -------
-    global_offset : np.ndarray
-        (2,) array representing the offset in global coordinates.
+    The operation is performed in double precision and the angle is
+    normalised to ``[0, 360)`` to avoid discrepancies where ``0`` and
+    ``360`` would otherwise yield slightly different results due to
+    floating point rounding.  The function fails fast if the input does
+    not represent a 2‑vector.
     """
-    # Convert to radians
-    orientation_rad = np.deg2rad(orientation_deg)
-    
-    # Create rotation matrix
-    rotation_matrix = np.array([
-        [np.cos(orientation_rad), -np.sin(orientation_rad)],
-        [np.sin(orientation_rad),  np.cos(orientation_rad)]
-    ])
-    
-    # Apply rotation
-    return rotation_matrix @ local_offset
+    if local_offset.shape != (2,):
+        raise ValueError("local_offset must be a 2‑element vector")
+
+    orientation_deg = normalize_angle(float(orientation_deg))
+    result = rotate(local_offset, orientation_deg)
+    logger.debug(
+        f"rotate_offset: local={local_offset}, orientation={orientation_deg}, result={result}"
+    )
+    return result
 
 
 def calculate_sensor_positions(
@@ -1062,9 +1054,9 @@ def read_odor_values(
 
 
 def update_positions_and_orientations(
-    positions: np.ndarray, 
-    orientations: np.ndarray, 
-    speeds: np.ndarray, 
+    positions: np.ndarray,
+    orientations: np.ndarray,
+    speeds: np.ndarray,
     angular_velocities: np.ndarray,
     dt: float = 1.0
 ) -> None:
@@ -1101,27 +1093,28 @@ def update_positions_and_orientations(
     that doesn't explicitly handle time steps. To properly incorporate physics
     time steps, pass the actual dt value from your simulation.
     """
-    # Convert orientations to radians
-    rad_orientations = np.radians(orientations)
-    
-    # Calculate movement deltas, scaled by dt
-    dx = speeds * np.cos(rad_orientations) * dt
-    dy = speeds * np.sin(rad_orientations) * dt
-    
-    # Update positions (vectorized for all agents)
-    if positions.ndim == 2:
-        # For multiple agents: positions has shape (N, 2)
-        positions += np.column_stack((dx, dy))
+    pos64 = np.asarray(positions, dtype=np.float64)
+    ori64 = np.asarray(orientations, dtype=np.float64)
+    spd64 = np.asarray(speeds, dtype=np.float64)
+    ang64 = np.asarray(angular_velocities, dtype=np.float64)
+
+    rad_orientations = np.deg2rad(ori64)
+
+    dx = spd64 * np.cos(rad_orientations) * dt
+    dy = spd64 * np.sin(rad_orientations) * dt
+
+    if pos64.ndim == 2:
+        pos64 = pos64 + np.column_stack((dx, dy))
     else:
-        # Handle single agent case with different indexing
-        for i in range(len(positions)):
-            positions[i] += np.array([dx[i], dy[i]])
-    
-    # Update orientations with angular velocities, scaled by dt
-    orientations += angular_velocities * dt
-    
-    # Wrap orientations to [0, 360) degrees
-    orientations %= 360.0
+        for i in range(len(pos64)):
+            pos64[i] = pos64[i] + np.array([dx[i], dy[i]], dtype=np.float64)
+
+    positions[...] = pos64
+
+    ori64 = normalize_angle(ori64 + ang64 * dt)
+    orientations[...] = ori64
+
+    logger.debug(f"Updated positions and orientations (dt={dt})")
 
 
 @dataclass
