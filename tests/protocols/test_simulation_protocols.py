@@ -12,7 +12,7 @@ PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     "NavigatorProtocol": {
         "methods": {
             "reset": lambda self: None,
-            "step": lambda self, dt: None,
+            "step": lambda self, action: None,
             "get_state": lambda self: {},
         },
         "missing": "step",
