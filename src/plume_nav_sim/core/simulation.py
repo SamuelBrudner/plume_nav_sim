@@ -69,6 +69,9 @@ import warnings
 from typing import Optional, Tuple, Dict, Any, Union, List, Protocol, TYPE_CHECKING
 import numpy as np
 from dataclasses import dataclass, field
+import logging
+
+from ..protocols import PerformanceMonitorProtocol
 from pathlib import Path
 
 # Core dependencies for Gymnasium migration
@@ -1066,6 +1069,24 @@ class PerformanceMonitor:
         return metrics
 
 
+class PerformanceMonitor(PerformanceMonitorProtocol):
+    """Basic implementation of :class:`PerformanceMonitorProtocol`."""
+
+    def __init__(self) -> None:
+        self._durations: Dict[str, List[float]] = {}
+        self._logger = logging.getLogger(__name__)
+
+    def record_step(self, duration_ms: float, label: str | None = None) -> None:
+        if duration_ms <= 0:
+            raise ValueError("duration_ms must be positive")
+        key = label or "step"
+        self._durations.setdefault(key, []).append(duration_ms)
+        self._logger.info(f"Recorded {key} duration: {duration_ms:.3f}ms")
+
+    def export(self) -> Dict[str, float]:
+        return {k: sum(v) for k, v in self._durations.items()}
+
+
 class SimulationContext:
     """
     Enhanced context manager for modular simulation lifecycle management.
@@ -1094,7 +1115,7 @@ class SimulationContext:
         self.config = config or SimulationConfig()
         self.components: Dict[str, Any] = {}
         self.metrics_collectors: Dict[str, ComponentMetrics] = {}
-        self.performance_monitor: Optional[PerformanceMonitor] = None
+        self.performance_monitor: Optional[PerformanceMonitorProtocol] = None
         self._episode_manager: Optional['EpisodeManager'] = None
         self._resource_cleanup_handlers: List[Callable[[], None]] = []
         
@@ -2212,13 +2233,11 @@ def run_simulation(
                             sim_logger.debug(f"Visualization update failed at step {step}: {e}")
 
                     # Record performance metrics
-                    step_duration = time.perf_counter() - step_start_time
+                    step_duration_ms = (time.perf_counter() - step_start_time) * 1000
                     if performance_monitor is not None:
-                        cache_stats = {}
-                        if frame_cache is not None and hasattr(frame_cache, 'get_stats'):
-                            cache_stats = frame_cache.get_stats()
-                        
-                        performance_monitor.record_step(step_duration, hook_duration, cache_stats)
+                        performance_monitor.record_step(step_duration_ms, label="step")
+                        if hook_duration > 0:
+                            performance_monitor.record_step(hook_duration * 1000, label="hook")
                     
                     # Collect component metrics if enabled
                     if component_metrics_collection and (step + 1) % 100 == 0:  # Every 100 steps

@@ -42,11 +42,10 @@ PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "PerformanceMonitorProtocol": {
         "methods": {
-            "record_step": lambda self, data: None,
-            "record_episode": lambda self, data: None,
-            "get_metrics": lambda self: {"dummy": 0.0},
+            "record_step": lambda self, duration_ms, label=None: None,
+            "export": lambda self: {"dummy": 0.0},
         },
-        "missing": "record_episode",
+        "missing": "export",
     },
 }
 
