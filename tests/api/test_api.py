@@ -251,6 +251,14 @@ class TestNavigatorCreation:
         with pytest.raises(ValueError, match=r"Cannot specify both 'position' \(single-agent\) and 'positions' \(multi-agent\). Please provide only one."):
             create_navigator(position=(0, 0), positions=[(1, 2), (3, 4)])
 
+    def test_create_navigator_unavailable(self, monkeypatch):
+        """Navigator creation should fail when core Navigator is unavailable."""
+        import plume_nav_sim.api.navigation as nav
+
+        monkeypatch.setattr(nav, "Navigator", None)
+        with pytest.raises(ImportError):
+            nav.create_navigator()
+
 
 class TestHydraConfigurationIntegration:
     """Test suite for Hydra configuration integration with enhanced pytest-hydra support."""
@@ -781,6 +789,11 @@ class TestSimulationExecution:
             assert result_positions.shape == (2, 2, 2)
             assert result_orientations.shape == (2, 2)
             assert result_readings.shape == (2, 2)
+
+    def test_run_plume_simulation_not_implemented(self, sample_navigator, sample_video_plume):
+        """Simulation entry point should raise when implementation missing."""
+        with pytest.raises(NotImplementedError):
+            run_plume_simulation(sample_navigator, sample_video_plume, num_steps=1, dt=1.0)
 
 
 class TestVisualizationIntegration:

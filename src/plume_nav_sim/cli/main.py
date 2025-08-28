@@ -93,22 +93,12 @@ from plume_nav_sim.utils.frame_cache import FrameCache
 from plume_nav_sim.models.plume import create_plume_model
 
 # Expose configuration schema classes for test patching
-try:
-    from plume_nav_sim.config.schemas import NavigatorConfig, VideoPlumeConfig, SimulationConfig
-except Exception:  # pragma: no cover
-    # If schemas cannot be imported, define placeholders to keep tests patchable
-    NavigatorConfig = VideoPlumeConfig = SimulationConfig = object  # type: ignore
+from plume_nav_sim.config.schemas import NavigatorConfig, VideoPlumeConfig, SimulationConfig
 
 # Alias setup_logger so tests can patch `setup_logging`
 setup_logging = setup_logger  # noqa: N816  (keep camelCase for compatibility)
 
-# Expose `close_session` for tests – fall back to no-op if import fails
-try:
-    from plume_nav_sim.db.session import close_session as _close_session  # type: ignore
-except Exception:  # pragma: no cover
-    def _close_session(_session):  # type: ignore
-        return None
-close_session = _close_session  # make patchable at module level
+from plume_nav_sim.db.session import close_session  # type: ignore
 
 # Import gymnasium for RL environment creation
 try:
@@ -755,52 +745,41 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
                 # Create environment from configuration
                 try:
                     from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
-                    
+
                     # Extract and structure plume model configuration from Hydra config
                     plume_model_config = None
                     if cfg and hasattr(cfg, 'plume_models'):
                         plume_models = cfg.plume_models
                         plume_type = plume_models.get('type', 'gaussian')
-                        
+
                         # Map config type names to actual class names expected by PlumeNavigationEnv
                         type_mapping = {
                             'gaussian': 'GaussianPlumeModel',
-                            'turbulent': 'TurbulentPlumeModel', 
+                            'turbulent': 'TurbulentPlumeModel',
                             'video_adapter': 'VideoPlumeAdapter'
                         }
-                        
+
                         if plume_type not in type_mapping:
                             logger.warning(f"Unknown plume model type '{plume_type}', using default 'gaussian'")
                             plume_type = 'gaussian'
-                        
-                        # Create flattened config expected by PlumeNavigationEnv
+
                         plume_model_config = {'type': type_mapping[plume_type]}
-                        
-                        # Merge type-specific parameters
+
                         if plume_type in plume_models:
                             type_config = plume_models[plume_type]
                             plume_model_config.update(type_config)
-                        
-                        # Add common parameters
+
                         for key in ['source_strength', 'source_position']:
                             if key in plume_models:
                                 plume_model_config[key] = plume_models[key]
-                        
+
                         logger.debug(f"Structured plume model config for {type_mapping[plume_type]}: {list(plume_model_config.keys())}")
-                    
-                    # Create environment with structured plume model configuration
+
                     env = PlumeNavigationEnv(plume_model=plume_model_config)
                     logger.info("Environment created successfully with plume model")
                 except Exception as e:
-                    logger.warning(f"Failed to create PlumeNavigationEnv, using fallback: {e}")
-                    # Fallback to basic environment creation
-                    try:
-                        import gymnasium as gym
-                        env = gym.make("CartPole-v1")  # Temporary fallback for testing
-                        logger.info("Using CartPole fallback environment")
-                    except Exception as e2:
-                        logger.error(f"Failed to create fallback environment: {e2}")
-                        raise CLIError(f"Environment creation failed: {e}")
+                    logger.error(f"Failed to create PlumeNavigationEnv: {e}")
+                    raise CLIError(f"Environment creation failed: {e}")
                 
                 # Convert Hydra DictConfig to regular dict and clean up Hydra-specific keys
                 if cfg:
