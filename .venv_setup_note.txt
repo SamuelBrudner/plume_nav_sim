@@ -1,0 +1,1 @@
+Local venv (.venv) created by Droid for testing. Activate with: source .venv/bin/activate

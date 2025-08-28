@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 import os
 import re
+from enum import Enum
 
 # Pydantic for external validation compatibility
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -31,6 +32,93 @@ from odor_plume_nav.domain.models import (
 
 # Set up module logger
 logger = logging.getLogger(__name__)
+
+
+# Enum classes to replace Literal types
+class NavigatorMode(Enum):
+    SINGLE = 'single'
+    MULTI = 'multi'
+    AUTO = 'auto'
+
+
+class OutputFormat(Enum):
+    NUMPY = 'numpy'
+    CSV = 'csv'
+    HDF5 = 'hdf5'
+    JSON = 'json'
+
+
+class LogLevel(Enum):
+    DEBUG = 'DEBUG'
+    INFO = 'INFO'
+    WARNING = 'WARNING'
+    ERROR = 'ERROR'
+
+
+class CacheMode(Enum):
+    NONE = 'none'
+    LRU = 'lru'
+    ALL = 'all'
+
+
+class EvictionPolicy(Enum):
+    LRU = 'lru'
+    FIFO = 'fifo'
+    RANDOM = 'random'
+
+
+class PreloadStrategy(Enum):
+    SEQUENTIAL = 'sequential'
+    RANDOM = 'random'
+    ADAPTIVE = 'adaptive'
+
+
+def _coerce_enum(value, EnumClass):
+    """
+    Coerce a value to an Enum instance.
+    
+    Args:
+        value: Value to coerce (None, Enum instance, or string)
+        EnumClass: Target Enum class
+        
+    Returns:
+        Enum instance, or None if value is None
+        
+    Raises:
+        ValueError: If string value cannot be coerced to Enum
+    """
+    if value is None:
+        return None
+        
+    if isinstance(value, EnumClass):
+        return value
+        
+    if isinstance(value, str):
+        # Skip coercion for environment variable interpolation
+        if value.startswith('${oc.env:'):
+            return value
+            
+        # Try direct match
+        try:
+            return EnumClass(value)
+        except ValueError:
+            # Try case-insensitive match by value
+            for enum_item in EnumClass:
+                if enum_item.value.lower() == value.lower():
+                    return enum_item
+                    
+            # Try case-insensitive match by name
+            for enum_item in EnumClass:
+                if enum_item.name.lower() == value.lower():
+                    return enum_item
+                    
+            # If all attempts fail, raise ValueError with allowed values
+            allowed_values = [e.value for e in EnumClass]
+            raise ValueError(f"Invalid value '{value}' for {EnumClass.__name__}. Allowed values: {allowed_values}")
+            
+    # If not None, Enum, or string, raise ValueError
+    allowed_values = [e.value for e in EnumClass]
+    raise ValueError(f"Cannot coerce {type(value)} to {EnumClass.__name__}. Allowed values: {allowed_values}")
 
 
 # Dataclass validation utilities to replace Pydantic validators
@@ -184,11 +272,17 @@ def validate_output_directory(path_value: Union[str, Path]) -> str:
     return str(path.resolve())
 
 
-def validate_cache_mode(cache_mode: str) -> str:
+def validate_cache_mode(cache_mode: Union[str, CacheMode]) -> Union[str, CacheMode]:
     """Validate frame cache mode enumeration values."""
+    # Handle Enum values
+    if isinstance(cache_mode, CacheMode):
+        return cache_mode
+        
+    # Handle string values
+    val = cache_mode.value if isinstance(cache_mode, Enum) else cache_mode
     valid_modes = {"none", "lru", "all"}
-    if cache_mode not in valid_modes:
-        raise ValueError(f"Cache mode must be one of {valid_modes}, got '{cache_mode}'")
+    if val not in valid_modes:
+        raise ValueError(f"Cache mode must be one of {valid_modes}, got '{val}'")
     return cache_mode
 
 
@@ -243,11 +337,17 @@ def validate_memory_size(memory_size: Union[str, int, float]) -> str:
     return f"{value:.0f}{unit}" if value.is_integer() else f"{value}{unit}"
 
 
-def validate_eviction_policy(policy: str) -> str:
+def validate_eviction_policy(policy: Union[str, EvictionPolicy]) -> Union[str, EvictionPolicy]:
     """Validate cache eviction policy enumeration values."""
+    # Handle Enum values
+    if isinstance(policy, EvictionPolicy):
+        return policy
+        
+    # Handle string values
+    val = policy.value if isinstance(policy, Enum) else policy
     valid_policies = {"lru", "fifo", "random"}
-    if policy not in valid_policies:
-        raise ValueError(f"Eviction policy must be one of {valid_policies}, got '{policy}'")
+    if val not in valid_policies:
+        raise ValueError(f"Eviction policy must be one of {valid_policies}, got '{val}'")
     return policy
 
 
@@ -350,20 +450,28 @@ def __post_init_multi_agent_config__(self):
 
 def __post_init_navigator_config__(self):
     """Post-initialization validation for NavigatorConfig."""
+    # Coerce mode to NavigatorMode enum
+    self.mode = _coerce_enum(self.mode, NavigatorMode)
+    
     has_multi_params = self.positions is not None
     has_single_params = self.position is not None
     
+    # Get string mode for comparisons
+    mode_str = self.mode.value if isinstance(self.mode, NavigatorMode) else self.mode
+    
     # Automatic mode detection when mode="auto"
-    if self.mode == "auto":
+    if mode_str == "auto":
         if has_multi_params and has_single_params:
             raise ValueError("Cannot specify both single-agent and multi-agent parameters simultaneously")
         elif has_multi_params:
-            self.mode = "multi"
+            mode_str = "multi"
+            self.mode = NavigatorMode.MULTI
         else:
-            self.mode = "single"
+            mode_str = "single"
+            self.mode = NavigatorMode.SINGLE
     
     # Validate mode-specific parameter consistency
-    if self.mode == "single":
+    if mode_str == "single":
         if has_multi_params:
             raise ValueError("Single-agent mode cannot have multi-agent parameters (positions, etc.)")
         # Validate single-agent speed constraints
@@ -372,7 +480,7 @@ def __post_init_navigator_config__(self):
             self.speed > self.max_speed):
             raise ValueError(f"Single agent speed ({self.speed}) cannot exceed max_speed ({self.max_speed})")
     
-    elif self.mode == "multi":
+    elif mode_str == "multi":
         if has_single_params:
             logger.warning("Multi-agent mode specified but single-agent parameters present. Multi-agent parameters will take precedence.")
         
@@ -438,6 +546,10 @@ def __post_init_video_plume_config__(self):
 
 def __post_init_simulation_config__(self):
     """Post-initialization validation for SimulationConfig."""
+    # Coerce enum fields
+    self.output_format = _coerce_enum(self.output_format, OutputFormat)
+    self.log_level = _coerce_enum(self.log_level, LogLevel)
+    
     if self.enable_gpu and self.num_workers > 1:
         logger.warning("GPU acceleration with multiple workers may cause resource conflicts")
     
@@ -447,15 +559,27 @@ def __post_init_simulation_config__(self):
 
 def __post_init_frame_cache_config__(self):
     """Post-initialization validation for FrameCacheConfig."""
+    # Coerce enum fields if not environment variable interpolation
+    if not (isinstance(self.mode, str) and self.mode.startswith('${oc.env:')):
+        self.mode = _coerce_enum(self.mode, CacheMode)
+    
+    self.eviction_policy = _coerce_enum(self.eviction_policy, EvictionPolicy)
+    self.preload_strategy = _coerce_enum(self.preload_strategy, PreloadStrategy)
+    
+    # Get mode string for comparisons
+    mode_str = self.mode.value if isinstance(self.mode, CacheMode) else self.mode
+    
     # Validate cache mode specific constraints
-    if self.mode == "none" and (self.memory_limit_mb is not None or self.eviction_policy != "lru"):
+    if mode_str == "none" and (self.memory_limit_mb is not None or 
+                              (isinstance(self.eviction_policy, EvictionPolicy) and 
+                               self.eviction_policy != EvictionPolicy.LRU)):
         logger.warning("Cache mode 'none' specified with cache-specific parameters. Parameters will be ignored.")
     
-    if self.mode == "all" and self.eviction_policy != "lru":
+    if mode_str == "all" and isinstance(self.eviction_policy, EvictionPolicy) and self.eviction_policy != EvictionPolicy.LRU:
         logger.warning("Eviction policy is not applicable for 'all' cache mode (full preload)")
     
     # Validate memory limit for non-none modes
-    if self.mode in ["lru", "all"] and self.memory_limit_mb is not None:
+    if mode_str in ["lru", "all"] and self.memory_limit_mb is not None:
         try:
             # Parse memory limit to ensure it's reasonable
             if isinstance(self.memory_limit_mb, str) and not self.memory_limit_mb.startswith('${oc.env:'):
@@ -644,8 +768,8 @@ class NavigatorConfig:
     """
     
     # Navigation mode specification with enhanced validation
-    mode: Literal["single", "multi", "auto"] = field(
-        default="auto",
+    mode: NavigatorMode = field(
+        default=NavigatorMode.AUTO,
         metadata={
             "description": "Navigation mode: 'single', 'multi', or 'auto' for automatic detection"
         }
@@ -741,7 +865,7 @@ class NavigatorConfig:
     
     def get_single_agent_config(self) -> SingleAgentConfig:
         """Extract single agent configuration parameters."""
-        if self.mode != "single":
+        if self.mode != NavigatorMode.SINGLE and (isinstance(self.mode, str) and self.mode != "single"):
             raise ValueError("Cannot extract single agent config from multi-agent mode")
         
         return SingleAgentConfig(
@@ -754,7 +878,7 @@ class NavigatorConfig:
     
     def get_multi_agent_config(self) -> MultiAgentConfig:
         """Extract multi-agent configuration parameters."""
-        if self.mode != "multi":
+        if self.mode != NavigatorMode.MULTI and (isinstance(self.mode, str) and self.mode != "multi"):
             raise ValueError("Cannot extract multi-agent config from single-agent mode")
         
         return MultiAgentConfig(
@@ -961,8 +1085,8 @@ class SimulationConfig:
             "description": "Enable trajectory data recording during simulation"
         }
     )
-    output_format: Literal["numpy", "csv", "hdf5", "json"] = field(
-        default="numpy",
+    output_format: OutputFormat = field(
+        default=OutputFormat.NUMPY,
         metadata={
             "description": "Output format for trajectory and results data"
         }
@@ -1025,8 +1149,8 @@ class SimulationConfig:
             "description": "Enable detailed simulation logging"
         }
     )
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = field(
-        default="INFO",
+    log_level: LogLevel = field(
+        default=LogLevel.INFO,
         metadata={
             "description": "Logging verbosity level"
         }
@@ -1064,7 +1188,7 @@ class FrameCacheConfig:
     """
     
     # Core cache mode configuration with enhanced validation
-    mode: Literal["none", "lru", "all"] = field(
+    mode: CacheMode = field(
         default="${oc.env:FRAME_CACHE_MODE,lru}",
         metadata={
             "description": "Frame cache mode: 'none' (disabled), 'lru' (memory-efficient), 'all' (full preload). Supports ${oc.env:FRAME_CACHE_MODE,lru}"
@@ -1080,16 +1204,16 @@ class FrameCacheConfig:
     )
     
     # Cache eviction policy for LRU mode
-    eviction_policy: Literal["lru", "fifo", "random"] = field(
-        default="lru",
+    eviction_policy: EvictionPolicy = field(
+        default=EvictionPolicy.LRU,
         metadata={
             "description": "Cache eviction policy for LRU mode. Options: 'lru' (least recently used), 'fifo' (first in, first out), 'random'"
         }
     )
     
     # Performance optimization settings
-    preload_strategy: Literal["sequential", "random", "adaptive"] = field(
-        default="sequential",
+    preload_strategy: PreloadStrategy = field(
+        default=PreloadStrategy.SEQUENTIAL,
         metadata={
             "description": "Preload strategy for 'all' mode: 'sequential' (ordered), 'random' (shuffled), 'adaptive' (usage-based)"
         }
@@ -1206,7 +1330,7 @@ class FrameCacheConfig:
         """Post-initialization validation for all field constraints."""
         # Validate cache mode
         if isinstance(self.mode, str) and not self.mode.startswith('${oc.env:'):
-            validate_cache_mode(self.mode)
+            self.mode = _coerce_enum(self.mode, CacheMode)
         
         # Validate memory limit format
         if (self.memory_limit_mb is not None and 
@@ -1215,8 +1339,10 @@ class FrameCacheConfig:
             validate_memory_size(self.memory_limit_mb)
         
         # Validate eviction policy
-        if isinstance(self.eviction_policy, str):
-            validate_eviction_policy(self.eviction_policy)
+        self.eviction_policy = _coerce_enum(self.eviction_policy, EvictionPolicy)
+        
+        # Validate preload strategy
+        self.preload_strategy = _coerce_enum(self.preload_strategy, PreloadStrategy)
         
         # Apply frame cache specific validation
         __post_init_frame_cache_config__(self)
@@ -1271,6 +1397,8 @@ class FrameCacheConfig:
         Returns:
             True if cache mode is not 'none'
         """
+        if isinstance(self.mode, CacheMode):
+            return self.mode != CacheMode.NONE
         if isinstance(self.mode, str) and not self.mode.startswith('${oc.env:'):
             return self.mode != "none"
         return True  # Assume enabled if using environment interpolation
@@ -1357,7 +1485,7 @@ def create_default_navigator_config(mode: str = "single") -> NavigatorConfig:
     """Create a default NavigatorConfig for specified mode."""
     if mode == "single":
         return NavigatorConfig(
-            mode="single",
+            mode="single",  # Will be coerced to NavigatorMode.SINGLE in __post_init__
             position=(50.0, 50.0),
             orientation=0.0,
             speed=1.0,
@@ -1366,7 +1494,7 @@ def create_default_navigator_config(mode: str = "single") -> NavigatorConfig:
         )
     elif mode == "multi":
         return NavigatorConfig(
-            mode="multi",
+            mode="multi",  # Will be coerced to NavigatorMode.MULTI in __post_init__
             positions=[[20.0, 30.0], [70.0, 80.0]],
             orientations=[45.0, 135.0],
             speeds=[1.2, 0.8],
@@ -1407,26 +1535,26 @@ def create_default_frame_cache_config(mode: str = "lru") -> FrameCacheConfig:
     """
     if mode == "none":
         return FrameCacheConfig(
-            mode="none",
+            mode="none",  # Will be coerced to CacheMode.NONE in __post_init__
             memory_limit_mb=None,
             enable_cache_warming=False,
             enable_statistics=False
         )
     elif mode == "all":
         return FrameCacheConfig(
-            mode="all",
+            mode="all",  # Will be coerced to CacheMode.ALL in __post_init__
             memory_limit_mb="4GiB",  # Larger default for full preload
-            preload_strategy="sequential",
+            preload_strategy="sequential",  # Will be coerced to PreloadStrategy.SEQUENTIAL
             enable_cache_warming=True,
             warm_cache_percentage=1.0,  # Preload everything
-            eviction_policy="lru"  # Not used but kept for consistency
+            eviction_policy="lru"  # Will be coerced to EvictionPolicy.LRU
         )
     else:  # Default to LRU mode
         return FrameCacheConfig(
-            mode="lru",
+            mode="lru",  # Will be coerced to CacheMode.LRU in __post_init__
             memory_limit_mb="2GiB",
-            eviction_policy="lru",
-            preload_strategy="sequential",
+            eviction_policy="lru",  # Will be coerced to EvictionPolicy.LRU
+            preload_strategy="sequential",  # Will be coerced to PreloadStrategy.SEQUENTIAL
             enable_cache_warming=True,
             warm_cache_percentage=0.1
         )
@@ -1435,6 +1563,10 @@ def create_default_frame_cache_config(mode: str = "lru") -> FrameCacheConfig:
 def dataclass_to_dict(config_obj) -> Dict[str, Any]:
     """Convert a dataclass configuration to dictionary, handling nested structures."""
     from dataclasses import asdict, is_dataclass
+    
+    # Handle Enum values
+    if hasattr(config_obj, 'value') and isinstance(config_obj, Enum):
+        return config_obj.value
     
     if is_dataclass(config_obj):
         return asdict(config_obj)
@@ -1523,7 +1655,7 @@ def register_config_schemas():
             group="frame_cache",
             name="none",
             node=FrameCacheConfig(
-                mode="none",
+                mode=CacheMode.NONE,
                 memory_limit_mb=None,
                 enable_cache_warming=False,
                 enable_statistics=False
@@ -1535,9 +1667,9 @@ def register_config_schemas():
             group="frame_cache",
             name="lru",
             node=FrameCacheConfig(
-                mode="lru",
+                mode=CacheMode.LRU,
                 memory_limit_mb="2GiB",
-                eviction_policy="lru",
+                eviction_policy=EvictionPolicy.LRU,
                 enable_cache_warming=True
             ),
             package="frame_cache"
@@ -1547,9 +1679,9 @@ def register_config_schemas():
             group="frame_cache",
             name="all",
             node=FrameCacheConfig(
-                mode="all",
+                mode=CacheMode.ALL,
                 memory_limit_mb="4GiB",
-                preload_strategy="sequential",
+                preload_strategy=PreloadStrategy.SEQUENTIAL,
                 warm_cache_percentage=1.0,
                 enable_cache_warming=True
             ),
@@ -1604,6 +1736,14 @@ __all__ = [
     "VideoPlumeConfig",
     "SimulationConfig",
     "FrameCacheConfig",
+    
+    # Enum classes
+    "NavigatorMode",
+    "OutputFormat",
+    "LogLevel",
+    "CacheMode",
+    "EvictionPolicy",
+    "PreloadStrategy",
     
     # Configuration registration and utilities
     "register_config_schemas",

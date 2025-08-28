@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Union, Tuple, Literal
+from enum import Enum
 
 try:
     from dotenv import load_dotenv
@@ -41,6 +42,10 @@ from odor_plume_nav.config.models import (
     SingleAgentConfig,
     MultiAgentConfig,
     VideoPlumeConfig,
+    # Newly introduced Enum replacements for Literal types
+    NavigatorMode,
+    OutputFormat,
+    LogLevel,
 )
 from odor_plume_nav.config.utils import (
     load_config,
@@ -154,8 +159,8 @@ class DataclassNavigatorConfig:
     with intelligent mode detection, Hydra environment variable interpolation support, and
     hierarchical configuration composition for factory-driven component instantiation.
     """
-    mode: Literal["single", "multi", "auto"] = field(
-        default="auto",
+    mode: NavigatorMode = field(
+        default=NavigatorMode.AUTO,
         metadata={"description": "Navigation mode: 'single', 'multi', or 'auto' for automatic detection"}
     )
     
@@ -308,8 +313,8 @@ class DataclassSimulationConfig:
         default=True,
         metadata={"description": "Enable trajectory data recording during simulation"}
     )
-    output_format: Literal["numpy", "csv", "hdf5", "json"] = field(
-        default="numpy",
+    output_format: OutputFormat = field(
+        default=OutputFormat.NUMPY,
         metadata={"description": "Output format for trajectory and results data"}
     )
     output_directory: str = field(
@@ -344,8 +349,8 @@ class DataclassSimulationConfig:
         default=True,
         metadata={"description": "Enable detailed simulation logging"}
     )
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = field(
-        default="INFO",
+    log_level: LogLevel = field(
+        default=LogLevel.INFO,
         metadata={"description": "Logging verbosity level"}
     )
     _target_: str = field(
@@ -686,6 +691,10 @@ def create_dataclass_config_with_env_resolution(
         
         # Convert dataclass instances to dictionaries for serialization
         def convert_dataclass_to_dict(obj):
+            # Handle Enum values first to preserve primitive compatibility
+            from enum import Enum as _Enum
+            if hasattr(obj, "value") and isinstance(obj, _Enum):
+                return obj.value
             if hasattr(obj, '__dataclass_fields__'):
                 # This is a dataclass instance, convert to dict
                 from dataclasses import asdict
