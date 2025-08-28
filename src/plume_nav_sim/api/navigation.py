@@ -800,14 +800,17 @@ def from_legacy(
             """Reset the environment and return initial observation."""
             # Reset internal state
             self.steps_taken = 0
-            
-            # Reset navigator if it has a reset method
-            if hasattr(self.navigator, 'reset'):
-                self.navigator.reset()
-            
-            # Get initial position and orientation
-            position = self.navigator.positions[0] if hasattr(self.navigator, 'positions') else np.zeros(2)
-            orientation = self.navigator.orientations[0] if hasattr(self.navigator, 'orientations') else 0.0
+
+            if not hasattr(self.navigator, 'reset'):
+                logger.debug("Navigator missing reset method")
+                raise NotImplementedError("navigator.reset is required")
+            self.navigator.reset()
+
+            if not (hasattr(self.navigator, 'positions') and hasattr(self.navigator, 'orientations')):
+                logger.debug("Navigator missing positions or orientations")
+                raise NotImplementedError("navigator must expose positions and orientations")
+            position = self.navigator.positions[0]
+            orientation = self.navigator.orientations[0]
             
             # Create observation dictionary
             obs = {
@@ -825,21 +828,22 @@ def from_legacy(
             """Take a step in the environment."""
             # Increment step counter
             self.steps_taken += 1
-            
-            # Call navigator step if available
-            if hasattr(self.navigator, 'step'):
-                position, _, _, _ = self.navigator.step(action)
-            else:
-                position = self.navigator.positions[0] if hasattr(self.navigator, 'positions') else np.zeros(2)
-            
-            # Get orientation
-            orientation = self.navigator.orientations[0] if hasattr(self.navigator, 'orientations') else 0.0
-            
-            # Get odor concentration if video_plume has get_concentration method
-            odor_concentration = 0.0
-            if hasattr(self.video_plume, 'get_concentration'):
-                odor_concentration = self.video_plume.get_concentration(position)
-            
+
+            if not hasattr(self.navigator, 'step'):
+                logger.debug("Navigator missing step method")
+                raise NotImplementedError("navigator.step is required")
+            position, _, _, _ = self.navigator.step(action)
+
+            if not hasattr(self.navigator, 'orientations'):
+                logger.debug("Navigator missing orientations property")
+                raise NotImplementedError("navigator must expose orientations")
+            orientation = self.navigator.orientations[0]
+
+            if not hasattr(self.video_plume, 'get_concentration'):
+                logger.debug("video_plume missing get_concentration method")
+                raise NotImplementedError("video_plume.get_concentration is required")
+            odor_concentration = self.video_plume.get_concentration(position)
+
             # Create observation dictionary
             obs = {
                 'agent_position': np.array(position, dtype=np.float32),

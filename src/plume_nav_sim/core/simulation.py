@@ -132,7 +132,7 @@ except ImportError:
 
 # Type checking imports
 if TYPE_CHECKING:
-    from ..core.protocols import NavigatorProtocol
+    from plume_nav_sim.protocols.navigator import NavigatorProtocol
     from ..envs.plume_navigation_env import PlumeNavigationEnv
 
 

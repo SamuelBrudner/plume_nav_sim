@@ -76,31 +76,12 @@ import json
 
 # Core protocol and controller imports
 try:
-    from ...core.protocols import NavigatorProtocol, PositionType, ConfigType
+    from plume_nav_sim.protocols.navigator import NavigatorProtocol
+    from ...core.protocols import PositionType, ConfigType
     from ...core.controllers import SingleAgentController
     PROTOCOLS_AVAILABLE = True
 except ImportError:
-    # Fallback during development
-    from typing import Protocol
-    class NavigatorProtocol(Protocol):
-        """Fallback NavigatorProtocol definition."""
-        @property
-        def positions(self) -> np.ndarray: ...
-        @property
-        def orientations(self) -> np.ndarray: ...
-        @property
-        def speeds(self) -> np.ndarray: ...
-        @property
-        def max_speeds(self) -> np.ndarray: ...
-        @property
-        def angular_velocities(self) -> np.ndarray: ...
-        @property
-        def num_agents(self) -> int: ...
-        def reset(self, **kwargs: Any) -> None: ...
-        def step(self, env_array: np.ndarray, dt: float = 1.0) -> None: ...
-        def sample_odor(self, env_array: np.ndarray) -> float: ...
-        def sample_multiple_sensors(self, env_array: np.ndarray, **kwargs) -> np.ndarray: ...
-    
+    NavigatorProtocol = None  # type: ignore
     SingleAgentController = object
     PositionType = Tuple[float, float]
     ConfigType = Dict[str, Any]

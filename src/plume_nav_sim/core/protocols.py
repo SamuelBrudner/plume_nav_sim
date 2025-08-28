@@ -33,6 +33,9 @@ import numpy as np
 import warnings
 import inspect
 
+# Use shared NavigatorProtocol definition
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+
 # Hydra imports for configuration integration
 try:
     from omegaconf import DictConfig
@@ -93,7 +96,7 @@ except ImportError:
 
 
 @runtime_checkable
-class NavigatorProtocol(Protocol):
+class _LegacyNavigatorProtocol(Protocol):
     """
     Protocol defining the structural interface for navigator controllers.
     

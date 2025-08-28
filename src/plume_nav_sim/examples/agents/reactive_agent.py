@@ -96,7 +96,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol and controller imports for NavigatorProtocol compliance
-from ...core.protocols import NavigatorProtocol
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
 from ...core.controllers import SingleAgentController
 
 # Sensor abstraction layer for gradient-based navigation

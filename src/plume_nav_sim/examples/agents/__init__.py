@@ -89,17 +89,21 @@ import numpy as np
 
 # Core protocol imports for type safety and validation
 try:
-    from ...core.protocols import NavigatorProtocol, NavigatorFactory
+    from plume_nav_sim.protocols.navigator import NavigatorProtocol
+    from ...core.protocols import NavigatorFactory
     from ...core.protocols import PlumeModelProtocol, SensorProtocol
     PROTOCOLS_AVAILABLE = True
 except ImportError:
     # Fallback for development/testing scenarios
-    NavigatorProtocol = object
+    NavigatorProtocol = None  # type: ignore
     NavigatorFactory = object
     PlumeModelProtocol = object
     SensorProtocol = object
     PROTOCOLS_AVAILABLE = False
-    warnings.warn("Core protocols not available. Some functionality may be limited.", ImportWarning)
+    warnings.warn(
+        "Core protocols not available. Some functionality may be limited.",
+        ImportWarning,
+    )
 
 # Configuration and simulation imports
 try:

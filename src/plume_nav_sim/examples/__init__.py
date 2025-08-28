@@ -92,7 +92,8 @@ import importlib
 import argparse
 
 # Core system imports for agent integration
-from ..core.protocols import NavigatorProtocol, PlumeModelProtocol, WindFieldProtocol, SensorProtocol
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from ..core.protocols import PlumeModelProtocol, WindFieldProtocol, SensorProtocol
 from ..core.simulation import SimulationContext, run_simulation
 from ..models import create_plume_model, create_wind_field, create_sensors, get_model_registry
 
