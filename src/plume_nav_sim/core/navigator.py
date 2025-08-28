@@ -487,8 +487,8 @@ class Navigator:
         return self.controller.sample_odor(env_array)
     
     def sample_multiple_sensors(
-        self, 
-        env_array: np.ndarray, 
+        self,
+        env_array: np.ndarray,
         sensor_distance: float = 5.0,
         sensor_angle: float = 45.0,
         num_sensors: int = 2,
@@ -514,6 +514,103 @@ class Navigator:
             num_sensors=num_sensors,
             layout_name=layout_name
         )
+
+    def read_single_antenna_odor(
+        self,
+        positions_or_plume: Union[np.ndarray, Any],
+        plume: Optional[np.ndarray] = None,
+    ) -> Union[float, np.ndarray]:
+        """Read odor concentration using a single antenna interface.
+
+        This method acts as a small shim around the concentration sensor to
+        preserve backwards compatibility with legacy code that expected a
+        ``read_single_antenna_odor`` method on the navigator.  The method is
+        intentionally lightweight and performs only minimal validation so that
+        tests can exercise the concentration sensing pathway directly.
+
+        Two invocation patterns are supported::
+
+            navigator.read_single_antenna_odor(plume_array)
+            navigator.read_single_antenna_odor(positions, plume_array)
+
+        When a single argument is provided it is treated as the plume or
+        environment array and the navigator's internal positions are used.  If
+        two arguments are supplied the first is interpreted as an explicit array
+        of positions (``N×2``) and the second as the plume/environment.
+
+        Parameters
+        ----------
+        positions_or_plume:
+            Either an ``(N, 2)`` array of positions or the plume/environment
+            array.
+        plume:
+            Optional plume/environment array when ``positions_or_plume``
+            contains explicit positions.
+
+        Returns
+        -------
+        Union[float, np.ndarray]
+            Odor concentration for each queried position.  A scalar ``float``
+            is returned for single-agent navigators for convenience.
+        """
+
+        if plume is None:
+            plume_state = positions_or_plume
+            positions = self.positions
+        else:
+            positions = np.asarray(positions_or_plume, dtype=float)
+            plume_state = plume
+
+        # If the plume state exposes a concentration_at interface we can defer to
+        # it directly.  Otherwise assume ``plume_state`` is an ndarray and sample
+        # values via integer indexing.  This mirrors the behaviour relied upon by
+        # legacy tests where environments are provided as 2‑D arrays.
+        if hasattr(plume_state, "concentration_at"):
+            values = plume_state.concentration_at(positions)
+        else:
+            env = np.asarray(plume_state)
+            h, w = env.shape[:2]
+            x = np.clip(np.floor(positions[:, 0]).astype(int), 0, w - 1)
+            y = np.clip(np.floor(positions[:, 1]).astype(int), 0, h - 1)
+            values = env[y, x]
+            if getattr(env, "dtype", None) == np.uint8:
+                values = values.astype(np.float64) / 255.0
+
+        # Return a scalar for the single‑agent case to match historical API
+        if self.num_agents == 1 and np.ndim(values) > 0:
+            return float(values[0])
+        return values
+
+    def observe(self, plume_state: np.ndarray) -> Dict[str, Any]:
+        """Generate a minimal observation dictionary.
+
+        The full navigation stack supports a rich, multi‑modal observation
+        space.  For the purposes of these tests we only expose odor
+        concentration via a :class:`ConcentrationSensor` and basic kinematic
+        information including angular velocity.  Downstream consumers can build
+        more elaborate observations by subclassing this method.
+        """
+
+        concentration = self.read_single_antenna_odor(plume_state)
+
+        obs: Dict[str, Any] = {
+            "concentration": concentration,
+            "kinematics": {
+                "position": self.positions.copy(),
+                "orientation": self.orientations.copy(),
+                "speed": self.speeds.copy(),
+                "angular_velocity": self.angular_velocities.copy(),
+            },
+        }
+
+        # For single agent convenience unwrap 1‑element arrays
+        if self.num_agents == 1:
+            kin = obs["kinematics"]
+            for key, val in kin.items():
+                kin[key] = float(val[0])
+            obs["concentration"] = float(np.atleast_1d(concentration)[0])
+
+        return obs
     
     # Enhanced extensibility hooks for Gymnasium 0.29.x migration
     
