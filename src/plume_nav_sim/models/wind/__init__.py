@@ -77,21 +77,9 @@ except ImportError:
     NUMPY_AVAILABLE = False
     np = None
 
-# Protocol imports for type safety and interface compliance
-try:
-    from ...core.protocols import WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during migration - create minimal protocol interface
-    from typing import Protocol
-    
-    class WindFieldProtocol(Protocol):
-        """Minimal fallback protocol interface during migration."""
-        def velocity_at(self, positions) -> Any: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    
-    PROTOCOLS_AVAILABLE = False
+# Protocol import for type safety and interface compliance
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
+PROTOCOLS_AVAILABLE = True
 
 # Configuration management
 try:
@@ -349,11 +337,24 @@ def create_wind_field(
                 wind_field = hydra_utils.instantiate(config_dict)
                 
                 # Validate protocol compliance if requested
-                if validate_protocol and PROTOCOLS_AVAILABLE:
-                    if not isinstance(wind_field, WindFieldProtocol):
+                if validate_protocol:
+                    missing = [
+                        m for m in ("velocity_at", "step", "reset")
+                        if not callable(getattr(wind_field, m, None))
+                    ]
+                    if missing:
+                        logger.error(
+                            f"Wind field missing required methods: {', '.join(missing)}"
+                        )
                         raise RuntimeError(
-                            f"Instantiated wind field does not implement WindFieldProtocol: "
-                            f"{type(wind_field)}"
+                            f"Instantiated wind field missing required methods: {', '.join(missing)}"
+                        )
+                    if not isinstance(wind_field, WindFieldProtocol):
+                        logger.error(
+                            f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
+                        )
+                        raise RuntimeError(
+                            f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
                         )
                 
                 logger.info(f"Successfully created wind field via Hydra: {type(wind_field).__name__}")
@@ -415,11 +416,24 @@ def create_wind_field(
         wind_field = target_class(**wind_field_params)
         
         # Validate protocol compliance if requested
-        if validate_protocol and PROTOCOLS_AVAILABLE:
-            if not isinstance(wind_field, WindFieldProtocol):
+        if validate_protocol:
+            missing = [
+                m for m in ("velocity_at", "step", "reset")
+                if not callable(getattr(wind_field, m, None))
+            ]
+            if missing:
+                logger.error(
+                    f"Wind field missing required methods: {', '.join(missing)}"
+                )
                 raise RuntimeError(
-                    f"Instantiated wind field does not implement WindFieldProtocol: "
-                    f"{type(wind_field)}"
+                    f"Instantiated wind field missing required methods: {', '.join(missing)}"
+                )
+            if not isinstance(wind_field, WindFieldProtocol):
+                logger.error(
+                    f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
+                )
+                raise RuntimeError(
+                    f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
                 )
         
         logger.info(f"Successfully created {wind_field_type} wind field")

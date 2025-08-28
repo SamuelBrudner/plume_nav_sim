@@ -67,6 +67,7 @@ import time
 import contextlib
 import warnings
 from typing import Optional, Tuple, Dict, Any, Union, List, Protocol, TYPE_CHECKING
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 import numpy as np
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -139,26 +140,6 @@ from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
 
 # Enhanced Protocol Definitions for Modular Architecture
-
-
-class WindFieldProtocol(Protocol):
-    """Protocol defining the interface for wind field dynamics."""
-    
-    def velocity_at(self, positions: np.ndarray, time: float) -> np.ndarray:
-        """Get wind velocity at specified positions and time."""
-        ...
-    
-    def step(self, dt: float) -> None:
-        """Advance wind field state by time delta."""
-        ...
-    
-    def reset(self) -> None:
-        """Reset wind field to initial state."""
-        ...
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """Get wind field metadata and configuration."""
-        ...
 
 
 class SensorProtocol(Protocol):
@@ -1174,20 +1155,32 @@ class SimulationContext:
             def __init__(self, field_type: str, **kwargs):
                 self.field_type = field_type
                 self.config = kwargs
-                
+
             def velocity_at(self, positions: np.ndarray, time: float) -> np.ndarray:
                 return np.random.random((len(positions), 2))
-                
+
             def step(self, dt: float) -> None:
                 pass
-                
+
             def reset(self) -> None:
                 pass
-                
+
             def get_metadata(self) -> Dict[str, Any]:
                 return {"type": self.field_type, "config": self.config}
-        
-        return MockWindField(field_type, **kwargs)
+
+        wind_field = MockWindField(field_type, **kwargs)
+        missing = [
+            m for m in ("velocity_at", "step", "reset")
+            if not callable(getattr(wind_field, m, None))
+        ]
+        if missing:
+            logger.error(
+                f"Wind field missing required methods: {', '.join(missing)}"
+            )
+            raise RuntimeError(
+                f"Instantiated wind field missing required methods: {', '.join(missing)}"
+            )
+        return wind_field
     
     def _create_sensor(self, sensor_type: str, **kwargs: Any) -> SensorProtocol:
         """Factory method for creating sensor instances."""
