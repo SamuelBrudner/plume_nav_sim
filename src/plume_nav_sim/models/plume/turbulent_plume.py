@@ -55,7 +55,7 @@ Example Usage:
 from __future__ import annotations
 import time
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Sequence
 from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
@@ -101,24 +101,8 @@ except ImportError:
         return range(x)
 
 # Core protocol imports
-try:
-    from ...core.protocols import PlumeModelProtocol, WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback type hints during development
-    from typing import Protocol
-    
-    class PlumeModelProtocol(Protocol):
-        def concentration_at(self, positions: np.ndarray) -> np.ndarray: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    
-    class WindFieldProtocol(Protocol):
-        def velocity_at(self, positions: np.ndarray) -> np.ndarray: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
 # Configuration imports with fallback
 try:
@@ -383,7 +367,7 @@ class TurbulentPlumeModel:
         self.wind_field = wind_field
         logger.info(f"Updated wind field integration: {type(wind_field).__name__}")
     
-    def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+    def concentration_at(self, positions: Sequence[Sequence[float]]) -> Sequence[float]:
         """
         Compute odor concentrations at specified spatial locations using filament interpolation.
         
@@ -426,7 +410,7 @@ class TurbulentPlumeModel:
         start_time = time.perf_counter()
         
         # Handle input shape normalization
-        positions = np.atleast_2d(positions)
+        positions = np.atleast_2d(np.asarray(positions, dtype=np.float64))
         if positions.shape[1] != 2:
             if positions.shape[0] == 2 and positions.shape[1] != 2:
                 positions = positions.T
@@ -574,7 +558,7 @@ class TurbulentPlumeModel:
             filament_sizes, max_concentration
         )
     
-    def step(self, dt: float = 1.0) -> None:
+    def step(self, dt: float) -> None:
         """
         Advance turbulent plume state by specified time delta with realistic physics.
         
@@ -864,91 +848,11 @@ class TurbulentPlumeModel:
         if pruned_count > 0:
             logger.debug(f"Pruned {pruned_count} filaments, {len(self._filaments)} remaining")
     
-    def reset(self, **kwargs: Any) -> None:
-        """
-        Reset turbulent plume state to initial conditions with optional parameter updates.
-        
-        Reinitializes the turbulent plume simulation to clean initial state while
-        preserving model configuration. Supports parameter overrides for episodic
-        experiments with different environmental conditions.
-        
-        Args:
-            **kwargs: Optional parameters to override initial settings. Common options:
-                - source_position: New source location (x, y)
-                - source_strength: Initial emission rate
-                - turbulence_intensity: Relative turbulence strength [0, 1]
-                - mean_wind_velocity: Base wind vector (u_x, u_y)
-                - random_seed: New random seed for stochastic processes
-                
-        Notes:
-            Parameter overrides apply to current episode only unless explicitly
-            configured for persistence. Wind field integration is reset to initial
-            conditions with any specified parameter updates.
-            
-            Clears all existing filaments and resets internal simulation state
-            including time counters, performance metrics, and spatial caches.
-            
-        Performance:
-            Completes in <10ms per protocol requirements to avoid blocking episode initialization.
-            
-        Examples:
-            Reset to default initial state:
-            >>> plume.reset()
-            
-            Reset with new source configuration:
-            >>> plume.reset(source_position=(75, 25), source_strength=1500)
-            
-            Reset with different turbulence conditions:
-            >>> plume.reset(turbulence_intensity=0.4, mean_wind_velocity=(1.5, 1.0))
-        """
+    def reset(self) -> None:
+        """Reset turbulent plume state to initial conditions."""
         logger.info("Resetting TurbulentPlumeModel to initial conditions")
-        
-        # Apply parameter overrides to configuration
-        for key, value in kwargs.items():
-            if hasattr(self.config, key):
-                setattr(self.config, key, value)
-                logger.debug(f"Override parameter: {key} = {value}")
-            else:
-                logger.warning(f"Unknown reset parameter: {key}")
-        
-        # Reset random seed if specified
-        if 'random_seed' in kwargs and kwargs['random_seed'] is not None:
-            np.random.seed(kwargs['random_seed'])
-        elif self.config.random_seed is not None:
-            np.random.seed(self.config.random_seed)
-        
-        # Clear all filaments and reset simulation state
-        self._filaments.clear()
-        self._current_time = 0.0
-        
-        # Reset wind field if available
-        if self.wind_field is not None:
-            wind_field_kwargs = {
-                k: v for k, v in kwargs.items() 
-                if k in ['mean_velocity', 'turbulence_intensity']
-            }
-            self.wind_field.reset(**wind_field_kwargs)
-        
-        # Clear performance monitoring data
-        self._step_times.clear()
-        self._concentration_times.clear()
-        
-        # Invalidate caches
-        self._concentration_cache.clear()
-        self._cache_valid = False
-        
-        # Reinitialize spatial grid if domain bounds changed
-        if 'domain_bounds' in kwargs:
-            self._initialize_spatial_grid()
-        
-        logger.info(
-            f"Reset complete: source_position={self.config.source_position}, "
-            f"source_strength={self.config.source_strength}, "
-            f"turbulence_intensity={self.config.turbulence_intensity}"
-        )
-    
-    # Additional utility methods for analysis and debugging
-    
+        self.__init__(config=self.config, wind_field=self.wind_field)
+
     def get_filament_count(self) -> int:
         """Get current number of active filaments."""
         return len(self._filaments)
@@ -1035,17 +939,3 @@ class TurbulentPlumeModel:
             f"turbulence_intensity={self.config.turbulence_intensity})"
         )
 
-
-# Register with protocols for type checking
-if PROTOCOLS_AVAILABLE:
-    # Verify protocol compliance at module load time
-    def _verify_protocol_compliance():
-        """Verify that TurbulentPlumeModel implements PlumeModelProtocol correctly."""
-        try:
-            # This will raise TypeError if protocol is not properly implemented
-            test_instance: PlumeModelProtocol = TurbulentPlumeModel()
-            logger.debug("TurbulentPlumeModel protocol compliance verified")
-        except Exception as e:
-            logger.error(f"Protocol compliance check failed: {e}")
-    
-    _verify_protocol_compliance()

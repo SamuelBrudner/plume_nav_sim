@@ -78,20 +78,7 @@ except ImportError:
     np = None
 
 # Protocol imports for type safety and interface compliance
-try:
-    from ...core.protocols import PlumeModelProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during migration - create minimal protocol interface
-    from typing import Protocol
-    
-    class PlumeModelProtocol(Protocol):
-        """Minimal fallback protocol interface during migration."""
-        def concentration_at(self, positions) -> Any: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
 # Configuration management
 try:
@@ -348,8 +335,9 @@ def create_plume_model(
                 plume_model = hydra_utils.instantiate(config_dict)
                 
                 # Validate protocol compliance if requested
-                if validate_protocol and PROTOCOLS_AVAILABLE:
+                if validate_protocol:
                     if not isinstance(plume_model, PlumeModelProtocol):
+                        logging.getLogger(__name__).debug("Hydra instantiation produced non-compliant PlumeModel")
                         raise RuntimeError(
                             f"Instantiated model does not implement PlumeModelProtocol: "
                             f"{type(plume_model)}"
@@ -414,12 +402,15 @@ def create_plume_model(
         plume_model = target_class(**model_params)
         
         # Validate protocol compliance if requested
-        if validate_protocol and PROTOCOLS_AVAILABLE:
+        if validate_protocol:
             if not isinstance(plume_model, PlumeModelProtocol):
+                logging.getLogger(__name__).debug(f"{model_type} does not implement PlumeModelProtocol")
                 raise RuntimeError(
                     f"Instantiated model does not implement PlumeModelProtocol: "
                     f"{type(plume_model)}"
                 )
+            else:
+                logging.getLogger(__name__).debug(f"{model_type} complies with PlumeModelProtocol")
         
         logger.info(f"Successfully created {model_type} plume model")
         return plume_model
@@ -772,7 +763,6 @@ def _validate_module_integrity() -> Dict[str, Any]:
         'issues': [],
         'components': {
             'numpy_available': NUMPY_AVAILABLE,
-            'protocols_available': PROTOCOLS_AVAILABLE,
             'hydra_available': HYDRA_AVAILABLE,
             'loguru_available': LOGURU_AVAILABLE
         },
@@ -786,9 +776,6 @@ def _validate_module_integrity() -> Dict[str, Any]:
     # Check critical dependencies
     if not NUMPY_AVAILABLE:
         validation_results['issues'].append("NumPy not available - array operations will fail")
-    
-    if not PROTOCOLS_AVAILABLE:
-        validation_results['issues'].append("Protocol interfaces not available - type safety limited")
     
     # Check implementation availability
     available_count = validation_results['implementations']['available']
