@@ -47,6 +47,7 @@ if "ENHANCED_FORMAT" not in __all__:
 # Local override: preserve provided LoggingConfig without env defaults        #
 # --------------------------------------------------------------------------- #
 
+import os
 import sys  # needed for console sink
 from pathlib import Path
 from typing import Optional
@@ -202,6 +203,10 @@ def setup_logger(  # noqa: C901
     """
     # Delegate when caller didn't supply an explicit config object
     if not isinstance(config, _UpstreamLoggingConfig):
+        disable_files = os.getenv("PLUME_TEST_DISABLE_FILE_LOGS") == "1"
+        if isinstance(config, dict) and disable_files:
+            config = {**config, "file_enabled": False}
+        logger.remove()
         return _upstream_setup_logger(
             config=config,
             sink=sink,
@@ -221,6 +226,13 @@ def setup_logger(  # noqa: C901
     # Explicit LoggingConfig provided – use it verbatim                     #
     # --------------------------------------------------------------------- #
     cfg = config
+
+    disable_files = os.getenv("PLUME_TEST_DISABLE_FILE_LOGS") == "1"
+    if disable_files:
+        try:
+            object.__setattr__(cfg, "file_enabled", False)
+        except Exception:  # pragma: no cover - safety
+            cfg.file_enabled = False
 
     # Remove any existing handlers installed by previous calls
     logger.remove()
@@ -384,6 +396,25 @@ def setup_logger(  # noqa: C901
 
 if "setup_logger" not in __all__:
     __all__.append("setup_logger")
+
+
+def teardown_logger() -> None:
+    """Remove all sinks from the global Loguru logger.
+
+    Tests frequently reconfigure logging; failing to remove previously
+    registered sinks results in file descriptor leaks and "Too many open
+    files" errors.  Exposing an explicit teardown helper keeps the calling
+    code simple and robust.
+    """
+
+    try:
+        logger.remove()
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
+if "teardown_logger" not in __all__:
+    __all__.append("teardown_logger")
 
 # --------------------------------------------------------------------------- #
 # Additional lightweight debug timers/utilities expected by plume_nav_sim     #

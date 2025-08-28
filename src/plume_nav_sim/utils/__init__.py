@@ -99,6 +99,7 @@ except ImportError as e:
 try:
     from plume_nav_sim.utils.logging_setup import (
         setup_logger,
+        teardown_logger,
         get_enhanced_logger,
         get_module_logger,
         get_logger,
@@ -148,6 +149,10 @@ except ImportError as e:
         """Fallback enhanced logger."""
         import logging
         return logging.getLogger(name)
+
+    def teardown_logger() -> None:  # pragma: no cover - fallback
+        import logging
+        logging.getLogger().handlers.clear()
     
     def get_module_logger(name: str, **kwargs):
         """Fallback module logger."""
@@ -905,6 +910,7 @@ __all__ = [
     
     # Logging functions
     'setup_logger',
+    'teardown_logger',
     'get_enhanced_logger',
     'get_module_logger',
     'get_logger',
