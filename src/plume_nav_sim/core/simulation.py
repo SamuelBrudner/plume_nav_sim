@@ -73,6 +73,7 @@ from dataclasses import dataclass, field
 import logging
 
 from ..protocols import PerformanceMonitorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 from pathlib import Path
 
 # Core dependencies for Gymnasium migration
@@ -143,24 +144,6 @@ from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
 
 # Enhanced Protocol Definitions for Modular Architecture
-
-
-class SensorProtocol(Protocol):
-    """Protocol defining the interface for sensor implementations."""
-    
-    def sense(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-        """Process sensor readings at specified positions."""
-        ...
-    
-    def get_observation_space_info(self) -> Dict[str, Any]:
-        """Get information for observation space construction."""
-        ...
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """Get sensor-specific metadata and configuration."""
-        ...
-
-
 class ComponentMetrics(Protocol):
     """Protocol for components that provide performance metrics."""
     
@@ -1210,13 +1193,22 @@ class SimulationContext:
             def __init__(self, sensor_type: str, **kwargs):
                 self.sensor_type = sensor_type
                 self.config = kwargs
-                
-            def sense(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+
+            def detect(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+                return np.zeros(len(positions), dtype=bool)
+
+            def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
                 return np.random.random(len(positions))
-                
+
+            def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+                return np.zeros((len(positions), 2))
+
+            def configure(self, **kwargs: Any) -> None:
+                self.config.update(kwargs)
+
             def get_observation_space_info(self) -> Dict[str, Any]:
                 return {"shape": (1,), "dtype": "float32"}
-                
+
             def get_metadata(self) -> Dict[str, Any]:
                 return {"type": self.sensor_type, "config": self.config}
         
