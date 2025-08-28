@@ -852,25 +852,35 @@ class VideoPlumeAdapter:
                 **config.additional_config
             )
         
-        elif isinstance(config, (dict, DictConfig)):
-            # Handle DictConfig from Hydra
-            if hasattr(config, 'to_container'):
+        # Normalize any dict-like or Pydantic configuration into a plain dict
+        elif isinstance(config, (dict, DictConfig)) or hasattr(config, "model_dump") or hasattr(config, "dict"):
+            if hasattr(config, "model_dump"):
+                config_dict = config.model_dump()
+            elif hasattr(config, "dict") and not isinstance(config, dict):
+                config_dict = config.dict()
+            elif hasattr(config, 'to_container'):
                 config_dict = config.to_container(resolve=True)
             else:
-                config_dict = config
-            
+                config_dict = dict(config)
+
             return cls(
-                video_path=config_dict['video_path'],
-                preprocessing_config=config_dict.get('preprocessing_config'),
-                frame_cache=config_dict.get('frame_cache'),
-                frame_cache_config=config_dict.get('frame_cache_config'),
-                spatial_interpolation_config=config_dict.get('spatial_interpolation_config'),
-                temporal_mode=config_dict.get('temporal_mode', 'cyclic'),
-                **{k: v for k, v in config_dict.items() 
-                   if k not in ['video_path', 'preprocessing_config', 'frame_cache', 
-                               'frame_cache_config', 'spatial_interpolation_config', 'temporal_mode']}
+                video_path=config_dict["video_path"],
+                preprocessing_config=config_dict.get("preprocessing_config"),
+                frame_cache=config_dict.get("frame_cache"),
+                frame_cache_config=config_dict.get("frame_cache_config"),
+                spatial_interpolation_config=config_dict.get("spatial_interpolation_config"),
+                temporal_mode=config_dict.get("temporal_mode", "cyclic"),
+                **{k: v for k, v in config_dict.items()
+                   if k not in [
+                       "video_path",
+                       "preprocessing_config",
+                       "frame_cache",
+                       "frame_cache_config",
+                       "spatial_interpolation_config",
+                       "temporal_mode",
+                   ]}
             )
-        
+
         else:
             raise TypeError(f"Unsupported config type: {type(config)}")
     

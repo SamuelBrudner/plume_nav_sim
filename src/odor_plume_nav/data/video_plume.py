@@ -169,9 +169,7 @@ class VideoPlume:
         # Convert and validate video path
         self.video_path = Path(video_path)
         if not self.video_path.exists():
-            raise IOError(f"Video file does not exist: {self.video_path}")
-        if not self.video_path.is_file():
-            raise IOError(f"Video path is not a file: {self.video_path}")
+            raise FileNotFoundError(f"Video file does not exist: {self.video_path}")
         
         # Store preprocessing parameters
         self.flip = flip
