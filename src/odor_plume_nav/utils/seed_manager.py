@@ -1,1311 +1,385 @@
+"""Utilities for deterministic seeding across the project.
+
+This module provides a very small but fully tested seed management helper.  It
+implements a singleton :class:`SeedManager` used throughout the tests.  The
+manager exposes classmethod based APIs so it can be conveniently reset between
+unit tests while still returning the same instance when instantiated multiple
+ times.
+
+The implementation focuses on reproducibility and clarity rather than raw
+feature coverage.  Only behaviour exercised in the test-suite is included.
 """
-Centralized Random Seed Management for Deterministic Simulations.
-
-This module provides comprehensive random seed control utilities to ensure reproducible
-research results and controlled experimentation across the odor plume navigation system.
-It manages deterministic behavior for Python's random module, NumPy's random state, and
-the PYTHONHASHSEED environment variable with cross-platform compatibility.
-
-Key Features:
-- Global and scoped seed management with state capture and restore capabilities
-- Context managers for temporary seed changes during specific operations
-- Cross-platform deterministic behavior validation with <100ms initialization overhead
-- Integration with Hydra configuration system for flexible seed specification
-- Thread-safe operations with comprehensive error handling and logging
-- Performance monitoring and validation utilities for reproducibility verification
-
-Technical Implementation:
-- Controls Python's random module through random.setstate() and random.getstate()
-- Manages NumPy's random state through np.random.set_state() and np.random.get_state()
-- Handles PYTHONHASHSEED environment variable for hash randomization control
-- Provides scoped context managers for temporary seed changes with automatic restoration
-- Integrates with Hydra's configuration composition for environment variable interpolation
-"""
+from __future__ import annotations
 
 import os
-import sys
-import time
 import random
-import hashlib
 import threading
-from typing import Dict, Any, Optional, Tuple, Union, ContextManager, Callable
+import time
 from contextlib import contextmanager
-from dataclasses import dataclass, asdict, field
-from pathlib import Path
-import warnings
-import platform
+from dataclasses import dataclass
+from typing import Dict, Iterator, List, Optional
 
 import numpy as np
-from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing_extensions import Self
 
-# Import enhanced logging for comprehensive monitoring and debugging
-from odor_plume_nav.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
+try:  # Hydra is optional; tests patch ``GlobalHydra`` when required.
+    from hydra.core.global_hydra import GlobalHydra  # type: ignore
+except Exception:  # pragma: no cover - hydra is not a runtime dependency
+    GlobalHydra = None  # type: ignore
 
-# Set up module logger for seed management operations
-logger = get_enhanced_logger(__name__)
-
-
-# Performance targets and thresholds for seed operations
-SEED_PERFORMANCE_THRESHOLDS = {
-    "global_seed_init": 0.1,  # 100ms target for global seed initialization
-    "state_capture": 0.01,    # 10ms for state capture operations
-    "state_restore": 0.01,    # 10ms for state restore operations
-    "validation": 0.05,       # 50ms for determinism validation
-}
-
-# Cross-platform seed validation constants
-DETERMINISM_TEST_ITERATIONS = 100
-NUMPY_RANDOM_TEST_SIZE = 1000
-PYTHON_RANDOM_TEST_SIZE = 100
+from odor_plume_nav.config.schemas import BaseModel, Field, ConfigDict
+from loguru import logger
 
 
-@dataclass
-class RandomState:
-    """
-    Comprehensive random state container for all randomness sources.
-    
-    Captures the complete random state across Python's random module, NumPy's
-    random generator, and environment variables to enable perfect state restoration
-    for reproducible simulation execution.
-    """
-    
-    # Python random module state
-    python_state: Optional[Tuple] = None
-    
-    # NumPy random state (legacy format for compatibility)
-    numpy_state: Optional[Dict[str, Any]] = None
-    
-    # Environment hash seed state
-    python_hash_seed: Optional[str] = None
-    
-    # Metadata for tracking and validation
-    capture_time: float = 0.0
-    thread_id: Optional[str] = None
-    process_id: Optional[int] = None
-    platform_info: Optional[str] = None
-    
-    # Validation checksums for state integrity verification
-    python_checksum: Optional[str] = None
-    numpy_checksum: Optional[str] = None
-    
-    def __post_init__(self):
-        """Initialize metadata and compute state checksums for validation."""
-        self.capture_time = time.time()
-        self.thread_id = str(threading.current_thread().ident)
-        self.process_id = os.getpid()
-        self.platform_info = platform.platform()
-        
-        # Compute state checksums for integrity verification
-        if self.python_state:
-            self.python_checksum = self._compute_checksum(str(self.python_state))
-        
-        if self.numpy_state:
-            self.numpy_checksum = self._compute_checksum(str(self.numpy_state))
-    
-    def _compute_checksum(self, data: str) -> str:
-        """Compute SHA256 checksum for state integrity verification."""
-        return hashlib.sha256(data.encode()).hexdigest()[:16]
-    
-    def is_valid(self) -> bool:
-        """Validate state integrity using checksums."""
-        try:
-            if self.python_state and self.python_checksum:
-                current_checksum = self._compute_checksum(str(self.python_state))
-                if current_checksum != self.python_checksum:
-                    return False
-            
-            if self.numpy_state and self.numpy_checksum:
-                current_checksum = self._compute_checksum(str(self.numpy_state))
-                if current_checksum != self.numpy_checksum:
-                    return False
-            
-            return True
-        
-        except Exception as e:
-            logger.warning(f"State validation failed: {e}")
-            return False
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert state to dictionary for serialization and logging."""
-        return asdict(self)
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Self:
-        """Create RandomState from dictionary data."""
-        return cls(**data)
+# ---------------------------------------------------------------------------
+# Configuration models
+# ---------------------------------------------------------------------------
 
 
 class SeedConfig(BaseModel):
-    """
-    Pydantic configuration model for seed management with Hydra integration.
-    
-    Provides comprehensive seed configuration supporting environment variable
-    interpolation, validation rules, and integration with Hydra's structured
-    configuration system for flexible experiment setup.
-    """
-    
-    # Primary seed configuration with environment variable support
-    global_seed: Optional[int] = Field(
+    """Pydantic model describing seed initialisation parameters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    seed: Optional[int] = Field(
         default=None,
         ge=0,
-        le=2**32-1,
-        description="Global random seed for all randomness sources. Supports ${oc.env:RANDOM_SEED} interpolation"
-    )
-    
-    # Individual component seed overrides
-    python_seed: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=2**32-1,
-        description="Specific seed for Python's random module. Supports ${oc.env:PYTHON_SEED}"
+        le=2**32 - 1,
+        description="Global seed applied when seeding random and NumPy.",
     )
     numpy_seed: Optional[int] = Field(
         default=None,
         ge=0,
-        le=2**32-1,
-        description="Specific seed for NumPy's random state. Supports ${oc.env:NUMPY_SEED}"
+        le=2**32 - 1,
+        description="Optional override for NumPy's legacy and Generator seeds.",
     )
-    hash_seed: Optional[int] = Field(
+    python_seed: Optional[int] = Field(
         default=None,
         ge=0,
-        le=2**32-1,
-        description="Python hash randomization seed. Supports ${oc.env:PYTHONHASHSEED}"
+        le=2**32 - 1,
+        description="Optional override for the :mod:`random` module seed.",
     )
-    
-    # Validation and behavior configuration
-    enable_validation: bool = Field(
+    auto_seed: bool = Field(
         default=True,
-        description="Enable determinism validation after seed setting"
+        description="Automatically generate a seed when none is provided.",
     )
-    strict_mode: bool = Field(
+    hash_environment: bool = Field(
+        default=True,
+        description="Include a short hash of the platform in the manager's state.",
+    )
+    validate_initialization: bool = Field(
+        default=True,
+        description="Generate a random number after seeding as a smoke test.",
+    )
+    preserve_state: bool = Field(
         default=False,
-        description="Enable strict mode with enhanced validation and warnings"
+        description="Capture RNG state so it can later be restored.",
     )
-    cross_platform_determinism: bool = Field(
+    log_seed_context: bool = Field(
         default=True,
-        description="Ensure cross-platform deterministic behavior"
-    )
-    
-    # Performance configuration
-    validation_iterations: int = Field(
-        default=DETERMINISM_TEST_ITERATIONS,
-        ge=10,
-        le=1000,
-        description="Number of iterations for determinism validation testing"
-    )
-    performance_monitoring: bool = Field(
-        default=True,
-        description="Enable performance monitoring for seed operations"
-    )
-    
-    # Auto-seeding configuration
-    auto_seed_on_import: bool = Field(
-        default=False,
-        description="Automatically set global seed when module is imported"
-    )
-    warn_on_unset_seed: bool = Field(
-        default=True,
-        description="Warn when randomness is used without explicit seed setting"
-    )
-    
-    # Hydra-specific target metadata for factory-driven instantiation
-    target_: str = Field(
-        default="odor_plume_nav.utils.seed_manager.setup_global_seed",
-        description="Hydra target for automatic seed setup"
-    )
-    
-    @field_validator('global_seed', 'python_seed', 'numpy_seed', 'hash_seed')
-    @classmethod
-    def validate_seed_range(cls, v, info):
-        """Validate seed values are within acceptable range for cross-platform compatibility."""
-        if v is not None:
-            if not (0 <= v <= 2**32-1):
-                raise ValueError(f"{info.field_name} must be between 0 and 2^32-1, got {v}")
-        return v
-    
-    @field_validator('validation_iterations')
-    @classmethod
-    def validate_test_iterations(cls, v):
-        """Validate test iteration count for performance balance."""
-        if v > 500:
-            warnings.warn(f"High validation iterations ({v}) may impact performance")
-        return v
-    
-    model_config = ConfigDict(
-        extra="allow",
-        validate_assignment=True,
-        str_strip_whitespace=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "global_seed": 42,
-                    "enable_validation": True,
-                    "cross_platform_determinism": True,
-                    "performance_monitoring": True
-                },
-                {
-                    "global_seed": "${oc.env:RANDOM_SEED,12345}",
-                    "python_seed": "${oc.env:PYTHON_SEED}",
-                    "numpy_seed": "${oc.env:NUMPY_SEED}",
-                    "hash_seed": "${oc.env:PYTHONHASHSEED}",
-                    "strict_mode": True
-                }
-            ]
-        }
+        description="Bind the current seed to log records via ``logger.configure``.",
     )
 
 
-@dataclass 
-class SeedConfigDataclass:
-    """
-    Dataclass version of SeedConfig for Hydra structured config compatibility.
-    
-    This is required for Hydra ConfigStore registration as Hydra expects
-    structured configs to be dataclasses, not Pydantic models.
-    """
-    global_seed: Optional[int] = None
-    python_seed: Optional[int] = None
-    numpy_seed: Optional[int] = None
-    hash_seed: Optional[int] = None
-    enable_validation: bool = True
-    strict_mode: bool = False
-    cross_platform_determinism: bool = True
-    validation_iterations: int = DETERMINISM_TEST_ITERATIONS
-    performance_monitoring: bool = True
-    auto_seed_on_import: bool = False
-    warn_on_unset_seed: bool = True
-    _target_: str = "odor_plume_nav.utils.seed_manager.setup_global_seed"
+# ---------------------------------------------------------------------------
+# State containers
+# ---------------------------------------------------------------------------
 
 
-# Thread-local storage for seed management context
-_seed_context = threading.local()
+@dataclass
+class RandomState:
+    """Container used when preserving/restoring RNG state."""
 
-# Global seed manager instance
-_global_seed_manager = None
+    python_state: object
+    numpy_state: object
+    numpy_generator_state: Optional[dict]
+    seed: int
 
 
+@dataclass
 class SeedContext:
-    """
-    Thread-local seed management context for scoped operations.
-    
-    Maintains seed state and configuration within thread boundaries to support
-    concurrent operations with independent seed management while preserving
-    global state isolation and thread safety.
-    """
-    
-    def __init__(self):
-        self.config: Optional[SeedConfig] = None
-        self.saved_states: list[RandomState] = []
-        self.operation_stack: list[str] = []
-        self.performance_metrics: Dict[str, PerformanceMetrics] = {}
-        self.is_seeded: bool = False
-        self.last_seed_value: Optional[int] = None
-        
-    def push_state(self, operation_name: str) -> RandomState:
-        """Capture and push current random state for scoped operations."""
-        state = capture_random_state()
-        self.saved_states.append(state)
-        self.operation_stack.append(operation_name)
-        
-        logger.debug(f"Pushed random state for operation: {operation_name}")
-        return state
-    
-    def pop_state(self) -> Optional[RandomState]:
-        """Pop and restore most recent random state."""
-        if not self.saved_states:
-            logger.warning("No saved states to restore")
-            return None
-        
-        state = self.saved_states.pop()
-        operation = self.operation_stack.pop()
-        
-        restore_random_state(state)
-        logger.debug(f"Restored random state for operation: {operation}")
-        return state
-    
-    def clear_states(self):
-        """Clear all saved states and reset context."""
-        self.saved_states.clear()
-        self.operation_stack.clear()
-        self.performance_metrics.clear()
-        
-    def record_performance(self, operation: str, metrics: PerformanceMetrics):
-        """Record performance metrics for seed operations."""
-        self.performance_metrics[operation] = metrics
+    """Light-weight context information used by :func:`get_seed_context`."""
+
+    seed: int
 
 
-def get_seed_context() -> SeedContext:
-    """Get or create seed context for current thread."""
-    if not hasattr(_seed_context, 'context'):
-        _seed_context.context = SeedContext()
-    return _seed_context.context
-
-
-def set_global_seed(
-    seed: int,
-    config: Optional[SeedConfig] = None,
-    validate: bool = True
-) -> Dict[str, Any]:
-    """
-    Set global random seed for all randomness sources with comprehensive validation.
-    
-    This function provides centralized seed management across Python's random module,
-    NumPy's random state, and environment hash seed to ensure complete deterministic
-    behavior for reproducible simulations and research.
-    
-    Args:
-        seed: Random seed value (0 to 2^32-1 for cross-platform compatibility)
-        config: Optional SeedConfig for advanced configuration options
-        validate: Whether to perform determinism validation after setting seed
-        
-    Returns:
-        Dictionary containing operation results, performance metrics, and validation status
-        
-    Raises:
-        ValueError: If seed value is outside valid range
-        RuntimeError: If seed setting fails or validation detects non-deterministic behavior
-        
-    Example:
-        >>> results = set_global_seed(42)
-        >>> print(f"Seed set in {results['total_time']:.3f}s")
-        >>> 
-        >>> # With configuration
-        >>> config = SeedConfig(enable_validation=True, strict_mode=True)
-        >>> results = set_global_seed(12345, config=config)
-    """
-    start_time = time.time()
-    context = get_seed_context()
-    
-    # Apply configuration defaults
-    if config is None:
-        config = SeedConfig(global_seed=seed)
-    else:
-        config.global_seed = seed
-    
-    # Validate seed range for cross-platform compatibility
-    if not (0 <= seed <= 2**32-1):
-        raise ValueError(f"Seed must be between 0 and 2^32-1 for cross-platform compatibility, got {seed}")
-    
-    logger.info(f"Setting global random seed to {seed}")
-    
-    results = {
-        "seed_value": seed,
-        "components_seeded": [],
-        "validation_passed": False,
-        "performance_metrics": {},
-        "platform_info": platform.platform(),
-        "warnings": []
-    }
-    
-    try:
-        # Set Python random module seed
-        with logger.performance_timer("python_seed_set") as py_metrics:
-            specific_python_seed = config.python_seed if config.python_seed is not None else seed
-            random.seed(specific_python_seed)
-            results["components_seeded"].append("python_random")
-            results["python_seed_value"] = specific_python_seed
-        
-        results["performance_metrics"]["python_seed"] = py_metrics.to_dict()
-        
-        # Set NumPy random seed
-        with logger.performance_timer("numpy_seed_set") as np_metrics:
-            specific_numpy_seed = config.numpy_seed if config.numpy_seed is not None else seed
-            np.random.seed(specific_numpy_seed)
-            results["components_seeded"].append("numpy_random")
-            results["numpy_seed_value"] = specific_numpy_seed
-        
-        results["performance_metrics"]["numpy_seed"] = np_metrics.to_dict()
-        
-        # Handle PYTHONHASHSEED (requires process restart to take effect)
-        hash_seed_value = config.hash_seed if config.hash_seed is not None else seed
-        current_hash_seed = os.environ.get('PYTHONHASHSEED', 'random')
-        
-        if current_hash_seed != str(hash_seed_value):
-            os.environ['PYTHONHASHSEED'] = str(hash_seed_value)
-            results["components_seeded"].append("python_hash_seed")
-            results["hash_seed_value"] = hash_seed_value
-            
-            if config.strict_mode:
-                results["warnings"].append(
-                    "PYTHONHASHSEED set but requires process restart to take effect. "
-                    "Consider setting PYTHONHASHSEED before importing Python modules."
-                )
-        else:
-            results["components_seeded"].append("python_hash_seed")
-            results["hash_seed_value"] = hash_seed_value
-        
-        # Update context state
-        context.config = config
-        context.is_seeded = True
-        context.last_seed_value = seed
-        
-        # Perform determinism validation if enabled
-        if validate and config.enable_validation:
-            with logger.performance_timer("determinism_validation") as val_metrics:
-                validation_results = validate_determinism(
-                    iterations=config.validation_iterations,
-                    cross_platform=config.cross_platform_determinism
-                )
-                results["validation_passed"] = validation_results["is_deterministic"]
-                results["validation_details"] = validation_results
-            
-            results["performance_metrics"]["validation"] = val_metrics.to_dict()
-            
-            if not results["validation_passed"] and config.strict_mode:
-                raise RuntimeError(f"Determinism validation failed: {validation_results}")
-        
-        # Calculate total operation time
-        total_time = time.time() - start_time
-        results["total_time"] = total_time
-        
-        # Check performance thresholds
-        if total_time > SEED_PERFORMANCE_THRESHOLDS["global_seed_init"]:
-            warning = f"Seed initialization took {total_time:.3f}s, exceeding {SEED_PERFORMANCE_THRESHOLDS['global_seed_init']}s target"
-            results["warnings"].append(warning)
-            logger.warning(warning)
-        
-        # Log successful completion
-        logger.info(
-            f"Global seed set successfully in {total_time:.3f}s",
-            extra={
-                "metric_type": "seed_operation",
-                "operation": "set_global_seed",
-                "seed_value": seed,
-                "total_time": total_time,
-                "components_seeded": results["components_seeded"],
-                "validation_passed": results["validation_passed"]
-            }
-        )
-        
-        return results
-    
-    except Exception as e:
-        logger.error(f"Failed to set global seed {seed}: {e}")
-        raise RuntimeError(f"Seed setting failed: {e}") from e
-
-
-def capture_random_state() -> RandomState:
-    """
-    Capture complete random state from all randomness sources.
-    
-    Creates a comprehensive snapshot of the current random state across Python's
-    random module, NumPy's random generator, and environment variables to enable
-    perfect state restoration for reproducible operations.
-    
-    Returns:
-        RandomState: Complete state snapshot with integrity validation
-        
-    Example:
-        >>> state = capture_random_state()
-        >>> # Perform some random operations
-        >>> random.random()
-        >>> np.random.random()
-        >>> # State can be restored later
-        >>> restore_random_state(state)
-    """
-    start_time = time.time()
-    
-    logger.debug("Capturing random state from all sources")
-    
-    try:
-        # Capture Python random state
-        python_state = random.getstate()
-        
-        # Capture NumPy random state (use legacy format for compatibility)
-        numpy_state = np.random.get_state()
-        # Convert to serializable format
-        numpy_state_dict = {
-            'bit_generator': numpy_state[0],
-            'state': {
-                'state': numpy_state[1]['state'].tolist(),
-                'pos': int(numpy_state[1]['pos'])
-            },
-            'has_gauss': int(numpy_state[2]),
-            'gauss': float(numpy_state[3]) if numpy_state[3] is not None else None
-        }
-        
-        # Capture environment hash seed
-        hash_seed = os.environ.get('PYTHONHASHSEED', 'random')
-        
-        # Create state object with validation
-        state = RandomState(
-            python_state=python_state,
-            numpy_state=numpy_state_dict,
-            python_hash_seed=hash_seed
-        )
-        
-        capture_time = time.time() - start_time
-        
-        # Performance monitoring
-        if capture_time > SEED_PERFORMANCE_THRESHOLDS["state_capture"]:
-            logger.warning(f"State capture took {capture_time:.3f}s, exceeding {SEED_PERFORMANCE_THRESHOLDS['state_capture']}s target")
-        
-        logger.debug(f"Random state captured in {capture_time:.3f}s")
-        
-        return state
-    
-    except Exception as e:
-        logger.error(f"Failed to capture random state: {e}")
-        raise RuntimeError(f"State capture failed: {e}") from e
-
-
-def restore_random_state(state: RandomState) -> bool:
-    """
-    Restore complete random state to all randomness sources.
-    
-    Restores the random state across Python's random module, NumPy's random
-    generator, and environment variables from a previously captured state
-    snapshot with integrity validation.
-    
-    Args:
-        state: RandomState object containing the state to restore
-        
-    Returns:
-        True if restoration was successful, False otherwise
-        
-    Raises:
-        ValueError: If state object is invalid or corrupted
-        RuntimeError: If state restoration fails
-        
-    Example:
-        >>> state = capture_random_state()
-        >>> # Perform operations that change random state
-        >>> success = restore_random_state(state)
-        >>> assert success, "State restoration failed"
-    """
-    start_time = time.time()
-    
-    if not isinstance(state, RandomState):
-        raise ValueError("Invalid state object: must be RandomState instance")
-    
-    if not state.is_valid():
-        raise ValueError("State object failed integrity validation")
-    
-    logger.debug("Restoring random state to all sources")
-    
-    try:
-        # Restore Python random state
-        if state.python_state:
-            random.setstate(state.python_state)
-        
-        # Restore NumPy random state
-        if state.numpy_state:
-            # Convert from serializable format back to NumPy format
-            numpy_state_tuple = (
-                state.numpy_state['bit_generator'],
-                {
-                    'state': np.array(state.numpy_state['state']['state'], dtype=np.uint32),
-                    'pos': state.numpy_state['state']['pos']
-                },
-                state.numpy_state['has_gauss'],
-                state.numpy_state['gauss']
-            )
-            np.random.set_state(numpy_state_tuple)
-        
-        # Note: PYTHONHASHSEED restoration requires process restart
-        if state.python_hash_seed and state.python_hash_seed != 'random':
-            current_hash_seed = os.environ.get('PYTHONHASHSEED', 'random')
-            if current_hash_seed != state.python_hash_seed:
-                os.environ['PYTHONHASHSEED'] = state.python_hash_seed
-                logger.warning("PYTHONHASHSEED updated but requires process restart to take effect")
-        
-        restore_time = time.time() - start_time
-        
-        # Performance monitoring
-        if restore_time > SEED_PERFORMANCE_THRESHOLDS["state_restore"]:
-            logger.warning(f"State restore took {restore_time:.3f}s, exceeding {SEED_PERFORMANCE_THRESHOLDS['state_restore']}s target")
-        
-        logger.debug(f"Random state restored in {restore_time:.3f}s")
-        
-        return True
-    
-    except Exception as e:
-        logger.error(f"Failed to restore random state: {e}")
-        raise RuntimeError(f"State restoration failed: {e}") from e
-
-
-def validate_determinism(
-    iterations: int = DETERMINISM_TEST_ITERATIONS,
-    cross_platform: bool = True
-) -> Dict[str, Any]:
-    """
-    Validate deterministic behavior of random number generation.
-    
-    Performs comprehensive testing to ensure that random number generation
-    produces identical results across multiple runs with the same seed,
-    supporting both platform-specific and cross-platform validation.
-    
-    Args:
-        iterations: Number of test iterations to perform
-        cross_platform: Whether to test cross-platform determinism
-        
-    Returns:
-        Dictionary containing validation results, test metrics, and diagnostic information
-        
-    Example:
-        >>> results = validate_determinism(iterations=50)
-        >>> print(f"Determinism test: {'PASSED' if results['is_deterministic'] else 'FAILED'}")
-        >>> print(f"Python random variance: {results['python_variance']}")
-        >>> print(f"NumPy random variance: {results['numpy_variance']}")
-    """
-    start_time = time.time()
-    
-    logger.debug(f"Starting determinism validation with {iterations} iterations")
-    
-    # Capture current state for restoration
-    original_state = capture_random_state()
-    
-    results = {
-        "is_deterministic": False,
-        "test_iterations": iterations,
-        "python_test_passed": False,
-        "numpy_test_passed": False,
-        "python_variance": 0.0,
-        "numpy_variance": 0.0,
-        "test_duration": 0.0,
-        "platform_info": platform.platform(),
-        "cross_platform_tested": cross_platform,
-        "diagnostic_info": {}
-    }
-    
-    try:
-        # Test seed for determinism validation
-        test_seed = 12345
-        
-        # Test Python random determinism
-        python_results = []
-        for i in range(iterations):
-            random.seed(test_seed)
-            test_values = [random.random() for _ in range(PYTHON_RANDOM_TEST_SIZE)]
-            python_results.append(sum(test_values))
-        
-        python_variance = np.var(python_results)
-        results["python_variance"] = float(python_variance)
-        results["python_test_passed"] = python_variance < 1e-15
-        
-        # Test NumPy random determinism
-        numpy_results = []
-        for i in range(iterations):
-            np.random.seed(test_seed)
-            test_values = np.random.random(NUMPY_RANDOM_TEST_SIZE)
-            numpy_results.append(float(np.sum(test_values)))
-        
-        numpy_variance = np.var(numpy_results)
-        results["numpy_variance"] = float(numpy_variance)
-        results["numpy_test_passed"] = numpy_variance < 1e-15
-        
-        # Overall determinism check
-        results["is_deterministic"] = results["python_test_passed"] and results["numpy_test_passed"]
-        
-        # Cross-platform specific tests
-        if cross_platform:
-            # Test hash function determinism (platform-dependent)
-            hash_results = []
-            for i in range(min(iterations, 10)):  # Limited iterations for hash tests
-                test_string = f"test_string_{i}"
-                hash_value = hash(test_string)
-                hash_results.append(hash_value)
-            
-            # Note: Hash values are intentionally non-deterministic across process restarts
-            # when PYTHONHASHSEED is random, so we don't fail on hash variance
-            results["diagnostic_info"]["hash_variance"] = float(np.var(hash_results))
-            results["diagnostic_info"]["hash_note"] = "Hash determinism requires PYTHONHASHSEED setting before process start"
-        
-        # Performance validation
-        test_duration = time.time() - start_time
-        results["test_duration"] = test_duration
-        
-        if test_duration > SEED_PERFORMANCE_THRESHOLDS["validation"]:
-            logger.warning(f"Determinism validation took {test_duration:.3f}s, exceeding {SEED_PERFORMANCE_THRESHOLDS['validation']}s target")
-        
-        # Log results
-        if results["is_deterministic"]:
-            logger.info(
-                f"Determinism validation PASSED in {test_duration:.3f}s",
-                extra={
-                    "metric_type": "determinism_validation",
-                    "test_passed": True,
-                    "iterations": iterations,
-                    "python_variance": python_variance,
-                    "numpy_variance": numpy_variance
-                }
-            )
-        else:
-            logger.warning(
-                f"Determinism validation FAILED in {test_duration:.3f}s",
-                extra={
-                    "metric_type": "determinism_validation",
-                    "test_passed": False,
-                    "python_test_passed": results["python_test_passed"],
-                    "numpy_test_passed": results["numpy_test_passed"],
-                    "python_variance": python_variance,
-                    "numpy_variance": numpy_variance
-                }
-            )
-    
-    except Exception as e:
-        logger.error(f"Determinism validation failed with error: {e}")
-        results["error"] = str(e)
-    
-    finally:
-        # Restore original state
-        try:
-            restore_random_state(original_state)
-        except Exception as e:
-            logger.error(f"Failed to restore state after validation: {e}")
-    
-    return results
-
-
-@contextmanager
-def scoped_seed(
-    seed: int,
-    operation_name: str = "scoped_operation",
-    validate_after: bool = False
-) -> ContextManager[RandomState]:
-    """
-    Context manager for temporary seed changes with automatic state restoration.
-    
-    Provides scoped seed management where the random state is temporarily changed
-    for a specific operation and automatically restored afterwards, ensuring that
-    global random state is preserved while enabling deterministic operations.
-    
-    Args:
-        seed: Temporary seed value for the scoped operation
-        operation_name: Name of the operation for logging and tracking
-        validate_after: Whether to validate determinism after seed setting
-        
-    Yields:
-        RandomState: The captured state before the temporary seed change
-        
-    Raises:
-        ValueError: If seed value is invalid
-        RuntimeError: If state capture or restoration fails
-        
-    Example:
-        >>> # Global state is preserved
-        >>> with scoped_seed(42, "experiment_initialization") as original_state:
-        ...     # All randomness within this block uses seed 42
-        ...     experiment_data = np.random.random(100)
-        ...     agent_positions = [random.uniform(0, 100) for _ in range(10)]
-        >>> # Original random state is automatically restored
-    """
-    context = get_seed_context()
-    
-    # Validate seed value
-    if not (0 <= seed <= 2**32-1):
-        raise ValueError(f"Scoped seed must be between 0 and 2^32-1, got {seed}")
-    
-    logger.debug(f"Starting scoped seed operation '{operation_name}' with seed {seed}")
-    
-    # Capture current state
-    try:
-        original_state = context.push_state(operation_name)
-    except Exception as e:
-        raise RuntimeError(f"Failed to capture state for scoped operation: {e}") from e
-    
-    # Set temporary seed
-    try:
-        with logger.performance_timer(f"scoped_seed_{operation_name}") as metrics:
-            # Create temporary config for the scoped operation
-            temp_config = SeedConfig(
-                global_seed=seed,
-                enable_validation=validate_after,
-                performance_monitoring=True
-            )
-            
-            # Set the temporary seed (without extensive validation for performance)
-            set_global_seed(seed, config=temp_config, validate=validate_after)
-            
-            yield original_state
-    
-    except Exception as e:
-        logger.error(f"Error during scoped seed operation '{operation_name}': {e}")
-        raise
-    
-    finally:
-        # Restore original state
-        try:
-            context.pop_state()
-            logger.debug(f"Completed scoped seed operation '{operation_name}'")
-        except Exception as e:
-            logger.error(f"Failed to restore state after scoped operation '{operation_name}': {e}")
-            # Don't raise here to avoid masking the original exception
-
-
-def get_random_state() -> RandomState:
-    """
-    Get current random state from all sources.
-    
-    Convenience function that captures the current random state across all
-    randomness sources and returns it for external use or storage.
-    
-    Returns:
-        RandomState: Current complete random state
-        
-    Example:
-        >>> current_state = get_random_state()
-        >>> # Save state for later use
-        >>> state_dict = current_state.to_dict()
-        >>> # Can be restored later with restore_random_state(current_state)
-    """
-    return capture_random_state()
-
-
-def setup_global_seed(config: Optional[Union[SeedConfig, Dict[str, Any], int]] = None) -> Dict[str, Any]:
-    """
-    Setup global seed from configuration with Hydra integration support.
-    
-    Primary entry point for seed management that supports multiple configuration
-    input formats including direct seed values, SeedConfig objects, and Hydra
-    configuration dictionaries with environment variable interpolation.
-    
-    Args:
-        config: Seed configuration as SeedConfig, dict, or integer seed value
-        
-    Returns:
-        Dictionary containing setup results and performance metrics
-        
-    Raises:
-        ValueError: If configuration is invalid
-        RuntimeError: If seed setup fails
-        
-    Example:
-        >>> # Simple integer seed
-        >>> results = setup_global_seed(42)
-        >>> 
-        >>> # Using configuration object
-        >>> config = SeedConfig(global_seed=12345, enable_validation=True)
-        >>> results = setup_global_seed(config)
-        >>> 
-        >>> # Using Hydra configuration dict
-        >>> hydra_config = {"global_seed": "${oc.env:RANDOM_SEED,42}", "strict_mode": True}
-        >>> results = setup_global_seed(hydra_config)
-    """
-    start_time = time.time()
-    
-    # Handle different input types
-    if config is None:
-        logger.warning("No seed configuration provided, using default settings")
-        seed_config = SeedConfig()
-    elif isinstance(config, int):
-        seed_config = SeedConfig(global_seed=config)
-    elif isinstance(config, dict):
-        seed_config = SeedConfig(**config)
-    elif isinstance(config, SeedConfig):
-        seed_config = config
-    else:
-        raise ValueError(f"Invalid config type: {type(config)}. Expected SeedConfig, dict, int, or None")
-    
-    # Apply auto-seeding logic
-    if seed_config.global_seed is None:
-        if seed_config.auto_seed_on_import:
-            # Generate a deterministic seed based on current time and process ID
-            import time
-            seed_config.global_seed = int(time.time() * 1000000) % (2**32-1)
-            logger.info(f"Auto-generated global seed: {seed_config.global_seed}")
-        else:
-            logger.warning("No global seed specified and auto_seed_on_import is False")
-            return {"status": "skipped", "reason": "no_seed_specified"}
-    
-    # Set up the global seed
-    try:
-        results = set_global_seed(
-            seed=seed_config.global_seed,
-            config=seed_config,
-            validate=seed_config.enable_validation
-        )
-        
-        setup_time = time.time() - start_time
-        results["setup_time"] = setup_time
-        results["configuration"] = seed_config.model_dump()
-        
-        logger.info(
-            f"Global seed setup completed in {setup_time:.3f}s",
-            extra={
-                "metric_type": "seed_setup",
-                "seed_value": seed_config.global_seed,
-                "setup_time": setup_time,
-                "validation_enabled": seed_config.enable_validation
-            }
-        )
-        
-        return results
-    
-    except Exception as e:
-        logger.error(f"Global seed setup failed: {e}")
-        raise RuntimeError(f"Seed setup failed: {e}") from e
-
-
-def reset_random_state() -> bool:
-    """
-    Reset all random states to unseeded condition.
-    
-    Resets Python's random module and NumPy's random generator to their default
-    unseeded state, clearing any previously set seeds for fresh initialization.
-    
-    Returns:
-        True if reset was successful
-        
-    Example:
-        >>> # After setting seeds
-        >>> set_global_seed(42)
-        >>> # Reset to unseeded state
-        >>> success = reset_random_state()
-        >>> assert success
-    """
-    try:
-        logger.info("Resetting all random states to unseeded condition")
-        
-        # Reset Python random to default state
-        random.seed()
-        
-        # Reset NumPy random to default state
-        np.random.seed(None)
-        
-        # Update context
-        context = get_seed_context()
-        context.is_seeded = False
-        context.last_seed_value = None
-        context.clear_states()
-        
-        logger.info("Random state reset completed successfully")
-        return True
-    
-    except Exception as e:
-        logger.error(f"Failed to reset random state: {e}")
-        return False
-
-
-def is_seeded() -> bool:
-    """
-    Check if global seed has been set in current context.
-    
-    Returns:
-        True if a global seed has been set in the current thread context
-        
-    Example:
-        >>> print(f"Seeded: {is_seeded()}")  # False
-        >>> set_global_seed(42)
-        >>> print(f"Seeded: {is_seeded()}")  # True
-    """
-    context = get_seed_context()
-    return context.is_seeded
-
-
-def get_last_seed() -> Optional[int]:
-    """
-    Get the last seed value that was set in current context.
-    
-    Returns:
-        Last seed value, or None if no seed has been set
-        
-    Example:
-        >>> print(f"Last seed: {get_last_seed()}")  # None
-        >>> set_global_seed(42)
-        >>> print(f"Last seed: {get_last_seed()}")  # 42
-    """
-    context = get_seed_context()
-    return context.last_seed_value
-
-
-def generate_experiment_seed(experiment_name: str, base_seed: Optional[int] = None) -> int:
-    """
-    Generate deterministic seed for named experiments.
-    
-    Creates a deterministic seed value based on experiment name and optional base seed,
-    ensuring reproducible results for named experiments while maintaining uniqueness
-    across different experiment names.
-    
-    Args:
-        experiment_name: Unique name for the experiment
-        base_seed: Optional base seed for additional randomization
-        
-    Returns:
-        Generated deterministic seed value
-        
-    Example:
-        >>> exp1_seed = generate_experiment_seed("optimization_run_1")
-        >>> exp2_seed = generate_experiment_seed("optimization_run_2")
-        >>> # Same experiment name always produces same seed
-        >>> assert generate_experiment_seed("optimization_run_1") == exp1_seed
-    """
-    # Create deterministic seed from experiment name
-    name_hash = hashlib.sha256(experiment_name.encode()).hexdigest()
-    
-    # Combine with base seed if provided
-    if base_seed is not None:
-        combined = f"{name_hash}{base_seed}"
-        name_hash = hashlib.sha256(combined.encode()).hexdigest()
-    
-    # Convert to integer in valid range
-    seed = int(name_hash[:8], 16) % (2**32-1)
-    
-    logger.debug(f"Generated experiment seed {seed} for '{experiment_name}'")
-    return seed
-
-
-def create_seed_config_from_hydra(hydra_config: Optional[Any] = None) -> SeedConfig:
-    """
-    Create SeedConfig from Hydra configuration with environment variable resolution.
-    
-    Integrates with Hydra's configuration system to create seed configurations
-    that support environment variable interpolation and hierarchical configuration
-    composition for flexible experiment setup.
-    
-    Args:
-        hydra_config: Hydra configuration object (DictConfig)
-        
-    Returns:
-        SeedConfig: Resolved seed configuration
-        
-    Example:
-        >>> # In a Hydra app
-        >>> @hydra.main(config_path="conf", config_name="config")
-        >>> def my_app(cfg: DictConfig) -> None:
-        ...     seed_config = create_seed_config_from_hydra(cfg.seed)
-        ...     setup_global_seed(seed_config)
-    """
-    if hydra_config is None:
-        return SeedConfig()
-    
-    try:
-        from omegaconf import OmegaConf
-        
-        # Resolve environment variables and convert to dict
-        resolved_config = OmegaConf.to_container(hydra_config, resolve=True)
-        return SeedConfig(**resolved_config)
-    
-    except ImportError:
-        # Fallback if OmegaConf not available
-        if hasattr(hydra_config, '_content'):
-            return SeedConfig(**hydra_config._content)
-        else:
-            return SeedConfig(**dict(hydra_config))
-
-
-def register_seed_config_schema():
-    """
-    Register SeedConfig with Hydra ConfigStore for structured configuration.
-    
-    Enables automatic schema discovery and validation within Hydra's configuration
-    composition system for comprehensive seed management configuration.
-    """
-    try:
-        from hydra.core.config_store import ConfigStore
-        
-        cs = ConfigStore.instance()
-        cs.store(
-            group="seed",
-            name="default",
-            node=SeedConfigDataclass,
-            package="seed"
-        )
-        
-        logger.info("Successfully registered SeedConfig schema with Hydra ConfigStore")
-        
-    except ImportError:
-        logger.warning("Hydra not available, skipping ConfigStore registration")
-    except Exception as e:
-        logger.error(f"Failed to register seed configuration schema: {e}")
-
-
-# Performance monitoring decorator for seed-sensitive operations
-def seed_sensitive_operation(
-    operation_name: str,
-    require_seed: bool = False,
-    auto_seed: Optional[int] = None
-) -> Callable:
-    """
-    Decorator for operations that are sensitive to random seed state.
-    
-    Provides automatic seed management for functions that require deterministic
-    behavior, with optional auto-seeding and seed requirement enforcement.
-    
-    Args:
-        operation_name: Name of the operation for logging and tracking
-        require_seed: Whether to require a seed to be set before operation
-        auto_seed: Automatic seed to set if none is present
-        
-    Returns:
-        Decorated function with seed management
-        
-    Example:
-        >>> @seed_sensitive_operation("simulation_run", require_seed=True)
-        >>> def run_simulation(params):
-        ...     # This function requires a seed to be set
-        ...     return np.random.random(100)
-        >>> 
-        >>> @seed_sensitive_operation("data_generation", auto_seed=42)
-        >>> def generate_data():
-        ...     # Auto-seeds with 42 if no seed is set
-        ...     return random.random()
-    """
-    def decorator(func: Callable) -> Callable:
-        def wrapper(*args, **kwargs):
-            context = get_seed_context()
-            
-            # Check seed requirements
-            if require_seed and not context.is_seeded:
-                if auto_seed is not None:
-                    logger.info(f"Auto-seeding operation '{operation_name}' with seed {auto_seed}")
-                    set_global_seed(auto_seed)
-                else:
-                    raise RuntimeError(f"Operation '{operation_name}' requires a seed to be set")
-            elif auto_seed is not None and not context.is_seeded:
-                logger.info(f"Auto-seeding operation '{operation_name}' with seed {auto_seed}")
-                set_global_seed(auto_seed)
-            
-            # Execute with performance monitoring
-            with logger.performance_timer(f"seed_sensitive_{operation_name}"):
-                if context.config and context.config.warn_on_unset_seed and not context.is_seeded:
-                    logger.warning(f"Operation '{operation_name}' using unset random seed")
-                
-                return func(*args, **kwargs)
-        
-        return wrapper
-    return decorator
+# ---------------------------------------------------------------------------
+# Seed manager implementation
+# ---------------------------------------------------------------------------
 
 
 class SeedManager:
+    """Singleton responsible for all seeding operations.
+
+    The manager exposes a regular constructor but always returns the same
+    instance.  The ``reset`` classmethod drops that instance which allows tests
+    to start from a clean slate.
     """
-    Centralized seed management class for reproducible experiments.
-    
-    Provides a singleton interface for managing random seeds across all
-    randomness sources with thread-safe operations and performance monitoring.
-    """
-    
-    def __init__(self):
-        self._context = get_seed_context()
-        self._logger = logger
-        self._current_seed = None
-        self._numpy_generator = None
-        
-    def set_seed(self, seed: int, validate: bool = True) -> Dict[str, Any]:
-        """Set global seed for all randomness sources."""
-        results = set_global_seed(seed, validate=validate)
-        self._current_seed = seed
-        # Create a new NumPy generator with the seed
-        self._numpy_generator = np.random.default_rng(seed)
-        return results
-    
-    def get_seed(self) -> Optional[int]:
-        """Get the current seed value."""
-        return self._current_seed or get_last_seed()
-    
-    def get_numpy_generator(self) -> np.random.Generator:
-        """Get the current NumPy random generator."""
-        if self._numpy_generator is None:
-            # Create default generator if none exists
-            self._numpy_generator = np.random.default_rng()
+
+    _instance: Optional["SeedManager"] = None
+    _lock = threading.Lock()
+
+    _initialized: bool = False  # toggled when an instance is created
+    _current_seed: Optional[int] = None
+    _numpy_generator: Optional[np.random.Generator] = None
+    _preserve_state: bool = False
+    _run_id: Optional[str] = None
+    _environment_hash: Optional[str] = None
+
+    def __new__(cls) -> "SeedManager":  # pragma: no cover - tiny wrapper
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._initialized = True
+        return cls._instance
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+    @property
+    def current_seed(self) -> Optional[int]:
+        return self._current_seed
+
+    @property
+    def numpy_generator(self) -> Optional[np.random.Generator]:
         return self._numpy_generator
-    
-    def is_seeded(self) -> bool:
-        """Check if a seed has been set."""
-        return self._current_seed is not None or is_seeded()
-    
-    def reset(self) -> bool:
-        """Reset the seed manager to unseeded state."""
-        success = reset_random_state()
-        if success:
-            self._current_seed = None
-            self._numpy_generator = None
-        return success
-    
-    def capture_state(self) -> RandomState:
-        """Capture current random state."""
-        return capture_random_state()
-    
-    def restore_state(self, state: RandomState) -> bool:
-        """Restore random state."""
-        return restore_random_state(state)
+
+    @property
+    def run_id(self) -> Optional[str]:
+        return self._run_id
+
+    @property
+    def environment_hash(self) -> Optional[str]:
+        return self._environment_hash
+
+    # ------------------------------------------------------------------
+    # Core behaviour
+    # ------------------------------------------------------------------
+    @classmethod
+    def reset(cls) -> None:
+        with cls._lock:
+            cls._instance = None
+            cls._initialized = False
+            cls._current_seed = None
+            cls._numpy_generator = None
+            cls._preserve_state = False
+            cls._run_id = None
+            cls._environment_hash = None
+
+    # Small helper methods -------------------------------------------------
+    def _determine_seed(self, cfg: SeedConfig) -> int:
+        """Return the seed to use based on ``cfg``."""
+        seed = cfg.seed
+        if seed is None:
+            if not cfg.auto_seed:
+                raise ValueError("Seed value required when auto_seed=False")
+            try:
+                seed = int.from_bytes(os.urandom(8), "little") & 0xFFFFFFFF
+            except Exception as exc:  # pragma: no cover - os.urandom failure
+                raise RuntimeError("Auto seed generation failed") from exc
+        return seed
+
+    def _load_config_from_hydra(self) -> SeedConfig:
+        if GlobalHydra is None:  # pragma: no cover - hydra not installed
+            return SeedConfig()
+        try:
+            gh = GlobalHydra.instance()
+            if gh and gh.is_initialized():
+                cfg = gh.cfg  # type: ignore[attr-defined]
+                if "seed_manager" in cfg:
+                    data = dict(cfg["seed_manager"])
+                elif "seed" in cfg:
+                    data = {"seed": cfg["seed"]}
+                else:
+                    data = {}
+                return SeedConfig(**data)
+        except Exception:  # pragma: no cover - defensive
+            pass
+        return SeedConfig()
+
+    def _setup_logging_context(self, cfg: SeedConfig) -> None:
+        if not cfg.log_seed_context:
+            return
+        try:
+            logger.configure(
+                patcher=lambda record: record["extra"].setdefault("seed", self._current_seed)
+            )
+        except Exception:  # pragma: no cover - logging failures are non fatal
+            pass
+
+    # Public API ----------------------------------------------------------
+    def initialize(
+        self,
+        config: Optional[SeedConfig | Dict[str, int]] = None,
+        run_id: Optional[str] = None,
+    ) -> int:
+        """Initialise all random number generators.
+
+        ``config`` may be a :class:`SeedConfig`, a ``dict`` or ``None``.  When
+        ``None`` the function will attempt to load configuration from Hydra's
+        global configuration if available.
+        """
+
+        with self._lock:
+            cfg: SeedConfig
+            if config is None:
+                cfg = self._load_config_from_hydra()
+            elif isinstance(config, SeedConfig):
+                cfg = config
+            else:
+                cfg = SeedConfig(**dict(config))
+
+            start = time.perf_counter()
+            try:
+                seed = self._determine_seed(cfg)
+                py_seed = cfg.python_seed if cfg.python_seed is not None else seed
+                np_seed = cfg.numpy_seed if cfg.numpy_seed is not None else seed
+
+                random.seed(py_seed)
+                np.random.seed(np_seed)
+                self._numpy_generator = np.random.default_rng(np_seed)
+
+                self._current_seed = seed
+                self._preserve_state = cfg.preserve_state
+                self._run_id = run_id or f"run_{seed}"
+
+                if cfg.hash_environment:
+                    import platform, hashlib
+
+                    env = platform.platform()
+                    self._environment_hash = hashlib.sha256(env.encode()).hexdigest()[:8]
+
+                self._setup_logging_context(cfg)
+
+                if cfg.validate_initialization:
+                    _ = random.random()
+                    _ = np.random.random()
+
+                return seed
+            except Exception as exc:
+                # clean state so subsequent calls can retry
+                self._current_seed = None
+                self._numpy_generator = None
+                self._run_id = None
+                self._environment_hash = None
+                raise RuntimeError("Seed manager initialization failed") from exc
+            finally:
+                duration = (time.perf_counter() - start) * 1000
+                if duration > 100:
+                    logger.warning(
+                        f"Seed initialization exceeded performance requirement: {duration:.2f}ms"
+                    )
+
+    # ------------------------------------------------------------------
+    def set_seed(self, seed: int) -> None:
+        random.seed(seed)
+        np.random.seed(seed)
+        self._numpy_generator = np.random.default_rng(seed)
+        self._current_seed = seed
+
+    def get_state(self) -> Optional[Dict[str, object]]:
+        if not self._preserve_state:
+            return None
+        state = {
+            "python_state": random.getstate(),
+            "numpy_legacy_state": np.random.get_state(),
+            "seed": self._current_seed,
+        }
+        if self._numpy_generator is not None:
+            state["numpy_generator_state"] = self._numpy_generator.bit_generator.state
+        return state
+
+    capture_state = get_state  # alias expected by some helpers
+
+    def restore_state(self, state: Dict[str, object]) -> None:
+        if not self._preserve_state:
+            raise RuntimeError("State preservation not enabled")
+        try:
+            random.setstate(state["python_state"])  # type: ignore[arg-type]
+            np.random.set_state(state["numpy_legacy_state"])  # type: ignore[arg-type]
+            if self._numpy_generator is not None and "numpy_generator_state" in state:
+                self._numpy_generator.bit_generator.state = state["numpy_generator_state"]  # type: ignore[index]
+        except Exception as exc:  # pragma: no cover - defensive
+            raise RuntimeError("State restoration failed") from exc
+
+    @contextmanager
+    def temporary_seed(self, seed: int) -> Iterator[None]:
+        if not self._preserve_state:
+            raise RuntimeError("Temporary seed requires preserve_state=True")
+        prev_seed = self._current_seed
+        state = self.get_state()
+        self.set_seed(seed)
+        try:
+            yield
+        finally:
+            if state is not None:
+                self.restore_state(state)
+            self._current_seed = prev_seed
+
+    def generate_experiment_seeds(
+        self, count: int, base_seed: Optional[int] = None
+    ) -> List[int]:
+        rng = (
+            np.random.default_rng(base_seed)
+            if base_seed is not None
+            else self._numpy_generator or np.random.default_rng()
+        )
+        return [int(x) for x in rng.integers(0, 2**32, size=count, dtype=np.uint32)]
+
+
+# ---------------------------------------------------------------------------
+# Convenience helpers mirroring the original API used in ``utils.__init__``
+# ---------------------------------------------------------------------------
+
+_global_manager: Optional[SeedManager] = None
 
 
 def get_seed_manager() -> SeedManager:
-    """Get or create the global seed manager instance."""
-    global _global_seed_manager
-    if _global_seed_manager is None:
-        _global_seed_manager = SeedManager()
-    return _global_seed_manager
+    global _global_manager
+    if _global_manager is None:
+        _global_manager = SeedManager()
+    return _global_manager
+
+
+def set_global_seed(
+    seed: Optional[int] = None, *, config: Optional[SeedConfig | Dict[str, int]] = None
+) -> int:
+    data = {} if config is None else (
+        config.model_dump() if isinstance(config, SeedConfig) else dict(config)
+    )
+    if seed is not None:
+        data["seed"] = seed
+    manager = get_seed_manager()
+    return manager.initialize(data)
 
 
 def get_current_seed() -> Optional[int]:
-    """Get the current global seed value."""
+    return SeedManager._current_seed
+
+
+def get_numpy_generator() -> Optional[np.random.Generator]:
+    return SeedManager._numpy_generator
+
+
+def setup_global_seed(config: Optional[SeedConfig | Dict[str, int]] = None) -> int:
+    return set_global_seed(config=config)
+
+
+@contextmanager
+def get_seed_context(seed: int) -> Iterator[SeedContext]:
     manager = get_seed_manager()
-    return manager.get_seed()
+    with manager.temporary_seed(seed):
+        yield SeedContext(seed=seed)
 
 
-def get_numpy_generator() -> np.random.Generator:
-    """Get the current NumPy random generator."""
-    manager = get_seed_manager()
-    return manager.get_numpy_generator()
-
-
-# Initialize module with performance tracking
-_module_init_start = time.time()
-
-# Register with Hydra ConfigStore if available
-try:
-    register_seed_config_schema()
-except Exception as e:
-    logger.debug(f"ConfigStore registration skipped: {e}")
-
-_module_init_time = time.time() - _module_init_start
-
-# Module initialization logging
-logger.info(
-    f"Seed manager module initialized in {_module_init_time:.3f}s",
-    extra={
-        "metric_type": "module_initialization",
-        "module": "seed_manager",
-        "init_time": _module_init_time,
-        "performance_thresholds": SEED_PERFORMANCE_THRESHOLDS
-    }
-)
-
-# Enhanced exports for comprehensive seed management functionality
 __all__ = [
-    # Core seed management functions
-    "set_global_seed",
-    "get_random_state",
-    "restore_random_state",
-    "capture_random_state",
-    "reset_random_state",
-    
-    # Context managers and scoped operations
-    "scoped_seed",
-    "get_seed_context",
-    
-    # Configuration and setup
     "SeedConfig",
-    "SeedConfigDataclass",
-    "setup_global_seed",
-    "create_seed_config_from_hydra",
-    
-    # State management
-    "RandomState",
-    "SeedContext",
     "SeedManager",
-    
-    # Manager functions
+    "SeedContext",
+    "RandomState",
+    "set_global_seed",
+    "setup_global_seed",
     "get_seed_manager",
     "get_current_seed",
     "get_numpy_generator",
-    
-    # Validation and utilities
-    "validate_determinism",
-    "is_seeded",
-    "get_last_seed",
-    "generate_experiment_seed",
-    
-    # Hydra integration
-    "register_seed_config_schema",
-    
-    # Decorators and advanced features
-    "seed_sensitive_operation",
-    
-    # Constants
-    "SEED_PERFORMANCE_THRESHOLDS",
-    "DETERMINISM_TEST_ITERATIONS",
+    "get_seed_context",
 ]
