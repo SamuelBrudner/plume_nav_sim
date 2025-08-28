@@ -12,14 +12,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import the real Navigator from the core module
+# Import the Navigator implementation; fail fast if unavailable
 try:
     from ..core.navigator import Navigator
-    NAVIGATOR_AVAILABLE = True
-except ImportError:
-    # Fallback for when core module is not available yet
+except ImportError:  # pragma: no cover - Navigator is a required dependency
     Navigator = None
-    NAVIGATOR_AVAILABLE = False
 
 
 class ConfigurationError(Exception):
@@ -77,43 +74,9 @@ def create_navigator(config: Optional[Dict[str, Any]] = None, cfg: Optional[Any]
     # Validate configuration values
     _validate_navigator_config(merged_config)
     
-    # Use real Navigator if available
-    if NAVIGATOR_AVAILABLE and Navigator is not None:
-        return Navigator(**merged_config)
-    
-    # Fallback placeholder implementation for when Navigator is not available
-    class NavigatorPlaceholder:
-        def __init__(self, config: Dict[str, Any]):
-            self.config = config
-            # Add expected properties for test compatibility
-            self._positions = np.array([[0.0, 0.0]])  # Single agent at origin
-            self._orientations = np.array([0.0])  # Facing forward
-            self._speeds = np.array([0.0])  # Initially stationary
-            self._max_speeds = np.array([1.0])  # Default max speed
-            
-        @property
-        def positions(self) -> np.ndarray:
-            return self._positions
-            
-        @property
-        def orientations(self) -> np.ndarray:
-            return self._orientations
-            
-        @property
-        def speeds(self) -> np.ndarray:
-            return self._speeds
-            
-        @property
-        def max_speeds(self) -> np.ndarray:
-            return self._max_speeds
-            
-        def reset(self):
-            return np.zeros(2)  # Default position
-            
-        def step(self, action):
-            return np.zeros(2), 0.0, False, {}
-    
-    return NavigatorPlaceholder(config)
+    if Navigator is None:
+        raise ImportError("Navigator implementation not available")
+    return Navigator(**merged_config)
 
 
 def _validate_video_plume_config(config: Dict[str, Any]) -> None:
@@ -478,24 +441,7 @@ def run_plume_simulation(
     if config is None:
         config = {}
         
-    try:
-        # Determine number of agents from navigator
-        if hasattr(navigator, 'positions') and navigator.positions is not None:
-            num_agents = len(navigator.positions)
-        else:
-            num_agents = 1
-            
-        # Generate placeholder simulation results using validated parameters
-        # Include initial position + simulation steps (num_steps + 1 total)
-        total_steps = num_steps + 1
-        positions = np.random.rand(num_agents, total_steps, 2)  # (num_agents, total_steps, 2) 
-        orientations = np.random.rand(num_agents, total_steps) * 360  # (num_agents, total_steps)
-        readings = np.random.rand(num_agents, total_steps)  # (num_agents, total_steps)
-        
-        # Return tuple format expected by tests: (positions, orientations, readings)
-        return positions, orientations, readings
-    except Exception as e:
-        raise SimulationError(f"Simulation failed: {e}")
+    raise NotImplementedError("run_plume_simulation has been deprecated; use core.run_simulation instead")
 
 
 def visualize_trajectory(
@@ -510,19 +456,8 @@ def visualize_trajectory(
     if config is None:
         config = {}
 
-    # Import lazily to avoid hard dependency at module import time.
-    try:
-        from ..utils.visualization import visualize_trajectory as _utils_visualize_trajectory
-    except ImportError:  # pragma: no cover – fallback should rarely be needed
-        # If the utility module is unavailable, fall back to a minimal stub.
-        def _utils_visualize_trajectory(
-            positions: np.ndarray,
-            config: Dict[str, Any],
-            save_path: Optional[Union[str, Path]] = None,
-        ):
-            return {"type": "trajectory_plot", "positions": positions, "config": config}
+    from ..utils.visualization import visualize_trajectory as _utils_visualize_trajectory
 
-    # Delegate – this single call point lets tests patch either location.
     return _utils_visualize_trajectory(
         positions=positions,
         config=config,
