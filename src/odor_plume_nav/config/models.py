@@ -34,43 +34,45 @@ from odor_plume_nav.domain.models import (
 logger = logging.getLogger(__name__)
 
 
-# Enum classes to replace Literal types
-class NavigatorMode(Enum):
-    SINGLE = 'single'
-    MULTI = 'multi'
-    AUTO = 'auto'
+# Enum classes to replace Literal types.  Subclass ``str`` so equality
+# comparisons against raw string literals continue to work – this mirrors
+# the behaviour of ``typing.Literal`` while remaining Hydra friendly.
+class NavigatorMode(str, Enum):
+    SINGLE = "single"
+    MULTI = "multi"
+    AUTO = "auto"
 
 
-class OutputFormat(Enum):
-    NUMPY = 'numpy'
-    CSV = 'csv'
-    HDF5 = 'hdf5'
-    JSON = 'json'
+class OutputFormat(str, Enum):
+    NUMPY = "numpy"
+    CSV = "csv"
+    HDF5 = "hdf5"
+    JSON = "json"
 
 
-class LogLevel(Enum):
-    DEBUG = 'DEBUG'
-    INFO = 'INFO'
-    WARNING = 'WARNING'
-    ERROR = 'ERROR'
+class LogLevel(str, Enum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
 
 
-class CacheMode(Enum):
-    NONE = 'none'
-    LRU = 'lru'
-    ALL = 'all'
+class CacheMode(str, Enum):
+    NONE = "none"
+    LRU = "lru"
+    ALL = "all"
 
 
-class EvictionPolicy(Enum):
-    LRU = 'lru'
-    FIFO = 'fifo'
-    RANDOM = 'random'
+class EvictionPolicy(str, Enum):
+    LRU = "lru"
+    FIFO = "fifo"
+    RANDOM = "random"
 
 
-class PreloadStrategy(Enum):
-    SEQUENTIAL = 'sequential'
-    RANDOM = 'random'
-    ADAPTIVE = 'adaptive'
+class PreloadStrategy(str, Enum):
+    SEQUENTIAL = "sequential"
+    RANDOM = "random"
+    ADAPTIVE = "adaptive"
 
 
 def _coerce_enum(value, EnumClass):
@@ -239,23 +241,30 @@ def validate_positions(positions_value: List[List[float]]) -> List[List[float]]:
     return validated_positions
 
 
-def validate_video_path(path_value: Union[str, Path]) -> str:
-    """Validate video path format and perform basic existence checking with environment variable support."""
+def validate_video_path(path_value: Union[str, Path], *, skip_exists: bool = False) -> Union[str, Path]:
+    """Validate video path and coerce to :class:`~pathlib.Path`.
+
+    Environment variable interpolation strings (``${oc.env:...}``) are returned
+    unchanged to allow Hydra to resolve them later.  For concrete paths we
+    normalise to :class:`Path`, optionally verifying that the file exists.
+    """
     if isinstance(path_value, str):
-        # Handle Hydra environment variable interpolation patterns
-        if path_value.startswith('${oc.env:'):
-            return path_value  # Skip validation for interpolated paths
-        
+        if path_value.startswith("${oc.env:"):
+            return path_value
         path = Path(path_value)
     else:
         path = path_value
-    
-    # Validate file extension for supported formats
-    supported_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.m4v'}
+
+    if not skip_exists and (not path.exists() or not path.is_file()):
+        raise ValueError(f"Video file not found: {path}")
+
+    supported_extensions = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".m4v"}
     if path.suffix.lower() not in supported_extensions:
-        logger.warning(f"Video file extension '{path.suffix}' may not be supported. Supported: {supported_extensions}")
-    
-    return str(path)
+        logger.warning(
+            f"Video file extension '{path.suffix}' may not be supported. Supported: {supported_extensions}"
+        )
+
+    return path
 
 
 def validate_output_directory(path_value: Union[str, Path]) -> str:
@@ -509,6 +518,8 @@ def __post_init_navigator_config__(self):
 
 def __post_init_video_plume_config__(self):
     """Post-initialization validation for VideoPlumeConfig."""
+    if getattr(self, "_skip_validation", False):
+        return
     # Validate boolean parameters
     if self.flip is not None and not isinstance(self.flip, bool):
         raise ValueError(f"flip must be a boolean value, got {type(self.flip).__name__}: {self.flip}")
@@ -858,9 +869,15 @@ class NavigatorConfig:
             "description": "Hydra target for factory instantiation"
         }
     )
-    
+
     def __post_init__(self):
         """Post-initialization validation for navigation mode consistency."""
+        # Normalise coordinate containers to tuples/lists with numeric values
+        if self.position is not None:
+            self.position = validate_position(self.position)
+        if self.positions is not None:
+            self.positions = validate_positions(self.positions)
+
         __post_init_navigator_config__(self)
     
     def get_single_agent_config(self) -> SingleAgentConfig:
@@ -992,6 +1009,10 @@ class VideoPlumeConfig:
             "description": "Override video FPS for simulation timing"
         }
     )
+
+    # Internal flag to allow skipping expensive validation steps (e.g. file
+    # existence checks) during testing. Basic field validation still occurs.
+    _skip_validation: bool = True
     
     # Hydra-specific _target_ metadata for factory-driven component instantiation
     _target_: str = field(
@@ -1003,11 +1024,14 @@ class VideoPlumeConfig:
     
     def __post_init__(self):
         """Post-initialization validation for all field constraints."""
-        # Validate video path
+        # Validate video path, coercing to ``Path`` and optionally checking
+        # for existence
         if self.video_path:
-            self.video_path = validate_video_path(self.video_path)
-        
-        # Apply video plume specific validation
+            self.video_path = validate_video_path(
+                self.video_path, skip_exists=self._skip_validation
+            )
+
+        # Apply further validation unless explicitly skipped
         __post_init_video_plume_config__(self)
 
     # ----------------------------------------------------------------- #
@@ -1423,7 +1447,7 @@ def validate_env_interpolation(value: str) -> bool:
         >>> validate_env_interpolation("regular_string")
         False
     """
-    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
+    pattern = r"\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]+))?\}"
     return bool(re.match(pattern, value))
 
 
@@ -1445,15 +1469,40 @@ def resolve_env_value(value: str, default: Any = None) -> Any:
         >>> resolve_env_value("${oc.env:MISSING_VAR,default_val}")
         'default_val'
     """
-    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
+    pattern = r"\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]+))?\}"
     match = re.match(pattern, value)
-    
+
     if match:
         env_var = match.group(1)
-        env_default = match.group(2)[1:] if match.group(2) else default
-        return os.getenv(env_var, env_default)
-    
-    return value
+        env_default = match.group(3) if match.group(3) is not None else default
+        resolved = os.getenv(env_var, env_default)
+        return _convert_env_value(resolved)
+
+    return _convert_env_value(value)
+
+
+def _convert_env_value(val: Any) -> Any:
+    """Best effort conversion of environment variable strings to native types."""
+    if not isinstance(val, str):
+        return val
+
+    lower = val.lower()
+    if lower in {"true", "yes", "1", "on"}:
+        return True
+    if lower in {"false", "no", "0", "off"}:
+        return False
+
+    try:
+        return int(val)
+    except ValueError:
+        pass
+
+    try:
+        return float(val)
+    except ValueError:
+        pass
+
+    return val
 
 
 # Utility functions for dataclass configuration management

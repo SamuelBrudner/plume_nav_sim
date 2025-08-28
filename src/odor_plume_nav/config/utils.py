@@ -16,8 +16,7 @@ from pathlib import Path
 
 from odor_plume_nav.services.config_loader import (
     get_config_dir,
-    load_yaml_config,
-    load_config,
+    load_yaml_config as _load_yaml_config,
     load_file_config,
     save_config,
     update_config,
@@ -28,6 +27,40 @@ from odor_plume_nav.services.validator import (
     validate_navigator_config,
     ConfigValidationError,
 )
+
+
+def load_config(
+    user_config_path: Optional[Union[str, Path]] = None,
+    validate: bool = False,
+    validate_sections: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Load and optionally validate configuration files.
+
+    This wrapper ensures that the config directory can be patched during tests
+    by delegating directory resolution to :func:`get_config_dir` from this
+    module rather than the copy inside ``services.config_loader``.
+    """
+    config_dir = get_config_dir()
+    default_path = config_dir / "default.yaml"
+    config = load_yaml_config(default_path)
+
+    if user_config_path:
+        user_cfg = load_file_config(user_config_path)
+        config = update_config(config, user_cfg)
+
+    if validate:
+        validate_config(config, required_sections=validate_sections)
+
+    return config
+
+
+def load_yaml_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+    """Load a YAML configuration file with basic path security checks."""
+    path = Path(config_path)
+    real_path = path.resolve()
+    if not real_path.is_file() or not real_path.is_relative_to(Path.cwd()):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    return _load_yaml_config(real_path)
 
 
 def validate_env_interpolation(value: str, field_metadata: Optional[Dict[str, Any]] = None) -> bool:
@@ -61,7 +94,7 @@ def validate_env_interpolation(value: str, field_metadata: Optional[Dict[str, An
         return False
     
     # Pattern for ${oc.env:VAR_NAME} or ${oc.env:VAR_NAME,default_value}
-    pattern = r'^\$\{oc\.env:([A-Za-z_][A-Za-z0-9_]*)(,.*?)?\}$'
+    pattern = r'^\$\{oc\.env:([A-Za-z_][A-Za-z0-9_]*)(,([^}]+))?\}$'
     match = re.match(pattern, value)
     
     if not match:
