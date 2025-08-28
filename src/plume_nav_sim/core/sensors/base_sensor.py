@@ -76,7 +76,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 # Core protocol imports
-from ..protocols import SensorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Hydra integration for configuration management
 try:

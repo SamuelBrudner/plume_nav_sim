@@ -51,19 +51,14 @@ Examples:
 from __future__ import annotations
 import time
 import warnings
-from typing import Protocol, runtime_checkable, Optional, Union, Dict, Any, List, Tuple
+from typing import Optional, Union, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol imports
-try:
-    from ..protocols import NavigatorProtocol, SensorProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Handle case where protocols don't exist yet
-    NavigatorProtocol = object
-    SensorProtocol = object
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
+PROTOCOLS_AVAILABLE = True
 
 # Hydra integration for configuration management
 try:

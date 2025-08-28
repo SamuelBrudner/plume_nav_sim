@@ -125,22 +125,12 @@ Notes:
 
 from __future__ import annotations
 import warnings
-from typing import Optional, Union, List, Dict, Any, Type, Callable, Protocol
+from typing import Optional, Union, List, Dict, Any, Type, Callable
 import numpy as np
 
 # Core protocol import for type safety
-try:
-    from ..protocols import SensorProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during module creation process
-    class SensorProtocol(Protocol):
-        """Minimal SensorProtocol fallback for module initialization."""
-        def detect(self, plume_state: Any, positions: np.ndarray) -> np.ndarray: ...
-        def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray: ...
-        def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray: ...
-        def configure(self, **kwargs: Any) -> None: ...
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.sensor import SensorProtocol
+PROTOCOLS_AVAILABLE = True
 
 # Hydra integration for configuration management
 try:
@@ -413,19 +403,22 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
         # Use Hydra instantiation for dependency injection
         try:
             sensor = hydra_utils.instantiate(config)
-            
+
             # Validate protocol compliance
             if not hasattr(sensor, 'configure'):
                 raise TypeError(f"Instantiated sensor {type(sensor)} does not implement SensorProtocol")
-            
             if LOGURU_AVAILABLE:
+                metadata = sensor.get_metadata() if hasattr(sensor, 'get_metadata') else {}
+                observation_shape = getattr(sensor, 'observation_shape', None)
                 logger.debug(
-                    "Sensor created via Hydra instantiation",
+                    "Sensor protocol compliance validated",
                     sensor_type=type(sensor).__name__,
+                    observation_shape=observation_shape,
+                    metadata=metadata,
                     target=config.get('_target_'),
                     config_keys=list(config.keys())
                 )
-            
+
             return sensor
             
         except Exception as e:
@@ -466,10 +459,18 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
     else:
         raise ValueError(f"Unknown sensor type: {sensor_type}")
     
+    # Validate protocol compliance
+    if not isinstance(sensor, SensorProtocol):
+        raise TypeError(f"Instantiated sensor {type(sensor)} does not implement SensorProtocol")
+
     if LOGURU_AVAILABLE:
+        metadata = sensor.get_metadata() if hasattr(sensor, 'get_metadata') else {}
+        observation_shape = getattr(sensor, 'observation_shape', None)
         logger.debug(
-            "Sensor created via factory method",
-            sensor_type=sensor_type,
+            "Sensor protocol compliance validated",
+            sensor_type=type(sensor).__name__,
+            observation_shape=observation_shape,
+            metadata=metadata,
             parameters=sensor_params,
             fallback_used=not all([
                 BINARY_SENSOR_AVAILABLE,
@@ -477,7 +478,7 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
                 GRADIENT_SENSOR_AVAILABLE
             ])
         )
-    
+
     return sensor
 
 
