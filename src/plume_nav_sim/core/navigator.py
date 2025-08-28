@@ -76,7 +76,8 @@ from typing import Optional, Union, Tuple, List, Any, Dict, ClassVar
 import numpy as np
 
 # Core protocol and controller imports
-from .protocols import NavigatorProtocol, NavigatorFactory as BaseNavigatorFactory
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from .protocols import NavigatorFactory as BaseNavigatorFactory
 from .protocols import (
     PositionType, PositionsType, OrientationType, OrientationsType,
     SpeedType, SpeedsType, ConfigType, ObservationHookType, 

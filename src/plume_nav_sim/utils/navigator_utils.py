@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from plume_nav_sim.core.protocols import NavigatorProtocol
+    from plume_nav_sim.protocols.navigator import NavigatorProtocol
     from plume_nav_sim.core.navigator import Navigator
 else:
     # At runtime, import lazily to avoid circular imports
@@ -51,12 +51,11 @@ def _get_navigator_protocol():
     global NavigatorProtocol
     if NavigatorProtocol is None:
         try:
-            from plume_nav_sim.core.protocols import NavigatorProtocol as _NavigatorProtocol
+            from plume_nav_sim.protocols.navigator import NavigatorProtocol as _NavigatorProtocol
             NavigatorProtocol = _NavigatorProtocol
-        except ImportError:
-            # If still can't import, create a dummy class
-            class NavigatorProtocol:
-                pass
+        except ImportError as e:
+            logger.debug("NavigatorProtocol import failed: %s", e)
+            raise NotImplementedError("NavigatorProtocol is required but missing") from e
     return NavigatorProtocol
 
 def _get_navigator():

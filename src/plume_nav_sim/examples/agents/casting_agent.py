@@ -83,12 +83,14 @@ import numpy as np
 
 # Core navigation protocol imports
 try:
-    from ...core.protocols import NavigatorProtocol, SensorProtocol
+    from plume_nav_sim.protocols.navigator import NavigatorProtocol
+    from ...core.protocols import SensorProtocol
     from ...core.controllers import SingleAgentController
     CORE_AVAILABLE = True
 except ImportError:
     # Fallback during migration
-    from plume_nav_sim.core.protocols import NavigatorProtocol, SensorProtocol
+    NavigatorProtocol = None  # type: ignore
+    from plume_nav_sim.core.protocols import SensorProtocol
     from plume_nav_sim.core.controllers import SingleAgentController
     CORE_AVAILABLE = True
 
