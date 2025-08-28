@@ -6,7 +6,7 @@ running simulations, and handling navigation-related operations.
 """
 
 import numpy as np
-from typing import Optional, Dict, Any, Union, List, Tuple
+from typing import Optional, Dict, Any, Union, List, Tuple, Mapping
 from pathlib import Path
 import logging
 
@@ -95,7 +95,7 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
         video_path = Path(config['video_path'])
         # Check if the file exists (skip if it's a placeholder path)
         if str(video_path) != 'default_video.mp4' and not video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {video_path}")
+            raise FileNotFoundError(f"Video file does not exist: {video_path}")
     
     # Validate flip parameter
     if 'flip' in config:
@@ -108,10 +108,10 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
         kernel_size = config['kernel_size']
         try:
             kernel_size_int = int(kernel_size)
-            if kernel_size_int <= 0:
-                raise ValueError(f"kernel_size must be positive, got {kernel_size_int}")
+            if kernel_size_int < 0:
+                raise ValueError("kernel_size must be a positive integer")
         except (ValueError, TypeError):
-            raise ValueError(f"kernel_size must be a positive integer, got {kernel_size}")
+            raise ValueError("kernel_size must be a positive integer")
     
     # Validate kernel_sigma
     if 'kernel_sigma' in config:
@@ -119,9 +119,9 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
         try:
             kernel_sigma_float = float(kernel_sigma)
             if kernel_sigma_float <= 0:
-                raise ValueError(f"kernel_sigma must be positive, got {kernel_sigma_float}")
+                raise ValueError("kernel_sigma must be a positive number")
         except (ValueError, TypeError):
-            raise ValueError(f"kernel_sigma must be a positive number, got {kernel_sigma}")
+            raise ValueError("kernel_sigma must be a positive number")
     
     # Validate width and height
     for param in ['width', 'height']:
@@ -322,45 +322,32 @@ def create_video_plume(config: Optional[Dict[str, Any]] = None, cfg: Optional[An
     
     if config is None:
         config = {}
-    
-    # Merge config and kwargs, with kwargs taking precedence
-    merged_config = {**config, **kwargs}
-    
+
+    # Normalize configuration mappings
+    if hasattr(config, "model_dump"):
+        config = config.model_dump()
+    elif not isinstance(config, Mapping):
+        config = dict(config)
+
+    # Filter out None overrides and merge
+    overrides = {k: v for k, v in kwargs.items() if v is not None}
+    merged_config = {**config, **overrides}
+
     # Validate required parameters
-    if 'video_path' not in merged_config:
-        raise TypeError("video_path is required for VideoPlume creation")
-    
+    if "video_path" not in merged_config:
+        raise ConfigurationError("video_path is required")
+
     # Validate configuration parameters
     _validate_video_plume_config(merged_config)
-    
-    # Enhanced VideoPlume implementation with expected attributes
-    class VideoPlume:
-        def __init__(self, config: Dict[str, Any]):
-            self.config = config
-            # Video file attributes
-            self.video_path = Path(config.get('video_path', 'default_video.mp4'))
-            self.flip = config.get('flip', False)
-            # Image processing attributes
-            self.kernel_size = config.get('kernel_size', 3)
-            self.kernel_sigma = config.get('kernel_sigma', 1.0)
-            # Display attributes
-            self.width = config.get('width', 640)
-            self.height = config.get('height', 480)
-            self.normalize = config.get('normalize', False)
-            
-        def get_frame(self, index: int = 0):
-            return np.zeros((self.height, self.width))
-            
-        def get_concentration(self, position):
-            return 0.0
-            
-        def process_frame(self, frame):
-            """Process video frame with configured parameters."""
-            if self.flip:
-                frame = np.flipud(frame)
-            return frame
-    
-    return VideoPlume(merged_config)
+
+    from ..data.video_plume import VideoPlume  # local import to avoid cycles
+
+    try:
+        return VideoPlume(**merged_config)
+    except FileNotFoundError:
+        raise
+    except Exception as e:
+        raise ConfigurationError("Failed to create VideoPlume") from e
 
 
 def create_video_plume_from_config(config: Any, **kwargs) -> Any:
@@ -377,13 +364,14 @@ def create_video_plume_from_config(config: Any, **kwargs) -> Any:
     Raises:
         ConfigurationError: If configuration is invalid
     """
+    if isinstance(config, (str, Path)):
+        raise ConfigurationError("File path configuration loading is deprecated")
+
     try:
-        # Validate and merge config first
         config_dict = _validate_and_merge_config(config)
-        
-        # Delegate to create_video_plume
         return create_video_plume(config_dict, **kwargs)
-        
+    except ConfigurationError:
+        raise
     except Exception as e:
         raise ConfigurationError(f"Failed to create video plume from config: {e}")
 
