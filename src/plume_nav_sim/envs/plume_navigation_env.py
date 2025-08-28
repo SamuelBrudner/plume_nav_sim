@@ -87,6 +87,7 @@ import warnings
 import inspect
 from typing import Dict, Tuple, Optional, Any, Union, List, SupportsFloat, Literal
 from pathlib import Path
+import logging
 import numpy as np
 
 # Gymnasium imports with fallback compatibility
@@ -360,7 +361,7 @@ except ImportError:
             return concentration_values >= self.threshold
         
         def configure(self, **kwargs):
-            pass
+            logging.getLogger(__name__).debug("BinarySensor configured with %s", kwargs)
         
         def get_metadata(self):
             return {"type": "binary", "threshold": self.threshold}
@@ -376,7 +377,7 @@ except ImportError:
             return np.clip(concentration_values, *self.dynamic_range)
         
         def configure(self, **kwargs):
-            pass
+            logging.getLogger(__name__).debug("ConcentrationSensor configured with %s", kwargs)
         
         def get_metadata(self):
             return {"type": "concentration", "range": self.dynamic_range}
@@ -389,12 +390,14 @@ except ImportError:
             self.spatial_resolution = spatial_resolution
         
         def compute_gradient(self, plume_state: Any, positions: np.ndarray, **kwargs) -> np.ndarray:
+            logger = logging.getLogger(__name__)
+            logger.debug("GradientSensor computing gradient for %d positions", len(positions))
             if positions.ndim == 1:
                 return np.random.rand(2) - 0.5  # Random gradient direction
             return np.random.rand(len(positions), 2) - 0.5
         
         def configure(self, **kwargs):
-            pass
+            logging.getLogger(__name__).debug("GradientSensor configured with %s", kwargs)
         
         def get_metadata(self):
             return {"type": "gradient", "resolution": self.spatial_resolution}

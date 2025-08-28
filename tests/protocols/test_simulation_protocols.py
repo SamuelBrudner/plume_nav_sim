@@ -21,8 +21,10 @@ PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
         "methods": {
             "detect": lambda self, plume_state, positions: [False],
             "measure": lambda self, plume_state, positions: [0.0],
+            "compute_gradient": lambda self, plume_state, positions: [(0.0, 0.0)],
+            "configure": lambda self, **kwargs: None,
         },
-        "missing": "measure",
+        "missing": "compute_gradient",
     },
     "PlumeModelProtocol": {
         "methods": {
