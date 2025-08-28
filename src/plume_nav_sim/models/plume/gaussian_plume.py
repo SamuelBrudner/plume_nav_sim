@@ -396,19 +396,15 @@ class GaussianPlumeModel:
         
         # Input validation and preprocessing
         positions = np.asarray(positions, dtype=np.float64)
-        single_agent = False
-        
-        if positions.ndim == 1:
-            if len(positions) != 2:
-                raise ValueError(f"Single agent position must have length 2, got {len(positions)}")
-            positions = positions.reshape(1, 2)
-            single_agent = True
-        elif positions.ndim == 2:
-            if positions.shape[1] != 2:
-                raise ValueError(f"Position array must have shape (n_agents, 2), got {positions.shape}")
-        else:
-            raise ValueError(f"Position array must be 1D or 2D, got {positions.ndim}D")
-        
+        positions = np.atleast_2d(positions)
+
+        if positions.shape[1] != 2:
+            raise ValueError(
+                f"Position array must have shape (n_agents, 2), got {positions.shape}"
+            )
+
+        single_agent = positions.shape[0] == 1
+
         n_agents = positions.shape[0]
         self._batch_size_stats.append(n_agents)
         
@@ -427,15 +423,17 @@ class GaussianPlumeModel:
         else:
             # Fallback NumPy implementation
             concentrations = self._compute_concentrations_numpy(dx, dy)
-        
+
+        concentrations = np.atleast_1d(concentrations).astype(np.float64, copy=False)
+
         # Apply concentration cutoff for computational efficiency
         concentrations[concentrations < self.concentration_cutoff] = 0.0
         
         # Add background concentration
         concentrations += self.background_concentration
         
-        # Apply normalization and bounds checking
-        concentrations = np.clip(concentrations, 0.0, self.max_concentration)
+        # Ensure non-negative concentrations
+        concentrations = np.clip(concentrations, 0.0, None)
         
         # Handle spatial bounds if specified
         if self.spatial_bounds is not None:
@@ -474,7 +472,8 @@ class GaussianPlumeModel:
         try:
             # Use multivariate normal for vectorized computation
             mvn = stats.multivariate_normal(mean=[0, 0], cov=cov)
-            concentrations = mvn.pdf(positions_relative) * self.source_strength
+            concentrations = mvn.pdf(positions_relative)
+            concentrations = np.atleast_1d(concentrations) * self.source_strength
         except Exception:
             # Fallback to manual computation if SciPy fails
             concentrations = self._compute_concentrations_numpy(dx, dy)
@@ -551,6 +550,8 @@ class GaussianPlumeModel:
             >>> model = GaussianPlumeModel(wind_field=turbulent_wind)
             >>> model.step(dt=2.0)  # Wind field evolves over 2s
         """
+        if not isinstance(dt, (int, float)) or not np.isfinite(dt):
+            raise TypeError(f"Invalid time step: {dt}")
         if dt <= 0:
             raise ValueError(f"Time step must be positive, got {dt}")
         

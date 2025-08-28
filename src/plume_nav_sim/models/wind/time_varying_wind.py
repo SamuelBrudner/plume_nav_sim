@@ -303,7 +303,10 @@ class TimeVaryingWindField:
                 UserWarning,
                 stacklevel=2
             )
-        
+
+        if data_file is not None and temporal_pattern == 'constant':
+            temporal_pattern = 'measured'
+
         # Validate input parameters
         if len(base_velocity) != 2:
             raise ValueError(f"Base velocity must be (u, v) tuple, got {base_velocity}")
@@ -552,18 +555,15 @@ class TimeVaryingWindField:
         
         # Input validation and preprocessing
         positions = np.asarray(positions, dtype=np.float64)
-        single_position = False
-        
-        if positions.ndim == 1:
-            if len(positions) != 2:
-                raise ValueError(f"Single position must have length 2, got {len(positions)}")
-            positions = positions.reshape(1, 2)
-            single_position = True
-        elif positions.ndim == 2:
-            if positions.shape[1] != 2:
-                raise ValueError(f"Position array must have shape (n_positions, 2), got {positions.shape}")
-        else:
-            raise ValueError(f"Position array must be 1D or 2D, got {positions.ndim}D")
+        positions = np.atleast_2d(positions)
+        if positions.shape[1] != 2:
+            raise ValueError(
+                f"Position array must have shape (n_positions, 2), got {positions.shape}"
+            )
+        if not np.all(np.isfinite(positions)):
+            raise ValueError("Positions must contain finite values")
+
+        single_position = positions.shape[0] == 1
         
         n_positions = positions.shape[0]
         
@@ -762,6 +762,8 @@ class TimeVaryingWindField:
             >>> step_time = time.perf_counter() - start_time
             >>> print(f"Step time: {step_time*1000:.3f}ms")
         """
+        if not isinstance(dt, (int, float)) or not np.isfinite(dt):
+            raise TypeError(f"Invalid time step: {dt}")
         if dt <= 0:
             raise ValueError(f"Time step must be positive, got {dt}")
         

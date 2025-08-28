@@ -603,6 +603,13 @@ class TurbulentPlumeModel:
         # Update wind field dynamics if available
         if self.wind_field is not None:
             self.wind_field.step(dt)
+            try:
+                # Query wind field to ensure velocity information is accessed
+                self.wind_field.velocity_at(
+                    np.asarray(self.config.source_position, dtype=np.float64).reshape(1, -1)
+                )
+            except Exception:
+                pass
         
         # 1. Advance existing filaments through Lagrangian transport
         self._transport_filaments(dt)

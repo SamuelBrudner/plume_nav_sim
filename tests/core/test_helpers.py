@@ -4,6 +4,7 @@ import time
 import functools
 from contextlib import contextmanager
 from typing import Any, Dict, Optional, Union
+from types import SimpleNamespace
 import warnings
 
 # Performance threshold constants
@@ -36,17 +37,24 @@ class PerformanceMonitor:
                     violations.append(f"{name}: {avg_time:.2f}ms > {self.thresholds[name]}ms")
         return violations
 
+    def record_step(self, duration_ms: float, label: str = "step"):
+        """Record timing information for a simulation step."""
+        if duration_ms < 0:
+            raise ValueError("duration_ms must be non-negative")
+        self.add_measurement(label, duration_ms)
+
 
 @contextmanager
 def performance_timer(name: str = "operation"):
     """Context manager to time operations."""
     start_time = time.perf_counter()
+    result = SimpleNamespace(duration_ms=0.0)
     try:
-        yield
+        yield result
     finally:
         end_time = time.perf_counter()
-        duration_ms = (end_time - start_time) * 1000
-        print(f"{name} took {duration_ms:.2f}ms")
+        result.duration_ms = (end_time - start_time) * 1000
+        print(f"{name} took {result.duration_ms:.2f}ms")
 
 
 def requires_performance_validation(threshold_ms: float):

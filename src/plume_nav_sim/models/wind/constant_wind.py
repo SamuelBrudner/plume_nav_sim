@@ -53,7 +53,7 @@ Example Usage:
 from __future__ import annotations
 import time
 import warnings
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Optional, Tuple, Union, Dict, Any, Sequence
 from dataclasses import dataclass, field
 import numpy as np
 
@@ -220,9 +220,9 @@ class ConstantWindField:
             TypeError: If parameter types are incorrect
         """
         # Validate input parameters
-        if not isinstance(velocity, (tuple, list)) or len(velocity) != 2:
-            raise ValueError(f"Velocity must be a 2-element tuple/list, got {velocity}")
-        
+        if not isinstance(velocity, Sequence) or len(velocity) != 2:
+            raise ValueError(f"Velocity must be a 2-element sequence, got {velocity}")
+
         u_x, u_y = velocity
         if not all(isinstance(v, (int, float)) for v in [u_x, u_y]):
             raise ValueError(f"Velocity components must be numeric, got {velocity}")
@@ -340,23 +340,21 @@ class ConstantWindField:
         
         # Input validation and preprocessing
         positions = np.asarray(positions, dtype=np.float64)
-        single_position = False
-        
-        if positions.ndim == 1:
-            if len(positions) != 2:
-                raise ValueError(f"Single position must have length 2, got {len(positions)}")
-            positions = positions.reshape(1, 2)
-            single_position = True
-        elif positions.ndim == 2:
-            if positions.shape[1] != 2:
-                raise ValueError(f"Position array must have shape (n_positions, 2), got {positions.shape}")
-        else:
-            raise ValueError(f"Position array must be 1D or 2D, got {positions.ndim}D")
+        positions = np.atleast_2d(positions)
+        if positions.shape[1] != 2:
+            raise ValueError(
+                f"Position array must have shape (n_positions, 2), got {positions.shape}"
+            )
+        if not np.all(np.isfinite(positions)):
+            raise ValueError("Positions must contain finite values")
+
+        single_position = positions.shape[0] == 1
         
         n_positions = positions.shape[0]
         
         # For constant wind fields, velocity is uniform across all positions
-        # Use broadcasting for efficient vectorized computation
+        # Update current velocity based on temporal evolution
+        self._compute_current_velocity()
         velocities = np.broadcast_to(self.velocity, (n_positions, 2)).copy()
         
         # Apply boundary conditions if specified
@@ -374,7 +372,17 @@ class ConstantWindField:
         if single_position:
             return velocities[0]
         return velocities
-    
+
+    def _compute_current_velocity(self) -> None:
+        """Recompute current velocity based on temporal parameters."""
+        if self.enable_temporal_evolution and self.evolution_amplitude > 0:
+            phase = self._evolution_frequency * self.current_time
+            u_offset = self.evolution_amplitude * np.sin(phase)
+            v_offset = self.evolution_amplitude * np.cos(phase)
+            self.velocity = self.base_velocity + np.array([u_offset, v_offset])
+        else:
+            self.velocity = self.base_velocity.copy()
+
     def _apply_boundary_conditions(self, positions: np.ndarray, velocities: np.ndarray) -> np.ndarray:
         """Apply spatial boundary conditions to velocity field."""
         (x_min, x_max), (y_min, y_max) = self.boundary_conditions
@@ -435,18 +443,22 @@ class ConstantWindField:
             >>> step_time = time.perf_counter() - start_time
             >>> print(f"Step time: {step_time*1000:.3f}ms")
         """
+        if not isinstance(dt, (int, float)) or not np.isfinite(dt):
+            raise TypeError(f"Invalid time step: {dt}")
         if dt <= 0:
             raise ValueError(f"Time step must be positive, got {dt}")
-        
+
         step_start = time.perf_counter() if self.performance_monitoring else 0.0
-        
+
         # Update simulation time
         self.current_time += dt
         self.time_step = dt
-        
+
         # Apply temporal evolution if enabled
         if self.enable_temporal_evolution:
             self._update_temporal_evolution(dt)
+        else:
+            self.velocity = self.base_velocity.copy()
         
         # Update performance statistics
         if self.performance_monitoring:
@@ -553,13 +565,13 @@ class ConstantWindField:
         # Update velocity parameters if specified
         if 'velocity' in kwargs:
             new_velocity = kwargs['velocity']
-            if not isinstance(new_velocity, (tuple, list)) or len(new_velocity) != 2:
-                raise ValueError(f"Velocity must be a 2-element tuple/list, got {new_velocity}")
-            
+            if not isinstance(new_velocity, Sequence) or len(new_velocity) != 2:
+                raise ValueError(f"Velocity must be a 2-element sequence, got {new_velocity}")
+
             u_x, u_y = new_velocity
             if not all(isinstance(v, (int, float)) for v in [u_x, u_y]):
                 raise ValueError(f"Velocity components must be numeric, got {new_velocity}")
-            
+
             self.base_velocity = np.array([u_x, u_y], dtype=np.float64)
             self.velocity = self.base_velocity.copy()
         else:
@@ -611,7 +623,9 @@ class ConstantWindField:
         self._step_count = 0
         self._total_step_time = 0.0
         self._batch_size_stats.clear()
-        
+
+        self._compute_current_velocity()
+
         # Performance monitoring
         if self.performance_monitoring:
             reset_time = time.perf_counter() - reset_start
