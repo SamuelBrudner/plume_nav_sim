@@ -1130,97 +1130,87 @@ class SimulationContext:
     
     def add_plume_model(self, model_type: str, **kwargs: Any) -> 'SimulationContext':
         """Add plume model component with configuration."""
-        # In full implementation, this would use a component factory
-        # to instantiate the appropriate plume model based on model_type
         plume_model = self._create_plume_model(model_type, **kwargs)
         return self.add_component("plume_model", plume_model)
     
     def add_wind_field(self, field_type: str, **kwargs: Any) -> 'SimulationContext':
         """Add wind field component with configuration."""
-        # In full implementation, this would use a component factory
         wind_field = self._create_wind_field(field_type, **kwargs)
         return self.add_component("wind_field", wind_field)
     
     def add_sensor(self, sensor_type: str, **kwargs: Any) -> 'SimulationContext':
         """Add sensor component with configuration."""
-        # In full implementation, this would use a component factory
         sensor = self._create_sensor(sensor_type, **kwargs)
         return self.add_component("sensor", sensor)
     
     def _create_plume_model(self, model_type: str, **kwargs: Any) -> PlumeModelProtocol:
         """Factory method for creating plume model instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockPlumeModel:
-            def __init__(self, model_type: str, **kwargs):
-                self.model_type = model_type
-                self.config = kwargs
-                
-            def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-                return np.random.random(len(positions))
-                
-            def step(self, dt: float) -> None:
-                pass
-                
-            def reset(self) -> None:
-                pass
-                
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.model_type, "config": self.config}
-        
-        return MockPlumeModel(model_type, **kwargs)
+        from plume_nav_sim.models import create_plume_model
+
+        config = {"type": model_type, **kwargs}
+        logger.info(
+            "Creating plume model",
+            extra={"model_type": model_type, "config_keys": list(kwargs.keys())},
+        )
+        plume_model = create_plume_model(config)
+
+        if not isinstance(plume_model, PlumeModelProtocol):
+            logger.error(
+                "Created plume model does not implement PlumeModelProtocol",
+                extra={"model_type": model_type},
+            )
+            raise TypeError(
+                f"Plume model {model_type} is not protocol compliant"
+            )
+
+        return plume_model
     
     def _create_wind_field(self, field_type: str, **kwargs: Any) -> WindFieldProtocol:
         """Factory method for creating wind field instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockWindField:
-            def __init__(self, field_type: str, **kwargs):
-                self.field_type = field_type
-                self.config = kwargs
+        from plume_nav_sim.models import create_wind_field
 
-            def velocity_at(self, positions: np.ndarray, time: float) -> np.ndarray:
-                return np.random.random((len(positions), 2))
+        config = {"type": field_type, **kwargs}
+        logger.info(
+            "Creating wind field",
+            extra={"field_type": field_type, "config_keys": list(kwargs.keys())},
+        )
+        wind_field = create_wind_field(config)
 
-            def step(self, dt: float) -> None:
-                pass
-
-            def reset(self) -> None:
-                pass
-
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.field_type, "config": self.config}
-
-        wind_field = MockWindField(field_type, **kwargs)
-        missing = [
-            m for m in ("velocity_at", "step", "reset")
-            if not callable(getattr(wind_field, m, None))
-        ]
-        if missing:
+        if not isinstance(wind_field, WindFieldProtocol):
             logger.error(
-                f"Wind field missing required methods: {', '.join(missing)}"
+                "Created wind field does not implement WindFieldProtocol",
+                extra={"field_type": field_type},
             )
-            raise RuntimeError(
-                f"Instantiated wind field missing required methods: {', '.join(missing)}"
+            raise TypeError(
+                f"Wind field {field_type} is not protocol compliant"
             )
+
         return wind_field
     
     def _create_sensor(self, sensor_type: str, **kwargs: Any) -> SensorProtocol:
         """Factory method for creating sensor instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockSensor:
-            def __init__(self, sensor_type: str, **kwargs):
-                self.sensor_type = sensor_type
-                self.config = kwargs
-                
-            def sense(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-                return np.random.random(len(positions))
-                
-            def get_observation_space_info(self) -> Dict[str, Any]:
-                return {"shape": (1,), "dtype": "float32"}
-                
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.sensor_type, "config": self.config}
-        
-        return MockSensor(sensor_type, **kwargs)
+        from plume_nav_sim.models import create_sensors
+
+        config = {"type": sensor_type, **kwargs}
+        logger.info(
+            "Creating sensor",
+            extra={"sensor_type": sensor_type, "config_keys": list(kwargs.keys())},
+        )
+        sensors = create_sensors([config])
+        if not sensors:
+            raise ValueError(f"Sensor factory returned no instance for {sensor_type}")
+        sensor = sensors[0]
+
+        if not isinstance(sensor, SensorProtocol):
+            logger.error(
+                "Created sensor does not implement SensorProtocol",
+                extra={"sensor_type": sensor_type},
+            )
+            raise TypeError(
+                f"Sensor {sensor_type} is not protocol compliant"
+            )
+
+        return sensor
     
     def __enter__(self) -> 'SimulationContext':
         """Enter context manager and initialize all components."""
