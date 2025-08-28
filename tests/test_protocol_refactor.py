@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+import inspect
+from typing import get_type_hints
 
 from plume_nav_sim.api.navigation import from_legacy
 from plume_nav_sim.core import protocols as core_protocols
@@ -8,6 +10,15 @@ from plume_nav_sim.protocols import navigator as navigator_mod
 
 def test_core_protocols_navigator_protocol_is_global():
     assert core_protocols.NavigatorProtocol is navigator_mod.NavigatorProtocol
+
+
+def test_navigator_protocol_step_signature():
+    sig = inspect.signature(navigator_mod.NavigatorProtocol.step)
+    params = list(sig.parameters.values())
+    assert len(params) == 2
+    assert params[1].name == "action"
+    hints = get_type_hints(navigator_mod.NavigatorProtocol.step)
+    assert hints["action"] is np.ndarray
 
 
 class MissingStepNavigator:

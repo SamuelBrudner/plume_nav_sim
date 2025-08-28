@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Protocol, Dict, Any, runtime_checkable
+import numpy as np
 
 
 @runtime_checkable
@@ -17,8 +18,8 @@ class NavigatorProtocol(Protocol):
     def reset(self) -> None:
         """Reset the navigator to its initial state."""
 
-    def step(self, dt: float) -> None:
-        """Advance the navigator state by ``dt`` seconds."""
+    def step(self, action: np.ndarray) -> None:
+        """Advance the navigator state using the provided action array."""
 
     def get_state(self) -> Dict[str, Any]:
         """Return a snapshot of the navigator's current state."""
