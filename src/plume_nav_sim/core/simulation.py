@@ -74,6 +74,8 @@ import logging
 
 from ..protocols import PerformanceMonitorProtocol
 from plume_nav_sim.protocols.sensor import SensorProtocol
+from ..models import create_plume_model, create_wind_field
+from .sensors import create_sensor_from_config
 from pathlib import Path
 
 # Core dependencies for Gymnasium migration
@@ -1132,51 +1134,45 @@ class SimulationContext:
     
     def _create_plume_model(self, model_type: str, **kwargs: Any) -> PlumeModelProtocol:
         """Factory method for creating plume model instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockPlumeModel:
-            def __init__(self, model_type: str, **kwargs):
-                self.model_type = model_type
-                self.config = kwargs
-                
-            def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-                return np.random.random(len(positions))
-                
-            def step(self, dt: float) -> None:
-                pass
-                
-            def reset(self) -> None:
-                pass
-                
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.model_type, "config": self.config}
-        
-        return MockPlumeModel(model_type, **kwargs)
+        type_map = {
+            "gaussian": "GaussianPlumeModel",
+            "turbulent": "TurbulentPlumeModel",
+            "video": "VideoPlumeAdapter",
+        }
+        resolved_type = type_map.get(model_type, model_type)
+        config = {"type": resolved_type, **kwargs}
+
+        plume_model = create_plume_model(config)
+
+        required = ["concentration_at", "step", "reset"]
+        missing = [m for m in required if not callable(getattr(plume_model, m, None))]
+        if missing:
+            logger.error(
+                f"Plume model missing required methods: {', '.join(missing)}"
+            )
+            raise RuntimeError(
+                f"Instantiated plume model missing required methods: {', '.join(missing)}"
+            )
+
+        logger.debug(
+            f"Created plume model '{resolved_type}' with config keys {list(kwargs.keys())}"
+        )
+        return plume_model
     
     def _create_wind_field(self, field_type: str, **kwargs: Any) -> WindFieldProtocol:
         """Factory method for creating wind field instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockWindField:
-            def __init__(self, field_type: str, **kwargs):
-                self.field_type = field_type
-                self.config = kwargs
+        type_map = {
+            "constant": "ConstantWindField",
+            "turbulent": "TurbulentWindField",
+            "time_varying": "TimeVaryingWindField",
+        }
+        resolved_type = type_map.get(field_type, field_type)
+        config = {"type": resolved_type, **kwargs}
 
-            def velocity_at(self, positions: np.ndarray, time: float) -> np.ndarray:
-                return np.random.random((len(positions), 2))
+        wind_field = create_wind_field(config)
 
-            def step(self, dt: float) -> None:
-                pass
-
-            def reset(self) -> None:
-                pass
-
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.field_type, "config": self.config}
-
-        wind_field = MockWindField(field_type, **kwargs)
-        missing = [
-            m for m in ("velocity_at", "step", "reset")
-            if not callable(getattr(wind_field, m, None))
-        ]
+        required = ["velocity_at", "step", "reset"]
+        missing = [m for m in required if not callable(getattr(wind_field, m, None))]
         if missing:
             logger.error(
                 f"Wind field missing required methods: {', '.join(missing)}"
@@ -1184,35 +1180,38 @@ class SimulationContext:
             raise RuntimeError(
                 f"Instantiated wind field missing required methods: {', '.join(missing)}"
             )
+
+        logger.debug(
+            f"Created wind field '{resolved_type}' with config keys {list(kwargs.keys())}"
+        )
         return wind_field
     
     def _create_sensor(self, sensor_type: str, **kwargs: Any) -> SensorProtocol:
         """Factory method for creating sensor instances."""
-        # Placeholder implementation - would be replaced with actual component factory
-        class MockSensor:
-            def __init__(self, sensor_type: str, **kwargs):
-                self.sensor_type = sensor_type
-                self.config = kwargs
+        type_map = {
+            "binary": "BinarySensor",
+            "concentration": "ConcentrationSensor",
+            "gradient": "GradientSensor",
+        }
+        resolved_type = type_map.get(sensor_type, sensor_type)
+        config = {"type": resolved_type, **kwargs}
 
-            def detect(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-                return np.zeros(len(positions), dtype=bool)
+        sensor = create_sensor_from_config(config)
 
-            def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-                return np.random.random(len(positions))
+        required = ["detect", "measure", "configure"]
+        missing = [m for m in required if not callable(getattr(sensor, m, None))]
+        if missing:
+            logger.error(
+                f"Sensor missing required methods: {', '.join(missing)}"
+            )
+            raise RuntimeError(
+                f"Instantiated sensor missing required methods: {', '.join(missing)}"
+            )
 
-            def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-                return np.zeros((len(positions), 2))
-
-            def configure(self, **kwargs: Any) -> None:
-                self.config.update(kwargs)
-
-            def get_observation_space_info(self) -> Dict[str, Any]:
-                return {"shape": (1,), "dtype": "float32"}
-
-            def get_metadata(self) -> Dict[str, Any]:
-                return {"type": self.sensor_type, "config": self.config}
-        
-        return MockSensor(sensor_type, **kwargs)
+        logger.debug(
+            f"Created sensor '{resolved_type}' with config keys {list(kwargs.keys())}"
+        )
+        return sensor
     
     def __enter__(self) -> 'SimulationContext':
         """Enter context manager and initialize all components."""
