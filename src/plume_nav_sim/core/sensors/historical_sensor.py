@@ -72,7 +72,7 @@ from collections import deque
 import numpy as np
 
 # Core protocol imports
-from ..protocols import SensorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Hydra integration for configuration management
 try:
@@ -416,6 +416,16 @@ class HistoricalSensor:
         if not isinstance(base_sensor, SensorProtocol):
             raise TypeError(
                 f"base_sensor must implement SensorProtocol, got {type(base_sensor)}"
+            )
+
+        if LOGURU_AVAILABLE:
+            metadata = base_sensor.get_metadata() if hasattr(base_sensor, 'get_metadata') else {}
+            observation_shape = getattr(base_sensor, 'observation_shape', None)
+            logger.debug(
+                "Base sensor protocol compliance validated",
+                base_sensor_type=type(base_sensor).__name__,
+                observation_shape=observation_shape,
+                metadata=metadata
             )
         
         self.base_sensor = base_sensor

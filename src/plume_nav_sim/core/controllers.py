@@ -111,44 +111,10 @@ import numpy as np
 
 # Core protocol imports
 from .protocols import NavigatorProtocol, BoundaryPolicyProtocol, SourceProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Boundary policy factory import
 from .boundaries import create_boundary_policy
-
-# Sensor protocol definitions - basic implementations for modular architecture
-from typing import Protocol, runtime_checkable
-from abc import ABC, abstractmethod
-
-@runtime_checkable
-class SensorProtocol(Protocol):
-    """
-    Protocol defining the interface for sensor implementations.
-    
-    This protocol enables modular perception systems where agents can
-    perceive the environment through configurable sensors rather than
-    direct field access, supporting the agent-agnostic design.
-    """
-    
-    def sample(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
-        """
-        Sample sensor readings at specified positions.
-        
-        Args:
-            plume_state: Current environmental state (e.g., odor field)
-            positions: Agent positions to sample at, shape (n_agents, 2)
-            
-        Returns:
-            np.ndarray: Sensor readings for each position
-        """
-        ...
-    
-    def configure(self, **kwargs) -> None:
-        """Configure sensor parameters."""
-        ...
-    
-    def reset(self) -> None:
-        """Reset sensor state (e.g., clear history)."""
-        ...
 
 
 # Basic sensor implementations for interim use until full sensor system is available

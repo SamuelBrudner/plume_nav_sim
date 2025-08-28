@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol import
-from ..protocols import SensorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Base sensor infrastructure
 try:

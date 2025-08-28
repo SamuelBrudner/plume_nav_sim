@@ -59,7 +59,7 @@ from enum import Enum
 import numpy as np
 
 # Core protocol imports
-from ..protocols import SensorProtocol
+from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Enhanced logging for performance monitoring
 try:
