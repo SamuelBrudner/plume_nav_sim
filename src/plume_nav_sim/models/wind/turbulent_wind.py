@@ -99,20 +99,8 @@ except ImportError:
     def prange(x):
         return range(x)
 
-# Core protocol imports
-try:
-    from ...core.protocols import WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback type hints during development
-    from typing import Protocol
-    
-    class WindFieldProtocol(Protocol):
-        def velocity_at(self, positions: np.ndarray) -> np.ndarray: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    
-    PROTOCOLS_AVAILABLE = False
+# Core protocol import
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
 # Configuration imports with fallback
 try:
@@ -1069,17 +1057,3 @@ class TurbulentWindField:
             f"turbulence_intensity={self.config.turbulence_intensity})"
         )
 
-
-# Register with protocols for type checking
-if PROTOCOLS_AVAILABLE:
-    # Verify protocol compliance at module load time
-    def _verify_protocol_compliance():
-        """Verify that TurbulentWindField implements WindFieldProtocol correctly."""
-        try:
-            # This will raise TypeError if protocol is not properly implemented
-            test_instance: WindFieldProtocol = TurbulentWindField()
-            logger.debug("TurbulentWindField protocol compliance verified")
-        except Exception as e:
-            logger.error(f"Protocol compliance check failed: {e}")
-    
-    _verify_protocol_compliance()

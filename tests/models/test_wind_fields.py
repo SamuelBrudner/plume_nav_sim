@@ -112,18 +112,9 @@ try:
 except ImportError:
     SCIPY_AVAILABLE = False
 
-# Core protocol imports for interface compliance testing
-try:
-    from src.plume_nav_sim.core.protocols import WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # The protocol might not exist yet - define a minimal interface for testing
-    class WindFieldProtocol:
-        """Minimal WindFieldProtocol interface for testing."""
-        def velocity_at(self, positions): pass
-        def step(self, dt=1.0): pass 
-        def reset(self, **kwargs): pass
-    PROTOCOLS_AVAILABLE = False
+# Core protocol import for interface compliance testing
+from src.plume_nav_sim.protocols.wind_field import WindFieldProtocol
+PROTOCOLS_AVAILABLE = True
 
 # Wind field implementation imports for testing
 try:
@@ -1411,8 +1402,23 @@ def test_module_imports_and_availability():
     
     if not HYPOTHESIS_AVAILABLE:
         warnings.warn("Hypothesis not available - property-based tests will be skipped", UserWarning)
-    
+
     assert True  # Test passes if we reach here
+
+
+def test_create_wind_field_validates_required_methods(monkeypatch):
+    """Factory should raise when required protocol methods are missing."""
+    from src.plume_nav_sim.models.wind import create_wind_field, AVAILABLE_WIND_FIELDS
+
+    class IncompleteWindField:
+        def velocity_at(self, positions):
+            return positions
+
+    monkeypatch.setitem(AVAILABLE_WIND_FIELDS, 'IncompleteWindField', {'class': IncompleteWindField})
+
+    config = {'type': 'IncompleteWindField'}
+    with pytest.raises(RuntimeError, match="missing required methods"):
+        create_wind_field(config)
 
 
 if __name__ == "__main__":

@@ -71,14 +71,8 @@ except ImportError:
     SCIPY_AVAILABLE = False
     interpolate = None
 
-# Protocol imports for interface compliance
-try:
-    from ...core.protocols import WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during development/testing
-    WindFieldProtocol = object
-    PROTOCOLS_AVAILABLE = False
+# Protocol import for interface compliance
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
 # Configuration management
 try:
@@ -1143,21 +1137,9 @@ def create_time_varying_wind_field(config: Union[TimeVaryingWindFieldConfig, Dic
     
     return TimeVaryingWindField(**config_dict)
 
-
-# Register with protocol for type checking
-if PROTOCOLS_AVAILABLE:
-    # Verify protocol compliance at module load time
-    try:
-        # This will raise TypeError if protocol is not implemented correctly
-        dummy_wind_field: WindFieldProtocol = TimeVaryingWindField()
-    except Exception:
-        # Protocol compliance will be checked at runtime
-        pass
-
-
 # Export public API
 __all__ = [
     'TimeVaryingWindField',
-    'TimeVaryingWindFieldConfig', 
+    'TimeVaryingWindFieldConfig',
     'create_time_varying_wind_field'
 ]

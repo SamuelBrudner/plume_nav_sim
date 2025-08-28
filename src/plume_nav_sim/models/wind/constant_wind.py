@@ -57,14 +57,8 @@ from typing import Optional, Tuple, Union, Dict, Any
 from dataclasses import dataclass, field
 import numpy as np
 
-# Core protocol imports for interface compliance
-try:
-    from ...core.protocols import WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during development/testing when protocols don't exist yet
-    WindFieldProtocol = object
-    PROTOCOLS_AVAILABLE = False
+# Core protocol import for interface compliance
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
 # Configuration management imports
 try:
@@ -811,21 +805,9 @@ def create_constant_wind_field(config: Union[ConstantWindFieldConfig, Dict[str, 
     
     return ConstantWindField(**config_dict)
 
-
-# Register with protocol for type checking
-if PROTOCOLS_AVAILABLE:
-    # Verify protocol compliance at module load time
-    try:
-        # This will raise TypeError if protocol is not implemented correctly
-        dummy_wind_field: WindFieldProtocol = ConstantWindField()
-    except Exception:
-        # Protocol compliance will be checked at runtime
-        pass
-
-
 # Export public API
 __all__ = [
     'ConstantWindField',
-    'ConstantWindFieldConfig', 
+    'ConstantWindFieldConfig',
     'create_constant_wind_field'
 ]
