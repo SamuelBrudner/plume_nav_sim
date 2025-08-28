@@ -401,7 +401,7 @@ class TestHydraConfigurationComposition:
             cfg = compose(config_name="config")
             
             # Test validate_config function with DictConfig
-            validated_config = validate_config(cfg.navigator, NavigatorConfig)
+            validated_config = validate_config(NavigatorConfig, cfg.navigator)
             assert isinstance(validated_config, NavigatorConfig)
             assert validated_config.max_speed == 2.0
             assert validated_config.speed == 1.0
@@ -413,7 +413,7 @@ class TestHydraConfigurationComposition:
             )
             
             with pytest.raises(ValueError, match="speed.*cannot exceed.*max_speed"):
-                validate_config(invalid_cfg.navigator, NavigatorConfig)
+                validate_config(NavigatorConfig, invalid_cfg.navigator)
 
 
 class TestEnvironmentVariableInterpolation:
@@ -494,7 +494,7 @@ class TestEnvironmentVariableInterpolation:
             if GlobalHydra().is_initialized():
                 GlobalHydra.instance().clear()
             
-            with initialize(version_base=None, config_path=str(conf_dir)):
+            with initialize_config_dir(config_dir=str(conf_dir)):
                 cfg = compose(config_name="test_env")
                 
                 # Resolve configuration to actual values
@@ -577,7 +577,7 @@ class TestConfigStoreIntegration:
         if GlobalHydra().is_initialized():
             GlobalHydra.instance().clear()
         
-        with initialize(version_base=None, config_path=str(conf_dir)):
+        with initialize_config_dir(config_dir=str(conf_dir)):
             cfg = compose(config_name="structured")
             
             # Verify structured config target is preserved
@@ -837,7 +837,8 @@ class TestLegacyCompatibility:
             }
         }
         
-        assert validate_config(config_dict) is True
+        validated = validate_config(NavigatorConfig, config_dict["navigator"])
+        assert isinstance(validated, NavigatorConfig)
         
         # Test with invalid config
         invalid_dict = {
@@ -848,8 +849,8 @@ class TestLegacyCompatibility:
             }
         }
         
-        with pytest.raises(ValueError, match="validation failed"):
-            validate_config(invalid_dict)
+        with pytest.raises(ValidationError):
+            validate_config(NavigatorConfig, invalid_dict["navigator"])
 
     def test_configuration_error_handling(self):
         """Test proper error handling for configuration issues."""
@@ -865,10 +866,8 @@ class TestLegacyCompatibility:
             })
         
         # Test validation errors are properly propagated
-        try:
-            validate_config({"navigator": {"mode": "invalid_mode"}})
-        except ValueError as e:
-            assert "validation failed" in str(e)
+        with pytest.raises(ValidationError):
+            validate_config(NavigatorConfig, {"mode": "invalid_mode"})
 
 
 # Pytest configuration for Hydra testing

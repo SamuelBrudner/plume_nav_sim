@@ -29,7 +29,7 @@ from src.odor_plume_nav.config.models import (
 
 # Hydra imports with fallback handling for structured configuration
 try:
-    from hydra import initialize, compose
+    from hydra import initialize, initialize_config_dir, compose
     from hydra.core.config_store import ConfigStore
     from hydra.core.global_hydra import GlobalHydra
     from omegaconf import DictConfig, OmegaConf, MISSING
@@ -784,7 +784,7 @@ class TestHydraStructuredConfigurationComposition:
             # Register structured configuration schemas
             register_config_schemas()
             
-            with initialize(config_path=str(temp_hydra_config_dir)):
+            with initialize_config_dir(config_dir=str(temp_hydra_config_dir)):
                 cfg = compose(config_name="config")
                 
                 # Test that base config is loaded with structured validation
@@ -812,7 +812,7 @@ class TestHydraStructuredConfigurationComposition:
         try:
             register_config_schemas()
             
-            with initialize(config_path=str(temp_hydra_config_dir)):
+            with initialize_config_dir(config_dir=str(temp_hydra_config_dir)):
                 # Test command-line style overrides with structured validation
                 cfg = compose(
                     config_name="config",

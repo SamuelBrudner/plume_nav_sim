@@ -22,23 +22,16 @@ except ImportError:
 from .schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig, VideoPlumeConfig, SimulationConfig
 
 
-def validate_config(config_data: Union[Dict[str, Any], DictConfig], config_class: Type[BaseModel]) -> BaseModel:
-    """
-    Validate configuration data against a Pydantic model.
-    
-    Args:
-        config_data: Configuration data to validate
-        config_class: Pydantic model class to validate against
-        
-    Returns:
-        Validated configuration instance
-        
-    Raises:
-        ValidationError: If validation fails
+def validate_config(config_class: Type[BaseModel], config_data: Union[Dict[str, Any], DictConfig]) -> BaseModel:
+    """Validate configuration data against a Pydantic model.
+
+    The ``config_class`` is supplied first to mirror ``pydantic``'s
+    ``model_validate`` style and to simplify partial application.  Returns the
+    instantiated and validated model instance.
     """
     if isinstance(config_data, DictConfig) and HAS_HYDRA:
         config_data = OmegaConf.to_container(config_data, resolve=True)
-    
+
     return config_class(**config_data)
 
 
@@ -181,7 +174,7 @@ def validate_env_interpolation(value: str) -> bool:
         
     # Check for ${oc.env:VAR_NAME} or ${oc.env:VAR_NAME,default} pattern
     import re
-    pattern = r'\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,.*?)?\}'
+    pattern = r"\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]+))?\}"
     return bool(re.search(pattern, value))
 
 
@@ -213,15 +206,40 @@ def resolve_env_value(value: str, default: str = "") -> str:
         # Use inline default if provided, otherwise use the provided default
         use_default = inline_default if inline_default is not None else default
         
-        # Return raw environment variable value without filtering
-        return os.environ.get(env_var, use_default)
+        # Return environment variable value converted to native types
+        raw = os.environ.get(env_var, use_default)
+        return _convert_env_value(str(raw) if raw is not None else raw)
     
     # Check if the string contains an environment variable reference but is not a full match
     if '${oc.env:' in value:
-        return default
+        return _convert_env_value(default)
     
     # No interpolation present, return the original string
-    return value
+    return _convert_env_value(value)
+
+
+def _convert_env_value(val: str):
+    """Convert a string from the environment into int/float/bool when possible."""
+    if not isinstance(val, str):
+        return val
+
+    lower = val.lower()
+    if lower in {"true", "yes", "1", "on"}:
+        return True
+    if lower in {"false", "no", "0", "off"}:
+        return False
+
+    try:
+        return int(val)
+    except ValueError:
+        pass
+
+    try:
+        return float(val)
+    except ValueError:
+        pass
+
+    return val
 
 
 # Re-export schemas for convenience

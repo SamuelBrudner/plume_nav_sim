@@ -5,6 +5,8 @@ This module provides Pydantic models for configuration validation.
 """
 
 from typing import List, Optional, Tuple, Union, Dict, Any
+from enum import Enum
+from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 try:
     from hydra.core.config_store import ConfigStore
@@ -16,10 +18,17 @@ except ImportError:
 class SingleAgentConfig(BaseModel):
     """Configuration for single agent navigator."""
     position: Optional[Tuple[float, float]] = None
-    orientation: Optional[float] = Field(0.0, ge=0.0, le=360.0)  # degrees
+    orientation: Optional[float] = 0.0  # degrees
     speed: Optional[float] = Field(0.0)  # Removed ge constraint for custom validator
     max_speed: Optional[float] = Field(1.0)  # Removed ge constraint for custom validator
     angular_velocity: Optional[float] = Field(0.0)  # Removed ge constraint for custom validator
+
+    @field_validator('orientation')
+    @classmethod
+    def normalize_orientation(cls, v):
+        if v is None:
+            return v
+        return v % 360
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -48,6 +57,33 @@ class MultiAgentConfig(BaseModel):
     angular_velocities: Optional[List[float]] = None
     num_agents: Optional[int] = None
 
+    @field_validator('orientations')
+    @classmethod
+    def normalize_orientations(cls, v):
+        if v is not None:
+            return [orient % 360 for orient in v]
+        return v
+
+    @field_validator('positions')
+    @classmethod
+    def validate_positions(cls, v):
+        for i, pos in enumerate(v):
+            if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+                raise ValueError(f"Position {i} must be a list/tuple of [x, y] coordinates")
+            x, y = pos
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                raise ValueError(f"Position {i} coordinates must be numeric")
+        return v
+
+    @field_validator('speeds')
+    @classmethod
+    def validate_speeds(cls, v):
+        if v is not None:
+            for i, s in enumerate(v):
+                if s < 0:
+                    raise ValueError(f"Speed at index {i} must be non-negative")
+        return v
+
     @model_validator(mode="after")
     def check_agent_params(cls, values):
         """Verify multi-agent parameter consistency."""
@@ -67,10 +103,16 @@ class MultiAgentConfig(BaseModel):
                 values.num_agents = n_agents
             elif values.num_agents != n_agents:
                 raise ValueError(f"num_agents ({values.num_agents}) does not match positions length ({n_agents})")
-        
+
         return values
 
     model_config = ConfigDict(extra="allow")
+
+
+class NavigatorMode(str, Enum):
+    single = "single"
+    multi = "multi"
+    auto = "auto"
 
 
 class NavigatorConfig(BaseModel):
@@ -80,11 +122,11 @@ class NavigatorConfig(BaseModel):
     This is maintained for backward compatibility.
     """
     # Mode selection - can be 'single', 'multi', or 'auto' for auto-detection
-    mode: Optional[str] = "auto"
+    mode: NavigatorMode = NavigatorMode.auto
     
     # Single agent parameters
     position: Optional[Tuple[float, float]] = None
-    orientation: Optional[float] = Field(0.0)  # Removed ge/le constraints for custom validator
+    orientation: Optional[float] = 0.0
     speed: Optional[float] = Field(0.0)  # Removed ge constraint for custom validator
     max_speed: Optional[float] = Field(1.0)  # Removed ge constraint for custom validator
     angular_velocity: Optional[float] = Field(0.0)  # Removed ge constraint for custom validator
@@ -99,17 +141,10 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def validate_orientation(cls, v):
-        """Validate orientation with specific error messages."""
-        if v is not None:
-            if v < 0:
-                raise ValueError("ensure this value is greater than or equal to 0")
-            if v > 360:
-                if v >= 400:
-                    raise ValueError("orientation must be between 0 and 360 degrees")
-                else:
-                    raise ValueError("ensure this value is less than or equal to 360")
-        return v
+    def normalize_orientation(cls, v):
+        if v is None:
+            return v
+        return v % 360
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -121,12 +156,9 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def validate_orientations(cls, v):
-        """Validate that all orientations are within valid range."""
+    def normalize_orientations(cls, v):
         if v is not None:
-            for orient in v:
-                if orient < 0 or orient > 360:
-                    raise ValueError("orientation must be between 0 and 360 degrees")
+            return [orient % 360 for orient in v]
         return v
 
     @model_validator(mode="after")
@@ -157,6 +189,15 @@ class NavigatorConfig(BaseModel):
                 param_val = getattr(values, param)
                 if param_val is not None and len(param_val) != n_agents:
                     raise ValueError(f"{param} length ({len(param_val)}) does not match number of agents ({n_agents})")
+            if values.num_agents is None:
+                values.num_agents = n_agents
+            elif values.num_agents != n_agents:
+                raise ValueError(f"num_agents ({values.num_agents}) does not match positions length ({n_agents})")
+            if values.speeds is not None and values.max_speeds is not None:
+                for i, (s, m) in enumerate(zip(values.speeds, values.max_speeds)):
+                    if s > m:
+                        raise ValueError(f"Agent {i}: speed ({s}) cannot exceed max_speed ({m})")
+
         if values.speed is not None and values.max_speed is not None and values.speed > values.max_speed:
             raise ValueError(f"speed ({values.speed}) cannot exceed max_speed ({values.max_speed})")
         return values
@@ -167,7 +208,7 @@ class NavigatorConfig(BaseModel):
 class VideoPlumeConfig(BaseModel):
     """Configuration for video-based plume environment."""
     # Path to the video file
-    video_path: str
+    video_path: Path
     
     # Optional parameters for video processing
     flip: Optional[bool] = False
@@ -192,23 +233,45 @@ class VideoPlumeConfig(BaseModel):
                 raise ValueError("ensure this value is greater than or equal to 0")
         return v
 
+    @field_validator('video_path')
+    @classmethod
+    def validate_video_path(cls, v, info):
+        skip = info.data.get('_skip_validation', True)
+        p = Path(v)
+        if not skip:
+            if not p.exists():
+                raise ValueError('Video file not found')
+            if not p.is_file():
+                raise ValueError('Video path is not a file')
+        return p
+
     @field_validator('kernel_size')
     @classmethod
     def validate_kernel_size(cls, v):
-        """Validate that kernel_size is odd and positive if provided."""
         if v is not None:
             if v < 0:
-                raise ValueError("kernel_size must be positive")
-            if v > 0 and v % 2 == 0:
-                raise ValueError("kernel_size must be odd")
+                raise ValueError('kernel_size must be positive')
+            if v % 2 == 0:
+                raise ValueError('kernel_size must be odd')
+        return v
+
+    @field_validator('kernel_sigma')
+    @classmethod
+    def validate_kernel_sigma(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('kernel_sigma must be positive')
         return v
 
     @model_validator(mode="after")
-    def validate_frame_range(cls, values):
-        """Validate that end_frame is greater than start_frame."""
+    def validate_parameters(cls, values):
+        if (values.kernel_size is None) != (values.kernel_sigma is None):
+            if values.kernel_size is None:
+                raise ValueError('kernel_size must be specified when kernel_sigma is provided')
+            else:
+                raise ValueError('kernel_sigma must be specified when kernel_size is provided')
         if values.start_frame is not None and values.end_frame is not None:
             if values.end_frame <= values.start_frame:
-                raise ValueError("end_frame must be greater than start_frame")
+                raise ValueError('end_frame must be greater than start_frame')
         return values
 
     model_config = ConfigDict(extra="allow")
