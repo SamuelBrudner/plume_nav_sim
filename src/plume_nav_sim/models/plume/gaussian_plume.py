@@ -55,7 +55,8 @@ Example Usage:
 
 from __future__ import annotations
 import time
-from typing import Optional, Tuple, Union, Dict, Any
+import logging
+from typing import Optional, Tuple, Union, Dict, Any, Sequence
 from dataclasses import dataclass, field
 import numpy as np
 import warnings
@@ -71,14 +72,8 @@ except ImportError:
     stats = None
 
 # Protocol imports for interface compliance
-try:
-    from ...core.protocols import PlumeModelProtocol, WindFieldProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during development/testing
-    PlumeModelProtocol = object
-    WindFieldProtocol = object  
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
+from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
 # Configuration management
 try:
@@ -267,7 +262,7 @@ class GaussianPlumeModel:
                 "SciPy not available. Using basic NumPy implementation. "
                 "Install scipy>=1.10.0 for optimized performance.",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
         
         # Validate input parameters
@@ -342,10 +337,10 @@ class GaussianPlumeModel:
             warnings.warn(
                 f"Source position {self.source_position} outside spatial bounds "
                 f"x=({x_min}, {x_max}), y=({y_min}, {y_max})",
-                UserWarning
+                UserWarning,
             )
     
-    def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+    def concentration_at(self, positions: Sequence[Sequence[float]]) -> Sequence[float]:
         """
         Compute odor concentrations at specified spatial locations.
         
@@ -514,7 +509,7 @@ class GaussianPlumeModel:
         
         return concentrations
     
-    def step(self, dt: float = 1.0) -> None:
+    def step(self, dt: float) -> None:
         """
         Advance plume state by specified time delta.
         
@@ -584,151 +579,28 @@ class GaussianPlumeModel:
         if step_time > 0.005:  # 5ms threshold
             warnings.warn(
                 f"Plume step time exceeded 5ms: {step_time*1000:.2f}ms",
-                UserWarning
+                UserWarning,
             )
     
-    def reset(self, **kwargs: Any) -> None:
-        """
-        Reset plume state to initial conditions with optional parameter updates.
-        
-        Reinitializes the plume model to its initial state while allowing for
-        parameter overrides. This method is essential for episodic simulation
-        scenarios and experiment reproducibility.
-        
-        Args:
-            **kwargs: Optional parameters to override initial settings. Supported keys:
-                - source_position: New source location as (x, y) tuple
-                - source_strength: New emission rate
-                - sigma_x, sigma_y: New dispersion coefficients
-                - wind_speed, wind_direction: New wind parameters
-                - background_concentration: New baseline level
-                - spatial_bounds: New environment bounds
-                - current_time: Reset simulation time (default: 0.0)
-                
-        Notes:
-            - Resets simulation time to zero unless overridden
-            - Preserves model configuration while updating specified parameters
-            - Recomputes derived parameters and optimization caches
-            - Integrates with WindField reset if configured
-            
-        Raises:
-            ValueError: If override parameters are invalid
-            TypeError: If parameter types are incorrect
-            
-        Performance:
-            - Typical execution: <1ms for parameter validation and reset
-            - With WindField integration: <5ms for complex resets
-            - Memory allocation: Minimal, reuses existing arrays where possible
-            
-        Examples:
-            Reset to initial state:
-            >>> model.reset()
-            >>> assert model.current_time == 0.0
-            
-            Reset with new source location:
-            >>> model.reset(source_position=(25, 75), source_strength=1500)
-            >>> new_concentrations = model.concentration_at(agent_positions)
-            
-            Reset for new experiment conditions:
-            >>> model.reset(
-            ...     sigma_x=10.0, sigma_y=8.0,
-            ...     wind_speed=3.0, wind_direction=45.0,
-            ...     background_concentration=0.1
-            ... )
-            
-            Partial parameter update:
-            >>> model.reset(source_strength=500)  # Only change source strength
-        """
+    def reset(self) -> None:
+        """Reset plume state to initial conditions."""
         reset_start = time.perf_counter()
-        
-        # Reset temporal state
-        self.current_time = kwargs.get('current_time', 0.0)
-        
-        # Update source parameters if specified
-        if 'source_position' in kwargs:
-            new_position = kwargs['source_position']
-            if isinstance(new_position, (list, tuple)) and len(new_position) == 2:
-                self.source_position = np.array(new_position, dtype=np.float64)
-                self.initial_source_position = self.source_position.copy()
-            else:
-                raise ValueError(f"Invalid source_position format: {new_position}")
-        else:
-            # Reset to initial position
-            self.source_position = self.initial_source_position.copy()
-        
-        if 'source_strength' in kwargs:
-            new_strength = float(kwargs['source_strength'])
-            if new_strength < 0:
-                raise ValueError(f"Source strength must be non-negative: {new_strength}")
-            self.source_strength = new_strength
-        
-        # Update dispersion parameters if specified
-        if 'sigma_x' in kwargs:
-            new_sigma_x = float(kwargs['sigma_x'])
-            if new_sigma_x <= 0:
-                raise ValueError(f"sigma_x must be positive: {new_sigma_x}")
-            self.sigma_x = new_sigma_x
-        
-        if 'sigma_y' in kwargs:
-            new_sigma_y = float(kwargs['sigma_y'])
-            if new_sigma_y <= 0:
-                raise ValueError(f"sigma_y must be positive: {new_sigma_y}")
-            self.sigma_y = new_sigma_y
-        
-        # Update wind parameters if specified
-        if 'wind_speed' in kwargs:
-            self.wind_speed = float(kwargs['wind_speed'])
-        
-        if 'wind_direction' in kwargs:
-            self.wind_direction = float(kwargs['wind_direction']) % 360.0
-        
-        # Recompute wind velocity vector
-        self.wind_velocity = self._compute_wind_velocity()
-        
-        # Update other parameters
-        if 'background_concentration' in kwargs:
-            self.background_concentration = float(kwargs['background_concentration'])
-        
-        if 'max_concentration' in kwargs:
-            new_max = float(kwargs['max_concentration'])
-            if new_max <= 0:
-                raise ValueError(f"max_concentration must be positive: {new_max}")
-            self.max_concentration = new_max
-        
-        if 'spatial_bounds' in kwargs:
-            self.spatial_bounds = kwargs['spatial_bounds']
-            if self.spatial_bounds is not None:
-                self._validate_spatial_bounds()
-        
-        if 'concentration_cutoff' in kwargs:
-            self.concentration_cutoff = float(kwargs['concentration_cutoff'])
-        
-        # Recompute optimization caches
-        self._normalization_factor = self.source_strength / (2 * np.pi * self.sigma_x * self.sigma_y)
-        self._sigma_x_sq_inv = 1.0 / (self.sigma_x ** 2)
-        self._sigma_y_sq_inv = 1.0 / (self.sigma_y ** 2)
-        
-        # Reset wind field if integrated
-        if self.enable_wind_field and self.wind_field is not None:
-            try:
-                wind_kwargs = {k: v for k, v in kwargs.items() 
-                              if k.startswith('wind_') and k != 'wind_field'}
-                self.wind_field.reset(**wind_kwargs)
-            except Exception as e:
-                warnings.warn(f"Wind field reset failed: {e}", UserWarning)
-        
-        # Reset performance statistics
+
+        self.current_time = 0.0
+        self.source_position = self.initial_source_position.copy()
+
         self._query_count = 0
         self._total_query_time = 0.0
         self._batch_size_stats.clear()
-        
+
+        if self.enable_wind_field and self.wind_field is not None:
+            self.wind_field.reset()
+
         reset_time = time.perf_counter() - reset_start
-        
-        # Performance monitoring
-        if reset_time > 0.010:  # 10ms threshold
+        if reset_time > 0.005:  # 5ms threshold
             warnings.warn(
-                f"Plume reset time exceeded 10ms: {reset_time*1000:.2f}ms",
-                UserWarning
+                f"Plume reset time exceeded 5ms: {reset_time*1000:.2f}ms",
+                UserWarning,
             )
     
     # Additional utility methods for enhanced functionality
@@ -855,18 +727,12 @@ def create_gaussian_plume_model(config: Union[GaussianPlumeConfig, Dict[str, Any
     else:
         config_dict = dict(config)
     
-    return GaussianPlumeModel(**config_dict)
-
-
-# Register with protocol for type checking
-if PROTOCOLS_AVAILABLE:
-    # Verify protocol compliance at module load time
-    try:
-        # This will raise TypeError if protocol is not implemented correctly
-        dummy_model: PlumeModelProtocol = GaussianPlumeModel()
-    except Exception:
-        # Protocol compliance will be checked at runtime
-        pass
+    model = GaussianPlumeModel(**config_dict)
+    if not isinstance(model, PlumeModelProtocol):
+        raise TypeError("GaussianPlumeModel does not implement PlumeModelProtocol")
+    logger = logging.getLogger(__name__)
+    logger.debug("GaussianPlumeModel complies with PlumeModelProtocol")
+    return model
 
 
 # Export public API

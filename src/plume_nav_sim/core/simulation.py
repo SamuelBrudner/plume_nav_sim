@@ -135,27 +135,10 @@ if TYPE_CHECKING:
     from ..core.protocols import NavigatorProtocol
     from ..envs.plume_navigation_env import PlumeNavigationEnv
 
+from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
+
 
 # Enhanced Protocol Definitions for Modular Architecture
-
-class PlumeModelProtocol(Protocol):
-    """Protocol defining the interface for pluggable plume model implementations."""
-    
-    def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-        """Sample odor concentration at specified positions."""
-        ...
-    
-    def step(self, dt: float) -> None:
-        """Advance plume state by time delta."""
-        ...
-    
-    def reset(self) -> None:
-        """Reset plume to initial state."""
-        ...
-    
-    def get_metadata(self) -> Dict[str, Any]:
-        """Get model-specific metadata and configuration."""
-        ...
 
 
 class WindFieldProtocol(Protocol):

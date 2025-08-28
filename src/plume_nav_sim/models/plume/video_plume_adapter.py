@@ -53,7 +53,7 @@ Examples:
 from __future__ import annotations
 import time
 import logging
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Union, Tuple, Sequence
 from pathlib import Path
 import numpy as np
 import warnings
@@ -67,17 +67,7 @@ except ImportError:
     cv2 = None
 
 # Protocol and interface imports
-try:
-    from ...core.protocols import PlumeModelProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback during migration - define minimal protocol
-    from typing import Protocol
-    class PlumeModelProtocol(Protocol):
-        def concentration_at(self, positions: np.ndarray) -> np.ndarray: ...
-        def step(self, dt: float = 1.0) -> None: ...
-        def reset(self, **kwargs: Any) -> None: ...
-    PROTOCOLS_AVAILABLE = False
+from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
 # VideoPlume import with fallback
 try:
@@ -668,7 +658,7 @@ class VideoPlumeAdapter:
     
     # PlumeModelProtocol implementation
     
-    def concentration_at(self, positions: np.ndarray) -> np.ndarray:
+    def concentration_at(self, positions: Sequence[Sequence[float]]) -> Sequence[float]:
         """
         Compute odor concentrations at specified spatial locations.
         
@@ -745,7 +735,7 @@ class VideoPlumeAdapter:
             n_agents = 1 if positions.ndim == 1 else positions.shape[0]
             return np.zeros(n_agents, dtype=np.float32)
     
-    def step(self, dt: float = 1.0) -> None:
+    def step(self, dt: float) -> None:
         """
         Advance plume state by specified time delta.
         
@@ -811,97 +801,13 @@ class VideoPlumeAdapter:
         logger.debug(f"Step {self._step_count}: advanced to frame {self.current_frame_index} "
                     f"(dt={dt:.3f}s, elapsed={self.time_elapsed:.3f}s)")
     
-    def reset(self, **kwargs: Any) -> None:
-        """
-        Reset plume state to initial conditions with optional parameter overrides.
-        
-        This method reinitializes the video plume adapter to its initial state
-        while supporting runtime parameter updates for experimental flexibility.
-        The reset operation preserves adapter configuration while resetting
-        temporal state and optional parameter overrides.
-        
-        Args:
-            **kwargs: Optional parameters to override initial settings.
-                Common options include:
-                - start_frame: Initial frame index (default: 0)
-                - temporal_mode: New temporal advancement strategy
-                - preprocessing_updates: Updates to preprocessing configuration
-                - clear_cache: Whether to clear frame cache (default: False)
-                
-        Notes:
-            Reset operation:
-            - Resets current_frame_index to start_frame (default: 0)
-            - Resets time_elapsed to 0.0
-            - Applies parameter overrides if provided
-            - Optionally clears frame cache for memory management
-            - Preserves video file and core configuration
-            
-            Parameter overrides are applied for this reset only and don't
-            permanently modify adapter configuration unless explicitly persisted.
-            
-        Performance:
-            Completes in <5ms including optional cache clearing operations.
-            
-        Raises:
-            ValueError: If override parameters are invalid
-            
-        Examples:
-            Reset to default initial state:
-            >>> adapter.reset()
-            
-            Reset with custom starting frame:
-            >>> adapter.reset(start_frame=100)
-            
-            Reset with temporal mode change:
-            >>> adapter.reset(temporal_mode="linear", clear_cache=True)
-            
-            Reset with preprocessing updates:
-            >>> adapter.reset(preprocessing_updates={'blur_kernel': 5})
-        """
-        # Extract reset parameters
-        start_frame = kwargs.get('start_frame', 0)
-        clear_cache = kwargs.get('clear_cache', False)
-        temporal_mode_override = kwargs.get('temporal_mode')
-        preprocessing_updates = kwargs.get('preprocessing_updates', {})
-        
-        # Validate start frame
-        if not (0 <= start_frame < self.frame_count):
-            raise ValueError(f"start_frame {start_frame} out of range [0, {self.frame_count})")
-        
-        # Reset temporal state
-        self.current_frame_index = start_frame
+    def reset(self) -> None:
+        """Reset video plume adapter to initial frame."""
+        self.current_frame_index = 0
         self.time_elapsed = 0.0
-        self._step_count = 0
-        
-        # Apply temporal mode override if provided
-        if temporal_mode_override is not None:
-            valid_modes = ["linear", "cyclic", "hold_last"]
-            if temporal_mode_override not in valid_modes:
-                raise ValueError(f"Invalid temporal_mode: {temporal_mode_override}. "
-                               f"Must be one of {valid_modes}")
-            self.temporal_mode = temporal_mode_override
-        
-        # Apply preprocessing updates if provided
-        if preprocessing_updates:
-            self.preprocessing_config.update(preprocessing_updates)
-            logger.debug(f"Applied preprocessing updates: {preprocessing_updates}")
-        
-        # Clear frame cache if requested
-        if clear_cache and self._cache_enabled and self.frame_cache is not None:
-            try:
-                self.frame_cache.clear()
-                self._cache_hits = 0
-                self._cache_misses = 0
-                logger.debug("Frame cache cleared on reset")
-            except Exception as e:
-                logger.warning(f"Failed to clear frame cache: {e}")
-        
-        logger.info(f"VideoPlumeAdapter reset to frame {start_frame} "
-                   f"(temporal_mode={self.temporal_mode})")
-    
-    # Additional methods for enhanced functionality
-    
-    @classmethod
+        if self.frame_cache is not None:
+            self.frame_cache.clear()
+
     def from_config(cls, config: Union[VideoPlumeConfig, DictConfig, Dict[str, Any]]) -> 'VideoPlumeAdapter':
         """
         Create VideoPlumeAdapter from configuration object.
