@@ -5,6 +5,8 @@ import numpy as np
 import pytest
 from mypy import api as mypy_api
 
+# Prefer modern protocol exports but retain core import for legacy types
+import plume_nav_sim.protocols as protocols_pkg
 from plume_nav_sim.core import protocols as core_protocols
 
 logger = logging.getLogger(__name__)
@@ -107,10 +109,17 @@ PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
 }
 
 
+def _get_protocol_cls(name: str):
+    """Return protocol class preferring modern export path."""
+    if hasattr(protocols_pkg, name):
+        return getattr(protocols_pkg, name)
+    return getattr(core_protocols, name)
+
+
 @pytest.mark.parametrize("protocol_name,spec", PROTOCOL_SPECS.items())
 def test_protocol_structural_compatibility(protocol_name: str, spec: Dict[str, Any]) -> None:
     logger.info("Validating positive case for %s", protocol_name)
-    protocol_cls = getattr(core_protocols, protocol_name)
+    protocol_cls = _get_protocol_cls(protocol_name)
     dummy_cls = type(f"Dummy{protocol_name.replace('Protocol', '')}", (), spec["methods"])
     instance = dummy_cls()
     assert isinstance(instance, protocol_cls)
@@ -119,7 +128,7 @@ def test_protocol_structural_compatibility(protocol_name: str, spec: Dict[str, A
 @pytest.mark.parametrize("protocol_name,spec", PROTOCOL_SPECS.items())
 def test_protocol_missing_method_runtime(protocol_name: str, spec: Dict[str, Any]) -> None:
     logger.info("Validating runtime failure for %s", protocol_name)
-    protocol_cls = getattr(core_protocols, protocol_name)
+    protocol_cls = _get_protocol_cls(protocol_name)
     methods = {name: fn for name, fn in spec["methods"].items() if name != spec["missing"]}
     incomplete_cls = type(f"Incomplete{protocol_name.replace('Protocol', '')}", (), methods)
     instance = incomplete_cls()
@@ -130,8 +139,13 @@ def test_protocol_missing_method_runtime(protocol_name: str, spec: Dict[str, Any
 def test_protocol_missing_method_mypy(protocol_name: str) -> None:
     logger.info("Running mypy negative test for %s", protocol_name)
     class_name = f"Incomplete{protocol_name.replace('Protocol', '')}"
+    module = (
+        "plume_nav_sim.protocols"
+        if hasattr(protocols_pkg, protocol_name)
+        else "plume_nav_sim.core.protocols"
+    )
     snippet = f"""
-from plume_nav_sim.core.protocols import {protocol_name}
+from {module} import {protocol_name}
 class {class_name}:
     pass
 
@@ -141,3 +155,9 @@ accept({class_name}())
     stdout, stderr, exit_status = mypy_api.run(["--strict", "-c", snippet])
     logger.info("mypy output for %s: %s", protocol_name, stdout.strip())
     assert exit_status != 0
+
+
+def test_core_protocol_reexports() -> None:
+    """Ensure legacy access via core.protocols remains available."""
+    assert protocols_pkg.PlumeModelProtocol is core_protocols.PlumeModelProtocol
+    assert protocols_pkg.SensorProtocol is core_protocols.SensorProtocol
