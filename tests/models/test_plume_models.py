@@ -889,6 +889,32 @@ class TestGaussianPlumeModelMathematicalValidation:
         assert isinstance(final_concentration, (float, np.number)), \
             "Wind integration should produce valid concentration"
 
+    def test_gaussian_wind_field_handles_1d_velocity(self, gaussian_plume_config):
+        """Wind field returning 1D velocity should shift plume correctly."""
+
+        class OneDimensionalWind:
+            def __init__(self, velocity):
+                self.velocity = np.asarray(velocity, dtype=float)
+
+            def velocity_at(self, positions):
+                return self.velocity  # intentionally 1D
+
+            def step(self, dt):
+                pass
+
+            def reset(self):
+                pass
+
+        wind = OneDimensionalWind((1.0, -0.5))
+        config = gaussian_plume_config.copy()
+        config.update({'wind_field': wind, 'enable_wind_field': True})
+
+        model = GaussianPlumeModel(**config)
+        model.current_time = 2.0
+
+        expected = np.array(config['source_position']) + np.array([1.0, -0.5]) * 2.0
+        assert np.allclose(model._get_effective_source_position(), expected)
+
 
 # =====================================================================================
 # TURBULENT PLUME MODEL FILAMENT-BASED PHYSICS VALIDATION TESTS

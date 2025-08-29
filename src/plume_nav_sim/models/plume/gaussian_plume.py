@@ -460,12 +460,18 @@ class GaussianPlumeModel:
         if self.enable_wind_field and self.wind_field is not None:
             # Use wind field for complex dynamics
             source_pos = np.atleast_2d(self.source_position)
-            wind_velocity = self.wind_field.velocity_at(source_pos)[0]
+            wind_velocity = self.wind_field.velocity_at(source_pos)
+            wind_velocity = np.asarray(wind_velocity, dtype=np.float64)
+            wind_velocity = np.atleast_2d(wind_velocity)[0]
+            if wind_velocity.shape[0] != 2:
+                raise ValueError(
+                    f"Wind field velocity_at must return 2 components, got shape {wind_velocity.shape}"
+                )
             advection_offset = wind_velocity * self.current_time
         else:
             # Use simple wind model
             advection_offset = self.wind_velocity * self.current_time
-        
+
         return self.source_position + advection_offset
     
     def _compute_concentrations_scipy(self, dx: np.ndarray, dy: np.ndarray) -> np.ndarray:
