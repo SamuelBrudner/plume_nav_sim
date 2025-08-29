@@ -55,6 +55,7 @@ try:
     from src.plume_nav_sim.core.sensors.binary_sensor import BinarySensor, BinarySensorConfig
     from src.plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor, ConcentrationSensorConfig
     from src.plume_nav_sim.core.sensors.gradient_sensor import GradientSensor, GradientSensorConfig, GradientResult
+    from src.plume_nav_sim.core.controllers import DirectOdorSensor
     SENSORS_AVAILABLE = True
 except ImportError as e:
     pytest.skip(f"Sensor implementations not available: {e}", allow_module_level=True)
@@ -146,6 +147,15 @@ def concentration_array():
     center_x, center_y = 50, 50
     concentration = np.exp(-((x - center_x)**2 + (y - center_y)**2) / (2 * 15**2))
     return concentration.astype(np.float64)
+
+
+def test_direct_odor_sensor_interface():
+    """DirectOdorSensor should expose modern sensing interface."""
+    sensor = DirectOdorSensor()
+
+    assert hasattr(sensor, "detect") and callable(sensor.detect)
+    assert hasattr(sensor, "measure") and callable(sensor.measure)
+    assert hasattr(sensor, "compute_gradient") and callable(sensor.compute_gradient)
 
 
 class TestSensorProtocolCompliance:
