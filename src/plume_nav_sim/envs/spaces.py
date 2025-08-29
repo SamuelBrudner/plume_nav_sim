@@ -1953,3 +1953,12 @@ __all__ = [
     # Legacy compatibility (deprecated)
     "create_gym_spaces",
 ]
+
+def default_action_space() -> gym.spaces.Box:
+    """Return default continuous action space."""
+    return Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+
+def default_observation_space() -> gym.spaces.Box:
+    """Return default observation space representing 2D position."""
+    return Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32)

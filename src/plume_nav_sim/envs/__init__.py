@@ -139,6 +139,20 @@ except ImportError as e:
         }
     ) if LOGGING_AVAILABLE else None
 
+# Minimal reference environment for testing
+try:
+    from plume_nav_sim.envs.plume_nav_env import PlumeNavEnv
+    __all__.append("PlumeNavEnv")
+    logger.debug(
+        "PlumeNavEnv available", extra={"metric_type": "environment_capability"}
+    ) if LOGGING_AVAILABLE else None
+except Exception as e:  # pragma: no cover - optional component
+    PlumeNavEnv = None
+    logger.warning(
+        f"PlumeNavEnv not available: {e}",
+        extra={"metric_type": "environment_limitation", "error": str(e)}
+    ) if LOGGING_AVAILABLE else None
+
 # Import compatibility layer for dual API support
 try:
     from plume_nav_sim.envs.compat import (
@@ -541,7 +555,23 @@ def register_environments() -> Dict[str, bool]:
                     "error_message": str(e)
                 }
             ) if LOGGING_AVAILABLE else None
-    
+
+    # Register minimal reference environment
+    if GYMNASIUM_AVAILABLE:
+        try:
+            gym_modern.register(
+                id='PlumeNav-v1',
+                entry_point='plume_nav_sim.envs.plume_nav_env:PlumeNavEnv',
+                max_episode_steps=100,
+            )
+            registration_results['PlumeNav-v1'] = True
+        except Exception as e:
+            registration_results['PlumeNav-v1'] = False
+            logger.error(
+                f"Failed to register PlumeNav-v1: {e}",
+                extra={"metric_type": "registration_error", "env_id": "PlumeNav-v1"}
+            ) if LOGGING_AVAILABLE else None
+
     # Register legacy environment for backward compatibility
     # Supports both legacy gym and gymnasium depending on availability
     target_gym = gym_modern if GYMNASIUM_AVAILABLE else (gym if LEGACY_GYM_AVAILABLE else None)

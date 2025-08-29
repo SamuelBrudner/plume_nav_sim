@@ -343,7 +343,7 @@ def create_video_plume(config: Optional[Dict[str, Any]] = None, cfg: Optional[An
 
     # Validate required parameters
     if "video_path" not in merged_config:
-        raise ConfigurationError("video_path is required")
+        raise TypeError("video_path is required")
 
     # Validate configuration parameters
     _validate_video_plume_config(merged_config)
@@ -386,58 +386,32 @@ def create_video_plume_from_config(config: Any, **kwargs) -> Any:
 
 def run_plume_simulation(
     navigator: Any,
-    video_plume: Any, 
+    video_plume: Any,
     num_steps: int = 100,
     dt: float = 0.1,
     config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """
-    Run a plume navigation simulation.
-    
-    Args:
-        navigator: Navigator instance
-        video_plume: VideoPlume instance
-        num_steps: Number of simulation steps
-        dt: Time step size for simulation
-        config: Additional configuration
-        
-    Returns:
-        Dictionary containing simulation results
-        
-    Raises:
-        SimulationError: If simulation fails
-        ValueError: If parameters are invalid
-        TypeError: If required parameters are missing
-    """
-    # Validate required parameters
+    """Thin wrapper around :func:`run_simulation` for backward compatibility."""
+
     if navigator is None:
         raise TypeError("navigator is required")
     if video_plume is None:
         raise TypeError("video_plume is required")
-    
-    # Validate parameter types and values
-    if not isinstance(num_steps, int):
-        try:
-            num_steps = int(num_steps)
-        except (ValueError, TypeError):
-            raise ValueError(f"num_steps must be an integer, got {type(num_steps).__name__}: {num_steps}")
-    
-    if num_steps <= 0:
-        raise ValueError(f"num_steps must be positive, got {num_steps}")
-    
-    if not isinstance(dt, (int, float)):
-        try:
-            dt = float(dt)
-        except (ValueError, TypeError):
-            raise ValueError(f"dt must be numeric, got {type(dt).__name__}: {dt}")
-    
-    if dt <= 0:
-        raise ValueError(f"dt must be positive, got {dt}")
-    
+    if not isinstance(num_steps, int) or num_steps <= 0:
+        raise ValueError("num_steps must be a positive integer")
+    if not isinstance(dt, (int, float)) or dt <= 0:
+        raise ValueError("dt must be positive")
+
     if config is None:
         config = {}
-        
-    raise NotImplementedError("run_plume_simulation has been deprecated; use core.run_simulation instead")
+
+    # If run_simulation alias hasn't been patched, indicate deprecation
+    if run_simulation is run_plume_simulation:
+        raise NotImplementedError(
+            "run_plume_simulation has been deprecated; use core.run_simulation instead"
+        )
+
+    return run_simulation(navigator, video_plume, num_steps, dt)
 
 
 def visualize_trajectory(
@@ -459,6 +433,10 @@ def visualize_trajectory(
         config=config,
         save_path=save_path,
     )
+
+
+# Legacy alias retained for backward compatibility
+run_simulation = run_plume_simulation
 
 
 def visualize_plume_simulation(
@@ -661,7 +639,6 @@ def create_gymnasium_environment(
 
 
 # Legacy compatibility aliases for backward compatibility
-run_simulation = run_plume_simulation
 visualize_simulation_results = visualize_plume_simulation 
 create_video_plume_from_config = create_video_plume
 
