@@ -84,125 +84,21 @@ from .protocols import (
     RewardHookType, EpisodeEndHookType
 )
 
-# Controller implementations - handle case where they don't exist yet
+# Controller implementations
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     from .controllers import SingleAgentController, MultiAgentController
-    CONTROLLERS_AVAILABLE = True
-except ImportError:
-    # Controllers will be created by other agents - create minimal fallbacks
-    class SingleAgentController:
-        def __init__(self, **kwargs):
-            self._kwargs = kwargs
-            self._positions = np.array([[kwargs.get('position', (0.0, 0.0))]])
-            self._orientations = np.array([kwargs.get('orientation', 0.0)])
-            self._speeds = np.array([kwargs.get('speed', 0.0)])
-            self._max_speeds = np.array([kwargs.get('max_speed', 1.0)])
-            self._angular_velocities = np.array([kwargs.get('angular_velocity', 0.0)])
-            
-        @property
-        def positions(self) -> np.ndarray:
-            return self._positions
-            
-        @property
-        def orientations(self) -> np.ndarray:
-            return self._orientations
-            
-        @property
-        def speeds(self) -> np.ndarray:
-            return self._speeds
-            
-        @property
-        def max_speeds(self) -> np.ndarray:
-            return self._max_speeds
-            
-        @property
-        def angular_velocities(self) -> np.ndarray:
-            return self._angular_velocities
-            
-        @property
-        def num_agents(self) -> int:
-            return 1
-            
-        def reset(self, **kwargs):
-            pass
-            
-        def step(self, env_array: np.ndarray, dt: float = 1.0):
-            pass
-            
-        def sample_odor(self, env_array: np.ndarray) -> float:
-            return 0.0
-            
-        def sample_multiple_sensors(self, env_array: np.ndarray, **kwargs) -> np.ndarray:
-            return np.array([0.0, 0.0])
-            
-        def compute_additional_obs(self, base_obs: dict) -> dict:
-            return {}
-            
-        def compute_extra_reward(self, base_reward: float, info: dict) -> float:
-            return 0.0
-            
-        def on_episode_end(self, final_info: dict) -> None:
-            pass
-    
-    class MultiAgentController:
-        def __init__(self, **kwargs):
-            self._kwargs = kwargs
-            positions = kwargs.get('positions', [[0.0, 0.0]])
-            if isinstance(positions, (list, tuple)):
-                positions = np.array(positions)
-            self._positions = positions
-            n_agents = len(positions)
-            self._orientations = np.zeros(n_agents)
-            self._speeds = np.zeros(n_agents)
-            self._max_speeds = np.ones(n_agents)
-            self._angular_velocities = np.zeros(n_agents)
-            
-        @property
-        def positions(self) -> np.ndarray:
-            return self._positions
-            
-        @property
-        def orientations(self) -> np.ndarray:
-            return self._orientations
-            
-        @property
-        def speeds(self) -> np.ndarray:
-            return self._speeds
-            
-        @property
-        def max_speeds(self) -> np.ndarray:
-            return self._max_speeds
-            
-        @property
-        def angular_velocities(self) -> np.ndarray:
-            return self._angular_velocities
-            
-        @property
-        def num_agents(self) -> int:
-            return len(self._positions)
-            
-        def reset(self, **kwargs):
-            pass
-            
-        def step(self, env_array: np.ndarray, dt: float = 1.0):
-            pass
-            
-        def sample_odor(self, env_array: np.ndarray) -> np.ndarray:
-            return np.zeros(self.num_agents)
-            
-        def sample_multiple_sensors(self, env_array: np.ndarray, **kwargs) -> np.ndarray:
-            return np.zeros((self.num_agents, 2))
-            
-        def compute_additional_obs(self, base_obs: dict) -> dict:
-            return {}
-            
-        def compute_extra_reward(self, base_reward: float, info: dict) -> float:
-            return 0.0
-            
-        def on_episode_end(self, final_info: dict) -> None:
-            pass
-    
-    CONTROLLERS_AVAILABLE = False
+except ImportError as exc:
+    logger.error(
+        "Navigator requires 'plume_nav_sim.core.controllers' to be available.",
+        exc_info=True,
+    )
+    raise ImportError(
+        "plume_nav_sim.core.controllers could not be imported."
+    ) from exc
 
 # Hydra imports for configuration integration
 try:
@@ -331,16 +227,6 @@ class Navigator:
         
         self.controller = controller
         self.factory = NavigatorFactory()
-        
-        # Issue warning if advanced features requested but controllers not available
-        if not CONTROLLERS_AVAILABLE and (enable_extensibility_hooks or frame_cache_mode):
-            warnings.warn(
-                "Advanced Navigator features requested but controllers not yet available. "
-                "Some functionality may be limited until plume_nav_sim.core.controllers "
-                "module is created.",
-                UserWarning,
-                stacklevel=2
-            )
     
     def _create_controller_from_kwargs(self, **kwargs: Any) -> NavigatorProtocol:
         """Create appropriate controller based on kwargs configuration."""
