@@ -39,14 +39,27 @@ class PerformanceMonitor:
 
 @contextmanager
 def performance_timer(name: str = "operation"):
-    """Context manager to time operations."""
+    """Context manager to time operations.
+
+    Returns an object with a ``duration_ms`` attribute capturing the
+    measured execution time. This mirrors the behaviour of more
+    sophisticated performance monitors used in the main codebase and
+    allows tests to introspect timings without relying on print output.
+    """
+
+    class _Perf:
+        def __init__(self, label: str):
+            self.label = label
+            self.duration_ms: float = 0.0
+
+    perf = _Perf(name)
     start_time = time.perf_counter()
     try:
-        yield
+        yield perf
     finally:
         end_time = time.perf_counter()
-        duration_ms = (end_time - start_time) * 1000
-        print(f"{name} took {duration_ms:.2f}ms")
+        perf.duration_ms = (end_time - start_time) * 1000
+        print(f"{perf.label} took {perf.duration_ms:.2f}ms")
 
 
 def requires_performance_validation(threshold_ms: float):

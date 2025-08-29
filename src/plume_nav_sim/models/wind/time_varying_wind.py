@@ -303,7 +303,10 @@ class TimeVaryingWindField:
                 UserWarning,
                 stacklevel=2
             )
-        
+
+        if data_file is not None and temporal_pattern == 'constant':
+            temporal_pattern = 'measured'
+
         # Validate input parameters
         if len(base_velocity) != 2:
             raise ValueError(f"Base velocity must be (u, v) tuple, got {base_velocity}")

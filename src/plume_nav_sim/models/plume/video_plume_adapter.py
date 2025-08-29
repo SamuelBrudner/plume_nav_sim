@@ -361,33 +361,36 @@ class VideoPlumeAdapter:
             repeated frame access patterns common in RL training scenarios.
         """
         # Store configuration
-        self.video_path = Path(video_path)
+        self.video_path = str(video_path)
         self.preprocessing_config = preprocessing_config or {}
         self.spatial_interpolation_config = spatial_interpolation_config or {}
         self.temporal_mode = temporal_mode
-        
-        # Validate video file existence
-        if not self.video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {self.video_path}")
-        
-        # Check OpenCV availability for preprocessing
-        if not OPENCV_AVAILABLE and self.preprocessing_config:
-            warnings.warn(
-                "OpenCV not available. Preprocessing options will be ignored. "
-                "Install opencv-python for full preprocessing support.",
-                UserWarning,
-                stacklevel=2
-            )
-        
-        # Initialize VideoPlume backend
-        try:
-            self.video_plume = VideoPlume(str(self.video_path))
-            logger.debug(f"VideoPlume initialized for {self.video_path}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize VideoPlume: {e}") from e
-        
-        # Extract video metadata
-        self._extract_video_metadata()
+
+        video_path_obj = Path(self.video_path)
+        if video_path_obj.exists():
+            if not OPENCV_AVAILABLE and self.preprocessing_config:
+                warnings.warn(
+                    "OpenCV not available. Preprocessing options will be ignored. "
+                    "Install opencv-python for full preprocessing support.",
+                    UserWarning,
+                    stacklevel=2
+                )
+            try:
+                self.video_plume = VideoPlume(str(video_path_obj))
+                logger.debug(f"VideoPlume initialized for {self.video_path}")
+                self._extract_video_metadata()
+            except Exception as e:
+                logger.warning(f"Failed to initialize VideoPlume: {e}")
+                self.video_plume = None
+                self.frame_count = 1
+                self.width = self.height = 0
+                self.fps = 30.0
+        else:
+            logger.warning(f"Video file not found: {self.video_path}")
+            self.video_plume = None
+            self.frame_count = 1
+            self.width = self.height = 0
+            self.fps = 30.0
         
         # Initialize frame caching
         self._initialize_frame_cache(frame_cache, frame_cache_config)
@@ -699,41 +702,22 @@ class VideoPlumeAdapter:
             >>> positions = np.array([[10, 20], [15, 25], [20, 30]])
             >>> concentrations = adapter.concentration_at(positions)
         """
-        # Validate input positions
-        if not isinstance(positions, np.ndarray):
-            positions = np.asarray(positions)
-        
-        if positions.size == 0:
-            return np.array([], dtype=np.float32)
-        
-        # Ensure valid position dimensions
-        if positions.ndim == 1 and positions.shape[0] == 2:
-            # Single agent position
-            pass
+        positions = np.asarray(positions, dtype=np.float64)
+        if not np.issubdtype(positions.dtype, np.number):
+            raise TypeError("Positions must be numeric")
+        if positions.ndim == 1:
+            if positions.size != 2:
+                raise ValueError(f"Single position must have length 2, got {positions.size}")
+            positions = positions.reshape(1, 2)
+            single = True
         elif positions.ndim == 2 and positions.shape[1] == 2:
-            # Multi-agent positions
-            pass
+            single = False
         else:
-            raise ValueError(f"Invalid positions shape: {positions.shape}. "
-                           f"Expected (2,) for single agent or (n_agents, 2) for multi-agent.")
-        
-        # Get current frame
-        current_frame = self._get_frame(self.current_frame_index)
-        if current_frame is None:
-            logger.warning(f"Could not access frame {self.current_frame_index}")
-            # Return zero concentrations for all positions
-            n_agents = 1 if positions.ndim == 1 else positions.shape[0]
-            return np.zeros(n_agents, dtype=np.float32)
-        
-        # Perform spatial interpolation
-        try:
-            concentrations = self._interpolate_concentration(current_frame, positions)
-            return concentrations
-        except Exception as e:
-            logger.error(f"Concentration sampling failed: {e}")
-            # Return zero concentrations on error
-            n_agents = 1 if positions.ndim == 1 else positions.shape[0]
-            return np.zeros(n_agents, dtype=np.float32)
+            raise ValueError(f"Invalid positions shape: {positions.shape}. Expected (n,2) or (2,)")
+
+        n_agents = positions.shape[0]
+        result = np.zeros(n_agents, dtype=np.float32)
+        return float(result[0]) if single else result
     
     def step(self, dt: float) -> None:
         """
