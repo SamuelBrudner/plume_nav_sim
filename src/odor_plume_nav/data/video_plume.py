@@ -169,7 +169,7 @@ class VideoPlume:
         # Convert and validate video path
         self.video_path = Path(video_path)
         if not self.video_path.exists():
-            raise FileNotFoundError(f"Video file does not exist: {self.video_path}")
+            raise FileNotFoundError(f"Video file not found: {self.video_path}")
         
         # Store preprocessing parameters
         self.flip = flip
@@ -893,7 +893,7 @@ class VideoPlume:
             "file_size": self.video_path.stat().st_size,
             "workflow_version": "1.0",
             "dependencies": {
-                "opencv_version": cv2.__version__,
+                "opencv_version": getattr(cv2, "__version__", "unknown"),
                 "numpy_version": np.__version__,
             }
         }

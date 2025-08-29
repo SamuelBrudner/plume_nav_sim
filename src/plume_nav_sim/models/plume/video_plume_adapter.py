@@ -367,26 +367,24 @@ class VideoPlumeAdapter:
         self.temporal_mode = temporal_mode
 
         video_path_obj = Path(self.video_path)
-        if video_path_obj.exists():
-            if not OPENCV_AVAILABLE and self.preprocessing_config:
-                warnings.warn(
-                    "OpenCV not available. Preprocessing options will be ignored. "
-                    "Install opencv-python for full preprocessing support.",
-                    UserWarning,
-                    stacklevel=2
-                )
-            try:
-                self.video_plume = VideoPlume(str(video_path_obj))
-                logger.debug(f"VideoPlume initialized for {self.video_path}")
-                self._extract_video_metadata()
-            except Exception as e:
-                logger.warning(f"Failed to initialize VideoPlume: {e}")
-                self.video_plume = None
-                self.frame_count = 1
-                self.width = self.height = 0
-                self.fps = 30.0
-        else:
-            logger.warning(f"Video file not found: {self.video_path}")
+        if not video_path_obj.exists():
+            # Fail fast with clear exception to match test expectations
+            raise FileNotFoundError(f"Video file not found: {video_path_obj}")
+
+        if not OPENCV_AVAILABLE and self.preprocessing_config:
+            warnings.warn(
+                "OpenCV not available. Preprocessing options will be ignored. "
+                "Install opencv-python for full preprocessing support.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        try:
+            self.video_plume = VideoPlume(str(video_path_obj))
+            logger.debug(f"VideoPlume initialized for {self.video_path}")
+            self._extract_video_metadata()
+        except Exception as e:
+            logger.warning(f"Failed to initialize VideoPlume: {e}")
             self.video_plume = None
             self.frame_count = 1
             self.width = self.height = 0
@@ -789,9 +787,15 @@ class VideoPlumeAdapter:
         """Reset video plume adapter to initial frame."""
         self.current_frame_index = 0
         self.time_elapsed = 0.0
+        if hasattr(self.video_plume, "reset"):
+            try:
+                self.video_plume.reset()
+            except Exception as e:
+                logger.debug(f"VideoPlume reset failed: {e}")
         if self.frame_cache is not None:
             self.frame_cache.clear()
 
+    @classmethod
     def from_config(cls, config: Union[VideoPlumeConfig, DictConfig, Dict[str, Any]]) -> 'VideoPlumeAdapter':
         """
         Create VideoPlumeAdapter from configuration object.

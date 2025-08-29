@@ -95,7 +95,7 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
         video_path = Path(config['video_path'])
         # Check if the file exists (skip if it's a placeholder path)
         if str(video_path) != 'default_video.mp4' and not video_path.exists():
-            raise FileNotFoundError(f"Video file does not exist: {video_path}")
+            raise FileNotFoundError(f"Video file not found: {video_path}")
     
     # Validate flip parameter
     if 'flip' in config:
@@ -244,14 +244,20 @@ def _validate_and_merge_config(config: Any, defaults: Optional[Dict[str, Any]] =
         ConfigurationError: If configuration is invalid
     """
     try:
-        # Handle different config types (DictConfig, dict, etc.)
-        if hasattr(config, '_content'):
-            # Handle DictConfig objects from Hydra  
+        # Handle different config types (DictConfig, Pydantic models, etc.)
+        if hasattr(config, "_content"):
+            # Handle DictConfig objects from Hydra
             config_dict = dict(config)
+        elif hasattr(config, "model_dump"):
+            config_dict = config.model_dump()
+        elif hasattr(config, "dict") and not isinstance(config, dict):
+            config_dict = config.dict()
         elif isinstance(config, dict):
             config_dict = dict(config)
+        elif hasattr(config, "__dict__"):
+            config_dict = dict(config.__dict__)
         else:
-            # Try to convert to dict
+            # Fallback conversion
             config_dict = dict(config) if config else {}
         
         # Merge with defaults if provided
@@ -323,11 +329,13 @@ def create_video_plume(config: Optional[Dict[str, Any]] = None, cfg: Optional[An
     if config is None:
         config = {}
 
-    # Normalize configuration mappings
+    # Normalize configuration mappings (handle Pydantic models and generic objects)
     if hasattr(config, "model_dump"):
         config = config.model_dump()
+    elif hasattr(config, "dict") and not isinstance(config, dict):
+        config = config.dict()
     elif not isinstance(config, Mapping):
-        config = dict(config)
+        config = dict(config) if config else {}
 
     # Filter out None overrides and merge
     overrides = {k: v for k, v in kwargs.items() if v is not None}
