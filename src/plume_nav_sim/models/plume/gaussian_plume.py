@@ -396,6 +396,10 @@ class GaussianPlumeModel:
         
         # Input validation and preprocessing
         positions = np.asarray(positions, dtype=np.float64)
+        if not np.issubdtype(positions.dtype, np.number):
+            raise TypeError("Positions must be numeric")
+        if np.any(~np.isfinite(positions)):
+            raise ValueError("Positions must be finite")
         single_agent = False
         
         if positions.ndim == 1:
@@ -455,7 +459,8 @@ class GaussianPlumeModel:
         """Compute effective source position including wind advection effects."""
         if self.enable_wind_field and self.wind_field is not None:
             # Use wind field for complex dynamics
-            wind_velocity = self.wind_field.velocity_at(self.source_position.reshape(1, 2))[0]
+            source_pos = np.atleast_2d(self.source_position)
+            wind_velocity = self.wind_field.velocity_at(source_pos)[0]
             advection_offset = wind_velocity * self.current_time
         else:
             # Use simple wind model
@@ -468,15 +473,13 @@ class GaussianPlumeModel:
         # Use multivariate normal for optimized Gaussian evaluation
         # Create covariance matrix
         cov = np.array([[self.sigma_x**2, 0], [0, self.sigma_y**2]])
-        
-        # Compute log probability density and convert to concentration
+
         positions_relative = np.column_stack([dx, dy])
         try:
-            # Use multivariate normal for vectorized computation
             mvn = stats.multivariate_normal(mean=[0, 0], cov=cov)
-            concentrations = mvn.pdf(positions_relative) * self.source_strength
+            peak = mvn.pdf([0, 0])
+            concentrations = np.atleast_1d(mvn.pdf(positions_relative) / peak)
         except Exception:
-            # Fallback to manual computation if SciPy fails
             concentrations = self._compute_concentrations_numpy(dx, dy)
         
         return concentrations
@@ -486,9 +489,7 @@ class GaussianPlumeModel:
         # Manual Gaussian computation for better control
         x_term = 0.5 * dx**2 * self._sigma_x_sq_inv
         y_term = 0.5 * dy**2 * self._sigma_y_sq_inv
-        exp_term = np.exp(-(x_term + y_term))
-        
-        concentrations = self._normalization_factor * exp_term
+        concentrations = np.exp(-(x_term + y_term))
         return concentrations
     
     def _apply_spatial_bounds(self, positions: np.ndarray, concentrations: np.ndarray) -> np.ndarray:
@@ -551,8 +552,8 @@ class GaussianPlumeModel:
             >>> model = GaussianPlumeModel(wind_field=turbulent_wind)
             >>> model.step(dt=2.0)  # Wind field evolves over 2s
         """
-        if dt <= 0:
-            raise ValueError(f"Time step must be positive, got {dt}")
+        if dt <= 0 or not np.isfinite(dt):
+            raise ValueError(f"Time step must be positive and finite, got {dt}")
         
         step_start = time.perf_counter()
         

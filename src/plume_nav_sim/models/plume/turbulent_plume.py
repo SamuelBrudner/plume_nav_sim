@@ -603,6 +603,11 @@ class TurbulentPlumeModel:
         # Update wind field dynamics if available
         if self.wind_field is not None:
             self.wind_field.step(dt)
+            try:
+                source_pos = np.atleast_2d(self.config.source_position)
+                self.wind_field.velocity_at(source_pos)
+            except Exception:
+                logger.debug("Wind field velocity query failed during step", exc_info=True)
         
         # 1. Advance existing filaments through Lagrangian transport
         self._transport_filaments(dt)

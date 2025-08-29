@@ -53,7 +53,8 @@ Example Usage:
 from __future__ import annotations
 import time
 import warnings
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Optional, Tuple, Union, Dict, Any, Sequence
+import logging
 from dataclasses import dataclass, field
 import numpy as np
 
@@ -220,12 +221,13 @@ class ConstantWindField:
             TypeError: If parameter types are incorrect
         """
         # Validate input parameters
-        if not isinstance(velocity, (tuple, list)) or len(velocity) != 2:
+        if (not isinstance(velocity, Sequence) or
+                isinstance(velocity, (str, bytes)) or len(velocity) != 2):
             raise ValueError(f"Velocity must be a 2-element tuple/list, got {velocity}")
-        
-        u_x, u_y = velocity
-        if not all(isinstance(v, (int, float)) for v in [u_x, u_y]):
-            raise ValueError(f"Velocity components must be numeric, got {velocity}")
+
+        u_x, u_y = float(velocity[0]), float(velocity[1])
+        if not np.isfinite([u_x, u_y]).all():
+            raise ValueError(f"Velocity components must be finite, got {velocity}")
         
         if evolution_rate < 0:
             raise ValueError(f"Evolution rate must be non-negative, got {evolution_rate}")
@@ -241,6 +243,7 @@ class ConstantWindField:
         
         # Store core parameters
         self.base_velocity = np.array([u_x, u_y], dtype=np.float64)
+        self.initial_base_velocity = self.base_velocity.copy()
         self.velocity = self.base_velocity.copy()
         
         # Temporal evolution parameters
@@ -269,10 +272,20 @@ class ConstantWindField:
         
         # Pre-compute derived parameters for performance
         self._evolution_frequency = 2 * np.pi / self.evolution_period if self.evolution_period > 0 else 0.0
-        
+
         # Random state for reproducible noise
         self._rng = np.random.default_rng(seed=42)
-        
+
+    def _current_velocity(self) -> np.ndarray:
+        """Compute velocity at the current time without allocating new state."""
+        velocity = self.base_velocity.copy()
+        if self.enable_temporal_evolution and self.evolution_amplitude > 0 and self._evolution_frequency > 0:
+            phase = self._evolution_frequency * self.current_time
+            amplitude_factor = self.evolution_amplitude * np.sin(phase)
+            velocity[0] += amplitude_factor * np.cos(phase * 0.7)
+            velocity[1] += amplitude_factor * np.sin(phase * 0.8)
+        return velocity
+
     def _validate_boundary_conditions(self) -> None:
         """Validate spatial boundary conditions parameters."""
         if self.boundary_conditions is None:
@@ -340,6 +353,10 @@ class ConstantWindField:
         
         # Input validation and preprocessing
         positions = np.asarray(positions, dtype=np.float64)
+        if not np.issubdtype(positions.dtype, np.number):
+            raise TypeError("Positions must be numeric")
+        if np.any(~np.isfinite(positions)):
+            raise ValueError("Positions must be finite")
         single_position = False
         
         if positions.ndim == 1:
@@ -354,10 +371,9 @@ class ConstantWindField:
             raise ValueError(f"Position array must be 1D or 2D, got {positions.ndim}D")
         
         n_positions = positions.shape[0]
-        
-        # For constant wind fields, velocity is uniform across all positions
-        # Use broadcasting for efficient vectorized computation
-        velocities = np.broadcast_to(self.velocity, (n_positions, 2)).copy()
+
+        current_velocity = self._current_velocity()
+        velocities = np.broadcast_to(current_velocity, (n_positions, 2)).copy()
         
         # Apply boundary conditions if specified
         if self.boundary_conditions is not None:
@@ -435,8 +451,8 @@ class ConstantWindField:
             >>> step_time = time.perf_counter() - start_time
             >>> print(f"Step time: {step_time*1000:.3f}ms")
         """
-        if dt <= 0:
-            raise ValueError(f"Time step must be positive, got {dt}")
+        if dt <= 0 or not np.isfinite(dt):
+            raise ValueError(f"Time step must be positive and finite, got {dt}")
         
         step_start = time.perf_counter() if self.performance_monitoring else 0.0
         
@@ -447,6 +463,7 @@ class ConstantWindField:
         # Apply temporal evolution if enabled
         if self.enable_temporal_evolution:
             self._update_temporal_evolution(dt)
+            self.velocity = self._current_velocity()
         
         # Update performance statistics
         if self.performance_monitoring:
@@ -549,22 +566,22 @@ class ConstantWindField:
         
         # Reset temporal state
         self.current_time = kwargs.get('current_time', 0.0)
-        
+
         # Update velocity parameters if specified
         if 'velocity' in kwargs:
             new_velocity = kwargs['velocity']
-            if not isinstance(new_velocity, (tuple, list)) or len(new_velocity) != 2:
+            if (not isinstance(new_velocity, Sequence) or isinstance(new_velocity, (str, bytes))
+                    or len(new_velocity) != 2):
                 raise ValueError(f"Velocity must be a 2-element tuple/list, got {new_velocity}")
-            
-            u_x, u_y = new_velocity
-            if not all(isinstance(v, (int, float)) for v in [u_x, u_y]):
-                raise ValueError(f"Velocity components must be numeric, got {new_velocity}")
-            
+            u_x, u_y = float(new_velocity[0]), float(new_velocity[1])
+            if not np.isfinite([u_x, u_y]).all():
+                raise ValueError(f"Velocity components must be finite, got {new_velocity}")
             self.base_velocity = np.array([u_x, u_y], dtype=np.float64)
-            self.velocity = self.base_velocity.copy()
         else:
             # Reset to initial base velocity
-            self.velocity = self.base_velocity.copy()
+            self.base_velocity = self.initial_base_velocity.copy()
+
+        self.velocity = self.base_velocity.copy()
         
         # Update temporal evolution parameters if specified
         if 'enable_temporal_evolution' in kwargs:
