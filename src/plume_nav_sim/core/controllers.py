@@ -118,68 +118,88 @@ from .boundaries import create_boundary_policy
 
 
 # Basic sensor implementations for interim use until full sensor system is available
-class DirectOdorSensor:
-    """
-    Basic sensor implementation that directly samples odor fields.
-    
-    This provides backward compatibility while transitioning to the new
-    sensor-based architecture. Used as the default sensor when no specific
-    sensors are configured.
-    """
-    
+class DirectOdorSensor(SensorProtocol):
+    """Directly reads odor values from a plume state."""
+
     def __init__(self):
-        """Initialize direct odor sensor."""
         self._enabled = True
-    
-    def sample(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
-        """Sample odor concentrations directly from the plume state."""
+        logger.debug("DirectOdorSensor initialized", enabled=self._enabled)
+
+    def detect(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
+        logger.debug("DirectOdorSensor.detect invoked", positions=positions)
+        measurements = self.measure(plume_state, positions)
+        return measurements > 0.0
+
+    def measure(self, plume_state: np.ndarray, positions: np.ndarray) -> np.ndarray:
+        logger.debug("DirectOdorSensor.measure invoked", positions=positions)
         return _read_odor_values(plume_state, positions)
-    
+
+    def compute_gradient(self, plume_state: np.ndarray, positions: np.ndarray, delta: float = 1.0) -> np.ndarray:
+        logger.debug("DirectOdorSensor.compute_gradient invoked", positions=positions, delta=delta)
+        positions = np.asarray(positions, dtype=float).reshape(-1, 2)
+        gradients = np.zeros((len(positions), 2), dtype=float)
+        for i, pos in enumerate(positions):
+            offsets = np.array([[delta, 0], [-delta, 0], [0, delta], [0, -delta]], dtype=float)
+            samples = self.measure(plume_state, pos + offsets)
+            dx = (samples[0] - samples[1]) / (2 * delta)
+            dy = (samples[2] - samples[3]) / (2 * delta)
+            gradients[i] = [dx, dy]
+        return gradients
+
     def configure(self, **kwargs) -> None:
-        """Configure sensor parameters."""
         self._enabled = kwargs.get('enabled', True)
-    
+        logger.debug("DirectOdorSensor.configure called", enabled=self._enabled)
+
     def reset(self) -> None:
-        """Reset sensor state."""
-        pass
+        logger.debug("DirectOdorSensor.reset called")
+
+    def sample(self, *args, **kwargs):
+        logger.error("DirectOdorSensor.sample is deprecated")
+        raise NotImplementedError(
+            "sample() is deprecated. Use detect(), measure(), or compute_gradient() instead."
+        )
 
 
 class MultiPointOdorSensor:
-    """
-    Sensor for multi-point odor sampling (e.g., bilateral antennae).
-    
-    Supports multiple sensor layouts and configurations for diverse
-    sensing strategies without hardcoded assumptions.
-    """
-    
-    def __init__(self, sensor_distance: float = 5.0, sensor_angle: float = 45.0, 
+    """Sensor for multi-point odor sampling (e.g., bilateral antennae)."""
+
+    def __init__(self, sensor_distance: float = 5.0, sensor_angle: float = 45.0,
                  num_sensors: int = 2, layout_name: Optional[str] = None):
-        """Initialize multi-point sensor."""
         self.sensor_distance = sensor_distance
-        self.sensor_angle = sensor_angle 
+        self.sensor_angle = sensor_angle
         self.num_sensors = num_sensors
         self.layout_name = layout_name
         self._enabled = True
-    
-    def sample(self, plume_state: np.ndarray, positions: np.ndarray, 
+
+    def detect(self, plume_state: np.ndarray, positions: np.ndarray, orientations: np.ndarray) -> np.ndarray:
+        logger.debug("MultiPointOdorSensor.detect invoked", positions=positions)
+        measurements = self.measure(plume_state, positions, orientations)
+        return measurements > 0.0
+
+    def measure(self, plume_state: np.ndarray, positions: np.ndarray,
                orientations: np.ndarray) -> np.ndarray:
-        """Sample odor at multiple sensor positions."""
+        logger.debug("MultiPointOdorSensor.measure invoked", positions=positions, orientations=orientations)
         if not self._enabled:
             return np.zeros((len(positions), self.num_sensors))
-        
-        # Create a mock navigator object for compatibility with existing utility functions
+
         mock_navigator = type('MockNavigator', (), {
             'positions': positions,
             'orientations': orientations,
             'num_agents': len(positions)
         })()
-        
+
         return _sample_odor_at_sensors(
             mock_navigator, plume_state,
             sensor_distance=self.sensor_distance,
             sensor_angle=self.sensor_angle,
             num_sensors=self.num_sensors,
             layout_name=self.layout_name
+        )
+
+    def sample(self, *args, **kwargs):
+        logger.error("MultiPointOdorSensor.sample is deprecated")
+        raise NotImplementedError(
+            "sample() is deprecated. Use detect() or measure() instead."
         )
     
     def configure(self, **kwargs) -> None:
@@ -1391,7 +1411,7 @@ class SingleAgentController(BaseController):
         
         try:
             # Use primary sensor for sampling instead of direct field access
-            odor_values = self._primary_sensor.sample(env_array, self._position)
+            odor_values = self._primary_sensor.measure(env_array, self._position)
             odor_value = float(odor_values[0])
             
             # Validate odor value
@@ -1480,7 +1500,7 @@ class SingleAgentController(BaseController):
             )
             
             # Sample using the multi-point sensor
-            odor_values = multi_sensor.sample(env_array, self._position, self._orientation)
+            odor_values = multi_sensor.measure(env_array, self._position, self._orientation)
             
             # Return as a 1D array for single agent
             result = odor_values[0] if odor_values.ndim > 1 else odor_values
@@ -2086,7 +2106,7 @@ class MultiAgentController(BaseController):
         
         try:
             # Use primary sensor for batch sampling instead of direct field access
-            odor_values = self._primary_sensor.sample(env_array, self._positions)
+            odor_values = self._primary_sensor.measure(env_array, self._positions)
             
             # Validate odor values
             invalid_mask = np.isnan(odor_values) | np.isinf(odor_values)
@@ -2179,7 +2199,7 @@ class MultiAgentController(BaseController):
             )
             
             # Sample using the multi-point sensor
-            odor_values = multi_sensor.sample(env_array, self._positions, self._orientations)
+            odor_values = multi_sensor.measure(env_array, self._positions, self._orientations)
             
             # Validate sensor readings
             invalid_mask = np.isnan(odor_values) | np.isinf(odor_values)
