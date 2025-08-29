@@ -739,40 +739,10 @@ class SimulationBuilder:
     
     def _execute_simulation(self, config: SimulationConfig) -> SimulationResults:
         """Execute simulation with enhanced modular architecture."""
-        # This method will delegate to the enhanced simulation context
-        # which will handle component instantiation and orchestration
-        
-        # For now, we'll use a simplified approach that delegates to the 
-        # enhanced context manager and run_simulation function
-        try:
-            # Create a basic environment for compatibility
-            # In a full implementation, this would use the component factory
-            # to create the appropriate environment with all configured components
-            
-            # Placeholder: In the full implementation, this would:
-            # 1. Instantiate plume model based on config.plume_model_config
-            # 2. Instantiate wind field based on config.wind_field_config  
-            # 3. Instantiate sensors based on config.sensor_configs
-            # 4. Create navigator based on self._navigator_config
-            # 5. Compose environment with all components
-            # 6. Execute simulation with enhanced monitoring
-            
-            # For now, return a basic structure to maintain compatibility
-            # The actual implementation will be completed in the context manager
-            return SimulationResults(
-                metadata={
-                    "builder_config": {
-                        "plume_model": config.plume_model_config,
-                        "wind_field": config.wind_field_config,
-                        "sensors": config.sensor_configs,
-                        "component_integration": config.component_integration_mode
-                    },
-                    "builder_pattern_used": True
-                }
-            )
-            
-        except Exception as e:
-            raise RuntimeError(f"Failed to execute simulation: {e}") from e
+        logger.error(
+            f"Simulation execution is not implemented for config: {config}"
+        )
+        raise NotImplementedError("Simulation execution is not yet implemented")
 
 
 class PerformanceMonitor:
