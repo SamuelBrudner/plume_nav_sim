@@ -39,7 +39,7 @@ Examples:
     plume-nav-sim config validate
     
     # Visualization export
-    plume-nav-sim visualize --input-file results.npz --format mp4 --output results.mp4
+    plume-nav-sim visualize export --input-data results.npz --format mp4 --output results.mp4
     
     # RL training with PPO algorithm
     plume-nav-sim train algorithm --algorithm PPO --total-timesteps 100000
@@ -98,7 +98,21 @@ from plume_nav_sim.config.schemas import NavigatorConfig, VideoPlumeConfig, Simu
 # Alias setup_logger so tests can patch `setup_logging`
 setup_logging = setup_logger  # noqa: N816  (keep camelCase for compatibility)
 
-from plume_nav_sim.db.session import close_session  # type: ignore
+# Database session cleanup is optional during tests.  Some lightweight
+# environments used in CI don't provide the full database layer which would
+# normally supply ``close_session``.  Import it defensively so the CLI remains
+# importable even when the database utilities are absent.
+try:  # pragma: no cover - exercised indirectly via CLI tests
+    from plume_nav_sim.db.session import close_session  # type: ignore
+except Exception:  # pragma: no cover - fallback for minimal environments
+    def close_session(session: object | None = None) -> None:
+        """Best-effort session closer used when DB layer is unavailable."""
+        if session is not None and hasattr(session, "close"):
+            try:
+                session.close()
+            except Exception:
+                pass
+
 
 # Import gymnasium for RL environment creation
 try:
@@ -183,7 +197,7 @@ def handle_cli_exception(func: Callable[..., T]) -> Callable[..., Optional[T]]:
             sys.exit(e.exit_code)
         except KeyboardInterrupt:
             logger.warning("Operation interrupted by user")
-            sys.exit(130)
+            sys.exit(2)
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
             logger.debug(traceback.format_exc())
@@ -296,28 +310,24 @@ def cleanup_system(info: Dict[str, Any]) -> None:
         logger.debug(f"System runtime: {runtime:.2f}s")
 
 
-def validate_configuration(cfg: DictConfig) -> bool:
-    """
-    Validate configuration with comprehensive checks.
-    
+def validate_configuration(cfg: DictConfig, strict: bool = False) -> bool:
+    """Validate configuration with comprehensive checks.
+
     Args:
         cfg: Hydra configuration to validate
-        
+        strict: When True, raise an error on validation failure
+
     Returns:
-        True if configuration is valid
-        
-    Raises:
-        CLIError: If configuration is invalid
+        True if configuration is valid, False otherwise
     """
     try:
         _validate_configuration(cfg)
-        
-        # Additional validation checks can be added here
-        # For now, we just do basic validation
-        
         return True
     except (ConfigValidationError, Exception) as e:
-        raise CLIError(f"Configuration validation failed: {e}", exit_code=2)
+        if strict:
+            raise CLIError("Configuration validation failed!", exit_code=1)
+        logger.error(f"Configuration validation failed: {e}")
+        return False
 
 
 def _setup_cli_logging(verbose: bool = False, quiet: bool = False, log_level: str = 'INFO') -> None:
@@ -550,7 +560,10 @@ def export_animation(output_path: Path, positions: Any = None, orientations: Any
 
 # Click CLI Groups and Commands Implementation
 
-@click.group(invoke_without_command=True)
+@click.group(
+    invoke_without_command=True,
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging output')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress non-essential output')
 @click.option('--log-level', default='INFO', type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
@@ -558,33 +571,16 @@ def export_animation(output_path: Path, positions: Any = None, orientations: Any
 @click.option('--config-dir', type=click.Path(exists=True), help='Directory containing configuration files')
 @click.pass_context
 def cli(ctx, verbose: bool, quiet: bool, log_level: str, config_dir: Optional[str]) -> None:
-    """
-    Odor Plume Navigation System - Comprehensive command-line interface.
-    
-    This CLI provides complete access to simulation execution, configuration management,
-    visualization generation, RL training, and batch processing capabilities. Built with Hydra
-    configuration integration for advanced parameter management and experiment orchestration.
-    
-    Examples:
-        # Run simulation with default configuration
-        plume_nav_sim run
-        
-        # Run with parameter overrides
-        plume_nav_sim run navigator.max_speed=10.0
-        
-        # Multi-run parameter sweep
-        plume_nav_sim --multirun run navigator.max_speed=5,10,15
-        
-        # Validate configuration
-        plume_nav_sim config validate
-        
-        # Export visualization
-        plume_nav_sim visualize --input-file results.npz --format mp4
-        
-        # Train RL agent
-        plume_nav_sim train algorithm --algorithm PPO
-    
-    For detailed help on any command, use: plume_nav_sim COMMAND --help
+    """Plume Navigation Simulation CLI.
+
+    Usage Examples:
+        plume-nav-sim run
+        plume-nav-sim config validate
+        plume-nav-sim visualize export --input-data results.npz --format mp4
+
+    This interface provides access to simulation execution, configuration management,
+    visualization export and training utilities.  For detailed help on any command,
+    use: ``plume-nav-sim COMMAND --help``
     """
     _CLI_CONFIG['start_time'] = time.time()
     
@@ -606,15 +602,15 @@ def cli(ctx, verbose: bool, quiet: bool, log_level: str, config_dir: Optional[st
 
 
 @cli.command()
-@click.option('--dry-run', is_flag=True, 
+@click.option('--dry-run', is_flag=True,
               help='Validate simulation setup without executing')
-@click.option('--seed', type=int, 
+@click.option('--seed', type=int,
               help='Random seed for reproducible results')
-@click.option('--output-dir', type=click.Path(), 
+@click.option('--output-dir', type=click.Path(),
               help='Directory for output files (overrides Hydra default)')
 @click.option('--save-trajectory', is_flag=True, default=True,
               help='Save trajectory data for post-analysis')
-@click.option('--show-animation', is_flag=True, 
+@click.option('--show-animation', is_flag=True,
               help='Display real-time animation during simulation')
 @click.option('--export-video', type=click.Path(),
               help='Export animation as MP4 video to specified path')
@@ -626,47 +622,20 @@ def cli(ctx, verbose: bool, quiet: bool, log_level: str, config_dir: Optional[st
 @click.option('--num-agents', type=int, help='Number of agents to simulate')
 @click.option('--batch', is_flag=True, help='Run in batch mode (disable animation and debug)')
 @click.pass_context
-def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str], 
-        save_trajectory: bool, show_animation: bool, export_video: Optional[str], 
+def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
+        save_trajectory: bool, show_animation: bool, export_video: Optional[str],
         frame_cache: str, max_duration: Optional[float], num_agents: Optional[int],
         batch: bool) -> None:
-    """
-    Execute odor plume navigation simulation with comprehensive options.
-    
-    This command runs the complete simulation pipeline including navigator creation,
-    plume environment loading, simulation execution, and optional visualization.
-    Supports parameter overrides via Hydra syntax and dry-run validation.
-    
-    Configuration Parameters:
-        All Hydra configuration parameters can be overridden using dot notation:
-        - navigator.max_speed=10.0
-        - simulation.num_steps=1000  
-        - plume.source_strength=500.0
-        - simulation.dt=0.1
-    
-    Performance Requirements:
-        - Step time: ≤33ms for 100 concurrent agents
-        - Frame cache hit rate: >90% for optimal performance
-        - Memory usage: Linear scaling with agent count
-    
+    """Execute plume navigation simulation.
+
+    Runs the complete simulation pipeline including navigator creation, plume
+    model loading and optional visualization.  Supports Hydra-style parameter
+    overrides and dry-run validation for quick configuration checks.
+
     Examples:
-        # Basic simulation
-        plume_nav_sim run
-        
-        # With parameter overrides
-        plume_nav_sim run navigator.max_speed=15.0 simulation.num_steps=500
-        
-        # Dry-run validation
-        plume_nav_sim run --dry-run
-        
-        # With visualization export
-        plume_nav_sim run --export-video results.mp4
-        
-        # Reproducible run with seed
-        plume_nav_sim run --seed 42
-        
-        # With frame caching for performance optimization
-        plume_nav_sim run --frame-cache lru
+        plume-nav-sim run
+        plume-nav-sim run --dry-run
+        plume-nav-sim run navigator.max_speed=15.0 simulation.num_steps=500
     """
     start_time = time.time()
     ctx.obj['dry_run'] = dry_run
@@ -676,9 +645,11 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         _validate_hydra_availability()
         
         # Get configuration from context or initialize
-        cfg = get_cli_config(ctx.obj.get('config_dir'))
+        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
-            raise CLIError("Configuration not available", exit_code=4)
+            if HYDRA_AVAILABLE and not HydraConfig.initialized():
+                raise CLIError("Hydra configuration not initialized", exit_code=1)
+            raise CLIError("Configuration not available", exit_code=1)
         
         # Apply parameter overrides if provided
         if output_dir and HYDRA_AVAILABLE:
@@ -882,18 +853,17 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         ctx.exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
 
 @cli.group()
 def config() -> None:
-    """
-    Configuration management and validation commands.
-    
-    This command group provides utilities for working with Hydra configuration files,
-    including validation, export, and documentation generation capabilities.
+    """Configuration management commands.
+
+    Utilities for working with Hydra configuration files including validation
+    and export operations.
     """
     pass
 
@@ -929,9 +899,9 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
         _validate_hydra_availability()
         
         # Get configuration from context or initialize
-        cfg = get_cli_config(ctx.obj.get('config_dir'))
+        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
-            raise CLIError("Configuration not available", exit_code=4)
+            raise CLIError("Configuration not available", exit_code=1)
         
         logger.info("Starting configuration validation...")
         
@@ -940,14 +910,11 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
         
         if validate_result:
             if output_format == 'pretty':
-                # Print friendly output with checkmark
-                click.echo(click.style("✅ Configuration validation passed", fg='green'))
+                click.echo("✅ Configuration is valid!")
             elif output_format == 'yaml':
-                # Output YAML format
                 yaml_output = OmegaConf.to_yaml(cfg)
                 click.echo(yaml_output)
             elif output_format == 'json':
-                # Output JSON format
                 json_output = json.dumps(OmegaConf.to_container(cfg, resolve=True), indent=2)
                 click.echo(json_output)
         
@@ -974,10 +941,11 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
             
     except CLIError as e:
         logger.error(str(e))
+        click.echo(str(e))
         ctx.exit(e.exit_code)
     except (ConfigValidationError, Exception) as e:
         logger.error(f"Validation error: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
@@ -1018,9 +986,9 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool, resolv
         _validate_hydra_availability()
         
         # Get configuration from context or initialize
-        cfg = get_cli_config(ctx.obj.get('config_dir'))
+        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
-            raise CLIError("Configuration not available", exit_code=4)
+            raise CLIError("Configuration not available", exit_code=1)
         
         # Determine output path
         if output is None:
@@ -1071,13 +1039,19 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool, resolv
         ctx.exit(e.exit_code)
     except (OSError, Exception) as e:
         logger.error(f"Unexpected export error: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
 
-@cli.command()
-@click.option('--input-file', type=click.Path(exists=True), required=True,
+@cli.group()
+def visualize() -> None:
+    """Visualization generation and export."""
+    pass
+
+
+@visualize.command()
+@click.option('--input-data', type=click.Path(exists=True), required=True,
               help='Path to trajectory data file (.npz format)')
 @click.option('--format', 'output_format', type=click.Choice(['mp4', 'gif', 'png']), default='mp4',
               help='Output format for visualization')
@@ -1090,29 +1064,28 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool, resolv
 @click.option('--quality', type=click.Choice(['low', 'medium', 'high']), default='medium',
               help='Quality preset for output')
 @click.pass_context
-def visualize(ctx, input_file: str, output_format: str, output: Optional[str],
-              dpi: int, fps: int, quality: str) -> None:
-    """
-    Generate visualizations from simulation results.
-    
+def export(ctx, input_data: str, output_format: str, output: Optional[str],
+           dpi: int, fps: int, quality: str) -> None:
+    """Export visualization from simulation results.
+
     This command creates publication-quality visualizations from simulation data,
     supporting multiple output formats and quality settings for research publication.
     
     Examples:
         # Export MP4 animation
-        plume_nav_sim visualize --input-file trajectory.npz --format mp4 --output animation.mp4
+        plume-nav-sim visualize export --input-data trajectory.npz --format mp4 --output animation.mp4
         
         # High-quality PNG trajectory plot
-        plume_nav_sim visualize --input-file trajectory.npz --format png --quality high --dpi 300
+        plume-nav-sim visualize export --input-data trajectory.npz --format png --quality high --dpi 300
         
         # Create GIF animation with custom frame rate
-        plume_nav_sim visualize --input-file trajectory.npz --format gif --fps 15
+        plume-nav-sim visualize export --input-data trajectory.npz --format gif --fps 15
     """
     start_time = time.time()
     
     try:
         # Load data from file
-        data_path = Path(input_file)
+        data_path = Path(input_data)
         if not data_path.exists():
             raise CLIError(f"Input data file not found: {data_path}", exit_code=2)
         
@@ -1121,7 +1094,7 @@ def visualize(ctx, input_file: str, output_format: str, output: Optional[str],
             # Use the original string path here instead of the Path object because
             # tests replace Path with a MagicMock that does not point to a real file.
             # Passing the raw string avoids issues with the patched Path mock.
-            data = np.load(input_file, allow_pickle=True)
+            data = np.load(input_data, allow_pickle=True)
             logger.info(f"Data loaded with keys: {list(data.keys())}")
         except Exception as e:
             raise CLIError(f"Failed to load data file: {e}", exit_code=2)
@@ -1185,7 +1158,7 @@ def visualize(ctx, input_file: str, output_format: str, output: Optional[str],
         ctx.exit(e.exit_code)
     except Exception as e:
         logger.error(f"Visualization export failed: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
@@ -1279,7 +1252,7 @@ def batch(ctx, jobs: int, config_dir: Optional[str], pattern: str, output_base: 
         ctx.exit(e.exit_code)
     except Exception as e:
         logger.error(f"Batch processing error: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
@@ -1485,9 +1458,9 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         _validate_hydra_availability()
         
         # Get configuration from context or initialize
-        cfg = get_cli_config(ctx.obj.get('config_dir'))
+        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
-            raise CLIError("Configuration not available", exit_code=4)
+            raise CLIError("Configuration not available", exit_code=1)
         
         algorithm_name = algorithm.upper()
         
@@ -1627,7 +1600,7 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         ctx.exit(1)
     except Exception as e:
         logger.error(f"Training failed: {e}")
-        if ctx.obj.get('verbose'):
+        if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
 
