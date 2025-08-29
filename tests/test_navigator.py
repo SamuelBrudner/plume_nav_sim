@@ -13,7 +13,7 @@ from typing import Dict, Any
 import warnings
 
 # Import new navigator structure
-from plume_nav_sim.core.navigator import NavigatorProtocol
+from plume_nav_sim.core.navigator import Navigator, NavigatorProtocol
 from plume_nav_sim.core.controllers import SingleAgentController, MultiAgentController
 from plume_nav_sim.api.navigation import (
     create_navigator,
@@ -230,6 +230,23 @@ class TestNavigatorProtocolCompliance:
     def test_navigator_runtime_protocol_check(self, navigator):
         """Test runtime protocol compliance checking."""
         assert isinstance(navigator, NavigatorProtocol)
+
+
+class TestNavigatorControllerSync:
+    """Test that Navigator forwards controller dependency properties."""
+
+    def test_boundary_policy_and_source_forwarding(self):
+        """Navigator properties should reflect controller dependencies."""
+        boundary = MagicMock(name="boundary")
+        source = MagicMock(name="source")
+        controller = SingleAgentController(position=(0.0, 0.0))
+        controller._boundary_policy = boundary
+        controller._source = source
+
+        navigator = Navigator(controller=controller)
+
+        assert navigator.boundary_policy is boundary
+        assert navigator.source is source
 
 
 class TestNavigatorMovement:

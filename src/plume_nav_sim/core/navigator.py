@@ -306,6 +306,16 @@ class Navigator:
     def num_agents(self) -> int:
         """Get the total number of agents managed by this navigator."""
         return self.controller.num_agents
+
+    @property
+    def boundary_policy(self):
+        """Expose boundary policy from the underlying controller."""
+        return self.controller.boundary_policy
+
+    @property
+    def source(self):
+        """Expose odor source from the underlying controller."""
+        return self.controller.source
     
     def reset(self, **kwargs: Any) -> None:
         """
@@ -889,6 +899,8 @@ class Navigator:
             # If we can't parse it, let the controller handle the error
             return True
 
+
+NavigatorProtocol.register(Navigator)
 
 class NavigatorFactory(BaseNavigatorFactory):
     """
