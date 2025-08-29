@@ -1545,6 +1545,24 @@ class SingleAgentController(BaseController):
             # Return safe default values
             return np.zeros(num_sensors)
 
+    def compute_additional_obs(self, base_obs: dict) -> dict:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.compute_additional_obs invoked")
+        return super().compute_additional_obs(base_obs)
+
+    def compute_extra_reward(self, base_reward: float, info: dict) -> float:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.compute_extra_reward invoked")
+        return super().compute_extra_reward(base_reward, info)
+
+    def on_episode_end(self, final_info: dict) -> None:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.on_episode_end invoked")
+        super().on_episode_end(final_info)
+
 
 class MultiAgentController(BaseController):
     """
@@ -1768,7 +1786,25 @@ class MultiAgentController(BaseController):
     def num_agents(self) -> int:
         """Get the number of agents."""
         return self._positions.shape[0]
-    
+
+    def compute_additional_obs(self, base_obs: dict) -> dict:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.compute_additional_obs invoked")
+        return super().compute_additional_obs(base_obs)
+
+    def compute_extra_reward(self, base_reward: float, info: dict) -> float:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.compute_extra_reward invoked")
+        return super().compute_extra_reward(base_reward, info)
+
+    def on_episode_end(self, final_info: dict) -> None:
+        """Log hook invocation then delegate to base implementation."""
+        if self._logger:
+            self._logger.debug(f"{self.__class__.__name__}.on_episode_end invoked")
+        super().on_episode_end(final_info)
+
     # NavigatorProtocol method implementations
     
     def reset(self, **kwargs: Any) -> None:
