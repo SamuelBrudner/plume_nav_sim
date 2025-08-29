@@ -9,6 +9,15 @@ CAP_PROP_POS_FRAMES = 1
 
 COLOR_BGR2GRAY = 6
 
+class _Ocl:
+    @staticmethod
+    def setUseOpenCL(flag):
+        pass
+
+
+ocl = _Ocl()
+
+
 
 def VideoCapture(*args, **kwargs):
     return _StubVideoCapture()

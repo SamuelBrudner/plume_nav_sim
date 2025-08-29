@@ -137,7 +137,7 @@ try:
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.env_util import make_vec_env
     SB3_AVAILABLE = True
-except ImportError:
+except Exception:  # catch any import-time failure (not just missing package)
     SB3_AVAILABLE = False
     warnings.warn(
         "Stable-baselines3 not available. RL training commands will be limited.",

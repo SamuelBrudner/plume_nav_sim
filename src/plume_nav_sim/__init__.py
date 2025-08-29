@@ -387,7 +387,7 @@ except ImportError:
 try:
     import stable_baselines3
     _stable_baselines3_available = True
-except ImportError:
+except Exception:
     _stable_baselines3_available = False
 
 # Check for Gymnasium availability
