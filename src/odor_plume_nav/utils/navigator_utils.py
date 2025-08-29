@@ -1093,11 +1093,27 @@ def update_positions_and_orientations(
     that doesn't explicitly handle time steps. To properly incorporate physics
     time steps, pass the actual dt value from your simulation.
     """
+    if dt < 0:
+        raise ValueError("dt must be non-negative")
+
     pos64 = np.asarray(positions, dtype=np.float64)
     ori64 = np.asarray(orientations, dtype=np.float64)
     spd64 = np.asarray(speeds, dtype=np.float64)
     ang64 = np.asarray(angular_velocities, dtype=np.float64)
 
+    if not (len(pos64) == len(ori64) == len(spd64) == len(ang64)):
+        raise ValueError("All input arrays must have the same length")
+
+    logger.debug(
+        "update_positions_and_orientations: pos=%s ori=%s spd=%s ang=%s dt=%s",
+        pos64,
+        ori64,
+        spd64,
+        ang64,
+        dt,
+    )
+
+    ori64 = normalize_angle(ori64)
     rad_orientations = np.deg2rad(ori64)
 
     dx = spd64 * np.cos(rad_orientations) * dt

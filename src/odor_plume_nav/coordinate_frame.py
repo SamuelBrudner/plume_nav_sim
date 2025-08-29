@@ -11,8 +11,11 @@ from __future__ import annotations
 
 from typing import Union
 
+import logging
 import numpy as np
 
+
+logger = logging.getLogger(__name__)
 
 Number = Union[float, np.ndarray]
 
@@ -29,7 +32,9 @@ def normalize_angle(angle: Number) -> Number:
     -------
     The normalised angle with the same shape as the input.
     """
-    return np.mod(angle, 360.0)
+    result = np.mod(angle, 360.0)
+    logger.debug("normalize_angle: %s -> %s", angle, result)
+    return result
 
 
 def rotation_matrix(angle_deg: float) -> np.ndarray:
@@ -40,7 +45,9 @@ def rotation_matrix(angle_deg: float) -> np.ndarray:
     """
     angle_rad = np.deg2rad(normalize_angle(float(angle_deg)))
     c, s = np.cos(angle_rad, dtype=np.float64), np.sin(angle_rad, dtype=np.float64)
-    return np.array([[c, -s], [s, c]], dtype=np.float64)
+    matrix = np.array([[c, -s], [s, c]], dtype=np.float64)
+    logger.debug("rotation_matrix: angle=%s -> %s", angle_deg, matrix)
+    return matrix
 
 
 def rotate(point: np.ndarray, angle_deg: float) -> np.ndarray:
@@ -48,5 +55,18 @@ def rotate(point: np.ndarray, angle_deg: float) -> np.ndarray:
 
     ``point`` is converted to ``float64`` to preserve precision.
     """
-    return rotation_matrix(angle_deg) @ np.asarray(point, dtype=np.float64)
+    result = rotation_matrix(angle_deg) @ np.asarray(point, dtype=np.float64)
+    logger.debug("rotate: point=%s angle=%s -> %s", point, angle_deg, result)
+    return result
+
+
+def compose_angles(angle1: Number, angle2: Number) -> Number:
+    """Compose two angles expressed in degrees.
+
+    The sum is normalised to the ``[0, 360)`` range so that wraparound
+    at 360 degrees is handled explicitly.
+    """
+    result = normalize_angle(angle1 + angle2)
+    logger.debug("compose_angles: %s + %s -> %s", angle1, angle2, result)
+    return result
 
