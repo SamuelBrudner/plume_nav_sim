@@ -400,15 +400,17 @@ class _VideoPlumeConfigModel(BaseModel):
     # --------------------------------------------------------------------- #
     @model_validator(mode='after')
     def _validate_gaussian_and_frames(cls, values):
-        if values.get("_skip_validation"):
-            # Skip heavy validation when requested (e.g., file existence)
+        # ``values`` is the model instance in Pydantic v2; use attribute access
+        if getattr(values, "_skip_validation", False):
             return values
 
-        kernel_size, kernel_sigma = values.get("kernel_size"), values.get("kernel_sigma")
+        kernel_size = getattr(values, "kernel_size")
+        kernel_sigma = getattr(values, "kernel_sigma")
         if (kernel_size is not None) != (kernel_sigma is not None):
             raise ValueError("Both kernel_size and kernel_sigma must be specified together")
 
-        sf, ef = values.get("start_frame"), values.get("end_frame")
+        sf = getattr(values, "start_frame")
+        ef = getattr(values, "end_frame")
         if sf is not None and ef is not None and ef <= sf:
             raise ValueError("end_frame must be greater than start_frame")
         return values
