@@ -166,6 +166,30 @@ except ImportError:
     ConfigStore = None
 
 
+def test_import_navigator_without_controllers_raises(monkeypatch):
+    """Navigator should raise ImportError when controllers are unavailable."""
+    import sys
+    import builtins
+
+    # Ensure fresh import of navigator and controllers
+    monkeypatch.delitem(sys.modules, "plume_nav_sim.core.navigator", raising=False)
+    monkeypatch.delitem(sys.modules, "plume_nav_sim.core.controllers", raising=False)
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "plume_nav_sim.core.controllers" or (
+            level == 1 and name == "controllers"
+        ):
+            raise ImportError("controllers missing")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    with pytest.raises(ImportError):
+        __import__("plume_nav_sim.core.navigator")
+
+
 # Enhanced test fixtures for Gymnasium 0.29.x API compliance and structured configuration testing
 
 @pytest.fixture(scope="session")
