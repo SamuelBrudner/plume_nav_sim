@@ -447,6 +447,7 @@ class BaseController:
         custom_observation_keys: Optional[List[str]] = None,
         reward_shaping: Optional[str] = None,
         sensors: Optional[List[SensorProtocol]] = None,
+        source: SourceProtocol | None = None,
         enable_memory: bool = False,
         boundary_policy: Optional[BoundaryPolicyProtocol] = None,
         domain_bounds: Optional[Tuple[float, float]] = None,
@@ -460,10 +461,17 @@ class BaseController:
         self._custom_observation_keys = custom_observation_keys or []
         self._reward_shaping = reward_shaping
         self._enable_memory = enable_memory
-        
+
         # Initialize sensor system for agent-agnostic perception
         self._sensors = sensors or [DirectOdorSensor()]
         self._primary_sensor = self._sensors[0] if self._sensors else DirectOdorSensor()
+
+        # Optional odor source integration
+        self._source = source
+        if self._enable_logging and self._source is None:
+            logger.warning(
+                "BaseController initialized without a SourceProtocol; explicit plume_state is required for sampling"
+            )
         
         # Memory management hooks - optional for flexible cognitive modeling
         self._memory_enabled = enable_memory
@@ -1407,6 +1415,9 @@ class SingleAgentController(BaseController):
         Raises:
             ValueError: If sampling fails or returns invalid values
         """
+        if env_array is None and self.source is None:
+            raise ValueError("Odor sampling requires either a plume_state or a SourceProtocol")
+
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
@@ -1456,8 +1467,8 @@ class SingleAgentController(BaseController):
             return 0.0
     
     def sample_multiple_sensors(
-        self, 
-        env_array: np.ndarray, 
+        self,
+        env_array: np.ndarray,
         sensor_distance: float = 5.0,
         sensor_angle: float = 45.0,
         num_sensors: int = 2,
@@ -1482,6 +1493,9 @@ class SingleAgentController(BaseController):
         Raises:
             ValueError: If sensor parameters are invalid
         """
+        if env_array is None and self.source is None:
+            raise ValueError("Odor sampling requires either a plume_state or a SourceProtocol")
+
         # Validate sensor parameters
         if sensor_distance <= 0:
             raise ValueError(f"sensor_distance must be positive, got {sensor_distance}")
@@ -2102,6 +2116,9 @@ class MultiAgentController(BaseController):
         Raises:
             ValueError: If sampling fails or returns invalid values
         """
+        if env_array is None and self.source is None:
+            raise ValueError("Odor sampling requires either a plume_state or a SourceProtocol")
+
         start_time = time.perf_counter() if self._enable_logging else None
         
         try:
@@ -2177,10 +2194,13 @@ class MultiAgentController(BaseController):
             
         Returns:
             np.ndarray: Array of shape (num_agents, num_sensors) with odor values
-            
+
         Raises:
             ValueError: If sensor parameters are invalid
         """
+        if env_array is None and self.source is None:
+            raise ValueError("Odor sampling requires either a plume_state or a SourceProtocol")
+
         # Validate sensor parameters
         if sensor_distance <= 0:
             raise ValueError(f"sensor_distance must be positive, got {sensor_distance}")
