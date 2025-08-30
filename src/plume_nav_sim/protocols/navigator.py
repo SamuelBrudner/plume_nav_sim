@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Dict, Any, runtime_checkable
+from typing import Protocol, Dict, Any, Optional, runtime_checkable
 import numpy as np
 
 
@@ -15,14 +15,46 @@ class NavigatorProtocol(Protocol):
     and expose their state for inspection.
     """
 
-    def reset(self) -> None:
-        """Reset the navigator to its initial state."""
+    # --- Required state properties ---
+    positions: np.ndarray
+    orientations: np.ndarray
+    speeds: np.ndarray
+    max_speeds: np.ndarray
+    angular_velocities: np.ndarray
+    num_agents: int
 
-    def step(self, action: np.ndarray) -> None:
-        """Advance the navigator state using the provided action array."""
+    # --- Core control API ---
+    def reset(self, *args, **kwargs) -> None:
+        """Reset the navigator to its initial state with optional parameters."""
 
-    def get_state(self) -> Dict[str, Any]:
-        """Return a snapshot of the navigator's current state."""
+    def step(self, env_array: np.ndarray, dt: float = 1.0) -> None:
+        """Advance the navigator state using the provided environment array."""
+
+    def sample_odor(self, env_array: np.ndarray) -> np.ndarray | float:
+        """Sample odor values at the agent positions."""
+
+    def sample_multiple_sensors(
+        self,
+        env_array: np.ndarray,
+        sensor_distance: float = ...,
+        sensor_angle: float = ...,
+        num_sensors: int = ...,
+        layout_name: Optional[str] = ...,
+    ) -> np.ndarray:
+        """Sample odor using a multi-sensor configuration."""
+
+    # --- Extensibility hooks ---
+    def compute_additional_obs(self, base_obs: dict) -> dict:
+        """Compute additional observation components."""
+
+    def compute_extra_reward(self, base_reward: float, info: dict) -> float:
+        """Compute additional reward components for shaping."""
+
+    def on_episode_end(self, final_info: dict) -> None:
+        """Handle episode completion events."""
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        """Return metadata describing the observation space."""
 
 
 __all__ = ["NavigatorProtocol"]

@@ -680,6 +680,21 @@ class BaseController:
             cache_stats=cache_stats,
             total_steps=self._performance_metrics['total_steps']
         )
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        """Return basic observation space metadata.
+
+        This stub provides minimal information required by tests and can be
+        extended by subclasses for richer observation descriptions.
+
+        Returns:
+            Dict[str, Any]: Dictionary with observation space details.
+        """
+        info = {
+            "num_agents": getattr(self, "num_agents", 0),
+            "sensors": [type(s).__name__ for s in getattr(self, "_sensors", [])],
+        }
+        return info
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """
@@ -692,13 +707,14 @@ class BaseController:
             return {}
         
         metrics = {
-            'controller_type': self.__class__.__name__,
+            'controller_type': 'single_agent' if getattr(self, 'num_agents', 1) == 1 else 'multi_agent',
             'controller_id': self._controller_id,
             'total_steps': self._performance_metrics['total_steps'],
             'extensibility_hooks_enabled': self._enable_extensibility_hooks,
             'frame_cache_mode': self._frame_cache_mode,
             'memory_enabled': self._memory_enabled,
-            'num_sensors': len(self._sensors)
+            'num_sensors': len(self._sensors),
+            'num_agents': getattr(self, 'num_agents', 0),
         }
         
         # Step time statistics
@@ -1785,6 +1801,20 @@ class MultiAgentController(BaseController):
     def speeds(self) -> np.ndarray:
         """Get agent speeds as a numpy array with shape (num_agents,)."""
         return self._speeds
+
+    @speeds.setter
+    def speeds(self, value: Union[List[float], np.ndarray]) -> None:
+        """Set agent speeds with validation against array shape and max speeds."""
+        arr = np.asarray(value, dtype=float)
+        if arr.shape != self._speeds.shape:
+            raise ValueError(
+                f"speeds must have shape {self._speeds.shape}, got {arr.shape}"
+            )
+        if np.any(arr < 0):
+            raise ValueError("speeds must be non-negative")
+        if np.any(arr > self._max_speeds):
+            raise ValueError("speeds cannot exceed max_speeds")
+        self._speeds = arr
     
     @property
     def max_speeds(self) -> np.ndarray:
@@ -1795,6 +1825,16 @@ class MultiAgentController(BaseController):
     def angular_velocities(self) -> np.ndarray:
         """Get agent angular velocities as a numpy array with shape (num_agents,)."""
         return self._angular_velocities
+
+    @angular_velocities.setter
+    def angular_velocities(self, value: Union[List[float], np.ndarray]) -> None:
+        """Set agent angular velocities with validation."""
+        arr = np.asarray(value, dtype=float)
+        if arr.shape != self._angular_velocities.shape:
+            raise ValueError(
+                f"angular_velocities must have shape {self._angular_velocities.shape}, got {arr.shape}"
+            )
+        self._angular_velocities = arr
     
     @property
     def num_agents(self) -> int:
