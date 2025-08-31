@@ -227,6 +227,11 @@ class BinarySensor:
         self._previous_detections: Optional[np.ndarray] = None
         self._detection_history: List[np.ndarray] = []
         self._num_agents: Optional[int] = None
+        self._detect_buffer: np.ndarray = np.zeros(0, dtype=bool)
+        self._rising_mask: np.ndarray = np.zeros(0, dtype=bool)
+        self._falling_mask: np.ndarray = np.zeros(0, dtype=bool)
+        self._rand_buffer: np.ndarray = np.zeros(0, dtype=np.float64)
+        self._validated: bool = False
         
         # Performance monitoring
         self._performance_metrics = {
@@ -323,57 +328,105 @@ class BinarySensor:
             # Input validation
             single_agent = False
 
-            if np.isscalar(concentration_values):
-                concentration_values = np.array([concentration_values], dtype=np.float64)
-                single_agent = True
-            elif isinstance(concentration_values, np.ndarray):
-                concentration_values = np.asarray(concentration_values, dtype=np.float64)
+            if (
+                self._validated
+                and isinstance(concentration_values, np.ndarray)
+                and isinstance(positions, np.ndarray)
+                and concentration_values.dtype == np.float64
+                and positions.dtype == np.float64
+                and concentration_values.shape[0] == self._num_agents
+                and positions.shape == (self._num_agents, 2)
+            ):
+                num_agents = self._num_agents
             else:
-                raise TypeError("concentration_values must be a numpy array or scalar")
+                if (
+                    isinstance(concentration_values, np.ndarray)
+                    and isinstance(positions, np.ndarray)
+                    and concentration_values.ndim == 1
+                    and positions.shape == (concentration_values.shape[0], 2)
+                ):
+                    concentration_values = concentration_values.astype(np.float64, copy=False)
+                    positions = positions.astype(np.float64, copy=False)
+                    num_agents = concentration_values.shape[0]
+                else:
+                    if isinstance(concentration_values, np.ndarray):
+                        concentration_values = concentration_values.astype(np.float64, copy=False)
+                        if concentration_values.ndim == 0:
+                            concentration_values = concentration_values.reshape(1)
+                            single_agent = True
+                        elif concentration_values.ndim != 1:
+                            raise ValueError("concentration_values must be 1D")
+                    else:
+                        concentration_values = np.asarray(concentration_values, dtype=np.float64)
+                        if concentration_values.ndim == 0:
+                            concentration_values = concentration_values.reshape(1)
+                            single_agent = True
+                        elif concentration_values.ndim != 1:
+                            raise ValueError("concentration_values must be 1D")
 
-            if np.isscalar(positions):
-                raise TypeError("positions must be a sequence or array")
-            elif isinstance(positions, np.ndarray):
-                positions = np.asarray(positions, dtype=np.float64)
-            else:
-                positions = np.array(positions, dtype=np.float64)
+                    if isinstance(positions, np.ndarray):
+                        positions = positions.astype(np.float64, copy=False)
+                    else:
+                        positions = np.asarray(positions, dtype=np.float64)
 
-            if positions.ndim == 1:
-                if positions.shape[0] != 2:
-                    raise ValueError(f"Single position must have 2 coordinates, got {positions.shape[0]}")
-                positions = positions.reshape(1, -1)
-                single_agent = True
-            elif positions.ndim != 2 or positions.shape[1] != 2:
-                raise ValueError(f"positions must have shape (N, 2), got {positions.shape}")
+                    if positions.ndim == 1:
+                        if positions.shape[0] != 2:
+                            raise ValueError("Single position must have 2 coordinates")
+                        positions = positions.reshape(1, 2)
+                        single_agent = True
+                    elif positions.ndim != 2 or positions.shape[1] != 2:
+                        raise ValueError(f"positions must have shape (N, 2), got {positions.shape}")
 
-            if len(concentration_values) != len(positions):
-                raise ValueError(f"Array length mismatch: {len(concentration_values)} vs {len(positions)}")
-            
-            num_agents = len(concentration_values)
+                    if concentration_values.shape[0] != positions.shape[0]:
+                        raise ValueError(
+                            f"Array length mismatch: {concentration_values.shape[0]} vs {positions.shape[0]}"
+                        )
+
+                    num_agents = concentration_values.shape[0]
+                self._validated = True
             
             # Initialize agent state if needed
             if self._num_agents != num_agents:
                 self._num_agents = num_agents
                 self._previous_detections = np.zeros(num_agents, dtype=bool)
+                self._detect_buffer = np.zeros(num_agents, dtype=bool)
+                self._rising_mask = np.zeros(num_agents, dtype=bool)
+                self._falling_mask = np.zeros(num_agents, dtype=bool)
+                self._rand_buffer = np.zeros(num_agents, dtype=np.float64)
                 if self.config.history_length > 0:
                     self._detection_history = []
-            
-            # Vectorized threshold detection with hysteresis
-            detections = self._apply_threshold_with_hysteresis(concentration_values)
-            
-            # Apply noise modeling if configured
-            if self.config.false_positive_rate > 0 or self.config.false_negative_rate > 0:
-                detections = self._apply_noise_model(detections)
-            
+
+            # Vectorized threshold detection with optional hysteresis/noise
+            if (
+                self.config.hysteresis <= 0
+                and self.config.false_positive_rate == 0
+                and self.config.false_negative_rate == 0
+            ):
+                np.greater_equal(
+                    concentration_values,
+                    self.config.threshold,
+                    out=self._detect_buffer,
+                )
+                detections = self._detect_buffer
+            else:
+                detections = self._apply_threshold_with_hysteresis(
+                    concentration_values, out=self._detect_buffer
+                )
+                if (
+                    self.config.false_positive_rate > 0
+                    or self.config.false_negative_rate > 0
+                ):
+                    detections = self._apply_noise_model(detections)
+
             # Update detection history
             if self.config.history_length > 0:
                 self._detection_history.append(detections.copy())
                 if len(self._detection_history) > self.config.history_length:
                     self._detection_history.pop(0)
-            
+
             # Update previous state for hysteresis
-            self._previous_detections = detections.copy()
-            
+            self._previous_detections[:] = detections
+
             # Performance tracking
             if self._enable_logging:
                 detection_time = (time.perf_counter() - start_time) * 1000000  # microseconds
@@ -412,7 +465,7 @@ class BinarySensor:
             
             if single_agent:
                 return bool(detections[0])
-            return detections
+            return detections.copy()
             
         except Exception as e:
             if self._logger:
@@ -424,88 +477,82 @@ class BinarySensor:
                 )
             raise
     
-    def _apply_threshold_with_hysteresis(self, concentration_values: np.ndarray) -> np.ndarray:
-        """
-        Apply threshold detection with optional hysteresis for stable switching.
-        
-        Hysteresis prevents oscillation near the threshold by using different
-        thresholds for rising and falling edges:
-        - Rising threshold: threshold
-        - Falling threshold: threshold - hysteresis
-        
-        Args:
-            concentration_values: Input concentration array
-            
-        Returns:
-            np.ndarray: Boolean detection array after threshold and hysteresis
-        """
+    def _apply_threshold_with_hysteresis(
+        self, concentration_values: np.ndarray, *, out: np.ndarray
+    ) -> np.ndarray:
+        """Apply threshold detection using preallocated buffers."""
         if self.config.hysteresis <= 0 or self._previous_detections is None:
-            # Simple threshold without hysteresis
-            return concentration_values >= self.config.threshold
-        
-        # Hysteresis logic: different thresholds for rising/falling edges
+            np.greater_equal(
+                concentration_values,
+                self.config.threshold,
+                out=out,
+            )
+            return out
+
         rising_threshold = self.config.threshold
         falling_threshold = self.config.threshold - self.config.hysteresis
-        
-        # Current detection based on simple threshold
-        current_detections = concentration_values >= rising_threshold
-        
-        # Apply hysteresis: only change state if concentration crosses the appropriate threshold
-        hysteresis_detections = self._previous_detections.copy()
-        
-        # Rising edge: was False, now above rising threshold
-        rising_mask = (~self._previous_detections) & current_detections
-        hysteresis_detections[rising_mask] = True
-        
-        # Falling edge: was True, now below falling threshold
-        falling_mask = self._previous_detections & (concentration_values < falling_threshold)
-        hysteresis_detections[falling_mask] = False
-        
-        # Track hysteresis activations for monitoring
+
+        np.greater_equal(concentration_values, rising_threshold, out=out)
+
+        np.logical_not(self._previous_detections, out=self._rising_mask)
+        np.logical_and(self._rising_mask, out, out=self._rising_mask)
+
+        np.less(concentration_values, falling_threshold, out=self._falling_mask)
+        np.logical_and(
+            self._previous_detections,
+            self._falling_mask,
+            out=self._falling_mask,
+        )
+
+        out[:] = self._previous_detections
+        out[self._rising_mask] = True
+        out[self._falling_mask] = False
+
         if self._enable_logging:
-            hysteresis_events = np.sum(rising_mask) + np.sum(falling_mask)
-            self._performance_metrics['hysteresis_activations'] += hysteresis_events
-        
-        return hysteresis_detections
+            self._performance_metrics['hysteresis_activations'] += int(
+                self._rising_mask.sum() + self._falling_mask.sum()
+            )
+
+        return out
     
-    def _apply_noise_model(self, clean_detections: np.ndarray) -> np.ndarray:
-        """
-        Apply realistic noise model with false positive and false negative rates.
-        
-        This method simulates sensor imperfections by randomly flipping
-        detection results based on configured error rates:
-        - False positives: True detections become False
-        - False negatives: False detections become True
-        
-        Args:
-            clean_detections: Clean detection results before noise
-            
-        Returns:
-            np.ndarray: Noisy detection results after error injection
-        """
-        noisy_detections = clean_detections.copy()
-        
+    def _apply_noise_model(self, detections: np.ndarray) -> np.ndarray:
+        """Apply in-place noise model using preallocated buffers."""
+        length = len(detections)
+
         if self.config.false_positive_rate > 0:
-            # False positives: flip False -> True
-            false_detection_mask = ~clean_detections
-            false_positive_prob = self._rng.random(size=len(clean_detections))
-            false_positive_mask = false_detection_mask & (false_positive_prob < self.config.false_positive_rate)
-            noisy_detections[false_positive_mask] = True
-            
+            self._rng.random(length, out=self._rand_buffer[:length])
+            np.logical_not(detections, out=self._rising_mask[:length])
+            np.less(
+                self._rand_buffer[:length],
+                self.config.false_positive_rate,
+                out=self._falling_mask[:length],
+            )
+            np.logical_and(
+                self._rising_mask[:length],
+                self._falling_mask[:length],
+                out=self._falling_mask[:length],
+            )
+            detections[self._falling_mask[:length]] = True
             if self._enable_logging:
-                self._performance_metrics['false_positives_applied'] += np.sum(false_positive_mask)
-        
+                self._performance_metrics['false_positives_applied'] += int(
+                    self._falling_mask[:length].sum()
+                )
+
         if self.config.false_negative_rate > 0:
-            # False negatives: flip True -> False
-            true_detection_mask = clean_detections
-            false_negative_prob = self._rng.random(size=len(clean_detections))
-            false_negative_mask = true_detection_mask & (false_negative_prob < self.config.false_negative_rate)
-            noisy_detections[false_negative_mask] = False
-            
+            self._rng.random(length, out=self._rand_buffer[:length])
+            np.less(
+                self._rand_buffer[:length],
+                self.config.false_negative_rate,
+                out=self._falling_mask[:length],
+            )
+            np.logical_and(detections, self._falling_mask[:length], out=self._falling_mask[:length])
+            detections[self._falling_mask[:length]] = False
             if self._enable_logging:
-                self._performance_metrics['false_negatives_applied'] += np.sum(false_negative_mask)
-        
-        return noisy_detections
+                self._performance_metrics['false_negatives_applied'] += int(
+                    self._falling_mask[:length].sum()
+                )
+
+        return detections
     
     def configure(self, **parameters: Any) -> None:
         """
