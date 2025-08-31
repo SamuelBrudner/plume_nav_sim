@@ -584,8 +584,9 @@ class ConcentrationSensor(BaseSensor):
                         performance_degradation=True
                     )
             
-            # Always return array for consistent API with vectorized operations
-            return measured_concentrations
+            if measured_concentrations.shape[0] == 1:
+                return np.float64(measured_concentrations[0])
+            return measured_concentrations.astype(np.float64)
                 
         except Exception as e:
             if self._enable_logging and LOGURU_AVAILABLE:

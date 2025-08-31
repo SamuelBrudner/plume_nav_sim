@@ -314,16 +314,26 @@ class TestSensorFunctionality:
             random_seed=42,  # For reproducible testing
             enable_logging=False
         )
-        
+
         positions = np.array([[i, i] for i in range(100)])  # 100 test positions
         concentration_values = np.zeros(100)  # All below threshold
-        
+
         detections = sensor.detect(concentration_values, positions)
-        
+
         # With false positive rate, some zeros should become True
         false_positives = np.sum(detections)
         assert false_positives > 0, "Expected some false positives with 10% rate"
         assert false_positives < 30, "Too many false positives detected"
+
+    def test_binary_sensor_scalar_detection(self, single_position):
+        """BinarySensor.detect should accept scalar inputs and return bool."""
+        sensor = BinarySensor(threshold=0.1, enable_logging=False)
+
+        concentration = 0.2  # Above threshold
+        detection = sensor.detect(concentration, single_position)
+
+        assert isinstance(detection, (bool, np.bool_))
+        assert detection is True
     
     def test_concentration_sensor_quantitative_measurement(self, mock_plume_state):
         """Test concentration sensor quantitative measurement capabilities."""
@@ -344,11 +354,20 @@ class TestSensorFunctionality:
         # Verify measurements are within dynamic range
         assert np.all(measurements >= 0.0)
         assert np.all(measurements <= 10.0)
-        
+
         # Test single agent measurement
         single_pos = np.array([50, 50])
         single_measurement = sensor.measure(mock_plume_state, single_pos)
         assert isinstance(single_measurement, (float, np.floating))
+
+    def test_concentration_sensor_scalar_dtype(self, mock_plume_state, single_position):
+        """ConcentrationSensor.measure should return float64 for single position."""
+        sensor = ConcentrationSensor(dynamic_range=(0.0, 1.0), enable_logging=False)
+
+        measurement = sensor.measure(mock_plume_state, single_position)
+
+        assert np.isscalar(measurement)
+        assert np.asarray(measurement).dtype == np.float64
     
     def test_concentration_sensor_noise_and_drift(self, mock_plume_state):
         """Test concentration sensor noise and drift modeling."""
