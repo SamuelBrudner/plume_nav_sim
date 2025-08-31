@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Union, Any, Dict
 from plume_nav_sim.api.navigation import ConfigurationError
+from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 
 
 class VideoPlume:
@@ -51,13 +52,13 @@ class VideoPlume:
             **kwargs: Additional keyword arguments for extended functionality
         
         Raises:
-            FileNotFoundError: If the video file does not exist
+            IOError: If the video file does not exist
             ConfigurationError: If the video file cannot be opened
         """
         # Convert to Path object and validate existence
         self.video_path = Path(video_path)
         if not self.video_path.exists():
-            raise FileNotFoundError(f"Video file does not exist: {self.video_path}")
+            raise IOError(VIDEO_FILE_MISSING_MSG)
         
         # Store configuration parameters
         self.flip = flip

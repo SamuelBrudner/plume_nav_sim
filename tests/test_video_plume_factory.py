@@ -27,6 +27,7 @@ from plume_nav_sim.api.navigation import (
 )
 from plume_nav_sim.data.video_plume import VideoPlume
 from plume_nav_sim.config.schemas import VideoPlumeConfig
+from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 
 # Try to import Hydra components for advanced testing
 try:
@@ -100,7 +101,7 @@ class TestCreateVideoPlume:
     
     def test_create_video_plume_file_not_found(self):
         """Test error handling for non-existent video file."""
-        with pytest.raises(FileNotFoundError, match="Video file does not exist"):
+        with pytest.raises(IOError, match=VIDEO_FILE_MISSING_MSG):
             create_video_plume(video_path="nonexistent_video.mp4")
     
     def test_create_video_plume_invalid_kernel_size(self, mock_exists):

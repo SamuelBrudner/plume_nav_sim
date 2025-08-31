@@ -9,6 +9,7 @@ import numpy as np
 from typing import Optional, Dict, Any, Union, List, Tuple, Mapping
 from pathlib import Path
 import logging
+from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 
 logger = logging.getLogger(__name__)
 
@@ -88,14 +89,14 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
         
     Raises:
         ValueError: If configuration contains invalid values
-        FileNotFoundError: If video file does not exist
+        IOError: If video file does not exist
     """
     # Validate video_path
     if 'video_path' in config:
         video_path = Path(config['video_path'])
         # Check if the file exists (skip if it's a placeholder path)
         if str(video_path) != 'default_video.mp4' and not video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {video_path}")
+            raise IOError(VIDEO_FILE_MISSING_MSG)
     
     # Validate flip parameter
     if 'flip' in config:

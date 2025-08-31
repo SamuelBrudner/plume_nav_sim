@@ -84,7 +84,10 @@ except ImportError:
     LOGGING_UTILS_AVAILABLE = False
     logger.debug("Enhanced logging utilities not available, using basic logging")
 
+# Shared error message when video file is missing
 VIDEO_FILE_MISSING_MSG = "Video file does not exist"
+
+__all__ = ["VideoPlume", "VIDEO_FILE_MISSING_MSG"]
 
 
 class VideoPlume:
