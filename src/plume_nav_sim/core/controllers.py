@@ -1814,7 +1814,7 @@ class MultiAgentController(BaseController):
     @speeds.setter
     def speeds(self, value: Union[List[float], np.ndarray]) -> None:
         """Set agent speeds with validation against array shape and max speeds."""
-        arr = np.asarray(value, dtype=float)
+        arr = np.array(value, dtype=float, copy=True)
         if arr.shape != self._speeds.shape:
             raise ValueError(
                 f"speeds must have shape {self._speeds.shape}, got {arr.shape}"
@@ -1823,6 +1823,13 @@ class MultiAgentController(BaseController):
             raise ValueError("speeds must be non-negative")
         if np.any(arr > self._max_speeds):
             raise ValueError("speeds cannot exceed max_speeds")
+        copied = not np.shares_memory(arr, value)
+        if self._logger:
+            self._logger.debug(
+                "speeds reassigned",
+                num_agents=self.num_agents,
+                copied=copied,
+            )
         self._speeds = arr
     
     @property
