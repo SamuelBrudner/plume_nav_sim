@@ -6,6 +6,7 @@ plume data for navigation simulations.
 """
 
 import logging
+import hashlib
 from pathlib import Path
 from typing import Optional, Union, Any, Dict
 
@@ -13,6 +14,7 @@ import cv2
 import numpy as np
 from plume_nav_sim.api.navigation import ConfigurationError
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
+from plume_nav_sim.utils.logging_setup import get_correlation_context
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,11 @@ class VideoPlume:
         # Store any additional keyword arguments as attributes
         for key, value in kwargs.items():
             setattr(self, key, value)
-        
+
+        # Correlation context for logging
+        self._correlation_ctx = get_correlation_context()
+        self._correlation_ctx.bind_context()
+
         # Initialize video capture and validate
         self._init_video_capture()
 
@@ -224,6 +230,18 @@ class VideoPlume:
             "start_frame": self.start_frame,
             "end_frame": self.end_frame,
         }
+
+    def get_workflow_metadata(self) -> Dict[str, Any]:
+        """Return extended metadata with file details."""
+        if getattr(self, "_correlation_ctx", None) is not None:
+            self._correlation_ctx.bind_context()
+        with open(self.video_path, "rb") as f:
+            data = f.read()
+        file_hash = hashlib.md5(data).hexdigest()
+        metadata = self.get_metadata()
+        metadata.update({"file_hash": file_hash, "file_size": len(data)})
+        logger.info("workflow_metadata_generated")
+        return metadata
 
     def reset(self):
         """Reset the video to the beginning."""
