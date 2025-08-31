@@ -38,7 +38,7 @@ import warnings
 
 try:
     # Import the primary gym_make compatibility function
-    from plume_nav_sim.shims.gym_make import gym_make
+    from .gym_make import gym_make
     _gym_make_available = True
     
 except ImportError as e:
