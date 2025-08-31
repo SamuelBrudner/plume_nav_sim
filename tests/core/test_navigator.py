@@ -20,6 +20,7 @@ Key Testing Areas:
 """
 
 import time
+import logging
 import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock, Mock
@@ -2166,3 +2167,16 @@ def test_performance_requirements_with_sensor_integration():
     
     if LOGURU_AVAILABLE:
         logger.info(f"Sensor integration performance: {avg_step_time:.2f}ms average step time")
+
+
+def test_single_agent_strict_speed_validation_raises():
+    """Controller should raise when speed exceeds max_speed in strict mode."""
+    with pytest.raises(ValueError):
+        SingleAgentController(speed=2.0, max_speed=1.0, strict_validation=True)
+
+
+def test_single_agent_permissive_speed_clamp():
+    """Controller should clamp speed when strict validation is disabled."""
+    controller = SingleAgentController(speed=2.0, max_speed=1.0)
+    controller.step(np.zeros((1, 1)))
+    assert controller.speeds[0] == pytest.approx(controller.max_speeds[0])
