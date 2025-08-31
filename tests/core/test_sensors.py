@@ -1029,6 +1029,7 @@ class TestSensorIntrospection:
         assert metrics['sensor_type'] == 'ConcentrationSensor'
         assert 'total_operations' in metrics
 
+
     def test_performance_metrics_persist_after_reset(self):
         sensor = BinarySensor(threshold=0.1, enable_logging=False)
         sensor.reset()

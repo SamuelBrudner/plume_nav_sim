@@ -190,24 +190,24 @@ def mock_enhanced_logger():
     """
     with patch('odor_plume_nav.utils.logging_setup.get_enhanced_logger') as mock_get_logger:
         logger_mock = MagicMock()
-        
+
         # Configure logger methods
         logger_mock.info = MagicMock()
         logger_mock.warning = MagicMock()
         logger_mock.error = MagicMock()
         logger_mock.debug = MagicMock()
-        
-        # Configure performance timer context manager
+
+        # Configure performance timer context manager and track calls
         @contextmanager
         def mock_performance_timer(operation, **kwargs):
             metrics = MagicMock()
             metrics.operation_name = operation
             metrics.duration = 0.015
             yield metrics
-        
-        logger_mock.performance_timer = mock_performance_timer
+
+        logger_mock.performance_timer = MagicMock(side_effect=mock_performance_timer)
         mock_get_logger.return_value = logger_mock
-        
+
         yield logger_mock
 
 
@@ -265,11 +265,13 @@ def mock_json_log_sink():
 
 @pytest.fixture
 def mock_exists(monkeypatch):
-    """Mock the Path.exists method to return True for all paths except 'nonexistent_file.mp4'."""
+    """Mock file existence and opening for tests."""
+
     def patched_exists(self):
         return str(self) != "nonexistent_file.mp4"
-    
+
     monkeypatch.setattr(Path, "exists", patched_exists)
+    monkeypatch.setattr("builtins.open", mock_open(read_data=b"data"))
     return patched_exists
 
 
@@ -699,12 +701,13 @@ def test_video_plume_loguru_integration(mock_video_capture, mock_exists, mock_lo
     # Create VideoPlume instance
     video_path = "test_video.mp4"
     plume = VideoPlume(video_path)
-    
+
     # Verify Loguru logger was used for initialization logging
-    mock_loguru_logger.info.assert_called()
-    
+    bound_logger = mock_loguru_logger.bind.return_value
+    bound_logger.info.assert_called()
+
     # Verify the log message includes structured information
-    log_calls = mock_loguru_logger.info.call_args_list
+    log_calls = bound_logger.info.call_args_list
     assert any("VideoPlume initialized" in str(call) for call in log_calls)
     
     # Verify no print statements were used (would be caught by static analysis in real implementation)
@@ -1706,13 +1709,15 @@ def test_video_plume_log_level_configuration(mock_video_capture, mock_exists):
     debug_config = LoggingConfig(level="DEBUG", format="enhanced")
     error_config = LoggingConfig(level="ERROR", format="minimal")
     
-    # Setup logger with debug level
-    setup_logger(debug_config)
-    plume_debug = VideoPlume("test_video.mp4")
-    
-    # Setup logger with error level
-    setup_logger(error_config)
-    plume_error = VideoPlume("test_video.mp4")
+    from types import SimpleNamespace
+    with patch('psutil.virtual_memory', return_value=SimpleNamespace(total=8*(1024**3))):
+        # Setup logger with debug level
+        setup_logger(debug_config)
+        plume_debug = VideoPlume("test_video.mp4")
+
+        # Setup logger with error level
+        setup_logger(error_config)
+        plume_error = VideoPlume("test_video.mp4")
     
     # Both instances should create successfully
     assert isinstance(plume_debug, VideoPlume)
