@@ -153,43 +153,46 @@ except Exception as e:  # pragma: no cover - optional component
         extra={"metric_type": "environment_limitation", "error": str(e)}
     ) if LOGGING_AVAILABLE else None
 
-# Import compatibility layer for dual API support
+# Import compatibility utilities for dual API support
 try:
-    from plume_nav_sim.envs.compat import (
-        CompatibilityEnvWrapper,
-        detect_api_context,
-        create_environment_factory,
-        LegacyWrapper
+    from . import compat
+    from .compat import (
+        APIVersionResult,
+        CompatibilityMode,
+        detect_api_version,
+        wrap_environment,
     )
     __all__.extend([
-        "CompatibilityEnvWrapper",
-        "detect_api_context", 
-        "create_environment_factory",
-        "LegacyWrapper"
+        "APIVersionResult",
+        "CompatibilityMode",
+        "detect_api_version",
+        "wrap_environment",
+        "compat",
     ])
     COMPAT_LAYER_AVAILABLE = True
     logger.info(
-        "Compatibility layer available for dual API support",
+        "Compatibility utilities available for dual API support",
         extra={
             "metric_type": "environment_capability",
             "feature": "dual_api_support",
             "legacy_support": True,
             "modern_support": True,
-            "auto_detection": True
+            "auto_detection": True,
         }
     ) if LOGGING_AVAILABLE else None
-except ImportError as e:
-    CompatibilityEnvWrapper = None
-    detect_api_context = None
-    create_environment_factory = None
-    LegacyWrapper = None
+except Exception as e:  # pragma: no cover - optional component
+    compat = None
+    APIVersionResult = None
+    CompatibilityMode = None
+    detect_api_version = None
+    wrap_environment = None
     COMPAT_LAYER_AVAILABLE = False
     logger.warning(
-        f"Compatibility layer not available: {e}, single API mode only",
+        f"Compatibility utilities not available: {e}, single API mode only",
         extra={
             "metric_type": "environment_limitation",
             "missing_feature": "dual_api_support",
-            "error": str(e)
+            "error": str(e),
         }
     ) if LOGGING_AVAILABLE else None
 
