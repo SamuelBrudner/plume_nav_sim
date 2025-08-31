@@ -49,7 +49,7 @@ from typing import Dict, Optional, Union, Any, Tuple
 
 import cv2
 import numpy as np
-from loguru import logger
+from loguru import logger as _base_logger
 
 # Hydra imports for configuration management
 try:
@@ -63,15 +63,8 @@ except ImportError:
 # Import configuration schema for validation from unified package structure
 from odor_plume_nav.config.models import VideoPlumeConfig
 
-# Import cache and logging dependencies for frame caching integration
-try:
-    from odor_plume_nav.cache.frame_cache import FrameCache
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    FRAME_CACHE_AVAILABLE = False
-    FrameCache = None
-    logger.debug("FrameCache not available, running without cache support")
-
+# Enhanced logging setup
+logger = _base_logger
 try:
     from odor_plume_nav.utils.logging_setup import (
         PerformanceMetrics,
@@ -80,9 +73,20 @@ try:
         get_enhanced_logger,
     )
     LOGGING_UTILS_AVAILABLE = True
+    logger = get_enhanced_logger(__name__)
 except ImportError:
     LOGGING_UTILS_AVAILABLE = False
+    PerformanceMetrics = Any  # type: ignore
     logger.debug("Enhanced logging utilities not available, using basic logging")
+
+# Import cache dependencies for frame caching integration
+try:
+    from odor_plume_nav.cache.frame_cache import FrameCache
+    FRAME_CACHE_AVAILABLE = True
+except ImportError:
+    FRAME_CACHE_AVAILABLE = False
+    FrameCache = None
+    logger.debug("FrameCache not available, running without cache support")
 
 # Shared error message when video file is missing
 VIDEO_FILE_MISSING_MSG = "Video file does not exist"
@@ -237,11 +241,9 @@ class VideoPlume:
             bound = self._correlation_ctx.bind_context()
             bound.setdefault("module", "video_plume")
             self._logger = logger.bind(**bound)
-            self._perf_logger = get_enhanced_logger(__name__)
         else:
             self._correlation_ctx = None
             self._logger = logger
-            self._perf_logger = logger
         
         # Initialize frame caching system for performance optimization
         self.cache = cache
@@ -475,7 +477,9 @@ class VideoPlume:
 
             self.cache_stats["total_requests"] += 1
 
-            with self._perf_logger.performance_timer("video_frame_processing") as perf:
+            with logger.performance_timer("video_frame_processing") as metrics:
+                if not hasattr(metrics, "operation_name"):
+                    raise AttributeError("Performance metrics missing 'operation_name'")
                 start = time.time()
 
                 # Cache path
@@ -490,7 +494,7 @@ class VideoPlume:
                                 frame = frame.view()
                             self._logger.bind(
                                 frame_index=frame_idx,
-                                performance_metrics=getattr(perf, "to_dict", lambda: None)(),
+                                performance_metrics=getattr(metrics, "to_dict", lambda: None)(),
                             ).info("frame_retrieved_cache")
                             return frame
                     except Exception as e:
@@ -516,7 +520,7 @@ class VideoPlume:
 
             self._logger.bind(
                 frame_index=frame_idx,
-                performance_metrics=getattr(perf, "to_dict", lambda: None)(),
+                performance_metrics=getattr(metrics, "to_dict", lambda: None)(),
             ).info("frame_retrieved")
             return processed_frame
     
