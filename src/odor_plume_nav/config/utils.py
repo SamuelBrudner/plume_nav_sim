@@ -9,9 +9,8 @@ dataclass-based schema validation and composition per Hydra structured configs.
 
 import os
 import re
-import inspect
 from dataclasses import dataclass, fields, Field, is_dataclass
-from typing import Any, Union, Optional, Type, Dict, List, get_type_hints, get_origin, get_args
+from typing import Any, Union, Optional, Type, Dict, List, get_type_hints
 from pathlib import Path
 
 from odor_plume_nav.services.config_loader import (
@@ -100,228 +99,39 @@ def validate_env_interpolation(value: str, field_metadata: Optional[Dict[str, An
     if not match:
         return False
     
-    # If field metadata is provided, validate the default value against constraints
-    if field_metadata and match.group(2):
-        default_value = match.group(2)[1:]  # Remove leading comma
-        try:
-            # Convert and validate default value against field constraints
-            converted_value = _convert_env_value(default_value)
-            _validate_field_constraints(converted_value, field_metadata)
-        except (ValueError, TypeError):
-            return False
-    
     return True
 
 
 def resolve_env_value(
-    interpolation_str: str, 
+    interpolation_str: str,
     field_type: Optional[Type] = None,
     field_metadata: Optional[Dict[str, Any]] = None
-) -> Any:
-    """
-    Resolve environment variable from OmegaConf interpolation syntax with dataclass field support.
-    
-    Parses ${oc.env:VAR_NAME} or ${oc.env:VAR_NAME,default_value} syntax
-    and returns the environment variable value or default value if specified.
-    Enhanced to support dataclass field type hints and validation constraints.
-    
-    Args:
-        interpolation_str: String containing environment variable interpolation
-        field_type: Optional dataclass field type for type conversion
-        field_metadata: Optional dataclass field metadata for validation
-        
-    Returns:
-        Resolved environment variable value or default value
-        
-    Raises:
-        ValueError: If the interpolation syntax is invalid or validation fails
-        KeyError: If environment variable doesn't exist and no default is provided
-        
-    Examples:
-        >>> os.environ['TEST_VAR'] = 'test_value'
-        >>> resolve_env_value("${oc.env:TEST_VAR}")
-        'test_value'
-        >>> resolve_env_value("${oc.env:MISSING_VAR,default}")
-        'default'
-        >>> # With type and metadata
-        >>> resolve_env_value("${oc.env:SPEED,1.5}", float, {"ge": 0.0, "le": 2.0})
-        1.5
-    """
-    if not validate_env_interpolation(interpolation_str, field_metadata):
+) -> str:
+    """Resolve environment variable interpolation and return raw string values."""
+    if not validate_env_interpolation(interpolation_str):
         raise ValueError(f"Invalid environment variable interpolation syntax: {interpolation_str}")
-    
-    # Extract variable name and optional default value
+
     pattern = r'^\$\{oc\.env:([A-Za-z_][A-Za-z0-9_]*)(,(.*)?)?\}$'
     match = re.match(pattern, interpolation_str)
-    
+
     if not match:
         raise ValueError(f"Failed to parse environment variable interpolation: {interpolation_str}")
-    
+
     var_name = match.group(1)
-    has_default = match.group(2) is not None
-    default_value = match.group(3) if has_default else None
-    
-    # Try to get environment variable
+    default_value = match.group(3)
+
     env_value = os.environ.get(var_name)
-    
     if env_value is not None:
-        # Convert with field type if provided
-        converted_value = _convert_env_value_with_type(env_value, field_type)
-    elif has_default:
-        # Use default value if provided
-        converted_value = _convert_env_value_with_type(default_value, field_type) if default_value is not None else None
-    else:
-        # No environment variable and no default - raise error
-        raise KeyError(f"Environment variable '{var_name}' not found and no default value provided")
-    
-    # Validate against field constraints if metadata provided
-    if field_metadata and converted_value is not None:
-        _validate_field_constraints(converted_value, field_metadata)
-    
-    return converted_value
+        return str(env_value)
+    if default_value is not None:
+        return str(default_value)
+    raise KeyError(f"Environment variable '{var_name}' not found and no default value provided")
 
 
-def _convert_env_value(value: str) -> Any:
-    """
-    Convert environment variable string to appropriate Python type.
-    
-    Args:
-        value: String value from environment variable
-        
-    Returns:
-        Converted value (int, float, bool, or original string)
-    """
-    if value is None:
-        return None
-    
-    # Handle boolean values
-    if value.lower() in ('true', 'yes', '1', 'on'):
-        return True
-    elif value.lower() in ('false', 'no', '0', 'off'):
-        return False
-    
-    # Try to convert to int
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    
-    # Try to convert to float
-    try:
-        return float(value)
-    except ValueError:
-        pass
-    
-    # Return as string if no conversion possible
-    return value
 
 
-def _convert_env_value_with_type(value: str, field_type: Optional[Type] = None) -> Any:
-    """
-    Convert environment variable string to specified type with enhanced type handling.
-    
-    Args:
-        value: String value from environment variable
-        field_type: Optional target type for conversion
-        
-    Returns:
-        Converted value according to field_type or best-guess type
-    """
-    if value is None:
-        return None
-    
-    # If no specific type provided, use basic conversion
-    if field_type is None:
-        return _convert_env_value(value)
-    
-    # Handle Optional types (Union[T, None])
-    if get_origin(field_type) is Union:
-        args = get_args(field_type)
-        if len(args) == 2 and type(None) in args:
-            # This is Optional[T], extract the non-None type
-            field_type = next(arg for arg in args if arg is not type(None))
-    
-    # Handle specific type conversions
-    try:
-        if field_type == bool:
-            return value.lower() in ('true', 'yes', '1', 'on')
-        elif field_type == int:
-            return int(value)
-        elif field_type == float:
-            return float(value)
-        elif field_type == str:
-            return value
-        elif field_type == Path:
-            return Path(value)
-        elif get_origin(field_type) is list:
-            # Handle List[T] types by parsing comma-separated values
-            inner_type = get_args(field_type)[0] if get_args(field_type) else str
-            items = [item.strip() for item in value.split(',')]
-            return [_convert_env_value_with_type(item, inner_type) for item in items]
-        elif get_origin(field_type) is tuple:
-            # Handle Tuple[T, ...] types
-            inner_types = get_args(field_type)
-            items = [item.strip() for item in value.split(',')]
-            if len(inner_types) == 2 and inner_types[1] is ...:
-                # Variable length tuple Tuple[T, ...]
-                inner_type = inner_types[0]
-                return tuple(_convert_env_value_with_type(item, inner_type) for item in items)
-            else:
-                # Fixed length tuple
-                if len(items) != len(inner_types):
-                    raise ValueError(f"Expected {len(inner_types)} items for tuple, got {len(items)}")
-                return tuple(_convert_env_value_with_type(item, t) for item, t in zip(items, inner_types))
-        else:
-            # Fallback to basic conversion for unknown types
-            return _convert_env_value(value)
-    except (ValueError, TypeError) as e:
-        raise ValueError(f"Cannot convert '{value}' to type {field_type}: {e}")
 
 
-def _validate_field_constraints(value: Any, field_metadata: Dict[str, Any]) -> None:
-    """
-    Validate a value against dataclass field constraints.
-    
-    Args:
-        value: Value to validate
-        field_metadata: Field metadata containing validation constraints
-        
-    Raises:
-        ValueError: If value doesn't meet constraints
-    """
-    if value is None:
-        return
-    
-    # Check numeric constraints
-    if 'ge' in field_metadata and hasattr(value, '__ge__'):
-        if not (value >= field_metadata['ge']):
-            raise ValueError(f"Value {value} must be >= {field_metadata['ge']}")
-    
-    if 'gt' in field_metadata and hasattr(value, '__gt__'):
-        if not (value > field_metadata['gt']):
-            raise ValueError(f"Value {value} must be > {field_metadata['gt']}")
-    
-    if 'le' in field_metadata and hasattr(value, '__le__'):
-        if not (value <= field_metadata['le']):
-            raise ValueError(f"Value {value} must be <= {field_metadata['le']}")
-    
-    if 'lt' in field_metadata and hasattr(value, '__lt__'):
-        if not (value < field_metadata['lt']):
-            raise ValueError(f"Value {value} must be < {field_metadata['lt']}")
-    
-    # Check string constraints
-    if 'min_length' in field_metadata and hasattr(value, '__len__'):
-        if len(value) < field_metadata['min_length']:
-            raise ValueError(f"Value length {len(value)} must be >= {field_metadata['min_length']}")
-    
-    if 'max_length' in field_metadata and hasattr(value, '__len__'):
-        if len(value) > field_metadata['max_length']:
-            raise ValueError(f"Value length {len(value)} must be <= {field_metadata['max_length']}")
-    
-    # Check pattern constraints
-    if 'pattern' in field_metadata and isinstance(value, str):
-        if not re.match(field_metadata['pattern'], value):
-            raise ValueError(f"Value '{value}' doesn't match pattern '{field_metadata['pattern']}'")
 
 
 # Dataclass schema introspection utilities
@@ -409,21 +219,11 @@ def validate_dataclass_env_interpolation(
         if isinstance(value, str) and value.startswith('${oc.env:'):
             # Resolve environment variable interpolation
             try:
-                resolved_value = resolve_env_value(
-                    value,
-                    field_type=field_data['type'],
-                    field_metadata=field_data['metadata']
-                )
+                resolved_value = resolve_env_value(value)
                 resolved_config[key] = resolved_value
             except (ValueError, KeyError) as e:
                 raise ValueError(f"Failed to resolve environment variable for field '{key}': {e}")
         else:
-            # Validate non-interpolated values against field constraints
-            if field_data['metadata']:
-                try:
-                    _validate_field_constraints(value, field_data['metadata'])
-                except ValueError as e:
-                    raise ValueError(f"Validation failed for field '{key}': {e}")
             resolved_config[key] = value
     
     return resolved_config

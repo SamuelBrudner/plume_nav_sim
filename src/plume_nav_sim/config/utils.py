@@ -198,18 +198,18 @@ def resolve_env_value(value: str, default: str = "") -> str:
         env_value = os.environ.get(env_var)
         if env_value is not None:
             logger.debug("Resolved env var %s as %s", env_var, env_value)
-            return env_value
+            return str(env_value)
         if use_default != "":
             logger.debug("Using default value for %s: %s", env_var, use_default)
-            return use_default
+            return str(use_default)
         raise KeyError(f"Environment variable '{env_var}' not found")
 
     if '${oc.env:' in value:
         logger.debug("Interpolation pattern detected but not full match; returning default: %s", default)
-        return default
+        return str(default)
 
     logger.debug("No interpolation; returning value unchanged: %s", value)
-    return value
+    return str(value)
 
 
 # Re-export schemas for convenience
