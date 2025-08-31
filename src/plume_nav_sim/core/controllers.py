@@ -498,13 +498,16 @@ class BaseController:
             'frame_cache_misses': 0
         }
         
+        # Known kwargs
+        cache_memory_limit_mb = kwargs.pop("cache_memory_limit_mb", 2048)
+
         # Frame cache integration
         self._frame_cache = None
         if FRAME_CACHE_AVAILABLE and self._frame_cache_mode != "none":
             try:
                 self._frame_cache = FrameCache(
                     mode=self._frame_cache_mode,
-                    memory_limit_mb=kwargs.get('cache_memory_limit_mb', 2048),
+                    memory_limit_mb=cache_memory_limit_mb,
                     enable_statistics=True
                 )
             except Exception as e:
@@ -534,6 +537,12 @@ class BaseController:
                     pass
         else:
             self._logger = None
+
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs.keys()))
+            log = self._logger if self._logger is not None else logger
+            log.error(f"Unexpected keyword arguments: {unknown}")
+            raise TypeError(f"Unexpected keyword arguments: {unknown}")
     
     # NavigatorProtocol properties for v1.0 architecture
     
