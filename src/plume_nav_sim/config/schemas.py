@@ -310,6 +310,9 @@ class VideoPlumeConfig(BaseModel):
     @classmethod
     def validate_kernel_size(cls, v):
         if v is not None:
+            if v == 0:
+                # A value of 0 disables kernel smoothing altogether
+                return 0
             if v < 0:
                 raise ValueError('kernel_size must be positive')
             if v % 2 == 0:
