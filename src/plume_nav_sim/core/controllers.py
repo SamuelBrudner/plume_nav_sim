@@ -1079,6 +1079,7 @@ class SingleAgentController(BaseController):
         enable_memory: bool = False,
         boundary_policy: Optional[BoundaryPolicyProtocol] = None,
         domain_bounds: Optional[Tuple[float, float]] = None,
+        strict_validation: bool = False,
         **kwargs: Any
     ) -> None:
         """
@@ -1089,11 +1090,13 @@ class SingleAgentController(BaseController):
             orientation: Initial orientation in degrees, defaults to 0.0
             speed: Initial speed, defaults to 0.0
             max_speed: Maximum allowed speed, defaults to 1.0
+            strict_validation: If True, raise when speed exceeds max_speed
             angular_velocity: Initial angular velocity in degrees/second, defaults to 0.0
             sensors: List of SensorProtocol implementations for perception, defaults to [DirectOdorSensor()]
             enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
             boundary_policy: Optional boundary policy for domain edge handling, defaults to None
             domain_bounds: Optional domain bounds for default boundary policy creation, defaults to None
+            strict_validation: If True, raise when speed exceeds max_speed
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging (default: True)
                 - controller_id: Unique controller identifier
@@ -1132,7 +1135,8 @@ class SingleAgentController(BaseController):
             raise ValueError(f"Invalid parameter type conversion: {e}")
         
         # Validate parameters
-        if speed > max_speed:
+        self._strict_validation = strict_validation
+        if speed > max_speed and self._strict_validation:
             raise ValueError(f"speed ({speed}) cannot exceed max_speed ({max_speed})")
         
         # Initialize state arrays for API consistency with proper shape (1, 2)
@@ -1310,7 +1314,7 @@ class SingleAgentController(BaseController):
             raise ValueError(f"Time step dt must be positive, got {dt}")
             
         start_time = time.perf_counter() if self._enable_logging else None
-        
+
         try:
             # Integrate with frame cache if available
             processed_env_array = env_array
@@ -1324,12 +1328,21 @@ class SingleAgentController(BaseController):
                         self._performance_metrics['frame_cache_hits'] += 1
                     else:
                         self._performance_metrics['frame_cache_misses'] += 1
-            
+
+            if not self._strict_validation and self._speed[0] > self._max_speed[0]:
+                log = self._logger if self._logger is not None else logger
+                log.warning(
+                    "speed exceeds max_speed; clamping",
+                    speed=float(self._speed[0]),
+                    max_speed=float(self._max_speed[0])
+                )
+                self._speed[0] = self._max_speed[0]
+
             # Use utility function to update position and orientation
             _update_positions_and_orientations(
-                self._position, 
-                self._orientation, 
-                self._speed, 
+                self._position,
+                self._orientation,
+                self._speed,
                 self._angular_velocity,
                 dt=dt
             )
