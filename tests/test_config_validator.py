@@ -111,28 +111,42 @@ class TestNavigatorConfig:
         assert "Agent 1: speed" in str(exc_info.value)
         assert "cannot exceed max_speed" in str(exc_info.value)
 
-    def test_orientation_normalization(self):
-        """Test that orientations are normalized to [0, 360) range."""
-        # Test single agent orientation normalization
+    def test_orientation_bounds(self):
+        """Test that orientations outside [0, 360] raise validation errors."""
+        # Single agent orientation too large
         config_data = {
             "position": [0.0, 0.0],
-            "orientation": 450.0,  # Should normalize to 90.0
+            "orientation": 450.0,
             "speed": 1.0,
-            "max_speed": 2.0
+            "max_speed": 2.0,
         }
-        config = NavigatorConfig(**config_data)
-        assert config.orientation == 90.0
+        with pytest.raises(ValidationError) as exc_info:
+            NavigatorConfig(**config_data)
+        assert "less than or equal to 360" in str(exc_info.value)
 
-        # Test multi-agent orientation normalization
+        # Single agent orientation negative
+        config_data["orientation"] = -90.0
+        with pytest.raises(ValidationError) as exc_info:
+            NavigatorConfig(**config_data)
+        assert "greater than or equal to 0" in str(exc_info.value)
+
+        # Multi-agent orientation too large
         config_data = {
             "positions": [[0.0, 0.0], [1.0, 1.0]],
-            "orientations": [380.0, -90.0],  # Should normalize to [20.0, 270.0]
+            "orientations": [380.0, 10.0],
             "speeds": [1.0, 1.0],
             "max_speeds": [2.0, 2.0],
-            "num_agents": 2
+            "num_agents": 2,
         }
-        config = NavigatorConfig(**config_data)
-        assert config.orientations == [20.0, 270.0]
+        with pytest.raises(ValidationError) as exc_info:
+            NavigatorConfig(**config_data)
+        assert "less than or equal to 360" in str(exc_info.value)
+
+        # Multi-agent orientation negative
+        config_data["orientations"] = [10.0, -90.0]
+        with pytest.raises(ValidationError) as exc_info:
+            NavigatorConfig(**config_data)
+        assert "greater than or equal to 0" in str(exc_info.value)
 
     def test_multi_agent_parameter_consistency(self):
         """Test that multi-agent parameter lists have consistent lengths."""
@@ -218,25 +232,23 @@ class TestSingleAgentConfig:
         
         assert "greater than 0" in str(exc_info.value)
 
-    def test_orientation_normalization_edge_cases(self):
-        """Test orientation normalization for edge cases."""
-        # Test large positive angle
+    def test_orientation_bounds(self):
+        """Test orientation validation for out-of-range angles."""
+        # Angle greater than 360
         config_data = {
-            "orientation": 720.0,  # Should normalize to 0.0
+            "orientation": 720.0,
             "speed": 1.0,
-            "max_speed": 2.0
+            "max_speed": 2.0,
         }
-        config = SingleAgentConfig(**config_data)
-        assert config.orientation == 0.0
+        with pytest.raises(ValidationError) as exc_info:
+            SingleAgentConfig(**config_data)
+        assert "less than or equal to 360" in str(exc_info.value)
 
-        # Test negative angle
-        config_data = {
-            "orientation": -180.0,  # Should normalize to 180.0
-            "speed": 1.0,
-            "max_speed": 2.0
-        }
-        config = SingleAgentConfig(**config_data)
-        assert config.orientation == 180.0
+        # Negative angle
+        config_data["orientation"] = -180.0
+        with pytest.raises(ValidationError) as exc_info:
+            SingleAgentConfig(**config_data)
+        assert "greater than or equal to 0" in str(exc_info.value)
 
 
 class TestMultiAgentConfig:
@@ -258,6 +270,24 @@ class TestMultiAgentConfig:
         assert len(config.orientations) == 3
         assert len(config.speeds) == 3
         assert config.num_agents == 3
+
+    def test_orientation_bounds(self):
+        """Test validation for orientation list bounds."""
+        config_data = {
+            "positions": [[0.0, 0.0], [5.0, 5.0]],
+            "orientations": [0.0, 400.0],
+            "speeds": [1.0, 1.0],
+            "max_speeds": [2.0, 2.0],
+            "num_agents": 2,
+        }
+        with pytest.raises(ValidationError) as exc_info:
+            MultiAgentConfig(**config_data)
+        assert "less than or equal to 360" in str(exc_info.value)
+
+        config_data["orientations"] = [-10.0, 45.0]
+        with pytest.raises(ValidationError) as exc_info:
+            MultiAgentConfig(**config_data)
+        assert "greater than or equal to 0" in str(exc_info.value)
 
     def test_position_structure_validation(self):
         """Test that positions have correct [x, y] structure."""
