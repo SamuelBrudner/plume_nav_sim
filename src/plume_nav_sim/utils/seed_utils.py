@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Any, Dict, Iterator, Optional, Tuple
 import threading
+import random
+import numpy as np
 
 try:  # Prefer loguru if available for consistency with project logging
     from loguru import logger
@@ -18,47 +20,59 @@ except Exception:  # pragma: no cover - fallback
     import logging
     logger = logging.getLogger(__name__)
 
-from odor_plume_nav.utils.seed_manager import (
-    SeedManager,
-    get_current_seed,
-)
-
-
-_seed_lock = threading.RLock()
+_THREAD_LOCAL = threading.local()
 
 
 @dataclass
 class SeedContext:
-    """Minimal seed context returned by :func:`get_seed_context`."""
+    """Seed context describing per-thread RNG state."""
 
     global_seed: int
+    thread_id: int
+    python_state: Optional[Tuple[Any, ...]] = None
+    numpy_state: Optional[Dict[str, Any]] = None
     is_seeded: bool = True
 
 
 def get_seed_context() -> SeedContext:
-    """Return a context describing the current seeding state."""
-    seed = get_current_seed()
-    return SeedContext(global_seed=seed if seed is not None else -1, is_seeded=seed is not None)
+    """Return a context describing the current thread's RNG state."""
+    seed = getattr(_THREAD_LOCAL, "seed", None)
+    py_rng = getattr(_THREAD_LOCAL, "py_rng", None)
+    np_rng = getattr(_THREAD_LOCAL, "np_rng", None)
+    return SeedContext(
+        global_seed=seed if seed is not None else -1,
+        thread_id=threading.get_ident(),
+        python_state=py_rng.getstate() if py_rng else None,
+        numpy_state=np_rng.bit_generator.state if np_rng else None,
+        is_seeded=seed is not None,
+    )
 
 
 @contextmanager
-def set_global_seed(seed: int) -> Iterator[None]:
-    """Context manager that seeds all RNGs deterministically.
+def set_global_seed(seed: int) -> Iterator[Tuple[random.Random, np.random.Generator]]:
+    """Context manager providing thread-local RNGs seeded deterministically."""
+    thread_id = threading.get_ident()
+    logger.info("Thread %s setting seed %s", thread_id, seed)
 
-    The previous seed is restored when exiting the context if one was set.
-    """
-    manager = SeedManager()
-    previous = get_current_seed()
-    logger.debug("Acquiring seed lock for seed %s", seed)
-    with _seed_lock:
-        manager.set_seed(seed)
-        logger.debug("Seed set to %s", seed)
-        try:
-            yield
-        finally:
-            if previous is not None:
-                manager.set_seed(previous)
-                logger.debug("Seed restored to %s", previous)
+    prev_seed = getattr(_THREAD_LOCAL, "seed", None)
+    prev_py = getattr(_THREAD_LOCAL, "py_rng", None)
+    prev_np = getattr(_THREAD_LOCAL, "np_rng", None)
+
+    _THREAD_LOCAL.py_rng = random.Random(seed)
+    _THREAD_LOCAL.np_rng = np.random.default_rng(seed)
+    _THREAD_LOCAL.seed = seed
+
+    try:
+        yield _THREAD_LOCAL.py_rng, _THREAD_LOCAL.np_rng
+    finally:
+        if prev_seed is not None and prev_py is not None and prev_np is not None:
+            _THREAD_LOCAL.seed = prev_seed
+            _THREAD_LOCAL.py_rng = prev_py
+            _THREAD_LOCAL.np_rng = prev_np
+        else:
+            for attr in ("seed", "py_rng", "np_rng"):
+                if hasattr(_THREAD_LOCAL, attr):
+                    delattr(_THREAD_LOCAL, attr)
 
 
 def validate_deterministic_behavior(*args, **kwargs) -> bool:  # pragma: no cover - simple proxy

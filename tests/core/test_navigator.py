@@ -1814,16 +1814,16 @@ def test_seed_context_thread_safety():
     results = queue.Queue()
 
     # Pre-compute expected sequences for each seed
-    expected_sequences = {s: np.random.RandomState(s).random(5) for s in (0, 100, 200)}
+    expected_sequences = {s: np.random.default_rng(s).random(5) for s in (0, 100, 200)}
 
     def worker_function(seed_val, worker_id):
-        with set_global_seed(seed_val):
+        with set_global_seed(seed_val) as (_, np_rng):
             # Sleep to encourage thread scheduling overlap which exposes race conditions
             time.sleep(0.01)
             context = get_seed_context()
             # Generate some random values
-            values = [np.random.random() for _ in range(5)]
-            results.put((worker_id, context.global_seed, values))
+            values = np_rng.random(5)
+            results.put((worker_id, context.global_seed, context.thread_id, values))
 
     # Start multiple threads with different seeds
     threads = []
@@ -1839,14 +1839,15 @@ def test_seed_context_thread_safety():
     # Verify each thread used its assigned seed and produced expected sequence
     thread_results = {}
     while not results.empty():
-        worker_id, seed, values = results.get()
-        thread_results[worker_id] = (seed, values)
+        worker_id, seed, thread_id, values = results.get()
+        thread_results[worker_id] = (seed, thread_id, values)
 
     assert len(thread_results) == 3
 
     # Check deterministic sequences and distinctness
     seen_sequences = []
-    for worker_id, (seed, values) in thread_results.items():
+    seen_threads = set()
+    for worker_id, (seed, thread_id, values) in thread_results.items():
         expected_seed = worker_id * 100
         assert seed == expected_seed, f"Worker {worker_id} should have seed {expected_seed}, got {seed}"
 
@@ -1855,9 +1856,59 @@ def test_seed_context_thread_safety():
             f"Worker {worker_id} did not produce expected sequence for seed {seed}"
         )
         seen_sequences.append(tuple(values))
+        seen_threads.add(thread_id)
 
-    # Ensure each thread produced a distinct sequence
+    # Ensure each thread produced a distinct sequence and thread id
     assert len(set(seen_sequences)) == 3, "Threads should produce distinct sequences"
+    assert len(seen_threads) == 3, "Thread identifiers should be unique"
+
+
+# Regression test for per-thread RNG independence
+def test_thread_local_rng_independence():
+    """Each thread should maintain independent RNGs and recorded seeds."""
+    import threading
+    import queue
+    import random
+
+    seeds = [1, 2, 3]
+    expected_py = {}
+    for s in seeds:
+        rng = random.Random(s)
+        expected_py[s] = [rng.random() for _ in range(3)]
+    expected_np = {s: np.random.default_rng(s).random(3) for s in seeds}
+
+    results = queue.Queue()
+
+    def worker(seed_val: int) -> None:
+        with set_global_seed(seed_val) as rngs:
+            assert rngs is not None, "set_global_seed should provide thread-local RNGs"
+            py_rng, np_rng = rngs
+            ctx = get_seed_context()
+            assert hasattr(ctx, "thread_id"), "SeedContext should include thread identifier"
+            py_seq = [py_rng.random() for _ in range(3)]
+            np_seq = np_rng.random(3)
+            results.put((seed_val, ctx.global_seed, ctx.thread_id, py_seq, np_seq))
+
+    threads = [threading.Thread(target=worker, args=(s,)) for s in seeds]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert results.qsize() == len(seeds)
+
+    seen_py = set()
+    seen_np = set()
+    while not results.empty():
+        seed_val, recorded_seed, thread_id, py_seq, np_seq = results.get()
+        assert recorded_seed == seed_val
+        assert np.allclose(py_seq, expected_py[seed_val])
+        assert np.allclose(np_seq, expected_np[seed_val])
+        seen_py.add(tuple(py_seq))
+        seen_np.add(tuple(np_seq))
+
+    assert len(seen_py) == len(seeds), "Python RNG sequences should be distinct"
+    assert len(seen_np) == len(seeds), "NumPy RNG sequences should be distinct"
 
 
 # Property-Based Testing for Coordinate Frame Consistency
