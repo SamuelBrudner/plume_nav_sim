@@ -732,10 +732,21 @@ class BaseSensor(ABC):
                 'cache_misses': 0,
                 'error_count': 0
             }
-            
+
             if self._logger:
                 self._logger.debug("Sensor performance metrics reset")
-    
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        """Return generic observation space information for the sensor.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Dictionary with ``shape`` and ``dtype`` describing the sensor's
+            observation output. Subclasses may override this for custom outputs.
+        """
+        return {"shape": (1,), "dtype": np.float64}
+
     # Protected helper methods for use by concrete implementations
     
     def _execute_with_monitoring(
