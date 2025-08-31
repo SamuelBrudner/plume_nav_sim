@@ -547,6 +547,43 @@ def register_environments() -> Dict[str, bool]:
                     "frame_cache_default": "lru"
                 }
             ) if LOGGING_AVAILABLE else None
+
+            try:
+                gym_modern.register(
+                    id='plume_nav_sim_v0',
+                    entry_point='plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv',
+                    max_episode_steps=1000,
+                    reward_threshold=100.0,
+                    nondeterministic=False,
+                    kwargs={
+                        'use_gymnasium_api': True,
+                        'api_version': '0.29.x',
+                        'enable_extensibility_hooks': True,
+                        'frame_cache_mode': 'lru'
+                    }
+                )
+                registration_results['plume_nav_sim_v0'] = True
+                logger.info(
+                    "Registered plume_nav_sim_v0 alias for PlumeNavSim-v0",
+                    extra={
+                        "metric_type": "environment_registration",
+                        "env_id": "plume_nav_sim_v0",
+                        "alias_for": "PlumeNavSim-v0",
+                        "api_type": "gymnasium",
+                        "api_version": "0.29.x"
+                    }
+                ) if LOGGING_AVAILABLE else None
+            except Exception as e:
+                registration_results['plume_nav_sim_v0'] = False
+                logger.error(
+                    f"Failed to register plume_nav_sim_v0: {e}",
+                    extra={
+                        "metric_type": "registration_error",
+                        "env_id": "plume_nav_sim_v0",
+                        "error_type": type(e).__name__,
+                        "error_message": str(e)
+                    }
+                ) if LOGGING_AVAILABLE else None
         except Exception as e:
             registration_results['PlumeNavSim-v0'] = False
             logger.error(

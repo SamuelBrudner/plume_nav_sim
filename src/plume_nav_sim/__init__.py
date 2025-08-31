@@ -20,8 +20,11 @@ import warnings
 import inspect
 import sys
 import atexit
+import logging
 
 __version__ = "1.0.0"
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # LEGACY GYM DETECTION AND DEPRECATION WARNING SYSTEM
@@ -132,20 +135,43 @@ def _register_gymnasium_environments():
     try:
         import gymnasium
         from gymnasium.envs.registration import register
-        
+
+        env_kwargs = {
+            'api_version': 'gymnasium',
+            'return_format': '5-tuple',
+            'enable_extensibility_hooks': True,
+        }
+
         # Register primary Gymnasium environment
         register(
             id='PlumeNavSim-v0',
             entry_point='plume_nav_sim.envs:PlumeNavigationEnv',
             max_episode_steps=1000,
             reward_threshold=500.0,
-            kwargs={
-                'api_version': 'gymnasium',
-                'return_format': '5-tuple',
-                'enable_extensibility_hooks': True,
-            }
+            kwargs=dict(env_kwargs),
         )
-        
+        logger.info(
+            "Registered PlumeNavSim-v0 environment",
+            extra={"metric_type": "environment_registration", "env_id": "PlumeNavSim-v0"},
+        )
+
+        # Register snake_case alias
+        register(
+            id='plume_nav_sim_v0',
+            entry_point='plume_nav_sim.envs:PlumeNavigationEnv',
+            max_episode_steps=1000,
+            reward_threshold=500.0,
+            kwargs=dict(env_kwargs),
+        )
+        logger.info(
+            "Registered plume_nav_sim_v0 alias for PlumeNavSim-v0",
+            extra={
+                "metric_type": "environment_registration",
+                "env_id": "plume_nav_sim_v0",
+                "alias_for": "PlumeNavSim-v0",
+            },
+        )
+
         # Register legacy compatibility environment
         register(
             id='OdorPlumeNavigation-v1',
@@ -158,7 +184,7 @@ def _register_gymnasium_environments():
                 'enable_extensibility_hooks': False,
             }
         )
-        
+
         return True
         
     except ImportError:

@@ -537,6 +537,21 @@ def visualize_simulation_results(
     return visualize_plume_simulation(positions, orientations, **kwargs)
 
 
+def _normalize_environment_id(env_id: str) -> str:
+    """Normalize environment identifiers to handle hyphen/underscore variants."""
+    key = env_id.replace("-", "").replace("_", "").lower()
+    if key == "plumenavsimv0":
+        target = "plume_nav_sim_v0" if "_" in env_id else "PlumeNavSim-v0"
+        if env_id != target:
+            logger.info(
+                "Using environment alias '%s' for '%s'",
+                target,
+                env_id,
+            )
+        return target
+    return env_id
+
+
 def create_gymnasium_environment(
     config: Optional[Dict[str, Any]] = None,
     **kwargs
@@ -562,11 +577,12 @@ def create_gymnasium_environment(
     
     # Extract environment_id, default to PlumeNavSim-v0
     environment_id = merged_config.pop('environment_id', 'PlumeNavSim-v0')
-    
+    environment_id = _normalize_environment_id(environment_id)
+
     # Try to create the real environment
     try:
         import gymnasium as gym
-        
+
         # Create environment using gymnasium.make
         env = gym.make(environment_id, **merged_config)
         return env
