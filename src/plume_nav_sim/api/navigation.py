@@ -123,6 +123,33 @@ def _validate_video_plume_config(config: Dict[str, Any]) -> None:
                 raise ValueError("kernel_sigma must be a positive number")
         except (ValueError, TypeError):
             raise ValueError("kernel_sigma must be a positive number")
+
+    # Validate frame range controls
+    if 'frame_skip' in config:
+        try:
+            frame_skip = int(config['frame_skip'])
+            if frame_skip <= 0:
+                raise ValueError("frame_skip must be a positive integer")
+        except (ValueError, TypeError):
+            raise ValueError("frame_skip must be a positive integer")
+
+    if 'start_frame' in config:
+        try:
+            start_frame = int(config['start_frame'])
+            if start_frame < 0:
+                raise ValueError("start_frame must be non-negative")
+        except (ValueError, TypeError):
+            raise ValueError("start_frame must be a non-negative integer")
+
+    if 'end_frame' in config and config['end_frame'] is not None:
+        try:
+            end_frame = int(config['end_frame'])
+            if end_frame < 0:
+                raise ValueError("end_frame must be non-negative")
+            if 'start_frame' in config and end_frame <= int(config['start_frame']):
+                raise ValueError("end_frame must be greater than start_frame")
+        except (ValueError, TypeError):
+            raise ValueError("end_frame must be a non-negative integer")
     
     # Validate width and height
     for param in ['width', 'height']:
