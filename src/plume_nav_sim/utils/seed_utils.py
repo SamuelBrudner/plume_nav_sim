@@ -21,6 +21,16 @@ except Exception:  # pragma: no cover - fallback
     logger = logging.getLogger(__name__)
 
 _THREAD_LOCAL = threading.local()
+from odor_plume_nav.utils.seed_manager import (
+    SeedManager,
+    get_current_seed,
+)
+from odor_plume_nav.utils.seed_utils import (
+    seed_context_manager as _seed_context_manager,
+)
+
+
+_seed_lock = threading.RLock()
 
 
 @dataclass
@@ -80,4 +90,14 @@ def validate_deterministic_behavior(*args, **kwargs) -> bool:  # pragma: no cove
     return True
 
 
-__all__ = ["set_global_seed", "get_seed_context", "SeedContext", "validate_deterministic_behavior"]
+# Re-export with preserved documentation
+seed_context_manager = _seed_context_manager
+
+
+__all__ = [
+    "set_global_seed",
+    "get_seed_context",
+    "SeedContext",
+    "validate_deterministic_behavior",
+    "seed_context_manager",
+]
