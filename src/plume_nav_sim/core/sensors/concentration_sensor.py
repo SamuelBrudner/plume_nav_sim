@@ -398,7 +398,8 @@ class ConcentrationSensor(BaseSensor):
             'filter_operations': 0,
             'saturation_events': 0,
             'noise_applications': 0,
-            'vectorized_operations': 0
+            'vectorized_operations': 0,
+            'total_measurements': 0
         })
         
         # Log sensor initialization
@@ -553,16 +554,16 @@ class ConcentrationSensor(BaseSensor):
             # Store last measurements for temporal filtering
             self._last_measurements = measured_concentrations.copy()
             self._measurement_count += num_agents
-            
+
             # Track performance metrics
+            self._performance_metrics['total_measurements'] += num_agents
             if self._enable_logging and start_time:
                 measurement_time = (time.perf_counter() - start_time) * 1000  # Convert to ms
                 self._performance_metrics['measurement_times'].append(measurement_time)
-                self._performance_metrics['total_measurements'] += num_agents
-                
+
                 if self._config.vectorized_ops and num_agents > 1:
                     self._performance_metrics['vectorized_operations'] += 1
-                
+
                 # Log detailed performance for debugging (reduced frequency)
                 if LOGURU_AVAILABLE and self._measurement_count % 100 == 0:
                     logger.trace(
@@ -573,7 +574,7 @@ class ConcentrationSensor(BaseSensor):
                         measurement_count=self._measurement_count,
                         drift_offset=self._total_drift
                     )
-                
+
                 # Check performance requirement (<0.1ms per agent)
                 if measurement_time > 0.1 * num_agents and LOGURU_AVAILABLE:
                     logger.warning(
@@ -1080,6 +1081,27 @@ class ConcentrationSensor(BaseSensor):
                 'performance_monitoring'
             ]
         }
+
+    def get_metadata(self) -> Dict[str, Any]:
+        """Return configuration and performance metadata for the sensor."""
+        return {
+            'sensor_type': 'ConcentrationSensor',
+            'sensor_id': self._sensor_id,
+            'configuration': {
+                'dynamic_range': self._config.dynamic_range,
+                'resolution': self._config.resolution,
+                'noise_std': self._config.noise_std,
+            },
+            'performance': {
+                'total_measurements': self._performance_metrics['total_measurements'],
+                'total_calls': self._measurement_count,
+            },
+            'last_measurement': float(self._last_measurements[-1]) if isinstance(self._last_measurements, np.ndarray) and self._last_measurements.size > 0 else None,
+        }
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        """Describe the measurement output space."""
+        return {'shape': (1,), 'dtype': np.float64}
 
 
 # Factory functions for configuration-driven instantiation

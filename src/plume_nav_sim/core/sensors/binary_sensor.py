@@ -235,7 +235,8 @@ class BinarySensor:
             'false_positives_applied': 0,
             'false_negatives_applied': 0,
             'hysteresis_activations': 0,
-            'total_calls': 0
+            'total_calls': 0,
+            'total_operations': 0
         }
         
         # Random number generation for noise modeling
@@ -379,6 +380,7 @@ class BinarySensor:
                 self._performance_metrics['detection_times'].append(detection_time)
                 self._performance_metrics['total_detections'] += num_agents
                 self._performance_metrics['total_calls'] += 1
+                self._performance_metrics['total_operations'] += 1
                 
                 # Per-agent latency calculation
                 per_agent_latency = detection_time / num_agents if num_agents > 0 else 0
@@ -701,7 +703,8 @@ class BinarySensor:
             'false_positives_applied': 0,
             'false_negatives_applied': 0,
             'hysteresis_activations': 0,
-            'total_calls': 0
+            'total_calls': 0,
+            'total_operations': 0
         }
         
         # Log reset
@@ -724,30 +727,57 @@ class BinarySensor:
             Dict[str, Any]: Performance metrics including timing, throughput,
                 and efficiency statistics
         """
-        if not self._performance_metrics['detection_times']:
-            return {
-                'total_calls': 0,
-                'total_detections': 0,
-                'avg_latency_us': 0,
-                'throughput_detections_per_sec': 0,
-                'efficiency_score': 0
-            }
-        
-        detection_times = np.array(self._performance_metrics['detection_times'])
-        
-        return {
+        detection_times = np.array(self._performance_metrics['detection_times']) if self._performance_metrics['detection_times'] else None
+
+        metrics = {
+            'sensor_type': 'BinarySensor',
+            'total_operations': self._performance_metrics['total_operations'],
             'total_calls': self._performance_metrics['total_calls'],
             'total_detections': self._performance_metrics['total_detections'],
-            'avg_latency_us': float(np.mean(detection_times)),
-            'p95_latency_us': float(np.percentile(detection_times, 95)),
-            'max_latency_us': float(np.max(detection_times)),
-            'min_latency_us': float(np.min(detection_times)),
-            'latency_std_us': float(np.std(detection_times)),
-            'avg_per_agent_latency_us': float(np.mean(detection_times) / max(1, self._num_agents or 1)),
-            'throughput_detections_per_sec': float(self._num_agents / (np.mean(detection_times) / 1e6)) if self._num_agents else 0,
-            'efficiency_score': min(1.0, 1.0 / max(1.0, np.mean(detection_times))),  # 1.0 at 1μs, decreases with latency
-            'performance_violations': int(np.sum(detection_times > 1.0))  # Count of >1μs per agent
+            'avg_latency_us': 0,
+            'throughput_detections_per_sec': 0,
+            'efficiency_score': 0,
         }
+
+        if detection_times is not None and detection_times.size > 0:
+            metrics.update({
+                'avg_latency_us': float(np.mean(detection_times)),
+                'p95_latency_us': float(np.percentile(detection_times, 95)),
+                'max_latency_us': float(np.max(detection_times)),
+                'min_latency_us': float(np.min(detection_times)),
+                'latency_std_us': float(np.std(detection_times)),
+                'avg_per_agent_latency_us': float(np.mean(detection_times) / max(1, self._num_agents or 1)),
+                'throughput_detections_per_sec': float(self._num_agents / (np.mean(detection_times) / 1e6)) if self._num_agents else 0,
+                'efficiency_score': min(1.0, 1.0 / max(1.0, np.mean(detection_times))),
+                'performance_violations': int(np.sum(detection_times > 1.0)),
+            })
+
+        return metrics
+
+    def get_sensor_info(self) -> Dict[str, Any]:
+        """Expose capability and configuration information for the sensor."""
+        info = {
+            'sensor_type': 'BinarySensor',
+            'sensor_id': self._sensor_id,
+            'capabilities': [
+                'binary_detection',
+                'noise_modeling',
+                'vectorized_operations',
+            ],
+            'configuration': {
+                'threshold': self.config.threshold,
+                'hysteresis': self.config.hysteresis,
+                'false_positive_rate': self.config.false_positive_rate,
+                'false_negative_rate': self.config.false_negative_rate,
+            },
+        }
+        if self._logger:
+            self._logger.debug("BinarySensor info requested", info=info)
+        return info
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        """Return observation space description for detection outputs."""
+        return {'shape': (1,), 'dtype': np.bool_}
 
     def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
         """

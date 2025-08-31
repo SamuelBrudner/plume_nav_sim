@@ -978,6 +978,57 @@ class TestSensorMetadata:
         assert 'total_computations' in metrics
 
 
+class TestSensorIntrospection:
+    """Tests for sensor capability and metadata introspection utilities."""
+
+    def test_binary_sensor_info_and_observation_space(self):
+        sensor = BinarySensor(threshold=0.1, enable_logging=False)
+
+        info = sensor.get_sensor_info()
+        assert info['sensor_type'] == 'BinarySensor'
+        assert 'binary_detection' in info['capabilities']
+
+        obs_info = sensor.get_observation_space_info()
+        assert obs_info['shape'] == (1,)
+        assert obs_info['dtype'] == np.bool_
+
+    def test_concentration_sensor_metadata_accessor(self, mock_plume_state):
+        sensor = ConcentrationSensor(dynamic_range=(0.0, 1.0), enable_logging=False)
+        position = np.array([50.0, 50.0])
+
+        sensor.measure(mock_plume_state, position)
+        metadata = sensor.get_metadata()
+
+        assert metadata['sensor_type'] == 'ConcentrationSensor'
+        assert metadata['performance']['total_measurements'] == 1
+
+    def test_performance_metrics_persist_after_reset(self):
+        sensor = BinarySensor(threshold=0.1, enable_logging=False)
+        sensor.reset()
+        metrics = sensor.get_performance_metrics()
+        assert metrics['sensor_type'] == 'BinarySensor'
+        assert 'total_operations' in metrics
+
+
+@pytest.mark.xfail(reason="Vectorization performance requires further optimization")
+def test_binary_sensor_vectorization_scaling(sample_positions):
+    sensor = BinarySensor(threshold=0.1, enable_logging=False)
+    batch_sizes = [1, 8, 64]
+    times_per_agent = []
+    for n in batch_sizes:
+        concentrations = np.linspace(0.0, 1.0, n)
+        positions = np.tile(sample_positions[0], (n, 1))
+        sensor.detect(concentrations, positions)  # warm-up
+        start = time.perf_counter()
+        for _ in range(10):
+            sensor.detect(concentrations, positions)
+        times_per_agent.append((time.perf_counter() - start) / (10 * n))
+
+    # Ignore single-agent warm-up which includes initialization overhead
+    ratio = max(times_per_agent[1:]) / min(times_per_agent[1:])
+    assert ratio < 3
+
+
 # Integration tests requiring hypothesis property-based testing
 if HYPOTHESIS_AVAILABLE:
     
