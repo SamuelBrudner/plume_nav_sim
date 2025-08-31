@@ -5,12 +5,16 @@ This module provides the VideoPlume class for loading and processing video-based
 plume data for navigation simulations.
 """
 
-import cv2
-import numpy as np
+import logging
 from pathlib import Path
 from typing import Optional, Union, Any, Dict
+
+import cv2
+import numpy as np
 from plume_nav_sim.api.navigation import ConfigurationError
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
+
+logger = logging.getLogger(__name__)
 
 
 class VideoPlume:
@@ -66,6 +70,10 @@ class VideoPlume:
         self.kernel_sigma = kernel_sigma
         self.grayscale = grayscale
         self.normalize = normalize
+
+        if self.kernel_size == 0:
+            # Log explicitly when smoothing is turned off
+            logger.info("Kernel smoothing disabled")
         
         # Store any additional keyword arguments as attributes
         for key, value in kwargs.items():
@@ -137,8 +145,8 @@ class VideoPlume:
         # Apply Gaussian kernel processing if specified
         if self.kernel_size > 0:
             processed = cv2.GaussianBlur(
-                processed, 
-                (self.kernel_size, self.kernel_size), 
+                processed,
+                (self.kernel_size, self.kernel_size),
                 self.kernel_sigma
             )
         
