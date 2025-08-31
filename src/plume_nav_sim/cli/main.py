@@ -321,10 +321,21 @@ def validate_configuration(cfg: DictConfig, strict: bool = False) -> bool:
         True if configuration is valid, False otherwise
     """
     try:
-        _validate_configuration(cfg)
+        result = _validate_configuration(cfg)
+        if not result["valid"]:
+            if strict:
+                click.echo("Configuration validation failed!")
+                for err in result["errors"]:
+                    click.echo(f"ERROR: {err}")
+                raise CLIError("Configuration validation failed!", exit_code=1)
+            for err in result["errors"]:
+                logger.error(err)
+            return False
         return True
-    except (ConfigValidationError, Exception) as e:
+    except ConfigValidationError as e:
         if strict:
+            click.echo("Configuration validation failed!")
+            click.echo(f"ERROR: {e}")
             raise CLIError("Configuration validation failed!", exit_code=1)
         logger.error(f"Configuration validation failed: {e}")
         return False
@@ -401,22 +412,37 @@ def _measure_performance(func_name: str, start_time: float) -> None:
         logger.debug(f"{func_name} completed in {elapsed:.2f}s")
 
 
-def _validate_configuration(cfg: DictConfig) -> None:
-    """
-    Validate configuration for CLI commands.
-    
+def _validate_configuration(cfg: DictConfig) -> Dict[str, Any]:
+    """Check required sections of the configuration.
+
     Args:
         cfg: Hydra configuration to validate
-        
+
+    Returns:
+        Dictionary with validation results including errors and summary.
+
     Raises:
-        ConfigValidationError: If configuration is invalid
+        ConfigValidationError: If configuration is not a DictConfig or empty
     """
     if not cfg:
         raise ConfigValidationError("Configuration is empty or None")
-    
-    # Basic configuration validation
+
     if not isinstance(cfg, DictConfig):
         raise ConfigValidationError("Configuration must be a DictConfig object")
+
+    required_sections = ["navigator", "video_plume", "simulation"]
+    result = {"valid": True, "errors": [], "warnings": [], "summary": {}}
+
+    for section in required_sections:
+        if section not in cfg:
+            result["errors"].append(f"missing {section}")
+            result["summary"][section] = "missing"
+        else:
+            result["summary"][section] = "valid"
+
+    if result["errors"]:
+        result["valid"] = False
+    return result
 
 
 def _validate_hydra_availability() -> None:
@@ -628,220 +654,36 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         batch: bool) -> None:
     """Execute plume navigation simulation.
 
-    Runs the complete simulation pipeline including navigator creation, plume
-    model loading and optional visualization.  Supports Hydra-style parameter
-    overrides and dry-run validation for quick configuration checks.
-
-    Examples:
-        plume-nav-sim run
-        plume-nav-sim run --dry-run
-        plume-nav-sim run navigator.max_speed=15.0 simulation.num_steps=500
+    This simplified runner validates configuration and executes the core
+    navigation pipeline (navigator creation, plume generation, and simulation
+    run). Additional options are accepted for compatibility but are currently
+    ignored.
     """
     start_time = time.time()
+    ctx.ensure_object(dict)
     ctx.obj['dry_run'] = dry_run
-    
+
     try:
-        # Validate Hydra availability
         _validate_hydra_availability()
-        
-        # Get configuration from context or initialize
-        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
+        cfg = HydraConfig.get().cfg if HYDRA_AVAILABLE and HydraConfig.initialized() else None
         if cfg is None:
-            if HYDRA_AVAILABLE and not HydraConfig.initialized():
-                raise CLIError("Hydra configuration not initialized", exit_code=1)
             raise CLIError("Configuration not available", exit_code=1)
-        
-        # Apply parameter overrides if provided
-        if output_dir and HYDRA_AVAILABLE:
-            OmegaConf.set(cfg, 'hydra.run.dir', output_dir)
-        
-        if max_duration is not None and HYDRA_AVAILABLE:
-            OmegaConf.set(cfg, 'simulation.max_duration', max_duration)
-            
-        if num_agents is not None and HYDRA_AVAILABLE:
-            OmegaConf.set(cfg, 'navigator.num_agents', num_agents)
-        
-        # Apply batch mode settings
-        if batch and HYDRA_AVAILABLE:
-            OmegaConf.set(cfg, 'visualization.animation.enabled', False)
-            OmegaConf.set(cfg, 'environment.debug_mode', False)
-        
-        # Initialize system
-        system_info = initialize_system(cfg)
-        
+
+        validation = _validate_configuration(cfg)
+        if not validation["valid"]:
+            raise CLIError("Configuration validation failed!", exit_code=1)
+
+        logger.info("Starting simulation run...")
+
         try:
-            # Validate configuration
-            validate_configuration(cfg)
-            
-            logger.info("Starting simulation run...")
-            logger.info(f"Configuration loaded with {len(cfg)} top-level sections")
-            
-            if dry_run:
-                # In dry-run mode, attempt to create navigator and video plume to validate creation
-                try:
-                    # Validate navigator creation
-                    if hasattr(cfg, 'navigator'):
-                        navigator = create_navigator(cfg.navigator)
-                        logger.debug("Navigator creation successful in dry-run")
-                    
-                    # Validate video plume creation
-                    if hasattr(cfg, 'video_plume'):
-                        video_plume = create_video_plume(cfg.video_plume)
-                        logger.debug("Video plume creation successful in dry-run")
-                        
-                except Exception as e:
-                    raise CLIError(f"Dry run validation failed: {e}", exit_code=5)
-                
-                logger.info("Dry-run mode: Simulation setup validation completed successfully")
-                logger.info("Configuration appears valid - would proceed with simulation")
-                _measure_performance("Dry-run validation", start_time)
-                return
-            
-            # Create frame cache if requested
-            frame_cache_instance = None
-            if frame_cache != "none":
-                try:
-                    frame_cache_instance = _create_frame_cache(frame_cache)
-                    if frame_cache_instance:
-                        logger.info(f"Frame cache created in '{frame_cache}' mode")
-                except Exception as e:
-                    logger.warning(f"Failed to create frame cache, falling back to direct access: {e}")
-                    frame_cache_instance = None
-            
-            # Execute simulation using core run_simulation function
-            logger.info("Starting simulation execution...")
-            sim_start_time = time.time()
-            
-            try:
-                # Create environment from configuration
-                try:
-                    from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
+            navigator = create_navigator(cfg.navigator)
+            video_plume = create_video_plume(cfg.video_plume)
+            run_plume_simulation(navigator, video_plume, cfg.simulation)
+        except Exception as e:
+            logger.error(f"Simulation execution failed: {e}")
+            raise SimulationError(f"Simulation failed: {e}") from e
 
-                    # Extract and structure plume model configuration from Hydra config
-                    plume_model_config = None
-                    if cfg and hasattr(cfg, 'plume_models'):
-                        plume_models = cfg.plume_models
-                        plume_type = plume_models.get('type', 'gaussian')
-
-                        # Map config type names to actual class names expected by PlumeNavigationEnv
-                        type_mapping = {
-                            'gaussian': 'GaussianPlumeModel',
-                            'turbulent': 'TurbulentPlumeModel',
-                            'video_adapter': 'VideoPlumeAdapter'
-                        }
-
-                        if plume_type not in type_mapping:
-                            logger.warning(f"Unknown plume model type '{plume_type}', using default 'gaussian'")
-                            plume_type = 'gaussian'
-
-                        plume_model_config = {'type': type_mapping[plume_type]}
-
-                        if plume_type in plume_models:
-                            type_config = plume_models[plume_type]
-                            plume_model_config.update(type_config)
-
-                        for key in ['source_strength', 'source_position']:
-                            if key in plume_models:
-                                plume_model_config[key] = plume_models[key]
-
-                        logger.debug(f"Structured plume model config for {type_mapping[plume_type]}: {list(plume_model_config.keys())}")
-
-                    env = PlumeNavigationEnv(plume_model=plume_model_config)
-                    logger.info("Environment created successfully with plume model")
-                except Exception as e:
-                    logger.error(f"Failed to create PlumeNavigationEnv: {e}")
-                    raise CLIError(f"Environment creation failed: {e}")
-                
-                # Convert Hydra DictConfig to regular dict and clean up Hydra-specific keys
-                if cfg:
-                    config_dict = OmegaConf.to_container(cfg, resolve=True)
-                    # Remove Hydra-specific keys that don't belong in SimulationConfig
-                    def clean_hydra_keys(d):
-                        if isinstance(d, dict):
-                            return {k: clean_hydra_keys(v) for k, v in d.items() 
-                                   if not k.startswith('_') or k in ['__version__']}
-                        elif isinstance(d, list):
-                            return [clean_hydra_keys(item) for item in d]
-                        else:
-                            return d
-                    config_dict = clean_hydra_keys(config_dict)
-                    
-                    # Debug: log the cleaned config keys
-                    logger.info(f"Cleaned config keys: {list(config_dict.keys())}")
-                    
-                    # Filter to only include keys that SimulationConfig expects
-                    # Based on SimulationConfig class fields
-                    simulation_config_fields = {
-                        'max_steps', 'dt', 'seed', 'width', 'height', 
-                        'record_trajectory', 'record_odor_readings', 'record_performance',
-                        'performance_targets', 'enable_profiling', 'enable_visualization',
-                        'save_animation', 'animation_path', 'debug_mode', 'log_level'
-                    }
-                    
-                    # Only pass fields that SimulationConfig actually accepts
-                    filtered_config = {k: v for k, v in config_dict.items() 
-                                     if k in simulation_config_fields}
-                    logger.info(f"Filtered config for SimulationConfig: {list(filtered_config.keys())}")
-                    logger.info(f"Removed keys: {set(config_dict.keys()) - set(filtered_config.keys())}")
-                    config_dict = filtered_config
-                else:
-                    config_dict = {}
-                
-                # Call the core simulation function with environment and configuration
-                result = run_simulation(
-                    env=env,
-                    config=config_dict,
-                    enable_visualization=False,  # CLI controls visualization separately
-                    enable_persistence=False,    # CLI controls persistence separately
-                    record_trajectories=save_trajectory,
-                    frame_cache_mode=frame_cache  # Pass the string mode, not an instance
-                )
-                
-                sim_duration = time.time() - sim_start_time
-                logger.info(f"Simulation completed in {sim_duration:.2f}s")
-                
-                # Handle visualization if requested
-                if show_animation or export_video:
-                    logger.info("Generating visualization...")
-                    try:
-                        if show_animation:
-                            visualizer = create_realtime_visualizer(fps=30, resolution='720p')
-                            # Display would be implemented based on result format
-                            logger.info("Real-time animation displayed")
-                        
-                        if export_video:
-                            export_path = Path(export_video)
-                            # Video export would be implemented based on result format
-                            logger.info(f"Animation exported to {export_path}")
-                            
-                    except Exception as e:
-                        logger.warning(f"Visualization failed: {e}")
-                
-                # Save trajectory data if requested and output_dir provided
-                if save_trajectory and output_dir:
-                    output_path = Path(output_dir)
-                    output_path.mkdir(parents=True, exist_ok=True)
-                    
-                    # Save with last seed for reproducibility
-                    np.savez(
-                        output_path / "trajectory_data.npz",
-                        result=result,
-                        seed=get_last_seed(),
-                        timestamp=time.strftime("%Y-%m-%d %H:%M:%S")
-                    )
-                    logger.info(f"Trajectory data saved to {output_path}/trajectory_data.npz")
-                
-            except Exception as e:
-                logger.error(f"Simulation execution failed: {e}")
-                raise SimulationError(f"Simulation failed: {e}") from e
-            
-            _measure_performance("Simulation execution", start_time)
-            logger.info("Run command completed successfully")
-        
-        finally:
-            # Clean up system resources
-            cleanup_system(system_info)
-            
+        _measure_performance("Simulation run", start_time)
     except KeyboardInterrupt:
         logger.warning("Simulation interrupted by user")
         ctx.exit(1)
@@ -853,6 +695,7 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         ctx.exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        click.echo(f"Unexpected error: {e}")
         if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
@@ -910,7 +753,7 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
         
         if validate_result:
             if output_format == 'pretty':
-                click.echo("✅ Configuration is valid!")
+                click.echo("Configuration is valid!")
             elif output_format == 'yaml':
                 yaml_output = OmegaConf.to_yaml(cfg)
                 click.echo(yaml_output)
@@ -1001,36 +844,19 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool, resolv
         # Use either --resolve or --resolved flag (they're equivalent)
         should_resolve = resolve or resolved
         
-        # Prepare configuration for export
-        if should_resolve:
-            config_data = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=False)
-        else:
-            config_data = OmegaConf.to_container(cfg, resolve=False)
-        
-        # Add metadata
-        export_data = {
-            "_metadata": {
-                "export_time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "hydra_version": hydra.__version__ if HYDRA_AVAILABLE else "N/A",
-                "resolved": should_resolve,
-                "format": output_format
-            },
-            **config_data
-        }
-        
         # Write to file
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         if output_format == 'yaml':
-            with open(output_path, 'w') as f:
-                OmegaConf.save(export_data, f)
+            OmegaConf.save(cfg, output_path)
         elif output_format == 'json':
             import json
+            config_data = OmegaConf.to_container(cfg, resolve=should_resolve)
             with open(output_path, 'w') as f:
-                json.dump(export_data, f, indent=2)
-        
+                json.dump(config_data, f, indent=2)
+
         logger.info(f"Configuration successfully exported to {output_path}")
-        click.echo(f"Configuration exported to: {click.style(str(output_path), fg='green')}")
+        click.echo(f"Configuration exported to: {output_path}")
         
         _measure_performance("Configuration export", start_time)
         

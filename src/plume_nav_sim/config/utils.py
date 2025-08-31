@@ -119,10 +119,12 @@ def create_default_config() -> Dict[str, Any]:
     Returns:
         Default configuration dictionary
     """
+    nav = NavigatorConfig(mode="auto").model_dump(mode="json")
+    nav["mode"] = "auto"
     return {
-        "navigator": NavigatorConfig().model_dump(),
-        "video_plume": VideoPlumeConfig(video_path="default.mp4").model_dump(),
-        "simulation": SimulationConfig().model_dump()
+        "navigator": nav,
+        "video_plume": VideoPlumeConfig(video_path="default.mp4").model_dump(mode="json"),
+        "simulation": SimulationConfig().model_dump(mode="json"),
     }
 
 
@@ -179,67 +181,27 @@ def validate_env_interpolation(value: str) -> bool:
 
 
 def resolve_env_value(value: str, default: str = "") -> str:
-    """
-    Resolve environment variable references in a string.
-    
-    Args:
-        value: String with potential environment variable references
-        default: Default value if environment variable is not set
-        
-    Returns:
-        Resolved string value
-    """
+    """Resolve environment variable references in a string without type conversion."""
     if not isinstance(value, str):
         return str(value)
-        
+
     import re
-    
-    # Pattern for full match of environment variable interpolation
+
     pattern = r'^\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]*))?\}$'
-    
-    # Check if the string is exactly an environment variable reference
     match = re.fullmatch(pattern, value)
     if match:
         env_var = match.group(1)
-        inline_default = match.group(3)  # Using group 3 which is the captured default value
-        
-        # Use inline default if provided, otherwise use the provided default
+        inline_default = match.group(3)
         use_default = inline_default if inline_default is not None else default
-        
-        # Return environment variable value converted to native types
         raw = os.environ.get(env_var, use_default)
-        return _convert_env_value(str(raw) if raw is not None else raw)
-    
-    # Check if the string contains an environment variable reference but is not a full match
+        return str(raw) if raw is not None else raw
+
     if '${oc.env:' in value:
-        return _convert_env_value(default)
-    
-    # No interpolation present, return the original string
-    return _convert_env_value(value)
+        return default
+
+    return value
 
 
-def _convert_env_value(val: str):
-    """Convert a string from the environment into int/float/bool when possible."""
-    if not isinstance(val, str):
-        return val
-
-    lower = val.lower()
-    if lower in {"true", "yes", "1", "on"}:
-        return True
-    if lower in {"false", "no", "0", "off"}:
-        return False
-
-    try:
-        return int(val)
-    except ValueError:
-        pass
-
-    try:
-        return float(val)
-    except ValueError:
-        pass
-
-    return val
 
 
 # Re-export schemas for convenience

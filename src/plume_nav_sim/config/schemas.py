@@ -25,10 +25,14 @@ class SingleAgentConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            raise ValueError('ensure this value is greater than or equal to 0')
+        if v > 360:
+            raise ValueError('ensure this value is less than or equal to 360')
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -59,9 +63,11 @@ class MultiAgentConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            for i, orient in enumerate(v):
+                if orient < 0 or orient > 360:
+                    raise ValueError(f"orientation at index {i} must be between 0 and 360 degrees")
         return v
 
     @field_validator('positions')
@@ -139,12 +145,6 @@ class NavigatorConfig(BaseModel):
     angular_velocities: Optional[List[float]] = None
     num_agents: Optional[int] = None
 
-    @field_validator('orientation')
-    @classmethod
-    def normalize_orientation(cls, v):
-        if v is None:
-            return v
-        return v % 360
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -154,11 +154,24 @@ class NavigatorConfig(BaseModel):
             raise ValueError("ensure this value is greater than or equal to 0")
         return v
 
+    @field_validator('orientation')
+    @classmethod
+    def validate_orientation(cls, v):
+        if v is None:
+            return v
+        if v < 0:
+            raise ValueError('ensure this value is greater than or equal to 0')
+        if v > 360:
+            raise ValueError('ensure this value is less than or equal to 360')
+        return v
+
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            for i, orient in enumerate(v):
+                if orient < 0 or orient > 360:
+                    raise ValueError(f"orientation at index {i} must be between 0 and 360 degrees")
         return v
 
     @model_validator(mode="after")
@@ -208,7 +221,7 @@ class NavigatorConfig(BaseModel):
 class VideoPlumeConfig(BaseModel):
     """Configuration for video-based plume environment."""
     # Path to the video file
-    video_path: Path
+    video_path: str
     
     # Optional parameters for video processing
     flip: Optional[bool] = False
@@ -237,13 +250,17 @@ class VideoPlumeConfig(BaseModel):
     @classmethod
     def validate_video_path(cls, v, info):
         skip = info.data.get('_skip_validation', True)
-        p = Path(v)
+        if not isinstance(v, str):
+            raise ValueError('video_path must be a string')
+        if any(ch in v for ch in [';', '&', '|']):
+            raise ValueError('video_path contains unsafe characters')
         if not skip:
+            p = Path(v)
             if not p.exists():
                 raise ValueError('Video file not found')
             if not p.is_file():
                 raise ValueError('Video path is not a file')
-        return p
+        return v
 
     @field_validator('kernel_size')
     @classmethod
@@ -251,7 +268,7 @@ class VideoPlumeConfig(BaseModel):
         if v is not None:
             if v < 0:
                 raise ValueError('kernel_size must be positive')
-            if v % 2 == 0:
+            if v > 0 and v % 2 == 0:
                 raise ValueError('kernel_size must be odd')
         return v
 
@@ -264,8 +281,9 @@ class VideoPlumeConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_parameters(cls, values):
-        if (values.kernel_size is None) != (values.kernel_sigma is None):
-            if values.kernel_size is None:
+        size = values.kernel_size
+        if (size not in (None, 0)) != (values.kernel_sigma is not None):
+            if size in (None, 0):
                 raise ValueError('kernel_size must be specified when kernel_sigma is provided')
             else:
                 raise ValueError('kernel_sigma must be specified when kernel_size is provided')
@@ -302,7 +320,7 @@ class SimulationConfig(BaseModel):
     save_animation: Optional[bool] = False
     animation_path: Optional[str] = None
     # Runtime/IO parameters for compatibility with tests
-    max_duration: Optional[float] = Field(None, gt=0)
+    max_duration: Optional[float] = None
     fps: Optional[int] = Field(None, gt=0)
     real_time: Optional[bool] = False
     output_directory: Optional[str] = None
@@ -326,6 +344,13 @@ class SimulationConfig(BaseModel):
         """Validate that dt is positive if provided."""
         if v is not None and v <= 0:
             raise ValueError("dt (timestep) must be positive")
+        return v
+
+    @field_validator('max_duration')
+    @classmethod
+    def validate_max_duration(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('ensure this value is greater than 0')
         return v
     
     @field_validator('width', 'height')
