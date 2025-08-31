@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple, Union, Dict, Any
 from enum import Enum
 from pathlib import Path
 import logging
+import re
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 try:
     from hydra.core.config_store import ConfigStore
@@ -17,6 +18,7 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+ENV_VAR_PATTERN = re.compile(r"^\$\{[^}]+\}$")
 
 
 class SingleAgentConfig(BaseModel):
@@ -252,9 +254,12 @@ class NavigatorConfig(BaseModel):
 
 class VideoPlumeConfig(BaseModel):
     """Configuration for video-based plume environment."""
-    # Path to the video file
-    video_path: Path
-    
+    # Path to the video file (kept internally as Path but exposed as string)
+    video_path: Union[Path, str]
+
+    # Internal flag to optionally skip validation
+    skip_validation: bool = Field(default=False, repr=False, exclude=True)
+
     # Optional parameters for video processing
     flip: Optional[bool] = False
     grayscale: Optional[bool] = True
@@ -262,7 +267,7 @@ class VideoPlumeConfig(BaseModel):
     kernel_sigma: Optional[float] = None
     threshold: Optional[float] = Field(None)  # Removed ge/le constraints for custom validator
     normalize: Optional[bool] = True
-    
+
     # Frame range parameters
     start_frame: Optional[int] = None
     end_frame: Optional[int] = None
@@ -278,17 +283,28 @@ class VideoPlumeConfig(BaseModel):
                 raise ValueError("ensure this value is greater than or equal to 0")
         return v
 
+    @field_validator('video_path', mode='before')
+    @classmethod
+    def parse_video_path(cls, v):
+        """Convert to Path unless value is an env-variable pattern."""
+        if isinstance(v, str) and ENV_VAR_PATTERN.fullmatch(v):
+            return v
+        return Path(v)
+
     @field_validator('video_path')
     @classmethod
     def validate_video_path(cls, v, info):
-        skip = info.data.get('_skip_validation', True)
-        p = Path(v)
+        skip = info.data.get('skip_validation', False)
+        if isinstance(v, str):
+            return v
         if not skip:
-            if not p.exists():
+            if not v.exists():
+                logger.error("Video file not found: %s", v)
                 raise ValueError('Video file not found')
-            if not p.is_file():
+            if not v.is_file():
+                logger.error("Video path is not a file: %s", v)
                 raise ValueError('Video path is not a file')
-        return p
+        return v
 
     @field_validator('kernel_size')
     @classmethod
@@ -318,6 +334,15 @@ class VideoPlumeConfig(BaseModel):
             if values.end_frame <= values.start_frame:
                 raise ValueError('end_frame must be greater than start_frame')
         return values
+
+    @property
+    def video_path_str(self) -> str:
+        return str(self.video_path)
+
+    def model_dump(self, *args, **kwargs):
+        data = super().model_dump(*args, **kwargs)
+        data['video_path'] = self.video_path_str
+        return data
 
     model_config = ConfigDict(extra="allow")
 
