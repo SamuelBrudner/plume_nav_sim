@@ -10,11 +10,21 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator
+import threading
+
+try:  # Prefer loguru if available for consistency with project logging
+    from loguru import logger
+except Exception:  # pragma: no cover - fallback
+    import logging
+    logger = logging.getLogger(__name__)
 
 from odor_plume_nav.utils.seed_manager import (
     SeedManager,
     get_current_seed,
 )
+
+
+_seed_lock = threading.RLock()
 
 
 @dataclass
@@ -39,12 +49,16 @@ def set_global_seed(seed: int) -> Iterator[None]:
     """
     manager = SeedManager()
     previous = get_current_seed()
-    manager.set_seed(seed)
-    try:
-        yield
-    finally:
-        if previous is not None:
-            manager.set_seed(previous)
+    logger.debug("Acquiring seed lock for seed %s", seed)
+    with _seed_lock:
+        manager.set_seed(seed)
+        logger.debug("Seed set to %s", seed)
+        try:
+            yield
+        finally:
+            if previous is not None:
+                manager.set_seed(previous)
+                logger.debug("Seed restored to %s", previous)
 
 
 def validate_deterministic_behavior(*args, **kwargs) -> bool:  # pragma: no cover - simple proxy

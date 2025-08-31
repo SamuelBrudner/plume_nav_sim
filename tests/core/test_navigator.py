@@ -1809,37 +1809,55 @@ def test_seed_context_thread_safety():
     """Test that seed context is properly isolated between threads."""
     import threading
     import queue
-    
+    import time
+
     results = queue.Queue()
-    
+
+    # Pre-compute expected sequences for each seed
+    expected_sequences = {s: np.random.RandomState(s).random(5) for s in (0, 100, 200)}
+
     def worker_function(seed_val, worker_id):
         with set_global_seed(seed_val):
+            # Sleep to encourage thread scheduling overlap which exposes race conditions
+            time.sleep(0.01)
             context = get_seed_context()
             # Generate some random values
             values = [np.random.random() for _ in range(5)]
             results.put((worker_id, context.global_seed, values))
-    
+
     # Start multiple threads with different seeds
     threads = []
-    for i in range(3):
-        thread = threading.Thread(target=worker_function, args=(i * 100, i))
+    for i, seed in enumerate((0, 100, 200)):
+        thread = threading.Thread(target=worker_function, args=(seed, i))
         threads.append(thread)
         thread.start()
-    
+
     # Wait for completion
     for thread in threads:
         thread.join()
-    
-    # Verify each thread used its assigned seed
+
+    # Verify each thread used its assigned seed and produced expected sequence
     thread_results = {}
     while not results.empty():
         worker_id, seed, values = results.get()
         thread_results[worker_id] = (seed, values)
-    
+
     assert len(thread_results) == 3
+
+    # Check deterministic sequences and distinctness
+    seen_sequences = []
     for worker_id, (seed, values) in thread_results.items():
         expected_seed = worker_id * 100
         assert seed == expected_seed, f"Worker {worker_id} should have seed {expected_seed}, got {seed}"
+
+        expected_values = expected_sequences[seed]
+        assert np.allclose(values, expected_values), (
+            f"Worker {worker_id} did not produce expected sequence for seed {seed}"
+        )
+        seen_sequences.append(tuple(values))
+
+    # Ensure each thread produced a distinct sequence
+    assert len(set(seen_sequences)) == 3, "Threads should produce distinct sequences"
 
 
 # Property-Based Testing for Coordinate Frame Consistency
