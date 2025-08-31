@@ -107,6 +107,7 @@ import time
 import warnings
 from typing import Optional, Union, Any, Tuple, List, Dict, TypeVar, Callable
 from dataclasses import dataclass, field
+import dataclasses
 import numpy as np
 
 # Core protocol imports
@@ -2848,20 +2849,29 @@ def create_controller_from_config(
     
     try:
         # Handle different configuration types
-        if SCHEMAS_AVAILABLE and isinstance(config, NavigatorConfig):
-            # Pydantic model - extract relevant parameters
+        config_type = type(config).__name__
+        if dataclasses.is_dataclass(config):
+            config_dict = dataclasses.asdict(config)
+            config_type = f"dataclass:{config_type}"
+        elif hasattr(config, "model_dump"):
             config_dict = config.model_dump(exclude_none=True)
+            config_type = f"pydantic_v2:{config_type}"
+        elif hasattr(config, "dict"):
+            config_dict = config.dict()
+            config_type = f"pydantic_v1:{config_type}"
         elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
-            # Hydra OmegaConf configuration
             config_dict = OmegaConf.to_container(config, resolve=True)
+            config_type = "DictConfig"
         elif isinstance(config, dict):
-            # Regular dictionary
             config_dict = config.copy()
+            config_type = "dict"
         else:
             raise TypeError(
                 f"Unsupported configuration type: {type(config)}. "
-                f"Expected DictConfig, dict, or NavigatorConfig"
+                f"Expected DictConfig, dict, dataclass, or Pydantic model"
             )
+
+        logger.debug("Detected configuration type", config_type=config_type)
         
         # Detect controller type based on configuration parameters
         has_multi_params = any([

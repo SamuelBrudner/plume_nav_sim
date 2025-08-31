@@ -26,6 +26,8 @@ from unittest.mock import patch, MagicMock, Mock
 import pytest
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Tuple, List, Union
+from pydantic import BaseModel as V2BaseModel
+from pydantic.v1 import BaseModel as V1BaseModel
 
 # Gymnasium integration for API compliance testing
 try:
@@ -664,6 +666,67 @@ def test_hydra_dict_config_compatibility(hydra_dict_config):
     assert np.allclose(controller.positions[0], [5.0, 15.0])
     assert controller.orientations[0] == 30.0
     assert controller.speeds[0] == 1.0
+
+
+def test_create_controller_from_pydantic_v2_model():
+    """Factory should handle Pydantic v2 models via model_dump."""
+
+    class V2Config(V2BaseModel):
+        position: Tuple[float, float]
+        speed: float = 1.0
+        max_speed: float = 2.0
+
+        class Config:
+            arbitrary_types_allowed = True
+
+    config = V2Config(position=(1.0, 2.0))
+    controller = create_controller_from_config(config)
+
+    assert isinstance(controller, SingleAgentController)
+    assert np.allclose(controller.positions[0], [1.0, 2.0])
+
+
+def test_create_controller_from_pydantic_v1_model():
+    """Factory should handle Pydantic v1 models via dict()."""
+
+    class V1Config(V1BaseModel):
+        position: Tuple[float, float]
+        speed: float = 1.0
+        max_speed: float = 2.0
+
+    config = V1Config(position=(3.0, 4.0))
+
+    controller = create_controller_from_config(config)
+
+    assert isinstance(controller, SingleAgentController)
+    assert np.allclose(controller.positions[0], [3.0, 4.0])
+
+
+@dataclass
+class DCConfig:
+    position: Tuple[float, float]
+    speed: float = 1.0
+    max_speed: float = 2.0
+
+
+def test_create_controller_from_dataclass_model():
+    """Factory should handle dataclass configurations via asdict."""
+
+    config = DCConfig(position=(5.0, 6.0))
+    controller = create_controller_from_config(config)
+
+    assert isinstance(controller, SingleAgentController)
+    assert np.allclose(controller.positions[0], [5.0, 6.0])
+
+
+def test_create_controller_from_plain_dict():
+    """Factory should handle plain dictionary configurations."""
+
+    config = {"position": [7.0, 8.0], "speed": 1.0, "max_speed": 2.0}
+    controller = create_controller_from_config(config)
+
+    assert isinstance(controller, SingleAgentController)
+    assert np.allclose(controller.positions[0], [7.0, 8.0])
 
 
 def test_config_validation_functionality():
