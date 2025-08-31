@@ -321,10 +321,21 @@ def validate_configuration(cfg: DictConfig, strict: bool = False) -> bool:
         True if configuration is valid, False otherwise
     """
     try:
-        _validate_configuration(cfg)
+        missing_sections = _validate_configuration(cfg)
+        if missing_sections:
+            if strict:
+                click.echo("Configuration validation failed!")
+                for section in missing_sections:
+                    click.echo(f"ERROR: missing {section}")
+                raise CLIError("Configuration validation failed!", exit_code=1)
+            for section in missing_sections:
+                logger.error(f"Missing required section: {section}")
+            return False
         return True
-    except (ConfigValidationError, Exception) as e:
+    except ConfigValidationError as e:
         if strict:
+            click.echo("Configuration validation failed!")
+            click.echo(f"ERROR: {e}")
             raise CLIError("Configuration validation failed!", exit_code=1)
         logger.error(f"Configuration validation failed: {e}")
         return False
@@ -401,22 +412,27 @@ def _measure_performance(func_name: str, start_time: float) -> None:
         logger.debug(f"{func_name} completed in {elapsed:.2f}s")
 
 
-def _validate_configuration(cfg: DictConfig) -> None:
-    """
-    Validate configuration for CLI commands.
-    
+def _validate_configuration(cfg: DictConfig) -> List[str]:
+    """Check required sections of the configuration.
+
     Args:
         cfg: Hydra configuration to validate
-        
+
+    Returns:
+        List of missing required section names.
+
     Raises:
-        ConfigValidationError: If configuration is invalid
+        ConfigValidationError: If configuration is not a DictConfig or empty
     """
     if not cfg:
         raise ConfigValidationError("Configuration is empty or None")
-    
-    # Basic configuration validation
+
     if not isinstance(cfg, DictConfig):
         raise ConfigValidationError("Configuration must be a DictConfig object")
+
+    required_sections = ["navigator", "video_plume", "simulation"]
+    missing = [section for section in required_sections if section not in cfg]
+    return missing
 
 
 def _validate_hydra_availability() -> None:
@@ -853,6 +869,7 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
         ctx.exit(1)
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        click.echo(f"Unexpected error: {e}")
         if (ctx.obj or {}).get('verbose'):
             logger.error(traceback.format_exc())
         ctx.exit(1)
@@ -910,7 +927,7 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
         
         if validate_result:
             if output_format == 'pretty':
-                click.echo("✅ Configuration is valid!")
+                click.echo("Configuration is valid!")
             elif output_format == 'yaml':
                 yaml_output = OmegaConf.to_yaml(cfg)
                 click.echo(yaml_output)
