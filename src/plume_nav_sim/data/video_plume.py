@@ -58,6 +58,7 @@ class VideoPlume:
         frame_skip: int = 1,
         start_frame: int = 0,
         end_frame: Optional[int] = None,
+        allowed_root: Optional[Union[str, Path]] = None,
         **kwargs,
     ):
         """
@@ -79,10 +80,28 @@ class VideoPlume:
             IOError: If the video file does not exist
             ConfigurationError: If the video file cannot be opened
         """
-        # Convert to Path object and validate existence
-        self.video_path = Path(video_path)
+        # Resolve video path and ensure it is within allowed root
+        self.video_path = Path(video_path).expanduser().resolve()
+        root = Path(allowed_root).expanduser().resolve() if allowed_root else Path.cwd().resolve()
+        if not self.video_path.is_relative_to(root):
+            msg = "Video path is outside allowed root"
+            py_logger.error(msg)
+            raise ValueError(msg)
+
+        # Validate file suffix
+        allowed_suffixes = {".mp4", ".avi", ".mov"}
+        if self.video_path.suffix.lower() not in allowed_suffixes:
+            msg = f"Unsupported video file extension: {self.video_path.suffix}"
+            py_logger.error(msg)
+            raise ValueError(msg)
+
+        # Validate file existence
         if not self.video_path.exists():
+            py_logger.error(VIDEO_FILE_MISSING_MSG)
             raise IOError(VIDEO_FILE_MISSING_MSG)
+
+        # store allowed root for reference
+        self.allowed_root = root
         
         # Validate frame range parameters early
         if frame_skip <= 0:
