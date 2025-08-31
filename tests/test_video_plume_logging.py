@@ -102,3 +102,37 @@ def test_get_metadata_logs_context(mock_exists):
     extra = record["record"]["extra"]
     assert "correlation_id" in extra
     assert extra.get("operation") == "get_metadata"
+
+def test_workflow_metadata_includes_correlation_id_and_logs(tmp_path):
+    dummy = DummyCapture()
+    video_file = tmp_path / "video.mp4"
+    video_file.write_bytes(b"data")
+    with patch("plume_nav_sim.data.video_plume.cv2.VideoCapture", return_value=dummy):
+        with patch("plume_nav_sim.data.video_plume.get_correlation_context") as mock_ctx, \
+             patch("plume_nav_sim.data.video_plume.logger") as mock_logger:
+            ctx = MagicMock()
+            ctx.bind_context.return_value = {"correlation_id": "cid-123"}
+            mock_ctx.return_value = ctx
+            plume = VideoPlume(video_path=video_file)
+            ctx.bind_context.reset_mock()
+            mock_logger.reset_mock()
+            metadata = plume.get_workflow_metadata()
+            ctx.bind_context.assert_called()
+            mock_logger.info.assert_called_with("workflow_metadata_generated", extra={"correlation_id": "cid-123"})
+            assert metadata["correlation_id"] == "cid-123"
+
+
+
+def test_workflow_metadata_missing_file_raises_before_hash(tmp_path):
+    dummy = DummyCapture()
+    video_file = tmp_path / "video.mp4"
+    video_file.write_bytes(b"data")
+    with patch("plume_nav_sim.data.video_plume.cv2.VideoCapture", return_value=dummy):
+        plume = VideoPlume(video_path=video_file)
+    mock_open = MagicMock()
+    with patch('pathlib.Path.exists', return_value=False), \
+         patch('plume_nav_sim.data.video_plume.open', mock_open):
+        with pytest.raises(IOError, match='Video file does not exist'):
+            plume.get_workflow_metadata()
+    mock_open.assert_not_called()
+
