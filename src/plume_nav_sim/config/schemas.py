@@ -31,23 +31,33 @@ class SingleAgentConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            logger.error("Invalid orientation %s: less than 0", v)
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            logger.error("Invalid orientation %s: greater than 360", v)
+            raise ValueError("ensure this value is less than or equal to 360")
+        logger.debug("Validated orientation %s", v)
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
     def validate_non_negative(cls, v, info):
         """Validate that values are non-negative."""
         if v is not None and v < 0:
+            logger.error("%s is negative: %s", info.field_name, v)
             raise ValueError(f"ensure this value is greater than or equal to 0")
+        logger.debug("%s validated: %s", info.field_name, v)
         return v
 
     @model_validator(mode="after")
     def check_speed_constraints(cls, values):
         """Verify speed constraints."""
         if values.speed is not None and values.max_speed is not None and values.speed > values.max_speed:
+            logger.error("speed %s exceeds max_speed %s", values.speed, values.max_speed)
             raise ValueError(f"speed ({values.speed}) cannot exceed max_speed ({values.max_speed})")
         return values
 
@@ -65,9 +75,19 @@ class MultiAgentConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            validated = []
+            for i, orient in enumerate(v):
+                if orient < 0:
+                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
+                    raise ValueError("ensure this value is less than or equal to 360")
+                validated.append(orient)
+            logger.debug("Validated orientations %s", validated)
+            return validated
         return v
 
     @field_validator('positions')
@@ -87,7 +107,9 @@ class MultiAgentConfig(BaseModel):
         if v is not None:
             for i, s in enumerate(v):
                 if s < 0:
+                    logger.error("Speed at index %d is negative: %s", i, s)
                     raise ValueError(f"Speed at index {i} must be non-negative")
+            logger.debug("Validated speeds %s", v)
         return v
 
     @model_validator(mode="after")
@@ -147,24 +169,43 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            logger.error("Invalid orientation %s: less than 0", v)
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            logger.error("Invalid orientation %s: greater than 360", v)
+            raise ValueError("ensure this value is less than or equal to 360")
+        logger.debug("Validated orientation %s", v)
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
     def validate_non_negative(cls, v, info):
         """Validate that values are non-negative with specific error message."""
         if v is not None and v < 0:
+            logger.error("%s is negative: %s", info.field_name, v)
             raise ValueError("ensure this value is greater than or equal to 0")
+        logger.debug("%s validated: %s", info.field_name, v)
         return v
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            validated = []
+            for i, orient in enumerate(v):
+                if orient < 0:
+                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
+                    raise ValueError("ensure this value is less than or equal to 360")
+                validated.append(orient)
+            logger.debug("Validated orientations %s", validated)
+            return validated
         return v
 
     @model_validator(mode="after")
