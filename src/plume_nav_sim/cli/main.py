@@ -84,7 +84,6 @@ from plume_nav_sim.api.navigation import (
     run_plume_simulation, create_video_plume, create_navigator, 
     ConfigurationError, SimulationError, visualize_simulation_results
 )
-from plume_nav_sim.core.simulation import run_simulation
 from plume_nav_sim.utils.seed_manager import get_last_seed, set_global_seed
 from plume_nav_sim.utils.seed_manager import get_current_seed  # exposed for test patching
 from plume_nav_sim.utils.logging_setup import setup_logger
@@ -723,134 +722,19 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
                 except Exception as e:
                     logger.warning(f"Failed to create frame cache, falling back to direct access: {e}")
                     frame_cache_instance = None
-            
-            # Execute simulation using core run_simulation function
-            logger.info("Starting simulation execution...")
-            sim_start_time = time.time()
-            
+
             try:
-                # Create environment from configuration
-                try:
-                    from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
-
-                    # Extract and structure plume model configuration from Hydra config
-                    plume_model_config = None
-                    if cfg and hasattr(cfg, 'plume_models'):
-                        plume_models = cfg.plume_models
-                        plume_type = plume_models.get('type', 'gaussian')
-
-                        # Map config type names to actual class names expected by PlumeNavigationEnv
-                        type_mapping = {
-                            'gaussian': 'GaussianPlumeModel',
-                            'turbulent': 'TurbulentPlumeModel',
-                            'video_adapter': 'VideoPlumeAdapter'
-                        }
-
-                        if plume_type not in type_mapping:
-                            logger.warning(f"Unknown plume model type '{plume_type}', using default 'gaussian'")
-                            plume_type = 'gaussian'
-
-                        plume_model_config = {'type': type_mapping[plume_type]}
-
-                        if plume_type in plume_models:
-                            type_config = plume_models[plume_type]
-                            plume_model_config.update(type_config)
-
-                        for key in ['source_strength', 'source_position']:
-                            if key in plume_models:
-                                plume_model_config[key] = plume_models[key]
-
-                        logger.debug(f"Structured plume model config for {type_mapping[plume_type]}: {list(plume_model_config.keys())}")
-
-                    env = PlumeNavigationEnv(plume_model=plume_model_config)
-                    logger.info("Environment created successfully with plume model")
-                except Exception as e:
-                    logger.error(f"Failed to create PlumeNavigationEnv: {e}")
-                    raise CLIError(f"Environment creation failed: {e}")
-                
-                # Convert Hydra DictConfig to regular dict and clean up Hydra-specific keys
-                if cfg:
-                    config_dict = OmegaConf.to_container(cfg, resolve=True)
-                    # Remove Hydra-specific keys that don't belong in SimulationConfig
-                    def clean_hydra_keys(d):
-                        if isinstance(d, dict):
-                            return {k: clean_hydra_keys(v) for k, v in d.items() 
-                                   if not k.startswith('_') or k in ['__version__']}
-                        elif isinstance(d, list):
-                            return [clean_hydra_keys(item) for item in d]
-                        else:
-                            return d
-                    config_dict = clean_hydra_keys(config_dict)
-                    
-                    # Debug: log the cleaned config keys
-                    logger.info(f"Cleaned config keys: {list(config_dict.keys())}")
-                    
-                    # Filter to only include keys that SimulationConfig expects
-                    # Based on SimulationConfig class fields
-                    simulation_config_fields = {
-                        'max_steps', 'dt', 'seed', 'width', 'height', 
-                        'record_trajectory', 'record_odor_readings', 'record_performance',
-                        'performance_targets', 'enable_profiling', 'enable_visualization',
-                        'save_animation', 'animation_path', 'debug_mode', 'log_level'
-                    }
-                    
-                    # Only pass fields that SimulationConfig actually accepts
-                    filtered_config = {k: v for k, v in config_dict.items() 
-                                     if k in simulation_config_fields}
-                    logger.info(f"Filtered config for SimulationConfig: {list(filtered_config.keys())}")
-                    logger.info(f"Removed keys: {set(config_dict.keys()) - set(filtered_config.keys())}")
-                    config_dict = filtered_config
-                else:
-                    config_dict = {}
-                
-                # Call the core simulation function with environment and configuration
-                result = run_simulation(
-                    env=env,
-                    config=config_dict,
-                    enable_visualization=False,  # CLI controls visualization separately
-                    enable_persistence=False,    # CLI controls persistence separately
-                    record_trajectories=save_trajectory,
-                    frame_cache_mode=frame_cache  # Pass the string mode, not an instance
-                )
-                
+                navigator = create_navigator(cfg.navigator)
+                plume = create_video_plume(cfg.video_plume)
+                logger.info("Starting simulation execution...")
+                sim_start_time = time.time()
+                run_plume_simulation(navigator, plume, cfg.simulation)
                 sim_duration = time.time() - sim_start_time
                 logger.info(f"Simulation completed in {sim_duration:.2f}s")
-                
-                # Handle visualization if requested
-                if show_animation or export_video:
-                    logger.info("Generating visualization...")
-                    try:
-                        if show_animation:
-                            visualizer = create_realtime_visualizer(fps=30, resolution='720p')
-                            # Display would be implemented based on result format
-                            logger.info("Real-time animation displayed")
-                        
-                        if export_video:
-                            export_path = Path(export_video)
-                            # Video export would be implemented based on result format
-                            logger.info(f"Animation exported to {export_path}")
-                            
-                    except Exception as e:
-                        logger.warning(f"Visualization failed: {e}")
-                
-                # Save trajectory data if requested and output_dir provided
-                if save_trajectory and output_dir:
-                    output_path = Path(output_dir)
-                    output_path.mkdir(parents=True, exist_ok=True)
-                    
-                    # Save with last seed for reproducibility
-                    np.savez(
-                        output_path / "trajectory_data.npz",
-                        result=result,
-                        seed=get_last_seed(),
-                        timestamp=time.strftime("%Y-%m-%d %H:%M:%S")
-                    )
-                    logger.info(f"Trajectory data saved to {output_path}/trajectory_data.npz")
-                
             except Exception as e:
                 logger.error(f"Simulation execution failed: {e}")
                 raise SimulationError(f"Simulation failed: {e}") from e
-            
+
             _measure_performance("Simulation execution", start_time)
             logger.info("Run command completed successfully")
         
