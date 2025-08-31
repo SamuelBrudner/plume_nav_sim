@@ -955,16 +955,21 @@ class ConcentrationSensor(BaseSensor):
             self._measurement_history.clear()
             
         if clear_metrics:
-            self._performance_metrics = {
-                'measurement_count': 0,
-                'total_measurement_time': 0.0,
-                'vectorized_operations': 0,
-                'mean_noise_level': 0.0,
-                'drift_updates': 0,
-                'saturation_events': 0,
-                'filter_operations': 0,
-                'outlier_detections': 0
-            }
+            super().reset_performance_metrics()
+            self._performance_metrics.update(
+                {
+                    'measurement_times': [],
+                    'total_measurement_time': 0.0,
+                    'vectorized_operations': 0,
+                    'mean_noise_level': 0.0,
+                    'drift_updates': 0,
+                    'saturation_events': 0,
+                    'filter_operations': 0,
+                    'outlier_detections': 0,
+                    'noise_applications': 0,
+                }
+            )
+            self._measurement_count = 0
             
         if reset_calibration:
             self._total_drift = 0.0

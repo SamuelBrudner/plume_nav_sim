@@ -1002,6 +1002,34 @@ class TestSensorIntrospection:
         assert metadata['sensor_type'] == 'ConcentrationSensor'
         assert metadata['performance']['total_measurements'] == 1
 
+    def test_gradient_sensor_introspection(self, mock_plume_state, single_position):
+        sensor = GradientSensor(enable_logging=False)
+
+        sensor.compute_gradient(mock_plume_state, single_position)
+
+        info = sensor.get_sensor_info()
+        assert info['sensor_type'] == 'GradientSensor'
+        assert 'gradient_computation' in info['capabilities']
+
+        obs_info = sensor.get_observation_space_info()
+        assert obs_info['shape'] == (2,)
+        assert obs_info['dtype'] == np.float64
+
+        metadata = sensor.get_metadata()
+        assert metadata['sensor_type'] == 'GradientSensor'
+        assert metadata['performance']['total_operations'] >= 1
+
+    def test_concentration_sensor_metrics_after_reset(self, mock_plume_state):
+        sensor = ConcentrationSensor(dynamic_range=(0.0, 1.0), enable_logging=False)
+        position = np.array([10.0, 10.0])
+        sensor.measure(mock_plume_state, position)
+
+        sensor.reset()
+        metrics = sensor.get_performance_metrics()
+        assert metrics['sensor_type'] == 'ConcentrationSensor'
+        assert 'total_operations' in metrics
+
+
     def test_performance_metrics_persist_after_reset(self):
         sensor = BinarySensor(threshold=0.1, enable_logging=False)
         sensor.reset()

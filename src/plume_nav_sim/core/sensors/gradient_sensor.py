@@ -60,6 +60,7 @@ import numpy as np
 
 # Core protocol imports
 from plume_nav_sim.protocols.sensor import SensorProtocol
+from .base_sensor import BaseSensor
 
 # Enhanced logging for performance monitoring
 try:
@@ -206,7 +207,7 @@ class GradientResult:
             raise ValueError(f"Inconsistent result array shapes: {shapes}")
 
 
-class GradientSensor:
+class GradientSensor(BaseSensor):
     """
     High-performance gradient sensor for spatial derivative computation.
     
@@ -284,41 +285,35 @@ class GradientSensor:
         else:
             raise TypeError(f"config must be GradientSensorConfig or dict, got {type(config)}")
         
-        # Sensor identification and logging setup
-        self._enable_logging = enable_logging
-        self._sensor_id = sensor_id or f"gradient_sensor_{id(self)}"
-        
-        # Performance metrics tracking
-        self._performance_metrics = {
-            'computation_times': [],
-            'total_computations': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'numerical_warnings': 0,
-            'edge_case_count': 0
-        }
-        
-        # Computation cache for performance optimization
+        super().__init__(
+            sensor_type="GradientSensor",
+            enable_logging=enable_logging,
+            sensor_id=sensor_id,
+            **kwargs,
+        )
+
+        self._performance_metrics.update(
+            {
+                'computation_times': [],
+                'total_computations': 0,
+                'cache_hits': 0,
+                'cache_misses': 0,
+                'numerical_warnings': 0,
+                'edge_case_count': 0,
+            }
+        )
+
         self._gradient_cache = {} if self.config.enable_caching else None
         self._cache_timestamps = {} if self.config.enable_caching else None
-        
-        # Pre-computed finite difference coefficients for performance
+
         self._fd_coefficients = self._precompute_fd_coefficients()
-        
-        # Structured logging setup with correlation context
-        if self._enable_logging and LOGURU_AVAILABLE:
-            self._logger = logger.bind(
-                sensor_type="GradientSensor",
-                sensor_id=self._sensor_id,
+
+        if self._logger:
+            self._logger = self._logger.bind(
                 method=self.config.method.value,
                 order=self.config.order,
-                spatial_resolution=self.config.spatial_resolution
+                spatial_resolution=self.config.spatial_resolution,
             )
-        else:
-            self._logger = None
-        
-        # Log initialization with configuration summary
-        if self._logger:
             self._logger.info(
                 "GradientSensor initialized with optimized configuration",
                 config_summary={
@@ -326,8 +321,8 @@ class GradientSensor:
                     'order': self.config.order,
                     'spatial_resolution': self.config.spatial_resolution,
                     'adaptive_step_size': self.config.adaptive_step_size,
-                    'caching_enabled': self.config.enable_caching
-                }
+                    'caching_enabled': self.config.enable_caching,
+                },
             )
     
     def _precompute_fd_coefficients(self) -> Dict[int, Dict[str, np.ndarray]]:
@@ -912,7 +907,7 @@ class GradientSensor:
         
         return magnitudes
     
-    def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+    def _compute_gradient_raw(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
         """
         Compute spatial gradients at specified agent positions.
         
@@ -943,6 +938,8 @@ class GradientSensor:
                 >>> gradients = sensor.compute_gradient(plume_state, positions)
                 >>> uphill_directions = np.arctan2(gradients[:, 1], gradients[:, 0])
         """
+        start_time = time.perf_counter() if self._enable_performance_monitoring else None
+
         # Input validation and normalization
         if positions.ndim == 1 and positions.shape[0] == 2:
             # Single agent case - reshape to (1, 2)
@@ -976,7 +973,10 @@ class GradientSensor:
                         cache_key=cache_key,
                         n_agents=positions.shape[0]
                     )
-                
+                if self._enable_performance_monitoring and start_time is not None:
+                    comp_time = (time.perf_counter() - start_time) * 1000
+                    self._performance_metrics['computation_times'].append(comp_time)
+                self._performance_metrics['total_computations'] += positions.shape[0]
                 return cached_result if not single_agent else cached_result[0]
             else:
                 self._performance_metrics['cache_misses'] += 1
@@ -984,7 +984,7 @@ class GradientSensor:
         # Compute gradients using finite difference methods
         try:
             gradients, metadata = self._compute_finite_difference_gradient(plume_state, positions)
-            
+
             # Store in cache if enabled
             if self.config.enable_caching and cache_key is not None:
                 # Maintain cache size limits
@@ -997,7 +997,13 @@ class GradientSensor:
                 
                 self._gradient_cache[cache_key] = gradients.copy()
                 self._cache_timestamps[cache_key] = time.time()
-            
+
+            if self._enable_performance_monitoring and start_time is not None:
+                comp_time = (time.perf_counter() - start_time) * 1000
+                self._performance_metrics['computation_times'].append(comp_time)
+
+            self._performance_metrics['total_computations'] += positions.shape[0]
+
             # Log computation summary
             if self._logger and self._performance_metrics['total_computations'] % 100 == 0:
                 recent_times = self._performance_metrics['computation_times'][-50:]
@@ -1029,6 +1035,11 @@ class GradientSensor:
             # Return zero gradients as fallback
             fallback_gradients = np.zeros_like(positions)
             return fallback_gradients if not single_agent else fallback_gradients[0]
+
+    def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
+        return self._execute_with_monitoring(
+            self._compute_gradient_raw, "gradient", plume_state, positions
+        )
     
     def compute_gradient_with_metadata(
         self, 
@@ -1095,8 +1106,41 @@ class GradientSensor:
             result.magnitude = result.magnitude[0]
             result.direction = result.direction[0]
             result.confidence = result.confidence[0]
-        
+
         return result
+
+    def get_sensor_info(self) -> Dict[str, Any]:
+        info = {
+            'sensor_type': 'GradientSensor',
+            'sensor_id': self._sensor_id,
+            'capabilities': [
+                'gradient_computation',
+                'vectorized_operations',
+            ],
+            'configuration': {
+                'method': self.config.method.value,
+                'order': self.config.order,
+                'spatial_resolution': self.config.spatial_resolution,
+                'adaptive_step_size': self.config.adaptive_step_size,
+                'caching_enabled': self.config.enable_caching,
+            },
+        }
+        if self._logger:
+            self._logger.debug("GradientSensor info requested", info=info)
+        return info
+
+    def get_metadata(self) -> Dict[str, Any]:
+        metadata = {
+            'sensor_type': 'GradientSensor',
+            'config': self.get_sensor_info()['configuration'],
+            'performance': self.get_performance_metrics(),
+        }
+        if self._logger:
+            self._logger.debug("GradientSensor metadata requested", metadata=metadata)
+        return metadata
+
+    def get_observation_space_info(self) -> Dict[str, Any]:
+        return {'shape': (2,), 'dtype': np.float64}
     
     def configure(self, **kwargs: Any) -> None:
         """
@@ -1210,14 +1254,12 @@ class GradientSensor:
                 >>> cache_efficiency = metrics['cache_hit_rate']
                 >>> error_rate = metrics['error_rate']
         """
-        if not self._enable_logging:
-            return {}
-        
+        base_metrics = super().get_performance_metrics()
+
         metrics = {
-            'sensor_type': 'GradientSensor',
-            'sensor_id': self._sensor_id,
+            **base_metrics,
             'total_computations': self._performance_metrics['total_computations'],
-            'cache_enabled': self.config.enable_caching
+            'cache_enabled': self.config.enable_caching,
         }
         
         # Computation time statistics
