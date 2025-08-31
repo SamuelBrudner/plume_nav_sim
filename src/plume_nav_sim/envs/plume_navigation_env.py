@@ -770,6 +770,7 @@ class PlumeNavigationEnv(gym.Env):
         seed: Optional[int] = None,
         performance_monitoring: bool = True,
         frame_cache: Optional[FrameCache] = None,
+        use_gymnasium_api: bool | None = None,
         _force_legacy_api: bool = False,
         **kwargs
     ):
@@ -820,6 +821,7 @@ class PlumeNavigationEnv(gym.Env):
             seed: Random seed for reproducible experiments (default: None)
             performance_monitoring: Enable performance tracking (default: True)
             frame_cache: Optional FrameCache instance for high-performance frame retrieval (VideoPlumeAdapter only)
+            use_gymnasium_api: Explicitly select Gymnasium API (True) or legacy gym API (False). If None, autodetect.
             _force_legacy_api: Force legacy API mode (internal use)
             **kwargs: Additional configuration parameters
             
@@ -894,8 +896,19 @@ class PlumeNavigationEnv(gym.Env):
         self.frame_cache = frame_cache
         self._cache_enabled = frame_cache is not None and FRAME_CACHE_AVAILABLE
         
-        # Detect API compatibility mode for legacy gym support
-        self._use_legacy_api = bool(_force_legacy_api)
+        # Determine API compatibility mode for legacy gym support
+        if _force_legacy_api:
+            self._use_legacy_api = True
+        elif use_gymnasium_api is not None:
+            self._use_legacy_api = not use_gymnasium_api
+        else:
+            self._use_legacy_api = _detect_legacy_gym_caller()
+
+        logger.debug(
+            f"API mode selected: {'legacy' if self._use_legacy_api else 'gymnasium'}",
+            extra={"metric_type": "api_mode_selection", "api_mode": "legacy" if self._use_legacy_api else "gymnasium"}
+        )
+
         self._correlation_id = None
         
         # v1.0 protocol-based component instances (initialized later)
@@ -1827,25 +1840,23 @@ class PlumeNavigationEnv(gym.Env):
         self, 
         seed: Optional[int] = None, 
         options: Optional[Dict[str, Any]] = None
-    ) -> Tuple[ObservationType, InfoType]:
+    ) -> Tuple[ObservationType, InfoType] | ObservationType:
         """
         Reset environment to initial state with optional parameter overrides.
-        
+
         Implements the modern Gymnasium reset() signature returning (observation, info)
-        with comprehensive state initialization and optional parameter overrides for
-        varying episode initial conditions.
-        
+        while supporting legacy API compatibility where only observation is returned.
+
         Args:
             seed: Random seed for episode reproducibility (optional)
             options: Dictionary of reset options (optional). Supported keys:
                 - position: Override initial position as (x, y) tuple
                 - orientation: Override initial orientation in radians
                 - frame_index: Start from specific video frame
-                
+
         Returns:
-            Tuple containing:
-                - observation: Initial observation dictionary
-                - info: Episode metadata and diagnostics
+            - observation: Initial observation dictionary
+            - info: Episode metadata and diagnostics (Gymnasium API only)
                 
         Raises:
             ValueError: If override options are invalid
@@ -2019,7 +2030,9 @@ class PlumeNavigationEnv(gym.Env):
                     )
             
             logger.debug(f"Environment reset completed in episode {self._episode_count}")
-            
+
+            if self._use_legacy_api:
+                return observation
             return observation, info
             
         except Exception as e:
@@ -2542,7 +2555,7 @@ class PlumeNavigationEnv(gym.Env):
         """Format step return based on API compatibility mode."""
         reward = float(reward)
         if self._use_legacy_api:
-            # Return 4-tuple for legacy gym API compatibility
+            logger.debug("step() using legacy 4-tuple return format")
             if SPACES_AVAILABLE:
                 return ReturnFormatConverter.to_legacy_format(
                     (observation, reward, terminated, truncated, info)
@@ -2551,7 +2564,7 @@ class PlumeNavigationEnv(gym.Env):
                 done = terminated or truncated
                 return observation, reward, done, info
         else:
-            # Return 5-tuple for modern Gymnasium API
+            logger.debug("step() using Gymnasium 5-tuple return format")
             return observation, reward, terminated, truncated, info
     
     def _get_observation(self) -> ObservationType:
