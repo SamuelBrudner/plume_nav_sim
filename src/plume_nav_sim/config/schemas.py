@@ -369,7 +369,7 @@ class SimulationConfig(BaseModel):
     save_animation: Optional[bool] = False
     animation_path: Optional[str] = None
     # Runtime/IO parameters for compatibility with tests
-    max_duration: Optional[float] = Field(None, gt=0)
+    max_duration: Optional[float] = Field(None)
     fps: Optional[int] = Field(None, gt=0)
     real_time: Optional[bool] = False
     output_directory: Optional[str] = None
@@ -401,6 +401,16 @@ class SimulationConfig(BaseModel):
         """Validate that width and height are positive if provided."""
         if v is not None and v <= 0:
             raise ValueError("Environment dimensions must be positive")
+        return v
+
+    @field_validator('max_duration')
+    @classmethod
+    def validate_max_duration(cls, v):
+        """Validate that max_duration is positive if provided."""
+        if v is not None and v <= 0:
+            logger.error("max_duration is not positive: %s", v)
+            raise ValueError("ensure this value is greater than 0")
+        logger.debug("max_duration validated: %s", v)
         return v
 
     model_config = ConfigDict(extra="allow")
