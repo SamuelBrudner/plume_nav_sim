@@ -964,18 +964,20 @@ class TestSensorMetadata:
         # Perform gradient computations
         for i in range(3):
             result = sensor.compute_gradient_with_metadata(mock_plume_state, positions)
-        
+
         # Test comprehensive metadata from gradient result
         assert isinstance(result.metadata, dict)
         assert 'sensor_id' in result.metadata
         assert 'timestamp' in result.metadata
-        
+
         # Test performance metrics
+        sensor.reset()
         metrics = sensor.get_performance_metrics()
         assert isinstance(metrics, dict)
         assert 'sensor_type' in metrics
         assert metrics['sensor_type'] == 'GradientSensor'
         assert 'total_computations' in metrics
+        assert 'total_operations' in metrics
 
 
 class TestSensorIntrospection:
