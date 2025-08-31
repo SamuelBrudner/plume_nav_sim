@@ -1453,24 +1453,8 @@ def validate_env_interpolation(value: str) -> bool:
     return bool(re.match(pattern, value))
 
 
-def resolve_env_value(value: str, default: Any = None) -> Any:
-    """
-    Resolve environment variable interpolation for testing and validation.
-    
-    Args:
-        value: String value with potential ${oc.env:} interpolation
-        default: Default value if environment variable not found
-        
-    Returns:
-        Resolved value from environment or default
-        
-    Examples:
-        >>> os.environ['TEST_VAR'] = 'test_value'
-        >>> resolve_env_value("${oc.env:TEST_VAR}")
-        'test_value'
-        >>> resolve_env_value("${oc.env:MISSING_VAR,default_val}")
-        'default_val'
-    """
+def resolve_env_value(value: str, default: Any = None) -> str:
+    """Resolve environment variable interpolation without type casting."""
     pattern = r"\$\{oc\.env:([A-Z_][A-Z0-9_]*)(,([^}]+))?\}"
     match = re.match(pattern, value)
 
@@ -1478,33 +1462,11 @@ def resolve_env_value(value: str, default: Any = None) -> Any:
         env_var = match.group(1)
         env_default = match.group(3) if match.group(3) is not None else default
         resolved = os.getenv(env_var, env_default)
-        return _convert_env_value(resolved)
+        if resolved is None:
+            raise KeyError(f"Environment variable '{env_var}' not found")
+        return str(resolved)
 
-    return _convert_env_value(value)
-
-
-def _convert_env_value(val: Any) -> Any:
-    """Best effort conversion of environment variable strings to native types."""
-    if not isinstance(val, str):
-        return val
-
-    lower = val.lower()
-    if lower in {"true", "yes", "1", "on"}:
-        return True
-    if lower in {"false", "no", "0", "off"}:
-        return False
-
-    try:
-        return int(val)
-    except ValueError:
-        pass
-
-    try:
-        return float(val)
-    except ValueError:
-        pass
-
-    return val
+    return str(value)
 
 
 # Utility functions for dataclass configuration management
