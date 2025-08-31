@@ -530,6 +530,16 @@ class ConcentrationSensor(BaseSensor):
                 >>> assert measurement_time < 0.1  # <0.1ms requirement
         """
         start_time = time.perf_counter() if self._enable_logging else None
+
+        # Update operation metrics for this measurement call
+        self._performance_metrics['total_operations'] += 1
+        self._performance_metrics['measurement_count'] += 1
+        if self._enable_logging and LOGURU_AVAILABLE:
+            logger.debug(
+                "ConcentrationSensor measure invoked",
+                total_operations=self._performance_metrics['total_operations'],
+                measurement_count=self._performance_metrics['measurement_count']
+            )
         
         try:
             # Validate and normalize positions
