@@ -74,14 +74,17 @@ except ImportError:
 
 try:
     from odor_plume_nav.utils.logging_setup import (
-        PerformanceMetrics, 
+        PerformanceMetrics,
         get_correlation_context,
-        create_step_timer
+        create_step_timer,
+        get_enhanced_logger,
     )
     LOGGING_UTILS_AVAILABLE = True
 except ImportError:
     LOGGING_UTILS_AVAILABLE = False
     logger.debug("Enhanced logging utilities not available, using basic logging")
+
+VIDEO_FILE_MISSING_MSG = "Video file does not exist"
 
 
 class VideoPlume:
@@ -139,6 +142,9 @@ class VideoPlume:
         threshold: Optional[float] = None,
         normalize: bool = True,
         cache: Optional[Any] = None,
+        frame_skip: int = 1,
+        start_frame: int = 0,
+        end_frame: Optional[int] = None,
         **kwargs
     ) -> None:
         """
@@ -169,7 +175,12 @@ class VideoPlume:
         # Convert and validate video path
         self.video_path = Path(video_path)
         if not self.video_path.exists():
-            raise FileNotFoundError(f"Video file not found: {self.video_path}")
+            raise IOError(VIDEO_FILE_MISSING_MSG)
+
+        # Frame range parameters
+        self.frame_skip = frame_skip if frame_skip > 0 else 1
+        self.start_frame = max(0, start_frame)
+        self.end_frame = end_frame
         
         # Store preprocessing parameters
         self.flip = flip
@@ -184,7 +195,7 @@ class VideoPlume:
             raise ValueError(
                 "Both kernel_size and kernel_sigma must be specified together or not at all"
             )
-        
+
         if kernel_size is not None:
             if kernel_size <= 0 or kernel_size % 2 == 0:
                 raise ValueError("kernel_size must be positive and odd")
@@ -193,6 +204,9 @@ class VideoPlume:
         
         if threshold is not None and (threshold < 0.0 or threshold > 1.0):
             raise ValueError("threshold must be between 0.0 and 1.0")
+
+        if self.end_frame is not None and self.end_frame <= self.start_frame:
+            raise ValueError("end_frame must be greater than start_frame")
         
         # Initialize OpenCV video capture
         self.cap = cv2.VideoCapture(str(self.video_path))
@@ -213,6 +227,18 @@ class VideoPlume:
         if self.fps <= 0:
             logger.warning(f"Invalid or missing FPS value: {self.fps}, defaulting to 30.0")
             self.fps = 30.0
+
+        # Correlation context and structured logger
+        if LOGGING_UTILS_AVAILABLE:
+            self._correlation_ctx = get_correlation_context()
+            bound = self._correlation_ctx.bind_context()
+            bound.setdefault("module", "video_plume")
+            self._logger = logger.bind(**bound)
+            self._perf_logger = get_enhanced_logger(__name__)
+        else:
+            self._correlation_ctx = None
+            self._logger = logger
+            self._perf_logger = logger
         
         # Initialize frame caching system for performance optimization
         self.cache = cache
@@ -229,16 +255,16 @@ class VideoPlume:
         
         # Initialize cache warming for preload modes
         if self.cache is not None and FRAME_CACHE_AVAILABLE:
-            logger.info(f"Frame cache enabled for {self.video_path.name}")
+            self._logger.info(f"Frame cache enabled for {self.video_path.name}")
             self._warm_cache_if_needed()
         else:
-            logger.debug(f"Frame cache disabled for {self.video_path.name}")
+            self._logger.debug(f"Frame cache disabled for {self.video_path.name}")
         
         # Thread safety for OpenCV operations and cache access
         self._lock = threading.RLock()
         self._is_closed = False
         
-        logger.info(
+        self._logger.info(
             f"VideoPlume initialized: {self.video_path.name} "
             f"({self.width}x{self.height}, {self.frame_count} frames, {self.fps:.1f} fps)"
         )
@@ -435,65 +461,60 @@ class VideoPlume:
         with self._lock:
             if self._is_closed:
                 raise ValueError("Cannot get frame from closed VideoPlume")
-            
-            # Validate frame index bounds
-            if frame_idx < 0 or frame_idx >= self.frame_count:
-                logger.debug(f"Frame index {frame_idx} out of bounds [0, {self.frame_count})")
+
+            max_frame = self.end_frame if self.end_frame is not None else self.frame_count
+            actual_idx = self.start_frame + frame_idx * self.frame_skip
+            if actual_idx < self.start_frame or actual_idx >= max_frame:
+                self._logger.debug(
+                    f"Frame index {frame_idx} out of bounds [{self.start_frame}, {max_frame})"
+                )
                 return None
-            
-            # Start performance timing for metrics collection
-            retrieval_start = time.time()
-            
-            # Update total request counter
+
             self.cache_stats["total_requests"] += 1
-            
-            # Check cache first for optimized frame retrieval
-            if self.cache is not None and FRAME_CACHE_AVAILABLE:
-                try:
-                    # Attempt zero-copy frame retrieval from cache
-                    cached_frame = self.cache.get(frame_idx)
-                    
-                    if cached_frame is not None:
-                        # Cache hit - update statistics
-                        cache_time = time.time() - retrieval_start
-                        self._update_cache_hit_stats(cache_time)
-                        
-                        # Return numpy array view for zero-copy access
-                        if isinstance(cached_frame, np.ndarray):
-                            return cached_frame.view()  # Zero-copy view
-                        else:
-                            return cached_frame
-                            
-                except Exception as e:
-                    logger.debug(f"Cache access failed for frame {frame_idx}: {e}")
-                    # Fall through to disk I/O on cache errors
-            
-            # Cache miss or no cache - read from video file
-            disk_start = time.time()
-            
-            # Seek to the requested frame
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-            ret, frame = self.cap.read()
-            
-            if not ret:
-                logger.warning(f"Failed to read frame {frame_idx}")
-                return None
-            
-            # Apply preprocessing pipeline
-            processed_frame = self._preprocess_frame(frame)
-            
-            # Store in cache for future access
-            if self.cache is not None and FRAME_CACHE_AVAILABLE and processed_frame is not None:
-                try:
-                    self.cache.put(frame_idx, processed_frame)
-                except Exception as e:
-                    logger.debug(f"Cache storage failed for frame {frame_idx}: {e}")
-            
-            # Update cache miss statistics
-            disk_time = time.time() - disk_start
-            total_time = time.time() - retrieval_start
-            self._update_cache_miss_stats(disk_time, total_time)
-            
+
+            with self._perf_logger.performance_timer("video_frame_processing") as perf:
+                start = time.time()
+
+                # Cache path
+                if self.cache is not None and FRAME_CACHE_AVAILABLE:
+                    try:
+                        cached_frame = self.cache.get(actual_idx)
+                        if cached_frame is not None:
+                            end = time.time()
+                            self._update_cache_hit_stats(end - start)
+                            frame = cached_frame
+                            if isinstance(frame, np.ndarray):
+                                frame = frame.view()
+                            self._logger.bind(
+                                frame_index=frame_idx,
+                                performance_metrics=getattr(perf, "to_dict", lambda: None)(),
+                            ).info("frame_retrieved_cache")
+                            return frame
+                    except Exception as e:
+                        self._logger.debug(f"Cache access failed for frame {actual_idx}: {e}")
+
+                # Read from disk
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, actual_idx)
+                ret, raw_frame = self.cap.read()
+                if not ret:
+                    self._logger.warning(f"Failed to read frame {actual_idx}")
+                    return None
+
+                processed_frame = self._preprocess_frame(raw_frame)
+
+                if self.cache is not None and FRAME_CACHE_AVAILABLE and processed_frame is not None:
+                    try:
+                        self.cache.put(actual_idx, processed_frame)
+                    except Exception as e:
+                        self._logger.debug(f"Cache storage failed for frame {actual_idx}: {e}")
+
+                end = time.time()
+                self._update_cache_miss_stats(end - start, end - start)
+
+            self._logger.bind(
+                frame_index=frame_idx,
+                performance_metrics=getattr(perf, "to_dict", lambda: None)(),
+            ).info("frame_retrieved")
             return processed_frame
     
     def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
@@ -779,6 +800,9 @@ class VideoPlume:
             "frame_count": self.frame_count,
             "duration": self.duration,
             "shape": self.shape,
+            "frame_skip": self.frame_skip,
+            "start_frame": self.start_frame,
+            "end_frame": self.end_frame,
             "preprocessing": {
                 "flip": self.flip,
                 "grayscale": self.grayscale,
@@ -798,7 +822,8 @@ class VideoPlume:
                     metadata["cache_config"] = self.cache.get_config()
                 except Exception:
                     pass  # Ignore cache config errors
-        
+
+        self._logger.bind(operation="get_metadata").info("metadata_retrieved")
         return metadata
     
     def get_metadata_string(self) -> str:
@@ -879,25 +904,35 @@ class VideoPlume:
         import hashlib
         
         # Calculate file hash for DVC compatibility
+        if not self.video_path.exists():
+            raise IOError(VIDEO_FILE_MISSING_MSG)
+
         file_hash = hashlib.md5()
-        with open(self.video_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                file_hash.update(chunk)
-        
+        try:
+            with open(self.video_path, 'rb') as f:
+                data = f.read()
+            file_hash.update(data)
+            file_size = len(data)
+        except FileNotFoundError:
+            raise IOError(VIDEO_FILE_MISSING_MSG)
+
+        if self._correlation_ctx is not None:
+            self._correlation_ctx.bind_context()
+
         base_metadata = self.get_metadata()
         
         # Add workflow-specific fields
         workflow_metadata = {
             **base_metadata,
             "file_hash": file_hash.hexdigest(),
-            "file_size": self.video_path.stat().st_size,
+            "file_size": file_size,
             "workflow_version": "1.0",
             "dependencies": {
                 "opencv_version": getattr(cv2, "__version__", "unknown"),
                 "numpy_version": np.__version__,
             }
         }
-        
+        self._logger.bind(operation="get_workflow_metadata").info("workflow_metadata_generated")
         return workflow_metadata
     
     def close(self) -> None:
