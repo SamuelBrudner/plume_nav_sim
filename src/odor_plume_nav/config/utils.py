@@ -114,71 +114,28 @@ def validate_env_interpolation(value: str, field_metadata: Optional[Dict[str, An
 
 
 def resolve_env_value(
-    interpolation_str: str, 
+    interpolation_str: str,
     field_type: Optional[Type] = None,
     field_metadata: Optional[Dict[str, Any]] = None
 ) -> Any:
-    """
-    Resolve environment variable from OmegaConf interpolation syntax with dataclass field support.
-    
-    Parses ${oc.env:VAR_NAME} or ${oc.env:VAR_NAME,default_value} syntax
-    and returns the environment variable value or default value if specified.
-    Enhanced to support dataclass field type hints and validation constraints.
-    
-    Args:
-        interpolation_str: String containing environment variable interpolation
-        field_type: Optional dataclass field type for type conversion
-        field_metadata: Optional dataclass field metadata for validation
-        
-    Returns:
-        Resolved environment variable value or default value
-        
-    Raises:
-        ValueError: If the interpolation syntax is invalid or validation fails
-        KeyError: If environment variable doesn't exist and no default is provided
-        
-    Examples:
-        >>> os.environ['TEST_VAR'] = 'test_value'
-        >>> resolve_env_value("${oc.env:TEST_VAR}")
-        'test_value'
-        >>> resolve_env_value("${oc.env:MISSING_VAR,default}")
-        'default'
-        >>> # With type and metadata
-        >>> resolve_env_value("${oc.env:SPEED,1.5}", float, {"ge": 0.0, "le": 2.0})
-        1.5
-    """
+    """Resolve environment variable interpolation returning raw strings."""
     if not validate_env_interpolation(interpolation_str, field_metadata):
         raise ValueError(f"Invalid environment variable interpolation syntax: {interpolation_str}")
-    
-    # Extract variable name and optional default value
+
     pattern = r'^\$\{oc\.env:([A-Za-z_][A-Za-z0-9_]*)(,(.*)?)?\}$'
     match = re.match(pattern, interpolation_str)
-    
     if not match:
         raise ValueError(f"Failed to parse environment variable interpolation: {interpolation_str}")
-    
+
     var_name = match.group(1)
     has_default = match.group(2) is not None
     default_value = match.group(3) if has_default else None
-    
-    # Try to get environment variable
-    env_value = os.environ.get(var_name)
-    
-    if env_value is not None:
-        # Convert with field type if provided
-        converted_value = _convert_env_value_with_type(env_value, field_type)
-    elif has_default:
-        # Use default value if provided
-        converted_value = _convert_env_value_with_type(default_value, field_type) if default_value is not None else None
-    else:
-        # No environment variable and no default - raise error
+
+    env_value = os.environ.get(var_name, default_value)
+    if env_value is None:
         raise KeyError(f"Environment variable '{var_name}' not found and no default value provided")
-    
-    # Validate against field constraints if metadata provided
-    if field_metadata and converted_value is not None:
-        _validate_field_constraints(converted_value, field_metadata)
-    
-    return converted_value
+
+    return str(env_value)
 
 
 def _convert_env_value(value: str) -> Any:

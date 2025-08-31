@@ -162,6 +162,13 @@ class TestPydanticSchemaValidation:
         config = VideoPlumeConfig.model_validate(env_config)
         assert config.video_path.startswith("${oc.env:")
 
+    def test_video_plume_config_serializes_path_as_string(self):
+        """model_dump should emit video_path as plain string."""
+        cfg = VideoPlumeConfig(video_path="example.mp4")
+        dumped = cfg.model_dump()
+        assert isinstance(dumped["video_path"], str)
+        assert dumped["video_path"] == "example.mp4"
+
     def test_video_plume_config_validation_errors(self):
         """Test VideoPlumeConfig validation error handling."""
         # Test invalid kernel size (even number)

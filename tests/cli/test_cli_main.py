@@ -1471,9 +1471,12 @@ class TestCLIIntegrationScenarios:
                 '--output-dir', self.temp_dir,
                 '--save-trajectory'
             ])
-            
+
             assert result.exit_code == 0
             assert 'Simulation completed' in result.output
+            mock_nav.assert_called_once_with(mock_cfg.navigator)
+            mock_plume.assert_called_once_with(mock_cfg.video_plume)
+            mock_sim.assert_called_once_with(mock_navigator, mock_video_plume, mock_cfg.simulation)
 
     def test_configuration_validation_workflow(self):
         """Test complete configuration validation workflow."""

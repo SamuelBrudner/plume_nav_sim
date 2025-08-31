@@ -7,7 +7,7 @@ This module provides Pydantic models for configuration validation.
 from typing import List, Optional, Tuple, Union, Dict, Any
 from enum import Enum
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer
 try:
     from hydra.core.config_store import ConfigStore
     cs = ConfigStore.instance()
@@ -25,10 +25,14 @@ class SingleAgentConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            raise ValueError("ensure this value is less than or equal to 360")
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -59,9 +63,13 @@ class MultiAgentConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            for orient in v:
+                if orient < 0:
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    raise ValueError("ensure this value is less than or equal to 360")
         return v
 
     @field_validator('positions')
@@ -141,10 +149,14 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            raise ValueError("ensure this value is less than or equal to 360")
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -156,9 +168,13 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            for orient in v:
+                if orient < 0:
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    raise ValueError("ensure this value is less than or equal to 360")
         return v
 
     @model_validator(mode="after")
@@ -244,6 +260,10 @@ class VideoPlumeConfig(BaseModel):
             if not p.is_file():
                 raise ValueError('Video path is not a file')
         return p
+
+    @field_serializer('video_path')
+    def serialize_video_path(self, v: Path) -> str:
+        return str(v)
 
     @field_validator('kernel_size')
     @classmethod

@@ -253,30 +253,12 @@ class TestNavigatorMovement:
     """Test navigator movement mechanics and calculations."""
     
     def test_navigator_orientation_normalization(self):
-        """Test that orientation is normalized properly during step."""
-        # Create navigator with various orientations
-        navigator_90 = create_navigator(position=(0.0, 0.0), orientation=90.0, speed=1.0)
-        assert navigator_90.orientations[0] == 90.0
-        
-        # Test normalization of angles during step
-        navigator_450 = create_navigator(position=(0.0, 0.0), orientation=450.0, speed=1.0)
-        # Initial value may not be automatically normalized
-        assert navigator_450.orientations[0] == 450.0
-        
-        # Normalization should happen during step
-        env_array = np.zeros((100, 100))
-        navigator_450.step(env_array)
-        # After step, orientation should be normalized to [0, 360) range
-        assert 0 <= navigator_450.orientations[0] < 360
-        assert np.isclose(navigator_450.orientations[0], 90.0, atol=1e-10)
-        
-        # Test normalization of negative angles during step
-        navigator_neg90 = create_navigator(position=(0.0, 0.0), orientation=-90.0, speed=1.0)
-        assert navigator_neg90.orientations[0] == -90.0
-        
-        navigator_neg90.step(env_array)
-        assert 0 <= navigator_neg90.orientations[0] < 360
-        assert np.isclose(navigator_neg90.orientations[0], 270.0, atol=1e-10)
+        """Invalid orientations should raise errors."""
+        with pytest.raises(ValueError, match="less than or equal to 360"):
+            create_navigator(position=(0.0, 0.0), orientation=450.0, speed=1.0)
+
+        with pytest.raises(ValueError, match="greater than or equal to 0"):
+            create_navigator(position=(0.0, 0.0), orientation=-90.0, speed=1.0)
     
     def test_navigator_speed_handling(self):
         """Test speed values and constraints in the controller."""

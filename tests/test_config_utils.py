@@ -1042,13 +1042,13 @@ class TestEnvironmentVariableInterpolation:
         
         with patch.dict(os.environ, test_env_vars):
             # Test resolution without defaults
-            assert resolve_env_value("${oc.env:NAVIGATOR_MAX_SPEED}") == 3.5
-            assert resolve_env_value("${oc.env:VIDEO_FLIP}") is True
-            assert resolve_env_value("${oc.env:KERNEL_SIZE}") == 7
+            assert resolve_env_value("${oc.env:NAVIGATOR_MAX_SPEED}") == "3.5"
+            assert resolve_env_value("${oc.env:VIDEO_FLIP}") == "true"
+            assert resolve_env_value("${oc.env:KERNEL_SIZE}") == "7"
 
             # Test resolution with defaults (should ignore defaults when var is set)
-            assert resolve_env_value("${oc.env:NAVIGATOR_MAX_SPEED,1.0}") == 3.5
-            assert resolve_env_value("${oc.env:VIDEO_FLIP,false}") is True
+            assert resolve_env_value("${oc.env:NAVIGATOR_MAX_SPEED,1.0}") == "3.5"
+            assert resolve_env_value("${oc.env:VIDEO_FLIP,false}") == "true"
             assert resolve_env_value("${oc.env:OUTPUT_DIR,./outputs}") == '/custom/output'
     
     def test_env_value_resolution_with_defaults(self):
@@ -1056,10 +1056,10 @@ class TestEnvironmentVariableInterpolation:
         # Test without setting environment variables
         with patch.dict(os.environ, {}, clear=True):
             # Test default value usage
-            assert resolve_env_value("${oc.env:MISSING_SPEED,2.0}") == 2.0
-            assert resolve_env_value("${oc.env:MISSING_FLIP,false}") is False
+            assert resolve_env_value("${oc.env:MISSING_SPEED,2.0}") == "2.0"
+            assert resolve_env_value("${oc.env:MISSING_FLIP,false}") == "false"
             assert resolve_env_value("${oc.env:MISSING_PATH,./default.mp4}") == './default.mp4'
-            assert resolve_env_value("${oc.env:MISSING_STEPS,1000}") == 1000
+            assert resolve_env_value("${oc.env:MISSING_STEPS,1000}") == "1000"
     
     def test_env_value_resolution_missing_variable_no_default(self):
         """Test error handling when environment variable is missing and no default provided."""
@@ -1105,10 +1105,10 @@ class TestEnvironmentVariableInterpolation:
         with patch.dict(os.environ, test_env_vars):
             # Note: Type conversion depends on the specific implementation
             # Here we test that values are resolved correctly
-            assert resolve_env_value("${oc.env:INT_VAR}") == 42
-            assert resolve_env_value("${oc.env:FLOAT_VAR}") == 3.14
-            assert resolve_env_value("${oc.env:BOOL_TRUE}") is True
-            assert resolve_env_value("${oc.env:BOOL_FALSE}") is False
+            assert resolve_env_value("${oc.env:INT_VAR}") == "42"
+            assert resolve_env_value("${oc.env:FLOAT_VAR}") == "3.14"
+            assert resolve_env_value("${oc.env:BOOL_TRUE}") == "true"
+            assert resolve_env_value("${oc.env:BOOL_FALSE}") == "false"
             assert resolve_env_value("${oc.env:STRING_VAR}") == 'test_string'
     
     def test_env_interpolation_security_validation(self):

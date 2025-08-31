@@ -166,10 +166,12 @@ def _validate_navigator_config(config: Dict[str, Any]) -> None:
         orientation = config['orientation']
         try:
             orientation_float = float(orientation)
-            if orientation_float < 0:
-                raise ValueError(f"Orientation cannot be negative, got {orientation_float}")
         except (ValueError, TypeError):
             raise ValueError("Orientation must be numeric")
+        if orientation_float < 0:
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if orientation_float > 360:
+            raise ValueError("ensure this value is less than or equal to 360")
     
     # Validate speed
     if 'speed' in config:

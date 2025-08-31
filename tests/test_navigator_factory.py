@@ -470,14 +470,13 @@ class TestParameterValidation:
         with pytest.raises(ConfigurationError):
             create_navigator(speed=-1.0)
 
-    def test_orientation_normalization(self):
-        """Test orientation normalization to [0, 360) range."""
-        # Test various orientation values
-        navigator1 = create_navigator(orientation=450.0)  # > 360
-        assert navigator1.orientations[0] == 90.0  # 450 % 360
-        
-        navigator2 = create_navigator(orientation=-90.0)  # Negative
-        assert navigator2.orientations[0] == 270.0  # (-90 % 360)
+    def test_orientation_bounds_validation(self):
+        """Orientation outside [0, 360] should raise errors."""
+        with pytest.raises(ValueError, match="less than or equal to 360"):
+            create_navigator(orientation=450.0)
+
+        with pytest.raises(ValueError, match="greater than or equal to 0"):
+            create_navigator(orientation=-90.0)
 
     def test_multi_agent_parameter_consistency(self):
         """Test parameter consistency validation for multi-agent scenarios."""
