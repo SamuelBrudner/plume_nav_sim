@@ -7,12 +7,18 @@ This module provides Pydantic models for configuration validation.
 from typing import List, Optional, Tuple, Union, Dict, Any
 from enum import Enum
 from pathlib import Path
+import logging
+import re
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 try:
     from hydra.core.config_store import ConfigStore
     cs = ConfigStore.instance()
 except ImportError:
     cs = None
+
+
+logger = logging.getLogger(__name__)
+ENV_VAR_PATTERN = re.compile(r"^\$\{[^}]+\}$")
 
 
 class SingleAgentConfig(BaseModel):
@@ -25,23 +31,33 @@ class SingleAgentConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            logger.error("Invalid orientation %s: less than 0", v)
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            logger.error("Invalid orientation %s: greater than 360", v)
+            raise ValueError("ensure this value is less than or equal to 360")
+        logger.debug("Validated orientation %s", v)
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
     def validate_non_negative(cls, v, info):
         """Validate that values are non-negative."""
         if v is not None and v < 0:
+            logger.error("%s is negative: %s", info.field_name, v)
             raise ValueError(f"ensure this value is greater than or equal to 0")
+        logger.debug("%s validated: %s", info.field_name, v)
         return v
 
     @model_validator(mode="after")
     def check_speed_constraints(cls, values):
         """Verify speed constraints."""
         if values.speed is not None and values.max_speed is not None and values.speed > values.max_speed:
+            logger.error("speed %s exceeds max_speed %s", values.speed, values.max_speed)
             raise ValueError(f"speed ({values.speed}) cannot exceed max_speed ({values.max_speed})")
         return values
 
@@ -59,9 +75,19 @@ class MultiAgentConfig(BaseModel):
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            validated = []
+            for i, orient in enumerate(v):
+                if orient < 0:
+                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
+                    raise ValueError("ensure this value is less than or equal to 360")
+                validated.append(orient)
+            logger.debug("Validated orientations %s", validated)
+            return validated
         return v
 
     @field_validator('positions')
@@ -81,7 +107,9 @@ class MultiAgentConfig(BaseModel):
         if v is not None:
             for i, s in enumerate(v):
                 if s < 0:
+                    logger.error("Speed at index %d is negative: %s", i, s)
                     raise ValueError(f"Speed at index {i} must be non-negative")
+            logger.debug("Validated speeds %s", v)
         return v
 
     @model_validator(mode="after")
@@ -141,24 +169,43 @@ class NavigatorConfig(BaseModel):
 
     @field_validator('orientation')
     @classmethod
-    def normalize_orientation(cls, v):
+    def validate_orientation(cls, v):
         if v is None:
             return v
-        return v % 360
+        if v < 0:
+            logger.error("Invalid orientation %s: less than 0", v)
+            raise ValueError("ensure this value is greater than or equal to 0")
+        if v > 360:
+            logger.error("Invalid orientation %s: greater than 360", v)
+            raise ValueError("ensure this value is less than or equal to 360")
+        logger.debug("Validated orientation %s", v)
+        return v
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
     def validate_non_negative(cls, v, info):
         """Validate that values are non-negative with specific error message."""
         if v is not None and v < 0:
+            logger.error("%s is negative: %s", info.field_name, v)
             raise ValueError("ensure this value is greater than or equal to 0")
+        logger.debug("%s validated: %s", info.field_name, v)
         return v
 
     @field_validator('orientations')
     @classmethod
-    def normalize_orientations(cls, v):
+    def validate_orientations(cls, v):
         if v is not None:
-            return [orient % 360 for orient in v]
+            validated = []
+            for i, orient in enumerate(v):
+                if orient < 0:
+                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
+                    raise ValueError("ensure this value is greater than or equal to 0")
+                if orient > 360:
+                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
+                    raise ValueError("ensure this value is less than or equal to 360")
+                validated.append(orient)
+            logger.debug("Validated orientations %s", validated)
+            return validated
         return v
 
     @model_validator(mode="after")
@@ -207,9 +254,12 @@ class NavigatorConfig(BaseModel):
 
 class VideoPlumeConfig(BaseModel):
     """Configuration for video-based plume environment."""
-    # Path to the video file
-    video_path: Path
-    
+    # Path to the video file (kept internally as Path but exposed as string)
+    video_path: Union[Path, str]
+
+    # Internal flag to optionally skip validation
+    skip_validation: bool = Field(default=False, repr=False, exclude=True)
+
     # Optional parameters for video processing
     flip: Optional[bool] = False
     grayscale: Optional[bool] = True
@@ -217,7 +267,7 @@ class VideoPlumeConfig(BaseModel):
     kernel_sigma: Optional[float] = None
     threshold: Optional[float] = Field(None)  # Removed ge/le constraints for custom validator
     normalize: Optional[bool] = True
-    
+
     # Frame range parameters
     start_frame: Optional[int] = None
     end_frame: Optional[int] = None
@@ -233,22 +283,36 @@ class VideoPlumeConfig(BaseModel):
                 raise ValueError("ensure this value is greater than or equal to 0")
         return v
 
+    @field_validator('video_path', mode='before')
+    @classmethod
+    def parse_video_path(cls, v):
+        """Convert to Path unless value is an env-variable pattern."""
+        if isinstance(v, str) and ENV_VAR_PATTERN.fullmatch(v):
+            return v
+        return Path(v)
+
     @field_validator('video_path')
     @classmethod
     def validate_video_path(cls, v, info):
-        skip = info.data.get('_skip_validation', True)
-        p = Path(v)
+        skip = info.data.get('skip_validation', False)
+        if isinstance(v, str):
+            return v
         if not skip:
-            if not p.exists():
+            if not v.exists():
+                logger.error("Video file not found: %s", v)
                 raise ValueError('Video file not found')
-            if not p.is_file():
+            if not v.is_file():
+                logger.error("Video path is not a file: %s", v)
                 raise ValueError('Video path is not a file')
-        return p
+        return v
 
     @field_validator('kernel_size')
     @classmethod
     def validate_kernel_size(cls, v):
         if v is not None:
+            if v == 0:
+                # A value of 0 disables kernel smoothing altogether
+                return 0
             if v < 0:
                 raise ValueError('kernel_size must be positive')
             if v % 2 == 0:
@@ -273,6 +337,15 @@ class VideoPlumeConfig(BaseModel):
             if values.end_frame <= values.start_frame:
                 raise ValueError('end_frame must be greater than start_frame')
         return values
+
+    @property
+    def video_path_str(self) -> str:
+        return str(self.video_path)
+
+    def model_dump(self, *args, **kwargs):
+        data = super().model_dump(*args, **kwargs)
+        data['video_path'] = self.video_path_str
+        return data
 
     model_config = ConfigDict(extra="allow")
 
