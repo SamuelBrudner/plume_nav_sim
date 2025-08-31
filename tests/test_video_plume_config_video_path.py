@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from plume_nav_sim.config.schemas import VideoPlumeConfig
+from pydantic import BaseModel
 
 
 def test_invalid_video_path_raises_and_logs(caplog):
@@ -24,3 +25,10 @@ def test_env_pattern_kept_as_string():
     cfg = VideoPlumeConfig(video_path=pattern)
     assert cfg.video_path == pattern
     assert cfg.model_dump()["video_path"] == pattern
+
+
+def test_base_model_dump_serializes_to_string():
+    path = Path("test_video.mp4")
+    cfg = VideoPlumeConfig(video_path=path)
+    data = BaseModel.model_dump(cfg)
+    assert data["video_path"] == "test_video.mp4"

@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 import logging
 import re
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer
 try:
     from hydra.core.config_store import ConfigStore
     cs = ConfigStore.instance()
@@ -337,14 +337,9 @@ class VideoPlumeConfig(BaseModel):
                 raise ValueError('end_frame must be greater than start_frame')
         return values
 
-    @property
-    def video_path_str(self) -> str:
-        return str(self.video_path)
-
-    def model_dump(self, *args, **kwargs):
-        data = super().model_dump(*args, **kwargs)
-        data['video_path'] = self.video_path_str
-        return data
+    @field_serializer('video_path')
+    def serialize_video_path(self, v):
+        return str(v)
 
     model_config = ConfigDict(extra="allow")
 
