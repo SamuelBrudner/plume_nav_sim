@@ -320,19 +320,31 @@ class BinarySensor:
         
         try:
             # Input validation
-            if not isinstance(concentration_values, np.ndarray):
-                raise TypeError("concentration_values must be a numpy array")
-            if not isinstance(positions, np.ndarray):
-                raise TypeError("positions must be a numpy array")
-            
-            concentration_values = np.asarray(concentration_values, dtype=np.float64)
-            positions = np.asarray(positions, dtype=np.float64)
-            
-            # Ensure arrays are compatible
-            if concentration_values.ndim != 1:
-                raise ValueError(f"concentration_values must be 1D, got shape {concentration_values.shape}")
-            if positions.ndim != 2 or positions.shape[1] != 2:
+            single_agent = False
+
+            if np.isscalar(concentration_values):
+                concentration_values = np.array([concentration_values], dtype=np.float64)
+                single_agent = True
+            elif isinstance(concentration_values, np.ndarray):
+                concentration_values = np.asarray(concentration_values, dtype=np.float64)
+            else:
+                raise TypeError("concentration_values must be a numpy array or scalar")
+
+            if np.isscalar(positions):
+                raise TypeError("positions must be a sequence or array")
+            elif isinstance(positions, np.ndarray):
+                positions = np.asarray(positions, dtype=np.float64)
+            else:
+                positions = np.array(positions, dtype=np.float64)
+
+            if positions.ndim == 1:
+                if positions.shape[0] != 2:
+                    raise ValueError(f"Single position must have 2 coordinates, got {positions.shape[0]}")
+                positions = positions.reshape(1, -1)
+                single_agent = True
+            elif positions.ndim != 2 or positions.shape[1] != 2:
                 raise ValueError(f"positions must have shape (N, 2), got {positions.shape}")
+
             if len(concentration_values) != len(positions):
                 raise ValueError(f"Array length mismatch: {len(concentration_values)} vs {len(positions)}")
             
@@ -396,6 +408,8 @@ class BinarySensor:
                         num_agents=num_agents
                     )
             
+            if single_agent:
+                return bool(detections[0])
             return detections
             
         except Exception as e:
