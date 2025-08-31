@@ -665,7 +665,8 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
 
     try:
         _validate_hydra_availability()
-        cfg = HydraConfig.get().cfg if HYDRA_AVAILABLE and HydraConfig.initialized() else None
+        set_cli_config(None)
+        cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
             raise CLIError("Configuration not available", exit_code=1)
 
@@ -679,6 +680,7 @@ def run(ctx, dry_run: bool, seed: Optional[int], output_dir: Optional[str],
             navigator = create_navigator(cfg.navigator)
             video_plume = create_video_plume(cfg.video_plume)
             run_plume_simulation(navigator, video_plume, cfg.simulation)
+            click.echo("Simulation completed")
         except Exception as e:
             logger.error(f"Simulation execution failed: {e}")
             raise SimulationError(f"Simulation failed: {e}") from e
