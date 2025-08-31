@@ -21,6 +21,31 @@ logger = logging.getLogger(__name__)
 ENV_VAR_PATTERN = re.compile(r"^\$\{[^}]+\}$")
 
 
+def _validate_orientation_value(value: float, index: Optional[int] = None) -> float:
+    """Validate that an orientation value lies within [0, 360].
+
+    Args:
+        value: Orientation value in degrees.
+        index: Optional index for multi-agent orientation lists.
+
+    Returns:
+        The validated orientation value.
+
+    Raises:
+        ValueError: If the orientation is outside the accepted range with
+            messages compatible with Pydantic's error scheme.
+    """
+    context = f"Orientation at index {index}" if index is not None else "Invalid orientation"
+    if value < 0:
+        logger.error("%s %s: less than 0", context, value)
+        raise ValueError("ensure this value is greater than or equal to 0")
+    if value > 360:
+        logger.error("%s %s: greater than 360", context, value)
+        raise ValueError("ensure this value is less than or equal to 360")
+    logger.debug("%s validated", value)
+    return value
+
+
 class SingleAgentConfig(BaseModel):
     """Configuration for single agent navigator."""
     position: Optional[Tuple[float, float]] = None
@@ -34,14 +59,7 @@ class SingleAgentConfig(BaseModel):
     def validate_orientation(cls, v):
         if v is None:
             return v
-        if v < 0:
-            logger.error("Invalid orientation %s: less than 0", v)
-            raise ValueError("ensure this value is greater than or equal to 0")
-        if v > 360:
-            logger.error("Invalid orientation %s: greater than 360", v)
-            raise ValueError("ensure this value is less than or equal to 360")
-        logger.debug("Validated orientation %s", v)
-        return v
+        return _validate_orientation_value(v)
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -79,13 +97,7 @@ class MultiAgentConfig(BaseModel):
         if v is not None:
             validated = []
             for i, orient in enumerate(v):
-                if orient < 0:
-                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
-                    raise ValueError("ensure this value is greater than or equal to 0")
-                if orient > 360:
-                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
-                    raise ValueError("ensure this value is less than or equal to 360")
-                validated.append(orient)
+                validated.append(_validate_orientation_value(orient, index=i))
             logger.debug("Validated orientations %s", validated)
             return validated
         return v
@@ -172,14 +184,7 @@ class NavigatorConfig(BaseModel):
     def validate_orientation(cls, v):
         if v is None:
             return v
-        if v < 0:
-            logger.error("Invalid orientation %s: less than 0", v)
-            raise ValueError("ensure this value is greater than or equal to 0")
-        if v > 360:
-            logger.error("Invalid orientation %s: greater than 360", v)
-            raise ValueError("ensure this value is less than or equal to 360")
-        logger.debug("Validated orientation %s", v)
-        return v
+        return _validate_orientation_value(v)
 
     @field_validator('speed', 'max_speed', 'angular_velocity')
     @classmethod
@@ -197,13 +202,7 @@ class NavigatorConfig(BaseModel):
         if v is not None:
             validated = []
             for i, orient in enumerate(v):
-                if orient < 0:
-                    logger.error("Orientation at index %d invalid %s: less than 0", i, orient)
-                    raise ValueError("ensure this value is greater than or equal to 0")
-                if orient > 360:
-                    logger.error("Orientation at index %d invalid %s: greater than 360", i, orient)
-                    raise ValueError("ensure this value is less than or equal to 360")
-                validated.append(orient)
+                validated.append(_validate_orientation_value(orient, index=i))
             logger.debug("Validated orientations %s", validated)
             return validated
         return v
