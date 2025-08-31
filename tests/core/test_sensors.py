@@ -368,6 +368,26 @@ class TestSensorFunctionality:
 
         assert np.isscalar(measurement)
         assert np.asarray(measurement).dtype == np.float64
+
+    def test_concentration_sensor_metrics_increment(self, mock_plume_state, single_position):
+        """ConcentrationSensor should update performance counters on measurement."""
+        sensor = ConcentrationSensor(dynamic_range=(0.0, 1.0), enable_logging=False)
+
+        initial_metrics = sensor.get_performance_metrics()
+        assert initial_metrics["total_operations"] == 0
+        assert initial_metrics["measurement_count"] == 0
+
+        sensor.measure(mock_plume_state, single_position)
+
+        mid_metrics = sensor.get_performance_metrics()
+        assert mid_metrics["total_operations"] == 1
+        assert mid_metrics["measurement_count"] == 1
+
+        sensor.measure(mock_plume_state, single_position)
+
+        updated_metrics = sensor.get_performance_metrics()
+        assert updated_metrics["total_operations"] == 2
+        assert updated_metrics["measurement_count"] == 2
     
     def test_concentration_sensor_noise_and_drift(self, mock_plume_state):
         """Test concentration sensor noise and drift modeling."""
