@@ -1337,15 +1337,19 @@ class GradientSensor(BaseSensor):
     
     def reset_performance_metrics(self) -> None:
         """Reset performance metrics for new monitoring period."""
-        self._performance_metrics = {
+        super().reset_performance_metrics()
+        if not self._enable_performance_monitoring:
+            return
+
+        self._performance_metrics.update({
             'computation_times': [],
             'total_computations': 0,
             'cache_hits': 0,
             'cache_misses': 0,
             'numerical_warnings': 0,
-            'edge_case_count': 0
-        }
-        
+            'edge_case_count': 0,
+        })
+
         if self._logger:
             self._logger.debug("Performance metrics reset", sensor_id=self._sensor_id)
 
