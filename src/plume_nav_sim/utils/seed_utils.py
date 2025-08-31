@@ -90,8 +90,40 @@ def validate_deterministic_behavior(*args, **kwargs) -> bool:  # pragma: no cove
     return True
 
 
-# Re-export with preserved documentation
-seed_context_manager = _seed_context_manager
+# Thin wrapper with lifecycle logging
+@contextmanager
+def seed_context_manager(
+    seed: Optional[int] = None,
+    experiment_name: Optional[str] = None,
+    **metadata: Any,
+) -> Iterator[Any]:
+    """Temporarily seed Python and NumPy RNGs.
+
+    This wrapper delegates to :func:`odor_plume_nav.utils.seed_utils.seed_context_manager`
+    while preserving and restoring the caller's random state.  The context is logged
+    to help trace deterministic execution during tests.
+
+    Example
+    -------
+    >>> from plume_nav_sim.utils.seed_utils import seed_context_manager
+    >>> with seed_context_manager(123):
+    ...     # deterministic operations
+    ...     pass
+    """
+    logger.info("Establishing seed context with seed %s", seed)
+    py_state = random.getstate()
+    np_state = np.random.get_state()
+    try:
+        with _seed_context_manager(
+            seed=seed,
+            experiment_name=experiment_name,
+            **metadata,
+        ) as ctx:
+            yield ctx
+    finally:
+        random.setstate(py_state)
+        np.random.set_state(np_state)
+        logger.info("Restored RNG state after seed context")
 
 
 __all__ = [
