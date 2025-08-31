@@ -232,16 +232,27 @@ class VideoPlume:
         }
 
     def get_workflow_metadata(self) -> Dict[str, Any]:
-        """Return extended metadata with file details."""
-        if getattr(self, "_correlation_ctx", None) is not None:
-            self._correlation_ctx.bind_context()
-        with open(self.video_path, "rb") as f:
+        """Return extended metadata with file details and correlation tracking."""
+        ctx: Dict[str, Any] = {}
+        if getattr(self, '_correlation_ctx', None) is not None:
+            ctx = self._correlation_ctx.bind_context()
+
+        if not self.video_path.exists():
+            raise IOError(VIDEO_FILE_MISSING_MSG)
+
+        with open(self.video_path, 'rb') as f:
             data = f.read()
+
         file_hash = hashlib.md5(data).hexdigest()
         metadata = self.get_metadata()
-        metadata.update({"file_hash": file_hash, "file_size": len(data)})
-        logger.info("workflow_metadata_generated")
+        metadata.update({'file_hash': file_hash, 'file_size': len(data)})
+        if ctx:
+            metadata['correlation_id'] = ctx.get('correlation_id')
+            logger.info('workflow_metadata_generated', extra=ctx)
+        else:
+            logger.info('workflow_metadata_generated')
         return metadata
+
 
     def reset(self):
         """Reset the video to the beginning."""
