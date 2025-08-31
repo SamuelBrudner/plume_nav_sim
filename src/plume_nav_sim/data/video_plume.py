@@ -1,5 +1,4 @@
-"""
-Video plume data handling and processing.
+"""Video plume data handling and processing.
 
 This module provides the VideoPlume class for loading and processing video-based
 plume data for navigation simulations.
@@ -7,16 +6,18 @@ plume data for navigation simulations.
 
 import logging
 import hashlib
+import uuid
 from pathlib import Path
 from typing import Optional, Union, Any, Dict
 
 import cv2
 import numpy as np
+from loguru import logger
 from plume_nav_sim.api.navigation import ConfigurationError
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 from plume_nav_sim.utils.logging_setup import get_correlation_context
 
-logger = logging.getLogger(__name__)
+py_logger = logging.getLogger(__name__)
 
 
 class VideoPlume:
@@ -103,7 +104,7 @@ class VideoPlume:
 
         if self.kernel_size == 0:
             # Log explicitly when smoothing is turned off
-            logger.info("Kernel smoothing disabled")
+            py_logger.info("Kernel smoothing disabled")
         
         # Store any additional keyword arguments as attributes
         for key, value in kwargs.items():
@@ -158,8 +159,15 @@ class VideoPlume:
         ret, frame = self._cap.read()
         if not ret:
             raise RuntimeError("Failed to read frame from video")
-
-        return self._process_frame(frame)
+        processed = self._process_frame(frame)
+        if getattr(self, "_correlation_ctx", None) is not None:
+            self._correlation_ctx.bind_context()
+        logger.bind(
+            correlation_id=uuid.uuid4().hex,
+            frame_index=actual_idx,
+            video_path=str(self.video_path),
+        ).info("frame_retrieved")
+        return processed
     
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
         """
@@ -219,7 +227,7 @@ class VideoPlume:
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return basic video metadata including frame controls."""
-        return {
+        metadata = {
             "width": self.width,
             "height": self.height,
             "fps": self.fps,
@@ -230,6 +238,14 @@ class VideoPlume:
             "start_frame": self.start_frame,
             "end_frame": self.end_frame,
         }
+        if getattr(self, "_correlation_ctx", None) is not None:
+            self._correlation_ctx.bind_context()
+        logger.bind(
+            correlation_id=uuid.uuid4().hex,
+            operation="get_metadata",
+            video_path=str(self.video_path),
+        ).info("metadata_retrieved")
+        return metadata
 
     def get_workflow_metadata(self) -> Dict[str, Any]:
         """Return extended metadata with file details."""
