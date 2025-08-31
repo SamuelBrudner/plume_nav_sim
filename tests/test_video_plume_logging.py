@@ -1,9 +1,12 @@
 import logging
+import json
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import cv2
 import pytest
+from loguru import logger
 
 from plume_nav_sim.data.video_plume import VideoPlume
 
@@ -69,6 +72,37 @@ def test_binds_context_in_workflow_metadata(tmp_path, mock_exists):
             assert ctx.bind_context.called
 
 
+def test_get_frame_logs_context(mock_exists):
+    dummy = DummyCapture()
+    with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture', return_value=dummy):
+        plume = VideoPlume(video_path="video.mp4")
+        buffer = StringIO()
+        handler_id = logger.add(buffer, serialize=True)
+        plume.get_frame(0)
+        logger.remove(handler_id)
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert lines, "No logs captured"
+    record = json.loads(lines[-1])
+    extra = record["record"]["extra"]
+    assert "correlation_id" in extra
+    assert extra["frame_index"] == 0
+
+
+def test_get_metadata_logs_context(mock_exists):
+    dummy = DummyCapture()
+    with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture', return_value=dummy):
+        plume = VideoPlume(video_path="video.mp4")
+        buffer = StringIO()
+        handler_id = logger.add(buffer, serialize=True)
+        plume.get_metadata()
+        logger.remove(handler_id)
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert lines, "No logs captured"
+    record = json.loads(lines[-1])
+    extra = record["record"]["extra"]
+    assert "correlation_id" in extra
+    assert extra.get("operation") == "get_metadata"
+
 def test_workflow_metadata_includes_correlation_id_and_logs(tmp_path):
     dummy = DummyCapture()
     video_file = tmp_path / "video.mp4"
@@ -101,3 +135,4 @@ def test_workflow_metadata_missing_file_raises_before_hash(tmp_path):
         with pytest.raises(IOError, match='Video file does not exist'):
             plume.get_workflow_metadata()
     mock_open.assert_not_called()
+
