@@ -1038,10 +1038,9 @@ class TestSensorIntrospection:
         assert 'total_operations' in metrics
 
 
-@pytest.mark.xfail(reason="Vectorization performance requires further optimization")
 def test_binary_sensor_vectorization_scaling(sample_positions):
     sensor = BinarySensor(threshold=0.1, enable_logging=False)
-    batch_sizes = [1, 8, 64]
+    batch_sizes = [1, 32, 64]
     times_per_agent = []
     for n in batch_sizes:
         concentrations = np.linspace(0.0, 1.0, n)
