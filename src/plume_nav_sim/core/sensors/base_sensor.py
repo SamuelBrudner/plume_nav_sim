@@ -98,16 +98,18 @@ except ImportError:
     logger = logging.getLogger(__name__)
     LOGURU_AVAILABLE = False
 
-# Configuration schemas - handle case where they don't exist yet
+# Configuration schemas - fail fast when they are missing
 try:
     from ...config.schemas import SensorConfig, BinarySensorConfig, ConcentrationSensorConfig
     SCHEMAS_AVAILABLE = True
-except ImportError:
-    # These will be created by other agents - use minimal fallback types
-    SensorConfig = Dict[str, Any]
-    BinarySensorConfig = Dict[str, Any] 
-    ConcentrationSensorConfig = Dict[str, Any]
-    SCHEMAS_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - executed only when schemas are absent
+    logger.error(
+        "Configuration schemas could not be imported: %s", exc
+    )
+    raise ImportError(
+        "Required configuration schemas are missing. Ensure ``plume_nav_sim.config.schemas`` "
+        "defines `SensorConfig`, `BinarySensorConfig`, and `ConcentrationSensorConfig`."
+    ) from exc
 
 # PSUtil for memory monitoring (optional dependency)
 try:
