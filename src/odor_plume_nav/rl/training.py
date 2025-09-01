@@ -53,66 +53,62 @@ from abc import ABC, abstractmethod
 import numpy as np
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
-# Stable-baselines3 imports with graceful fallbacks
+from odor_plume_nav.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
+
+# Set up module logger with RL training context
+logger = get_enhanced_logger(__name__)
+
+# Required third-party dependencies
 try:
     import stable_baselines3 as sb3
     from stable_baselines3 import PPO, SAC, TD3, A2C, DQN
     from stable_baselines3.common.base_class import BaseAlgorithm
     from stable_baselines3.common.vec_env import (
-        VecEnv, DummyVecEnv, SubprocVecEnv, 
-        SyncVectorEnv, AsyncVectorEnv
+        VecEnv, DummyVecEnv, SubprocVecEnv,
+        SyncVectorEnv, AsyncVectorEnv,
     )
     from stable_baselines3.common.callbacks import (
-        BaseCallback, CheckpointCallback, EvalCallback, 
-        StopTrainingOnRewardThreshold, CallbackList
+        BaseCallback, CheckpointCallback, EvalCallback,
+        StopTrainingOnRewardThreshold, CallbackList,
     )
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.evaluation import evaluate_policy
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.utils import safe_mean
-    SB3_AVAILABLE = True
-except ImportError:
-    SB3_AVAILABLE = False
-    # Mock classes to prevent import errors
-    BaseAlgorithm = object
-    VecEnv = object
-    BaseCallback = object
+except ImportError as e:
+    logger.error(
+        "stable-baselines3 is required for RL training. Install with: pip install 'odor_plume_nav[rl]'"
+    )
+    raise ImportError(
+        "stable-baselines3 is required for RL training. Install with: pip install 'odor_plume_nav[rl]'"
+    ) from e
 
-# Gymnasium vectorization support
 try:
     import gymnasium as gym
     from gymnasium.vector import SyncVectorEnv as GymSyncVectorEnv
     from gymnasium.vector import AsyncVectorEnv as GymAsyncVectorEnv
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    gym = None
+except ImportError as e:
+    logger.error("Gymnasium is required for RL training.")
+    raise ImportError("Gymnasium is required for RL training.") from e
 
-# Optional monitoring and visualization imports
 try:
-    import tensorboard
+    import tensorboard  # noqa: F401
     from torch.utils.tensorboard import SummaryWriter
-    TENSORBOARD_AVAILABLE = True
-except ImportError:
-    TENSORBOARD_AVAILABLE = False
-    SummaryWriter = None
+except ImportError as e:
+    logger.error("TensorBoard is required for RL training.")
+    raise ImportError("TensorBoard is required for RL training.") from e
 
 try:
     import wandb
-    WANDB_AVAILABLE = True
-except ImportError:
-    WANDB_AVAILABLE = False
-    wandb = None
+except ImportError as e:
+    logger.error("Weights & Biases (wandb) is required for RL training.")
+    raise ImportError("Weights & Biases (wandb) is required for RL training.") from e
 
 # Core odor plume navigation imports
 from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
 from odor_plume_nav.api.navigation import create_gymnasium_environment
 from odor_plume_nav.config.models import SimulationConfig
 from odor_plume_nav.utils.seed_manager import set_global_seed, get_seed_context, SeedConfig
-from odor_plume_nav.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
-
-# Set up module logger with RL training context
-logger = get_enhanced_logger(__name__)
 
 
 # Training session states and configuration
@@ -640,13 +636,7 @@ class AlgorithmFactory:
             
         Raises:
             ValueError: If algorithm type is not supported
-            ImportError: If stable-baselines3 is not available
         """
-        if not SB3_AVAILABLE:
-            raise ImportError(
-                "stable-baselines3 is required for RL training. "
-                "Install with: pip install 'odor_plume_nav[rl]'"
-            )
         
         logger.info(f"Creating {algorithm_type.value.upper()} algorithm")
         
@@ -797,15 +787,10 @@ class VectorEnvManager:
             
         elif env_type == VectorEnvType.SUBPROC:
             # SB3 SubprocVecEnv - parallel processes
-            if not SB3_AVAILABLE:
-                raise ImportError("stable-baselines3 required for SubprocVecEnv")
             vec_env = SubprocVecEnv([lambda: final_factory(i) for i in range(n_envs)])
-            
+
         elif env_type == VectorEnvType.SYNC:
             # Gymnasium SyncVectorEnv
-            if not GYMNASIUM_AVAILABLE:
-                raise ImportError("gymnasium required for SyncVectorEnv")
-            
             # Create list of environment factories
             env_fns = [lambda: final_factory(i) for i in range(n_envs)]
             vec_env = GymSyncVectorEnv(env_fns)
@@ -816,9 +801,6 @@ class VectorEnvManager:
             
         elif env_type == VectorEnvType.ASYNC:
             # Gymnasium AsyncVectorEnv
-            if not GYMNASIUM_AVAILABLE:
-                raise ImportError("gymnasium required for AsyncVectorEnv")
-            
             # Create list of environment factories
             env_fns = [lambda: final_factory(i) for i in range(n_envs)]
             vec_env = GymAsyncVectorEnv(env_fns)
@@ -933,11 +915,10 @@ class TrainingCallbacks:
             self.log_dir = Path(log_dir)
             self.monitor = monitor
             self.writer = None
-            
-            if TENSORBOARD_AVAILABLE:
-                self.log_dir.mkdir(parents=True, exist_ok=True)
-                self.writer = SummaryWriter(str(self.log_dir))
-                logger.info(f"TensorBoard logging enabled: {self.log_dir}")
+
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            self.writer = SummaryWriter(str(self.log_dir))
+            logger.info(f"TensorBoard logging enabled: {self.log_dir}")
         
         def _on_step(self) -> bool:
             """Log metrics to TensorBoard."""
@@ -980,9 +961,8 @@ class TrainingCallbacks:
             self.config = config
             self.monitor = monitor
             self.wandb_run = None
-            
-            if WANDB_AVAILABLE:
-                self._init_wandb()
+
+            self._init_wandb()
         
         def _init_wandb(self):
             """Initialize Weights & Biases run."""
@@ -1367,20 +1347,20 @@ class RLTrainer:
         callback_list.append(eval_callback)
         
         # TensorBoard callback
-        if TENSORBOARD_AVAILABLE and self.config.tensorboard_log:
+        if self.config.tensorboard_log:
             tb_callback = TrainingCallbacks.TensorBoardCallback(
                 log_dir=self.tensorboard_dir,
-                monitor=self.progress_monitor
+                monitor=self.progress_monitor,
             )
             callback_list.append(tb_callback)
-        
+
         # Weights & Biases callback
-        if WANDB_AVAILABLE and self.config.wandb_project:
+        if self.config.wandb_project:
             wandb_callback = TrainingCallbacks.WandBCallback(
                 project=self.config.wandb_project,
                 run_name=self.config.wandb_run_name or f"training_{self.session_id}",
                 config=self.config,
-                monitor=self.progress_monitor
+                monitor=self.progress_monitor,
             )
             callback_list.append(wandb_callback)
         
@@ -1712,65 +1692,25 @@ def evaluate_trained_policy(
     
     try:
         # Use stable-baselines3 evaluation
-        if SB3_AVAILABLE:
-            mean_reward, std_reward = evaluate_policy(
-                model=model,
-                env=eval_env,
-                n_eval_episodes=n_eval_episodes,
-                deterministic=deterministic,
-                render=render
-            )
-            
-            results = {
-                "mean_reward": float(mean_reward),
-                "std_reward": float(std_reward),
-                "n_episodes": n_eval_episodes
-            }
-        else:
-            # Fallback manual evaluation
-            results = _manual_policy_evaluation(
-                model, eval_env, n_eval_episodes, deterministic
-            )
-        
+        mean_reward, std_reward = evaluate_policy(
+            model=model,
+            env=eval_env,
+            n_eval_episodes=n_eval_episodes,
+            deterministic=deterministic,
+            render=render,
+        )
+
+        results = {
+            "mean_reward": float(mean_reward),
+            "std_reward": float(std_reward),
+            "n_episodes": n_eval_episodes,
+        }
+
         logger.info(f"Evaluation completed: {results}")
         return results
         
     finally:
         eval_env.close()
-
-
-def _manual_policy_evaluation(
-    model: BaseAlgorithm,
-    env: GymnasiumEnv,
-    n_episodes: int,
-    deterministic: bool
-) -> Dict[str, float]:
-    """Manual policy evaluation fallback."""
-    episode_rewards = []
-    episode_lengths = []
-    
-    for episode in range(n_episodes):
-        obs, _ = env.reset()
-        episode_reward = 0
-        episode_length = 0
-        done = False
-        
-        while not done:
-            action, _ = model.predict(obs, deterministic=deterministic)
-            obs, reward, terminated, truncated, _ = env.step(action)
-            episode_reward += reward
-            episode_length += 1
-            done = terminated or truncated
-        
-        episode_rewards.append(episode_reward)
-        episode_lengths.append(episode_length)
-    
-    return {
-        "mean_reward": float(np.mean(episode_rewards)),
-        "std_reward": float(np.std(episode_rewards)),
-        "mean_length": float(np.mean(episode_lengths)),
-        "n_episodes": n_episodes
-    }
 
 
 # Export public API
