@@ -105,6 +105,7 @@ Notes:
 import contextlib
 import time
 import warnings
+import copy
 from typing import Optional, Union, Any, Tuple, List, Dict, TypeVar, Callable
 from dataclasses import dataclass, field
 import dataclasses
@@ -867,10 +868,15 @@ class BaseController:
             raise TypeError("memory state must be a dict")
 
         log = self._logger if self._logger is not None else logger
-        if self._memory_state is not None:
-            log.debug("memory state saved", memory_keys=list(self._memory_state.keys()))
+        if self._memory_state is None:
+            log.debug("memory state saved", deep_copy=False)
+            return None
 
-        return self._memory_state
+        memory_copy = copy.deepcopy(self._memory_state)
+        log.debug(
+            "memory state saved", deep_copy=True, memory_keys=list(self._memory_state.keys())
+        )
+        return memory_copy
     
     def update_memory(self, observation: Dict[str, Any], action: Any, reward: float, info: Dict[str, Any]) -> None:
         """
