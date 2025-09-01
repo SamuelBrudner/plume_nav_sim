@@ -9,4 +9,4 @@ def test_max_duration_negative_logs_and_raises(caplog):
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(ValidationError, match="ensure this value is greater than 0"):
             SimulationConfig(max_duration=-1)
-    assert "Invalid max_duration" in caplog.text
+    assert "max_duration is not positive" in caplog.text

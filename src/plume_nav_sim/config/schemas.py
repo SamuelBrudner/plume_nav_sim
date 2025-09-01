@@ -395,15 +395,6 @@ class SimulationConfig(BaseModel):
             raise ValueError("dt (timestep) must be positive")
         return v
 
-    @field_validator('max_duration')
-    @classmethod
-    def validate_max_duration(cls, v):
-        """Validate that max_duration is positive if provided."""
-        if v is not None and v <= 0:
-            logger.debug("Invalid max_duration: %s", v)
-            raise ValueError("ensure this value is greater than 0")
-        return v
-    
     @field_validator('width', 'height')
     @classmethod
     def validate_dimensions(cls, v):
