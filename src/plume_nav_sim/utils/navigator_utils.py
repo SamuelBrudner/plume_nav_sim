@@ -34,53 +34,26 @@ from dataclasses import dataclass, field
 import time
 import threading
 from pathlib import Path
+import logging
 
-# Core imports - updated for plume_nav_sim namespace
-from typing import TYPE_CHECKING
+logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
+try:
     from plume_nav_sim.protocols.navigator import NavigatorProtocol
     from plume_nav_sim.core.navigator import Navigator
-else:
-    # At runtime, import lazily to avoid circular imports
-    NavigatorProtocol = None
-    Navigator = None
+except ImportError as exc:
+    logger.exception("Failed to import navigator dependencies: %s", exc)
+    raise
 
-def _get_navigator_protocol():
-    """Lazy import of NavigatorProtocol to avoid circular imports."""
-    global NavigatorProtocol
-    if NavigatorProtocol is None:
-        try:
-            from plume_nav_sim.protocols.navigator import NavigatorProtocol as _NavigatorProtocol
-            NavigatorProtocol = _NavigatorProtocol
-        except ImportError as e:
-            logger.debug("NavigatorProtocol import failed: %s", e)
-            raise NotImplementedError("NavigatorProtocol is required but missing") from e
-    return NavigatorProtocol
-
-def _get_navigator():
-    """Lazy import of Navigator to avoid circular imports."""
-    global Navigator
-    if Navigator is None:
-        try:
-            from plume_nav_sim.core.navigator import Navigator as _Navigator
-            Navigator = _Navigator
-        except ImportError:
-            # If still can't import, create a dummy class
-            class Navigator:
-                pass
-    return Navigator
-
-# Configuration imports with fallback handling
 try:
-    from plume_nav_sim.config.models import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
-    CONFIG_MODELS_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without config models
-    CONFIG_MODELS_AVAILABLE = False
-    NavigatorConfig = dict
-    SingleAgentConfig = dict
-    MultiAgentConfig = dict
+    from plume_nav_sim.config.models import (
+        NavigatorConfig,
+        SingleAgentConfig,
+        MultiAgentConfig,
+    )
+except ImportError as exc:
+    logger.exception("Failed to import configuration models: %s", exc)
+    raise
 
 # Hydra imports with fallback for environments without Hydra
 try:
@@ -247,14 +220,14 @@ def create_navigator_from_config(
         elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
             creation_result.configuration_source = "hydra"
             config_dict = OmegaConf.to_container(config, resolve=True)
-        elif CONFIG_MODELS_AVAILABLE and isinstance(config, (NavigatorConfig, SingleAgentConfig, MultiAgentConfig)):
+        elif isinstance(config, (NavigatorConfig, SingleAgentConfig, MultiAgentConfig)):
             creation_result.configuration_source = "pydantic"
             config_dict = config.dict() if hasattr(config, 'dict') else config.model_dump()
         else:
             raise TypeError(f"Unsupported configuration type: {type(config)}")
         
         # Validate configuration if requested
-        if validate_config and CONFIG_MODELS_AVAILABLE:
+        if validate_config:
             try:
                 # Try to create Pydantic model for validation
                 if _is_multi_agent_config_dict(config_dict):
@@ -531,7 +504,7 @@ def create_navigator_from_params(
         max_speeds = normalize_array_parameter(max_speeds, num_agents)
         angular_velocities = normalize_array_parameter(angular_velocities, num_agents)
 
-        NavigatorClass = _get_navigator()
+        NavigatorClass = Navigator
         navigator = NavigatorClass(
             positions=positions,
             orientations=orientations,
@@ -540,7 +513,7 @@ def create_navigator_from_params(
             angular_velocities=angular_velocities
         )
     else:
-        NavigatorClass = _get_navigator()
+        NavigatorClass = Navigator
         navigator = NavigatorClass(
             position=positions,
             orientation=orientations,
@@ -695,7 +668,7 @@ def _create_single_agent_from_dict(config_dict: Dict[str, Any]) -> 'NavigatorPro
             if isinstance(values, (list, tuple, np.ndarray)) and len(values) > 0:
                 kwargs[param] = values[0]
     
-    NavigatorClass = _get_navigator()
+    NavigatorClass = Navigator
     return NavigatorClass(**kwargs)
 
 
@@ -716,7 +689,7 @@ def _create_multi_agent_from_dict(config_dict: Dict[str, Any]) -> 'NavigatorProt
         if param in config_dict:
             kwargs[param] = config_dict[param]
     
-    NavigatorClass = _get_navigator()
+    NavigatorClass = Navigator
     return NavigatorClass(**kwargs)
 
 
@@ -1674,9 +1647,9 @@ def validate_navigator_configuration(
             config_dict = config.copy()
         elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
-        elif CONFIG_MODELS_AVAILABLE and hasattr(config, 'dict'):
+        elif hasattr(config, 'dict'):
             config_dict = config.dict()
-        elif CONFIG_MODELS_AVAILABLE and hasattr(config, 'model_dump'):
+        elif hasattr(config, 'model_dump'):
             config_dict = config.model_dump()
         else:
             validation_result['errors'].append(f"Unsupported configuration type: {type(config)}")
@@ -1684,7 +1657,7 @@ def validate_navigator_configuration(
             return validation_result
         
         # Validate using Pydantic models if available
-        if CONFIG_MODELS_AVAILABLE and strict_validation:
+        if strict_validation:
             try:
                 if _is_multi_agent_config_dict(config_dict):
                     validated_config = MultiAgentConfig(**config_dict)
@@ -1855,7 +1828,7 @@ def get_navigator_capabilities(navigator: 'NavigatorProtocol') -> Dict[str, Any]
         'current_speeds': navigator.speeds.tolist(),
         'max_speeds': navigator.max_speeds.tolist(),
         'angular_velocities': navigator.angular_velocities.tolist(),
-        'protocol_compliance': isinstance(navigator, _get_navigator_protocol()),
+        'protocol_compliance': isinstance(navigator, NavigatorProtocol),
         'supports_reset': hasattr(navigator, 'reset'),
         'supports_step': hasattr(navigator, 'step'),
         'supports_sensor_sampling': hasattr(navigator, 'sample_odor'),
