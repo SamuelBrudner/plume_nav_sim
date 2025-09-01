@@ -210,13 +210,9 @@ try:
         visualize_simulation_results,
     )
     _core_api_available = True
-except ImportError:
-    # Core API not available yet
-    create_navigator = None
-    create_video_plume = None
-    run_plume_simulation = None
-    visualize_simulation_results = None
-    _core_api_available = False
+except ImportError as e:
+    logger.error("Failed to import core API functions: %s", e)
+    raise
 
 # Enhanced API factory functions
 try:
@@ -226,12 +222,9 @@ try:
         run_experiment_sweep,
     )
     _enhanced_api_available = True
-except ImportError:
-    # Enhanced API not available
-    create_simulation_runner = None
-    create_batch_processor = None
-    run_experiment_sweep = None
-    _enhanced_api_available = False
+except ImportError as e:
+    logger.error("Failed to import enhanced API factory functions: %s", e)
+    raise
 
 # Core navigation components
 try:
@@ -243,13 +236,9 @@ try:
         run_simulation
     )
     _core_navigation_available = True
-except ImportError:
-    Navigator = None
-    SingleAgentController = None
-    MultiAgentController = None
-    NavigatorProtocol = None
-    run_simulation = None
-    _core_navigation_available = False
+except ImportError as e:
+    logger.error("Failed to import core navigation components: %s", e)
+    raise
 
 # New v1.0 protocol interfaces for pluggable architecture
 from plume_nav_sim.core.protocols import (
@@ -266,30 +255,24 @@ try:
     from plume_nav_sim.envs import VideoPlume
     from plume_nav_sim.envs import PlumeNavigationEnv
     _env_components_available = True
-except ImportError:
-    VideoPlume = None
-    PlumeNavigationEnv = None
-    _env_components_available = False
+except ImportError as e:
+    logger.error("Failed to import environment components: %s", e)
+    raise
 
 # Configuration management
 try:
     from plume_nav_sim.config import (
-        NavigatorConfig, 
+        NavigatorConfig,
         SingleAgentConfig,
-        MultiAgentConfig, 
+        MultiAgentConfig,
         VideoPlumeConfig,
         load_config,
         save_config,
     )
     _config_available = True
-except ImportError:
-    NavigatorConfig = None
-    SingleAgentConfig = None
-    MultiAgentConfig = None
-    VideoPlumeConfig = None
-    load_config = None
-    save_config = None
-    _config_available = False
+except ImportError as e:
+    logger.error("Failed to import configuration management components: %s", e)
+    raise
 
 # Utility functions
 try:
@@ -297,11 +280,11 @@ try:
         # IO utilities
         load_yaml,
         save_yaml,
-        load_json, 
+        load_json,
         save_json,
         load_numpy,
         save_numpy,
-        
+
         # Logging utilities
         setup_logger,
         get_module_logger,
@@ -310,20 +293,9 @@ try:
         LOG_LEVELS,
     )
     _utils_available = True
-except ImportError:
-    # Utilities not available
-    load_yaml = None
-    save_yaml = None
-    load_json = None
-    save_json = None
-    load_numpy = None
-    save_numpy = None
-    setup_logger = None
-    get_module_logger = None
-    DEFAULT_FORMAT = None
-    MODULE_FORMAT = None
-    LOG_LEVELS = None
-    _utils_available = False
+except ImportError as e:
+    logger.error("Failed to import utility functions: %s", e)
+    raise
 
 # Gymnasium and RL integration features
 try:
@@ -338,30 +310,25 @@ try:
         RewardShapingWrapper,
     )
     _gymnasium_components_available = True
-except ImportError:
-    GymnasiumEnv = None
-    ActionSpace = None
-    ObservationSpace = None
-    NormalizationWrapper = None
-    FrameStackWrapper = None
-    RewardShapingWrapper = None
-    _gymnasium_components_available = False
+except ImportError as e:
+    logger.error("Failed to import Gymnasium integration features: %s", e)
+    raise
 
 # Gymnasium environment factory
 try:
     from plume_nav_sim.api.navigation import create_gymnasium_environment
     _gymnasium_factory_available = True
-except ImportError:
-    create_gymnasium_environment = None
-    _gymnasium_factory_available = False
+except ImportError as e:
+    logger.error("Failed to import Gymnasium environment factory: %s", e)
+    raise
 
 # Shim compatibility layer
 try:
     from plume_nav_sim.shims import gym_make
     _shim_available = True
-except ImportError:
-    gym_make = None
-    _shim_available = False
+except ImportError as e:
+    logger.error("Failed to import shim compatibility layer: %s", e)
+    raise
 
 # Recording framework components for v1.0 architecture
 try:
@@ -371,11 +338,9 @@ try:
         RecorderManager
     )
     _recording_components_available = True
-except ImportError:
-    BaseRecorder = None
-    RecorderFactory = None
-    RecorderManager = None
-    _recording_components_available = False
+except ImportError as e:
+    logger.error("Failed to import recording framework components: %s", e)
+    raise
 
 # Analysis framework components for v1.0 architecture
 try:
@@ -384,10 +349,9 @@ try:
         generate_summary
     )
     _analysis_components_available = True
-except ImportError:
-    StatsAggregator = None
-    generate_summary = None
-    _analysis_components_available = False
+except ImportError as e:
+    logger.error("Failed to import analysis framework components: %s", e)
+    raise
 
 # Debug framework components for v1.0 architecture
 try:
@@ -396,24 +360,25 @@ try:
         plot_initial_state
     )
     _debug_components_available = True
-except ImportError:
-    DebugGUI = None
-    plot_initial_state = None
-    _debug_components_available = False
+except ImportError as e:
+    logger.error("Failed to import debug framework components: %s", e)
+    raise
 
 # Check for stable-baselines3 availability
 try:
     import stable_baselines3
     _stable_baselines3_available = True
-except ImportError:
-    _stable_baselines3_available = False
+except ImportError as e:
+    logger.error("stable-baselines3 is required but failed to import: %s", e)
+    raise
 
 # Check for Gymnasium availability
 try:
     import gymnasium
     _gymnasium_available = True
-except ImportError:
-    _gymnasium_available = False
+except ImportError as e:
+    logger.error("Gymnasium is required but failed to import: %s", e)
+    raise
 
 # =============================================================================
 # FEATURE AVAILABILITY MAPPING
