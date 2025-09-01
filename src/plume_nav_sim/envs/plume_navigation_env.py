@@ -90,19 +90,17 @@ from pathlib import Path
 import logging
 import numpy as np
 
-# Gymnasium imports with fallback compatibility
+# Gymnasium imports are required; fail fast with guidance if missing
 try:
     import gymnasium as gym
     from gymnasium.spaces import Box, Dict as DictSpace
     from gymnasium.error import DependencyNotInstalled
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    # Create mock classes to prevent import errors during transition
-    class gym:
-        class Env:
-            def __init__(self): pass
-    Box = DictSpace = None
+except ImportError as exc:
+    raise ImportError(
+        "Gymnasium is required for plume_nav_sim. Install with `pip install gymnasium`."
+    ) from exc
+
+GYMNASIUM_AVAILABLE = True
 
 # Core plume navigation imports with graceful fallbacks during migration
 try:
