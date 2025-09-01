@@ -180,6 +180,8 @@ class SimulationResults:
         checkpoints: Optional simulation state checkpoints
         visualization_artifacts: Optional visualization outputs
         database_records: Optional database persistence information
+        step_count: Number of simulation steps executed
+        success: Whether the simulation completed successfully
     """
     positions_history: np.ndarray
     orientations_history: np.ndarray
@@ -189,6 +191,8 @@ class SimulationResults:
     checkpoints: List[Dict[str, Any]] = field(default_factory=list)
     visualization_artifacts: Dict[str, Any] = field(default_factory=dict)
     database_records: Dict[str, Any] = field(default_factory=dict)
+    step_count: int = 0
+    success: bool = False
 
 
 class PerformanceMonitor:
@@ -227,33 +231,30 @@ class PerformanceMonitor:
         self.performance_warnings = []
         self.optimization_applied = False
     
-    def record_step(self, step_duration: float) -> None:
-        """Record timing for a simulation step.
-        
-        Parameters
-        ----------
-        step_duration : float
-            Time taken for the step in seconds
-        """
+    def record_step_time(self, step_duration: float) -> None:
+        """Record timing for a simulation step."""
+        logger.debug("Recording step duration", extra={"step_duration": step_duration})
         current_time = time.perf_counter()
-        
+
         # Update counters
         self.total_steps += 1
         self.step_times.append(step_duration)
-        
+
         # Calculate frame time (time since last step)
         frame_time = current_time - self.last_step_time
         self.frame_times.append(frame_time)
         self.last_step_time = current_time
-        
+
         # Maintain rolling history
         if len(self.step_times) > self.history_length:
             self.step_times.pop(0)
             self.frame_times.pop(0)
-        
+
         # Check performance thresholds
         self._check_performance_thresholds()
 
+    # Backward compatibility
+    record_step = record_step_time
     def record_step_time(self, seconds: float, label: str | None = None) -> None:
         """Compatibility wrapper accepting durations in seconds.
 
@@ -304,10 +305,10 @@ class PerformanceMonitor:
         recent_frame_time = np.mean(self.frame_times[-5:])
         return 1.0 / recent_frame_time if recent_frame_time > 0 else 0.0
     
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_summary(self) -> Dict[str, Any]:
         """Get comprehensive performance metrics."""
         elapsed_time = time.perf_counter() - self.start_time
-        
+
         metrics = {
             'total_steps': self.total_steps,
             'elapsed_time': elapsed_time,
@@ -317,7 +318,7 @@ class PerformanceMonitor:
             'performance_warnings': len(self.performance_warnings),
             'optimization_applied': self.optimization_applied
         }
-        
+
         if self.step_times:
             metrics.update({
                 'average_step_time': np.mean(self.step_times),
@@ -325,15 +326,19 @@ class PerformanceMonitor:
                 'max_step_time': np.max(self.step_times),
                 'step_time_std': np.std(self.step_times)
             })
-        
+
         if self.frame_times:
             metrics.update({
                 'average_frame_time': np.mean(self.frame_times),
                 'min_frame_time': np.min(self.frame_times),
                 'max_frame_time': np.max(self.frame_times)
             })
-        
+
+        logger.debug("Performance summary computed", extra={"total_steps": self.total_steps})
         return metrics
+
+    # Backward compatibility
+    get_metrics = get_summary
 
 
 @contextlib.contextmanager
@@ -802,7 +807,7 @@ def run_simulation(
         # Collect performance metrics
         performance_metrics = {}
         if performance_monitor is not None:
-            performance_metrics = performance_monitor.get_metrics()
+            performance_metrics = performance_monitor.get_summary()
 
         # Create metadata
         metadata = {
@@ -831,7 +836,9 @@ def run_simulation(
             metadata=metadata,
             checkpoints=checkpoints,
             visualization_artifacts=visualization_artifacts,
-            database_records=database_records
+            database_records=database_records,
+            step_count=performance_monitor.total_steps if performance_monitor is not None else num_steps,
+            success=True,
         )
 
         sim_logger.info(
