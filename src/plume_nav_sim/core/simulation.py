@@ -995,15 +995,24 @@ class PerformanceMonitor(PerformanceMonitorProtocol):
         self._durations: Dict[str, List[float]] = {}
         self._logger = logging.getLogger(__name__)
 
+    def record_step_time(self, seconds: float, label: str | None = None) -> None:
+        if seconds <= 0:
+            raise ValueError("seconds must be positive")
+        key = label or "step"
+        self._durations.setdefault(key, []).append(seconds)
+        self._logger.info(f"Recorded {key} duration: {seconds:.6f}s")
+
+    def get_summary(self) -> Dict[str, Any]:
+        return {k: sum(v) for k, v in self._durations.items()}
+
     def record_step(self, duration_ms: float, label: str | None = None) -> None:
         if duration_ms <= 0:
             raise ValueError("duration_ms must be positive")
-        key = label or "step"
-        self._durations.setdefault(key, []).append(duration_ms)
-        self._logger.info(f"Recorded {key} duration: {duration_ms:.3f}ms")
+        self.record_step_time(duration_ms / 1000.0, label=label)
 
     def export(self) -> Dict[str, float]:
-        return {k: sum(v) for k, v in self._durations.items()}
+        summary = self.get_summary()
+        return {k: v * 1000.0 for k, v in summary.items()}
 
 
 class SimulationContext:
