@@ -11,9 +11,23 @@ logger = logging.getLogger(__name__)
 PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     "NavigatorProtocol": {
         "methods": {
-            "reset": lambda self: None,
-            "step": lambda self, action: None,
-            "get_state": lambda self: {},
+            "positions": None,
+            "orientations": None,
+            "speeds": None,
+            "max_speeds": None,
+            "angular_velocities": None,
+            "num_agents": 1,
+            "reset": lambda self, *args, **kwargs: None,
+            "step": lambda self, env_array, dt=1.0: None,
+            "sample_odor": lambda self, env_array: 0.0,
+            "sample_multiple_sensors": (
+                lambda self, env_array, sensor_distance=None, sensor_angle=None,
+                num_sensors=None, layout_name=None: 0.0
+            ),
+            "compute_additional_obs": lambda self, base_obs: {},
+            "compute_extra_reward": lambda self, base_reward, info: 0.0,
+            "on_episode_end": lambda self, final_info: None,
+            "get_observation_space_info": lambda self: {},
         },
         "missing": "step",
     },
@@ -44,10 +58,12 @@ PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "PerformanceMonitorProtocol": {
         "methods": {
+            "record_step_time": lambda self, seconds: None,
+            "get_summary": lambda self: {"dummy": 0.0},
             "record_step": lambda self, duration_ms, label=None: None,
             "export": lambda self: {"dummy": 0.0},
         },
-        "missing": "export",
+        "missing": "get_summary",
     },
 }
 
