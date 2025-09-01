@@ -83,24 +83,21 @@ import pathlib
 import warnings
 import inspect
 import numpy as np
+import logging
 
 # Enhanced logging setup for deprecation warnings and structured messaging
 try:
     from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    LOGURU_AVAILABLE = False
-    # Fallback to standard logging if Loguru not available
-    import logging
-    logger = logging.getLogger(__name__)
+except ImportError as exc:  # pragma: no cover - defensive
+    logging.getLogger(__name__).error("Loguru is required for odor_plume_nav.api")
+    raise ImportError("loguru is required for odor_plume_nav.api") from exc
 
 # Core dependency imports for type hints
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    DictConfig = Dict[str, Any]  # Fallback type hint
+except ImportError as exc:  # pragma: no cover - defensive
+    logger.error("Hydra (omegaconf) is required for odor_plume_nav.api")
+    raise ImportError("Hydra is required for odor_plume_nav.api") from exc
 
 
 def _detect_legacy_gym_import() -> bool:
@@ -187,26 +184,18 @@ def _issue_legacy_gym_warning() -> None:
         ]
     }
     
-    if LOGURU_AVAILABLE:
-        # Use structured Loguru logging as per specification
-        logger.warning(
-            warning_message,
-            extra={
-                "warning_type": "legacy_api_deprecation",
-                "component": "gym_import_detection",
-                "migration_guidance": migration_guidance,
-                "action_required": True,
-                "breaking_change_timeline": "Next major version",
-                "current_compatibility": "Maintained with warnings"
-            }
-        )
-    else:
-        # Fallback to standard warnings if Loguru not available
-        warnings.warn(
-            f"{warning_message}\nMigration guidance: {migration_guidance}",
-            DeprecationWarning,
-            stacklevel=3
-        )
+    # Use structured Loguru logging as per specification
+    logger.warning(
+        warning_message,
+        extra={
+            "warning_type": "legacy_api_deprecation",
+            "component": "gym_import_detection",
+            "migration_guidance": migration_guidance,
+            "action_required": True,
+            "breaking_change_timeline": "Next major version",
+            "current_compatibility": "Maintained with warnings"
+        }
+    )
 
 
 # Import core API functions from navigation module
@@ -260,11 +249,10 @@ except ImportError as e:
             "import_error": str(e) if e else "Module not available"
         }
         
-        if LOGURU_AVAILABLE:
-            logger.error(
-                "create_gymnasium_environment not available - ensure Gymnasium environment is created",
-                extra=error_details
-            )
+        logger.error(
+            "create_gymnasium_environment not available - ensure Gymnasium environment is created",
+            extra=error_details
+        )
         
         raise ImportError(
             "create_gymnasium_environment not available. "
@@ -289,11 +277,10 @@ except ImportError as e:
             "import_error": str(e) if e else "Module not available"
         }
         
-        if LOGURU_AVAILABLE:
-            logger.error(
-                "from_legacy not available - ensure legacy migration function is created",
-                extra=error_details
-            )
+        logger.error(
+            "from_legacy not available - ensure legacy migration function is created",
+            extra=error_details
+        )
         
         raise ImportError(
             "from_legacy migration function not available. "
@@ -616,12 +603,10 @@ __all__ = [
     "__description__",
 ]
 
-# Conditional exports based on Hydra and Gymnasium availability
-if HYDRA_AVAILABLE:
-    # Add Hydra-specific functionality to exports
-    __all__.extend([
-        "DictConfig",  # Re-export for type hints
-    ])
+# Export Hydra-specific functionality
+__all__.extend([
+    "DictConfig",  # Re-export for type hints
+])
 
 if GYMNASIUM_AVAILABLE:
     # Add Gymnasium-specific functionality when available
@@ -635,9 +620,7 @@ def _get_api_info() -> Dict[str, Any]:
     """Get API module information for debugging and introspection."""
     return {
         "version": __version__,
-        "hydra_available": HYDRA_AVAILABLE,
         "gymnasium_available": GYMNASIUM_AVAILABLE,
-        "loguru_available": LOGURU_AVAILABLE,
         "public_functions": len(__all__),
         "primary_functions": [
             "create_navigator", 
@@ -651,9 +634,11 @@ def _get_api_info() -> Dict[str, Any]:
         ] if GYMNASIUM_AVAILABLE else [],
         "legacy_support": True,
         "deprecation_warnings": True,
-        "configuration_types": ["direct_parameters", "hydra_dictconfig"] + (
-            ["yaml_files"] if HYDRA_AVAILABLE else []
-        ),
+        "configuration_types": [
+            "direct_parameters",
+            "hydra_dictconfig",
+            "yaml_files",
+        ],
         "compatibility_features": [
             "legacy_gym_detection",
             "structured_warnings",
