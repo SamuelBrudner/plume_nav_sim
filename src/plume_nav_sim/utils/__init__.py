@@ -61,8 +61,21 @@ Examples:
 
 # Core imports with error handling for optional dependencies
 import warnings
+import logging
 from typing import Any, Dict, List, Optional, Callable, Union, Tuple, Generator
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def _feature_unavailable(feature: str) -> None:
+    """Log and raise an ImportError for an unavailable feature."""
+    message = (
+        f"{feature} functionality is not available. "
+        "Install optional dependencies to enable it."
+    )
+    logger.error(message)
+    raise ImportError(message)
 
 # Frame cache imports - critical for performance per Section 0.2.3
 try:
@@ -78,22 +91,16 @@ try:
 except ImportError as e:
     warnings.warn(f"Frame cache functionality not available: {e}")
     CACHE_AVAILABLE = False
-    # Provide fallback classes
-    class FrameCache:
-        """Fallback frame cache class."""
-        def __init__(self, *args, **kwargs):
-            raise ImportError("Frame cache functionality not available")
-    
-    class CacheMode:
-        """Fallback cache mode enum."""
-        NONE = "none"
-        LRU = "lru"
-        ALL = "all"
-    
-    class CacheStatistics:
-        """Fallback cache statistics class."""
-        def __init__(self, *args, **kwargs):
-            raise ImportError("Frame cache functionality not available")
+
+
+def require_frame_cache() -> None:
+    """Ensure frame cache dependencies are available."""
+    if not CACHE_AVAILABLE:
+        _feature_unavailable("Frame cache")
+
+
+if not CACHE_AVAILABLE:
+    FrameCache = CacheMode = CacheStatistics = create_lru_cache = create_preload_cache = create_no_cache = require_frame_cache
 
 # Enhanced logging system imports
 try:
@@ -138,31 +145,51 @@ try:
 except ImportError as e:
     warnings.warn(f"Enhanced logging functionality not available: {e}")
     LOGGING_AVAILABLE = False
-    # Provide fallback functions
-    def setup_logger(*args, **kwargs):
-        """Fallback logging setup."""
-        warnings.warn("Enhanced logging not available, using basic logging")
-        import logging
-        logging.basicConfig(level=logging.INFO)
-    
-    def get_enhanced_logger(name: str, **kwargs):
-        """Fallback enhanced logger."""
-        import logging
-        return logging.getLogger(name)
 
-    def teardown_logger() -> None:  # pragma: no cover - fallback
-        import logging
-        logging.getLogger().handlers.clear()
-    
-    def get_module_logger(name: str, **kwargs):
-        """Fallback module logger."""
-        import logging
-        return logging.getLogger(name)
-    
-    def get_logger(name: str, **kwargs):
-        """Fallback logger."""
-        import logging
-        return logging.getLogger(name)
+
+def require_logging() -> None:
+    """Ensure enhanced logging dependencies are available."""
+    if not LOGGING_AVAILABLE:
+        _feature_unavailable("Enhanced logging")
+
+
+if not LOGGING_AVAILABLE:
+    for _name in [
+        "setup_logger",
+        "teardown_logger",
+        "get_enhanced_logger",
+        "get_module_logger",
+        "get_logger",
+        "correlation_context",
+        "get_correlation_context",
+        "set_correlation_context",
+        "create_step_timer",
+        "step_performance_timer",
+        "frame_rate_timer",
+        "update_cache_metrics",
+        "log_cache_memory_pressure_violation",
+        "detect_legacy_gym_import",
+        "log_legacy_api_deprecation",
+        "monitor_environment_creation",
+        "register_logging_config_schema",
+        "LoggingConfig",
+        "PerformanceMetrics",
+        "FrameCacheConfig",
+        "EnhancedLogger",
+        "CorrelationContext",
+        "DEFAULT_FORMAT",
+        "MODULE_FORMAT",
+        "ENHANCED_FORMAT",
+        "HYDRA_FORMAT",
+        "CLI_FORMAT",
+        "MINIMAL_FORMAT",
+        "PRODUCTION_FORMAT",
+        "JSON_FORMAT",
+        "LOG_LEVELS",
+        "PERFORMANCE_THRESHOLDS",
+        "ENVIRONMENT_DEFAULTS",
+    ]:
+        globals()[_name] = require_logging
 
 # Visualization system imports
 try:
@@ -177,23 +204,23 @@ try:
 except ImportError as e:
     warnings.warn(f"Visualization functionality not available: {e}")
     VISUALIZATION_AVAILABLE = False
-    # Provide fallback classes
-    class SimulationVisualization:
-        """Fallback visualization class."""
-        def __init__(self, *args, **kwargs):
-            raise ImportError("Visualization functionality not available")
-    
-    def visualize_trajectory(*args, **kwargs):
-        """Fallback trajectory visualization."""
-        raise ImportError("Visualization functionality not available")
-    
-    def create_realtime_visualizer(*args, **kwargs):
-        """Fallback realtime visualizer."""
-        raise ImportError("Visualization functionality not available")
-    
-    def create_static_plotter(*args, **kwargs):
-        """Fallback static plotter."""
-        raise ImportError("Visualization functionality not available")
+
+
+def require_visualization() -> None:
+    """Ensure visualization dependencies are available."""
+    if not VISUALIZATION_AVAILABLE:
+        _feature_unavailable("Visualization")
+
+
+if not VISUALIZATION_AVAILABLE:
+    for _name in [
+        "SimulationVisualization",
+        "visualize_trajectory",
+        "create_realtime_visualizer",
+        "create_static_plotter",
+        "VisualizationConfig",
+    ]:
+        globals()[_name] = require_visualization
 
 # Seed management system imports
 try:
@@ -226,18 +253,41 @@ try:
 except ImportError as e:
     warnings.warn(f"Seed management functionality not available: {e}")
     SEED_MANAGER_AVAILABLE = False
-    # Provide fallback functions
-    def set_global_seed(seed: int, **kwargs):
-        """Fallback seed management."""
-        import random
-        import numpy as np
-        random.seed(seed)
-        np.random.seed(seed)
-        warnings.warn("Using basic seed management, enhanced features not available")
-    
-    def get_global_seed_manager(*args, **kwargs):
-        """Fallback seed manager."""
-        return None
+
+
+def require_seed_manager() -> None:
+    """Ensure seed manager dependencies are available."""
+    if not SEED_MANAGER_AVAILABLE:
+        _feature_unavailable("Seed management")
+
+
+if not SEED_MANAGER_AVAILABLE:
+    for _name in [
+        "set_global_seed",
+        "get_global_seed_manager",
+        "get_random_state",
+        "restore_random_state",
+        "capture_random_state",
+        "reset_random_state",
+        "scoped_seed",
+        "get_seed_context",
+        "seed_sensitive_operation",
+        "SeedConfig",
+        "setup_global_seed",
+        "create_seed_config_from_hydra",
+        "RandomState",
+        "SeedContext",
+        "validate_determinism",
+        "is_seeded",
+        "get_last_seed",
+        "generate_experiment_seed",
+        "register_seed_config_schema",
+        "get_reproducibility_report",
+        "SEED_PERFORMANCE_THRESHOLDS",
+        "DETERMINISM_TEST_ITERATIONS",
+        "CROSS_PLATFORM_SEED_MAX",
+    ]:
+        globals()[_name] = require_seed_manager
 
 # I/O Utilities
 try:
@@ -257,20 +307,28 @@ try:
 except ImportError as e:
     warnings.warn(f"I/O utilities not available: {e}")
     IO_AVAILABLE = False
-    # Provide basic fallback implementations
-    def load_yaml(filepath: Union[str, Path]) -> Dict[str, Any]:
-        """Fallback YAML loader."""
-        import yaml
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    
-    def save_yaml(data: Dict[str, Any], filepath: Union[str, Path]) -> None:
-        """Fallback YAML saver."""
-        import yaml
-        from pathlib import Path
-        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            yaml.safe_dump(data, f, default_flow_style=False, indent=2)
+
+
+def require_io() -> None:
+    """Ensure I/O utilities dependencies are available."""
+    if not IO_AVAILABLE:
+        _feature_unavailable("I/O utilities")
+
+
+if not IO_AVAILABLE:
+    for _name in [
+        "load_yaml",
+        "save_yaml",
+        "load_json",
+        "save_json",
+        "load_numpy",
+        "save_numpy",
+        "IOError",
+        "YAMLError",
+        "JSONError",
+        "NumpyError",
+    ]:
+        globals()[_name] = require_io
 
 # Navigator utilities
 try:
@@ -315,23 +373,45 @@ try:
 except ImportError as e:
     warnings.warn(f"Navigator utilities not available: {e}")
     NAVIGATOR_UTILS_AVAILABLE = False
-    # Provide basic fallback implementations
-    def normalize_array_parameter(param: Any, expected_shape: Optional[Tuple[int, ...]] = None) -> Any:
-        """Fallback array parameter normalization."""
-        import numpy as np
-        if not isinstance(param, np.ndarray):
-            param = np.asarray(param)
-        if expected_shape and param.shape != expected_shape:
-            try:
-                param = np.broadcast_to(param, expected_shape)
-            except ValueError:
-                param = np.resize(param, expected_shape)
-        return param
-    
-    def create_navigator_from_params(**kwargs) -> Any:
-        """Fallback navigator creation."""
-        warnings.warn("Navigator creation not available. Use plume_nav_sim.api.navigation module.")
-        raise ImportError("Navigator creation not available")
+
+
+def require_navigator_utils() -> None:
+    """Ensure navigator utilities dependencies are available."""
+    if not NAVIGATOR_UTILS_AVAILABLE:
+        _feature_unavailable("Navigator utilities")
+
+
+if not NAVIGATOR_UTILS_AVAILABLE:
+    for _name in [
+        "create_navigator_from_config",
+        "create_reproducible_navigator",
+        "create_navigator_from_params",
+        "create_navigator_factory",
+        "NavigatorCreationResult",
+        "validate_navigator_configuration",
+        "normalize_array_parameter",
+        "PREDEFINED_SENSOR_LAYOUTS",
+        "get_predefined_sensor_layout",
+        "define_sensor_offsets",
+        "rotate_offset",
+        "calculate_sensor_positions",
+        "compute_sensor_positions",
+        "sample_odor_at_sensors",
+        "SingleAgentParams",
+        "MultiAgentParams",
+        "reset_navigator_state",
+        "reset_navigator_state_with_params",
+        "update_positions_and_orientations",
+        "read_odor_values",
+        "navigator_performance_context",
+        "get_navigator_capabilities",
+        "create_navigator_comparison_report",
+        "get_property_name",
+        "get_property_value",
+        "create_navigator_for_cli",
+        "create_navigator_with_database_logging",
+    ]:
+        globals()[_name] = require_navigator_utils
 
 
 # Convenience function for seed management (backward compatibility)
@@ -424,8 +504,10 @@ def normalize_array_parameter(  # type: ignore[override] – replace imported
        • exact match ➜ return original object *unchanged* (identity preserved);
        • scalar ➜ broadcast via :pyfunc:`numpy.full`;
        • otherwise attempt ``np.broadcast_to`` then fall-back to
-         ``np.resize`` if broadcasting fails.
+        ``np.resize`` if broadcasting fails.
     """
+
+    require_navigator_utils()
 
     if param is None:
         return None
@@ -549,6 +631,8 @@ def sample_odor_at_sensors(  # type: ignore[override]
     """
     Lightweight sampler matching the behaviour asserted in tests.
     """
+
+    require_navigator_utils()
 
     frame = np.asarray(plume_frame)
     if frame.ndim != 2:
