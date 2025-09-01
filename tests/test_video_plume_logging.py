@@ -4,8 +4,8 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import cv2
 import pytest
+cv2 = pytest.importorskip("cv2")
 from loguru import logger
 
 from plume_nav_sim.data.video_plume import VideoPlume

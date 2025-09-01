@@ -23,9 +23,9 @@ Test Categories:
 - Error handling and edge case coverage
 """
 
-import cv2
-import numpy as np
 import pytest
+cv2 = pytest.importorskip("cv2")
+import numpy as np
 import tempfile
 import threading
 import time

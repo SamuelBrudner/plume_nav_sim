@@ -27,7 +27,7 @@ Enhanced Integration Points:
 import pytest
 from pathlib import Path
 import numpy as np
-import cv2
+cv2 = pytest.importorskip("cv2")
 import os
 import tempfile
 import time
