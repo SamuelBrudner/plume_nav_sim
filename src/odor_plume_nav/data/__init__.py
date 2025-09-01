@@ -71,17 +71,20 @@ from typing import Dict, List, Optional, Union, Any, Tuple
 import numpy as np
 from pathlib import Path
 
+from loguru import logger
+
 # Core video plume functionality
 from .video_plume import VideoPlume, create_video_plume
 
 # Type imports for better IDE support and documentation
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    # Fallback type hint for when Hydra is not available
-    DictConfig = Dict[str, Any]
+except ImportError as exc:  # pragma: no cover - exercised in tests
+    logger.error(
+        "Hydra (omegaconf) is required for odor_plume_nav.data. "
+        "Install with `pip install hydra-core`."
+    )
+    raise
 
 
 def get_frame_batch(
@@ -178,7 +181,7 @@ def get_workflow_metadata(video_plume: VideoPlume) -> Dict[str, Any]:
                 "dvc": True,
                 "snakemake": True,
                 "kedro": True,
-                "hydra": HYDRA_AVAILABLE
+                "hydra": True
             }
         },
         "processing_capabilities": {
@@ -190,7 +193,7 @@ def get_workflow_metadata(video_plume: VideoPlume) -> Dict[str, Any]:
         },
         "integration_patterns": {
             "numpy_interface": True,
-            "hydra_config": HYDRA_AVAILABLE,
+            "hydra_config": True,
             "environment_variables": True,
             "path_interpolation": True
         }
@@ -246,7 +249,7 @@ def get_video_plume_catalog_entry(
         "description": f"VideoPlume dataset: {name}",
         "metadata": {
             "kedro_compatible": True,
-            "hydra_configurable": HYDRA_AVAILABLE,
+            "hydra_configurable": True,
             "workflow_ready": True
         }
     }
@@ -405,11 +408,8 @@ __all__ = [
     "create_video_plume_from_env",
     
     # Type hints for external use
-    "DictConfig" if HYDRA_AVAILABLE else None,
+    "DictConfig",
 ]
-
-# Clean up None values from __all__ when Hydra is not available
-__all__ = [item for item in __all__ if item is not None]
 
 
 # Package-level configuration for improved usability
@@ -445,7 +445,7 @@ __package_metadata__ = {
     "author": __author__,
     "compatibility": {
         "kedro": ">=0.18.0",
-        "hydra": ">=1.1.0" if HYDRA_AVAILABLE else "not available",
+        "hydra": ">=1.1.0",
         "opencv": ">=4.5.0",
         "numpy": ">=1.20.0"
     },
@@ -453,6 +453,6 @@ __package_metadata__ = {
         "dvc": True,
         "snakemake": True,
         "kedro_pipelines": True,
-        "hydra_configs": HYDRA_AVAILABLE
+        "hydra_configs": True
     }
 }
