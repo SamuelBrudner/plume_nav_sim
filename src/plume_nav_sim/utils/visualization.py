@@ -50,65 +50,49 @@ from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap
 
-# Initialize module logger with fallback
+import logging
+
 try:
     from plume_nav_sim.utils.logging_setup import get_module_logger
-    logger = get_module_logger(__name__)
-except ImportError:
-    # Fallback logging implementation
-    import logging
-    logger = logging.getLogger(__name__)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+except ImportError as exc:  # pragma: no cover - fail fast
+    logging.getLogger(__name__).exception("Logging setup module missing")
+    raise
 
-# Import new protocols for enhanced visualization capabilities
+logger = get_module_logger(__name__)
+
 try:
     from ..core.protocols import SourceProtocol
-    logger.info("Successfully imported SourceProtocol")
-except ImportError as exc:
+except ImportError as exc:  # pragma: no cover - fail fast
     logger.exception("Failed to import SourceProtocol")
     raise
 
-# Optional GUI dependencies for debug visualizer
 try:
-    import PySide6
-    from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
+    from PySide6.QtWidgets import (
+        QApplication,
+        QMainWindow,
+        QWidget,
+        QVBoxLayout,
+        QHBoxLayout,
+    )
     from PySide6.QtCore import QTimer, Signal, QThread
     from PySide6.QtGui import QPixmap, QPainter
-    PYSIDE6_AVAILABLE = True
-except ImportError:
-    PYSIDE6_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - fail fast
+    logger.exception("PySide6 is required for visualization")
+    raise
 
 try:
     import streamlit as st
-    STREAMLIT_AVAILABLE = True
-except ImportError:
-    STREAMLIT_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - fail fast
+    logger.exception("Streamlit is required for visualization")
+    raise
 
-# Track available debug backends
-DEBUG_BACKENDS = []
-if PYSIDE6_AVAILABLE:
-    DEBUG_BACKENDS.append('qt')
-if STREAMLIT_AVAILABLE:
-    DEBUG_BACKENDS.append('streamlit')
-DEBUG_BACKENDS.append('console')  # Always available fallback
-
-# Conditional imports for Hydra configuration support
 try:
     from hydra.core.config_store import ConfigStore
     from omegaconf import DictConfig, OmegaConf
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    # Fallback types for environments without Hydra
-    DictConfig = dict
-    OmegaConf = None
+except ImportError as exc:  # pragma: no cover - fail fast
+    logger.exception("Hydra and OmegaConf are required for visualization")
+    raise
+
 
 
 @runtime_checkable
@@ -259,7 +243,7 @@ class SimulationVisualization:
         """
         logger.info("Creating SimulationVisualization from configuration")
         
-        if HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        if isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
         else:
             config_dict = dict(config) if config else {}
@@ -1329,30 +1313,20 @@ def create_debug_visualizer(
     logger.info(f"Creating debug visualizer with backend: {backend}")
     
     # Backend selection logic using already imported modules
-    available_backends = DEBUG_BACKENDS.copy()
-    available_backends.remove('console')  # Remove console from user selection
-    
-    if PYSIDE6_AVAILABLE:
-        logger.debug("PySide6 available for Qt backend")
-    
-    if STREAMLIT_AVAILABLE:
-        logger.debug("Streamlit available for web backend")
-    
-    # Determine backend to use
+    available_backends = ['qt', 'streamlit']
+
+    logger.debug("PySide6 available for Qt backend")
+    logger.debug("Streamlit available for web backend")
+
     if backend == 'auto':
-        if 'qt' in available_backends:
-            selected_backend = 'qt'
-        elif 'streamlit' in available_backends:
-            selected_backend = 'streamlit'
-        else:
-            selected_backend = 'console'  # Fallback
+        selected_backend = 'qt'
     else:
-        selected_backend = backend
         if backend not in available_backends and backend != 'console':
             raise ImportError(
                 f"Requested backend '{backend}' not available. "
                 f"Available backends: {available_backends}"
             )
+        selected_backend = backend
     
     logger.info(f"Selected debug backend: {selected_backend}")
     
@@ -1520,9 +1494,6 @@ def _create_qt_debug_visualizer(config: Dict[str, Any]) -> Any:
     Returns:
         Any: Qt debug visualizer instance.
     """
-    if not PYSIDE6_AVAILABLE:
-        raise ImportError("PySide6 is required for Qt backend")
-    
     logger.info("Creating Qt-based debug visualizer")
     
     class QtDebugVisualizer(QMainWindow):
@@ -1634,9 +1605,6 @@ def _create_streamlit_debug_visualizer(config: Dict[str, Any]) -> Any:
     Returns:
         Any: Streamlit debug visualizer instance.
     """
-    if not STREAMLIT_AVAILABLE:
-        raise ImportError("Streamlit is required for web backend")
-    
     logger.info("Creating Streamlit-based debug visualizer")
     
     class StreamlitDebugVisualizer:
@@ -2009,7 +1977,7 @@ def visualize_plume_simulation(
     
     # Apply configuration overrides if provided
     if config is not None:
-        if HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        if isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
         else:
             config_dict = dict(config) if config else {}
@@ -2672,7 +2640,7 @@ def create_static_plotter(
     # Extract configuration overrides if provided
     plot_config = {}
     if config is not None:
-        if HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        if isinstance(config, DictConfig):
             plot_config = OmegaConf.to_container(config, resolve=True)
         else:
             plot_config = dict(config) if config else {}
@@ -2739,53 +2707,49 @@ def create_static_plotter(
 
 
 # Hydra ConfigStore registration for visualization configurations
-if HYDRA_AVAILABLE:
-    cs = ConfigStore.instance()
-    
-    # Register visualization configuration schemas
-    try:
-        from dataclasses import dataclass, field
-        from typing import Optional
-        
-        @dataclass
-        class AnimationConfig:
-            fps: int = 30
-            format: str = "mp4"
-            quality: str = "medium"
-            
-        @dataclass  
-        class StaticConfig:
-            dpi: int = 300
-            format: str = "png"
-            figsize: Tuple[float, float] = (12, 8)
-            
-        @dataclass
-        class AgentConfig:
-            max_agents: int = 100
-            color_scheme: str = "scientific"
-            trail_length: int = 1000
-            
-        @dataclass
-        class VisualizationConfig:
-            animation: AnimationConfig = field(default_factory=AnimationConfig)
-            static: StaticConfig = field(default_factory=StaticConfig)
-            agents: AgentConfig = field(default_factory=AgentConfig)
-            headless: bool = False
-            resolution: str = "720p"
-            theme: str = "scientific"
-        
-        # Register configuration groups
-        cs.store(group="visualization", name="animation", node=AnimationConfig)
-        cs.store(group="visualization", name="static", node=StaticConfig)
-        cs.store(group="visualization", name="agents", node=AgentConfig)
-        cs.store(group="visualization", name="base", node=VisualizationConfig)
-        
-        logger.debug("Registered Hydra configuration schemas for visualization")
-        
-    except ImportError:
-        # Fallback if dataclasses not available
-        logger.warning("Dataclasses not available, skipping Hydra ConfigStore registration")
-        pass
+cs = ConfigStore.instance()
+
+try:
+    from dataclasses import dataclass, field
+    from typing import Optional
+
+    @dataclass
+    class AnimationConfig:
+        fps: int = 30
+        format: str = "mp4"
+        quality: str = "medium"
+
+    @dataclass
+    class StaticConfig:
+        dpi: int = 300
+        format: str = "png"
+        figsize: Tuple[float, float] = (12, 8)
+
+    @dataclass
+    class AgentConfig:
+        max_agents: int = 100
+        color_scheme: str = "scientific"
+        trail_length: int = 1000
+
+    @dataclass
+    class VisualizationConfig:
+        animation: AnimationConfig = field(default_factory=AnimationConfig)
+        static: StaticConfig = field(default_factory=StaticConfig)
+        agents: AgentConfig = field(default_factory=AgentConfig)
+        headless: bool = False
+        resolution: str = "720p"
+        theme: str = "scientific"
+
+    cs.store(group="visualization", name="animation", node=AnimationConfig)
+    cs.store(group="visualization", name="static", node=StaticConfig)
+    cs.store(group="visualization", name="agents", node=AgentConfig)
+    cs.store(group="visualization", name="base", node=VisualizationConfig)
+
+    logger.debug("Registered Hydra configuration schemas for visualization")
+
+except ImportError:
+    logger.warning("Dataclasses not available, skipping Hydra ConfigStore registration")
+    pass
 
 
 # Public API exports
