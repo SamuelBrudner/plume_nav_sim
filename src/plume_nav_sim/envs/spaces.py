@@ -87,23 +87,24 @@ except ImportError:
 
 # Import logging utilities for comprehensive observability
 from plume_nav_sim.utils.logging_setup import (
-    get_logger, 
+    get_logger,
     correlation_context,
     log_legacy_api_deprecation
 )
 
-# Import sensor protocol for dynamic space construction - use TYPE_CHECKING to avoid circular imports
+# Module logger for structured logging integration
+logger = get_logger(__name__)
+
+# Import sensor protocol for dynamic space construction
 if TYPE_CHECKING:
     from ..core.protocols import SensorProtocol
 else:
-    # Try runtime import but handle circular imports gracefully
     try:
         from ..core.protocols import SensorProtocol
-        SENSOR_PROTOCOL_AVAILABLE = True
+        logger.info("SensorProtocol import successful")
     except ImportError:
-        # Handle case where protocols don't exist yet or circular import
-        SensorProtocol = object
-        SENSOR_PROTOCOL_AVAILABLE = False
+        logger.exception("Failed to import SensorProtocol")
+        raise
 
 # Import sensor implementations for type checking
 try:
@@ -117,10 +118,6 @@ except ImportError:
     ConcentrationSensor = None
     GradientSensor = None
     SENSOR_IMPLEMENTATIONS_AVAILABLE = False
-
-# Module logger for structured logging integration
-logger = get_logger(__name__)
-
 
 @dataclass
 class SpaceDefinition:
