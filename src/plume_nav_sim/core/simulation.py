@@ -2146,6 +2146,7 @@ def run_simulation(
                 info_history.append(info)
             
             # Main simulation loop
+            executed_steps = 0
             for step in range(num_steps):
                 step_start_time = time.perf_counter()
                 
@@ -2215,6 +2216,8 @@ def run_simulation(
                         performance_monitor.record_step(step_duration_ms, label="step")
                         if hook_duration > 0:
                             performance_monitor.record_step(hook_duration * 1000, label="hook")
+
+                    executed_steps += 1
                     
                     # Collect component metrics if enabled
                     if component_metrics_collection and (step + 1) % 100 == 0:  # Every 100 steps
@@ -2296,7 +2299,7 @@ def run_simulation(
         # Collect performance metrics
         performance_metrics = {}
         if performance_monitor is not None:
-            performance_metrics = performance_monitor.get_metrics()
+            performance_metrics = performance_monitor.get_summary()
 
         # Collect frame cache statistics
         frame_cache_stats = {}
@@ -2420,7 +2423,7 @@ def run_simulation(
             },
             
             # System performance and management
-            performance_metrics=performance_metrics,
+            performance_metrics={},
             episode_management_stats={
                 'mode': sim_config.episode_management_mode,
                 'termination_conditions': sim_config.termination_conditions,
@@ -2431,7 +2434,7 @@ def run_simulation(
                 'frame_cache_used': frame_cache is not None,
                 'component_metrics_collected': component_metrics_collection
             },
-            step_count=len(actions_history) if sim_config.record_trajectories else num_steps,
+            step_count=0,
             success=False,
 
             # Legacy compatibility
@@ -2443,6 +2446,19 @@ def run_simulation(
             frame_cache_stats=frame_cache_stats,
             legacy_mode_used=sim_config.enable_legacy_mode,
             api_compatibility_info=api_info
+        )
+
+        # Update results with final execution details
+        results.step_count = executed_steps
+        results.success = executed_steps == num_steps
+        if performance_monitor is not None:
+            results.performance_metrics = performance_metrics
+
+        sim_logger.info(
+            "Simulation summary: steps=%d, success=%s, performance=%s",
+            results.step_count,
+            results.success,
+            results.performance_metrics,
         )
 
         sim_logger.info(
