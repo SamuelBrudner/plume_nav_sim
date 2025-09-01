@@ -2072,6 +2072,9 @@ class TestNavigatorProtocolMemoryInterface:
         assert saved_memory == test_memory
         # Returned object should be a different instance than internal memory
         assert saved_memory is not controller._memory_state
+        # Modifying the returned memory should not affect internal memory state
+        saved_memory["episode_count"] = 999
+        assert controller._memory_state["episode_count"] == test_memory["episode_count"]
     
     def test_memory_interface_optional_compliance(self) -> None:
         """Test that memory interface methods are optional and don't enforce usage."""
