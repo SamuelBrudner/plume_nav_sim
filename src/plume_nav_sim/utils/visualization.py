@@ -50,19 +50,30 @@ from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap
 
+# Initialize module logger with fallback
+try:
+    from plume_nav_sim.utils.logging_setup import get_module_logger
+    logger = get_module_logger(__name__)
+except ImportError:
+    # Fallback logging implementation
+    import logging
+    logger = logging.getLogger(__name__)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
 # Import new protocols for enhanced visualization capabilities
 try:
     from ..core.protocols import SourceProtocol
-    PROTOCOLS_AVAILABLE = True
-except ImportError:
-    # Fallback for development when protocols might not be available yet
-    class SourceProtocol:
-        """Fallback protocol definition for development."""
-        def get_position(self) -> Tuple[float, float]:
-            return (0.0, 0.0)
-        def get_emission_rate(self) -> float:
-            return 0.0
-    PROTOCOLS_AVAILABLE = False
+    logger.info("Successfully imported SourceProtocol")
+except ImportError as exc:
+    logger.exception("Failed to import SourceProtocol")
+    raise
 
 # Optional GUI dependencies for debug visualizer
 try:
@@ -98,23 +109,6 @@ except ImportError:
     # Fallback types for environments without Hydra
     DictConfig = dict
     OmegaConf = None
-
-# Initialize module logger with fallback
-try:
-    from plume_nav_sim.utils.logging_setup import get_module_logger
-    logger = get_module_logger(__name__)
-except ImportError:
-    # Fallback logging implementation
-    import logging
-    logger = logging.getLogger(__name__)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
 
 
 @runtime_checkable
