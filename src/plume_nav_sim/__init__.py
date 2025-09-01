@@ -252,22 +252,14 @@ except ImportError:
     _core_navigation_available = False
 
 # New v1.0 protocol interfaces for pluggable architecture
-try:
-    from plume_nav_sim.core.protocols import (
-        SourceProtocol,
-        BoundaryPolicyProtocol,
-        ActionInterfaceProtocol,
-        RecorderProtocol,
-        StatsAggregatorProtocol
-    )
-    _v1_protocols_available = True
-except ImportError:
-    SourceProtocol = None
-    BoundaryPolicyProtocol = None
-    ActionInterfaceProtocol = None
-    RecorderProtocol = None
-    StatsAggregatorProtocol = None
-    _v1_protocols_available = False
+from plume_nav_sim.core.protocols import (
+    SourceProtocol,
+    BoundaryPolicyProtocol,
+    ActionInterfaceProtocol,
+    RecorderProtocol,
+    StatsAggregatorProtocol,
+)
+_v1_protocols_available = True
 
 # Environment components
 try:
