@@ -1136,8 +1136,18 @@ class SingleAgentController(BaseController):
         
         # Validate parameters
         self._strict_validation = strict_validation
-        if speed > max_speed and self._strict_validation:
-            raise ValueError(f"speed ({speed}) cannot exceed max_speed ({max_speed})")
+        if speed > max_speed:
+            log = self._logger if self._logger is not None else logger
+            if self._strict_validation:
+                raise ValueError(
+                    f"speed ({speed}) cannot exceed max_speed ({max_speed})"
+                )
+            else:
+                log.warning(
+                    "speed exceeds max_speed; will clamp during step",
+                    speed=float(speed),
+                    max_speed=float(max_speed),
+                )
         
         # Initialize state arrays for API consistency with proper shape (1, 2)
         if position is not None:
@@ -1677,6 +1687,7 @@ class MultiAgentController(BaseController):
         enable_memory: bool = False,
         boundary_policy: Optional[BoundaryPolicyProtocol] = None,
         domain_bounds: Optional[Tuple[float, float]] = None,
+        strict_validation: bool = False,
         **kwargs: Any
     ) -> None:
         """
@@ -1693,6 +1704,7 @@ class MultiAgentController(BaseController):
             enable_memory: Enable memory management hooks for cognitive modeling, defaults to False
             boundary_policy: Optional boundary policy for domain edge handling, defaults to None
             domain_bounds: Optional domain bounds for default boundary policy creation, defaults to None
+            strict_validation: If True, raise when any speed exceeds its max_speed
             **kwargs: Additional configuration options including:
                 - enable_logging: Enable comprehensive logging
                 - controller_id: Unique controller identifier
@@ -1714,6 +1726,7 @@ class MultiAgentController(BaseController):
         )
         
         self._enable_vectorized_ops = enable_vectorized_ops
+        self._strict_validation = strict_validation
         
         # Ensure we have at least one agent position
         if positions is None:
@@ -1741,7 +1754,7 @@ class MultiAgentController(BaseController):
         
         # Validate array shapes and constraints
         self._validate_array_shapes()
-        self._validate_speed_constraints()
+        self._validate_speed_constraints(strict_validation=self._strict_validation)
         
         # Enhanced performance metrics for multi-agent scenarios
         self._performance_metrics.update({
@@ -1797,16 +1810,25 @@ class MultiAgentController(BaseController):
                     f"{name} shape {array.shape} does not match expected {expected_shape}"
                 )
     
-    def _validate_speed_constraints(self) -> None:
-        """Validate that speeds do not exceed max_speeds for any agent."""
+    def _validate_speed_constraints(self, strict_validation: bool = False) -> None:
+        """Validate that speeds do not exceed max_speeds for any agent.
+
+        When ``strict_validation`` is False, violations emit a warning and are
+        clamped during ``step`` rather than raising immediately.
+        """
         violations = self._speeds > self._max_speeds
         if np.any(violations):
             violating_agents = np.where(violations)[0]
-            raise ValueError(
+            message = (
                 f"Speed exceeds max_speed for agents {violating_agents.tolist()}: "
                 f"speeds={self._speeds[violations].tolist()}, "
                 f"max_speeds={self._max_speeds[violations].tolist()}"
             )
+            log = self._logger if self._logger is not None else logger
+            if strict_validation:
+                raise ValueError(message)
+            else:
+                log.warning(message)
     
     # NavigatorProtocol property implementations
     
@@ -1939,7 +1961,7 @@ class MultiAgentController(BaseController):
             
             # Validate updated state
             self._validate_array_shapes()
-            self._validate_speed_constraints()
+            self._validate_speed_constraints(strict_validation=self._strict_validation)
             
             # Reset performance metrics for new episode
             if self._enable_logging:
@@ -2051,7 +2073,20 @@ class MultiAgentController(BaseController):
                         self._performance_metrics['frame_cache_hits'] += 1
                     else:
                         self._performance_metrics['frame_cache_misses'] += 1
-            
+
+            if not self._strict_validation:
+                violations = self._speeds > self._max_speeds
+                if np.any(violations):
+                    violating_agents = np.where(violations)[0]
+                    log = self._logger if self._logger is not None else logger
+                    log.warning(
+                        "speed exceeds max_speed; clamping",
+                        violating_agents=violating_agents.tolist(),
+                        speeds=self._speeds[violations].tolist(),
+                        max_speeds=self._max_speeds[violations].tolist(),
+                    )
+                    self._speeds[violations] = self._max_speeds[violations]
+
             # Vectorized position and orientation updates
             vectorized_start = time.perf_counter() if self._enable_logging else None
             
