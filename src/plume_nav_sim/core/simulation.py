@@ -1078,20 +1078,20 @@ class SimulationContext:
         )
 
         step_count = 0
-        for _ in range(self.config.num_steps):
+        num_steps = self.config.num_steps
+        for _ in range(num_steps):
             if self.performance_monitor is not None:
                 self.performance_monitor.record_step_time(0.001)
             step_count += 1
 
-        success = step_count == self.config.num_steps
         results.step_count = step_count
-        results.success = success
+        results.success = step_count == num_steps
 
         if self.performance_monitor is not None:
             results.performance_metrics = self.performance_monitor.get_summary()
 
-        logger.info(
-            "Simulation completed: steps=%d, success=%s, performance=%s",
+        logging.getLogger(__name__).info(
+            "Simulation completed summary: steps=%d, success=%s, performance=%s",
             results.step_count,
             results.success,
             results.performance_metrics,
