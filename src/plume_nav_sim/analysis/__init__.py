@@ -96,22 +96,17 @@ from .stats import (
 # Recording system integration
 from ..recording import RecorderFactory
 
-# Hydra configuration support
+# Configure module logging
+logger = logging.getLogger(__name__)
+
+# Hydra configuration support (fail fast if unavailable)
 try:
     from hydra import instantiate
     from omegaconf import DictConfig
     HYDRA_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without Hydra
-    def instantiate(config, **kwargs):
-        """Fallback instantiate function when Hydra is not available."""
-        raise ImportError("Hydra is required for configuration-driven instantiation")
-    
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
-
-# Configure module logging
-logger = logging.getLogger(__name__)
+except ImportError as e:  # pragma: no cover - executed when Hydra is missing
+    logger.error("Hydra is required for configuration-driven analysis: %s", e)
+    raise
 
 # Module version for API compatibility tracking
 __version__ = "1.0.0"
