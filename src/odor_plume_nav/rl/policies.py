@@ -42,17 +42,10 @@ try:
     from stable_baselines3.common.type_aliases import Schedule
     from stable_baselines3.common.utils import get_device
     import gym
-    SB3_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without stable-baselines3
-    SB3_AVAILABLE = False
-    ActorCriticPolicy = object
-    BaseFeaturesExtractor = object
-    
-    class MockSchedule:
-        def __init__(self, value): self.value = value
-        def __call__(self, progress): return self.value
-    Schedule = MockSchedule
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).error("stable-baselines3 dependency is missing: %s", e)
+    raise
 
 # Configuration imports
 try:
@@ -1279,10 +1272,6 @@ def test_policy_forward_pass(
         >>> success = test_policy_forward_pass(obs_space, action_space, config)
     """
     try:
-        if not SB3_AVAILABLE:
-            logger.warning("stable-baselines3 not available, skipping forward pass test")
-            return True
-        
         # Create features extractor
         features_extractor = PlumeNavigationFeaturesExtractor(
             observation_space=observation_space,
