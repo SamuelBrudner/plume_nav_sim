@@ -762,12 +762,35 @@ class BaseController:
     # Observation hook and memory management for flexible cognitive modeling
 
     def observe(self, sensor_output: Any) -> Dict[str, Any]:
-        """Default observation stub with type validation and logging."""
-        if not isinstance(sensor_output, dict):
-            raise TypeError(f"sensor_output must be a dict, got {type(sensor_output)}")
+        """Validate and enrich raw sensor output."""
         log = self._logger if self._logger is not None else logger
-        log.debug("observe called", output_keys=list(sensor_output.keys()))
-        return sensor_output
+        log.debug("observe invoked", input_type=type(sensor_output).__name__)
+
+        if not isinstance(sensor_output, dict):
+            log.error("sensor_output must be a dict", provided_type=type(sensor_output).__name__)
+            raise TypeError(f"sensor_output must be a dict, got {type(sensor_output)}")
+
+        observation = dict(sensor_output)
+        log.debug("sensor_output validated", keys=list(observation.keys()))
+
+        try:
+            additional = self.compute_additional_obs(observation)
+        except Exception as e:
+            log.error("compute_additional_obs failed", error=str(e))
+            raise
+
+        if additional:
+            if not isinstance(additional, dict):
+                log.error(
+                    "compute_additional_obs must return dict",
+                    returned_type=type(additional).__name__,
+                )
+                raise TypeError("compute_additional_obs must return dict")
+            log.debug("merging additional observations", keys=list(additional.keys()))
+            observation.update(additional)
+
+        log.debug("observe returning", keys=list(observation.keys()))
+        return observation
 
     def load_memory(self, memory_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
@@ -1458,6 +1481,12 @@ class SingleAgentController(BaseController):
             ValueError: If env_array is invalid or sampling fails
         """
         return self.read_single_antenna_odor(env_array)
+
+    def observe(self, sensor_output: Any) -> Dict[str, Any]:
+        """Process sensor output with additional debug logging."""
+        log = self._logger if self._logger is not None else logger
+        log.debug("SingleAgentController.observe invoked")
+        return super().observe(sensor_output)
     
     def read_single_antenna_odor(self, env_array: np.ndarray) -> float:
         """
@@ -2251,6 +2280,12 @@ class MultiAgentController(BaseController):
             ValueError: If env_array is invalid or sampling fails
         """
         return self.read_single_antenna_odor(env_array)
+
+    def observe(self, sensor_output: Any) -> Dict[str, Any]:
+        """Process sensor output with additional debug logging."""
+        log = self._logger if self._logger is not None else logger
+        log.debug("MultiAgentController.observe invoked")
+        return super().observe(sensor_output)
     
     def read_single_antenna_odor(self, env_array: np.ndarray) -> np.ndarray:
         """

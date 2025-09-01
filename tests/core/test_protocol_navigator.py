@@ -2558,3 +2558,16 @@ class TestNavigatorProtocolObserveMethod:
             except (ValueError, IndexError):
                 # Expected to raise errors for invalid input
                 pass
+
+    def test_observe_returns_sensor_output_dict(self) -> None:
+        """Ensure observe merges sensor output with additional observations."""
+        controller = SingleAgentController(enable_extensibility_hooks=True)
+        sensor_output = {"signal": 1}
+        controller.compute_additional_obs = MagicMock(return_value={"extra": 2})
+
+        observation = controller.observe(sensor_output)
+
+        assert observation["signal"] == 1
+        assert observation["extra"] == 2
+        controller.compute_additional_obs.assert_called_once()
+        assert controller.compute_additional_obs.call_args[0][0]["signal"] == 1
