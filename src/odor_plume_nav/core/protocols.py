@@ -16,15 +16,20 @@ from __future__ import annotations
 from typing import Protocol, Union, Optional, Tuple, List, Any, runtime_checkable
 from typing_extensions import Self
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Hydra imports for configuration integration
 try:
     from omegaconf import DictConfig
     HYDRA_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without Hydra
-    DictConfig = dict
+except ImportError as exc:  # pragma: no cover - import error path
     HYDRA_AVAILABLE = False
+    logger.exception(
+        "Hydra is required for odor_plume_nav.core.protocols; install omegaconf to enable configuration support"
+    )
+    raise
 
 # Import configuration schemas for type hints
 from odor_plume_nav.domain.models import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
