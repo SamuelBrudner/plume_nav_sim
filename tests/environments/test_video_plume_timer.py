@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from contextlib import contextmanager
 import numpy as np
-import cv2
+cv2 = pytest.importorskip("cv2")
 
 from odor_plume_nav.data.video_plume import VideoPlume
 

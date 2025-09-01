@@ -28,7 +28,7 @@ with enhanced support for modern RL frameworks and legacy compatibility.
 import contextlib
 import pytest
 import numpy as np
-import cv2
+cv2 = pytest.importorskip("cv2")
 import time
 import uuid
 from pathlib import Path
