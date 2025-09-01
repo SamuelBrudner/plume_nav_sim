@@ -7,13 +7,23 @@ from odor_plume_nav.core.simulation import PerformanceMonitor
 
 
 def test_performance_monitor_new_methods_and_aliases():
+    """New helper names should function and map to legacy aliases."""
     monitor = PerformanceMonitor(target_fps=10.0)
-    monitor.record_step_time(0.01)
+
+    # record two steps using both the new name and legacy alias
+    monitor.record_step_time(0.01, label="step1")
     monitor.record_step(0.02)
+
+    # summaries should reflect both calls
     summary = monitor.get_summary()
     assert summary["total_steps"] == 2
+
+    # legacy getter should reference the same implementation
     metrics = monitor.get_metrics()
     assert metrics["total_steps"] == 2
+
+    # ensure the alias actually points to the same function object
+    assert PerformanceMonitor.record_step_time is PerformanceMonitor.record_step
 
 
 def test_run_simulation_populates_results_and_uses_summary(monkeypatch):
@@ -25,7 +35,7 @@ def test_run_simulation_populates_results_and_uses_summary(monkeypatch):
             self.summary_called = False
             DummyMonitor.instances.append(self)
 
-        def record_step_time(self, step_duration: float) -> None:
+        def record_step_time(self, step_duration: float, label: str | None = None) -> None:
             self.total_steps += 1
 
         record_step = record_step_time
