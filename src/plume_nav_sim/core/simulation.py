@@ -2210,11 +2210,14 @@ def run_simulation(
                             sim_logger.debug(f"Visualization update failed at step {step}: {e}")
 
                     # Record performance metrics
-                    step_duration_ms = (time.perf_counter() - step_start_time) * 1000
+                    step_duration = time.perf_counter() - step_start_time
+                    sim_logger.debug(
+                        f"Step {step} duration: {step_duration:.6f}s"
+                    )
                     if performance_monitor is not None:
-                        performance_monitor.record_step(step_duration_ms, label="step")
+                        performance_monitor.record_step_time(step_duration, label="step")
                         if hook_duration > 0:
-                            performance_monitor.record_step(hook_duration * 1000, label="hook")
+                            performance_monitor.record_step_time(hook_duration, label="hook")
                     
                     # Collect component metrics if enabled
                     if component_metrics_collection and (step + 1) % 100 == 0:  # Every 100 steps
