@@ -71,24 +71,24 @@ from typing import Dict, Any, Optional, Union, List, Tuple
 
 import numpy as np
 
-# External imports with graceful fallback handling
+# External imports
 try:
     import pyarrow as pa
     import pyarrow.parquet as pq
     import pyarrow.dataset as ds
-    PYARROW_AVAILABLE = True
-except ImportError:
-    pa = None
-    pq = None
-    ds = None
-    PYARROW_AVAILABLE = False
+except ImportError as exc:
+    logging.getLogger(__name__).error(
+        "PyArrow is required for ParquetRecorder: %s", exc
+    )
+    raise ImportError("PyArrow is required for ParquetRecorder") from exc
 
 try:
     import pandas as pd
-    PANDAS_AVAILABLE = True
-except ImportError:
-    pd = None
-    PANDAS_AVAILABLE = False
+except ImportError as exc:
+    logging.getLogger(__name__).error(
+        "Pandas is required for ParquetRecorder: %s", exc
+    )
+    raise ImportError("Pandas is required for ParquetRecorder") from exc
 
 # Internal imports
 from ..import BaseRecorder
@@ -245,26 +245,6 @@ class ParquetRecorder(BaseRecorder):
                 metadata=getattr(config, 'metadata', None)
             )
         
-        # Validate PyArrow availability with helpful error message
-        if not PYARROW_AVAILABLE:
-            error_msg = (
-                "PyArrow not available for ParquetRecorder. "
-                "Install with: pip install pyarrow>=10.0.0"
-            )
-            if getattr(config, 'allow_fallback', False):
-                warnings.warn(f"{error_msg}. Falling back to NoneRecorder.", UserWarning)
-                # Could implement fallback to NoneRecorder here
-                raise ImportError(error_msg)
-            else:
-                raise ImportError(error_msg)
-        
-        if not PANDAS_AVAILABLE:
-            warnings.warn(
-                "Pandas not available. Some features may be limited. "
-                "Install with: pip install pandas>=1.5.0", 
-                UserWarning
-            )
-        
         # Initialize base recorder
         super().__init__(base_config)
         
@@ -341,42 +321,38 @@ class ParquetRecorder(BaseRecorder):
             pa.Table: PyArrow Table with optimized schema and data types
         """
         start_time = time.perf_counter()
-        
+
         try:
-            if PANDAS_AVAILABLE:
-                # Use Pandas for efficient data processing and type inference
-                df = pd.DataFrame(data)
-                
-                # Optimize data types for storage efficiency
-                for col in df.columns:
-                    if df[col].dtype == 'object':
-                        # Try to convert to more efficient types
+            # Use Pandas for efficient data processing and type inference
+            df = pd.DataFrame(data)
+
+            # Optimize data types for storage efficiency
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    # Try to convert to more efficient types
+                    try:
+                        # Check if it's numeric - handle deprecation warning
                         try:
-                            # Check if it's numeric - handle deprecation warning
-                            try:
-                                numeric_series = pd.to_numeric(df[col], errors='coerce')
-                                if not pd.isna(numeric_series).all() and not numeric_series.equals(df[col]):
-                                    df[col] = numeric_series
-                            except Exception:
-                                pass  # Keep as object/string
-                        except (ValueError, TypeError):
+                            numeric_series = pd.to_numeric(df[col], errors='coerce')
+                            if not pd.isna(numeric_series).all() and not numeric_series.equals(df[col]):
+                                df[col] = numeric_series
+                        except Exception:
                             pass  # Keep as object/string
-                    elif df[col].dtype == 'float64':
-                        # Downcast to float32 if possible without precision loss
-                        if df[col].min() >= np.finfo(np.float32).min and \
-                           df[col].max() <= np.finfo(np.float32).max:
-                            df[col] = df[col].astype(np.float32)
-                
-                # Convert to PyArrow Table
-                table = pa.Table.from_pandas(
-                    df, 
-                    preserve_index=self.parquet_config.preserve_index,
-                    schema=self._get_target_schema() if self._current_schema else None
-                )
-            else:
-                # Direct PyArrow conversion without Pandas
-                table = pa.Table.from_pylist(data)
-            
+                    except (ValueError, TypeError):
+                        pass  # Keep as object/string
+                elif df[col].dtype == 'float64':
+                    # Downcast to float32 if possible without precision loss
+                    if df[col].min() >= np.finfo(np.float32).min and \
+                       df[col].max() <= np.finfo(np.float32).max:
+                        df[col] = df[col].astype(np.float32)
+
+            # Convert to PyArrow Table
+            table = pa.Table.from_pandas(
+                df,
+                preserve_index=self.parquet_config.preserve_index,
+                schema=self._get_target_schema() if self._current_schema else None
+            )
+
             # Update schema tracking
             if self._current_schema is None:
                 self._current_schema = table.schema
@@ -620,13 +596,13 @@ class ParquetRecorder(BaseRecorder):
                     compression=compression or self.parquet_config.compression,
                     **export_options
                 )
-            elif format == 'csv' and PANDAS_AVAILABLE:
+            elif format == 'csv':
                 df = table.to_pandas()
                 df.to_csv(output_path, compression=compression, **export_options)
-            elif format == 'json' and PANDAS_AVAILABLE:
+            elif format == 'json':
                 df = table.to_pandas()
                 df.to_json(output_path, compression=compression, **export_options)
-            elif format == 'hdf5' and PANDAS_AVAILABLE:
+            elif format == 'hdf5':
                 try:
                     import h5py
                     df = table.to_pandas()
