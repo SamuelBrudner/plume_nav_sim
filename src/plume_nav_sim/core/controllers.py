@@ -867,14 +867,12 @@ class BaseController:
         if self._memory_state is not None and not isinstance(self._memory_state, dict):
             raise TypeError("memory state must be a dict")
 
-        log = self._logger if self._logger is not None else logger
-        if self._memory_state is None:
-            log.debug("memory state saved", deep_copy=False)
-            return None
-
         memory_copy = copy.deepcopy(self._memory_state)
+        log = self._logger if self._logger is not None else logger
         log.debug(
-            "memory state saved", deep_copy=True, memory_keys=list(self._memory_state.keys())
+            "memory state saved",
+            deep_copy=self._memory_state is not None,
+            memory_keys=list(self._memory_state.keys()) if self._memory_state else None,
         )
         return memory_copy
     

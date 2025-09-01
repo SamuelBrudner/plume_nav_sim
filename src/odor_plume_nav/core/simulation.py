@@ -255,6 +255,17 @@ class PerformanceMonitor:
 
     # Backward compatibility
     record_step = record_step_time
+    def record_step_time(self, seconds: float, label: str | None = None) -> None:
+        """Compatibility wrapper accepting durations in seconds.
+
+        Parameters
+        ----------
+        seconds : float
+            Time taken for the step in seconds.
+        label : str | None
+            Optional label for the recorded duration.
+        """
+        self.record_step(seconds)
     
     def _check_performance_thresholds(self) -> None:
         """Check if performance is below target and record warnings."""
@@ -737,8 +748,11 @@ def run_simulation(
 
                     # Record performance metrics
                     step_duration = time.perf_counter() - step_start_time
+                    sim_logger.debug(
+                        f"Step {step} duration: {step_duration:.6f}s"
+                    )
                     if performance_monitor is not None:
-                        performance_monitor.record_step(step_duration)
+                        performance_monitor.record_step_time(step_duration, label="step")
 
                     # Checkpoint creation
                     if (sim_config.checkpoint_interval > 0 and 
