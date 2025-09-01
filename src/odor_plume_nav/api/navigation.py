@@ -143,20 +143,20 @@ from ..utils.visualization import visualize_trajectory
 
 # Gymnasium environment imports for RL integration
 try:
-    from ..environments.gymnasium_env import GymnasiumEnv, create_gymnasium_environment as _create_gymnasium_env
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    GymnasiumEnv = None
-    _create_gymnasium_env = None
+    from ..environments.gymnasium_env import (
+        GymnasiumEnv,
+        create_gymnasium_environment as _create_gymnasium_env,
+    )
+except ImportError as e:
+    logger.error("Gymnasium environment dependencies missing: %s", e)
+    raise
 
 # Frame caching system imports for high-performance environments
 try:
     from ..cache.frame_cache import FrameCache
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    FRAME_CACHE_AVAILABLE = False
-    FrameCache = None
+except ImportError as e:
+    logger.error("FrameCache dependency missing: %s", e)
+    raise
 
 # Compatibility layer for dual API support
 try:
@@ -1515,13 +1515,6 @@ def create_gymnasium_environment(
     correlation_id = str(uuid.uuid4())
     request_id = kwargs.get('request_id', str(uuid.uuid4()))
     
-    # Check Gymnasium availability
-    if not GYMNASIUM_AVAILABLE:
-        raise ImportError(
-            "Gymnasium environment support is not available. "
-            "Install with: pip install 'odor_plume_nav[rl]' to enable RL functionality."
-        )
-
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
             "correlation_id": correlation_id,
@@ -1530,7 +1523,6 @@ def create_gymnasium_environment(
             "cfg_provided": cfg is not None,
             "video_path_provided": video_path is not None,
             "frame_cache_provided": frame_cache is not None,
-            "frame_cache_available": FRAME_CACHE_AVAILABLE
         }
         
         with correlation_context("create_gymnasium_environment", **context_data):
@@ -1544,7 +1536,6 @@ def create_gymnasium_environment(
             cfg_provided=cfg is not None,
             video_path_provided=video_path is not None,
             frame_cache_provided=frame_cache is not None,
-            frame_cache_available=FRAME_CACHE_AVAILABLE
         )
 
     # Performance monitoring for environment creation
@@ -1556,7 +1547,6 @@ def create_gymnasium_environment(
                     "environment_id": environment_id,
                     "performance_monitoring": performance_monitoring,
                     "frame_cache_requested": frame_cache is not None,
-                    "frame_cache_system_available": FRAME_CACHE_AVAILABLE,
                     "correlation_id": correlation_id
                 }
             )
@@ -1617,14 +1607,7 @@ def create_gymnasium_environment(
             # Validate and configure frame cache if provided
             cache_instance = constructor_params.get("frame_cache")
             if cache_instance is not None:
-                if not FRAME_CACHE_AVAILABLE:
-                    func_logger.warning(
-                        "FrameCache provided but cache module not available. "
-                        "Cache will be ignored. Install cache dependencies to enable caching.",
-                        extra={"correlation_id": correlation_id}
-                    )
-                    constructor_params["frame_cache"] = None
-                elif not hasattr(cache_instance, 'get') or not hasattr(cache_instance, 'hit_rate'):
+                if not hasattr(cache_instance, 'get') or not hasattr(cache_instance, 'hit_rate'):
                     func_logger.error(
                         f"Invalid FrameCache instance: missing required methods. "
                         f"Expected FrameCache with 'get' and 'hit_rate' methods, "
@@ -1640,7 +1623,6 @@ def create_gymnasium_environment(
                         f"Frame cache validation successful",
                         extra={
                             "cache_type": type(cache_instance).__name__,
-                            "cache_available": FRAME_CACHE_AVAILABLE,
                             "correlation_id": correlation_id
                         }
                     )
@@ -1870,13 +1852,6 @@ def from_legacy(
     correlation_id = str(uuid.uuid4())
     request_id = env_kwargs.get('request_id', str(uuid.uuid4()))
     
-    # Check Gymnasium availability
-    if not GYMNASIUM_AVAILABLE:
-        raise ImportError(
-            "Gymnasium environment support is not available. "
-            "Install with: pip install 'odor_plume_nav[rl]' to enable RL functionality."
-        )
-
     if ENHANCED_LOGGING_AVAILABLE:
         context_data = {
             "correlation_id": correlation_id,
@@ -1958,14 +1933,7 @@ def from_legacy(
 
             # Validate frame cache if provided for legacy migration
             if frame_cache is not None:
-                if not FRAME_CACHE_AVAILABLE:
-                    func_logger.warning(
-                        "FrameCache provided for legacy migration but cache module not available. "
-                        "Cache will be ignored. Install cache dependencies to enable caching.",
-                        extra={"correlation_id": correlation_id}
-                    )
-                    frame_cache = None
-                elif not hasattr(frame_cache, 'get') or not hasattr(frame_cache, 'hit_rate'):
+                if not hasattr(frame_cache, 'get') or not hasattr(frame_cache, 'hit_rate'):
                     func_logger.error(
                         f"Invalid FrameCache instance in legacy migration: missing required methods. "
                         f"Expected FrameCache with 'get' and 'hit_rate' methods, "
@@ -1981,7 +1949,6 @@ def from_legacy(
                         f"Frame cache validation successful for legacy migration",
                         extra={
                             "cache_type": type(frame_cache).__name__,
-                            "cache_available": FRAME_CACHE_AVAILABLE,
                             "correlation_id": correlation_id
                         }
                     )
