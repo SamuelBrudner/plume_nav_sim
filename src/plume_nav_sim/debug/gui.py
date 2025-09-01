@@ -64,108 +64,48 @@ from plume_nav_sim.utils.logging_setup import correlation_context
 from plume_nav_sim.core.protocols import RecorderProtocol
 from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
 
-# Check for optional GUI dependencies with graceful fallback
-PYSIDE6_AVAILABLE = False
-STREAMLIT_AVAILABLE = False
+# Initialize module logger
+try:
+    from plume_nav_sim.utils.logging_setup import get_module_logger
+    logger = get_module_logger(__name__)
+except ImportError:  # pragma: no cover - fallback for logging setup import
+    import logging
+    logger = logging.getLogger(__name__)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
 
+# Import required GUI dependencies
 try:
     from PySide6.QtCore import QTimer, Signal, QThread, QObject, Qt
     from PySide6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QLabel, QSlider, QSpinBox, QCheckBox, QTabWidget,
         QTextEdit, QProgressBar, QGroupBox, QGridLayout, QFileDialog,
-        QMessageBox, QSplitter, QFrame
+        QMessageBox, QSplitter, QFrame,
     )
     from PySide6.QtGui import QKeySequence, QShortcut, QPixmap, QPainter
     import matplotlib
     matplotlib.use('Qt5Agg')
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
-    PYSIDE6_AVAILABLE = True
-except ImportError:
-    # Create mock classes to prevent import errors
-    class QTimer:
-        def __init__(self): pass
-        def timeout(self): pass
-        def start(self, interval): pass
-        def stop(self): pass
-    
-    class Signal:
-        def __init__(self, *args): pass
-        def emit(self, *args): pass
-        def connect(self, slot): pass
-    
-    class QThread:
-        pass
-    
-    class QObject:
-        def __init__(self): pass
-    
-    class Qt:
-        Key_Space = 32
-        Key_Right = 16777236
-        Key_R = 82
-        Horizontal = 1
-    
-    class QMainWindow:
-        def __init__(self): 
-            self.central_widget = None
-        def setWindowTitle(self, title): pass
-        def setGeometry(self, x, y, w, h): pass
-        def setCentralWidget(self, widget): 
-            self.central_widget = widget
-        def statusBar(self): 
-            return MockStatusBar()
-        def show(self): pass
-        def hide(self): pass
-        def grab(self): 
-            return MockPixmap()
-    
-    class QWidget:
-        def __init__(self): pass
-        def setMaximumWidth(self, width): pass
-        def setMaximumHeight(self, height): pass
-        def setReadOnly(self, readonly): pass
-        def setPlaceholderText(self, text): pass
-        def clear(self): pass
-        def setText(self, text): pass
-        def setPlainText(self, text): pass
-        def toPlainText(self): return ""
-        def getValue(self): return 0
-        def setValue(self, value): pass
-        def setRange(self, min_val, max_val): pass
-        def valueChanged(self): return Signal()
-        def clicked(self): return Signal()
-        def activated(self): return Signal()
-    
-    QApplication = QWidget
-    QVBoxLayout = QHBoxLayout = QGridLayout = QWidget
-    QPushButton = QLabel = QSlider = QSpinBox = QCheckBox = QWidget
-    QTabWidget = QTextEdit = QProgressBar = QGroupBox = QWidget
-    QFileDialog = QMessageBox = QSplitter = QFrame = QWidget
-    QKeySequence = QShortcut = QPixmap = QPainter = QWidget
-    
-    class MockStatusBar:
-        def addWidget(self, widget): pass
-        def addPermanentWidget(self, widget): pass
-    
-    class MockPixmap:
-        def save(self, filename): return True
-    
-    # Mock matplotlib classes
-    class Figure:
-        def __init__(self, *args, **kwargs): pass
-    
-    class FigureCanvas:
-        def __init__(self, figure): pass
-        def draw(self): pass
+except ImportError as exc:  # pragma: no cover - import error path
+    logger.error("PySide6 is required for the Qt debug GUI", exc_info=True)
+    raise
 
+# Optional Streamlit dependencies
+STREAMLIT_AVAILABLE = False
 try:
     import streamlit as st
     import plotly.graph_objects as go
     import plotly.express as px
     STREAMLIT_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover - optional dependency
     STREAMLIT_AVAILABLE = False
 
 
@@ -1593,15 +1533,8 @@ class DebugGUI:
     def _select_backend(self, requested_backend: str) -> str:
         """Select appropriate backend based on availability and request."""
         if requested_backend == 'auto':
-            if PYSIDE6_AVAILABLE:
-                return 'qt'
-            elif STREAMLIT_AVAILABLE:
-                return 'streamlit'
-            else:
-                return 'console'
+            return 'qt'
         elif requested_backend == 'qt':
-            if not PYSIDE6_AVAILABLE:
-                raise ImportError("PySide6 not available for Qt backend")
             return 'qt'
         elif requested_backend == 'streamlit':
             if not STREAMLIT_AVAILABLE:
@@ -1675,13 +1608,12 @@ class DebugGUI:
         if self.backend_name == 'qt':
             # For Qt, show the main window
             self.backend_impl.show()
-            
+
             # Start Qt application if not already running
-            if PYSIDE6_AVAILABLE:
-                app = QApplication.instance()
-                if app is None:
-                    app = QApplication([])
-                app.exec()
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication([])
+            app.exec()
         
         elif self.backend_name == 'streamlit':
             # For Streamlit, call the show method which creates the app
