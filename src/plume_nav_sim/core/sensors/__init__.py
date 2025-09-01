@@ -169,178 +169,37 @@ except ImportError:
 try:
     from .base_sensor import BaseSensor
     BASE_SENSOR_AVAILABLE = True
-except ImportError:
-    # Create minimal fallback for development
-    class BaseSensor:
-        """Fallback BaseSensor implementation until module is created."""
-        def __init__(self, **kwargs):
-            self._config = kwargs
-            self._performance_metrics = {}
-        
-        def configure(self, **kwargs: Any) -> None:
-            """Update sensor configuration."""
-            self._config.update(kwargs)
-        
-        def get_performance_metrics(self) -> Dict[str, Any]:
-            """Get sensor performance metrics."""
-            return self._performance_metrics.copy()
-        
-        def reset_performance_metrics(self) -> None:
-            """Reset performance metrics."""
-            self._performance_metrics.clear()
-    
-    BASE_SENSOR_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("Failed to import BaseSensor", exc_info=exc)
+    raise
 
 try:
     from .binary_sensor import BinarySensor
     BINARY_SENSOR_AVAILABLE = True
-except ImportError:
-    # Create minimal fallback for development
-    class BinarySensor(BaseSensor):
-        """Fallback BinarySensor implementation until module is created."""
-        def __init__(self, threshold: float = 0.1, false_positive_rate: float = 0.0, 
-                     false_negative_rate: float = 0.0, hysteresis: float = 0.0, **kwargs):
-            super().__init__(**kwargs)
-            self.threshold = threshold
-            self.false_positive_rate = false_positive_rate
-            self.false_negative_rate = false_negative_rate
-            self.hysteresis = hysteresis
-        
-        def detect(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-            """Placeholder binary detection."""
-            if hasattr(plume_state, 'concentration_at'):
-                concentrations = plume_state.concentration_at(positions)
-            else:
-                concentrations = np.random.random(positions.shape[0] if positions.ndim > 1 else 1)
-            return concentrations > self.threshold
-    
-    BINARY_SENSOR_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("Failed to import BinarySensor", exc_info=exc)
+    raise
 
 try:
     from .concentration_sensor import ConcentrationSensor
     CONCENTRATION_SENSOR_AVAILABLE = True
-except ImportError:
-    # Create minimal fallback for development
-    class ConcentrationSensor(BaseSensor):
-        """Fallback ConcentrationSensor implementation until module is created."""
-        def __init__(self, dynamic_range: tuple = (0.0, 1.0), resolution: float = 0.001, 
-                     noise_level: float = 0.0, **kwargs):
-            super().__init__(**kwargs)
-            self.dynamic_range = dynamic_range
-            self.resolution = resolution
-            self.noise_level = noise_level
-        
-        def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-            """Placeholder concentration measurement."""
-            if hasattr(plume_state, 'concentration_at'):
-                concentrations = plume_state.concentration_at(positions)
-            else:
-                concentrations = np.random.random(positions.shape[0] if positions.ndim > 1 else 1)
-            
-            # Apply dynamic range and resolution
-            concentrations = np.clip(concentrations, *self.dynamic_range)
-            if self.resolution > 0:
-                concentrations = np.round(concentrations / self.resolution) * self.resolution
-            
-            # Add noise if specified
-            if self.noise_level > 0:
-                noise = np.random.normal(0, self.noise_level, concentrations.shape)
-                concentrations += noise
-                concentrations = np.clip(concentrations, *self.dynamic_range)
-            
-            return concentrations
-    
-    CONCENTRATION_SENSOR_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("Failed to import ConcentrationSensor", exc_info=exc)
+    raise
 
 try:
     from .gradient_sensor import GradientSensor
     GRADIENT_SENSOR_AVAILABLE = True
-except ImportError:
-    # Create minimal fallback for development
-    class GradientSensor(BaseSensor):
-        """Fallback GradientSensor implementation until module is created."""
-        def __init__(self, spatial_resolution: tuple = (0.5, 0.5), method: str = 'central',
-                     order: int = 2, **kwargs):
-            super().__init__(**kwargs)
-            self.spatial_resolution = spatial_resolution
-            self.method = method
-            self.order = order
-        
-        def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-            """Placeholder gradient computation."""
-            dx, dy = self.spatial_resolution
-            
-            if positions.ndim == 1:
-                positions = positions.reshape(1, -1)
-            
-            gradients = np.zeros((positions.shape[0], 2))
-            
-            for i, pos in enumerate(positions):
-                # Sample at offset positions for finite difference
-                pos_x_plus = pos + np.array([dx, 0])
-                pos_x_minus = pos - np.array([dx, 0])
-                pos_y_plus = pos + np.array([0, dy])
-                pos_y_minus = pos - np.array([0, dy])
-                
-                if hasattr(plume_state, 'concentration_at'):
-                    conc_x_plus = plume_state.concentration_at(pos_x_plus.reshape(1, -1))[0]
-                    conc_x_minus = plume_state.concentration_at(pos_x_minus.reshape(1, -1))[0]
-                    conc_y_plus = plume_state.concentration_at(pos_y_plus.reshape(1, -1))[0]
-                    conc_y_minus = plume_state.concentration_at(pos_y_minus.reshape(1, -1))[0]
-                    
-                    # Central difference
-                    grad_x = (conc_x_plus - conc_x_minus) / (2 * dx)
-                    grad_y = (conc_y_plus - conc_y_minus) / (2 * dy)
-                else:
-                    # Placeholder gradient
-                    grad_x = np.random.normal(0, 0.1)
-                    grad_y = np.random.normal(0, 0.1)
-                
-                gradients[i] = [grad_x, grad_y]
-            
-            return gradients.squeeze() if gradients.shape[0] == 1 else gradients
-    
-    GRADIENT_SENSOR_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("Failed to import GradientSensor", exc_info=exc)
+    raise
 
 try:
     from .historical_sensor import HistoricalSensor
     HISTORICAL_SENSOR_AVAILABLE = True
-except ImportError:
-    # Create minimal fallback for development
-    class HistoricalSensor:
-        """Fallback HistoricalSensor implementation until module is created."""
-        def __init__(self, base_sensor: SensorProtocol, history_length: int = 10,
-                     sampling_interval: float = 1.0, **kwargs):
-            self.base_sensor = base_sensor
-            self.history_length = history_length
-            self.sampling_interval = sampling_interval
-            self._history = []
-            self._last_sample_time = 0.0
-        
-        def __getattr__(self, name):
-            """Delegate to base sensor for sensor protocol methods."""
-            return getattr(self.base_sensor, name)
-        
-        def get_history(self) -> List[Any]:
-            """Get observation history."""
-            return self._history.copy()
-        
-        def clear_history(self) -> None:
-            """Clear observation history."""
-            self._history.clear()
-        
-        def _update_history(self, observation: Any, timestamp: float) -> None:
-            """Update history with new observation."""
-            self._history.append({
-                'observation': observation,
-                'timestamp': timestamp
-            })
-            
-            # Trim history to specified length
-            if len(self._history) > self.history_length:
-                self._history = self._history[-self.history_length:]
-    
-    HISTORICAL_SENSOR_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("Failed to import HistoricalSensor", exc_info=exc)
+    raise
 
 
 # =============================================================================
