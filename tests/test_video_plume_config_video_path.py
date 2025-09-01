@@ -38,5 +38,12 @@ def test_base_model_dump_serializes_to_string():
 def test_skip_flags_bypass_existence_check(tmp_path, flag_name):
     """Ensure both skip flags bypass path existence checks."""
     missing = tmp_path / "missing.mp4"
-    cfg = VideoPlumeConfig(video_path=missing, **{flag_name: True})
-    assert cfg.video_path == missing
+    cfg = VideoPlumeConfig(video_path=str(missing), **{flag_name: True})
+    assert cfg.video_path == str(missing)
+
+
+def test_skip_allows_traversal_string():
+    """Skip flag should allow any string, including traversal paths."""
+    traversal = "../nonexistent/../../missing.mp4"
+    cfg = VideoPlumeConfig(video_path=traversal, skip_validation=True)
+    assert cfg.video_path == traversal
