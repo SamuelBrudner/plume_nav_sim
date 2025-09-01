@@ -282,74 +282,61 @@ except ImportError as e:
     ) if LOGGING_AVAILABLE else None
 
 # Import modular component protocols for pluggable architecture
-try:
-    from plume_nav_sim.core.protocols import (
-        PlumeModelProtocol,
-        WindFieldProtocol,
-        SensorProtocol,
-        AgentObservationProtocol,
-        AgentActionProtocol,
-        NavigatorFactory,
-        # New v1.0 protocols for protocol-based architecture
-        SourceProtocol,
-        BoundaryPolicyProtocol,
-        ActionInterfaceProtocol,
-        RecorderProtocol,
-        StatsAggregatorProtocol,
-        AgentInitializerProtocol
-    )
-    __all__.extend([
-        "PlumeModelProtocol",
-        "WindFieldProtocol",
-        "SensorProtocol",
-        "AgentObservationProtocol", 
-        "AgentActionProtocol",
-        "NavigatorFactory",
-        # New v1.0 protocol interfaces
-        "SourceProtocol",
-        "BoundaryPolicyProtocol", 
-        "ActionInterfaceProtocol",
-        "RecorderProtocol",
-        "StatsAggregatorProtocol",
-        "AgentInitializerProtocol"
-    ])
-    PROTOCOLS_AVAILABLE = True
-    NEW_PROTOCOLS_AVAILABLE = True
-    logger.info(
-        "Enhanced modular component protocols available for v1.0 architecture",
-        extra={
-            "metric_type": "environment_capability",
-            "component": "protocols",
-            "protocols": ["plume_model", "wind_field", "sensor", "observation", "action", 
-                         "source", "boundary_policy", "action_interface", "recorder", "stats_aggregator", "agent_initializer"],
-            "v1_architecture": True
-        }
-    ) if LOGGING_AVAILABLE else None
-except ImportError as e:
-    PlumeModelProtocol = None
-    WindFieldProtocol = None
-    SensorProtocol = None
-    AgentObservationProtocol = None
-    AgentActionProtocol = None
-    NavigatorFactory = None
-    # New v1.0 protocols
-    SourceProtocol = None
-    BoundaryPolicyProtocol = None
-    ActionInterfaceProtocol = None
-    RecorderProtocol = None
-    StatsAggregatorProtocol = None
-    AgentInitializerProtocol = None
-    PROTOCOLS_AVAILABLE = False
-    NEW_PROTOCOLS_AVAILABLE = False
-    logger.warning(
-        f"Enhanced modular component protocols not available: {e}",
-        extra={
-            "metric_type": "environment_limitation",
-            "missing_component": "protocols",
-            "error": str(e),
-            "note": "v1.0 protocol-based architecture features disabled"
-        }
-    ) if LOGGING_AVAILABLE else None
+from plume_nav_sim.core.protocols import (
+    PlumeModelProtocol,
+    WindFieldProtocol,
+    SensorProtocol,
+    AgentObservationProtocol,
+    AgentActionProtocol,
+    NavigatorFactory,
+    # New v1.0 protocols for protocol-based architecture
+    SourceProtocol,
+    BoundaryPolicyProtocol,
+    ActionInterfaceProtocol,
+    RecorderProtocol,
+    StatsAggregatorProtocol,
+    AgentInitializerProtocol,
+)
+
+__all__.extend([
+    "PlumeModelProtocol",
+    "WindFieldProtocol",
+    "SensorProtocol",
+    "AgentObservationProtocol",
+    "AgentActionProtocol",
+    "NavigatorFactory",
+    # New v1.0 protocol interfaces
+    "SourceProtocol",
+    "BoundaryPolicyProtocol",
+    "ActionInterfaceProtocol",
+    "RecorderProtocol",
+    "StatsAggregatorProtocol",
+    "AgentInitializerProtocol",
+])
+
+PROTOCOLS_AVAILABLE = True
+NEW_PROTOCOLS_AVAILABLE = True
+logger.info(
+    "Enhanced modular component protocols available for v1.0 architecture",
+    extra={
+        "metric_type": "environment_capability",
+        "component": "protocols",
+        "protocols": [
+            "plume_model",
+            "wind_field",
+            "sensor",
+            "observation",
+            "action",
+            "source",
+            "boundary_policy",
+            "action_interface",
+            "recorder",
+            "stats_aggregator",
+            "agent_initializer",
+        ],
+        "v1_architecture": True,
+    },
+) if LOGGING_AVAILABLE else None
 
 # Import plume model implementations
 try:
