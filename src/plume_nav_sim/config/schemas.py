@@ -289,25 +289,38 @@ class VideoPlumeConfig(BaseModel):
 
     @field_validator('video_path', mode='before')
     @classmethod
-    def parse_video_path(cls, v):
-        """Convert to Path unless value is an env-variable pattern."""
-        if isinstance(v, str) and ENV_VAR_PATTERN.fullmatch(v):
-            return v
-        return Path(v)
+    def parse_video_path(cls, v, info):
+        """Convert to Path unless skipping or value is an env-variable pattern."""
+        skip = info.data.get('skip_validation') or info.data.get('_skip_validation') or False
+        if isinstance(v, str):
+            if skip or ENV_VAR_PATTERN.fullmatch(v):
+                logger.debug("Skipping path parsing for video path: %s", v)
+                return v
+            return Path(v)
+        return v
 
     @field_validator('video_path')
     @classmethod
     def validate_video_path(cls, v, info):
+        """Optionally validate that the video file exists."""
         skip = info.data.get('skip_validation') or info.data.get('_skip_validation') or False
         if isinstance(v, str):
+            if skip or ENV_VAR_PATTERN.fullmatch(v):
+                logger.debug("Skipping video file existence check for path: %s", v)
+                return v
+            v = Path(v)
+
+        if skip:
+            logger.debug("Skipping video file existence check for path: %s", v)
             return v
-        if not skip:
-            if not v.exists():
-                logger.error("Video file not found: %s", v)
-                raise ValueError('Video file not found')
-            if not v.is_file():
-                logger.error("Video path is not a file: %s", v)
-                raise ValueError('Video path is not a file')
+
+        if not v.exists():
+            logger.error("Video file not found: %s", v)
+            raise ValueError('Video file not found')
+        if not v.is_file():
+            logger.error("Video path is not a file: %s", v)
+            raise ValueError('Video path is not a file')
+
         return v
 
     @field_validator('kernel_size')

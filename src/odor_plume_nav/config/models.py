@@ -242,20 +242,29 @@ def validate_positions(positions_value: List[List[float]]) -> List[List[float]]:
 
 
 def validate_video_path(path_value: Union[str, Path], *, skip_exists: bool = False) -> Union[str, Path]:
-    """Validate video path and coerce to :class:`~pathlib.Path`.
+    """Validate video path with optional existence checks.
 
     Environment variable interpolation strings (``${oc.env:...}``) are returned
-    unchanged to allow Hydra to resolve them later.  For concrete paths we
-    normalise to :class:`Path`, optionally verifying that the file exists.
+    unchanged to allow Hydra to resolve them later.  When ``skip_exists`` is
+    ``True`` any provided string is accepted—including traversal segments—and
+    returned unchanged.  For normal operation paths are coerced to
+    :class:`~pathlib.Path` and validated for existence.
     """
-    if isinstance(path_value, str):
-        if path_value.startswith("${oc.env:"):
-            return path_value
-        path = Path(path_value)
-    else:
-        path = path_value
 
-    if not skip_exists and (not path.exists() or not path.is_file()):
+    if isinstance(path_value, str) and path_value.startswith("${oc.env:"):
+        logger.debug(
+            "Received environment variable interpolation string for video path: %s",
+            path_value,
+        )
+        return path_value
+
+    if skip_exists:
+        logger.debug("Skipping video file existence check for path '%s'", path_value)
+        return path_value if isinstance(path_value, str) else str(path_value)
+
+    path = Path(path_value) if isinstance(path_value, str) else path_value
+
+    if not path.exists() or not path.is_file():
         raise ValueError(f"Video file not found: {path}")
 
     supported_extensions = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".m4v"}
