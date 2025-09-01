@@ -14,8 +14,8 @@ Features:
 - Automatic module initialization with configuration loading
 """
 
-import os
 import logging
+import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Union, Tuple, Literal
@@ -23,18 +23,17 @@ from enum import Enum
 
 try:
     from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
+except ImportError as e:
+    logging.getLogger(__name__).error("python-dotenv is required for environment variable loading")
+    raise
 
 try:
     from hydra import compose, initialize_config_store
     from hydra.core.config_store import ConfigStore
     from omegaconf import OmegaConf, DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    ConfigStore = None
-    DictConfig = None
+except ImportError as e:
+    logging.getLogger(__name__).error("hydra-core is required for configuration management")
+    raise
 
 # Export configuration models and utilities from this module
 from odor_plume_nav.config.models import (
@@ -374,14 +373,7 @@ def load_environment_variables(environment: Optional[str] = None) -> Dict[str, s
     Returns:
         Dictionary of loaded environment variables
         
-    Raises:
-        ImportError: If python-dotenv is not available
     """
-    if load_dotenv is None:
-        raise ImportError(
-            "python-dotenv is required for environment variable loading. "
-            "Install with: pip install python-dotenv"
-        )
     
     loaded_vars = {}
     config_dir = get_config_dir()
@@ -441,18 +433,11 @@ def initialize_hydra_config_store() -> Optional[ConfigStore]:
     maintaining backward compatibility with existing YAML configuration loading.
     
     Returns:
-        ConfigStore instance if Hydra is available, None otherwise
-        
+        ConfigStore instance
+
     Raises:
-        ImportError: If Hydra is not available
+        Exception: If ConfigStore initialization fails
     """
-    if not HYDRA_AVAILABLE:
-        logger.warning(
-            "Hydra is not available. ConfigStore initialization skipped. "
-            "Install with: pip install hydra-core"
-        )
-        return None
-    
     try:
         cs = ConfigStore.instance()
         
@@ -535,15 +520,8 @@ def compose_config_from_overrides(
         Composed configuration as dictionary or DictConfig with dataclass validation applied
         
     Raises:
-        ImportError: If Hydra is not available
         ValueError: If configuration composition fails or dataclass validation fails
     """
-    if not HYDRA_AVAILABLE:
-        raise ImportError(
-            "Hydra is required for configuration composition. "
-            "Install with: pip install hydra-core"
-        )
-    
     try:
         # Use compose API for programmatic configuration
         cfg = compose(config_name=config_name or "config", overrides=overrides or [])
@@ -843,31 +821,23 @@ def _initialize_module() -> None:
         # Load environment variables with enhanced hierarchy support
         loaded_env_vars = load_environment_variables(environment=environment)
         
-        # Initialize Hydra ConfigStore if available
-        if HYDRA_AVAILABLE:
-            config_store = initialize_hydra_config_store()
-            
-            # Validate dataclass schemas are properly registered
-            if config_store:
-                logger.debug("Validating dataclass schema registration for environment variable support")
-                try:
-                    # Test environment variable resolution with a sample dataclass
-                    test_config = {"speed": "${oc.env:TEST_SPEED,1.0}"}
-                    validate_dataclass_env_interpolation(DataclassSingleAgentConfig, test_config)
-                    logger.debug("Dataclass environment variable integration validated successfully")
-                except Exception as e:
-                    logger.warning(f"Dataclass environment variable validation failed: {e}")
-            
-        else:
-            logger.info(
-                "Hydra not available. Install with 'pip install hydra-core' "
-                "for advanced dataclass configuration features."
-            )
+        # Initialize Hydra ConfigStore
+        config_store = initialize_hydra_config_store()
+
+        # Validate dataclass schemas are properly registered
+        if config_store:
+            logger.debug("Validating dataclass schema registration for environment variable support")
+            try:
+                # Test environment variable resolution with a sample dataclass
+                test_config = {"speed": "${oc.env:TEST_SPEED,1.0}"}
+                validate_dataclass_env_interpolation(DataclassSingleAgentConfig, test_config)
+                logger.debug("Dataclass environment variable integration validated successfully")
+            except Exception as e:
+                logger.warning(f"Dataclass environment variable validation failed: {e}")
         
         # Log initialization summary
         logger.info(
-            f"Configuration module initialized with {len(loaded_env_vars)} environment variables "
-            f"and {'dataclass' if HYDRA_AVAILABLE else 'legacy'} schema support"
+            f"Configuration module initialized with {len(loaded_env_vars)} environment variables and dataclass schema support"
         )
             
     except Exception as e:
