@@ -43,6 +43,31 @@ class NavigatorProtocol(Protocol):
     ) -> np.ndarray:
         """Sample odor using a multi-sensor configuration."""
 
+    # --- Optional observation and memory hooks ---
+    def observe(self, sensor_output: Any) -> Dict[str, Any]:
+        """Process raw sensor output into a normalized observation.
+
+        Implementations may simply return an empty dictionary if no
+        observation processing is required. Invalid input types should
+        raise ``TypeError`` to prevent silent failures.
+        """
+
+    def load_memory(self, memory_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """Load internal memory state for cognitive navigation strategies.
+
+        The default expectation is a no-op returning ``None`` when memory
+        is disabled. Implementations should raise ``TypeError`` when
+        ``memory_data`` is provided with an incompatible type.
+        """
+
+    def save_memory(self) -> Optional[Dict[str, Any]]:
+        """Return a serialisable snapshot of the current memory state.
+
+        When memory is disabled, implementations should return ``None``.
+        Invalid internal memory representations should trigger a
+        ``TypeError`` to surface misconfigurations loudly.
+        """
+
     # --- Extensibility hooks ---
     def compute_additional_obs(self, base_obs: dict) -> dict:
         """Compute additional observation components."""
