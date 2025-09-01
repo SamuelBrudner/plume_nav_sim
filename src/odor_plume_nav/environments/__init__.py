@@ -53,112 +53,96 @@ try:
 except ImportError:
     LEGACY_GYM_AVAILABLE = False
 
-# Check for Gymnasium availability
+# Require Gymnasium and log if missing
 try:
     import gymnasium as gym_modern
-    GYMNASIUM_AVAILABLE = True
     logger.info(
-        "Gymnasium package available for modern RL API", 
+        "Gymnasium package available for modern RL API",
         extra={
             "metric_type": "environment_capability",
             "package": "gymnasium",
-            "api_version": "0.29.x"
-        }
+            "api_version": "0.29.x",
+        },
     ) if LOGGING_AVAILABLE else None
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    gym_modern = None
+except ImportError as e:
+    logger.error(
+        "Gymnasium package is required for RL environments",
+        extra={"metric_type": "missing_dependency", "package": "gymnasium"},
+    ) if LOGGING_AVAILABLE else None
+    raise
 
-# Conditional imports for reinforcement learning features
-# These require gymnasium and related RL dependencies
+# Import Gymnasium environment implementation
 try:
     from odor_plume_nav.environments.gymnasium_env import GymnasiumEnv
-    __all__.append("GymnasiumEnv")
-    RL_ENV_AVAILABLE = True
-except ImportError:
-    # RL dependencies not available - GymnasiumEnv not available
-    GymnasiumEnv = None
-    RL_ENV_AVAILABLE = False
+except ImportError as e:
+    logger.error(
+        "Failed to import GymnasiumEnv implementation",
+        extra={"metric_type": "missing_dependency", "package": "odor_plume_nav.environments.gymnasium_env"},
+    ) if LOGGING_AVAILABLE else None
+    raise
+__all__.append("GymnasiumEnv")
 
 # Import compatibility layer for dual API support
 try:
     from odor_plume_nav.environments.compat import (
         CompatibilityEnvWrapper,
         detect_api_context,
-        create_environment_factory
+        create_environment_factory,
     )
-    __all__.extend([
-        "CompatibilityEnvWrapper",
-        "detect_api_context", 
-        "create_environment_factory"
-    ])
-    COMPAT_LAYER_AVAILABLE = True
     logger.info(
         "Compatibility layer available for dual API support",
         extra={
             "metric_type": "environment_capability",
             "feature": "dual_api_support",
             "legacy_support": True,
-            "modern_support": True
-        }
+            "modern_support": True,
+        },
     ) if LOGGING_AVAILABLE else None
-except ImportError:
-    # Compatibility layer not available - proceed without dual API support
-    CompatibilityEnvWrapper = None
-    detect_api_context = None
-    create_environment_factory = None
-    COMPAT_LAYER_AVAILABLE = False
-    logger.warning(
-        "Compatibility layer not available, single API mode only",
-        extra={
-            "metric_type": "environment_limitation",
-            "missing_feature": "dual_api_support"
-        }
+except ImportError as e:
+    logger.error(
+        "Compatibility layer is required for dual API support",
+        extra={"metric_type": "missing_dependency", "package": "odor_plume_nav.environments.compat"},
     ) if LOGGING_AVAILABLE else None
+    raise
+__all__.extend([
+    "CompatibilityEnvWrapper",
+    "detect_api_context",
+    "create_environment_factory",
+])
 
-try:
-    from odor_plume_nav.environments.spaces import (
-        create_action_space,
-        create_observation_space,
-        ActionSpaceConfig,
-        ObservationSpaceConfig,
-    )
-    __all__.extend([
-        "create_action_space",
-        "create_observation_space", 
-        "ActionSpaceConfig",
-        "ObservationSpaceConfig",
-    ])
-    SPACES_AVAILABLE = True
-except ImportError:
-    # Spaces module not available
-    create_action_space = None
-    create_observation_space = None
-    ActionSpaceConfig = None
-    ObservationSpaceConfig = None
-    SPACES_AVAILABLE = False
+# Import spaces and wrappers - required for environment setup
+from odor_plume_nav.environments.spaces import (
+    create_action_space,
+    create_observation_space,
+    ActionSpaceConfig,
+    ObservationSpaceConfig,
+)
+__all__.extend([
+    "create_action_space",
+    "create_observation_space",
+    "ActionSpaceConfig",
+    "ObservationSpaceConfig",
+])
 
-try:
-    from odor_plume_nav.environments.wrappers import (
-        NormalizationWrapper,
-        FrameStackWrapper,
-        ClippingWrapper,
-        RewardShapingWrapper,
-    )
-    __all__.extend([
-        "NormalizationWrapper",
-        "FrameStackWrapper",
-        "ClippingWrapper", 
-        "RewardShapingWrapper",
-    ])
-    WRAPPERS_AVAILABLE = True
-except ImportError:
-    # Wrappers module not available
-    NormalizationWrapper = None
-    FrameStackWrapper = None
-    ClippingWrapper = None
-    RewardShapingWrapper = None
-    WRAPPERS_AVAILABLE = False
+from odor_plume_nav.environments.wrappers import (
+    NormalizationWrapper,
+    FrameStackWrapper,
+    ClippingWrapper,
+    RewardShapingWrapper,
+)
+__all__.extend([
+    "NormalizationWrapper",
+    "FrameStackWrapper",
+    "ClippingWrapper",
+    "RewardShapingWrapper",
+])
+
+# Dependency availability flags (always True; imports above will raise if missing)
+GYMNASIUM_AVAILABLE = True
+RL_ENV_AVAILABLE = True
+COMPAT_LAYER_AVAILABLE = True
+SPACES_AVAILABLE = True
+WRAPPERS_AVAILABLE = True
 
 # Environment registration functionality
 def register_environments() -> Dict[str, bool]:
