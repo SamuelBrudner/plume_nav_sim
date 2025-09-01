@@ -71,13 +71,13 @@ try:
     from hydra.core.global_hydra import GlobalHydra
     from hydra.core.hydra_config import HydraConfig
     from omegaconf import DictConfig, OmegaConf, ListConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    warnings.warn(
-        "Hydra not available. Advanced configuration features will be limited.",
-        ImportWarning
-    )
+except ImportError as exc:  # pragma: no cover - dependency required for CLI
+    logger.error("Hydra is required for plume_nav_sim CLI. Install hydra-core.")
+    raise ImportError(
+        "Hydra is required for plume_nav_sim CLI. Install hydra-core."
+    ) from exc
+
+HYDRA_AVAILABLE = True
 
 # Import core system components
 from plume_nav_sim.api.navigation import (
