@@ -56,87 +56,34 @@ import logging
 from typing import Optional, Dict, Any, Union, Tuple, Sequence
 from pathlib import Path
 import numpy as np
-import warnings
 
-# Core imports with graceful fallbacks
+logger = logging.getLogger(__name__)
+
 try:
     import cv2
-    OPENCV_AVAILABLE = True
-except ImportError:
-    OPENCV_AVAILABLE = False
-    cv2 = None
+except ImportError as e:
+    logger.error("OpenCV dependency not found", exc_info=e)
+    raise
 
-# Protocol and interface imports
 from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
-# VideoPlume import with fallback
 try:
     from ...envs.video_plume import VideoPlume
-    VIDEO_PLUME_AVAILABLE = True
-except ImportError:
-    # Minimal fallback implementation for testing
-    class VideoPlume:
-        def __init__(self, video_path: str):
-            self.video_path = video_path
-            self.frame_count = 1000
-            self.width = 640
-            self.height = 480
-            self.fps = 30.0
-            self._current_frame = 0
-        
-        def get_frame(self, frame_id: int) -> Optional[np.ndarray]:
-            if 0 <= frame_id < self.frame_count:
-                return np.random.rand(self.height, self.width).astype(np.float32)
-            return None
-        
-        def get_metadata(self) -> Dict[str, Any]:
-            return {
-                "width": self.width,
-                "height": self.height,
-                "fps": self.fps,
-                "frame_count": self.frame_count
-            }
-        
-        def close(self):
-            pass
-    
-    VIDEO_PLUME_AVAILABLE = False
+except ImportError as e:
+    logger.error("VideoPlume dependency not found", exc_info=e)
+    raise
 
-# Frame cache import with fallback
 try:
     from ...utils.frame_cache import FrameCache, CacheMode
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    # Minimal fallback
-    class FrameCache:
-        def __init__(self, **kwargs):
-            self.hit_rate = 0.0
-            self.hits = 0
-            self.misses = 0
-        
-        def get(self, frame_id, video_plume, **kwargs):
-            return video_plume.get_frame(frame_id, **kwargs)
-        
-        def clear(self):
-            pass
-    
-    class CacheMode:
-        NONE = "none"
-        LRU = "lru"
-        ALL = "all"
-    
-    FRAME_CACHE_AVAILABLE = False
+except ImportError as e:
+    logger.error("FrameCache dependency not found", exc_info=e)
+    raise
 
-# Configuration support imports
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
-
-# Initialize module logger
-logger = logging.getLogger(__name__)
+except ImportError as e:
+    logger.error("omegaconf dependency not found", exc_info=e)
+    raise
 
 
 class VideoPlumeConfig:
@@ -371,14 +318,6 @@ class VideoPlumeAdapter:
             # Fail fast with clear exception to match test expectations
             raise FileNotFoundError(f"Video file not found: {video_path_obj}")
 
-        if not OPENCV_AVAILABLE and self.preprocessing_config:
-            warnings.warn(
-                "OpenCV not available. Preprocessing options will be ignored. "
-                "Install opencv-python for full preprocessing support.",
-                UserWarning,
-                stacklevel=2,
-            )
-
         try:
             self.video_plume = VideoPlume(str(video_path_obj))
             logger.debug(f"VideoPlume initialized for {self.video_path}")
@@ -450,7 +389,7 @@ class VideoPlumeAdapter:
         if frame_cache is not None:
             self._cache_enabled = True
             logger.debug("Using provided FrameCache instance")
-        elif frame_cache_config and FRAME_CACHE_AVAILABLE:
+        elif frame_cache_config:
             try:
                 self.frame_cache = FrameCache(**frame_cache_config)
                 self._cache_enabled = True
@@ -531,7 +470,7 @@ class VideoPlumeAdapter:
         Returns:
             Processed frame with applied transformations
         """
-        if not OPENCV_AVAILABLE or not self.preprocessing_config:
+        if not self.preprocessing_config:
             return frame
         
         processed_frame = frame.copy()
