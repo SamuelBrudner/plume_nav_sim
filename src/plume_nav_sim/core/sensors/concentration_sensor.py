@@ -70,26 +70,7 @@ import numpy as np
 from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Base sensor infrastructure
-try:
-    from .base_sensor import BaseSensor
-    BASE_SENSOR_AVAILABLE = True
-except ImportError:
-    # Fallback base class if BaseSensor doesn't exist yet
-    class BaseSensor:
-        def __init__(self, **kwargs):
-            self._enable_logging = kwargs.get('enable_logging', True)
-            self._sensor_id = kwargs.get('sensor_id', f"sensor_{id(self)}")
-            self._performance_metrics = {
-                'measurement_times': [],
-                'total_measurements': 0,
-                'noise_samples': 0,
-                'drift_updates': 0
-            }
-        
-        def get_performance_metrics(self) -> Dict[str, Any]:
-            return self._performance_metrics.copy()
-    
-    BASE_SENSOR_AVAILABLE = False
+from .base_sensor import BaseSensor
 
 # Logging integration
 try:
@@ -403,7 +384,7 @@ class ConcentrationSensor(BaseSensor):
         })
         
         # Log sensor initialization
-        if self._enable_logging and BASE_SENSOR_AVAILABLE:
+        if self._enable_logging:
             if LOGURU_AVAILABLE:
                 logger.bind(
                     sensor_type="ConcentrationSensor",
