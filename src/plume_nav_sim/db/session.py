@@ -19,6 +19,7 @@ Version: 1.0.0
 """
 
 import asyncio
+import logging
 import os
 import re
 import sqlite3
@@ -30,6 +31,8 @@ from enum import Enum
 from typing import Any, AsyncGenerator, Dict, Generator, Optional, Protocol, Union, TypedDict
 from typing import AsyncIterator
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 # Python 3.13+ compatibility: reintroduce asyncio.coroutine for tests
 if not hasattr(asyncio, "coroutine"):
@@ -46,38 +49,22 @@ try:
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
     from sqlalchemy.orm import Session, sessionmaker
     from sqlalchemy.pool import StaticPool
-    SQLALCHEMY_AVAILABLE = True
-except ImportError:
-    SQLALCHEMY_AVAILABLE = False
-    sqlalchemy = None
-    Session = None
-    AsyncSession = None
-    async_sessionmaker = None
-    text = None
+except ImportError as exc:
+    logger.exception("SQLAlchemy is required but not installed")
+    raise
 
 try:
     import hydra
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    hydra = None
-    DictConfig = None
+except ImportError as exc:
+    logger.exception("Hydra is required but not installed")
+    raise
 
 try:
     from dotenv import load_dotenv
-    DOTENV_AVAILABLE = True
-except ImportError:
-    DOTENV_AVAILABLE = False
-    load_dotenv = None
-
-# --------------------------------------------------------------------------- #
-# Test-suite compatibility: force DOTENV availability flag off so that tests
-# relying on @pytest.skipif(not DOTENV_AVAILABLE) behave deterministically and
-# do not attempt to touch the filesystem with .env manipulation.  We still keep
-# load_dotenv reference for real environments, only the boolean gate is closed.
-# --------------------------------------------------------------------------- #
-DOTENV_AVAILABLE = False
+except ImportError as exc:
+    logger.exception("python-dotenv is required but not installed")
+    raise
 
 
 # --------------------------------------------------------------------------- #
@@ -280,12 +267,8 @@ class SessionManager:
         self._async_engine = None
         self._async_sessionmaker = None
         
-        # Early exit if SQLAlchemy is not available
-        if not SQLALCHEMY_AVAILABLE:
-            return
-            
         # Load environment variables if auto_configure is True
-        if auto_configure and DOTENV_AVAILABLE:
+        if auto_configure:
             try:
                 load_dotenv()
             except Exception as e:
@@ -676,7 +659,7 @@ def is_database_enabled() -> bool:
     """
     # Use the global reference directly to avoid creating a manager when none exists.
     manager = _GLOBAL_MANAGER
-    return bool(SQLALCHEMY_AVAILABLE and manager and manager.enabled)
+    return bool(manager and manager.enabled)
 
 
 def cleanup_database() -> None:
