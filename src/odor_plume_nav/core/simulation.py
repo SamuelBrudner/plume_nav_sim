@@ -231,14 +231,25 @@ class PerformanceMonitor:
         self.performance_warnings = []
         self.optimization_applied = False
     
-    def record_step_time(self, step_duration: float) -> None:
-        """Record timing for a simulation step."""
-        logger.debug("Recording step duration", extra={"step_duration": step_duration})
+    def record_step_time(self, seconds: float, label: str | None = None) -> None:
+        """Record timing for a simulation step.
+
+        Parameters
+        ----------
+        seconds : float
+            Time taken for the step in seconds.
+        label : str | None
+            Optional label for the recorded duration. Currently unused.
+        """
+        logger.debug(
+            "Recording step duration",
+            extra={"step_duration": seconds, "label": label},
+        )
         current_time = time.perf_counter()
 
         # Update counters
         self.total_steps += 1
-        self.step_times.append(step_duration)
+        self.step_times.append(seconds)
 
         # Calculate frame time (time since last step)
         frame_time = current_time - self.last_step_time
@@ -255,17 +266,6 @@ class PerformanceMonitor:
 
     # Backward compatibility
     record_step = record_step_time
-    def record_step_time(self, seconds: float, label: str | None = None) -> None:
-        """Compatibility wrapper accepting durations in seconds.
-
-        Parameters
-        ----------
-        seconds : float
-            Time taken for the step in seconds.
-        label : str | None
-            Optional label for the recorded duration.
-        """
-        self.record_step(seconds)
     
     def _check_performance_thresholds(self) -> None:
         """Check if performance is below target and record warnings."""
