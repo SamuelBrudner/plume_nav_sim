@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 import logging
 import re
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer, AliasChoices
 try:
     from hydra.core.config_store import ConfigStore
     cs = ConfigStore.instance()
@@ -253,11 +253,16 @@ class NavigatorConfig(BaseModel):
 
 class VideoPlumeConfig(BaseModel):
     """Configuration for video-based plume environment."""
+    # Internal flag to optionally skip validation
+    skip_validation: bool = Field(
+        default=False,
+        repr=False,
+        exclude=True,
+        validation_alias=AliasChoices("skip_validation", "_skip_validation"),
+    )
+
     # Path to the video file (kept internally as Path but exposed as string)
     video_path: Union[Path, str]
-
-    # Internal flag to optionally skip validation
-    skip_validation: bool = Field(default=False, repr=False, exclude=True)
 
     # Optional parameters for video processing
     flip: Optional[bool] = False
@@ -293,7 +298,7 @@ class VideoPlumeConfig(BaseModel):
     @field_validator('video_path')
     @classmethod
     def validate_video_path(cls, v, info):
-        skip = info.data.get('skip_validation', False)
+        skip = info.data.get('skip_validation') or info.data.get('_skip_validation') or False
         if isinstance(v, str):
             return v
         if not skip:

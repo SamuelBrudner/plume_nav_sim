@@ -32,3 +32,11 @@ def test_base_model_dump_serializes_to_string():
     cfg = VideoPlumeConfig(video_path=path)
     data = BaseModel.model_dump(cfg)
     assert data["video_path"] == "test_video.mp4"
+
+
+@pytest.mark.parametrize("flag_name", ["skip_validation", "_skip_validation"])
+def test_skip_flags_bypass_existence_check(tmp_path, flag_name):
+    """Ensure both skip flags bypass path existence checks."""
+    missing = tmp_path / "missing.mp4"
+    cfg = VideoPlumeConfig(video_path=missing, **{flag_name: True})
+    assert cfg.video_path == missing
