@@ -45,84 +45,18 @@ Authors: Blitzy Platform v1.0 Development Team
 
 from __future__ import annotations
 import numpy as np
-from typing import Union, Optional, Dict, Any, List, Tuple, Protocol, runtime_checkable
+from typing import Union, Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 import pandas as pd
 from pathlib import Path
 import warnings
+import logging
 
-# Import the protocol from the protocols module once it's defined
-# For now, we'll define it locally as per the schema requirements
-try:
-    from .protocols import AgentInitializerProtocol
-except ImportError:
-    # Define the protocol locally since it may not exist yet in protocols.py
-    @runtime_checkable
-    class AgentInitializerProtocol(Protocol):
-        """
-        Protocol defining the interface for agent initialization strategies.
-        
-        This protocol ensures consistent initialization behavior across different
-        strategies while maintaining type safety and extensibility. All concrete
-        initialization strategies must implement these core methods.
-        
-        The protocol supports deterministic seeding, domain validation, and
-        flexible position generation for diverse experimental requirements.
-        """
-        
-        def initialize_positions(
-            self, 
-            num_agents: int, 
-            **kwargs: Any
-        ) -> np.ndarray:
-            """
-            Generate initial agent positions based on strategy configuration.
-            
-            Args:
-                num_agents: Number of agents to initialize
-                **kwargs: Additional strategy-specific parameters
-                
-            Returns:
-                np.ndarray: Agent positions with shape (num_agents, 2)
-                    Each row contains [x, y] coordinates for one agent
-                    
-            Notes:
-                - Must be deterministic when seeded
-                - Positions should be within domain bounds
-                - Performance target: <1ms for 100 agents
-            """
-            ...
-        
-        def validate_domain(self, positions: np.ndarray) -> bool:
-            """
-            Validate that generated positions comply with domain constraints.
-            
-            Args:
-                positions: Agent positions to validate with shape (n_agents, 2)
-                
-            Returns:
-                bool: True if all positions are valid, False otherwise
-                
-            Notes:
-                - Checks domain bounds compliance
-                - No collision detection required per specification
-                - Should be called after position generation
-            """
-            ...
-        
-        def reset(self, seed: Optional[int] = None) -> None:
-            """
-            Reset initializer state with optional deterministic seeding.
-            
-            Args:
-                seed: Random seed for deterministic behavior (optional)
-                
-            Notes:
-                - Reinitializes internal random state
-                - Ensures reproducible position generation
-                - Should be called before each episode
-            """
-            ...
+logger = logging.getLogger(__name__)
+
+from .protocols import AgentInitializerProtocol
+
+logger.info("AgentInitializerProtocol import succeeded")
 
 
 @dataclass
