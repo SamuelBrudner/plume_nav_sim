@@ -1784,6 +1784,14 @@ def test_integration_test_suite_completeness():
     assert coverage_percentage >= 100, f"Test coverage {coverage_percentage:.1f}% below 100% requirement"
 
 
+def test_simulation_results_have_step_count_and_success():
+    """Simulation results expose step count and success attributes."""
+    ctx = SimulationContext.create()
+    results = ctx.run_simulation()
+    assert hasattr(results, "step_count")
+    assert hasattr(results, "success")
+
+
 if __name__ == "__main__":
     # Enhanced test execution with comprehensive reporting
     pytest.main([
