@@ -754,253 +754,15 @@ class SimulationBuilder:
         raise NotImplementedError("Simulation execution is not yet implemented")
 
 
-class PerformanceMonitor:
-    """Enhanced performance monitoring for Gymnasium migration with extensibility hooks.
-    
-    This class tracks simulation performance metrics including frame rates, step execution
-    times, memory usage, and extensibility hook overhead. Enforces the performance
-    requirements of ≥30 FPS and ≤10ms step execution while monitoring frame cache
-    efficiency and memory pressure management.
-    """
-    
-    def __init__(
-        self, 
-        target_fps: float = 30.0, 
-        step_time_limit_ms: float = 10.0,
-        history_length: int = 100,
-        enable_memory_monitoring: bool = True
-    ):
-        """Initialize performance monitor with Gymnasium migration requirements.
-        
-        Parameters
-        ----------
-        target_fps : float
-            Target frame rate for performance optimization (≥30 FPS requirement)
-        step_time_limit_ms : float
-            Maximum allowed time per step in milliseconds (≤10ms requirement)
-        history_length : int
-            Number of recent measurements to track for moving averages
-        enable_memory_monitoring : bool
-            Whether to enable memory usage monitoring for frame cache
-        """
-        self.target_fps = target_fps
-        self.target_step_time = 1.0 / target_fps
-        self.step_time_limit_ms = step_time_limit_ms
-        self.step_time_limit_s = step_time_limit_ms / 1000.0
-        self.history_length = history_length
-        self.enable_memory_monitoring = enable_memory_monitoring and MEMORY_MONITORING_AVAILABLE
-        
-        # Performance tracking
-        self.step_times: List[float] = []
-        self.frame_times: List[float] = []
-        self.hook_times: List[float] = []
-        self.memory_usage: List[float] = []
-        
-        # Statistics
-        self.total_steps = 0
-        self.start_time = time.perf_counter()
-        self.last_step_time = self.start_time
-        
-        # Performance violations
-        self.performance_warnings = []
-        self.step_time_violations = 0
-        self.fps_violations = 0
-        self.hook_timeout_violations = 0
-        
-        # Frame cache monitoring
-        self.cache_hit_rate_history: List[float] = []
-        self.cache_memory_usage: List[float] = []
-    
-    def record_step(
-        self, 
-        step_duration: float, 
-        hook_duration: float = 0.0,
-        cache_stats: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Record timing for a simulation step with hook and cache monitoring.
-        
-        Parameters
-        ----------
-        step_duration : float
-            Time taken for the core step in seconds
-        hook_duration : float
-            Time taken for extensibility hooks in seconds
-        cache_stats : Optional[Dict[str, Any]]
-            Frame cache performance statistics
-        """
-        current_time = time.perf_counter()
-        
-        # Update counters
-        self.total_steps += 1
-        self.step_times.append(step_duration)
-        self.hook_times.append(hook_duration)
-        
-        # Calculate frame time (time since last step)
-        frame_time = current_time - self.last_step_time
-        self.frame_times.append(frame_time)
-        self.last_step_time = current_time
-        
-        # Monitor memory usage if enabled
-        if self.enable_memory_monitoring:
-            try:
-                process = psutil.Process()
-                memory_mb = process.memory_info().rss / 1024 / 1024
-                self.memory_usage.append(memory_mb)
-            except Exception:
-                # Graceful degradation if memory monitoring fails
-                pass
-        
-        # Track frame cache statistics
-        if cache_stats:
-            if 'hit_rate' in cache_stats:
-                self.cache_hit_rate_history.append(cache_stats['hit_rate'])
-            if 'memory_usage_mb' in cache_stats:
-                self.cache_memory_usage.append(cache_stats['memory_usage_mb'])
-        
-        # Maintain rolling history
-        if len(self.step_times) > self.history_length:
-            self.step_times.pop(0)
-            self.frame_times.pop(0)
-            self.hook_times.pop(0)
-            if self.memory_usage:
-                self.memory_usage.pop(0)
-        
-        # Check performance thresholds
-        self._check_performance_thresholds(step_duration, hook_duration)
-    
-    def _check_performance_thresholds(self, step_duration: float, hook_duration: float) -> None:
-        """Check if performance is meeting requirements and record violations."""
-        # Check step time limit (≤10ms requirement)
-        if step_duration > self.step_time_limit_s:
-            self.step_time_violations += 1
-            warning = {
-                'timestamp': time.perf_counter(),
-                'violation_type': 'step_time_limit',
-                'step_duration_ms': step_duration * 1000,
-                'limit_ms': self.step_time_limit_ms,
-                'step': self.total_steps,
-                'message': f"Step time exceeded limit: {step_duration*1000:.2f}ms (limit: {self.step_time_limit_ms:.1f}ms)"
-            }
-            self.performance_warnings.append(warning)
-            
-            logger.warning(
-                "Step time limit exceeded",
-                extra={
-                    'step_duration_ms': step_duration * 1000,
-                    'limit_ms': self.step_time_limit_ms,
-                    'step': self.total_steps,
-                    'hook_duration_ms': hook_duration * 1000
-                }
-            )
-        
-        # Check FPS requirement (≥30 FPS)
-        if len(self.frame_times) >= 10:
-            recent_frame_time = np.mean(self.frame_times[-10:])
-            current_fps = 1.0 / recent_frame_time if recent_frame_time > 0 else 0
-            
-            if current_fps < self.target_fps * 0.9:  # 10% tolerance
-                self.fps_violations += 1
-                warning = {
-                    'timestamp': time.perf_counter(),
-                    'violation_type': 'fps_requirement',
-                    'current_fps': current_fps,
-                    'target_fps': self.target_fps,
-                    'step': self.total_steps,
-                    'message': f"FPS below target: {current_fps:.1f} FPS (target: {self.target_fps:.1f} FPS)"
-                }
-                self.performance_warnings.append(warning)
-                
-                logger.warning(
-                    "FPS requirement not met",
-                    extra={
-                        'current_fps': current_fps,
-                        'target_fps': self.target_fps,
-                        'step': self.total_steps
-                    }
-                )
-    
-    def get_current_fps(self) -> float:
-        """Get current frame rate based on recent measurements."""
-        if len(self.frame_times) < 5:
-            return 0.0
-        
-        recent_frame_time = np.mean(self.frame_times[-5:])
-        return 1.0 / recent_frame_time if recent_frame_time > 0 else 0.0
-    
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get comprehensive performance metrics including Gymnasium migration stats."""
-        elapsed_time = time.perf_counter() - self.start_time
-        
-        metrics = {
-            # Core performance metrics
-            'total_steps': self.total_steps,
-            'elapsed_time': elapsed_time,
-            'average_fps': self.total_steps / elapsed_time if elapsed_time > 0 else 0,
-            'current_fps': self.get_current_fps(),
-            'target_fps': self.target_fps,
-            
-            # Performance requirement compliance
-            'step_time_limit_ms': self.step_time_limit_ms,
-            'step_time_violations': self.step_time_violations,
-            'fps_violations': self.fps_violations,
-            'performance_warnings_count': len(self.performance_warnings),
-            'requirements_met': {
-                'fps_requirement': self.fps_violations == 0,
-                'step_time_requirement': self.step_time_violations == 0
-            },
-            
-            # Extensibility hook performance
-            'hook_timeout_violations': self.hook_timeout_violations,
-            'hook_overhead_ms': np.mean(self.hook_times) * 1000 if self.hook_times else 0.0,
-            'max_hook_time_ms': np.max(self.hook_times) * 1000 if self.hook_times else 0.0,
-        }
-        
-        # Add detailed timing statistics
-        if self.step_times:
-            metrics.update({
-                'average_step_time_ms': np.mean(self.step_times) * 1000,
-                'min_step_time_ms': np.min(self.step_times) * 1000,
-                'max_step_time_ms': np.max(self.step_times) * 1000,
-                'step_time_std_ms': np.std(self.step_times) * 1000,
-                'step_time_95th_percentile_ms': np.percentile(self.step_times, 95) * 1000
-            })
-        
-        if self.frame_times:
-            metrics.update({
-                'average_frame_time_ms': np.mean(self.frame_times) * 1000,
-                'min_frame_time_ms': np.min(self.frame_times) * 1000,
-                'max_frame_time_ms': np.max(self.frame_times) * 1000
-            })
-        
-        # Add memory monitoring data
-        if self.memory_usage:
-            metrics.update({
-                'average_memory_mb': np.mean(self.memory_usage),
-                'peak_memory_mb': np.max(self.memory_usage),
-                'current_memory_mb': self.memory_usage[-1] if self.memory_usage else 0
-            })
-        
-        # Add frame cache statistics
-        if self.cache_hit_rate_history:
-            metrics.update({
-                'cache_hit_rate': np.mean(self.cache_hit_rate_history),
-                'cache_hit_rate_min': np.min(self.cache_hit_rate_history),
-                'cache_efficiency_target_met': np.mean(self.cache_hit_rate_history) >= 0.9
-            })
-        
-        if self.cache_memory_usage:
-            metrics.update({
-                'cache_memory_usage_mb': self.cache_memory_usage[-1],
-                'cache_memory_peak_mb': np.max(self.cache_memory_usage)
-            })
-        
-        return metrics
 
 
 class PerformanceMonitor(PerformanceMonitorProtocol):
     """Basic implementation of :class:`PerformanceMonitorProtocol`."""
 
-    def __init__(self) -> None:
+    def __init__(self, performance_target_ms: float = 10.0) -> None:
+        if performance_target_ms <= 0:
+            raise ValueError("performance_target_ms must be positive")
+        self.performance_target_ms = performance_target_ms
         self._durations: Dict[str, List[float]] = {}
         self._logger = logging.getLogger(__name__)
 
@@ -1012,7 +774,19 @@ class PerformanceMonitor(PerformanceMonitorProtocol):
         self._logger.info(f"Recorded {key} duration: {seconds:.6f}s")
 
     def get_summary(self) -> Dict[str, Any]:
-        return {k: sum(v) for k, v in self._durations.items()}
+        step_times = self._durations.get("step", [])
+        total_steps = len(step_times)
+        avg_ms = float(np.mean(step_times) * 1000) if step_times else 0.0
+        max_ms = float(np.max(step_times) * 1000) if step_times else 0.0
+        return {
+            "avg_step_time_ms": avg_ms,
+            "max_step_time_ms": max_ms,
+            "total_steps": total_steps,
+            "performance_target_met": avg_ms <= self.performance_target_ms,
+        }
+
+    def get_metrics(self) -> Dict[str, Any]:
+        return self.get_summary()
 
     def record_step(self, duration_ms: float, label: str | None = None) -> None:
         if duration_ms <= 0:
@@ -1021,7 +795,8 @@ class PerformanceMonitor(PerformanceMonitorProtocol):
 
     def export(self) -> Dict[str, float]:
         summary = self.get_summary()
-        return {k: v * 1000.0 for k, v in summary.items()}
+        # export uses milliseconds values
+        return {k: v for k, v in summary.items() if k != "performance_target_met"}
 
 
 class SimulationContext:
@@ -1207,11 +982,9 @@ class SimulationContext:
             # Initialize performance monitoring
             if self.config.performance_monitoring:
                 self.performance_monitor = PerformanceMonitor(
-                    target_fps=self.config.target_fps,
-                    step_time_limit_ms=self.config.step_time_limit_ms,
-                    enable_memory_monitoring=MEMORY_MONITORING_AVAILABLE
+                    performance_target_ms=self.config.step_time_limit_ms
                 )
-            
+
             # Initialize episode manager if auto mode is enabled
             if self.config.episode_management_mode == "auto":
                 self._episode_manager = EpisodeManager(self.config.termination_conditions)
