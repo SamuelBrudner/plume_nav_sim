@@ -38,58 +38,14 @@ Examples:
 """
 
 from __future__ import annotations
-from typing import Union, Optional, Dict, Any, Tuple, List, TYPE_CHECKING
+from typing import Union, Optional, Dict, Any, Tuple, List
+import logging
 import numpy as np
 
-# Try to import ActionInterfaceProtocol from protocols, define locally if not available
-try:
-    from .protocols import ActionInterfaceProtocol
-except ImportError:
-    # Define ActionInterfaceProtocol locally - this will be moved to protocols.py by another agent
-    from typing import Protocol, runtime_checkable
-    
-    @runtime_checkable
-    class ActionInterfaceProtocol(Protocol):
-        """
-        Protocol defining standardized action processing interface.
-        
-        This protocol ensures consistent action handling across different control
-        modalities while maintaining type safety and framework compatibility.
-        All action interface implementations must provide these core methods.
-        """
-        
-        def translate_action(self, action: Union[int, np.ndarray]) -> Dict[str, Any]:
-            """
-            Translate RL framework action to navigation command.
-            
-            Args:
-                action: Action from RL framework (array for continuous, int for discrete)
-                
-            Returns:
-                Dict[str, Any]: Navigation command dictionary
-            """
-            ...
-        
-        def validate_action(self, action: Union[int, np.ndarray]) -> Union[int, np.ndarray]:
-            """
-            Validate and constrain action to valid range.
-            
-            Args:
-                action: Action to validate
-                
-            Returns:
-                Union[int, np.ndarray]: Validated action
-            """
-            ...
-        
-        def get_action_space(self) -> Optional[spaces.Space]:
-            """
-            Get Gymnasium action space for this interface.
-            
-            Returns:
-                Optional[spaces.Space]: Action space or None if Gymnasium unavailable
-            """
-            ...
+from .protocols import ActionInterfaceProtocol
+
+logger = logging.getLogger(__name__)
+logger.debug("Loaded actions module with ActionInterfaceProtocol from protocols")
 
 # Gymnasium imports for action space construction
 try:
