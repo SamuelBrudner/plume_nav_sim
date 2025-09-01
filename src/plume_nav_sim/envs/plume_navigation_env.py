@@ -104,37 +104,18 @@ except ImportError:
             def __init__(self): pass
     Box = DictSpace = None
 
-# Core plume navigation imports with graceful fallbacks during migration
-try:
-    from plume_nav_sim.core.protocols import (
-        NavigatorProtocol, NavigatorFactory, PlumeModelProtocol, 
-        WindFieldProtocol, SensorProtocol, AgentObservationProtocol, 
-        AgentActionProtocol, AgentInitializerProtocol
-    )
-    NAVIGATOR_AVAILABLE = True
-except ImportError:
-    # Fallback during migration - will be created by other agents
-    NavigatorProtocol = Any
-    PlumeModelProtocol = Any
-    WindFieldProtocol = Any
-    SensorProtocol = Any
-    AgentObservationProtocol = Any
-    AgentActionProtocol = Any
-    AgentInitializerProtocol = Any
-    class NavigatorFactory:
-        @staticmethod
-        def single_agent(**kwargs):
-            raise ImportError("NavigatorFactory not yet available")
-        @staticmethod
-        def create_plume_model(**kwargs):
-            raise ImportError("PlumeModel creation not yet available")
-        @staticmethod
-        def create_wind_field(**kwargs):
-            raise ImportError("WindField creation not yet available")
-        @staticmethod
-        def create_sensors(**kwargs):
-            raise ImportError("Sensor creation not yet available")
-    NAVIGATOR_AVAILABLE = False
+# Core plume navigation imports
+from plume_nav_sim.core.protocols import (
+    NavigatorProtocol,
+    NavigatorFactory,
+    PlumeModelProtocol,
+    WindFieldProtocol,
+    SensorProtocol,
+    AgentObservationProtocol,
+    AgentActionProtocol,
+    AgentInitializerProtocol,
+)
+NAVIGATOR_AVAILABLE = True
 
 # Enhanced space definitions with proper Gymnasium compliance
 try:
