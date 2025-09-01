@@ -111,7 +111,8 @@ import dataclasses
 import numpy as np
 
 # Core protocol imports
-from .protocols import NavigatorProtocol, BoundaryPolicyProtocol, SourceProtocol
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from .protocols import BoundaryPolicyProtocol, SourceProtocol
 from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Boundary policy factory import
@@ -757,9 +758,17 @@ class BaseController:
             })
         
         return metrics
-    
-    # Memory management hooks for flexible cognitive modeling
-    
+
+    # Observation hook and memory management for flexible cognitive modeling
+
+    def observe(self, sensor_output: Any) -> Dict[str, Any]:
+        """Default observation stub with type validation and logging."""
+        if not isinstance(sensor_output, dict):
+            raise TypeError(f"sensor_output must be a dict, got {type(sensor_output)}")
+        log = self._logger if self._logger is not None else logger
+        log.debug("observe called", output_keys=list(sensor_output.keys()))
+        return sensor_output
+
     def load_memory(self, memory_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Load memory state for memory-based navigation strategies.
@@ -786,18 +795,20 @@ class BaseController:
             Get current memory state:
             >>> current_memory = navigator.load_memory()
         """
+        if memory_data is not None and not isinstance(memory_data, dict):
+            raise TypeError(f"memory_data must be a dict, got {type(memory_data)}")
+
         if not self._memory_enabled:
             return None
-        
+
         if memory_data is not None:
             self._memory_state = memory_data
-            if self._logger:
-                self._logger.debug(
-                    "Memory state loaded",
-                    memory_keys=list(memory_data.keys()) if isinstance(memory_data, dict) else "non-dict",
-                    memory_size=len(str(memory_data))
-                )
-        
+            log = self._logger if self._logger is not None else logger
+            log.debug("memory state loaded", memory_keys=list(memory_data.keys()))
+
+        if self._memory_state is not None and not isinstance(self._memory_state, dict):
+            raise TypeError("memory state must be a dict")
+
         return self._memory_state
     
     def save_memory(self) -> Optional[Dict[str, Any]]:
@@ -828,14 +839,14 @@ class BaseController:
         """
         if not self._memory_enabled:
             return None
-        
-        if self._logger and self._memory_state is not None:
-            self._logger.debug(
-                "Memory state saved",
-                memory_keys=list(self._memory_state.keys()) if isinstance(self._memory_state, dict) else "non-dict",
-                memory_size=len(str(self._memory_state))
-            )
-        
+
+        if self._memory_state is not None and not isinstance(self._memory_state, dict):
+            raise TypeError("memory state must be a dict")
+
+        log = self._logger if self._logger is not None else logger
+        if self._memory_state is not None:
+            log.debug("memory state saved", memory_keys=list(self._memory_state.keys()))
+
         return self._memory_state
     
     def update_memory(self, observation: Dict[str, Any], action: Any, reward: float, info: Dict[str, Any]) -> None:
