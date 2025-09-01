@@ -359,6 +359,8 @@ class SimulationResults:
         episode_management_stats: Automatic episode lifecycle statistics
         termination_analysis: Breakdown of episode termination causes
         resource_utilization: Memory, CPU, and caching resource usage
+        step_count: Total number of steps executed
+        success: Whether the simulation met success criteria
         
     Legacy Compatibility and Metadata:
         metadata: Enhanced configuration and system information
@@ -391,6 +393,8 @@ class SimulationResults:
     episode_management_stats: Dict[str, Any] = field(default_factory=dict)
     termination_analysis: Dict[str, Any] = field(default_factory=dict)
     resource_utilization: Dict[str, Any] = field(default_factory=dict)
+    step_count: int = 0
+    success: bool = False
     
     # Legacy compatibility and metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -401,6 +405,11 @@ class SimulationResults:
     frame_cache_stats: Dict[str, Any] = field(default_factory=dict)
     legacy_mode_used: bool = False
     api_compatibility_info: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        logger.debug(
+            f"SimulationResults created: step_count={self.step_count}, success={self.success}"
+        )
 
 
 class SimulationBuilder:
@@ -1287,10 +1296,12 @@ class SimulationContext:
                 },
                 "configuration": {
                     "num_steps": self.config.num_steps,
-                    "integration_mode": self.config.component_integration_mode,
-                    "episode_management": self.config.episode_management_mode
+                "integration_mode": self.config.component_integration_mode,
+                "episode_management": self.config.episode_management_mode
                 }
-            }
+            },
+            step_count=0,
+            success=False
         )
         
         return results
@@ -2400,7 +2411,9 @@ def run_simulation(
                 'frame_cache_used': frame_cache is not None,
                 'component_metrics_collected': component_metrics_collection
             },
-            
+            step_count=len(actions_history) if sim_config.record_trajectories else num_steps,
+            success=False,
+
             # Legacy compatibility
             metadata=metadata,
             checkpoints=checkpoints,
