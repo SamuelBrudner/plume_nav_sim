@@ -69,40 +69,39 @@ import logging
 from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
 
-# Core imports with graceful fallbacks during migration
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
-    np = None
+import numpy as np
+from omegaconf import DictConfig
+from loguru import logger
 
 # Protocol imports for type safety and interface compliance
 from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 
-# Configuration management
+# Import plume model implementations directly and fail fast if missing
 try:
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+    from .gaussian_plume import (
+        GaussianPlumeModel,
+        GaussianPlumeConfig,
+        create_gaussian_plume_model,
+    )
+except ImportError as e:
+    logger.error(f"GaussianPlumeModel not available: {e}")
+    raise
 
-# Enhanced logging for debugging and performance monitoring
 try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+    from .turbulent_plume import TurbulentPlumeModel, TurbulentPlumeConfig
+except ImportError as e:
+    logger.error(f"TurbulentPlumeModel not available: {e}")
+    raise
 
-# Import all plume model implementations with graceful fallbacks
-PLUME_MODEL_IMPLEMENTATIONS = {}  # Registry for successful imports
-
-# GaussianPlumeModel implementation
 try:
-    from .gaussian_plume import GaussianPlumeModel, GaussianPlumeConfig, create_gaussian_plume_model
-    PLUME_MODEL_IMPLEMENTATIONS['GaussianPlumeModel'] = {
+    from .video_plume_adapter import VideoPlumeAdapter, VideoPlumeConfig
+except ImportError as e:
+    logger.error(f"VideoPlumeAdapter not available: {e}")
+    raise
+
+# Registry of available implementations
+AVAILABLE_PLUME_MODELS: Dict[str, Dict[str, Any]] = {
+    'GaussianPlumeModel': {
         'class': GaussianPlumeModel,
         'config_class': GaussianPlumeConfig,
         'factory_function': create_gaussian_plume_model,
@@ -110,75 +109,42 @@ try:
         'features': ['analytical_solution', 'fast_computation', 'wind_integration', 'vectorized_operations'],
         'performance': {'concentration_query_ms': 0.1, 'step_time_ms': 1.0, 'memory_mb': 1},
         'use_cases': ['rapid_prototyping', 'algorithm_development', 'baseline_comparison'],
-        'available': True
-    }
-    GAUSSIAN_PLUME_AVAILABLE = True
-    logger.debug("GaussianPlumeModel imported successfully") if LOGURU_AVAILABLE else None
-except ImportError as e:
-    GAUSSIAN_PLUME_AVAILABLE = False
-    logger.warning(f"GaussianPlumeModel not available: {e}") if LOGURU_AVAILABLE else None
-    GaussianPlumeModel = None
-    GaussianPlumeConfig = None
-    create_gaussian_plume_model = None
-
-# TurbulentPlumeModel implementation  
-try:
-    from .turbulent_plume import TurbulentPlumeModel, TurbulentPlumeConfig
-    PLUME_MODEL_IMPLEMENTATIONS['TurbulentPlumeModel'] = {
+        'available': True,
+    },
+    'TurbulentPlumeModel': {
         'class': TurbulentPlumeModel,
         'config_class': TurbulentPlumeConfig,
-        'factory_function': None,  # Uses class constructor
+        'factory_function': None,
         'description': 'Realistic filament-based turbulent physics simulation',
         'features': ['filament_tracking', 'turbulent_physics', 'intermittent_signals', 'eddy_interactions'],
         'performance': {'concentration_query_ms': 1.0, 'step_time_ms': 5.0, 'memory_mb': 100},
         'use_cases': ['realistic_simulation', 'biological_navigation', 'turbulence_research'],
-        'available': True
-    }
-    TURBULENT_PLUME_AVAILABLE = True
-    logger.debug("TurbulentPlumeModel imported successfully") if LOGURU_AVAILABLE else None
-except ImportError as e:
-    TURBULENT_PLUME_AVAILABLE = False
-    logger.warning(f"TurbulentPlumeModel not available: {e}") if LOGURU_AVAILABLE else None
-    TurbulentPlumeModel = None
-    TurbulentPlumeConfig = None
-
-# VideoPlumeAdapter implementation
-try:
-    from .video_plume_adapter import VideoPlumeAdapter, VideoPlumeConfig
-    PLUME_MODEL_IMPLEMENTATIONS['VideoPlumeAdapter'] = {
+        'available': True,
+    },
+    'VideoPlumeAdapter': {
         'class': VideoPlumeAdapter,
         'config_class': VideoPlumeConfig,
-        'factory_function': None,  # Uses class constructor and from_config
+        'factory_function': None,
         'description': 'Backward-compatible adapter for video-based plume data',
         'features': ['video_integration', 'frame_caching', 'preprocessing_pipeline', 'spatial_interpolation'],
         'performance': {'concentration_query_ms': 0.5, 'step_time_ms': 1.0, 'memory_mb': 200},
         'use_cases': ['experimental_data', 'validation_studies', 'legacy_compatibility'],
-        'available': True
-    }
-    VIDEO_PLUME_ADAPTER_AVAILABLE = True
-    logger.debug("VideoPlumeAdapter imported successfully") if LOGURU_AVAILABLE else None
-except ImportError as e:
-    VIDEO_PLUME_ADAPTER_AVAILABLE = False
-    logger.warning(f"VideoPlumeAdapter not available: {e}") if LOGURU_AVAILABLE else None
-    VideoPlumeAdapter = None
-    VideoPlumeConfig = None
+        'available': True,
+    },
+}
 
-# Calculate total available implementations
-TOTAL_IMPLEMENTATIONS = len(PLUME_MODEL_IMPLEMENTATIONS)
-logger.info(f"Loaded {TOTAL_IMPLEMENTATIONS} plume model implementations") if LOGURU_AVAILABLE else None
+TOTAL_IMPLEMENTATIONS = len(AVAILABLE_PLUME_MODELS)
+logger.info(f"Loaded {TOTAL_IMPLEMENTATIONS} plume model implementations")
 
 # Ensure at least one implementation is available
-if TOTAL_IMPLEMENTATIONS == 0:
+if not AVAILABLE_PLUME_MODELS:
     warnings.warn(
         "No plume model implementations are currently available. "
         "This may indicate missing dependencies or incomplete migration. "
         "At least one model implementation is required for functionality.",
         ImportWarning,
-        stacklevel=2
+        stacklevel=2,
     )
-
-# Create the public registry for model discovery and validation
-AVAILABLE_PLUME_MODELS: Dict[str, Dict[str, Any]] = PLUME_MODEL_IMPLEMENTATIONS.copy()
 """
 Registry of available plume model implementations with metadata.
 
@@ -314,7 +280,7 @@ def create_plume_model(
         raise ValueError("Configuration cannot be None")
     
     # Convert DictConfig to regular dict if needed
-    if hasattr(config, 'to_container') and HYDRA_AVAILABLE:
+    if hasattr(config, 'to_container'):
         config_dict = config.to_container(resolve=True)
     else:
         config_dict = dict(config)
@@ -328,31 +294,24 @@ def create_plume_model(
     
     # Priority 1: Hydra-style _target_ field
     if '_target_' in config_dict:
-        if HYDRA_AVAILABLE:
-            try:
-                from hydra import utils as hydra_utils
-                logger.debug(f"Using Hydra instantiation with target: {config_dict['_target_']}")
-                plume_model = hydra_utils.instantiate(config_dict)
-                
-                # Validate protocol compliance if requested
-                if validate_protocol:
-                    if not isinstance(plume_model, PlumeModelProtocol):
-                        logging.getLogger(__name__).debug("Hydra instantiation produced non-compliant PlumeModel")
-                        raise RuntimeError(
-                            f"Instantiated model does not implement PlumeModelProtocol: "
-                            f"{type(plume_model)}"
-                        )
-                
-                logger.info(f"Successfully created plume model via Hydra: {type(plume_model).__name__}")
-                return plume_model
-            except Exception as e:
-                raise RuntimeError(f"Hydra instantiation failed: {e}") from e
-        else:
-            warnings.warn(
-                "Hydra not available but _target_ specified. "
-                "Falling back to factory instantiation.",
-                UserWarning
-            )
+        try:
+            from hydra import utils as hydra_utils
+            logger.debug(f"Using Hydra instantiation with target: {config_dict['_target_']}")
+            plume_model = hydra_utils.instantiate(config_dict)
+
+            # Validate protocol compliance if requested
+            if validate_protocol:
+                if not isinstance(plume_model, PlumeModelProtocol):
+                    logging.getLogger(__name__).debug("Hydra instantiation produced non-compliant PlumeModel")
+                    raise RuntimeError(
+                        f"Instantiated model does not implement PlumeModelProtocol: "
+                        f"{type(plume_model)}"
+                    )
+
+            logger.info(f"Successfully created plume model via Hydra: {type(plume_model).__name__}")
+            return plume_model
+        except Exception as e:
+            raise RuntimeError(f"Hydra instantiation failed: {e}") from e
     
     # Priority 2: Factory-style type field
     if 'type' in config_dict:
@@ -762,9 +721,9 @@ def _validate_module_integrity() -> Dict[str, Any]:
         'status': 'healthy',
         'issues': [],
         'components': {
-            'numpy_available': NUMPY_AVAILABLE,
-            'hydra_available': HYDRA_AVAILABLE,
-            'loguru_available': LOGURU_AVAILABLE
+            'numpy_available': True,
+            'hydra_available': True,
+            'loguru_available': True,
         },
         'implementations': {
             'total': len(AVAILABLE_PLUME_MODELS),
@@ -772,10 +731,6 @@ def _validate_module_integrity() -> Dict[str, Any]:
             'models': list(AVAILABLE_PLUME_MODELS.keys())
         }
     }
-    
-    # Check critical dependencies
-    if not NUMPY_AVAILABLE:
-        validation_results['issues'].append("NumPy not available - array operations will fail")
     
     # Check implementation availability
     available_count = validation_results['implementations']['available']
@@ -813,42 +768,36 @@ if _validation_results['status'] != 'healthy':
     warnings.warn(warning_msg, ImportWarning, stacklevel=2)
 
 # Log successful initialization
-if LOGURU_AVAILABLE:
-    logger.info(
-        f"Plume models package initialized successfully",
-        total_implementations=_validation_results['implementations']['total'],
-        available_implementations=_validation_results['implementations']['available'],
-        status=_validation_results['status']
-    )
+logger.info(
+    f"Plume models package initialized successfully",
+    total_implementations=_validation_results['implementations']['total'],
+    available_implementations=_validation_results['implementations']['available'],
+    status=_validation_results['status'],
+)
 
 # Define comprehensive public API for maximum flexibility
 __all__ = [
-    # Core model implementations (conditionally exported based on availability)
-    *(["GaussianPlumeModel", "GaussianPlumeConfig", "create_gaussian_plume_model"] 
-      if GAUSSIAN_PLUME_AVAILABLE else []),
-    *(["TurbulentPlumeModel", "TurbulentPlumeConfig"] 
-      if TURBULENT_PLUME_AVAILABLE else []),
-    *(["VideoPlumeAdapter", "VideoPlumeConfig"] 
-      if VIDEO_PLUME_ADAPTER_AVAILABLE else []),
-    
+    "GaussianPlumeModel",
+    "GaussianPlumeConfig",
+    "create_gaussian_plume_model",
+    "TurbulentPlumeModel",
+    "TurbulentPlumeConfig",
+    "VideoPlumeAdapter",
+    "VideoPlumeConfig",
     # Factory functions and registry
     "create_plume_model",
-    "AVAILABLE_PLUME_MODELS", 
+    "AVAILABLE_PLUME_MODELS",
     "MODEL_TYPE_MAPPING",
-    
     # Discovery and information functions
     "get_model_info",
     "list_available_models",
     "get_models_by_feature",
     "get_models_by_use_case",
-    
     # Configuration utilities
     "validate_model_config",
     "get_default_config",
-    
     # Performance and diagnostics
     "get_performance_summary",
-    
     # Module metadata
     "TOTAL_IMPLEMENTATIONS",
 ]
