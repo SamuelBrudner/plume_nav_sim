@@ -61,32 +61,28 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 PROTOCOLS_AVAILABLE = True
 
 # Hydra integration for configuration management
+import logging
+
 try:
     from hydra.core.hydra_config import HydraConfig
     from omegaconf import DictConfig, OmegaConf
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HydraConfig = None
-    DictConfig = dict
-    OmegaConf = None
-    HYDRA_AVAILABLE = False
+except ImportError as e:  # pragma: no cover - dependency required
+    logging.getLogger(__name__).error("hydra-core is required for configuration management", exc_info=e)
+    raise
 
 # Loguru integration for enhanced logging
 try:
     from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+except ImportError as e:  # pragma: no cover - dependency required
+    logging.getLogger(__name__).error("loguru is required for logging", exc_info=e)
+    raise
 
 # Performance monitoring
 try:
     import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None
-    PSUTIL_AVAILABLE = False
+except ImportError as e:  # pragma: no cover - dependency required
+    logging.getLogger(__name__).error("psutil is required for performance monitoring", exc_info=e)
+    raise
 
 
 
@@ -251,7 +247,7 @@ class BinarySensor:
             self._rng = np.random.RandomState()
         
         # Setup structured logging with context binding
-        if self._enable_logging and LOGURU_AVAILABLE:
+        if self._enable_logging:
             self._logger = logger.bind(
                 sensor_type="BinarySensor",
                 sensor_id=self._sensor_id,
@@ -262,15 +258,14 @@ class BinarySensor:
             )
             
             # Add Hydra context if available
-            if HYDRA_AVAILABLE:
-                try:
-                    hydra_cfg = HydraConfig.get()
-                    self._logger = self._logger.bind(
-                        hydra_job_name=hydra_cfg.job.name,
-                        hydra_output_dir=hydra_cfg.runtime.output_dir
-                    )
-                except Exception:
-                    pass
+            try:
+                hydra_cfg = HydraConfig.get()
+                self._logger = self._logger.bind(
+                    hydra_job_name=hydra_cfg.job.name,
+                    hydra_output_dir=hydra_cfg.runtime.output_dir
+                )
+            except Exception:
+                pass
         else:
             self._logger = None
         
@@ -1041,7 +1036,7 @@ def create_binary_sensor_from_config(
     # Handle different configuration types
     if isinstance(config, BinarySensorConfig):
         config_dict = config.__dict__
-    elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+    elif isinstance(config, DictConfig):
         config_dict = OmegaConf.to_container(config, resolve=True)
     elif isinstance(config, dict):
         config_dict = config.copy()
