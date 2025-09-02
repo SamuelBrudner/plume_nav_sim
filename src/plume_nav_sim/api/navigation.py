@@ -1,23 +1,17 @@
-"""
-Navigation API for plume_nav_sim.
+"""Navigation API for plume_nav_sim."""
 
-This module provides high-level functions for creating navigators, video plumes,
-running simulations, and handling navigation-related operations.
-"""
-
-import numpy as np
-from typing import Optional, Dict, Any, Union, List, Tuple, Mapping
-from pathlib import Path
 import logging
-from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
+
+import gymnasium as gym
+import numpy as np
+from gymnasium.spaces import Box, Dict as GymDict
+
+from ..core.navigator import Navigator
+from ..data.video_plume import VIDEO_FILE_MISSING_MSG
 
 logger = logging.getLogger(__name__)
-
-# Import the Navigator implementation; fail fast if unavailable
-try:
-    from ..core.navigator import Navigator
-except ImportError:  # pragma: no cover - Navigator is a required dependency
-    Navigator = None
 
 
 class ConfigurationError(Exception):
@@ -75,8 +69,6 @@ def create_navigator(config: Optional[Dict[str, Any]] = None, cfg: Optional[Any]
     # Validate configuration values
     _validate_navigator_config(merged_config)
     
-    if Navigator is None:
-        raise ImportError("Navigator implementation not available")
     return Navigator(**merged_config)
 
 
@@ -571,115 +563,10 @@ def create_gymnasium_environment(
     """
     if config is None:
         config = {}
-        
-    # Merge config and kwargs
+
     merged_config = {**config, **kwargs}
-    
-    # Extract environment_id, default to PlumeNavSim-v0
-    environment_id = merged_config.pop('environment_id', 'PlumeNavSim-v0')
-    environment_id = _normalize_environment_id(environment_id)
-
-    # Try to create the real environment
-    try:
-        import gymnasium as gym
-
-        # Create environment using gymnasium.make
-        env = gym.make(environment_id, **merged_config)
-        return env
-        
-    except ImportError:
-        # Fallback if gymnasium is not available - create a compatible placeholder
-        class PlumeNavigationEnvFallback:
-            def __init__(self, config: Dict[str, Any]):
-                self.config = config
-                
-            def reset(self, seed: Optional[int] = None):
-                # Return dictionary observation to match expected structure
-                obs = {
-                    'agent_position': np.array([0.0, 0.0], dtype=np.float32),
-                    'agent_orientation': np.array([0.0], dtype=np.float32),
-                    'sensor_binary_detection': np.array([0.0], dtype=np.float32),
-                    'sensor_concentration': np.array([0.0], dtype=np.float32)
-                }
-                info = {}
-                return obs, info
-                
-            def step(self, action):
-                # Return dictionary observation to match expected structure  
-                obs = {
-                    'agent_position': np.array([0.0, 0.0], dtype=np.float32),
-                    'agent_orientation': np.array([0.0], dtype=np.float32),
-                    'sensor_binary_detection': np.array([0.0], dtype=np.float32),
-                    'sensor_concentration': np.array([0.0], dtype=np.float32)
-                }
-                reward = 0.0
-                terminated = False
-                truncated = False
-                info = {}
-                return obs, reward, terminated, truncated, info
-                
-            def render(self):
-                pass
-                
-            def close(self):
-                pass
-        
-        return PlumeNavigationEnvFallback(merged_config)
-        
-    except Exception as e:
-        # If environment creation fails, return a minimal placeholder
-        class PlumeNavigationEnvPlaceholder:
-            def __init__(self, config: Dict[str, Any]):
-                self.config = config
-                # Add observation and action spaces for compatibility
-                try:
-                    import gymnasium as gym
-                    from gymnasium.spaces import Dict, Box
-                    
-                    # Create dict observation space to match expected structure
-                    self.observation_space = Dict({
-                        'agent_position': Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32),
-                        'agent_orientation': Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
-                        'sensor_binary_detection': Box(low=0, high=1, shape=(1,), dtype=np.float32),
-                        'sensor_concentration': Box(low=0, high=np.inf, shape=(1,), dtype=np.float32)
-                    })
-                    self.action_space = Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-                except ImportError:
-                    self.observation_space = None
-                    self.action_space = None
-                
-            def reset(self, seed: Optional[int] = None):
-                # Return dictionary observation to match expected structure
-                obs = {
-                    'agent_position': np.array([0.0, 0.0], dtype=np.float32),
-                    'agent_orientation': np.array([0.0], dtype=np.float32),
-                    'sensor_binary_detection': np.array([0.0], dtype=np.float32),
-                    'sensor_concentration': np.array([0.0], dtype=np.float32)
-                }
-                info = {}
-                return obs, info
-                
-            def step(self, action):
-                # Return dictionary observation to match expected structure  
-                obs = {
-                    'agent_position': np.array([0.0, 0.0], dtype=np.float32),
-                    'agent_orientation': np.array([0.0], dtype=np.float32),
-                    'sensor_binary_detection': np.array([0.0], dtype=np.float32),
-                    'sensor_concentration': np.array([0.0], dtype=np.float32)
-                }
-                reward = 0.0
-                terminated = False
-                truncated = False
-                info = {}
-                return obs, reward, terminated, truncated, info
-                
-            def render(self):
-                pass
-                
-            def close(self):
-                pass
-        
-        return PlumeNavigationEnvPlaceholder(merged_config)
+    environment_id = _normalize_environment_id(merged_config.pop('environment_id', 'PlumeNavSim-v0'))
+    return gym.make(environment_id, **merged_config)
 
 
 # Legacy compatibility aliases for backward compatibility
@@ -733,20 +620,12 @@ def from_legacy(
             self.steps_taken = 0
             
             # Add observation and action spaces for compatibility
-            try:
-                import gymnasium as gym
-                from gymnasium.spaces import Dict, Box
-                
-                # Create dict observation space to match expected structure
-                self.observation_space = Dict({
-                    'agent_position': Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32),
-                    'agent_orientation': Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
-                    'odor_concentration': Box(low=0, high=np.inf, shape=(1,), dtype=np.float32)
-                })
-                self.action_space = Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-            except ImportError:
-                self.observation_space = None
-                self.action_space = None
+            self.observation_space = GymDict({
+                'agent_position': Box(low=-np.inf, high=np.inf, shape=(2,), dtype=np.float32),
+                'agent_orientation': Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32),
+                'odor_concentration': Box(low=0, high=np.inf, shape=(1,), dtype=np.float32)
+            })
+            self.action_space = Box(low=-1, high=1, shape=(2,), dtype=np.float32)
         
         def reset(self, seed: Optional[int] = None):
             """Reset the environment and return initial observation."""

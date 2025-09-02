@@ -54,33 +54,28 @@ Example Usage:
 
 from __future__ import annotations
 import time
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, Sequence
 from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Scientific computing imports
 try:
     import scipy.stats
     from scipy.spatial.distance import cdist
     from scipy.interpolate import griddata
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    warnings.warn(
-        "SciPy not available. Turbulent plume modeling will use simplified algorithms. "
-        "Install scipy>=1.9.0 for full turbulent physics support.",
-        UserWarning,
-        stacklevel=2
-    )
+except ImportError as exc:  # pragma: no cover - defensive
+    logger.error("SciPy is required for TurbulentPlumeModel: %s", exc)
+    raise
 
 # Optional Numba imports for JIT acceleration
 try:
     import numba
     from numba import jit, prange
-    NUMBA_AVAILABLE = True
-    
+
     # Numba compilation settings for performance optimization
     NUMBA_OPTIONS = {
         'nopython': True,
@@ -88,33 +83,20 @@ try:
         'cache': True,
         'parallel': True
     }
-except ImportError:
-    NUMBA_AVAILABLE = False
-    
-    # Dummy decorator when Numba is not available
-    def jit(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator if args else decorator
-    
-    def prange(x):
-        return range(x)
+except ImportError as exc:  # pragma: no cover - defensive
+    logger.error("Numba is required for TurbulentPlumeModel: %s", exc)
+    raise
 
 # Core protocol imports
 from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
-# Configuration imports with fallback
+# Configuration imports
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
-
-# Logging imports
-import logging
-logger = logging.getLogger(__name__)
+except ImportError as exc:  # pragma: no cover - defensive
+    logger.error("Hydra (omegaconf) is required for TurbulentPlumeModel: %s", exc)
+    raise
 
 
 @dataclass
@@ -325,7 +307,7 @@ class TurbulentPlumeModel:
         logger.info(
             f"Initialized TurbulentPlumeModel with {self.config.max_filaments} max filaments, "
             f"turbulence_intensity={self.config.turbulence_intensity:.3f}, "
-            f"Numba={'enabled' if self.config.enable_numba and NUMBA_AVAILABLE else 'disabled'}"
+            f"Numba={'enabled' if self.config.enable_numba else 'disabled'}"
         )
     
     def _initialize_spatial_grid(self) -> None:
@@ -424,7 +406,7 @@ class TurbulentPlumeModel:
             return result.item() if result.size == 1 else result
         
         # Use optimized Numba kernel if available
-        if self.config.enable_numba and NUMBA_AVAILABLE:
+        if self.config.enable_numba:
             concentrations = self._concentration_at_numba(positions)
         else:
             concentrations = self._concentration_at_python(positions)
@@ -487,52 +469,51 @@ class TurbulentPlumeModel:
         concentrations = np.clip(concentrations / max_concentration, 0.0, 1.0)
         
         return concentrations
-    
-    if NUMBA_AVAILABLE:
-        @staticmethod
-        @jit(**NUMBA_OPTIONS)
-        def _concentration_kernel_numba(
-            positions: np.ndarray,
-            filament_positions: np.ndarray, 
-            filament_concentrations: np.ndarray,
-            filament_sizes: np.ndarray,
-            max_concentration: float
-        ) -> np.ndarray:
-            """
-            Numba-accelerated kernel for concentration field computation.
-            
-            Args:
-                positions: Query positions (n_positions, 2)
-                filament_positions: Filament locations (n_filaments, 2)  
-                filament_concentrations: Filament strengths (n_filaments,)
-                filament_sizes: Filament size parameters (n_filaments,)
-                max_concentration: Normalization factor
-                
-            Returns:
-                np.ndarray: Normalized concentration values (n_positions,)
-            """
-            n_positions = positions.shape[0]
-            n_filaments = filament_positions.shape[0]
-            concentrations = np.zeros(n_positions, dtype=np.float64)
-            
-            for i in prange(n_positions):
-                pos = positions[i]
-                total_concentration = 0.0
-                
-                for j in range(n_filaments):
-                    fil_pos = filament_positions[j]
-                    distance = np.sqrt((pos[0] - fil_pos[0])**2 + (pos[1] - fil_pos[1])**2)
-                    
-                    # Gaussian profile with numerical stability
-                    size = max(filament_sizes[j], 1e-8)
-                    contribution = filament_concentrations[j] * np.exp(-0.5 * (distance / size)**2)
-                    total_concentration += contribution
-                
-                # Normalize and clip
-                concentrations[i] = min(total_concentration / max_concentration, 1.0)
-            
-            return concentrations
-    
+
+    @staticmethod
+    @jit(**NUMBA_OPTIONS)
+    def _concentration_kernel_numba(
+        positions: np.ndarray,
+        filament_positions: np.ndarray,
+        filament_concentrations: np.ndarray,
+        filament_sizes: np.ndarray,
+        max_concentration: float
+    ) -> np.ndarray:
+        """
+        Numba-accelerated kernel for concentration field computation.
+
+        Args:
+            positions: Query positions (n_positions, 2)
+            filament_positions: Filament locations (n_filaments, 2)
+            filament_concentrations: Filament strengths (n_filaments,)
+            filament_sizes: Filament size parameters (n_filaments,)
+            max_concentration: Normalization factor
+
+        Returns:
+            np.ndarray: Normalized concentration values (n_positions,)
+        """
+        n_positions = positions.shape[0]
+        n_filaments = filament_positions.shape[0]
+        concentrations = np.zeros(n_positions, dtype=np.float64)
+
+        for i in prange(n_positions):
+            pos = positions[i]
+            total_concentration = 0.0
+
+            for j in range(n_filaments):
+                fil_pos = filament_positions[j]
+                distance = np.sqrt((pos[0] - fil_pos[0])**2 + (pos[1] - fil_pos[1])**2)
+
+                # Gaussian profile with numerical stability
+                size = max(filament_sizes[j], 1e-8)
+                contribution = filament_concentrations[j] * np.exp(-0.5 * (distance / size)**2)
+                total_concentration += contribution
+
+            # Normalize and clip
+            concentrations[i] = min(total_concentration / max_concentration, 1.0)
+
+        return concentrations
+
     def _concentration_at_numba(self, positions: np.ndarray) -> np.ndarray:
         """
         Numba-accelerated concentration field computation wrapper.
@@ -713,7 +694,7 @@ class TurbulentPlumeModel:
         turbulent_velocities = volatility * random_increments
         
         # Apply spatial correlation for realistic eddy structure
-        if SCIPY_AVAILABLE and n_filaments > 1:
+        if n_filaments > 1:
             # Simple spatial correlation using exponential decay
             distance_matrix = cdist(positions, positions)
             correlation_length = 10.0  # Typical turbulent length scale
@@ -892,8 +873,8 @@ class TurbulentPlumeModel:
             },
             'active_filaments': len(self._filaments),
             'simulation_time': self._current_time,
-            'numba_enabled': self.config.enable_numba and NUMBA_AVAILABLE,
-            'scipy_available': SCIPY_AVAILABLE
+            'numba_enabled': self.config.enable_numba,
+            'scipy_available': True
         }
     
     def get_filament_statistics(self) -> Dict[str, Any]:

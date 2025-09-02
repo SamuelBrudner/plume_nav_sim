@@ -10,19 +10,24 @@ from typing import Dict, Any, Optional, Union, Type
 from pydantic import BaseModel, ValidationError
 
 from dotenv import load_dotenv, find_dotenv
+
+logger = logging.getLogger(__name__)
+
 try:
     from hydra.core.config_store import ConfigStore
     from hydra import initialize, compose
     from omegaconf import DictConfig, OmegaConf
-    HAS_HYDRA = True
-except ImportError:
-    HAS_HYDRA = False
-    DictConfig = dict
-    OmegaConf = None
+except ImportError as exc:
+    logger.error("Hydra and OmegaConf are required for configuration utilities: %s", exc)
+    raise
 
-from .schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig, VideoPlumeConfig, SimulationConfig
-
-logger = logging.getLogger(__name__)
+from .schemas import (
+    NavigatorConfig,
+    SingleAgentConfig,
+    MultiAgentConfig,
+    VideoPlumeConfig,
+    SimulationConfig,
+)
 
 
 def validate_config(config_class: Type[BaseModel], config_data: Union[Dict[str, Any], DictConfig]) -> BaseModel:
@@ -32,7 +37,7 @@ def validate_config(config_class: Type[BaseModel], config_data: Union[Dict[str, 
     ``model_validate`` style and to simplify partial application.  Returns the
     instantiated and validated model instance.
     """
-    if isinstance(config_data, DictConfig) and HAS_HYDRA:
+    if isinstance(config_data, DictConfig):
         config_data = OmegaConf.to_container(config_data, resolve=True)
 
     return config_class(**config_data)
@@ -64,18 +69,10 @@ def load_environment_variables(
     return bool(loaded)
 
 
-def initialize_hydra_config_store() -> Optional[object]:
-    """
-    Initialize Hydra ConfigStore with default schemas.
-    
-    Returns:
-        ConfigStore instance if Hydra is available, None otherwise
-    """
-    if not HAS_HYDRA:
-        return False
-        
+def initialize_hydra_config_store() -> ConfigStore:
+    """Initialize Hydra ConfigStore with default schemas."""
     cs = ConfigStore.instance()
-    
+
     # Register config schemas
     for name, node in [
         ("navigator_config", NavigatorConfig),
@@ -86,10 +83,10 @@ def initialize_hydra_config_store() -> Optional[object]:
     ]:
         try:
             cs.store(name=name, node=node)
-        except Exception:
-            # Ignore registration errors (e.g., OmegaConf dataclass expectation)
-            pass
-    return True
+        except Exception as exc:  # pragma: no cover - logging only
+            logger.debug("Could not register %s: %s", name, exc)
+
+    return cs
 
 
 def compose_config_from_overrides(config_name: str = "config", overrides: Optional[list] = None) -> DictConfig:
@@ -103,9 +100,6 @@ def compose_config_from_overrides(config_name: str = "config", overrides: Option
     Returns:
         Composed configuration
     """
-    if not HAS_HYDRA:
-        raise ImportError("Hydra is required for config composition")
-        
     if overrides is None:
         overrides = []
         
