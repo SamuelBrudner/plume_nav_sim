@@ -50,19 +50,12 @@ import numpy as np
 import psutil
 
 # Enhanced logging imports for structured monitoring
-try:
-    from plume_nav_sim.utils.logging_setup import (
-        get_enhanced_logger,
-        correlation_context,
-        update_cache_metrics,
-        log_cache_memory_pressure_violation
-    )
-    ENHANCED_LOGGING_AVAILABLE = True
-except ImportError:
-    ENHANCED_LOGGING_AVAILABLE = False
-    # Fallback to basic logging
-    import logging
-    logging.basicConfig(level=logging.INFO)
+from plume_nav_sim.utils.logging_setup import (
+    get_enhanced_logger,
+    correlation_context,
+    update_cache_metrics,
+    log_cache_memory_pressure_violation,
+)
 
 
 class _ProcessAdapter:
@@ -446,26 +439,23 @@ class FrameCache:
         self._preloaded_range = None
         
         # Initialize logging
-        if self.enable_logging and ENHANCED_LOGGING_AVAILABLE:
+        if self.enable_logging:
             self.logger = get_enhanced_logger(__name__)
-            
+
             # Log initialization with correlation context
-            with correlation_context("frame_cache_init", cache_mode=self.mode.value) as ctx:
+            with correlation_context("frame_cache_init", cache_mode=self.mode.value):
                 self.logger.info(
                     f"FrameCache initialized: mode={self.mode.value}, limit={memory_limit_mb}MB",
                     extra={
-                        'metric_type': 'cache_initialization',
-                        'cache_mode': self.mode.value,
-                        'memory_limit_mb': memory_limit_mb,
-                        'memory_pressure_threshold': memory_pressure_threshold,
-                        'enable_statistics': enable_statistics
-                    }
+                        "metric_type": "cache_initialization",
+                        "cache_mode": self.mode.value,
+                        "memory_limit_mb": memory_limit_mb,
+                        "memory_pressure_threshold": memory_pressure_threshold,
+                        "enable_statistics": enable_statistics,
+                    },
                 )
         else:
-            # Fallback logging
             self.logger = None
-            if enable_logging:
-                print(f"FrameCache initialized: mode={self.mode.value}, limit={memory_limit_mb}MB")
         
         # Initialize psutil process monitoring
         try:
@@ -658,7 +648,7 @@ class FrameCache:
                 self.statistics.record_pressure_warning()
             
             # Log pressure warning
-            if self.enable_logging and ENHANCED_LOGGING_AVAILABLE:
+            if self.enable_logging:
                 log_cache_memory_pressure_violation(
                     current_usage_mb=total_memory_needed / (1024 * 1024),
                     limit_mb=self.memory_limit_mb,
@@ -675,7 +665,7 @@ class FrameCache:
                 self.statistics.record_pressure_warning()
             
             # Log pressure warning
-            if self.enable_logging and ENHANCED_LOGGING_AVAILABLE:
+            if self.enable_logging:
                 log_cache_memory_pressure_violation(
                     current_usage_mb=total_memory_needed / (1024 * 1024),
                     limit_mb=self.memory_limit_mb,
@@ -695,7 +685,7 @@ class FrameCache:
                 if system_pressure_ratio >= self.memory_pressure_threshold:
                     if self.statistics:
                         self.statistics.record_pressure_warning()
-                    if self.enable_logging and ENHANCED_LOGGING_AVAILABLE:
+                    if self.enable_logging:
                         log_cache_memory_pressure_violation(
                             current_usage_mb=(process_memory / (1024 * 1024)),
                             limit_mb=self.memory_limit_mb * 2,
@@ -1099,7 +1089,7 @@ class FrameCache:
     
     def _update_logging_metrics(self) -> None:
         """Update logging context with current cache metrics."""
-        if not (self.enable_logging and ENHANCED_LOGGING_AVAILABLE and self.statistics):
+        if not (self.enable_logging and self.statistics):
             return
         
         try:
