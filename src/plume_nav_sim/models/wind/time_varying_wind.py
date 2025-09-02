@@ -55,45 +55,38 @@ Example Usage:
 """
 
 from __future__ import annotations
+import json
+import logging
 import time
 import warnings
-from typing import Optional, Tuple, Union, Dict, Any, List, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 
-# Core scientific computing dependencies
+logger = logging.getLogger(__name__)
+
 try:
     from scipy import interpolate
     from scipy.signal import periodogram
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    interpolate = None
+except ImportError as err:  # pragma: no cover - import side effect
+    logger.error("SciPy is required for TimeVaryingWindField", exc_info=err)
+    raise
 
-# Protocol import for interface compliance
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
-# Configuration management
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+except ImportError as err:  # pragma: no cover - import side effect
+    logger.error("Hydra (omegaconf) is required for TimeVaryingWindField", exc_info=err)
+    raise
 
-# Optional data loading dependencies
 try:
     import pandas as pd
-    PANDAS_AVAILABLE = True
-except ImportError:
-    PANDAS_AVAILABLE = False
-
-try:
-    import json
-    JSON_AVAILABLE = True
-except ImportError:
-    JSON_AVAILABLE = False
+except ImportError as err:  # pragma: no cover - import side effect
+    logger.error("Pandas is required for TimeVaryingWindField", exc_info=err)
+    raise
 
 
 @dataclass
@@ -293,16 +286,8 @@ class TimeVaryingWindField:
             
         Raises:
             ValueError: If parameters are invalid or inconsistent
-            ImportError: If required dependencies are not available
             FileNotFoundError: If data_file is specified but not found
         """
-        if not SCIPY_AVAILABLE:
-            warnings.warn(
-                "SciPy not available. Using basic NumPy implementation. "
-                "Install scipy>=1.10.0 for optimized temporal interpolation.",
-                UserWarning,
-                stacklevel=2
-            )
 
         if data_file is not None and temporal_pattern == 'constant':
             temporal_pattern = 'measured'
@@ -404,68 +389,50 @@ class TimeVaryingWindField:
         
         try:
             if data_path.suffix.lower() == '.csv':
-                if not PANDAS_AVAILABLE:
-                    raise ImportError("pandas required for CSV data loading")
                 self.measurement_data = pd.read_csv(data_path)
             elif data_path.suffix.lower() == '.json':
-                if not JSON_AVAILABLE:
-                    raise ImportError("json module required for JSON data loading")
                 with open(data_path, 'r') as f:
                     json_data = json.load(f)
-                if PANDAS_AVAILABLE:
-                    self.measurement_data = pd.DataFrame(json_data)
-                else:
-                    # Fallback to dict handling
-                    self.measurement_data = json_data
+                self.measurement_data = pd.DataFrame(json_data)
             else:
                 raise ValueError(f"Unsupported data file format: {data_path.suffix}")
         except Exception as e:
             raise RuntimeError(f"Failed to load wind data from {self.data_file}: {e}") from e
-        
+
         # Validate required columns
-        if PANDAS_AVAILABLE and isinstance(self.measurement_data, pd.DataFrame):
-            required_cols = [self.temporal_column] + self.velocity_columns
-            missing_cols = [col for col in required_cols if col not in self.measurement_data.columns]
-            if missing_cols:
-                raise ValueError(f"Missing columns in data file: {missing_cols}")
-            
-            # Extract time and velocity data
-            time_data = self.measurement_data[self.temporal_column].values
-            velocity_data = self.measurement_data[self.velocity_columns].values
-        else:
-            # Handle dict data format
-            time_data = np.array(self.measurement_data[self.temporal_column])
-            velocity_data = np.column_stack([
-                np.array(self.measurement_data[col]) for col in self.velocity_columns
-            ])
-        
+        required_cols = [self.temporal_column] + self.velocity_columns
+        missing_cols = [col for col in required_cols if col not in self.measurement_data.columns]
+        if missing_cols:
+            raise ValueError(f"Missing columns in data file: {missing_cols}")
+
+        # Extract time and velocity data
+        time_data = self.measurement_data[self.temporal_column].values
+        velocity_data = self.measurement_data[self.velocity_columns].values
+
         # Store time range for extrapolation handling
         self.data_time_range = (np.min(time_data), np.max(time_data))
-        
+
         # Create SciPy interpolator
-        if SCIPY_AVAILABLE:
-            try:
-                if self.interpolation_method == 'linear':
-                    self.interpolator = interpolate.interp1d(
-                        time_data, velocity_data.T, kind='linear',
-                        bounds_error=False, fill_value='extrapolate'
-                    )
-                elif self.interpolation_method == 'cubic':
-                    self.interpolator = interpolate.interp1d(
-                        time_data, velocity_data.T, kind='cubic',
-                        bounds_error=False, fill_value='extrapolate'
-                    )
-                elif self.interpolation_method == 'nearest':
-                    self.interpolator = interpolate.interp1d(
-                        time_data, velocity_data.T, kind='nearest',
-                        bounds_error=False, fill_value='extrapolate'
-                    )
-                else:
-                    raise ValueError(f"Unknown interpolation method: {self.interpolation_method}")
-            except Exception as e:
-                warnings.warn(f"SciPy interpolation failed, using linear fallback: {e}")
-                self._create_linear_interpolator(time_data, velocity_data)
-        else:
+        try:
+            if self.interpolation_method == 'linear':
+                self.interpolator = interpolate.interp1d(
+                    time_data, velocity_data.T, kind='linear',
+                    bounds_error=False, fill_value='extrapolate'
+                )
+            elif self.interpolation_method == 'cubic':
+                self.interpolator = interpolate.interp1d(
+                    time_data, velocity_data.T, kind='cubic',
+                    bounds_error=False, fill_value='extrapolate'
+                )
+            elif self.interpolation_method == 'nearest':
+                self.interpolator = interpolate.interp1d(
+                    time_data, velocity_data.T, kind='nearest',
+                    bounds_error=False, fill_value='extrapolate'
+                )
+            else:
+                raise ValueError(f"Unknown interpolation method: {self.interpolation_method}")
+        except Exception as e:
+            warnings.warn(f"SciPy interpolation failed, using linear fallback: {e}")
             self._create_linear_interpolator(time_data, velocity_data)
     
     def _create_linear_interpolator(self, time_data: np.ndarray, velocity_data: np.ndarray) -> None:
@@ -1045,9 +1012,7 @@ class TimeVaryingWindField:
             'cache_hit_rate': cache_hit_rate,
             'cache_size': len(self._velocity_cache),
             'current_time': self.current_time,
-            'temporal_pattern': self.temporal_pattern,
-            'scipy_available': SCIPY_AVAILABLE,
-            'pandas_available': PANDAS_AVAILABLE
+            'temporal_pattern': self.temporal_pattern
         }
     
     def get_velocity_field(

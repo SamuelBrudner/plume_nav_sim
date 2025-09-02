@@ -68,7 +68,7 @@ try:
         NavigatorProtocol,
     )
     PROTOCOLS_AVAILABLE = True
-except Exception:
+except Exception:  # pragma: no cover - best effort for optional dependency
     PROTOCOLS_AVAILABLE = False
 
 # Import centralized logging for performance monitoring
