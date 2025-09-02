@@ -54,43 +54,37 @@ Example Usage:
 """
 
 from __future__ import annotations
-import time
 import logging
-from typing import Optional, Tuple, Union, Dict, Any, Sequence
-from dataclasses import dataclass, field
-import numpy as np
+import time
 import warnings
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
-# Core scientific computing dependencies
-try:
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+try:  # Core scientific computing dependencies
     from scipy import stats
     from scipy.spatial import distance
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    # Minimal fallback for basic Gaussian calculations
-    stats = None
+except ImportError as e:  # pragma: no cover - fail fast
+    logger.error("SciPy is required for GaussianPlumeModel", exc_info=e)
+    raise
 
-# Protocol imports for interface compliance
 from plume_nav_sim.protocols.plume_model import PlumeModelProtocol
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
-# Configuration management
-try:
+try:  # Configuration management
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+except ImportError as e:  # pragma: no cover - fail fast
+    logger.error("Hydra (omegaconf) is required for GaussianPlumeModel", exc_info=e)
+    raise
 
-# Optional wind field integration
-try:
-    from ...models.wind.constant_wind import ConstantWindField
-    WIND_FIELDS_AVAILABLE = True
-except ImportError:
-    # Wind fields will be implemented by other agents
-    ConstantWindField = None
-    WIND_FIELDS_AVAILABLE = False
+try:  # Wind field integration
+    from plume_nav_sim.models.wind.constant_wind import ConstantWindField
+except ImportError as e:  # pragma: no cover - fail fast
+    logger.error("Wind field modules are required for GaussianPlumeModel", exc_info=e)
+    raise
 
 
 @dataclass
@@ -254,16 +248,8 @@ class GaussianPlumeModel:
             **kwargs: Additional parameters for extensibility
             
         Raises:
-            ImportError: If SciPy is not available for optimized computations
             ValueError: If parameters are invalid or inconsistent
         """
-        if not SCIPY_AVAILABLE:
-            warnings.warn(
-                "SciPy not available. Using basic NumPy implementation. "
-                "Install scipy>=1.10.0 for optimized performance.",
-                UserWarning,
-                stacklevel=2,
-            )
         
         # Validate input parameters
         if sigma_x <= 0 or sigma_y <= 0:
@@ -424,13 +410,8 @@ class GaussianPlumeModel:
         dx = relative_positions[:, 0]
         dy = relative_positions[:, 1]
         
-        # Compute Gaussian concentration field
-        if SCIPY_AVAILABLE:
-            # Optimized computation using SciPy
-            concentrations = self._compute_concentrations_scipy(dx, dy)
-        else:
-            # Fallback NumPy implementation
-            concentrations = self._compute_concentrations_numpy(dx, dy)
+        # Compute Gaussian concentration field using SciPy
+        concentrations = self._compute_concentrations_scipy(dx, dy)
         
         # Apply concentration cutoff for computational efficiency
         concentrations[concentrations < self.concentration_cutoff] = 0.0
@@ -481,21 +462,10 @@ class GaussianPlumeModel:
         cov = np.array([[self.sigma_x**2, 0], [0, self.sigma_y**2]])
 
         positions_relative = np.column_stack([dx, dy])
-        try:
-            mvn = stats.multivariate_normal(mean=[0, 0], cov=cov)
-            peak = mvn.pdf([0, 0])
-            concentrations = np.atleast_1d(mvn.pdf(positions_relative) / peak)
-        except Exception:
-            concentrations = self._compute_concentrations_numpy(dx, dy)
-        
-        return concentrations
-    
-    def _compute_concentrations_numpy(self, dx: np.ndarray, dy: np.ndarray) -> np.ndarray:
-        """Fallback concentration computation using pure NumPy."""
-        # Manual Gaussian computation for better control
-        x_term = 0.5 * dx**2 * self._sigma_x_sq_inv
-        y_term = 0.5 * dy**2 * self._sigma_y_sq_inv
-        concentrations = np.exp(-(x_term + y_term))
+        mvn = stats.multivariate_normal(mean=[0, 0], cov=cov)
+        peak = mvn.pdf([0, 0])
+        concentrations = np.atleast_1d(mvn.pdf(positions_relative) / peak)
+
         return concentrations
     
     def _apply_spatial_bounds(self, positions: np.ndarray, concentrations: np.ndarray) -> np.ndarray:
@@ -653,7 +623,6 @@ class GaussianPlumeModel:
             'average_batch_size': avg_batch_size,
             'max_batch_size': max_batch_size,
             'current_time': self.current_time,
-            'scipy_available': SCIPY_AVAILABLE,
             'wind_field_enabled': self.enable_wind_field
         }
     

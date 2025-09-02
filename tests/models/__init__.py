@@ -60,13 +60,16 @@ except ImportError:
     SCIPY_AVAILABLE = False
 
 # Import protocol definitions for compliance testing
-from plume_nav_sim.protocols import (
-    PlumeModelProtocol,
-    WindFieldProtocol,
-    SensorProtocol,
-    NavigatorProtocol,
-)
-PROTOCOLS_AVAILABLE = True
+try:
+    from plume_nav_sim.protocols import (
+        PlumeModelProtocol,
+        WindFieldProtocol,
+        SensorProtocol,
+        NavigatorProtocol,
+    )
+    PROTOCOLS_AVAILABLE = True
+except Exception:
+    PROTOCOLS_AVAILABLE = False
 
 # Import centralized logging for performance monitoring
 try:
