@@ -75,43 +75,24 @@ import numpy as np
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing_extensions import Self
 
-# Try to import enhanced logging with fallback for compatibility
+# Required dependencies
 try:
     from plume_nav_sim.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
-    ENHANCED_LOGGING_AVAILABLE = True
-except ImportError:
-    # Fallback for environments where logging_setup isn't available yet
-    try:
-        from loguru import logger as _logger
-        ENHANCED_LOGGING_AVAILABLE = False
-        # Create a simple performance metrics placeholder
-        @dataclass
-        class PerformanceMetrics:
-            operation: str
-            duration_ms: float
-            timestamp: float = field(default_factory=time.time)
-            
-            def to_dict(self) -> Dict[str, Any]:
-                return asdict(self)
-    except ImportError:
-        import logging
-        _logger = logging.getLogger(__name__)
-        ENHANCED_LOGGING_AVAILABLE = False
-        
-        @dataclass
-        class PerformanceMetrics:
-            operation: str
-            duration_ms: float
-            timestamp: float = field(default_factory=time.time)
-            
-            def to_dict(self) -> Dict[str, Any]:
-                return asdict(self)
+except ImportError as e:
+    import logging
+    logging.getLogger(__name__).critical(
+        "logging_setup module is required for seed_manager: %s", e
+    )
+    raise
 
-# Set up module logger for seed management operations
-if ENHANCED_LOGGING_AVAILABLE:
-    logger = get_enhanced_logger(__name__)
-else:
-    logger = _logger
+logger = get_enhanced_logger(__name__)
+
+try:
+    from omegaconf import DictConfig, OmegaConf
+    from hydra.core.config_store import ConfigStore
+except ImportError as e:
+    logger.critical("Hydra dependencies are required for seed_manager: %s", e)
+    raise
 
 
 # Performance targets and thresholds for seed operations per Section 0.5.1
@@ -934,20 +915,19 @@ def scoped_seed(
         op_time = (time.time() - op_start) * 1000
         
         # Record performance metrics
-        if ENHANCED_LOGGING_AVAILABLE:
-            try:
-                metrics = PerformanceMetrics(
-                    operation=f"scoped_seed_{operation_name}",
-                    duration_ms=op_time
-                )
-                context.record_performance(operation_name, metrics)
-            except TypeError:
-                # Fallback for PerformanceMetrics without operation parameter
-                metrics = PerformanceMetrics(
-                    f"scoped_seed_{operation_name}",
-                    op_time
-                )
-                context.record_performance(operation_name, metrics)
+        try:
+            metrics = PerformanceMetrics(
+                operation=f"scoped_seed_{operation_name}",
+                duration_ms=op_time
+            )
+            context.record_performance(operation_name, metrics)
+        except TypeError:
+            # Fallback for PerformanceMetrics without operation parameter
+            metrics = PerformanceMetrics(
+                f"scoped_seed_{operation_name}",
+                op_time
+            )
+            context.record_performance(operation_name, metrics)
         
         # Check performance threshold
         if op_time > SEED_PERFORMANCE_THRESHOLDS["scoped_operation"] * 1000:
@@ -1241,20 +1221,9 @@ def create_seed_config_from_hydra(hydra_config: Optional[Any] = None) -> SeedCon
     """
     if hydra_config is None:
         return SeedConfig()
-    
-    try:
-        from omegaconf import OmegaConf
-        
-        # Resolve environment variables and convert to dict
-        resolved_config = OmegaConf.to_container(hydra_config, resolve=True)
-        return SeedConfig(**resolved_config)
-    
-    except ImportError:
-        # Fallback if OmegaConf not available
-        if hasattr(hydra_config, '_content'):
-            return SeedConfig(**hydra_config._content)
-        else:
-            return SeedConfig(**dict(hydra_config))
+
+    resolved_config = OmegaConf.to_container(hydra_config, resolve=True)
+    return SeedConfig(**resolved_config)
 
 
 def register_seed_config_schema():
@@ -1265,23 +1234,15 @@ def register_seed_config_schema():
     composition system for comprehensive seed management configuration per
     Section 0.3.1 Hydra integration requirements.
     """
-    try:
-        from hydra.core.config_store import ConfigStore
-        
-        cs = ConfigStore.instance()
-        cs.store(
-            group="seed",
-            name="default",
-            node=SeedConfig,
-            package="seed"
-        )
-        
-        logger.info("Successfully registered SeedConfig schema with Hydra ConfigStore")
-        
-    except ImportError:
-        logger.warning("Hydra not available, skipping ConfigStore registration")
-    except Exception as e:
-        logger.error(f"Failed to register seed configuration schema: {e}")
+    cs = ConfigStore.instance()
+    cs.store(
+        group="seed",
+        name="default",
+        node=SeedConfig,
+        package="seed"
+    )
+
+    logger.info("Successfully registered SeedConfig schema with Hydra ConfigStore")
 
 
 # Performance monitoring decorator for seed-sensitive operations per Section 0.3.1
@@ -1341,12 +1302,11 @@ def seed_sensitive_operation(
                 
                 # Record performance metrics
                 duration = (time.time() - start_time) * 1000
-                if ENHANCED_LOGGING_AVAILABLE:
-                    metrics = PerformanceMetrics(
-                        operation=f"seed_sensitive_{operation_name}",
-                        duration_ms=duration
-                    )
-                    context.record_performance(operation_name, metrics)
+                metrics = PerformanceMetrics(
+                    operation=f"seed_sensitive_{operation_name}",
+                    duration_ms=duration
+                )
+                context.record_performance(operation_name, metrics)
                 
                 return result
             
@@ -1431,11 +1391,8 @@ def get_reproducibility_report() -> Dict[str, Any]:
 # Initialize module with performance tracking per Section 0.5.1
 _module_init_start = time.time()
 
-# Register with Hydra ConfigStore if available
-try:
-    register_seed_config_schema()
-except Exception as e:
-    logger.debug(f"ConfigStore registration skipped: {e}")
+# Register with Hydra ConfigStore
+register_seed_config_schema()
 
 _module_init_time = time.time() - _module_init_start
 
@@ -1447,7 +1404,6 @@ logger.info(
         "module": "seed_manager",
         "init_time": _module_init_time,
         "performance_thresholds": SEED_PERFORMANCE_THRESHOLDS,
-        "enhanced_logging_available": ENHANCED_LOGGING_AVAILABLE
     }
 )
 
