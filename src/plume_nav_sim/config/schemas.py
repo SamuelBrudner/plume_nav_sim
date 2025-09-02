@@ -9,15 +9,21 @@ from enum import Enum
 from pathlib import Path
 import logging
 import re
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer, AliasChoices
-try:
-    from hydra.core.config_store import ConfigStore
-    cs = ConfigStore.instance()
-except ImportError:
-    cs = None
-
+from pydantic import (
+    BaseModel,
+    Field,
+    ConfigDict,
+    field_validator,
+    model_validator,
+    field_serializer,
+    AliasChoices,
+)
+from hydra.core.config_store import ConfigStore
 
 logger = logging.getLogger(__name__)
+
+cs = ConfigStore.instance()
+logger.debug("Initialized Hydra ConfigStore for configuration schemas")
 ENV_VAR_PATTERN = re.compile(r"^\$\{[^}]+\}$")
 
 
