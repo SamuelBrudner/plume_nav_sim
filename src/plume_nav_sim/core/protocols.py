@@ -75,11 +75,13 @@ except ImportError as e:
     ) from e
 
 try:
-    from ..envs.spaces import SpaceFactory
+    from ..envs.spaces import SpaceFactory  # type: ignore
+    SPACE_FACTORY_AVAILABLE = True
     logger.info("SpaceFactory successfully imported")
-except ImportError as e:
-    logger.error("SpaceFactory is required", exc_info=e)
-    raise ImportError("SpaceFactory is required for plume_nav_sim.core.protocols") from e
+except ImportError as e:  # pragma: no cover - import error path
+    SPACE_FACTORY_AVAILABLE = False
+    SpaceFactory = None  # type: ignore
+    logger.error("SpaceFactory import failed", exc_info=e)
 
 
 @runtime_checkable
@@ -2647,7 +2649,13 @@ class NavigatorFactory:
         """
         if not GYMNASIUM_AVAILABLE:
             return None
-            
+
+        if not SPACE_FACTORY_AVAILABLE or SpaceFactory is None:
+            logger.error("SpaceFactory is required for observation space creation")
+            raise ImportError(
+                "SpaceFactory is required for NavigatorFactory.create_observation_space"
+            )
+
         return SpaceFactory.create_observation_space(
             num_agents=navigator.num_agents,
             include_additional_obs=include_additional_obs,
@@ -2680,7 +2688,13 @@ class NavigatorFactory:
         """
         if not GYMNASIUM_AVAILABLE:
             return None
-            
+
+        if not SPACE_FACTORY_AVAILABLE or SpaceFactory is None:
+            logger.error("SpaceFactory is required for action space creation")
+            raise ImportError(
+                "SpaceFactory is required for NavigatorFactory.create_action_space"
+            )
+
         return SpaceFactory.create_action_space(
             num_agents=navigator.num_agents,
             **space_kwargs
