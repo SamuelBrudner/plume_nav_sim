@@ -78,64 +78,47 @@ from ..models import create_plume_model, create_wind_field
 from .sensors import create_sensor_from_config
 from pathlib import Path
 
-# Core dependencies for Gymnasium migration
+logger = logging.getLogger(__name__)
+
+try:
+    from loguru import logger as _loguru_logger
+except ImportError as exc:
+    logger.error("loguru is required for simulation", exc_info=True)
+    raise
+else:
+    logger = _loguru_logger
+
 try:
     import gymnasium as gym
     from gymnasium import Env as GymnasiumEnv
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    GymnasiumEnv = object  # Fallback for type hints
+except ImportError as exc:
+    logger.error("gymnasium is required for simulation", exc_info=True)
+    raise
 
-# Legacy Gym compatibility (optional)
-try:
-    import gym as legacy_gym
-    LEGACY_GYM_AVAILABLE = True
-except ImportError:
-    LEGACY_GYM_AVAILABLE = False
 
-# Enhanced frame caching and utilities
 try:
     from ..utils.frame_cache import FrameCache, FrameCacheConfig
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    FRAME_CACHE_AVAILABLE = False
-    warnings.warn(
-        "Enhanced frame cache not available. Using basic caching fallback.",
-        ImportWarning
-    )
+except ImportError as exc:
+    logger.error("Enhanced frame cache utilities are required", exc_info=True)
+    raise
 
-# Visualization support (optional)
 try:
     from ..utils.visualization import SimulationVisualization, visualize_trajectory
-    VISUALIZATION_AVAILABLE = True
-except ImportError:
-    VISUALIZATION_AVAILABLE = False
+except ImportError as exc:
+    logger.error("Visualization utilities are required", exc_info=True)
+    raise
 
-# Database persistence (optional)
 try:
     from ..db.session_manager import DatabaseSessionManager
-    DATABASE_AVAILABLE = True
-except ImportError:
-    DATABASE_AVAILABLE = False
+except ImportError as exc:
+    logger.error("Database session manager is required", exc_info=True)
+    raise
 
-# Memory monitoring for cache management
 try:
     import psutil
-    MEMORY_MONITORING_AVAILABLE = True
-except ImportError:
-    MEMORY_MONITORING_AVAILABLE = False
-    warnings.warn(
-        "psutil not available. Memory monitoring disabled.",
-        ImportWarning
-    )
-
-# Logging setup
-try:
-    from loguru import logger
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+except ImportError as exc:
+    logger.error("psutil is required for memory monitoring", exc_info=True)
+    raise
 
 # Type checking imports
 if TYPE_CHECKING:
@@ -1253,8 +1236,8 @@ def simulation_context(
         'sensors': sensors or [],
         'component_integration_mode': component_integration_mode,
         'api_info': {
-            'gymnasium_env': GYMNASIUM_AVAILABLE and hasattr(env, 'spec'),
-            'legacy_env': not (GYMNASIUM_AVAILABLE and hasattr(env, 'spec')),
+            'gymnasium_env': hasattr(env, 'spec'),
+            'legacy_env': not hasattr(env, 'spec'),
             'supports_5_tuple': True,  # Assume modern API by default
         },
         'component_info': {
@@ -1271,19 +1254,19 @@ def simulation_context(
             # Test with a dummy action to detect return format
             try:
                 # This is just for API detection, not actual simulation
-                dummy_obs, dummy_info = env.reset() if GYMNASIUM_AVAILABLE else (env.reset(), {})
+                dummy_obs, dummy_info = env.reset()
                 resources['api_info']['supports_reset_info'] = isinstance(dummy_info, dict)
             except Exception:
                 # Fallback for environments that need special initialization
-                resources['api_info']['supports_reset_info'] = GYMNASIUM_AVAILABLE
+                resources['api_info']['supports_reset_info'] = hasattr(env, 'spec')
         
         # Initialize frame cache if enabled and available
-        if enable_frame_cache and FRAME_CACHE_AVAILABLE and frame_cache is not None:
+        if enable_frame_cache and frame_cache is not None:
             logger.info("Initializing enhanced frame cache")
             resources['frame_cache'] = frame_cache
         
         # Initialize visualization if enabled and available
-        if enable_visualization and VISUALIZATION_AVAILABLE and visualization is not None:
+        if enable_visualization and visualization is not None:
             logger.info("Initializing visualization resources")
             resources['visualization'] = visualization
         
@@ -1419,18 +1402,18 @@ def detect_environment_api(env: EnvironmentProtocol) -> Dict[str, Any]:
     
     try:
         # Check for Gymnasium environment
-        if hasattr(env, 'spec') and GYMNASIUM_AVAILABLE:
+        if hasattr(env, 'spec'):
             api_info['is_gymnasium'] = True
             api_info['supports_5_tuple'] = True
             api_info['supports_seed_in_reset'] = True
             api_info['supports_options_in_reset'] = True
             api_info['has_spec'] = True
-            
+
             if hasattr(env.spec, 'id'):
                 api_info['env_id'] = env.spec.id
             if hasattr(env.spec, 'version'):
                 api_info['version'] = env.spec.version
-        
+
         # Check for legacy Gym environment
         elif hasattr(env, 'action_space') and hasattr(env, 'observation_space'):
             api_info['is_legacy_gym'] = True
@@ -1818,12 +1801,12 @@ def run_simulation(
                 target_fps=sim_config.target_fps,
                 step_time_limit_ms=sim_config.step_time_limit_ms,
                 history_length=min(100, num_steps // 10),
-                enable_memory_monitoring=MEMORY_MONITORING_AVAILABLE
+                enable_memory_monitoring=True
             )
 
         # Initialize frame cache if enabled
         frame_cache = None
-        if sim_config.frame_cache_mode != "none" and FRAME_CACHE_AVAILABLE:
+        if sim_config.frame_cache_mode != "none":
             try:
                 cache_config = FrameCacheConfig(
                     mode=sim_config.frame_cache_mode,
@@ -1838,7 +1821,7 @@ def run_simulation(
 
         # Initialize visualization if enabled
         visualization = None
-        if sim_config.enable_visualization and VISUALIZATION_AVAILABLE:
+        if sim_config.enable_visualization:
             try:
                 visualization = SimulationVisualization(**sim_config.visualization_config)
                 sim_logger.info("Visualization initialized successfully")
@@ -2203,7 +2186,7 @@ def run_simulation(
                 'total_steps': len(actions_history) if sim_config.record_trajectories else num_steps
             },
             resource_utilization={
-                'memory_monitoring_available': MEMORY_MONITORING_AVAILABLE,
+                'memory_monitoring_available': True,
                 'frame_cache_used': frame_cache is not None,
                 'component_metrics_collected': component_metrics_collection
             },
