@@ -57,7 +57,6 @@ import json
 import logging
 import threading
 import time
-import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,19 +66,15 @@ from typing import Dict, Any, Optional, Union, List, Tuple, TYPE_CHECKING
 import numpy as np
 
 # Import BaseRecorder from recording framework
-try:
-    from .. import BaseRecorder, RecorderConfig
-except ImportError:
-    # Fallback during development
-    from src.plume_nav_sim.recording import BaseRecorder, RecorderConfig
+from .. import BaseRecorder, RecorderConfig
 
-# HDF5 dependency with graceful fallback
+# HDF5 dependency required
+_H5PY_IMPORT_ERROR = None
 try:
-    import h5py
-    HDF5_AVAILABLE = True
-except ImportError:
-    h5py = None
-    HDF5_AVAILABLE = False
+    import h5py  # type: ignore
+except ImportError as _h5_err:  # pragma: no cover - dependency validation
+    h5py = None  # type: ignore
+    _H5PY_IMPORT_ERROR = _h5_err
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -278,19 +273,9 @@ class HDF5Recorder(BaseRecorder):
                 buffer_size=config.buffer_size
             )
         
-        # Check HDF5 availability with graceful fallback
-        if not HDF5_AVAILABLE:
-            warnings.warn(
-                "h5py not available. HDF5Recorder will operate in fallback mode with "
-                "limited functionality. Install h5py>=3.0.0 for full HDF5 support.",
-                UserWarning,
-                stacklevel=2
-            )
-            self._fallback_mode = True
-            self._h5_file = None
-            return
-        else:
-            self._fallback_mode = False
+        # Validate h5py dependency
+        if h5py is None:  # pragma: no cover - defensive
+            raise ImportError("h5py is required for HDF5Recorder") from _H5PY_IMPORT_ERROR
         
         # HDF5-specific state
         self._h5_file: Optional["h5py.File"] = None
@@ -304,14 +289,11 @@ class HDF5Recorder(BaseRecorder):
         
         # Initialize HDF5 file structure
         self._initialize_hdf5_file()
-        
+
         logger.info(f"HDF5Recorder initialized with file: {self.hdf5_config.file_path}")
     
     def _initialize_hdf5_file(self) -> None:
         """Initialize HDF5 file with proper configuration and metadata."""
-        if self._fallback_mode:
-            return
-        
         try:
             # Ensure parent directory exists
             file_path = Path(self.hdf5_config.file_path)
@@ -335,19 +317,12 @@ class HDF5Recorder(BaseRecorder):
                 
         except Exception as e:
             logger.error(f"Failed to initialize HDF5 file: {e}")
-            # Fall back to limited functionality
-            self._fallback_mode = True
-            self._h5_file = None
-            warnings.warn(
-                f"HDF5 file initialization failed: {e}. Operating in fallback mode.",
-                UserWarning,
-                stacklevel=2
-            )
+            raise
     
     def _set_file_metadata(self) -> None:
         """Set comprehensive file-level metadata for scientific reproducibility."""
-        if not self._h5_file or self._fallback_mode:
-            return
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         metadata = {
             'created_timestamp': time.time(),
@@ -382,10 +357,10 @@ class HDF5Recorder(BaseRecorder):
             **metadata: Metadata attributes to attach to the group
             
         Returns:
-            Optional["h5py.Group"]: Created group or None if in fallback mode
+            Optional["h5py.Group"]: Created group
         """
-        if self._fallback_mode or not self._h5_file:
-            return None
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         try:
             with self._file_lock:
@@ -424,10 +399,10 @@ class HDF5Recorder(BaseRecorder):
             **metadata: Metadata attributes to attach to the dataset
             
         Returns:
-            Optional["h5py.Dataset"]: Created dataset or None if in fallback mode
+            Optional["h5py.Dataset"]: Created dataset
         """
-        if self._fallback_mode or not self._h5_file:
-            return None
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         try:
             with self._file_lock:
@@ -479,8 +454,8 @@ class HDF5Recorder(BaseRecorder):
             path: HDF5 path (group or dataset) to attach attributes
             attributes: Dictionary of attributes to set
         """
-        if self._fallback_mode or not self._h5_file:
-            return
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         try:
             with self._file_lock:
@@ -509,8 +484,8 @@ class HDF5Recorder(BaseRecorder):
     
     def flush_buffer(self) -> None:
         """Force immediate flush of HDF5 file buffers to disk."""
-        if self._fallback_mode or not self._h5_file:
-            return
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         try:
             with self._file_lock:
@@ -522,8 +497,8 @@ class HDF5Recorder(BaseRecorder):
     
     def close_file(self) -> None:
         """Close HDF5 file with proper resource cleanup."""
-        if self._fallback_mode or not self._h5_file:
-            return
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
         
         try:
             with self._file_lock:
@@ -565,10 +540,6 @@ class HDF5Recorder(BaseRecorder):
         Returns:
             int: Number of bytes written (estimated)
         """
-        if self._fallback_mode:
-            # Fallback mode - minimal processing
-            return 0
-        
         if not data or not self._h5_file:
             return 0
         
@@ -648,9 +619,6 @@ class HDF5Recorder(BaseRecorder):
         Returns:
             int: Number of bytes written (estimated)
         """
-        if self._fallback_mode:
-            return 0
-        
         if not data or not self._h5_file:
             return 0
         
@@ -714,10 +682,6 @@ class HDF5Recorder(BaseRecorder):
         Returns:
             bool: True if export completed successfully, False otherwise
         """
-        if self._fallback_mode:
-            logger.warning("Export not available in fallback mode")
-            return False
-        
         if not self._h5_file:
             logger.error("No HDF5 file open for export")
             return False
@@ -885,10 +849,9 @@ class HDF5Recorder(BaseRecorder):
             ...     recorder.create_group('/experiment_1')
             ...     recorder.create_dataset('/experiment_1/data', data_array)
         """
-        if self._fallback_mode:
-            yield None
-            return
-        
+        if not self._h5_file:
+            raise RuntimeError("HDF5 file is not initialized")
+
         try:
             with self._file_lock:
                 yield self._h5_file
@@ -914,7 +877,6 @@ class HDF5Recorder(BaseRecorder):
             'hdf5_file_size_mb': 0.0,
             'compression_algorithm': self.hdf5_config.compression,
             'compression_level': self.hdf5_config.compression_opts,
-            'fallback_mode': self._fallback_mode,
             'average_write_time_ms': 0.0,
             'total_datasets': len(self._dataset_cache),
             'total_groups': len(self._group_cache),
@@ -923,7 +885,7 @@ class HDF5Recorder(BaseRecorder):
         
         # Calculate file size
         try:
-            if not self._fallback_mode and Path(self.hdf5_config.file_path).exists():
+            if Path(self.hdf5_config.file_path).exists():
                 file_size = Path(self.hdf5_config.file_path).stat().st_size
                 hdf5_metrics['hdf5_file_size_mb'] = file_size / (1024 * 1024)
         except Exception:
