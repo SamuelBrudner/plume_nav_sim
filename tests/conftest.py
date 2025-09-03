@@ -75,6 +75,9 @@ from typing import Any, Dict, Optional, Union, Generator, Tuple
 from unittest.mock import patch, MagicMock, Mock
 import sys
 import pathlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Update sys.path for new project structure
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
@@ -119,10 +122,10 @@ try:
     # v1.0 Protocol-based architecture imports
     from plume_nav_sim.core.protocols import (
         SourceProtocol, BoundaryPolicyProtocol, ActionInterfaceProtocol,
-        RecorderProtocol, StatsAggregatorProtocol
+        RecorderProtocol, StatsAggregatorProtocol,
     )
     PROTOCOLS_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # pragma: no cover - test infrastructure guard
     PROTOCOLS_AVAILABLE = False
     # Fallback protocol types for testing
     SourceProtocol = object
@@ -130,6 +133,7 @@ except ImportError:
     ActionInterfaceProtocol = object
     RecorderProtocol = object
     StatsAggregatorProtocol = object
+    logger.warning("Failed to import core protocols: %s", exc)
 
 try:
     # Recorder backend testing dependencies
@@ -157,10 +161,11 @@ except ImportError:
 try:
     from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
     SEED_MANAGER_AVAILABLE = True
-except ImportError:
+except Exception as exc:  # pragma: no cover - test infrastructure guard
     SEED_MANAGER_AVAILABLE = False
     SeedManager = None
     SeedConfig = None
+    logger.warning("Seed manager unavailable: %s", exc)
 
 
 @pytest.fixture
