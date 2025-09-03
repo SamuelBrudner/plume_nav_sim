@@ -1100,13 +1100,10 @@ class GradientSensor(BaseSensor):
                     "Gradient computation failed",
                     error=str(e),
                     error_type=type(e).__name__,
-                    positions_shape=positions.shape,
+                    positions=positions.tolist(),
                     config=self.config.__dict__,
                 )
-
-            # Return zero gradients as fallback
-            fallback_gradients = np.zeros_like(positions)
-            return fallback_gradients if not single_agent else fallback_gradients[0]
+            raise
 
     def compute_gradient(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
         return self._execute_with_monitoring(
