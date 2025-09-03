@@ -8,6 +8,15 @@ MISSING_MODULES = [
     "plume_nav_sim.envs.video_plume",
     "plume_nav_sim.utils.logging_setup",
     "gymnasium",
+    "plume_nav_sim.utils.seed_utils",
+    "plume_nav_sim.hooks",
+    "plume_nav_sim.core.sources",
+    "plume_nav_sim.core.initialization",
+    "plume_nav_sim.core.boundaries",
+    "plume_nav_sim.core.actions",
+    "plume_nav_sim.recording",
+    "plume_nav_sim.analysis",
+    "matplotlib",
 ]
 
 @pytest.mark.parametrize("missing", MISSING_MODULES)
