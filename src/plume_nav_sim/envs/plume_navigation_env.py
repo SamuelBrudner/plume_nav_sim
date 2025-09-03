@@ -116,91 +116,19 @@ from plume_nav_sim.core.protocols import (
 NAVIGATOR_AVAILABLE = True
 
 # Enhanced space definitions with proper Gymnasium compliance
-try:
-    from plume_nav_sim.envs.spaces import (
-        ActionSpaceFactory, ObservationSpaceFactory, SensorAwareSpaceFactory, 
-        SpaceValidator, ReturnFormatConverter, WindDataConfig,
-        get_standard_action_space, get_standard_observation_space,
-        get_sensor_aware_observation_space, validate_sensor_observation_compatibility
-    )
-    SPACES_AVAILABLE = True
-except ImportError:
-    # Minimal fallback during migration
-    class ActionSpaceFactory:
-        @staticmethod
-        def create_continuous_action_space(**kwargs):
-            if GYMNASIUM_AVAILABLE:
-                return Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
-            return None
-    
-    class ObservationSpaceFactory:
-        @staticmethod
-        def create_navigation_observation_space(**kwargs):
-            if GYMNASIUM_AVAILABLE:
-                return DictSpace({
-                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "agent_position": Box(low=-1000.0, high=1000.0, shape=(2,), dtype=np.float32),
-                    "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
-                })
-            return None
-        
-        @staticmethod
-        def create_dynamic_sensor_observation_space(sensors, **kwargs):
-            if GYMNASIUM_AVAILABLE:
-                return DictSpace({
-                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "agent_position": Box(low=-1000.0, high=1000.0, shape=(2,), dtype=np.float32),
-                    "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
-                })
-            return None
-    
-    class SensorAwareSpaceFactory:
-        @staticmethod
-        def create_sensor_observation_space(sensors, **kwargs):
-            if GYMNASIUM_AVAILABLE:
-                return DictSpace({
-                    "odor_concentration": Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "agent_position": Box(low=-1000.0, high=1000.0, shape=(2,), dtype=np.float32),
-                    "agent_orientation": Box(low=0.0, high=360.0, shape=(1,), dtype=np.float32)
-                })
-            return None
-    
-    class SpaceValidator:
-        @staticmethod
-        def validate_gymnasium_compliance(space):
-            return True
-    
-    class ReturnFormatConverter:
-        @staticmethod
-        def to_legacy_format(gymnasium_return):
-            obs, reward, terminated, truncated, info = gymnasium_return
-            done = terminated or truncated
-            return obs, reward, done, info
-        
-        @staticmethod
-        def to_gymnasium_format(legacy_return):
-            obs, reward, done, info = legacy_return
-            terminated = done
-            truncated = False
-            return obs, reward, terminated, truncated, info
-    
-    class WindDataConfig:
-        def __init__(self, enabled=False, **kwargs):
-            self.enabled = enabled
-    
-    def get_standard_action_space():
-        return ActionSpaceFactory.create_continuous_action_space()
-    
-    def get_standard_observation_space():
-        return ObservationSpaceFactory.create_navigation_observation_space()
-    
-    def get_sensor_aware_observation_space(sensors, **kwargs):
-        return SensorAwareSpaceFactory.create_sensor_observation_space(sensors, **kwargs)
-    
-    def validate_sensor_observation_compatibility(obs, sensors, **kwargs):
-        return True
-    
-    SPACES_AVAILABLE = False
+from plume_nav_sim.envs.spaces import (
+    ActionSpaceFactory,
+    ObservationSpaceFactory,
+    SensorAwareSpaceFactory,
+    SpaceValidator,
+    ReturnFormatConverter,
+    WindDataConfig,
+    get_standard_action_space,
+    get_standard_observation_space,
+    get_sensor_aware_observation_space,
+    validate_sensor_observation_compatibility,
+)
+SPACES_AVAILABLE = True
 
 # Plume model implementations with fallback
 try:
