@@ -1131,7 +1131,6 @@ h5py = ">=3.0.0"
 
 #### Visualization and GUI
 plotly = ">=5.17.0"
-seaborn = ">=0.12.0"
 PySide6 = ">=6.0.0"
 streamlit = ">=1.0.0"
 ```
@@ -1321,7 +1320,7 @@ sphinx-rtd-theme = ">=1.3.0"
 - **Gymnasium Compliance**: Full API compatibility with OpenAI Gymnasium
 - **RL Framework Support**: Stable-baselines3, Ray RLlib integration
 - **Data Analysis**: Pandas, NumPy, SciPy ecosystem compatibility
-- **Visualization**: Matplotlib, Plotly, Seaborn integration
+- **Visualization**: Matplotlib and Plotly integration
 
 **Institutional Integration**
 - **HPC Compatibility**: SLURM, PBS job scheduler support
