@@ -119,35 +119,17 @@ from plume_nav_sim.config.schemas import (
 setup_logging = setup_logger  # noqa: N816  (keep camelCase for compatibility)
 
 
-# Import gymnasium for RL environment creation
-try:
-    import gymnasium
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    warnings.warn(
-        "Gymnasium not available. RL training features will be limited.",
-        ImportWarning
-    )
-
-# Conditional imports for RL training functionality
-try:
-    import stable_baselines3
-    from stable_baselines3 import PPO, SAC, TD3, A2C, DDPG
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-    from stable_baselines3.common.callbacks import (
-        CheckpointCallback, EvalCallback, StopTrainingOnRewardThreshold,
-        ProgressBarCallback
-    )
-    from stable_baselines3.common.monitor import Monitor
-    from stable_baselines3.common.env_util import make_vec_env
-    SB3_AVAILABLE = True
-except ImportError:
-    SB3_AVAILABLE = False
-    warnings.warn(
-        "Stable-baselines3 not available. RL training commands will be limited.",
-        ImportWarning
-    )
+# Import RL dependencies directly; let ImportError propagate
+import gymnasium
+import stable_baselines3
+from stable_baselines3 import PPO, SAC, TD3, A2C, DDPG
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.callbacks import (
+    CheckpointCallback, EvalCallback, StopTrainingOnRewardThreshold,
+    ProgressBarCallback
+)
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.env_util import make_vec_env
 
 # Global configuration for CLI state management
 _CLI_CONFIG = {
@@ -808,6 +790,7 @@ def validate(ctx, strict: bool, export_results: Optional[str], output_format: st
         # Get configuration from context or initialize
         cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
+            logger.error("Configuration not available")
             raise CLIError("Configuration not available", exit_code=1)
         
         logger.info("Starting configuration validation...")
@@ -895,6 +878,7 @@ def export(ctx, output: Optional[str], output_format: str, resolve: bool, resolv
         # Get configuration from context or initialize
         cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
+            logger.error("Configuration not available")
             raise CLIError("Configuration not available", exit_code=1)
         
         # Determine output path
@@ -1166,26 +1150,8 @@ def batch(ctx, jobs: int, config_dir: Optional[str], pattern: str, output_base: 
 
 # RL Training Commands and Utilities
 
-def _validate_rl_availability() -> None:
-    """Validate that RL dependencies are available for training commands."""
-    if not SB3_AVAILABLE:
-        raise CLIError(
-            "Stable-baselines3 is required for RL training. Please install with: "
-            "pip install 'stable-baselines3>=2.0.0'"
-        )
-    
-    if not GYMNASIUM_AVAILABLE:
-        raise CLIError(
-            "Gymnasium is required for RL training. Please install with: "
-            "pip install 'gymnasium>=0.29.0'"
-        )
-
-
 def _create_algorithm_factory() -> Dict[str, Any]:
     """Create algorithm factory mapping for supported RL algorithms."""
-    if not SB3_AVAILABLE:
-        return {}
-    
     return {
         'PPO': PPO,
         'SAC': SAC,
@@ -1246,12 +1212,6 @@ def _setup_training_callbacks(
         List of configured callbacks
     """
     callbacks = []
-    
-    # Only setup callbacks if stable-baselines3 is available
-    if not SB3_AVAILABLE:
-        logger.warning("Stable-baselines3 not available - no training callbacks will be configured")
-        return callbacks
-    
     # Model checkpointing
     checkpoint_callback = CheckpointCallback(
         save_freq=checkpoint_freq,
@@ -1358,15 +1318,13 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
     start_time = time.time()
     
     try:
-        # Validate RL dependencies
-        _validate_rl_availability()
-        
         # Validate Hydra availability and configuration
         _validate_hydra_availability()
         
         # Get configuration from context or initialize
         cfg = get_cli_config((ctx.obj or {}).get('config_dir'))
         if cfg is None:
+            logger.error("Configuration not available")
             raise CLIError("Configuration not available", exit_code=1)
         
         algorithm_name = algorithm.upper()
@@ -1381,7 +1339,13 @@ def algorithm(ctx, algorithm: str, total_timesteps: int, n_envs: int, vec_env_ty
         # Create algorithm factory
         algorithm_factory = _create_algorithm_factory()
         if algorithm_name not in algorithm_factory:
-            raise CLIError(f"Algorithm {algorithm_name} not supported. Available: {list(algorithm_factory.keys())}")
+            available = list(algorithm_factory.keys())
+            logger.error(
+                f"Algorithm {algorithm_name} not supported. Available: {available}"
+            )
+            raise CLIError(
+                f"Algorithm {algorithm_name} not supported. Available: {available}"
+            )
         
         AlgorithmClass = algorithm_factory[algorithm_name]
         

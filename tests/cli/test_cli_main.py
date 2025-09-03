@@ -86,9 +86,7 @@ from plume_nav_sim.cli.main import (
     _measure_performance,
     _safe_config_access,
     _CLI_CONFIG,
-    HYDRA_AVAILABLE,
-    GYMNASIUM_AVAILABLE,
-    SB3_AVAILABLE
+    HYDRA_AVAILABLE
 )
 
 from plume_nav_sim.cli import (
@@ -103,6 +101,8 @@ from plume_nav_sim.cli import (
     register_command,
     list_commands
 )
+
+import plume_nav_sim.cli.main as cli_main_module
 
 # Import dependencies for testing
 from plume_nav_sim.api.navigation import (
@@ -173,7 +173,7 @@ class TestCLIImportValidation:
             'create_video_plume': create_video_plume,
             'run_plume_simulation': run_plume_simulation
         }
-        
+
         assert_all_imported_from(
             api_imports,
             'plume_nav_sim.api.navigation'
@@ -186,7 +186,7 @@ class TestCLIImportValidation:
             'VideoPlumeConfig': VideoPlumeConfig,
             'SimulationConfig': SimulationConfig
         }
-        
+
         assert_all_imported_from(
             config_imports,
             'plume_nav_sim.config.schemas'
@@ -199,12 +199,19 @@ class TestCLIImportValidation:
             'get_current_seed': get_current_seed,
             'get_seed_manager': get_seed_manager
         }
-        
+
         assert_all_imported_from(
             seed_imports,
             'plume_nav_sim.utils.seed_manager'
         )
 
+
+class TestRLDependencyFlagsRemoval:
+    """Ensure optional dependency flags are not exposed in CLI main module."""
+
+    def test_no_availability_flags(self):
+        assert not hasattr(cli_main_module, "GYMNASIUM_AVAILABLE")
+        assert not hasattr(cli_main_module, "SB3_AVAILABLE")
 
 class TestCLIFrameworkIntegration:
     """
