@@ -28,7 +28,7 @@ except ImportError as e:
     raise
 
 try:
-    from hydra import compose, initialize_config_store
+    from hydra import compose, initialize_config_dir
     from hydra.core.config_store import ConfigStore
     from omegaconf import OmegaConf, DictConfig
 except ImportError as e:
