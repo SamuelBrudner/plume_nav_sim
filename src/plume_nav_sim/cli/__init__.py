@@ -28,11 +28,10 @@ experiment support, and comprehensive error handling with diagnostic information
 
 Example Usage:
     # Import CLI components
-    from plume_nav_sim.cli import main, cli, is_available
-    
-    # Check CLI availability
-    if is_available():
-        main()  # Run with Hydra configuration
+    from plume_nav_sim.cli import main, cli
+
+    # Execute main entry point
+    main()  # Run with Hydra configuration
     
     # Get version information
     version = get_version()
@@ -60,6 +59,7 @@ import platform
 import sys
 import time
 import warnings
+import logging
 from typing import Optional, Dict, Any, List, Callable, Union
 from pathlib import Path
 
@@ -69,23 +69,15 @@ import hydra
 import numpy
 import psutil
 
+logger = logging.getLogger(__name__)
+
 # Package metadata and version information
-try:
-    from plume_nav_sim import __version__
-    _VERSION_AVAILABLE = True
-except ImportError:
-    __version__ = "1.0.0"
-    _VERSION_AVAILABLE = False
+logger.debug("Importing plume_nav_sim version information")
+from plume_nav_sim import __version__
 
 __author__ = "Plume Navigation Simulation Team"
 __description__ = "Comprehensive command-line interface for plume navigation simulation research"
 __license__ = "MIT"
-
-# CLI availability flags and error tracking
-_CLI_AVAILABLE = False
-_CLI_ERROR = None
-_HYDRA_AVAILABLE = False
-_CLICK_AVAILABLE = False
 
 # Default CLI configuration dictionary with performance and behavior settings
 CLI_CONFIG = {
@@ -183,135 +175,23 @@ class EnvironmentValidationError(RuntimeError):
     pass
 
 
-# Conditional imports with graceful degradation
-@_measure_time('cli_imports')
-def _import_cli_components():
-    """
-    Conditionally import CLI components with comprehensive error handling.
-    
-    This function attempts to import the main CLI components and tracks
-    availability status for graceful degradation in headless environments.
-    
-    Returns:
-        tuple: (main_function, cli_group, train_main_function, run_command, config_command, 
-                visualize_command, batch_command, train_command, cli_error_class, 
-                config_validation_error_class, import_success)
-    """
-    global _CLI_AVAILABLE, _CLI_ERROR, _HYDRA_AVAILABLE, _CLICK_AVAILABLE
-    
-    main_func = None
-    cli_group = None
-    
-    try:
-        # Check for Click framework availability
-        try:
-            _CLICK_AVAILABLE = True
-        except ImportError as e:
-            _CLI_ERROR = f"Click framework not available: {e}"
-            return None, None, None, None, None, None, None, None, None, None, False
-        
-        # Check for Hydra configuration system
-        try:
-            from hydra.core.config_store import ConfigStore
-            _HYDRA_AVAILABLE = True
-        except ImportError as e:
-            _CLI_ERROR = f"Hydra configuration system not available: {e}"
-            return None, None, None, None, None, None, None, None, None, None, False
-        
-        # Import main CLI components from src/plume_nav_sim/cli/main.py
-        try:
-            from plume_nav_sim.cli.main import (
-                main, cli, train_main, run, config, visualize, batch, train,
-                CLIError, ConfigValidationError
-            )
-            main_func = main
-            cli_group = cli
-            train_main_func = train_main
-            run_cmd = run
-            config_cmd = config
-            visualize_cmd = visualize
-            batch_cmd = batch
-            train_cmd = train
-            cli_error = CLIError
-            config_validation_error = ConfigValidationError
-            _CLI_AVAILABLE = True
-            
-        except ImportError as e:
-            _CLI_ERROR = f"Failed to import CLI main components: {e}"
-            return None, None, None, None, None, None, None, None, None, None, False
-            
-        except Exception as e:
-            _CLI_ERROR = f"Unexpected error importing CLI components: {e}"
-            return None, None, None, None, None, None, None, None, None, None, False
-    
-    except Exception as e:
-        _CLI_ERROR = f"Critical error during CLI import: {e}"
-        return None, None, None, None, None, None, None, None, None, None, False
-    
-    return main_func, cli_group, train_main_func, run_cmd, config_cmd, visualize_cmd, batch_cmd, train_cmd, cli_error, config_validation_error, True
-
-
-# Perform initial import attempt
+# Direct CLI component imports
 _startup_time = time.time()
-main, cli, train_main, run, config, visualize, batch, train, CLIError, ConfigValidationError, _import_success = _import_cli_components()
+logger.debug("Importing CLI components")
+from plume_nav_sim.cli.main import (
+    main,
+    cli,
+    train_main,
+    run,
+    config,
+    visualize,
+    batch,
+    train,
+    CLIError,
+    ConfigValidationError,
+)
 _cli_state['startup_time'] = time.time() - _startup_time
 
-
-def is_available() -> bool:
-    """
-    Check if CLI functionality is available.
-    
-    This function performs a comprehensive availability check for CLI components
-    including Click framework, Hydra configuration system, and core CLI modules.
-    
-    Returns:
-        bool: True if CLI is fully functional, False otherwise
-        
-    Examples:
-        >>> if is_available():
-        ...     from plume_nav_sim.cli import main
-        ...     main()
-        ... else:
-        ...     print("CLI not available in headless environment")
-    """
-    return _CLI_AVAILABLE and main is not None and cli is not None
-
-
-def get_availability_status() -> Dict[str, Any]:
-    """
-    Get detailed availability status for CLI components.
-    
-    Returns comprehensive status information including component availability,
-    error details, performance metrics, and diagnostic information.
-    
-    Returns:
-        dict: Detailed availability status with diagnostics
-        
-    Example:
-        >>> status = get_availability_status()
-        >>> print(f"CLI Available: {status['cli_available']}")
-        >>> print(f"Hydra Available: {status['hydra_available']}")
-        >>> if status['error']:
-        ...     print(f"Error: {status['error']}")
-    """
-    return {
-        'cli_available': _CLI_AVAILABLE,
-        'click_available': _CLICK_AVAILABLE, 
-        'hydra_available': _HYDRA_AVAILABLE,
-        'main_function_available': main is not None,
-        'cli_group_available': cli is not None,
-        'error': _CLI_ERROR,
-        'startup_time': _cli_state['startup_time'],
-        'performance_metrics': _cli_state['performance_metrics'].copy(),
-        'initialized': _cli_state['initialized'],
-        'version_available': _VERSION_AVAILABLE,
-        'dependencies': {
-            'click_version': getattr(click, '__version__', 'Unknown'),
-            'hydra_version': getattr(hydra, '__version__', 'Unknown'),
-            'numpy_version': getattr(numpy, '__version__', 'Unknown'),
-            'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-        }
-    }
 
 
 def get_version() -> str:
@@ -417,11 +297,8 @@ def validate_environment() -> Dict[str, Any]:
         'environment': {}
     }
     
-    # Check CLI availability
-    validation_results['checks']['cli_available'] = is_available()
-    if not is_available():
-        validation_results['errors'].append(f"CLI not available: {_CLI_ERROR}")
-        validation_results['valid'] = False
+    # CLI import succeeded if this function is running
+    validation_results['checks']['cli_available'] = True
     
     # Check environment variables
     env_vars = ['CLI_DEVELOPMENT_MODE', 'HYDRA_FULL_ERROR', 'PYTHONPATH']
@@ -476,8 +353,8 @@ def validate_environment() -> Dict[str, Any]:
         validation_results['warnings'].append(f"Memory check failed: {e}")
     
     # Dependency version checks
-    validation_results['checks']['click_available'] = _CLICK_AVAILABLE
-    validation_results['checks']['hydra_available'] = _HYDRA_AVAILABLE
+    validation_results['checks']['click_available'] = True
+    validation_results['checks']['hydra_available'] = True
     validation_results['checks']['numpy_available'] = True  # We imported it successfully
     validation_results['checks']['psutil_available'] = True  # We imported it successfully
     
@@ -514,10 +391,6 @@ def register_command(command_name: str, command_func: Callable, group: Optional[
     """
     if not CLI_CONFIG['allow_command_extensions']:
         warnings.warn("Command registration disabled in CLI configuration")
-        return False
-    
-    if not is_available():
-        warnings.warn("CLI not available, cannot register commands")
         return False
     
     try:
@@ -564,8 +437,8 @@ def list_commands() -> List[Dict[str, Any]]:
     """
     commands = []
     
-    # Add built-in commands if CLI is available
-    if is_available() and cli is not None:
+    # Add built-in commands
+    if cli is not None:
         try:
             # Introspect Click commands
             for name, command in cli.commands.items():
@@ -615,14 +488,6 @@ def invoke_command(args: List[str], **kwargs) -> Dict[str, Any]:
         ... else:
         ...     print(f"Command failed: {result['error']}")
     """
-    if not is_available():
-        return {
-            'success': False,
-            'error': 'CLI not available',
-            'output': None,
-            'execution_time': 0
-        }
-    
     start_time = time.time()
     
     try:
@@ -816,10 +681,6 @@ __all__ = [
     'train',
     'CLIError',
     'ConfigValidationError',
-    
-    # Availability and status functions
-    'is_available',
-    'get_availability_status',
     
     # Version and metadata
     'get_version',
