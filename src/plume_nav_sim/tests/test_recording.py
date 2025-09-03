@@ -852,22 +852,15 @@ class TestNullRecorder:
         
         null_recorder.stop_recording()
     
-    def test_fallback_mode_behavior(self, null_config):
-        """Test NullRecorder as fallback when other backends fail."""
-        # Test creation through factory with fallback
+    def test_invalid_backend_raises_error(self, null_config):
+        """Invalid backend configuration should raise ValueError."""
         invalid_config = RecorderConfig(
             backend='nonexistent_backend',
             output_dir='/invalid/path'
         )
-        
-        # Should fallback to null recorder
-        recorder = create_backend(invalid_config, fallback_to_null=True)
-        assert isinstance(recorder, RecorderProtocol)
-        
-        # Verify fallback functionality
-        recorder.start_recording(1)
-        recorder.record_step({'test': 'data'}, 0, 1)
-        recorder.stop_recording()
+
+        with pytest.raises(ValueError):
+            create_backend(invalid_config)
     
     def test_debug_mode_functionality(self, null_recorder):
         """Test debug mode capabilities of NullRecorder."""
@@ -1484,32 +1477,23 @@ class TestRecorderFactory:
                 assert isinstance(deps, list), "Dependencies should be a list"
     
     def test_graceful_degradation(self, tmp_path):
-        """Test graceful degradation when backends fail."""
-        # Test fallback to null recorder
+        """Test error handling when backends fail."""
         invalid_config = RecorderConfig(
             backend='nonexistent_backend',
             output_dir=str(tmp_path)
         )
-        
-        # Should fallback to null recorder without exception
-        recorder = create_backend(invalid_config, fallback_to_null=True)
-        assert isinstance(recorder, RecorderProtocol)
-        
-        # Test operation with fallback recorder
-        recorder.start_recording(1)
-        recorder.record_step({'fallback_test': True}, 0, 1)
-        recorder.stop_recording()
-        
-        # Test graceful handling of missing dependencies
+
+        with pytest.raises(ValueError):
+            create_backend(invalid_config)
+
         for backend_name in ['parquet', 'hdf5', 'sqlite']:
             config = RecorderConfig(backend=backend_name, output_dir=str(tmp_path))
-            
-            # Should either create backend or fallback gracefully
             try:
-                recorder = create_backend(config, fallback_to_null=True)
+                recorder = create_backend(config)
                 assert isinstance(recorder, RecorderProtocol)
-            except Exception as e:
-                pytest.fail(f"Graceful degradation failed for {backend_name}: {e}")
+            except ImportError:
+                # Missing dependencies are acceptable
+                pass
     
     def test_hydra_integration(self, tmp_path):
         """Test Hydra configuration integration and instantiation."""
