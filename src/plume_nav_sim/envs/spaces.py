@@ -55,7 +55,6 @@ Example Usage:
     ... )
 """
 
-import warnings
 import numpy as np
 from typing import Dict, Any, Union, Tuple, Optional, List, Literal, Type, cast, TYPE_CHECKING
 from pathlib import Path
@@ -63,27 +62,8 @@ import threading
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 
-try:
-    import gymnasium as gym
-    from gymnasium.spaces import Space, Box, Discrete, Dict as DictSpace, MultiBinary, MultiDiscrete
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    # Fallback for environments where gymnasium isn't available yet
-    try:
-        import gym
-        from gym.spaces import Space, Box, Discrete, Dict as DictSpace, MultiBinary, MultiDiscrete
-        GYMNASIUM_AVAILABLE = False
-        warnings.warn(
-            "Gymnasium not available, falling back to legacy gym. "
-            "Please install gymnasium>=0.29.0 for full compatibility.",
-            UserWarning,
-            stacklevel=2
-        )
-    except ImportError:
-        raise ImportError(
-            "Neither gymnasium nor gym are available. "
-            "Please install gymnasium>=0.29.0 for full functionality."
-        )
+import gymnasium as gym
+from gymnasium.spaces import Space, Box, Discrete, Dict as DictSpace, MultiBinary, MultiDiscrete
 
 # Import logging utilities for comprehensive observability
 from plume_nav_sim.utils.logging_setup import (
@@ -107,17 +87,9 @@ else:
         raise
 
 # Import sensor implementations for type checking
-try:
-    from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
-    from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
-    from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
-    SENSOR_IMPLEMENTATIONS_AVAILABLE = True
-except ImportError:
-    # Handle case where sensor implementations don't exist yet
-    BinarySensor = None
-    ConcentrationSensor = None
-    GradientSensor = None
-    SENSOR_IMPLEMENTATIONS_AVAILABLE = False
+from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
+from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
+from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
 
 @dataclass
 class SpaceDefinition:
@@ -1040,54 +1012,47 @@ class SensorAwareSpaceFactory:
         """
         spaces = {}
         sensor_name = type(sensor).__name__.lower()
-        
-        if SENSOR_IMPLEMENTATIONS_AVAILABLE:
-            if isinstance(sensor, type(BinarySensor)) if BinarySensor else False:
-                # Binary sensor returns boolean detection
-                spaces[f"sensor_{sensor_index}_{sensor_name}_detection"] = Box(
-                    low=0, high=1, shape=(1,), dtype=bool
-                )
-                
-            elif isinstance(sensor, type(ConcentrationSensor)) if ConcentrationSensor else False:
-                # Concentration sensor returns float concentration value
-                # Try to get dynamic range from sensor config
-                try:
-                    config = getattr(sensor, 'config', None)
-                    if config and hasattr(config, 'dynamic_range'):
-                        low, high = config.dynamic_range
-                    else:
-                        low, high = 0.0, 1.0
-                except:
+
+        if isinstance(sensor, BinarySensor):
+            # Binary sensor returns boolean detection
+            spaces[f"sensor_{sensor_index}_{sensor_name}_detection"] = Box(
+                low=0, high=1, shape=(1,), dtype=bool
+            )
+
+        elif isinstance(sensor, ConcentrationSensor):
+            # Concentration sensor returns float concentration value
+            try:
+                config = getattr(sensor, 'config', None)
+                if config and hasattr(config, 'dynamic_range'):
+                    low, high = config.dynamic_range
+                else:
                     low, high = 0.0, 1.0
-                    
-                spaces[f"sensor_{sensor_index}_{sensor_name}_concentration"] = Box(
-                    low=low, high=high, shape=(1,), dtype=dtype
-                )
-                
-            elif isinstance(sensor, type(GradientSensor)) if GradientSensor else False:
-                # Gradient sensor returns 2D gradient vector
-                spaces[f"sensor_{sensor_index}_{sensor_name}_gradient"] = Box(
-                    low=-10.0, high=10.0, shape=(2,), dtype=dtype
-                )
-                # Also include gradient magnitude and direction
-                spaces[f"sensor_{sensor_index}_{sensor_name}_magnitude"] = Box(
-                    low=0.0, high=10.0, shape=(1,), dtype=dtype
-                )
-                spaces[f"sensor_{sensor_index}_{sensor_name}_direction"] = Box(
-                    low=0.0, high=360.0, shape=(1,), dtype=dtype
-                )
-                
-            else:
-                # Generic sensor - assume float output
-                spaces[f"sensor_{sensor_index}_{sensor_name}_output"] = Box(
-                    low=0.0, high=1.0, shape=(1,), dtype=dtype
-                )
+            except Exception:
+                low, high = 0.0, 1.0
+
+            spaces[f"sensor_{sensor_index}_{sensor_name}_concentration"] = Box(
+                low=low, high=high, shape=(1,), dtype=dtype
+            )
+
+        elif isinstance(sensor, GradientSensor):
+            # Gradient sensor returns 2D gradient vector
+            spaces[f"sensor_{sensor_index}_{sensor_name}_gradient"] = Box(
+                low=-10.0, high=10.0, shape=(2,), dtype=dtype
+            )
+            # Also include gradient magnitude and direction
+            spaces[f"sensor_{sensor_index}_{sensor_name}_magnitude"] = Box(
+                low=0.0, high=10.0, shape=(1,), dtype=dtype
+            )
+            spaces[f"sensor_{sensor_index}_{sensor_name}_direction"] = Box(
+                low=0.0, high=360.0, shape=(1,), dtype=dtype
+            )
+
         else:
-            # Fallback when sensor implementations not available
+            # Generic sensor - assume float output
             spaces[f"sensor_{sensor_index}_{sensor_name}_output"] = Box(
                 low=0.0, high=1.0, shape=(1,), dtype=dtype
             )
-        
+
         return spaces
     
     @staticmethod
