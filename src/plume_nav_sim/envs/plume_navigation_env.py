@@ -160,163 +160,44 @@ from plume_nav_sim.utils.frame_cache import FrameCache, CacheMode
 logger.info("FrameCache utilities successfully imported")
 FRAME_CACHE_AVAILABLE = True
 
-# Seed management utilities
-try:
-    from plume_nav_sim.utils.seed_utils import set_global_seed, get_seed_context
-    SEED_UTILS_AVAILABLE = True
-except ImportError:
-    def set_global_seed(seed: int):
-        np.random.seed(seed)
-    
-    def get_seed_context():
-        return {}
-    
-    SEED_UTILS_AVAILABLE = False
-
-# HookManager integration with graceful fallback handling
-try:
-    from plume_nav_sim.hooks import HookManager
-    HOOKS_AVAILABLE = True
-except ImportError:
-    # Fallback HookManager with no-op operations for graceful degradation
-    class HookManager:
-        def __init__(self):
-            pass
-        def register_pre_step(self, hook): pass
-        def register_post_step(self, hook): pass
-        def register_episode_end(self, hook): pass
-        def dispatch_pre_step(self): pass
-        def dispatch_post_step(self): pass
-        def dispatch_episode_end(self, final_info): pass
-        def clear_hooks(self): pass
-    HOOKS_AVAILABLE = False
 
 # Enhanced logging with correlation support
-try:
-    from plume_nav_sim.utils.logging_setup import (
-        get_enhanced_logger, correlation_context, create_step_timer,
-        log_legacy_api_deprecation
-    )
-    LOGGING_AVAILABLE = True
-except ImportError:
-    import logging
-    
-    def get_enhanced_logger(name):
-        return logging.getLogger(name)
-    
-    def correlation_context(name, **kwargs):
-        class DummyContext:
-            def __enter__(self):
-                return self
-            def __exit__(self, *args):
-                pass
-            correlation_id = "dummy"
-        return DummyContext()
-    
-    def create_step_timer():
-        class DummyTimer:
-            def __enter__(self):
-                return self
-            def __exit__(self, *args):
-                pass
-        return DummyTimer()
-    
-    def log_legacy_api_deprecation(**kwargs):
-        pass
-    
-    LOGGING_AVAILABLE = False
+from plume_nav_sim.utils.logging_setup import (
+    get_enhanced_logger,
+    correlation_context,
+    create_step_timer,
+    log_legacy_api_deprecation,
+)
+
+logger = get_enhanced_logger(__name__)
+logger.info("Logging utilities successfully imported")
+
+# Seed management utilities
+from plume_nav_sim.utils.seed_utils import set_global_seed, get_seed_context
+logger.info("Seed utilities successfully imported")
+
+# Hook system
+from plume_nav_sim.hooks import HookManager
+logger.info("HookManager successfully imported")
 
 # Configuration support
-try:
-    from omegaconf import DictConfig, OmegaConf
-    from hydra.utils import instantiate
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    class OmegaConf:
-        @staticmethod
-        def to_container(config, resolve=True):
-            return dict(config)
-    def instantiate(config):
-        raise ImportError("Hydra not available")
-    HYDRA_AVAILABLE = False
+from omegaconf import DictConfig, OmegaConf
+from hydra.utils import instantiate
+logger.info("Hydra configuration utilities successfully imported")
 
-# New v1.0 component imports with graceful fallbacks
-try:
-    from plume_nav_sim.core.sources import create_source
-    SOURCES_AVAILABLE = True
-except ImportError:
-    def create_source(config):
-        raise ImportError("Sources module not yet available")
-    SOURCES_AVAILABLE = False
-
-try:
-    from plume_nav_sim.core.initialization import create_agent_initializer
-    INITIALIZATION_AVAILABLE = True
-except ImportError:
-    def create_agent_initializer(config):
-        raise ImportError("Initialization module not yet available")
-    INITIALIZATION_AVAILABLE = False
-
-try:
-    from plume_nav_sim.core.boundaries import create_boundary_policy
-    BOUNDARIES_AVAILABLE = True
-except ImportError:
-    def create_boundary_policy(config):
-        raise ImportError("Boundaries module not yet available")
-    BOUNDARIES_AVAILABLE = False
-
-try:
-    from plume_nav_sim.core.actions import create_action_interface
-    ACTIONS_AVAILABLE = True
-except ImportError:
-    def create_action_interface(config):
-        raise ImportError("Actions module not yet available")
-    ACTIONS_AVAILABLE = False
-
-try:
-    from plume_nav_sim.recording import RecorderFactory
-    RECORDING_AVAILABLE = True
-except ImportError:
-    class RecorderFactory:
-        @staticmethod
-        def create_recorder(config):
-            raise ImportError("Recording module not yet available")
-        @staticmethod
-        def get_available_backends():
-            return []
-        @staticmethod
-        def validate_config(config):
-            return {'valid': False, 'error': 'Recording module not available'}
-    RECORDING_AVAILABLE = False
-
-try:
-    from plume_nav_sim.analysis import StatsAggregator
-    ANALYSIS_AVAILABLE = True
-except ImportError:
-    class StatsAggregator:
-        def __init__(self, config):
-            pass
-        def calculate_episode_stats(self, trajectory_data, episode_id, **kwargs):
-            return {}
-        def calculate_run_stats(self, episode_data_list, run_id, **kwargs):
-            return {}
-        def export_summary(self, output_path, **kwargs):
-            return True
-        def configure_metrics(self, metrics_config):
-            pass
-    ANALYSIS_AVAILABLE = False
+# Component factories
+from plume_nav_sim.core.sources import create_source
+from plume_nav_sim.core.initialization import create_agent_initializer
+from plume_nav_sim.core.boundaries import create_boundary_policy
+from plume_nav_sim.core.actions import create_action_interface
+from plume_nav_sim.recording import RecorderFactory
+from plume_nav_sim.analysis import StatsAggregator
+logger.info("Component factories successfully imported")
 
 # Matplotlib for rendering
-try:
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
-
-# Initialize module logger
-logger = get_enhanced_logger(__name__)
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+logger.info("Matplotlib rendering utilities successfully imported")
 
 # Type aliases for enhanced readability and IDE support
 ConfigType = Union[DictConfig, Dict[str, Any]]
@@ -746,11 +627,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._source_config is not None:
                 if isinstance(self._source_config, dict):
                     # Configuration-based instantiation using factory
-                    if SOURCES_AVAILABLE:
-                        self.source = create_source(self._source_config)
-                    else:
-                        logger.warning("Sources module not available, source initialization skipped")
-                        self.source = None
+                    self.source = create_source(self._source_config)
                 else:
                     # Direct instance provided
                     self.source = self._source_config
@@ -770,11 +647,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._agent_initializer_config is not None:
                 if isinstance(self._agent_initializer_config, dict):
                     # Configuration-based instantiation using factory
-                    if INITIALIZATION_AVAILABLE:
-                        self.agent_initializer = create_agent_initializer(self._agent_initializer_config)
-                    else:
-                        logger.warning("Initialization module not available, using default initializer")
-                        self.agent_initializer = None
+                    self.agent_initializer = create_agent_initializer(self._agent_initializer_config)
                 else:
                     # Direct instance provided
                     self.agent_initializer = self._agent_initializer_config
@@ -794,11 +667,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._boundary_policy_config is not None:
                 if isinstance(self._boundary_policy_config, dict):
                     # Configuration-based instantiation using factory
-                    if BOUNDARIES_AVAILABLE:
-                        self.boundary_policy = create_boundary_policy(self._boundary_policy_config)
-                    else:
-                        logger.warning("Boundaries module not available, using default policy")
-                        self.boundary_policy = None
+                    self.boundary_policy = create_boundary_policy(self._boundary_policy_config)
                 else:
                     # Direct instance provided
                     self.boundary_policy = self._boundary_policy_config
@@ -818,11 +687,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._action_interface_config is not None:
                 if isinstance(self._action_interface_config, dict):
                     # Configuration-based instantiation using factory
-                    if ACTIONS_AVAILABLE:
-                        self.action_interface = create_action_interface(self._action_interface_config)
-                    else:
-                        logger.warning("Actions module not available, using default interface")
-                        self.action_interface = None
+                    self.action_interface = create_action_interface(self._action_interface_config)
                 else:
                     # Direct instance provided
                     self.action_interface = self._action_interface_config
@@ -842,11 +707,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._recorder_config is not None:
                 if isinstance(self._recorder_config, dict):
                     # Configuration-based instantiation using factory
-                    if RECORDING_AVAILABLE:
-                        self.recorder = RecorderFactory.create_recorder(self._recorder_config)
-                    else:
-                        logger.warning("Recording module not available, recording disabled")
-                        self.recorder = None
+                    self.recorder = RecorderFactory.create_recorder(self._recorder_config)
                 else:
                     # Direct instance provided
                     self.recorder = self._recorder_config
@@ -866,11 +727,7 @@ class PlumeNavigationEnv(gym.Env):
             if self._stats_aggregator_config is not None:
                 if isinstance(self._stats_aggregator_config, dict):
                     # Configuration-based instantiation
-                    if ANALYSIS_AVAILABLE:
-                        self.stats_aggregator = StatsAggregator(self._stats_aggregator_config)
-                    else:
-                        logger.warning("Analysis module not available, statistics disabled")
-                        self.stats_aggregator = None
+                    self.stats_aggregator = StatsAggregator(self._stats_aggregator_config)
                 else:
                     # Direct instance provided
                     self.stats_aggregator = self._stats_aggregator_config
@@ -889,46 +746,28 @@ class PlumeNavigationEnv(gym.Env):
         try:
             if self._hook_manager_config is not None:
                 if isinstance(self._hook_manager_config, dict):
-                    # Configuration-based instantiation
-                    if HOOKS_AVAILABLE:
-                        # Check for specific configuration - if config is "none", use NullHookSystem
-                        if self._hook_manager_config.get("type") == "none" or self._hook_manager_config.get("name") == "none":
-                            # Use lightweight null system for zero overhead
-                            from plume_nav_sim.hooks import NullHookSystem
-                            self.hook_manager = NullHookSystem()
-                        else:
-                            # Use full HookManager with configuration
-                            self.hook_manager = HookManager()
+                    if self._hook_manager_config.get("type") == "none" or self._hook_manager_config.get("name") == "none":
+                        from plume_nav_sim.hooks import NullHookSystem
+                        self.hook_manager = NullHookSystem()
                     else:
-                        logger.warning("Hooks module not available, using fallback HookManager")
                         self.hook_manager = HookManager()
                 elif isinstance(self._hook_manager_config, str):
-                    # String-based configuration (e.g., "none")
-                    if HOOKS_AVAILABLE:
-                        if self._hook_manager_config == "none":
-                            from plume_nav_sim.hooks import NullHookSystem
-                            self.hook_manager = NullHookSystem()
-                        else:
-                            self.hook_manager = HookManager()
+                    if self._hook_manager_config == "none":
+                        from plume_nav_sim.hooks import NullHookSystem
+                        self.hook_manager = NullHookSystem()
                     else:
                         self.hook_manager = HookManager()
                 else:
-                    # Direct instance provided
                     self.hook_manager = self._hook_manager_config
-                    
+
                 logger.debug(f"Hook manager initialized: {type(self.hook_manager).__name__}")
             else:
-                # Default to NullHookSystem for zero overhead when no configuration provided
-                if HOOKS_AVAILABLE:
-                    from plume_nav_sim.hooks import NullHookSystem
-                    self.hook_manager = NullHookSystem()
-                else:
-                    self.hook_manager = HookManager()
+                from plume_nav_sim.hooks import NullHookSystem
+                self.hook_manager = NullHookSystem()
                 logger.debug("No hook manager configuration provided, using NullHookSystem")
-                
+
         except Exception as e:
             logger.warning(f"Failed to initialize hook manager: {e}")
-            # Fallback to basic HookManager
             self.hook_manager = HookManager()
     
     def _init_plume_model(self) -> None:
@@ -1377,12 +1216,6 @@ class PlumeNavigationEnv(gym.Env):
         self.agent_plot = None
         self.trajectory_plot = None
         self.render_trajectory: List[Tuple[float, float]] = []
-        
-        if self.render_mode == "human" and not MATPLOTLIB_AVAILABLE:
-            logger.warning(
-                "Matplotlib not available, falling back to headless rendering"
-            )
-            self.render_mode = "headless"
     
     def _reset_episode_state(self) -> None:
         """Reset episode-specific state variables."""
@@ -1427,7 +1260,7 @@ class PlumeNavigationEnv(gym.Env):
         # Handle different configuration types
         if isinstance(config, dict):
             config_dict = config.copy()
-        elif HYDRA_AVAILABLE and hasattr(config, 'to_container'):
+        elif hasattr(config, 'to_container'):
             # Handle Hydra DictConfig
             config_dict = OmegaConf.to_container(config, resolve=True)
         else:
@@ -1613,12 +1446,9 @@ class PlumeNavigationEnv(gym.Env):
         # Handle seeding if provided - enforce deterministic seeding for reproducible experiments
         if seed is not None:
             try:
-                if SEED_UTILS_AVAILABLE:
-                    set_global_seed(seed)
-                else:
-                    np.random.seed(seed)
+                set_global_seed(seed)
                 self._last_seed = seed
-                
+
                 # Propagate seed to all components for full determinism
                 if self.source and hasattr(self.source, 'reset'):
                     self.source.reset(seed=seed)
@@ -1626,7 +1456,7 @@ class PlumeNavigationEnv(gym.Env):
                     self.agent_initializer.reset(seed=seed)
                 if self.boundary_policy and hasattr(self.boundary_policy, 'reset'):
                     self.boundary_policy.reset(seed=seed)
-                    
+
                 logger.debug(f"Environment reset with deterministic seed {seed}")
             except Exception as e:
                 logger.warning(f"Failed to set seed {seed}: {e}")
@@ -2890,10 +2720,6 @@ class PlumeNavigationEnv(gym.Env):
         if render_mode == "headless":
             return None
         
-        if not MATPLOTLIB_AVAILABLE and render_mode != "headless":
-            logger.warning("Matplotlib not available, skipping render")
-            return None
-        
         try:
             # Initialize rendering if not done
             if not self.render_initialized:
@@ -2986,9 +2812,6 @@ class PlumeNavigationEnv(gym.Env):
     
     def _init_render_display(self) -> None:
         """Initialize matplotlib display for rendering."""
-        if not MATPLOTLIB_AVAILABLE:
-            return
-        
         self.fig, self.ax = plt.subplots(figsize=(10, 8))
         plt.ion()  # Interactive mode
         self.render_initialized = True
@@ -3044,7 +2867,7 @@ class PlumeNavigationEnv(gym.Env):
                     logger.debug("Frame cache cleared on environment close")
             
             # Close rendering resources
-            if self.render_initialized and MATPLOTLIB_AVAILABLE:
+            if self.render_initialized:
                 plt.close(self.fig)
                 self.render_initialized = False
             
@@ -3099,20 +2922,14 @@ class PlumeNavigationEnv(gym.Env):
         
         try:
             if seed is not None:
-                if SEED_UTILS_AVAILABLE:
-                    set_global_seed(seed)
-                else:
-                    np.random.seed(seed)
+                set_global_seed(seed)
                 self._last_seed = seed
                 logger.debug(f"Environment seed set to {seed}")
             else:
                 # Generate random seed
                 import random
                 seed = random.randint(0, 2**32 - 1)
-                if SEED_UTILS_AVAILABLE:
-                    set_global_seed(seed)
-                else:
-                    np.random.seed(seed)
+                set_global_seed(seed)
                 self._last_seed = seed
                 logger.debug(f"Environment auto-seeded with {seed}")
             
@@ -3188,9 +3005,6 @@ def create_v1_environment_from_hydra(cfg: DictConfig) -> PlumeNavigationEnv:
         ...     cfg = compose(config_name="config")
         ...     env = create_v1_environment_from_hydra(cfg.env)
     """
-    if not HYDRA_AVAILABLE:
-        raise ImportError("Hydra is required for create_v1_environment_from_hydra")
-    
     # Use Hydra's instantiate for full dependency injection
     if "_target_" in cfg:
         return instantiate(cfg)
