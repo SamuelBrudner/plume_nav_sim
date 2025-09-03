@@ -56,40 +56,13 @@ Examples:
 
 from typing import Dict, List, Optional, Type, Union, Any, TYPE_CHECKING
 import warnings
-import importlib
 import logging
 
 # Import RecorderProtocol for type validation
 if TYPE_CHECKING:
     from ..import BaseRecorder
 
-# Import backends with capability detection
 from .null import NullRecorder
-
-# Optional backend imports with graceful fallback handling
-try:
-    from .parquet import ParquetRecorder
-    PARQUET_AVAILABLE = True
-except ImportError as e:
-    ParquetRecorder = None
-    PARQUET_AVAILABLE = False
-    _PARQUET_IMPORT_ERROR = str(e)
-
-try:
-    from .hdf5 import HDF5Recorder
-    HDF5_AVAILABLE = True
-except ImportError as e:
-    HDF5Recorder = None
-    HDF5_AVAILABLE = False
-    _HDF5_IMPORT_ERROR = str(e)
-
-try:
-    from .sqlite import SQLiteRecorder
-    SQLITE_AVAILABLE = True
-except ImportError as e:
-    SQLiteRecorder = None
-    SQLITE_AVAILABLE = False
-    _SQLITE_IMPORT_ERROR = str(e)
 
 # Configure logging for backend module
 logger = logging.getLogger(__name__)
@@ -101,18 +74,36 @@ BACKEND_REGISTRY: Dict[str, Type['BaseRecorder']] = {
     'none': NullRecorder,  # Alias for null backend
 }
 
-# Register optional backends if available
-if PARQUET_AVAILABLE:
+
+# Optional backend imports with explicit failure logging
+try:
+    from .parquet import ParquetRecorder
     BACKEND_REGISTRY['parquet'] = ParquetRecorder
     logger.debug("ParquetRecorder registered in BACKEND_REGISTRY")
+except ImportError as exc:
+    logger.error("Failed to import ParquetRecorder: %s", exc)
+    raise
 
-if HDF5_AVAILABLE:
+try:
+    from .hdf5 import HDF5Recorder
     BACKEND_REGISTRY['hdf5'] = HDF5Recorder
     logger.debug("HDF5Recorder registered in BACKEND_REGISTRY")
+except ImportError as exc:
+    logger.error("Failed to import HDF5Recorder: %s", exc)
+    raise
 
-if SQLITE_AVAILABLE:
+try:
+    from .sqlite import SQLiteRecorder
     BACKEND_REGISTRY['sqlite'] = SQLiteRecorder
     logger.debug("SQLiteRecorder registered in BACKEND_REGISTRY")
+except ImportError as exc:
+    logger.error("Failed to import SQLiteRecorder: %s", exc)
+    raise
+
+# Derived availability flags for internal utilities
+PARQUET_AVAILABLE = 'parquet' in BACKEND_REGISTRY
+HDF5_AVAILABLE = 'hdf5' in BACKEND_REGISTRY
+SQLITE_AVAILABLE = 'sqlite' in BACKEND_REGISTRY
 
 
 def get_available_backends() -> List[str]:
@@ -155,32 +146,17 @@ def get_available_backends() -> List[str]:
     available_backends.append('null')
     
     # Check optional backends with dependency validation
-    if PARQUET_AVAILABLE:
-        try:
-            # Validate PyArrow availability for ParquetRecorder
-            import pyarrow as pa
-            available_backends.append('parquet')
-            logger.debug("ParquetRecorder available with PyArrow support")
-        except ImportError:
-            logger.debug("ParquetRecorder unavailable: PyArrow dependency missing")
-    
-    if HDF5_AVAILABLE:
-        try:
-            # Validate h5py availability for HDF5Recorder
-            import h5py
-            available_backends.append('hdf5')
-            logger.debug("HDF5Recorder available with h5py support")
-        except ImportError:
-            logger.debug("HDF5Recorder unavailable: h5py dependency missing")
-    
-    if SQLITE_AVAILABLE:
-        try:
-            # SQLite3 is part of standard library, validate availability
-            import sqlite3
-            available_backends.append('sqlite')
-            logger.debug("SQLiteRecorder available with sqlite3 support")
-        except ImportError:
-            logger.debug("SQLiteRecorder unavailable: sqlite3 not found")
+    if 'parquet' in BACKEND_REGISTRY:
+        available_backends.append('parquet')
+        logger.debug("ParquetRecorder available")
+
+    if 'hdf5' in BACKEND_REGISTRY:
+        available_backends.append('hdf5')
+        logger.debug("HDF5Recorder available")
+
+    if 'sqlite' in BACKEND_REGISTRY:
+        available_backends.append('sqlite')
+        logger.debug("SQLiteRecorder available")
     
     logger.info(f"Available recording backends: {available_backends}")
     return available_backends
