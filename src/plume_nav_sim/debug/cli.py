@@ -47,7 +47,7 @@ import os
 import json
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List, Union, Tuple, Set
 
 # Click CLI framework imports per Section 7.1.2
 import click
@@ -58,7 +58,7 @@ from rich.text import Text
 from rich import print as rich_print
 
 # Type annotations support
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Set
 
 # Standard library imports for system operations
 import sys
@@ -94,34 +94,31 @@ CLI_PERFORMANCE_THRESHOLDS = {
 }
 
 # Backend availability detection
-def detect_available_backends() -> Dict[str, bool]:
-    """
-    Detect which GUI backends are available for debug viewer launch.
-    
+def detect_available_backends() -> Set[str]:
+    """Detect which GUI backends are available for debug viewer launch.
+
     Returns:
-        Dict mapping backend names to availability status
+        Set of available backend names. An empty set indicates that no GUI
+        backends are installed.
     """
-    backends = {
-        'qt': False,
-        'streamlit': False,
-        'console': True  # Always available as fallback
-    }
-    
+    available: Set[str] = set()
+
     # Check PySide6 availability for Qt backend
     try:
-        importlib.util.find_spec('PySide6')
-        backends['qt'] = True
+        if importlib.util.find_spec('PySide6') is not None:
+            available.add('qt')
     except (ImportError, AttributeError):
-        pass
-    
+        logger.debug("PySide6 not found for Qt backend")
+
     # Check Streamlit availability for web backend
     try:
-        importlib.util.find_spec('streamlit')
-        backends['streamlit'] = True
+        if importlib.util.find_spec('streamlit') is not None:
+            available.add('streamlit')
     except (ImportError, AttributeError):
-        pass
-    
-    return backends
+        logger.debug("Streamlit not found for web backend")
+
+    logger.debug("Detected GUI backends: %s", sorted(available))
+    return available
 
 
 def validate_results_path(results_path: str) -> Path:
@@ -334,17 +331,19 @@ def launch_debug_viewer(ctx, backend: str, results: str, config: Optional[str],
             
             # Detect available backends
             available_backends = detect_available_backends()
-            
+
             # Determine effective backend
             if backend == 'auto':
-                if available_backends['qt']:
+                if 'qt' in available_backends:
                     effective_backend = 'qt'
-                elif available_backends['streamlit']:
+                elif 'streamlit' in available_backends:
                     effective_backend = 'streamlit'
                 else:
-                    effective_backend = 'console'
+                    raise click.ClickException(
+                        "No GUI backends available. Install PySide6 or Streamlit."
+                    )
             else:
-                if not available_backends.get(backend, False):
+                if backend not in available_backends:
                     raise click.ClickException(f"Backend '{backend}' is not available")
                 effective_backend = backend
             
@@ -440,23 +439,10 @@ def launch_debug_viewer(ctx, backend: str, results: str, config: Optional[str],
                     debug_gui.start_session()
                     debug_gui.show()
                     
-                else:  # console fallback
-                    console.print(f"\n[yellow]Console debug mode activated[/yellow]")
-                    console.print(f"Results loaded from: {results_path}")
-                    
-                    # Basic console debugging interface
-                    session.start()
-                    
-                    # Display session information
-                    session_info = session.get_session_info()
-                    info_table = Table(title="Debug Session Information")
-                    info_table.add_column("Property", style="cyan")
-                    info_table.add_column("Value", style="white")
-                    
-                    for key, value in session_info.items():
-                        info_table.add_row(str(key), str(value))
-                    
-                    console.print(info_table)
+                else:
+                    raise click.ClickException(
+                        f"Backend '{effective_backend}' is not supported"
+                    )
                     
                 progress.update(task3, advance=100)
                 
