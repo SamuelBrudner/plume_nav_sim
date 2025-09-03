@@ -1,20 +1,20 @@
 """
 NavigatorProtocol interface defining the structural contract for navigation controllers.
 
-This module implements the core NavigatorProtocol that prescribes the exact properties 
-and methods that any concrete Navigator implementation must provide, ensuring uniform 
-API across single-agent and multi-agent navigation logic. The protocol supports type 
-safety, IDE tooling requirements, and seamless integration with Hydra configuration 
+This module implements the core NavigatorProtocol that prescribes the exact properties
+and methods that any concrete Navigator implementation must provide, ensuring uniform
+API across single-agent and multi-agent navigation logic. The protocol supports type
+safety, IDE tooling requirements, and seamless integration with Hydra configuration
 management for enhanced ML framework compatibility with Gymnasium 0.29.x.
 
-The protocol-based design enables researchers to implement custom navigation algorithms 
-while maintaining compatibility with the existing framework, supporting both research 
+The protocol-based design enables researchers to implement custom navigation algorithms
+while maintaining compatibility with the existing framework, supporting both research
 extensibility and production-grade type safety.
 
 Key enhancements for Gymnasium 0.29.x migration:
 - Extensibility hooks for custom observations, rewards, and episode handling
 - Dual API compatibility detection and automatic format conversion
-- Integration with SpacesFactory utilities for type-safe space construction
+- Integration with SpaceFactory utilities for type-safe space construction
 - Enhanced performance monitoring and memory management integration
 
 Modular Architecture Extensions:
@@ -32,18 +32,20 @@ from typing_extensions import Self
 import numpy as np
 import warnings
 import inspect
+import logging
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 from plume_nav_sim.protocols import PlumeModelProtocol, SensorProtocol
 
 # Use shared NavigatorProtocol definition
 from plume_nav_sim.protocols.navigator import NavigatorProtocol
 
+logger = logging.getLogger(__name__)
+
 # Hydra imports for configuration integration
 try:
     from omegaconf import DictConfig
     HYDRA_AVAILABLE = True
 except ImportError:
-    # Fallback for environments without Hydra
     DictConfig = dict
     HYDRA_AVAILABLE = False
 
@@ -53,7 +55,6 @@ try:
     from gymnasium import spaces
     GYMNASIUM_AVAILABLE = True
 except ImportError:
-    # Fallback compatibility
     try:
         import gym as gymnasium
         from gym import spaces
@@ -63,38 +64,22 @@ except ImportError:
         spaces = None
         GYMNASIUM_AVAILABLE = False
 
-# Import configuration schemas for type hints - handle case where they don't exist yet
 try:
     from ..config.schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
-    SCHEMAS_AVAILABLE = True
-except ImportError:
-    # These will be created by other agents - define minimal fallback types
-    NavigatorConfig = Dict[str, Any]
-    SingleAgentConfig = Dict[str, Any] 
-    MultiAgentConfig = Dict[str, Any]
-    SCHEMAS_AVAILABLE = False
+    logger.info("NavigatorConfig, SingleAgentConfig, MultiAgentConfig successfully imported")
+except ImportError as e:
+    logger.error("Required configuration schemas are missing", exc_info=e)
+    raise ImportError(
+        "Required configuration schemas are missing. Ensure `plume_nav_sim.config.schemas` defines `NavigatorConfig`, "
+        "`SingleAgentConfig`, and `MultiAgentConfig`."
+    ) from e
 
-# Import spaces factory - handle case where it doesn't exist yet
 try:
-    from ..envs.spaces import SpaceFactory as SpacesFactory
-    SPACES_FACTORY_AVAILABLE = True
-except ImportError:
-    # This will be created by other agents - define minimal fallback
-    class SpacesFactory:
-        @staticmethod
-        def create_observation_space(**kwargs):
-            """Fallback until real SpacesFactory is available."""
-            if GYMNASIUM_AVAILABLE and spaces:
-                return spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
-            return None
-            
-        @staticmethod
-        def create_action_space(**kwargs):
-            """Fallback until real SpacesFactory is available."""
-            if GYMNASIUM_AVAILABLE and spaces:
-                return spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-            return None
-    SPACES_FACTORY_AVAILABLE = False
+    from ..envs.spaces import SpaceFactory
+    logger.info("SpaceFactory successfully imported")
+except ImportError as e:
+    logger.error("SpaceFactory is required", exc_info=e)
+    raise ImportError("SpaceFactory is required for plume_nav_sim.core.protocols") from e
 
 
 @runtime_checkable
@@ -2396,7 +2381,7 @@ class NavigatorFactory:
     Enhanced for Gymnasium 0.29.x migration:
     - Gymnasium-specific parameter validation and space creation integration
     - Dual API compatibility detection and automatic format conversion
-    - Integration with SpacesFactory utilities for type-safe space construction
+    - Integration with SpaceFactory utilities for type-safe space construction
     - Support for new extensibility hooks in navigator creation
     
     The factory pattern decouples navigator creation from specific implementation 
@@ -2471,17 +2456,10 @@ class NavigatorFactory:
         
         # Convert to NavigatorConfig if needed for validation
         if isinstance(config, dict):
-            if SCHEMAS_AVAILABLE:
-                config = NavigatorConfig(**config)
-            # If schemas not available yet, work with dict directly
+            config = NavigatorConfig(**config)
         elif hasattr(config, 'to_container') and HYDRA_AVAILABLE:
-            # Handle DictConfig from Hydra
-            if SCHEMAS_AVAILABLE:
-                config_dict = config.to_container(resolve=True)
-                config = NavigatorConfig(**config_dict)
-            else:
-                # Work with DictConfig directly
-                pass
+            config_dict = config.to_container(resolve=True)
+            config = NavigatorConfig(**config_dict)
         
         # Validate Gymnasium availability for enhanced features
         if not GYMNASIUM_AVAILABLE:
@@ -2644,7 +2622,7 @@ class NavigatorFactory:
         """
         Create Gymnasium observation space for a navigator instance.
         
-        Integrates with SpacesFactory utilities to create type-safe observation
+        Integrates with SpaceFactory utilities to create type-safe observation
         spaces that account for both base navigation observations and any
         additional observations from extensibility hooks.
         
@@ -2670,7 +2648,7 @@ class NavigatorFactory:
         if not GYMNASIUM_AVAILABLE:
             return None
             
-        return SpacesFactory.create_observation_space(
+        return SpaceFactory.create_observation_space(
             num_agents=navigator.num_agents,
             include_additional_obs=include_additional_obs,
             **space_kwargs
@@ -2684,7 +2662,7 @@ class NavigatorFactory:
         """
         Create Gymnasium action space for a navigator instance.
         
-        Integrates with SpacesFactory utilities to create type-safe action
+        Integrates with SpaceFactory utilities to create type-safe action
         spaces appropriate for the navigator's configuration.
         
         Args:
@@ -2703,7 +2681,7 @@ class NavigatorFactory:
         if not GYMNASIUM_AVAILABLE:
             return None
             
-        return SpacesFactory.create_action_space(
+        return SpaceFactory.create_action_space(
             num_agents=navigator.num_agents,
             **space_kwargs
         )
