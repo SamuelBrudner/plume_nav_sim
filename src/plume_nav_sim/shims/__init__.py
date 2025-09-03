@@ -36,39 +36,11 @@ import warnings
 # COMPATIBILITY FUNCTION IMPORTS
 # =============================================================================
 
-try:
-    # Import the primary gym_make compatibility function
-    from .gym_make import gym_make
-    _gym_make_available = True
-    
-except ImportError as e:
-    # gym_make.py not available - provide a fallback with clear error
-    warnings.warn(
-        f"Failed to import gym_make compatibility function: {e}. "
-        "Legacy gym.make() compatibility is not available. "
-        "Please use gymnasium.make() directly for environment creation.",
-        ImportWarning,
-        stacklevel=2
-    )
-    
-    def gym_make(*args, **kwargs):
-        """
-        Fallback gym_make function when compatibility layer is unavailable.
-        
-        This function provides a clear error message when the main gym_make
-        compatibility function cannot be imported, guiding users to use
-        the modern gymnasium.make() API directly.
-        """
-        raise ImportError(
-            "The gym_make compatibility function is not available. "
-            "This typically means the gym_make.py module is missing or has import errors. "
-            "Please use gymnasium.make() directly:\n\n"
-            "  import gymnasium\n"
-            "  env = gymnasium.make('PlumeNavSim-v0')\n\n"
-            "For migration guidance, see plume_nav_sim.get_api_migration_guide()"
-        )
-    
-    _gym_make_available = False
+# Import the primary gym_make compatibility function directly. Any import
+# failure should surface immediately to signal missing dependencies.
+from .gym_make import gym_make
+
+_gym_make_available = True
 
 # =============================================================================
 # SHIMS MODULE FEATURE DETECTION
