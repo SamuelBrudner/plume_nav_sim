@@ -96,7 +96,6 @@ from plume_nav_sim.cli import (
     CLIError as cli_CLIError,
     ConfigValidationError as cli_ConfigValidationError,
     get_version,
-    is_available,
     validate_environment,
     register_command,
     list_commands
@@ -156,7 +155,6 @@ class TestCLIImportValidation:
         """Validate that CLI module utilities are imported from correct locations."""
         cli_module_imports = {
             'get_version': get_version,
-            'is_available': is_available,
             'validate_environment': validate_environment,
             'register_command': register_command
         }
@@ -1380,14 +1378,6 @@ class TestCLIUtilityFunctions:
         version = get_version()
         assert isinstance(version, str)
         assert len(version) > 0
-
-    def test_cli_availability_check(self):
-        """Test CLI availability checking."""
-        available = is_available()
-        assert isinstance(available, bool)
-        
-        # Should be True since we're running CLI tests
-        assert available is True
 
     def test_cli_environment_validation(self):
         """Test CLI environment validation."""
