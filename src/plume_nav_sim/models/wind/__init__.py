@@ -65,9 +65,11 @@ Technical Integration:
 
 from __future__ import annotations
 import warnings
-import logging
 from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
+
+from loguru import logger
+LOGURU_AVAILABLE = True
 
 # Core imports with graceful fallbacks during migration
 try:
@@ -89,14 +91,6 @@ except ImportError:
     DictConfig = dict
     HYDRA_AVAILABLE = False
 
-# Enhanced logging for debugging and performance monitoring
-try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
-
 # Import all wind field implementations with graceful fallbacks
 WIND_FIELD_IMPLEMENTATIONS = {}  # Registry for successful imports
 
@@ -114,10 +108,10 @@ try:
         'available': True
     }
     CONSTANT_WIND_AVAILABLE = True
-    logger.debug("ConstantWindField imported successfully") if LOGURU_AVAILABLE else None
+    logger.debug("ConstantWindField imported successfully")
 except ImportError as e:
     CONSTANT_WIND_AVAILABLE = False
-    logger.warning(f"ConstantWindField not available: {e}") if LOGURU_AVAILABLE else None
+    logger.warning(f"ConstantWindField not available: {e}")
     ConstantWindField = None
     ConstantWindFieldConfig = None
     create_constant_wind_field = None
@@ -136,10 +130,10 @@ try:
         'available': True
     }
     TURBULENT_WIND_AVAILABLE = True
-    logger.debug("TurbulentWindField imported successfully") if LOGURU_AVAILABLE else None
+    logger.debug("TurbulentWindField imported successfully")
 except ImportError as e:
     TURBULENT_WIND_AVAILABLE = False
-    logger.warning(f"TurbulentWindField not available: {e}") if LOGURU_AVAILABLE else None
+    logger.warning(f"TurbulentWindField not available: {e}")
     TurbulentWindField = None
     TurbulentWindFieldConfig = None
 
@@ -157,16 +151,16 @@ try:
         'available': True
     }
     TIME_VARYING_WIND_AVAILABLE = True
-    logger.debug("TimeVaryingWindField imported successfully") if LOGURU_AVAILABLE else None
+    logger.debug("TimeVaryingWindField imported successfully")
 except ImportError as e:
     TIME_VARYING_WIND_AVAILABLE = False
-    logger.warning(f"TimeVaryingWindField not available: {e}") if LOGURU_AVAILABLE else None
+    logger.warning(f"TimeVaryingWindField not available: {e}")
     TimeVaryingWindField = None
     TimeVaryingWindFieldConfig = None
 
 # Calculate total available implementations
 TOTAL_IMPLEMENTATIONS = len(WIND_FIELD_IMPLEMENTATIONS)
-logger.info(f"Loaded {TOTAL_IMPLEMENTATIONS} wind field implementations") if LOGURU_AVAILABLE else None
+logger.info(f"Loaded {TOTAL_IMPLEMENTATIONS} wind field implementations")
 
 # Ensure at least one implementation is available
 if TOTAL_IMPLEMENTATIONS == 0:
@@ -850,13 +844,12 @@ if _validation_results['status'] != 'healthy':
     warnings.warn(warning_msg, ImportWarning, stacklevel=2)
 
 # Log successful initialization
-if LOGURU_AVAILABLE:
-    logger.info(
-        f"Wind fields package initialized successfully",
-        total_implementations=_validation_results['implementations']['total'],
-        available_implementations=_validation_results['implementations']['available'],
-        status=_validation_results['status']
-    )
+logger.info(
+    f"Wind fields package initialized successfully",
+    total_implementations=_validation_results['implementations']['total'],
+    available_implementations=_validation_results['implementations']['available'],
+    status=_validation_results['status'],
+)
 
 # Define comprehensive public API for maximum flexibility
 __all__ = [
