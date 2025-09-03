@@ -110,6 +110,9 @@ from typing import Optional, Union, Any, Tuple, List, Dict, TypeVar, Callable
 from dataclasses import dataclass, field
 import dataclasses
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Core protocol imports
 from plume_nav_sim.protocols.navigator import NavigatorProtocol
@@ -221,100 +224,53 @@ class MultiPointOdorSensor:
 try:
     from hydra.core.hydra_config import HydraConfig
     from omegaconf import DictConfig, OmegaConf
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    HydraConfig = None
-    DictConfig = dict
-    OmegaConf = None
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"Hydra configuration dependencies are missing: {exc}")
+    raise
 
 # Loguru integration for enhanced logging
 try:
-    from loguru import logger
+    from loguru import logger as loguru_logger
+    logger = loguru_logger
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
     LOGURU_AVAILABLE = False
 
 # Gymnasium integration for modern API support
 try:
     import gymnasium
     from gymnasium import spaces
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    # Fallback compatibility
-    try:
-        import gym as gymnasium
-        from gym import spaces
-        GYMNASIUM_AVAILABLE = True
-    except ImportError:
-        gymnasium = None
-        spaces = None
-        GYMNASIUM_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"Gymnasium is required for controllers: {exc}")
+    raise
 
-# Configuration schemas - handle case where they don't exist yet
+# Configuration schemas
 try:
     from ..config.schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
-    SCHEMAS_AVAILABLE = True
-except ImportError:
-    # These will be created by other agents - use minimal fallback types
-    NavigatorConfig = Dict[str, Any]
-    SingleAgentConfig = Dict[str, Any] 
-    MultiAgentConfig = Dict[str, Any]
-    SCHEMAS_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"Configuration schemas are missing: {exc}")
+    raise
 
-# Frame cache integration - handle case where it doesn't exist yet  
+# Frame cache integration
 try:
     from ..utils.frame_cache import FrameCache, CacheMode
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    # Frame cache will be created by other agents - define minimal fallback
-    class FrameCache:
-        def __init__(self, **kwargs):
-            pass
-        def get_frame(self, frame_id):
-            return None
-        def get_statistics(self):
-            return {}
-    
-    class CacheMode:
-        NONE = "none"
-        LRU = "lru" 
-        PRELOAD = "preload"
-    
-    FRAME_CACHE_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"FrameCache utilities are required: {exc}")
+    raise
 
-# Spaces factory integration - handle case where it doesn't exist yet
+# Spaces factory integration
 try:
     from ..envs.spaces import SpacesFactory
-    SPACES_FACTORY_AVAILABLE = True
-except ImportError:
-    # This will be created by other agents - define minimal fallback
-    class SpacesFactory:
-        @staticmethod
-        def create_observation_space(**kwargs):
-            """Fallback until real SpacesFactory is available."""
-            if GYMNASIUM_AVAILABLE and spaces:
-                return spaces.Box(low=0, high=1, shape=(4,), dtype=np.float32)
-            return None
-            
-        @staticmethod
-        def create_action_space(**kwargs):
-            """Fallback until real SpacesFactory is available."""
-            if GYMNASIUM_AVAILABLE and spaces:
-                return spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-            return None
-    
-    SPACES_FACTORY_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"SpacesFactory is required: {exc}")
+    raise
 
-# PSUtil for memory monitoring (optional dependency)
+# PSUtil for memory monitoring
 try:
     import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None
-    PSUTIL_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - handled by tests
+    logger.error(f"psutil is required for memory monitoring: {exc}")
+    raise
 
 # Type variable for controller types
 ControllerType = TypeVar('ControllerType', bound='BaseController')
@@ -506,7 +462,7 @@ class BaseController:
 
         # Frame cache integration
         self._frame_cache = None
-        if FRAME_CACHE_AVAILABLE and self._frame_cache_mode != "none":
+        if self._frame_cache_mode != "none":
             try:
                 self._frame_cache = FrameCache(
                     mode=self._frame_cache_mode,
@@ -528,16 +484,14 @@ class BaseController:
             )
             
             # Add Hydra context if available
-            if HYDRA_AVAILABLE:
-                try:
-                    hydra_cfg = HydraConfig.get()
-                    self._logger = self._logger.bind(
-                        hydra_job_name=hydra_cfg.job.name,
-                        hydra_output_dir=hydra_cfg.runtime.output_dir
-                    )
-                except Exception:
-                    # Hydra context not available, continue without it
-                    pass
+            try:
+                hydra_cfg = HydraConfig.get()
+                self._logger = self._logger.bind(
+                    hydra_job_name=hydra_cfg.job.name,
+                    hydra_output_dir=hydra_cfg.runtime.output_dir
+                )
+            except Exception:  # pragma: no cover - optional integration
+                pass
         else:
             self._logger = None
 
@@ -777,7 +731,7 @@ class BaseController:
         try:
             additional = self.compute_additional_obs(observation)
         except Exception as e:
-            log.error("compute_additional_obs failed", error=str(e))
+            log.error(f"compute_additional_obs failed: {e}")
             raise
 
         if additional:
@@ -1809,7 +1763,7 @@ class MultiAgentController(BaseController):
         })
         
         # Memory monitoring for large agent counts
-        if PSUTIL_AVAILABLE and num_agents > 50:
+        if num_agents > 50:
             self._monitor_memory = True
             self._base_memory_usage = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         else:
@@ -2957,7 +2911,7 @@ def create_controller_from_config(
         elif hasattr(config, "dict"):
             config_dict = config.dict()
             config_type = f"pydantic_v1:{config_type}"
-        elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+        elif isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
             config_type = "DictConfig"
         elif isinstance(config, dict):
@@ -3075,9 +3029,9 @@ def create_single_agent_controller(
         SingleAgentController: Configured single-agent controller instance
     """
     # Merge configuration with kwargs
-    if SCHEMAS_AVAILABLE and isinstance(config, SingleAgentConfig):
+    if isinstance(config, SingleAgentConfig):
         config_dict = config.model_dump(exclude_none=True)
-    elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+    elif isinstance(config, DictConfig):
         config_dict = OmegaConf.to_container(config, resolve=True)
     else:
         config_dict = dict(config) if config else {}
@@ -3111,9 +3065,9 @@ def create_multi_agent_controller(
         MultiAgentController: Configured multi-agent controller instance
     """
     # Merge configuration with kwargs
-    if SCHEMAS_AVAILABLE and isinstance(config, MultiAgentConfig):
+    if isinstance(config, MultiAgentConfig):
         config_dict = config.model_dump(exclude_none=True)
-    elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+    elif isinstance(config, DictConfig):
         config_dict = OmegaConf.to_container(config, resolve=True)
     else:
         config_dict = dict(config) if config else {}

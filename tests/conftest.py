@@ -77,6 +77,9 @@ import sys
 import pathlib
 import logging
 
+logger = logging.getLogger(__name__)
+
+
 # Update sys.path for new project structure
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
@@ -120,10 +123,11 @@ try:
     # v1.0 Protocol-based architecture imports
     from plume_nav_sim.core.protocols import (
         SourceProtocol, BoundaryPolicyProtocol, ActionInterfaceProtocol,
-        RecorderProtocol, StatsAggregatorProtocol
+        RecorderProtocol, StatsAggregatorProtocol,
     )
     PROTOCOLS_AVAILABLE = True
-except Exception as exc:
+except Exception as exc:  # pragma: no cover - test infrastructure guard
+
     PROTOCOLS_AVAILABLE = False
     # Fallback protocol types for testing
     SourceProtocol = object
@@ -131,9 +135,8 @@ except Exception as exc:
     ActionInterfaceProtocol = object
     RecorderProtocol = object
     StatsAggregatorProtocol = object
-    logging.getLogger(__name__).warning(
-        "Protocol imports unavailable: %s", exc
-    )
+    logger.warning("Failed to import core protocols: %s", exc)
+
 
 try:
     # Recorder backend testing dependencies
@@ -161,6 +164,7 @@ except ImportError:
 try:
     from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
     SEED_MANAGER_AVAILABLE = True
+
 except Exception as exc:
     SEED_MANAGER_AVAILABLE = False
     SeedManager = None
