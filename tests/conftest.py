@@ -75,6 +75,7 @@ from typing import Any, Dict, Optional, Union, Generator, Tuple
 from unittest.mock import patch, MagicMock, Mock
 import sys
 import pathlib
+import logging
 
 # Update sys.path for new project structure
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
@@ -122,7 +123,7 @@ try:
         RecorderProtocol, StatsAggregatorProtocol
     )
     PROTOCOLS_AVAILABLE = True
-except ImportError:
+except Exception as exc:
     PROTOCOLS_AVAILABLE = False
     # Fallback protocol types for testing
     SourceProtocol = object
@@ -130,6 +131,9 @@ except ImportError:
     ActionInterfaceProtocol = object
     RecorderProtocol = object
     StatsAggregatorProtocol = object
+    logging.getLogger(__name__).warning(
+        "Protocol imports unavailable: %s", exc
+    )
 
 try:
     # Recorder backend testing dependencies
@@ -157,10 +161,13 @@ except ImportError:
 try:
     from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
     SEED_MANAGER_AVAILABLE = True
-except ImportError:
+except Exception as exc:
     SEED_MANAGER_AVAILABLE = False
     SeedManager = None
     SeedConfig = None
+    logging.getLogger(__name__).warning(
+        "SeedManager unavailable: %s", exc
+    )
 
 
 @pytest.fixture
