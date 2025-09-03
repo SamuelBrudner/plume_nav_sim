@@ -648,18 +648,9 @@ def list_available_plume_models() -> List[str]:
         >>> models = list_available_plume_models()
         >>> print(f"Available plume models: {models}")
     """
-    available_models = list(_PLUME_MODEL_REGISTRY.keys())
-    
-    # Add fallback models that have direct import support
-    fallback_models = ['GaussianPlumeModel', 'TurbulentPlumeModel', 'VideoPlumeAdapter']
-    for model in fallback_models:
-        if model not in available_models:
-            # Check if import status indicates availability
-            status = _IMPORT_STATUS['plume_models'].get(model, {})
-            if not status.get('attempted_import', False) or status.get('available', False):
-                available_models.append(model)
-    
-    return sorted(available_models)
+    models = sorted(_PLUME_MODEL_REGISTRY.keys())
+    logger.debug("Available plume models: {}", models)
+    return models
 
 
 def list_available_wind_fields() -> List[str]:
@@ -669,16 +660,9 @@ def list_available_wind_fields() -> List[str]:
     Returns:
         List[str]: List of wind field type names that can be instantiated
     """
-    available_fields = list(_WIND_FIELD_REGISTRY.keys())
-    
-    fallback_fields = ['ConstantWindField', 'TurbulentWindField', 'TimeVaryingWindField']
-    for field in fallback_fields:
-        if field not in available_fields:
-            status = _IMPORT_STATUS['wind_fields'].get(field, {})
-            if not status.get('attempted_import', False) or status.get('available', False):
-                available_fields.append(field)
-    
-    return sorted(available_fields)
+    fields = sorted(_WIND_FIELD_REGISTRY.keys())
+    logger.debug("Available wind fields: {}", fields)
+    return fields
 
 
 def list_available_sensors() -> List[str]:
@@ -688,16 +672,9 @@ def list_available_sensors() -> List[str]:
     Returns:
         List[str]: List of sensor type names that can be instantiated
     """
-    available_sensors = list(_SENSOR_REGISTRY.keys())
-    
-    fallback_sensors = ['BinarySensor', 'ConcentrationSensor', 'GradientSensor']
-    for sensor in fallback_sensors:
-        if sensor not in available_sensors:
-            status = _IMPORT_STATUS['sensors'].get(sensor, {})
-            if not status.get('attempted_import', False) or status.get('available', False):
-                available_sensors.append(sensor)
-    
-    return sorted(available_sensors)
+    sensors = sorted(_SENSOR_REGISTRY.keys())
+    logger.debug("Available sensors: {}", sensors)
+    return sensors
 
 
 def get_model_registry() -> Dict[str, Dict[str, Any]]:
