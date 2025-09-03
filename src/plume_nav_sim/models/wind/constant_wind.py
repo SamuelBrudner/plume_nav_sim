@@ -61,14 +61,16 @@ import numpy as np
 # Core protocol import for interface compliance
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 
+logger = logging.getLogger(__name__)
+
 # Configuration management imports
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
 except ImportError:
-    # Fallback for environments without Hydra
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+    logger.error(
+        "Missing optional dependency 'omegaconf'. Install hydra-core to enable configuration support."
+    )
+    raise
 
 
 @dataclass
