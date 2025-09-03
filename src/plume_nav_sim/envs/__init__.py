@@ -27,41 +27,35 @@ Modular Architecture Components:
 
 import warnings
 from typing import Dict, Any, Optional, Union, List
+import logging
 
-# Hydra imports for dependency injection and component instantiation
-try:
-    from hydra import instantiate
-    HYDRA_INSTANTIATE_AVAILABLE = True
-except ImportError:
-    HYDRA_INSTANTIATE_AVAILABLE = False
-    # Fallback for environments without Hydra
-    def instantiate(config, **kwargs):
-        """Fallback instantiate function."""
-        raise RuntimeError("Hydra not available for dependency injection")
-
-# Core environment - always available
-try:
-    from plume_nav_sim.envs.video_plume import VideoPlume
-    VIDEO_PLUME_AVAILABLE = True
-except ImportError:
-    VideoPlume = None
-    VIDEO_PLUME_AVAILABLE = False
-
-# Import centralized logging setup first for structured diagnostics
+# Initialize structured logging; fail fast if unavailable
 try:
     from plume_nav_sim.utils.logging_setup import get_enhanced_logger
     logger = get_enhanced_logger(__name__)
     LOGGING_AVAILABLE = True
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGGING_AVAILABLE = False
+except Exception as e:  # pragma: no cover - critical dependency
+    logging.getLogger(__name__).error("Logging setup unavailable: %s", e)
+    raise
+
+# Required dependency: Hydra
+try:
+    from hydra import instantiate
+    HYDRA_INSTANTIATE_AVAILABLE = True
+except ImportError as e:  # pragma: no cover - explicit failure
+    logger.error(f"Hydra is required for dependency injection: {e}")
+    raise
+
+# Required core environment
+try:
+    from plume_nav_sim.envs.video_plume import VideoPlume
+    VIDEO_PLUME_AVAILABLE = True
+except ImportError as e:  # pragma: no cover - explicit failure
+    logger.error(f"VideoPlume import failed: {e}")
+    raise
 
 # List of all available exports - will be updated based on successful imports
-__all__ = []
-
-if VIDEO_PLUME_AVAILABLE:
-    __all__.append("VideoPlume")
+__all__ = ["VideoPlume"]
 
 # Check for legacy gym import attempts and issue deprecation warnings
 try:
@@ -88,30 +82,22 @@ try:
 except ImportError:
     LEGACY_GYM_AVAILABLE = False
 
-# Check for Gymnasium availability - required for modern API
+# Required Gymnasium dependency for modern API
 try:
     import gymnasium as gym_modern
     GYMNASIUM_AVAILABLE = True
     logger.info(
-        "Gymnasium package available for modern RL API", 
+        "Gymnasium package available for modern RL API",
         extra={
             "metric_type": "environment_capability",
             "package": "gymnasium",
             "api_version": "0.29.x",
-            "supports_terminated_truncated": True
-        }
-    ) if LOGGING_AVAILABLE else None
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    gym_modern = None
-    logger.warning(
-        "Gymnasium package not available - modern RL environments disabled",
-        extra={
-            "metric_type": "environment_limitation",
-            "missing_package": "gymnasium",
-            "recommendation": "pip install gymnasium==0.29.*"
-        }
-    ) if LOGGING_AVAILABLE else None
+            "supports_terminated_truncated": True,
+        },
+    )
+except ImportError as e:  # pragma: no cover - explicit failure
+    logger.error(f"Gymnasium package is required: {e}")
+    raise
 
 # Core environment implementation - requires gymnasium
 try:
