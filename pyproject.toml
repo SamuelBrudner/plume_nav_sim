@@ -68,7 +68,6 @@ docs = [
 ]
 viz = [
     "plotly>=5.17.0",
-    "seaborn>=0.12.0",
 ]
 rl = [
     # Core RL dependencies for Gymnasium API compatibility
@@ -152,7 +151,6 @@ module = [
     "matplotlib.*",
     "numpy.*",
     "plotly.*",
-    "seaborn.*",
     "cv2.*",
     "opencv.*",
     "loguru.*",
