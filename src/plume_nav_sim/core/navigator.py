@@ -100,30 +100,10 @@ except ImportError as exc:
         "plume_nav_sim.core.controllers could not be imported."
     ) from exc
 
-# Hydra imports for configuration integration
-try:
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without Hydra
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
-
-# Gymnasium imports for modern API support
-try:
-    import gymnasium
-    from gymnasium import spaces
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    # Fallback compatibility
-    try:
-        import gym as gymnasium
-        from gym import spaces
-        GYMNASIUM_AVAILABLE = True
-    except ImportError:
-        gymnasium = None
-        spaces = None
-        GYMNASIUM_AVAILABLE = False
+# Required dependencies
+from omegaconf import DictConfig
+import gymnasium
+from gymnasium import spaces
 
 
 class Navigator:
