@@ -508,7 +508,7 @@ pip install "plume_nav_sim[rl]"
 
 # v1.0 Optional dependency groups for enhanced capabilities
 pip install "plume_nav_sim[recording]"  # Multi-backend data persistence (pandas, pyarrow, h5py)
-pip install "plume_nav_sim[debug]"      # Interactive debugging GUI (PySide6, streamlit)
+pip install "plume_nav_sim[debug]"      # Interactive debugging GUI (PySide6, plotly, streamlit)
 pip install "plume_nav_sim[analysis]"   # Automated statistics collection (scipy, psutil)
 
 # Full installation with all v1.0 components
