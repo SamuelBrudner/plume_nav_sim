@@ -79,38 +79,44 @@ except ImportError as exc:  # pragma: no cover - dependency required for CLI
 
 HYDRA_AVAILABLE = True
 
+# Database session utilities are required for cleanup operations
+try:  # pragma: no cover - exercised via CLI import tests
+    from plume_nav_sim.db.session import close_session
+except ImportError as exc:  # pragma: no cover - fail fast when DB layer missing
+    logger.error(
+        "Database layer is required for plume_nav_sim CLI. Install with 'pip install plume_nav_sim[db]'."
+    )
+    raise ImportError(
+        "Database layer is required for plume_nav_sim CLI. Install with 'pip install plume_nav_sim[db]'."
+    ) from exc
+
 # Import core system components
 from plume_nav_sim.api.navigation import (
-    run_plume_simulation, create_video_plume, create_navigator, 
-    ConfigurationError, SimulationError, visualize_simulation_results
+    run_plume_simulation,
+    create_video_plume,
+    create_navigator,
+    ConfigurationError,
+    SimulationError,
+    visualize_simulation_results,
 )
 from plume_nav_sim.utils.seed_manager import get_last_seed, set_global_seed
-from plume_nav_sim.utils.seed_manager import get_current_seed  # exposed for test patching
+from plume_nav_sim.utils.seed_manager import (
+    get_current_seed,
+)  # exposed for test patching
 from plume_nav_sim.utils.logging_setup import setup_logger
 from plume_nav_sim.utils.visualization import create_realtime_visualizer
 from plume_nav_sim.utils.frame_cache import FrameCache
 from plume_nav_sim.models.plume import create_plume_model
 
 # Expose configuration schema classes for test patching
-from plume_nav_sim.config.schemas import NavigatorConfig, VideoPlumeConfig, SimulationConfig
+from plume_nav_sim.config.schemas import (
+    NavigatorConfig,
+    VideoPlumeConfig,
+    SimulationConfig,
+)
 
 # Alias setup_logger so tests can patch `setup_logging`
 setup_logging = setup_logger  # noqa: N816  (keep camelCase for compatibility)
-
-# Database session cleanup is optional during tests.  Some lightweight
-# environments used in CI don't provide the full database layer which would
-# normally supply ``close_session``.  Import it defensively so the CLI remains
-# importable even when the database utilities are absent.
-try:  # pragma: no cover - exercised indirectly via CLI tests
-    from plume_nav_sim.db.session import close_session  # type: ignore
-except Exception:  # pragma: no cover - fallback for minimal environments
-    def close_session(session: object | None = None) -> None:
-        """Best-effort session closer used when DB layer is unavailable."""
-        if session is not None and hasattr(session, "close"):
-            try:
-                session.close()
-            except Exception:
-                pass
 
 
 # Import gymnasium for RL environment creation
