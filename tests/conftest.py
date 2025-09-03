@@ -79,6 +79,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # Update sys.path for new project structure
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
@@ -126,6 +127,7 @@ try:
     )
     PROTOCOLS_AVAILABLE = True
 except Exception as exc:  # pragma: no cover - test infrastructure guard
+
     PROTOCOLS_AVAILABLE = False
     # Fallback protocol types for testing
     SourceProtocol = object
@@ -134,6 +136,7 @@ except Exception as exc:  # pragma: no cover - test infrastructure guard
     RecorderProtocol = object
     StatsAggregatorProtocol = object
     logger.warning("Failed to import core protocols: %s", exc)
+
 
 try:
     # Recorder backend testing dependencies
@@ -161,11 +164,14 @@ except ImportError:
 try:
     from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
     SEED_MANAGER_AVAILABLE = True
-except Exception as exc:  # pragma: no cover - test infrastructure guard
+
+except Exception as exc:
     SEED_MANAGER_AVAILABLE = False
     SeedManager = None
     SeedConfig = None
-    logger.warning("Seed manager unavailable: %s", exc)
+    logging.getLogger(__name__).warning(
+        "SeedManager unavailable: %s", exc
+    )
 
 
 @pytest.fixture

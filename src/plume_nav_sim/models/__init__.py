@@ -74,24 +74,23 @@ from ..core.protocols import (
     ComponentConfigType
 )
 
-# Hydra configuration support
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     from omegaconf import DictConfig
     from hydra import utils as hydra_utils
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    hydra_utils = None
-    HYDRA_AVAILABLE = False
+except ImportError as exc:
+    logger.error("Hydra is required for plume_nav_sim.models but not installed.")
+    raise
 
-# Enhanced logging support
 try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
+    from loguru import logger as loguru_logger
+    logger = loguru_logger
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+    logger.error("loguru is required for plume_nav_sim.models but not installed.")
+    raise
 
 # Type imports for protocols
 if TYPE_CHECKING:
@@ -146,13 +145,12 @@ def register_plume_model(
     }
     
     # Log registration for monitoring
-    if LOGURU_AVAILABLE:
-        logger.debug(
-            f"Registered plume model: {model_name}",
-            model_class=model_class.__name__,
-            module=model_class.__module__,
-            description=description
-        )
+    logger.debug(
+        f"Registered plume model: {model_name}",
+        model_class=model_class.__name__,
+        module=model_class.__module__,
+        description=description
+    )
 
 
 def register_wind_field(
@@ -179,14 +177,13 @@ def register_wind_field(
         'performance_characteristics': performance_characteristics or {},
         'module_path': f"{field_class.__module__}.{field_class.__name__}"
     }
-    
-    if LOGURU_AVAILABLE:
-        logger.debug(
-            f"Registered wind field: {field_name}",
-            field_class=field_class.__name__,
-            module=field_class.__module__,
-            description=description
-        )
+
+    logger.debug(
+        f"Registered wind field: {field_name}",
+        field_class=field_class.__name__,
+        module=field_class.__module__,
+        description=description
+    )
 
 
 def register_sensor(
@@ -213,14 +210,13 @@ def register_sensor(
         'performance_characteristics': performance_characteristics or {},
         'module_path': f"{sensor_class.__module__}.{sensor_class.__name__}"
     }
-    
-    if LOGURU_AVAILABLE:
-        logger.debug(
-            f"Registered sensor: {sensor_name}",
-            sensor_class=sensor_class.__name__,
-            module=sensor_class.__module__,
-            description=description
-        )
+
+    logger.debug(
+        f"Registered sensor: {sensor_name}",
+        sensor_class=sensor_class.__name__,
+        module=sensor_class.__module__,
+        description=description
+    )
 
 
 def create_plume_model(config: Union[Dict[str, Any], DictConfig]) -> 'PlumeModelProtocol':
@@ -268,7 +264,7 @@ def create_plume_model(config: Union[Dict[str, Any], DictConfig]) -> 'PlumeModel
         >>> model = create_plume_model({'type': 'GaussianPlumeModel'})
     """
     # Handle Hydra instantiation pattern
-    if HYDRA_AVAILABLE and isinstance(config, (dict, DictConfig)) and '_target_' in config:
+    if isinstance(config, (dict, DictConfig)) and '_target_' in config:
         try:
             model = hydra_utils.instantiate(config)
             
@@ -278,12 +274,11 @@ def create_plume_model(config: Union[Dict[str, Any], DictConfig]) -> 'PlumeModel
                     f"Created model {type(model)} does not implement PlumeModelProtocol"
                 )
             
-            if LOGURU_AVAILABLE:
-                logger.info(
-                    f"Created plume model via Hydra instantiation",
-                    target=config['_target_'],
-                    model_type=type(model).__name__
-                )
+            logger.info(
+                f"Created plume model via Hydra instantiation",
+                target=config['_target_'],
+                model_type=type(model).__name__
+            )
             
             return model
             
@@ -306,13 +301,12 @@ def create_plume_model(config: Union[Dict[str, Any], DictConfig]) -> 'PlumeModel
             model_config = {k: v for k, v in config.items() if k not in ['type', 'model_type']}
             
             model = model_class(**model_config)
-            
-            if LOGURU_AVAILABLE:
-                logger.info(
-                    f"Created plume model via registry",
-                    model_type=model_type,
-                    config_keys=list(model_config.keys())
-                )
+
+            logger.info(
+                f"Created plume model via registry",
+                model_type=model_type,
+                config_keys=list(model_config.keys())
+            )
             
             return model
             
@@ -339,13 +333,12 @@ def create_plume_model(config: Union[Dict[str, Any], DictConfig]) -> 'PlumeModel
         # Create model instance
         model_config = {k: v for k, v in config.items() if k not in ['type', 'model_type']}
         model = model_class(**model_config)
-        
-        if LOGURU_AVAILABLE:
-            logger.info(
-                f"Created plume model via direct import",
-                model_type=model_type,
-                module=model_class.__module__
-            )
+
+        logger.info(
+            f"Created plume model via direct import",
+            model_type=model_type,
+            module=model_class.__module__
+        )
         
         return model
         
@@ -390,7 +383,7 @@ def create_wind_field(config: Union[Dict[str, Any], DictConfig]) -> 'WindFieldPr
         >>> wind_field = create_wind_field(config)
     """
     # Handle Hydra instantiation pattern
-    if HYDRA_AVAILABLE and isinstance(config, (dict, DictConfig)) and '_target_' in config:
+    if isinstance(config, (dict, DictConfig)) and '_target_' in config:
         try:
             wind_field = hydra_utils.instantiate(config)
             
@@ -399,12 +392,11 @@ def create_wind_field(config: Union[Dict[str, Any], DictConfig]) -> 'WindFieldPr
                     f"Created wind field {type(wind_field)} does not implement WindFieldProtocol"
                 )
             
-            if LOGURU_AVAILABLE:
-                logger.info(
-                    f"Created wind field via Hydra instantiation",
-                    target=config['_target_'],
-                    field_type=type(wind_field).__name__
-                )
+            logger.info(
+                f"Created wind field via Hydra instantiation",
+                target=config['_target_'],
+                field_type=type(wind_field).__name__
+            )
             
             return wind_field
             
@@ -425,13 +417,12 @@ def create_wind_field(config: Union[Dict[str, Any], DictConfig]) -> 'WindFieldPr
             
             field_config = {k: v for k, v in config.items() if k not in ['type', 'field_type']}
             wind_field = field_class(**field_config)
-            
-            if LOGURU_AVAILABLE:
-                logger.info(
-                    f"Created wind field via registry",
-                    field_type=field_type,
-                    config_keys=list(field_config.keys())
-                )
+
+            logger.info(
+                f"Created wind field via registry",
+                field_type=field_type,
+                config_keys=list(field_config.keys())
+            )
             
             return wind_field
             
@@ -457,13 +448,12 @@ def create_wind_field(config: Union[Dict[str, Any], DictConfig]) -> 'WindFieldPr
         
         field_config = {k: v for k, v in config.items() if k not in ['type', 'field_type']}
         wind_field = field_class(**field_config)
-        
-        if LOGURU_AVAILABLE:
-            logger.info(
-                f"Created wind field via direct import",
-                field_type=field_type,
-                module=field_class.__module__
-            )
+
+        logger.info(
+            f"Created wind field via direct import",
+            field_type=field_type,
+            module=field_class.__module__
+        )
         
         return wind_field
         
@@ -506,7 +496,7 @@ def create_sensors(sensor_configs: List[Union[Dict[str, Any], DictConfig]]) -> L
     for i, config in enumerate(sensor_configs):
         try:
             # Handle Hydra instantiation
-            if HYDRA_AVAILABLE and isinstance(config, (dict, DictConfig)) and '_target_' in config:
+            if isinstance(config, (dict, DictConfig)) and '_target_' in config:
                 sensor = hydra_utils.instantiate(config)
                 
                 if not isinstance(sensor, SensorProtocol):
@@ -565,11 +555,10 @@ def create_sensors(sensor_configs: List[Union[Dict[str, Any], DictConfig]]) -> L
                 f"Failed to create sensor from config {i}: {config}. Error: {e}"
             )
     
-    if LOGURU_AVAILABLE:
-        logger.info(
-            f"Created {len(sensors)} sensors",
-            sensor_types=[type(s).__name__ for s in sensors]
-        )
+    logger.info(
+        f"Created {len(sensors)} sensors",
+        sensor_types=[type(s).__name__ for s in sensors]
+    )
     
     return sensors
 
@@ -639,11 +628,10 @@ def create_modular_environment(config: Union[Dict[str, Any], DictConfig]) -> Dic
         'wind_field_type': type(components['wind_field']).__name__ if components['wind_field'] else None
     }
     
-    if LOGURU_AVAILABLE:
-        logger.info(
-            "Created modular environment",
-            **components['metadata']
-        )
+    logger.info(
+        "Created modular environment",
+        **components['metadata']
+    )
     
     return components
 
@@ -894,21 +882,17 @@ def auto_discover_models() -> None:
 # Initialize the package by attempting auto-discovery
 try:
     auto_discover_models()
-    
-    if LOGURU_AVAILABLE:
-        logger.debug(
-            "Models package initialized",
-            plume_models=len(_PLUME_MODEL_REGISTRY),
-            wind_fields=len(_WIND_FIELD_REGISTRY),
-            sensors=len(_SENSOR_REGISTRY)
-        )
-        
+
+    logger.debug(
+        "Models package initialized",
+        plume_models=len(_PLUME_MODEL_REGISTRY),
+        wind_fields=len(_WIND_FIELD_REGISTRY),
+        sensors=len(_SENSOR_REGISTRY)
+    )
+
 except Exception as e:
     # Don't fail package import if auto-discovery fails
-    if LOGURU_AVAILABLE:
-        logger.warning(f"Auto-discovery failed, continuing with manual registration: {e}")
-    else:
-        warnings.warn(f"Models auto-discovery failed: {e}", UserWarning, stacklevel=2)
+    logger.warning(f"Auto-discovery failed, continuing with manual registration: {e}")
 
 
 # Public API exports
@@ -956,8 +940,8 @@ __performance_characteristics__ = {
 
 # Compatibility features
 __compatibility_features__ = {
-    "hydra_integration": HYDRA_AVAILABLE,
-    "enhanced_logging": LOGURU_AVAILABLE,
+    "hydra_integration": True,
+    "enhanced_logging": True,
     "auto_discovery": True,
     "protocol_validation": True,
     "registry_based_creation": True,

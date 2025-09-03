@@ -72,22 +72,22 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 # Base sensor infrastructure
 from .base_sensor import BaseSensor
 
-# Logging integration
-try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+import logging
 
-# Configuration integration
+logger = logging.getLogger(__name__)
+try:
+    from loguru import logger as loguru_logger
+except ImportError as e:
+    logger.error("loguru is required for ConcentrationSensor")
+    raise
+else:
+    logger = loguru_logger
+
 try:
     from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+except ImportError as e:
+    logger.error("omegaconf is required for ConcentrationSensor")
+    raise
 
 
 @dataclass
@@ -385,16 +385,15 @@ class ConcentrationSensor(BaseSensor):
         
         # Log sensor initialization
         if self._enable_logging:
-            if LOGURU_AVAILABLE:
-                logger.bind(
-                    sensor_type="ConcentrationSensor",
-                    sensor_id=self._sensor_id,
-                    dynamic_range=dynamic_range,
-                    resolution=resolution,
-                    noise_std=noise_std,
-                    enable_drift=enable_drift,
-                    vectorized_ops=vectorized_ops
-                ).info("ConcentrationSensor initialized with enhanced measurement capabilities")
+            logger.bind(
+                sensor_type="ConcentrationSensor",
+                sensor_id=self._sensor_id,
+                dynamic_range=dynamic_range,
+                resolution=resolution,
+                noise_std=noise_std,
+                enable_drift=enable_drift,
+                vectorized_ops=vectorized_ops
+            ).info("ConcentrationSensor initialized with enhanced measurement capabilities")
     
     def _initialize_temporal_filter(self) -> None:
         """Initialize temporal filtering components for sensor dynamics."""
@@ -515,7 +514,7 @@ class ConcentrationSensor(BaseSensor):
         # Update operation metrics for this measurement call
         self._performance_metrics['total_operations'] += 1
         self._performance_metrics['measurement_count'] += 1
-        if self._enable_logging and LOGURU_AVAILABLE:
+        if self._enable_logging:
             logger.debug(
                 "ConcentrationSensor measure invoked",
                 total_operations=self._performance_metrics['total_operations'],
@@ -556,7 +555,7 @@ class ConcentrationSensor(BaseSensor):
                     self._performance_metrics['vectorized_operations'] += 1
 
                 # Log detailed performance for debugging (reduced frequency)
-                if LOGURU_AVAILABLE and self._measurement_count % 100 == 0:
+                if self._measurement_count % 100 == 0:
                     logger.trace(
                         "ConcentrationSensor measurement completed",
                         measurement_time_ms=measurement_time,
@@ -567,7 +566,7 @@ class ConcentrationSensor(BaseSensor):
                     )
 
                 # Check performance requirement (<0.1ms per agent)
-                if measurement_time > 0.1 * num_agents and LOGURU_AVAILABLE:
+                if measurement_time > 0.1 * num_agents:
                     logger.warning(
                         "ConcentrationSensor measurement exceeded performance requirement",
                         measurement_time_ms=measurement_time,
@@ -581,7 +580,7 @@ class ConcentrationSensor(BaseSensor):
             return measured_concentrations.astype(np.float64)
                 
         except Exception as e:
-            if self._enable_logging and LOGURU_AVAILABLE:
+            if self._enable_logging:
                 logger.error(
                     f"ConcentrationSensor measurement failed: {str(e)}",
                     error_type=type(e).__name__,
@@ -730,7 +729,7 @@ class ConcentrationSensor(BaseSensor):
                 self._last_calibration_time = time.time()
             
             # Log configuration update
-            if self._enable_logging and LOGURU_AVAILABLE:
+            if self._enable_logging:
                 logger.info(
                     "ConcentrationSensor configuration updated",
                     sensor_id=self._sensor_id,
@@ -739,7 +738,7 @@ class ConcentrationSensor(BaseSensor):
                 )
                 
         except Exception as e:
-            if self._enable_logging and LOGURU_AVAILABLE:
+            if self._enable_logging:
                 logger.error(
                     f"ConcentrationSensor configuration update failed: {str(e)}",
                     error_type=type(e).__name__,
@@ -786,7 +785,7 @@ class ConcentrationSensor(BaseSensor):
                 return np.zeros(positions.shape[0])
                 
         except Exception as e:
-            if self._enable_logging and LOGURU_AVAILABLE:
+            if self._enable_logging:
                 logger.warning(
                     f"Failed to sample from plume_state: {str(e)}",
                     plume_state_type=type(plume_state).__name__,
@@ -1130,7 +1129,7 @@ def create_concentration_sensor_from_config(
             >>> sensor = create_concentration_sensor_from_config(cfg.sensors.concentration)
     """
     # Handle different configuration types
-    if HYDRA_AVAILABLE and isinstance(config, DictConfig):
+    if isinstance(config, DictConfig):
         config_dict = config
     elif isinstance(config, dict):
         config_dict = config
