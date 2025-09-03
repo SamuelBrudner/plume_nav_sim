@@ -90,6 +90,8 @@ from pathlib import Path
 import logging
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 # Gymnasium imports are required; fail fast with guidance if missing
 try:
     import gymnasium as gym
@@ -130,214 +132,33 @@ from plume_nav_sim.envs.spaces import (
 )
 SPACES_AVAILABLE = True
 
-# Plume model implementations with fallback
-try:
-    from plume_nav_sim.models.plume.gaussian_plume import GaussianPlumeModel
-    from plume_nav_sim.models.plume.turbulent_plume import TurbulentPlumeModel  
-    from plume_nav_sim.models.plume.video_plume_adapter import VideoPlumeAdapter
-    PLUME_MODELS_AVAILABLE = True
-except ImportError:
-    # Minimal fallback implementation for VideoPlumeAdapter
-    class VideoPlumeAdapter:
-        def __init__(self, video_path: str, **kwargs):
-            self.video_path = video_path
-            self.frame_count = 1000
-            self.width = 640
-            self.height = 480
-            self.fps = 30.0
-        
-        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-            if positions.ndim == 1:
-                return np.random.rand()
-            return np.random.rand(len(positions))
-        
-        def step(self, dt: float = 1.0) -> None:
-            pass
-        
-        def reset(self, **kwargs) -> None:
-            pass
-        
-        def get_frame(self, frame_id: int) -> Optional[np.ndarray]:
-            return np.random.rand(self.height, self.width).astype(np.float32)
-        
-        def get_metadata(self) -> Dict[str, Any]:
-            return {
-                "width": self.width,
-                "height": self.height, 
-                "fps": self.fps,
-                "frame_count": self.frame_count
-            }
-        
-        def close(self):
-            pass
-    
-    class GaussianPlumeModel:
-        def __init__(self, source_position=(50, 50), source_strength=1000.0, **kwargs):
-            self.source_position = source_position
-            self.source_strength = source_strength
-        
-        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-            if positions.ndim == 1:
-                return np.random.rand()
-            return np.random.rand(len(positions))
-        
-        def step(self, dt: float = 1.0) -> None:
-            pass
-        
-        def reset(self, **kwargs) -> None:
-            pass
-    
-    class TurbulentPlumeModel:
-        def __init__(self, filament_count=500, turbulence_intensity=0.3, **kwargs):
-            self.filament_count = filament_count
-            self.turbulence_intensity = turbulence_intensity
-        
-        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-            if positions.ndim == 1:
-                return np.random.rand()
-            return np.random.rand(len(positions))
-        
-        def step(self, dt: float = 1.0) -> None:
-            pass
-        
-        def reset(self, **kwargs) -> None:
-            pass
-    
-    PLUME_MODELS_AVAILABLE = False
-
+# Plume model implementations
+from plume_nav_sim.models.plume.gaussian_plume import GaussianPlumeModel
+from plume_nav_sim.models.plume.turbulent_plume import TurbulentPlumeModel
+from plume_nav_sim.models.plume.video_plume_adapter import VideoPlumeAdapter
+logger.info("Plume models successfully imported")
+PLUME_MODELS_AVAILABLE = True
 
 # Back-compatibility alias for tests expecting a `VideoPlume` symbol
-try:
-    from plume_nav_sim.models.plume.video_plume import VideoPlume as _ImportedVideoPlume  # type: ignore
-    VideoPlume = _ImportedVideoPlume
-except Exception:
-    class VideoPlume(VideoPlumeAdapter):  # type: ignore
-        pass
+from plume_nav_sim.models.plume.video_plume import VideoPlume as VideoPlume  # type: ignore
 
-# Wind field implementations with fallback
-try:
-    from plume_nav_sim.models.wind.constant_wind import ConstantWindField
-    from plume_nav_sim.models.wind.turbulent_wind import TurbulentWindField
-    WIND_FIELDS_AVAILABLE = True
-except ImportError:
-    class ConstantWindField:
-        def __init__(self, velocity=(0.0, 0.0), **kwargs):
-            self.velocity = np.array(velocity)
-        
-        def velocity_at(self, positions: np.ndarray) -> np.ndarray:
-            if positions.ndim == 1:
-                return self.velocity
-            return np.tile(self.velocity, (len(positions), 1))
-        
-        def step(self, dt: float = 1.0) -> None:
-            pass
-        
-        def reset(self, **kwargs) -> None:
-            pass
-    
-    class TurbulentWindField:
-        def __init__(self, mean_velocity=(0.0, 0.0), turbulence_intensity=0.1, **kwargs):
-            self.mean_velocity = np.array(mean_velocity)
-            self.turbulence_intensity = turbulence_intensity
-        
-        def velocity_at(self, positions: np.ndarray) -> np.ndarray:
-            if positions.ndim == 1:
-                return self.mean_velocity + np.random.normal(0, self.turbulence_intensity, 2)
-            return np.tile(self.mean_velocity, (len(positions), 1)) + np.random.normal(0, self.turbulence_intensity, (len(positions), 2))
-        
-        def step(self, dt: float = 1.0) -> None:
-            pass
-        
-        def reset(self, **kwargs) -> None:
-            pass
-    
-    WIND_FIELDS_AVAILABLE = False
+# Wind field implementations
+from plume_nav_sim.models.wind.constant_wind import ConstantWindField
+from plume_nav_sim.models.wind.turbulent_wind import TurbulentWindField
+logger.info("Wind field models successfully imported")
+WIND_FIELDS_AVAILABLE = True
 
-# Sensor implementations with fallback  
-try:
-    from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
-    from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
-    from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
-    SENSORS_AVAILABLE = True
-except ImportError:
-    class BinarySensor:
-        def __init__(self, threshold=0.1, **kwargs):
-            self.threshold = threshold
-        
-        def detect(self, concentration_values: np.ndarray, positions: np.ndarray, **kwargs) -> np.ndarray:
-            return concentration_values >= self.threshold
-        
-        def configure(self, **kwargs):
-            logging.getLogger(__name__).debug("BinarySensor configured with %s", kwargs)
-        
-        def get_metadata(self):
-            return {"type": "binary", "threshold": self.threshold}
-        
-        def reset(self):
-            pass
-    
-    class ConcentrationSensor:
-        def __init__(self, dynamic_range=(0.0, 1.0), **kwargs):
-            self.dynamic_range = dynamic_range
-        
-        def measure(self, concentration_values: np.ndarray, positions: np.ndarray, **kwargs) -> np.ndarray:
-            return np.clip(concentration_values, *self.dynamic_range)
-        
-        def configure(self, **kwargs):
-            logging.getLogger(__name__).debug("ConcentrationSensor configured with %s", kwargs)
-        
-        def get_metadata(self):
-            return {"type": "concentration", "range": self.dynamic_range}
-        
-        def reset(self):
-            pass
-    
-    class GradientSensor:
-        def __init__(self, spatial_resolution=(0.5, 0.5), **kwargs):
-            self.spatial_resolution = spatial_resolution
-        
-        def compute_gradient(self, plume_state: Any, positions: np.ndarray, **kwargs) -> np.ndarray:
-            logger = logging.getLogger(__name__)
-            logger.debug("GradientSensor computing gradient for %d positions", len(positions))
-            if positions.ndim == 1:
-                return np.random.rand(2) - 0.5  # Random gradient direction
-            return np.random.rand(len(positions), 2) - 0.5
-        
-        def configure(self, **kwargs):
-            logging.getLogger(__name__).debug("GradientSensor configured with %s", kwargs)
-        
-        def get_metadata(self):
-            return {"type": "gradient", "resolution": self.spatial_resolution}
-        
-        def reset(self):
-            pass
-    
-    SENSORS_AVAILABLE = False
+# Sensor implementations
+from plume_nav_sim.core.sensors.binary_sensor import BinarySensor
+from plume_nav_sim.core.sensors.concentration_sensor import ConcentrationSensor
+from plume_nav_sim.core.sensors.gradient_sensor import GradientSensor
+logger.info("Sensor implementations successfully imported")
+SENSORS_AVAILABLE = True
 
 # Frame caching with enhanced memory management
-try:
-    from plume_nav_sim.utils.frame_cache import FrameCache, CacheMode
-    FRAME_CACHE_AVAILABLE = True
-except ImportError:
-    # Minimal fallback
-    class FrameCache:
-        def __init__(self, **kwargs):
-            self.hit_rate = 0.0
-            self.hits = 0
-            self.misses = 0
-        
-        def get(self, frame_id, video_plume, **kwargs):
-            return video_plume.get_frame(frame_id, **kwargs)
-        
-        def clear(self):
-            pass
-    
-    class CacheMode:
-        NONE = "none"
-        LRU = "lru"
-        ALL = "all"
-    
-    FRAME_CACHE_AVAILABLE = False
+from plume_nav_sim.utils.frame_cache import FrameCache, CacheMode
+logger.info("FrameCache utilities successfully imported")
+FRAME_CACHE_AVAILABLE = True
 
 # Seed management utilities
 try:
