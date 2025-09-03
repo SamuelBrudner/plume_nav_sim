@@ -12,7 +12,7 @@ Key Components:
     - BaseRecorder: Abstract implementation providing common functionality and buffering
     - RecorderFactory: Hydra-integrated factory for runtime backend selection
     - RecorderManager: Lifecycle management with performance monitoring integration
-    - Multi-backend support: parquet, HDF5, SQLite, and none backends
+    - Multi-backend support: parquet, HDF5, SQLite, and null backends
     - Structured output: run_id/episode_id hierarchical directory organization
 
 Performance Requirements:
@@ -92,7 +92,7 @@ class RecorderConfig:
     consistent parameter injection and validation.
     
     Core Configuration:
-        backend: Backend type selection ('parquet', 'hdf5', 'sqlite', 'none')
+        backend: Backend type selection ('parquet', 'hdf5', 'sqlite', 'null')
         output_dir: Base directory for structured output organization
         run_id: Unique identifier for this recording session
         episode_id_format: Template for episode directory naming
@@ -139,8 +139,8 @@ class RecorderConfig:
             raise ValueError("memory_limit_mb must be positive")
         if not 0 < self.warning_threshold <= 1:
             raise ValueError("warning_threshold must be between 0 and 1")
-        if self.backend not in ['parquet', 'hdf5', 'sqlite', 'none']:
-            raise ValueError("backend must be one of: parquet, hdf5, sqlite, none")
+        if self.backend not in ['parquet', 'hdf5', 'sqlite', 'null', 'none']:
+            raise ValueError("backend must be one of: parquet, hdf5, sqlite, null")
 
 
 class BaseRecorder(abc.ABC, RecorderProtocol):
@@ -703,7 +703,7 @@ class RecorderFactory:
     """
     
     _backend_registry = {
-        'none': NoneRecorder,
+        'null': NoneRecorder,
         # Additional backends would be registered here in full implementation
     }
     
@@ -813,7 +813,7 @@ class RecorderFactory:
                 # Derive backend name from recorder class suffix
                 target_lower = target.lower()
                 if target_lower.endswith('nullrecorder'):
-                    backend_name = 'none'
+                    backend_name = 'null'
                 elif target_lower.endswith('parquetrecorder'):
                     backend_name = 'parquet'
                 elif target_lower.endswith(('hdf5recorder', 'hdf5recorder')):  # case-insensitive match
@@ -821,7 +821,7 @@ class RecorderFactory:
                 elif target_lower.endswith('sqliterecorder'):
                     backend_name = 'sqlite'
                 else:
-                    backend_name = 'none'  # Fallback
+                    backend_name = 'null'  # Fallback
 
                 backend_available: bool = backend_name in cls.get_available_backends()
 
@@ -958,8 +958,8 @@ class RecorderManager:
             episode_id: Optional episode identifier (auto-generated if not provided)
         """
         if not self.recorder:
-            logger.warning("No recorder configured, creating none recorder")
-            self.recorder = NoneRecorder(RecorderConfig(backend='none'))
+            logger.warning("No recorder configured, creating null recorder")
+            self.recorder = NoneRecorder(RecorderConfig(backend='null'))
         
         if episode_id is None:
             episode_id = self._episode_count

@@ -165,71 +165,27 @@ def get_available_backends() -> List[str]:
 def create_backend(
     config: Union[Dict[str, Any], Any],
     backend_name: Optional[str] = None,
-    fallback_to_null: bool = True
 ) -> 'BaseRecorder':
-    """
-    Create recording backend instance from configuration with automatic fallback handling.
-    
-    Factory function providing configuration-driven backend instantiation with comprehensive
-    error handling and automatic fallback to NullRecorder when primary backends fail or
-    dependencies are unavailable. Supports both dictionary configuration and structured
-    configuration objects for flexible integration patterns.
-    
+    """Create a recording backend instance from configuration.
+
+    The backend must be specified either via the ``backend`` key on a config
+    dictionary or via an explicit ``backend_name`` argument. When recording is
+    not desired, callers should specify ``backend='null'``.
+
     Args:
-        config: Backend configuration as dictionary or structured config object.
-            Expected to contain 'backend' field specifying backend type and
-            backend-specific parameters for initialization.
-        backend_name: Optional explicit backend name override. If provided,
-            takes precedence over config['backend'] field.
-        fallback_to_null: Enable automatic fallback to NullRecorder when primary
-            backend fails (default: True). Set to False to raise exceptions.
-            
+        config: Backend configuration as dictionary or structured config
+            object. Must provide a ``backend`` field or attribute.
+        backend_name: Optional explicit backend name override. If provided, it
+            takes precedence over any value in ``config``.
+
     Returns:
-        BaseRecorder: Configured recorder backend instance implementing RecorderProtocol
-        
+        BaseRecorder: Configured recorder backend instance implementing
+        ``RecorderProtocol``.
+
     Raises:
-        ValueError: If backend_name is unknown and fallback_to_null=False
-        ImportError: If backend dependencies are missing and fallback_to_null=False
-        TypeError: If config format is invalid
-        
-    Notes:
-        Backend selection priority:
-        1. Explicit backend_name parameter if provided
-        2. config['backend'] field from configuration dictionary/object
-        3. config.backend attribute from structured configuration
-        4. NullRecorder fallback if fallback_to_null=True
-        
-        Fallback behavior with informative warnings:
-        - Missing dependencies trigger automatic NullRecorder fallback
-        - Invalid configurations trigger validation error with fallback
-        - Unknown backend names trigger warning with fallback suggestion
-        
-    Examples:
-        Dictionary configuration with automatic backend selection:
-        >>> config = {
-        ...     'backend': 'parquet',
-        ...     'compression': 'snappy',
-        ...     'buffer_size': 1000
-        ... }
-        >>> recorder = create_backend(config)
-        
-        Explicit backend override with fallback handling:
-        >>> recorder = create_backend(config, backend_name='hdf5', fallback_to_null=True)
-        
-        Structured configuration object:
-        >>> from dataclasses import dataclass
-        >>> @dataclass
-        >>> class RecorderConfig:
-        ...     backend: str = 'sqlite'
-        ...     buffer_size: int = 500
-        >>> config = RecorderConfig()
-        >>> recorder = create_backend(config)
-        
-        Error handling without fallback:
-        >>> try:
-        ...     recorder = create_backend(config, fallback_to_null=False)
-        ... except ImportError as e:
-        ...     print(f"Backend dependency missing: {e}")
+        ValueError: If the backend name is unknown or missing.
+        ImportError: If backend dependencies are missing.
+        TypeError: If the configuration format is invalid.
     """
     # Extract backend name from various configuration formats
     target_backend = backend_name
@@ -241,58 +197,38 @@ def create_backend(
         elif hasattr(config, 'get'):
             target_backend = config.get('backend')
         else:
-            if not fallback_to_null:
-                raise TypeError("Invalid config format: must be dict or have 'backend' attribute")
-            warnings.warn("No backend specified in config, falling back to NullRecorder")
-            target_backend = 'null'
-    
+            logger.error("Invalid config format: missing 'backend' field")
+            raise TypeError("Invalid config format: must be dict or have 'backend' attribute")
+
+    if not target_backend:
+        logger.error("No backend specified in configuration")
+        raise ValueError("Backend must be specified in configuration")
+
     # Validate backend name
     if target_backend not in BACKEND_REGISTRY:
         available = list(BACKEND_REGISTRY.keys())
-        error_msg = f"Unknown backend '{target_backend}'. Available: {available}"
-        
-        if fallback_to_null:
-            warnings.warn(f"{error_msg}. Falling back to NullRecorder.")
-            target_backend = 'null'
-        else:
-            raise ValueError(error_msg)
-    
+        logger.error("Unknown backend '%s'. Available: %s", target_backend, available)
+        raise ValueError(f"Unknown backend '{target_backend}'. Available: {available}")
+
     # Attempt backend instantiation with dependency validation
     backend_class = BACKEND_REGISTRY[target_backend]
-    
+
     try:
-        # Create backend instance with configuration
         recorder = backend_class(config)
-        logger.info(f"Successfully created {target_backend} recorder backend")
+        logger.info("Successfully created %s recorder backend", target_backend)
         return recorder
-        
     except ImportError as e:
-        # Handle missing dependencies with informative error messages
         dependency_suggestions = {
             'parquet': "Install PyArrow: pip install pyarrow>=10.0.0",
             'hdf5': "Install h5py: pip install h5py>=3.0.0",
-            'sqlite': "SQLite3 should be available in standard library"
+            'sqlite': "SQLite3 should be available in standard library",
         }
-        
         suggestion = dependency_suggestions.get(target_backend, "Check backend dependencies")
-        error_msg = f"Failed to create {target_backend} backend: {e}. {suggestion}"
-        
-        if fallback_to_null:
-            warnings.warn(f"{error_msg}. Falling back to NullRecorder.")
-            # Recursive call with null backend (guaranteed to work)
-            return create_backend(config, backend_name='null', fallback_to_null=False)
-        else:
-            raise ImportError(error_msg) from e
-            
+        logger.error("Failed to create %s backend: %s. %s", target_backend, e, suggestion)
+        raise ImportError(f"Failed to create {target_backend} backend: {e}. {suggestion}") from e
     except Exception as e:
-        # Handle other instantiation errors
-        error_msg = f"Failed to create {target_backend} backend: {e}"
-        
-        if fallback_to_null:
-            warnings.warn(f"{error_msg}. Falling back to NullRecorder.")
-            return create_backend(config, backend_name='null', fallback_to_null=False)
-        else:
-            raise RuntimeError(error_msg) from e
+        logger.error("Failed to create %s backend: %s", target_backend, e)
+        raise RuntimeError(f"Failed to create {target_backend} backend: {e}") from e
 
 
 def get_backend_capabilities() -> Dict[str, Dict[str, Any]]:
