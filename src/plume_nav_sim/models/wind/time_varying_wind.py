@@ -431,9 +431,15 @@ class TimeVaryingWindField:
                 )
             else:
                 raise ValueError(f"Unknown interpolation method: {self.interpolation_method}")
-        except Exception as e:
-            warnings.warn(f"SciPy interpolation failed, using linear fallback: {e}")
-            self._create_linear_interpolator(time_data, velocity_data)
+        except Exception as e:  # pragma: no cover - exercised via dedicated tests
+            logger.error(
+                "SciPy interpolation failed using method %s with time_data=%s velocity_data=%s",
+                self.interpolation_method,
+                time_data,
+                velocity_data,
+                exc_info=e,
+            )
+            raise
     
     def _create_linear_interpolator(self, time_data: np.ndarray, velocity_data: np.ndarray) -> None:
         """Create simple linear interpolator using NumPy."""
