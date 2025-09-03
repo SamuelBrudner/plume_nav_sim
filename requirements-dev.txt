@@ -24,3 +24,6 @@ ruff>=0.1.0
 mypy>=1.5.0
 gymnasium[classic-control]==0.29.*
 stable-baselines3[extra]>=2.0.0
+PySide6>=6.0.0
+plotly>=5.17.0
+streamlit>=1.0.0
