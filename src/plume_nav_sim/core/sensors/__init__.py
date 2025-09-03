@@ -124,7 +124,6 @@ Notes:
 """
 
 from __future__ import annotations
-import warnings
 from typing import Optional, Union, List, Dict, Any, Type, Callable
 import numpy as np
 
@@ -270,7 +269,7 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
                 metadata = sensor.get_metadata() if hasattr(sensor, 'get_metadata') else {}
                 observation_shape = getattr(sensor, 'observation_shape', None)
                 logger.debug(
-                    "Sensor protocol compliance validated",
+                    "Sensor created",
                     sensor_type=type(sensor).__name__,
                     observation_shape=observation_shape,
                     metadata=metadata,
@@ -290,34 +289,25 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
     # Create sensor based on type
     if sensor_type == 'BinarySensor':
         if not BINARY_SENSOR_AVAILABLE:
-            warnings.warn(
-                "BinarySensor implementation not yet available. Using fallback implementation.",
-                UserWarning,
-                stacklevel=2
-            )
+            logger.error("BinarySensor implementation not available")
+            raise ImportError("BinarySensor implementation not available")
         sensor = BinarySensor(**sensor_params)
-    
+
     elif sensor_type == 'ConcentrationSensor':
         if not CONCENTRATION_SENSOR_AVAILABLE:
-            warnings.warn(
-                "ConcentrationSensor implementation not yet available. Using fallback implementation.",
-                UserWarning,
-                stacklevel=2
-            )
+            logger.error("ConcentrationSensor implementation not available")
+            raise ImportError("ConcentrationSensor implementation not available")
         sensor = ConcentrationSensor(**sensor_params)
-    
+
     elif sensor_type == 'GradientSensor':
         if not GRADIENT_SENSOR_AVAILABLE:
-            warnings.warn(
-                "GradientSensor implementation not yet available. Using fallback implementation.",
-                UserWarning,
-                stacklevel=2
-            )
+            logger.error("GradientSensor implementation not available")
+            raise ImportError("GradientSensor implementation not available")
         sensor = GradientSensor(**sensor_params)
-    
+
     else:
         raise ValueError(f"Unknown sensor type: {sensor_type}")
-    
+
     # Validate protocol compliance
     if not isinstance(sensor, SensorProtocol):
         raise TypeError(f"Instantiated sensor {type(sensor)} does not implement SensorProtocol")
@@ -326,16 +316,11 @@ def create_sensor_from_config(config: Union[Dict[str, Any], DictConfig]) -> Sens
         metadata = sensor.get_metadata() if hasattr(sensor, 'get_metadata') else {}
         observation_shape = getattr(sensor, 'observation_shape', None)
         logger.debug(
-            "Sensor protocol compliance validated",
+            "Sensor created",
             sensor_type=type(sensor).__name__,
             observation_shape=observation_shape,
             metadata=metadata,
-            parameters=sensor_params,
-            fallback_used=not all([
-                BINARY_SENSOR_AVAILABLE,
-                CONCENTRATION_SENSOR_AVAILABLE,
-                GRADIENT_SENSOR_AVAILABLE
-            ])
+            parameters=sensor_params
         )
 
     return sensor
@@ -389,13 +374,12 @@ def create_sensor_suite(sensor_configs: List[Union[Dict[str, Any], DictConfig]])
         >>> sensors = create_sensor_suite(sensor_configs)
     """
     sensors = []
-    
+
     for i, config in enumerate(sensor_configs):
         try:
             sensor = create_sensor_from_config(config)
             sensors.append(sensor)
-            
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             raise ValueError(f"Failed to create sensor {i} from config {config}: {e}")
     
     if LOGURU_AVAILABLE:
@@ -450,15 +434,12 @@ def create_historical_sensor(
         ... }
         >>> historical_sensor = create_historical_sensor(base_config, history_length=5)
     """
-    base_sensor = create_sensor_from_config(base_config)
-    
     if not HISTORICAL_SENSOR_AVAILABLE:
-        warnings.warn(
-            "HistoricalSensor implementation not yet available. Using fallback implementation.",
-            UserWarning,
-            stacklevel=2
-        )
-    
+        logger.error("HistoricalSensor implementation not available")
+        raise ImportError("HistoricalSensor implementation not available")
+
+    base_sensor = create_sensor_from_config(base_config)
+
     historical_sensor = HistoricalSensor(
         base_sensor=base_sensor,
         history_length=history_length,
@@ -812,8 +793,7 @@ def get_sensor_module_info() -> Dict[str, Any]:
     unavailable_components = [k for k, v in availability.items() if not v]
     if unavailable_components:
         info['warnings'] = [
-            f"Components not yet available: {', '.join(unavailable_components)}",
-            "Fallback implementations are being used for development"
+            f"Components not yet available: {', '.join(unavailable_components)}"
         ]
     
     return info
@@ -872,7 +852,6 @@ if LOGURU_AVAILABLE:
         "Sensor abstraction layer initialized",
         available_components=sum(check_sensor_module_availability().values()),
         total_components=len(check_sensor_module_availability()),
-        fallback_implementations_active=not all(check_sensor_module_availability().values()),
         hydra_available=HYDRA_AVAILABLE,
         performance_monitoring=PERFORMANCE_MONITORING_AVAILABLE
     )
