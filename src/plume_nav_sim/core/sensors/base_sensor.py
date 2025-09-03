@@ -100,7 +100,7 @@ except ImportError:
 
 # Configuration schemas - fail fast when they are missing
 try:
-    from ...config.schemas import SensorConfig, BinarySensorConfig, ConcentrationSensorConfig
+    from ...config.schemas import SensorConfig
     SCHEMAS_AVAILABLE = True
 except ImportError as exc:  # pragma: no cover - executed only when schemas are absent
     logger.error(
@@ -108,7 +108,7 @@ except ImportError as exc:  # pragma: no cover - executed only when schemas are 
     )
     raise ImportError(
         "Required configuration schemas are missing. Ensure ``plume_nav_sim.config.schemas`` "
-        "defines `SensorConfig`, `BinarySensorConfig`, and `ConcentrationSensorConfig`."
+        "defines `SensorConfig`."
     ) from exc
 
 # PSUtil for memory monitoring (optional dependency)

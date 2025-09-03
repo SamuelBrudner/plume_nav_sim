@@ -52,6 +52,21 @@ def _validate_orientation_value(value: float, index: Optional[int] = None) -> fl
     return value
 
 
+class SensorConfig(BaseModel):
+    """Generic configuration for sensor components.
+
+    Provides a minimal schema so modules can validate that sensor
+    configuration structures are present. Additional parameters are
+    permitted to support specialized sensor implementations.
+    """
+
+    type: str = Field(..., description="Identifier for the sensor type")
+    params: Dict[str, Any] = Field(
+        default_factory=dict, description="Implementation specific parameters"
+    )
+
+    model_config = ConfigDict(extra="allow")
+
 class SingleAgentConfig(BaseModel):
     """Configuration for single agent navigator."""
     position: Optional[Tuple[float, float]] = None
