@@ -17,8 +17,9 @@ import random
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional
+from dataclasses import dataclass as std_dataclass
+from pydantic.dataclasses import dataclass
+from typing import Dict, Iterator, List, Optional, Annotated
 
 import numpy as np
 
@@ -27,7 +28,7 @@ try:  # Hydra is optional; tests patch ``GlobalHydra`` when required.
 except Exception:  # pragma: no cover - hydra is not a runtime dependency
     GlobalHydra = None  # type: ignore
 
-from odor_plume_nav.config.schemas import BaseModel, Field, ConfigDict
+from odor_plume_nav.config.schemas import Field, ConfigDict
 from loguru import logger
 
 
@@ -36,46 +37,39 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 
 
-class SeedConfig(BaseModel):
+@dataclass
+class SeedConfig:
     """Pydantic model describing seed initialisation parameters."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    seed: Optional[int] = Field(
-        default=None,
+    seed: Annotated[Optional[int], Field(
         ge=0,
         description="Global seed applied when seeding random and NumPy.",
-    )
-    numpy_seed: Optional[int] = Field(
-        default=None,
+    )] = None
+    numpy_seed: Annotated[Optional[int], Field(
         ge=0,
         description="Optional override for NumPy's legacy and Generator seeds.",
-    )
-    python_seed: Optional[int] = Field(
-        default=None,
+    )] = None
+    python_seed: Annotated[Optional[int], Field(
         ge=0,
         description="Optional override for the :mod:`random` module seed.",
-    )
-    auto_seed: bool = Field(
-        default=True,
+    )] = None
+    auto_seed: Annotated[bool, Field(
         description="Automatically generate a seed when none is provided.",
-    )
-    hash_environment: bool = Field(
-        default=True,
+    )] = True
+    hash_environment: Annotated[bool, Field(
         description="Include a short hash of the platform in the manager's state.",
-    )
-    validate_initialization: bool = Field(
-        default=True,
+    )] = True
+    validate_initialization: Annotated[bool, Field(
         description="Generate a random number after seeding as a smoke test.",
-    )
-    preserve_state: bool = Field(
-        default=False,
+    )] = True
+    preserve_state: Annotated[bool, Field(
         description="Capture RNG state so it can later be restored.",
-    )
-    log_seed_context: bool = Field(
-        default=True,
+    )] = False
+    log_seed_context: Annotated[bool, Field(
         description="Bind the current seed to log records via ``logger.configure``.",
-    )
+    )] = True
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +77,7 @@ class SeedConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@std_dataclass
 class RandomState:
     """Container used when preserving/restoring RNG state."""
 
@@ -93,7 +87,7 @@ class RandomState:
     seed: int
 
 
-@dataclass
+@std_dataclass
 class SeedContext:
     """Light-weight context information used by :func:`get_seed_context`."""
 

@@ -64,15 +64,16 @@ import time
 import random
 import hashlib
 import threading
-from typing import Dict, Any, Optional, Tuple, Union, ContextManager, Callable, List
+from typing import Dict, Any, Optional, Tuple, Union, ContextManager, Callable, List, Annotated
 from contextlib import contextmanager
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass as std_dataclass, field, asdict
+from pydantic.dataclasses import dataclass
 from pathlib import Path
 import warnings
 import platform
 
 import numpy as np
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import Field, ConfigDict, field_validator
 from typing_extensions import Self
 
 # Required dependencies
@@ -111,7 +112,7 @@ PYTHON_RANDOM_TEST_SIZE = 100
 CROSS_PLATFORM_SEED_MAX = 2**31 - 1  # Maximum safe seed value for cross-platform compatibility
 
 
-@dataclass
+@std_dataclass
 class RandomState:
     """
     Comprehensive random state container for all randomness sources with integrity validation.
@@ -194,7 +195,8 @@ class RandomState:
         return cls(**data)
 
 
-class SeedConfig(BaseModel):
+@dataclass
+class SeedConfig:
     """
     Pydantic configuration model for seed management with Hydra integration.
     
@@ -210,75 +212,63 @@ class SeedConfig(BaseModel):
     """
     
     # Primary seed configuration with environment variable support
-    global_seed: Optional[int] = Field(
-        default=None,
+    global_seed: Annotated[Optional[int], Field(
         ge=0,
         le=CROSS_PLATFORM_SEED_MAX,
         description="Global random seed for all randomness sources. Supports ${oc.env:RANDOM_SEED} interpolation"
-    )
-    
+    )] = None
+
     # Individual component seed overrides for fine-grained control
-    python_seed: Optional[int] = Field(
-        default=None,
+    python_seed: Annotated[Optional[int], Field(
         ge=0,
         le=CROSS_PLATFORM_SEED_MAX,
         description="Specific seed for Python's random module. Supports ${oc.env:PYTHON_SEED}"
-    )
-    numpy_seed: Optional[int] = Field(
-        default=None,
+    )] = None
+    numpy_seed: Annotated[Optional[int], Field(
         ge=0,
         le=CROSS_PLATFORM_SEED_MAX,
         description="Specific seed for NumPy's random state. Supports ${oc.env:NUMPY_SEED}"
-    )
-    hash_seed: Optional[int] = Field(
-        default=None,
+    )] = None
+    hash_seed: Annotated[Optional[int], Field(
         ge=0,
         le=CROSS_PLATFORM_SEED_MAX,
         description="Python hash randomization seed. Supports ${oc.env:PYTHONHASHSEED}"
-    )
-    
+    )] = None
+
     # Validation and behavior configuration
-    enable_validation: bool = Field(
-        default=True,
+    enable_validation: Annotated[bool, Field(
         description="Enable determinism validation after seed setting"
-    )
-    strict_mode: bool = Field(
-        default=False,
+    )] = True
+    strict_mode: Annotated[bool, Field(
         description="Enable strict mode with enhanced validation and warnings"
-    )
-    cross_platform_determinism: bool = Field(
-        default=True,
+    )] = False
+    cross_platform_determinism: Annotated[bool, Field(
         description="Ensure cross-platform deterministic behavior"
-    )
-    
+    )] = True
+
     # Performance configuration per Section 0.5.1 requirements
-    validation_iterations: int = Field(
-        default=DETERMINISM_TEST_ITERATIONS,
+    validation_iterations: Annotated[int, Field(
         ge=10,
         le=1000,
         description="Number of iterations for determinism validation testing"
-    )
-    performance_monitoring: bool = Field(
-        default=True,
+    )] = DETERMINISM_TEST_ITERATIONS
+    performance_monitoring: Annotated[bool, Field(
         description="Enable performance monitoring for seed operations"
-    )
-    
+    )] = True
+
     # Auto-seeding configuration for convenience
-    auto_seed_on_import: bool = Field(
-        default=False,
+    auto_seed_on_import: Annotated[bool, Field(
         description="Automatically set global seed when module is imported"
-    )
-    warn_on_unset_seed: bool = Field(
-        default=True,
+    )] = False
+    warn_on_unset_seed: Annotated[bool, Field(
         description="Warn when randomness is used without explicit seed setting"
-    )
-    
+    )] = True
+
     # Hydra-specific target_ metadata for factory-driven instantiation
-    target_: str = Field(
-        default="plume_nav_sim.utils.seed_manager.setup_global_seed",
+    target_: Annotated[str, Field(
         description="Hydra target for automatic seed setup",
         alias="_target_"
-    )
+    )] = "plume_nav_sim.utils.seed_manager.setup_global_seed"
     
     @field_validator('global_seed', 'python_seed', 'numpy_seed', 'hash_seed')
     @classmethod

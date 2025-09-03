@@ -1160,6 +1160,14 @@ class TestHydraConfigurationIntegration:
         except ImportError:
             pytest.skip("Hydra not available")
 
+    @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
+    def test_seed_config_structured_for_hydra(self):
+        """SeedConfig should be usable as a Hydra structured config."""
+        from omegaconf import OmegaConf
+
+        cfg = OmegaConf.structured(SeedConfig)
+        assert cfg.seed is None
+
     def test_dictconfig_initialization(self):
         """Test initialization with DictConfig-like object."""
         # Simulate DictConfig behavior without requiring Hydra
