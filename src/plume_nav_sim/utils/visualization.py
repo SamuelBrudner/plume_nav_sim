@@ -2709,47 +2709,46 @@ def create_static_plotter(
 # Hydra ConfigStore registration for visualization configurations
 cs = ConfigStore.instance()
 
-try:
-    from dataclasses import dataclass, field
-    from typing import Optional
+from dataclasses import dataclass, field
 
-    @dataclass
-    class AnimationConfig:
-        fps: int = 30
-        format: str = "mp4"
-        quality: str = "medium"
 
-    @dataclass
-    class StaticConfig:
-        dpi: int = 300
-        format: str = "png"
-        figsize: Tuple[float, float] = (12, 8)
+@dataclass
+class AnimationConfig:
+    fps: int = 30
+    format: str = "mp4"
+    quality: str = "medium"
 
-    @dataclass
-    class AgentConfig:
-        max_agents: int = 100
-        color_scheme: str = "scientific"
-        trail_length: int = 1000
 
-    @dataclass
-    class VisualizationConfig:
-        animation: AnimationConfig = field(default_factory=AnimationConfig)
-        static: StaticConfig = field(default_factory=StaticConfig)
-        agents: AgentConfig = field(default_factory=AgentConfig)
-        headless: bool = False
-        resolution: str = "720p"
-        theme: str = "scientific"
+@dataclass
+class StaticConfig:
+    dpi: int = 300
+    format: str = "png"
+    figsize: Tuple[float, float] = (12, 8)
 
-    cs.store(group="visualization", name="animation", node=AnimationConfig)
-    cs.store(group="visualization", name="static", node=StaticConfig)
-    cs.store(group="visualization", name="agents", node=AgentConfig)
-    cs.store(group="visualization", name="base", node=VisualizationConfig)
 
-    logger.debug("Registered Hydra configuration schemas for visualization")
+@dataclass
+class AgentConfig:
+    max_agents: int = 100
+    color_scheme: str = "scientific"
+    trail_length: int = 1000
 
-except ImportError:
-    logger.warning("Dataclasses not available, skipping Hydra ConfigStore registration")
-    pass
+
+@dataclass
+class VisualizationConfig:
+    animation: AnimationConfig = field(default_factory=AnimationConfig)
+    static: StaticConfig = field(default_factory=StaticConfig)
+    agents: AgentConfig = field(default_factory=AgentConfig)
+    headless: bool = False
+    resolution: str = "720p"
+    theme: str = "scientific"
+
+
+cs.store(group="visualization", name="animation", node=AnimationConfig)
+cs.store(group="visualization", name="static", node=StaticConfig)
+cs.store(group="visualization", name="agents", node=AgentConfig)
+cs.store(group="visualization", name="base", node=VisualizationConfig)
+
+logger.debug("Registered Hydra configuration schemas for visualization")
 
 
 # Public API exports
