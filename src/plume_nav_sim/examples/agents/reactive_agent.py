@@ -94,9 +94,7 @@ import warnings
 from typing import Optional, Union, Dict, Any, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # Core protocol and controller imports for NavigatorProtocol compliance
 try:
@@ -119,28 +117,9 @@ from ...core.sensors import (
 )
 
 # Configuration management and CLI support
-try:
-    import hydra
-    from hydra import compose, initialize
-    from omegaconf import DictConfig, OmegaConf
-
-    HYDRA_AVAILABLE = True
-except ImportError:
-    hydra = None
-    DictConfig = dict
-    OmegaConf = None
-    HYDRA_AVAILABLE = False
-
-# Enhanced logging support
-try:
-    from loguru import logger
-
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+import hydra
+from hydra import compose, initialize
+from omegaconf import DictConfig, OmegaConf
 
 # Type checking imports
 if TYPE_CHECKING:
@@ -377,16 +356,7 @@ class ReactiveAgent:
                 "spatial_resolution": (0.5, 0.5),
                 "method": "central",
             }
-            try:
-                self._gradient_sensor = create_sensor_from_config(sensor_config)
-            except ImportError as e:
-                if enable_logging and LOGURU_AVAILABLE:
-                    logger.warning(
-                        f"Failed to create default GradientSensor: {e}. "
-                        f"Using fallback gradient computation."
-                    )
-                # Create minimal fallback sensor
-                self._gradient_sensor = GradientSensor()
+            self._gradient_sensor = create_sensor_from_config(sensor_config)
         else:
             self._gradient_sensor = gradient_sensor
 
@@ -403,7 +373,7 @@ class ReactiveAgent:
         }
 
         # Enhanced logging setup
-        if self._enable_logging and LOGURU_AVAILABLE:
+        if self._enable_logging:
             self._logger = logger.bind(
                 agent_type="ReactiveAgent",
                 agent_id=id(self),
@@ -1131,7 +1101,7 @@ class ReactiveAgent:
                 sensor = create_sensor_from_config(config.sensor)
                 config_dict["gradient_sensor"] = sensor
 
-        elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+        elif isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
 
             # Handle sensor configuration
@@ -1269,13 +1239,12 @@ def demonstrate_reactive_navigation(
     trajectory = []
     concentrations = []
 
-    if LOGURU_AVAILABLE:
-        logger.info(
-            "Starting reactive navigation demonstration",
-            environment_size=environment_size,
-            num_steps=num_steps,
-            agent_config=agent_config.__dict__,
-        )
+    logger.info(
+        "Starting reactive navigation demonstration",
+        environment_size=environment_size,
+        num_steps=num_steps,
+        agent_config=agent_config.__dict__,
+    )
 
     # Simulation loop
     for step in range(num_steps):
@@ -1291,12 +1260,11 @@ def demonstrate_reactive_navigation(
 
         # Check if reached high concentration area (success condition)
         if concentration > 0.8:
-            if LOGURU_AVAILABLE:
-                logger.success(
-                    f"Agent reached high concentration area at step {step}",
-                    position=position.tolist(),
-                    concentration=concentration,
-                )
+            logger.success(
+                f"Agent reached high concentration area at step {step}",
+                position=position.tolist(),
+                concentration=concentration,
+            )
             break
 
     # Collect results
@@ -1386,14 +1354,13 @@ def demonstrate_reactive_navigation(
         except ImportError:
             warnings.warn("Matplotlib not available for visualization", UserWarning)
 
-    if LOGURU_AVAILABLE:
-        logger.info(
-            "Reactive navigation demonstration completed",
-            steps_taken=results["steps_taken"],
-            success=results["success"],
-            final_concentration=results["final_concentration"],
-            total_distance=results.get("total_distance", 0),
-        )
+    logger.info(
+        "Reactive navigation demonstration completed",
+        steps_taken=results["steps_taken"],
+        success=results["success"],
+        final_concentration=results["final_concentration"],
+        total_distance=results.get("total_distance", 0),
+    )
 
     return results
 
@@ -1406,39 +1373,12 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg: Hydra configuration object
     """
-    if not HYDRA_AVAILABLE:
-        print("Hydra not available. Using default configuration.")
-        cfg = DictConfig(
-            {
-                "agent": {
-                    "position": (20.0, 50.0),
-                    "max_speed": 2.0,
-                    "step_size": 1.0,
-                    "turning_rate": 45.0,
-                    "gradient_threshold": 1e-6,
-                    "performance_monitoring": True,
-                    "sensor": {
-                        "type": "GradientSensor",
-                        "spatial_resolution": [0.5, 0.5],
-                        "method": "central",
-                    },
-                },
-                "simulation": {
-                    "environment_size": [100, 100],
-                    "num_steps": 500,
-                    "visualization": True,
-                },
-            }
-        )
-
     print("ReactiveAgent CLI Demonstration")
     print("=" * 50)
 
     # Create agent from configuration
     agent_config = cfg.get("agent", {})
-    print(
-        f"Agent configuration: {OmegaConf.to_yaml(agent_config) if HYDRA_AVAILABLE else agent_config}"
-    )
+    print(f"Agent configuration: {OmegaConf.to_yaml(agent_config)}")
 
     try:
         agent = create_reactive_agent_from_config(agent_config)
@@ -1492,10 +1432,4 @@ def main(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    if HYDRA_AVAILABLE:
-        main()
-    else:
-        # Fallback for environments without Hydra
-        print("Running ReactiveAgent demonstration without Hydra...")
-        results = demonstrate_reactive_navigation(visualization=True)
-        print(f"Demonstration completed. Success: {results['success']}")
+    main()
