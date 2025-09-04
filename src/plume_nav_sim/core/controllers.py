@@ -110,9 +110,8 @@ from typing import Optional, Union, Any, Tuple, List, Dict, TypeVar, Callable
 from dataclasses import dataclass, field
 import dataclasses
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
+# Loguru logging
+from loguru import logger
 
 # Core protocol imports
 from plume_nav_sim.protocols.navigator import NavigatorProtocol
@@ -221,20 +220,8 @@ class MultiPointOdorSensor:
         pass
 
 # Hydra integration for configuration management
-try:
-    from hydra.core.hydra_config import HydraConfig
-    from omegaconf import DictConfig, OmegaConf
-except ImportError as exc:  # pragma: no cover - handled by tests
-    logger.error(f"Hydra configuration dependencies are missing: {exc}")
-    raise
-
-# Loguru integration for enhanced logging
-try:
-    from loguru import logger as loguru_logger
-    logger = loguru_logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    LOGURU_AVAILABLE = False
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
 # Gymnasium integration for modern API support
 try:
@@ -265,12 +252,8 @@ except ImportError as exc:  # pragma: no cover - handled by tests
     logger.error(f"SpacesFactory is required: {exc}")
     raise
 
-# PSUtil for memory monitoring
-try:
-    import psutil
-except ImportError as exc:  # pragma: no cover - handled by tests
-    logger.error(f"psutil is required for memory monitoring: {exc}")
-    raise
+# psutil for memory monitoring
+import psutil
 
 # Type variable for controller types
 ControllerType = TypeVar('ControllerType', bound='BaseController')
@@ -475,7 +458,7 @@ class BaseController:
                 self._frame_cache = None
         
         # Setup structured logging with context binding
-        if self._enable_logging and LOGURU_AVAILABLE:
+        if self._enable_logging:
             self._logger = logger.bind(
                 controller_type=self.__class__.__name__,
                 controller_id=self._controller_id,
@@ -2987,7 +2970,7 @@ def create_controller_from_config(
             )
         
         # Log successful creation with performance timing
-        if enable_logging and LOGURU_AVAILABLE:
+        if enable_logging:
             creation_time = (time.perf_counter() - start_time) * 1000
             logger.bind(
                 controller_type=type(controller).__name__,
@@ -3004,7 +2987,7 @@ def create_controller_from_config(
         return controller
         
     except Exception as e:
-        if enable_logging and LOGURU_AVAILABLE:
+        if enable_logging:
             logger.error(
                 f"Enhanced controller creation failed: {str(e)}",
                 error_type=type(e).__name__,

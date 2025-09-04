@@ -78,18 +78,11 @@ import numpy as np
 # Core protocol imports
 from plume_nav_sim.protocols.sensor import SensorProtocol
 
-# Hydra integration for configuration management
-try:
-    from hydra.core.hydra_config import HydraConfig
-    from omegaconf import DictConfig, OmegaConf
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    HydraConfig = None
-    DictConfig = dict
-    OmegaConf = None
+# Required configuration management dependencies
+from hydra.core.hydra_config import HydraConfig
+from omegaconf import DictConfig, OmegaConf
 
-# Loguru integration for enhanced logging
+# Loguru logging
 from loguru import logger
 
 # Configuration schemas - fail fast when they are missing
@@ -105,13 +98,8 @@ except ImportError as exc:  # pragma: no cover - executed only when schemas are 
         "defines `SensorConfig`."
     ) from exc
 
-# PSUtil for memory monitoring (optional dependency)
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    psutil = None
-    PSUTIL_AVAILABLE = False
+# psutil for memory monitoring
+import psutil
 
 # Type variable for sensor types
 SensorType = TypeVar('SensorType', bound='BaseSensor')
@@ -276,7 +264,7 @@ class BaseSensor(ABC):
         self._sensor_config = kwargs.copy()
         
         # Memory monitoring for large-scale scenarios
-        if PSUTIL_AVAILABLE and enable_performance_monitoring:
+        if enable_performance_monitoring:
             self._monitor_memory = True
             self._base_memory_usage = psutil.Process().memory_info().rss / 1024 / 1024  # MB
         else:
@@ -292,18 +280,16 @@ class BaseSensor(ABC):
                 vectorized_ops=self._vectorized_ops,
                 history_enabled=self._enable_history
             )
-            
-            # Add Hydra context if available
-            if HYDRA_AVAILABLE:
-                try:
-                    hydra_cfg = HydraConfig.get()
-                    self._logger = self._logger.bind(
-                        hydra_job_name=hydra_cfg.job.name,
-                        hydra_output_dir=hydra_cfg.runtime.output_dir
-                    )
-                except Exception:
-                    # Hydra context not available, continue without it
-                    pass
+
+            try:
+                hydra_cfg = HydraConfig.get()
+                self._logger = self._logger.bind(
+                    hydra_job_name=hydra_cfg.job.name,
+                    hydra_output_dir=hydra_cfg.runtime.output_dir
+                )
+            except Exception:
+                # Hydra context not available, continue without it
+                pass
         else:
             self._logger = None
         
@@ -579,13 +565,13 @@ class BaseSensor(ABC):
                                    self._performance_metrics['total_operations'])
         
         # Memory usage monitoring
-        if self._monitor_memory and PSUTIL_AVAILABLE:
+        if self._monitor_memory:
             current_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
             memory_growth = current_memory - self._base_memory_usage
             metrics.update({
                 'memory_usage_mb': current_memory,
                 'memory_growth_mb': memory_growth,
-                'memory_per_operation_kb': (memory_growth * 1024 / 
+                'memory_per_operation_kb': (memory_growth * 1024 /
                                           max(self._performance_metrics['total_operations'], 1))
             })
         
@@ -1057,7 +1043,7 @@ def create_sensor_from_config(
         if SCHEMAS_AVAILABLE and isinstance(config, SensorConfig):
             # Pydantic model - extract relevant parameters
             config_dict = config.model_dump(exclude_none=True)
-        elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+        elif isinstance(config, DictConfig):
             # Hydra OmegaConf configuration
             config_dict = OmegaConf.to_container(config, resolve=True)
         elif isinstance(config, dict):
