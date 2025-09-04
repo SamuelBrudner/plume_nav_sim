@@ -1344,11 +1344,9 @@ def create_debug_visualizer(
     # Create backend-specific visualizer
     if selected_backend == 'qt':
         return _create_qt_debug_visualizer(visualizer_config)
-    elif selected_backend == 'streamlit':
+    if selected_backend == 'streamlit':
         return _create_streamlit_debug_visualizer(visualizer_config)
-    else:
-        # Console fallback
-        return _create_console_debug_visualizer(visualizer_config)
+    raise ImportError(f"Requested backend '{selected_backend}' not available")
 
 
 def register_visualization_hooks(
@@ -1787,57 +1785,6 @@ def _create_streamlit_debug_visualizer(config: Dict[str, Any]) -> Any:
     return StreamlitDebugVisualizer(config)
 
 
-def _create_console_debug_visualizer(config: Dict[str, Any]) -> Any:
-    """
-    Create console-based debug visualizer as fallback.
-    
-    Args:
-        config: Visualizer configuration dictionary.
-        
-    Returns:
-        Any: Console debug visualizer instance.
-    """
-    logger.info("Creating console-based debug visualizer (fallback)")
-    
-    class ConsoleDebugVisualizer:
-        """Console-based fallback debug visualizer."""
-        
-        def __init__(self, config):
-            self.config = config
-            logger.debug("Console debug visualizer initialized")
-        
-        def setup_environment(self, env):
-            """Setup environment for debugging."""
-            self.env = env
-            logger.debug("Environment setup complete")
-        
-        def start_session(self):
-            """Start debugging session."""
-            logger.info("Console debug session started")
-            print("Debug visualizer running in console mode")
-            print("Available commands: help, state, performance, quit")
-        
-        def interactive_session(self):
-            """Run interactive console debugging session."""
-            while True:
-                try:
-                    command = input("debug> ").strip().lower()
-                    if command == 'quit':
-                        break
-                    elif command == 'help':
-                        print("Available commands: help, state, performance, quit")
-                    elif command == 'state':
-                        print("Current simulation state information...")
-                    elif command == 'performance':
-                        print("Performance metrics and profiling data...")
-                    else:
-                        print(f"Unknown command: {command}")
-                except KeyboardInterrupt:
-                    break
-            
-            logger.info("Console debug session ended")
-    
-    return ConsoleDebugVisualizer(config)
 
 
 def visualize_plume_simulation(

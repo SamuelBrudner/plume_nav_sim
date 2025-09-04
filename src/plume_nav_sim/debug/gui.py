@@ -1533,65 +1533,24 @@ class DebugGUI:
     def _select_backend(self, requested_backend: str) -> str:
         """Select appropriate backend based on availability and request."""
         if requested_backend == 'auto':
+            if STREAMLIT_AVAILABLE:
+                return 'streamlit'
             return 'qt'
-        elif requested_backend == 'qt':
+        if requested_backend == 'qt':
             return 'qt'
-        elif requested_backend == 'streamlit':
+        if requested_backend == 'streamlit':
             if not STREAMLIT_AVAILABLE:
                 raise ImportError("Streamlit not available for web backend")
             return 'streamlit'
-        elif requested_backend == 'console':
-            return 'console'
-        else:
-            raise ValueError(f"Unknown backend: {requested_backend}")
+        raise ValueError(f"Unknown backend: {requested_backend}")
     
     def _create_backend_implementation(self):
         """Create backend-specific implementation."""
         if self.backend_name == 'qt':
             return QtDebugGUI(self.config, self.session)
-        elif self.backend_name == 'streamlit':
+        if self.backend_name == 'streamlit':
             return StreamlitDebugGUI(self.config, self.session)
-        else:
-            # Console fallback
-            return self._create_console_fallback()
-    
-    def _create_console_fallback(self):
-        """Create console fallback implementation."""
-        class ConsoleFallback:
-            def __init__(self, session):
-                self.session = session
-            
-            def start_session(self):
-                print(f"Debug session started: {self.session.session_id}")
-            
-            def step_through(self):
-                print("Single step executed")
-                return True
-            
-            def show(self):
-                print("Console debug mode - limited functionality")
-            
-            def export_screenshots(self, output_dir=None):
-                print(f"Screenshot export not available in console mode")
-                return None
-            
-            def set_simulation_state(self, state):
-                print(f"State updated: step {state.get('step_count', 'unknown')}")
-            
-            def add_breakpoint(self, condition, **kwargs):
-                bp_id = self.session.add_breakpoint(condition, **kwargs)
-                print(f"Breakpoint added: {condition} (ID: {bp_id})")
-                return bp_id
-            
-            def remove_breakpoint(self, breakpoint_id):
-                success = self.session.remove_breakpoint(breakpoint_id)
-                print(f"Breakpoint {breakpoint_id} {'removed' if success else 'not found'}")
-                return success
-            
-            def get_performance_metrics(self):
-                return {}
-        
-        return ConsoleFallback(self.session)
+        raise ImportError(f"Unsupported backend: {self.backend_name}")
     
     def configure_backend(self, **kwargs):
         """Configure backend-specific settings."""
