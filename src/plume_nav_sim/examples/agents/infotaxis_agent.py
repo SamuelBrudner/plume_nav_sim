@@ -92,43 +92,11 @@ except ImportError as e:
     ) from e
 
 # Sensor imports for multi-modal observation
-try:
-    from ...core.sensors import (
-        ConcentrationSensor,
-        BinarySensor,
-        create_sensor_from_config,
-    )
-
-    SENSORS_AVAILABLE = True
-except ImportError:
-    # Fallback sensor implementations
-    class ConcentrationSensor:
-        def __init__(self, **kwargs):
-            self.config = kwargs
-
-        def measure(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-            return np.random.random(positions.shape[0] if positions.ndim > 1 else 1)
-
-    class BinarySensor:
-        def __init__(self, **kwargs):
-            self.config = kwargs
-
-        def detect(self, plume_state: Any, positions: np.ndarray) -> np.ndarray:
-            concentrations = np.random.random(
-                positions.shape[0] if positions.ndim > 1 else 1
-            )
-            return concentrations > self.config.get("threshold", 0.1)
-
-    def create_sensor_from_config(config: Dict[str, Any]):
-        sensor_type = config.get("type", "ConcentrationSensor")
-        if sensor_type == "ConcentrationSensor":
-            return ConcentrationSensor(**config)
-        elif sensor_type == "BinarySensor":
-            return BinarySensor(**config)
-        else:
-            raise ValueError(f"Unknown sensor type: {sensor_type}")
-
-    SENSORS_AVAILABLE = False
+from ...core.sensors import (
+    ConcentrationSensor,
+    BinarySensor,
+    create_sensor_from_config,
+)
 
 # Enhanced logging support
 try:
@@ -440,32 +408,20 @@ class InfotaxisAgent:
             config = {**default_config, **sensor_configs.get(sensor_name, {})}
 
             try:
-                if SENSORS_AVAILABLE:
-                    sensors[sensor_name] = create_sensor_from_config(config)
-                else:
-                    # Fallback sensor creation
-                    if config["type"] == "ConcentrationSensor":
-                        sensors[sensor_name] = ConcentrationSensor(**config)
-                    elif config["type"] == "BinarySensor":
-                        sensors[sensor_name] = BinarySensor(**config)
-
+                sensors[sensor_name] = create_sensor_from_config(config)
                 if self.logger:
-                    self.logger.debug(
+                    self.logger.info(
                         f"Initialized {sensor_name} sensor",
                         sensor_type=config["type"],
                         config=config,
                     )
-
             except Exception as e:
                 if self.logger:
-                    self.logger.warning(
+                    self.logger.error(
                         f"Failed to initialize {sensor_name} sensor: {e}",
                         config=config,
-                        fallback_used=True,
                     )
-
-                # Create minimal fallback
-                sensors[sensor_name] = ConcentrationSensor(**config)
+                raise
 
         return sensors
 
@@ -630,96 +586,64 @@ class InfotaxisAgent:
             "orientation": float(self._orientation[0]),
         }
 
-        try:
-            # Concentration sensor
-            if "concentration" in self.sensors:
-                sensor = self.sensors["concentration"]
-                if hasattr(sensor, "measure"):
-                    conc = sensor.measure(env_array, self._position)
-                    observations["concentration"] = float(
-                        conc[0] if isinstance(conc, np.ndarray) else conc
-                    )
-                else:
-                    # Fallback direct sampling
-                    observations["concentration"] = float(self.sample_odor(env_array))
-
-            # Binary sensor
-            if "binary" in self.sensors:
-                sensor = self.sensors["binary"]
-                if hasattr(sensor, "detect"):
-                    detection = sensor.detect(env_array, self._position)
-                    observations["detection"] = bool(
-                        detection[0] if isinstance(detection, np.ndarray) else detection
-                    )
-                else:
-                    # Fallback threshold detection
-                    threshold = getattr(sensor, "config", {}).get("threshold", 0.1)
-                    observations["detection"] = (
-                        observations.get("concentration", 0.0) > threshold
-                    )
-
-            # Add gradient information if available
-            try:
-                gradient = self._estimate_gradient(env_array)
-                observations["gradient"] = gradient.tolist()
-            except Exception:
-                observations["gradient"] = [0.0, 0.0]
-
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"Sensor observation failed: {e}")
-
-            # Provide fallback observations
-            observations.update(
-                {"concentration": 0.0, "detection": False, "gradient": [0.0, 0.0]}
+        # Concentration sensor
+        if "concentration" in self.sensors:
+            sensor = self.sensors["concentration"]
+            conc = sensor.measure(env_array, self._position)
+            observations["concentration"] = float(
+                conc[0] if isinstance(conc, np.ndarray) else conc
             )
+
+        # Binary sensor
+        if "binary" in self.sensors:
+            sensor = self.sensors["binary"]
+            detection = sensor.detect(env_array, self._position)
+            observations["detection"] = bool(
+                detection[0] if isinstance(detection, np.ndarray) else detection
+            )
+
+        # Add gradient information
+        gradient = self._estimate_gradient(env_array)
+        observations["gradient"] = gradient.tolist()
 
         return observations
 
     def _estimate_gradient(self, env_array: np.ndarray) -> np.ndarray:
         """Estimate concentration gradient using finite differences."""
-        try:
-            position = self._position[0]
-            step_size = self.grid_resolution
+        position = self._position[0]
+        step_size = self.grid_resolution
 
-            # Sample at offset positions
-            pos_x_plus = position + np.array([step_size, 0])
-            pos_x_minus = position - np.array([step_size, 0])
-            pos_y_plus = position + np.array([0, step_size])
-            pos_y_minus = position - np.array([0, step_size])
+        # Sample at offset positions
+        pos_x_plus = position + np.array([step_size, 0])
+        pos_x_minus = position - np.array([step_size, 0])
+        pos_y_plus = position + np.array([0, step_size])
+        pos_y_minus = position - np.array([0, step_size])
 
-            # Get concentrations at offset positions
-            conc_center = self.sample_odor(env_array)
-            conc_x_plus = self._sample_at_position(env_array, pos_x_plus)
-            conc_x_minus = self._sample_at_position(env_array, pos_x_minus)
-            conc_y_plus = self._sample_at_position(env_array, pos_y_plus)
-            conc_y_minus = self._sample_at_position(env_array, pos_y_minus)
+        # Get concentrations at offset positions
+        conc_center = self.sample_odor(env_array)
+        conc_x_plus = self._sample_at_position(env_array, pos_x_plus)
+        conc_x_minus = self._sample_at_position(env_array, pos_x_minus)
+        conc_y_plus = self._sample_at_position(env_array, pos_y_plus)
+        conc_y_minus = self._sample_at_position(env_array, pos_y_minus)
 
-            # Central difference gradient
-            grad_x = (conc_x_plus - conc_x_minus) / (2 * step_size)
-            grad_y = (conc_y_plus - conc_y_minus) / (2 * step_size)
+        # Central difference gradient
+        grad_x = (conc_x_plus - conc_x_minus) / (2 * step_size)
+        grad_y = (conc_y_plus - conc_y_minus) / (2 * step_size)
 
-            return np.array([grad_x, grad_y])
-
-        except Exception:
-            return np.array([0.0, 0.0])
+        return np.array([grad_x, grad_y])
 
     def _sample_at_position(self, env_array: np.ndarray, position: np.ndarray) -> float:
         """Sample odor concentration at a specific position."""
-        try:
-            # Temporarily update position for sampling
-            old_position = self._position.copy()
-            self._position = position.reshape(1, 2)
+        # Temporarily update position for sampling
+        old_position = self._position.copy()
+        self._position = position.reshape(1, 2)
 
-            concentration = self.sample_odor(env_array)
+        concentration = self.sample_odor(env_array)
 
-            # Restore original position
-            self._position = old_position
+        # Restore original position
+        self._position = old_position
 
-            return float(concentration)
-
-        except Exception:
-            return 0.0
+        return float(concentration)
 
     def _update_belief_state(self, observations: Dict[str, Any], dt: float) -> None:
         """Update probability beliefs using Bayesian inference."""
