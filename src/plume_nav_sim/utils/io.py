@@ -419,30 +419,3 @@ def save_numpy(
             pass
         raise NumpyError(f"Failed to serialize NumPy array: {e}") from e
 
-
-# Maintain backward compatibility with legacy io_utils imports
-# This provides a fallback for projects that may still import from the old structure
-def _setup_legacy_compatibility() -> None:
-    """
-    Set up compatibility with legacy io_utils module imports.
-    
-    This function attempts to make the current module's functions available
-    through legacy import paths for backward compatibility during the migration.
-    """
-    try:
-        import sys
-        current_module = sys.modules[__name__]
-        
-        # Try to make functions available through legacy paths if needed
-        # This helps during the transition period
-        if 'plume_nav_sim.io_utils' not in sys.modules:
-            sys.modules['plume_nav_sim.io_utils'] = current_module
-            
-    except Exception:
-        # If compatibility setup fails, continue without it
-        # This is not critical to core functionality
-        pass
-
-
-# Initialize backward compatibility on import
-_setup_legacy_compatibility()
