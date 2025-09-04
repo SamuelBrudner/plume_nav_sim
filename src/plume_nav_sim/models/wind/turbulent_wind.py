@@ -87,7 +87,9 @@ from numba import jit, prange
 # Numba compilation settings for performance optimization
 NUMBA_OPTIONS = {"nopython": True, "fastmath": True, "cache": True, "parallel": True}
 
-logger.info("Numba %s successfully imported", getattr(numba, "__version__", "unknown"))
+logger.info(
+    "Numba version %s successfully imported", getattr(numba, "__version__", "unknown")
+)
 
 # Core protocol import
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
@@ -96,7 +98,9 @@ from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 import hydra
 from omegaconf import DictConfig
 
-logger.info("Hydra %s successfully imported", getattr(hydra, "__version__", "unknown"))
+logger.info(
+    "Hydra version %s successfully imported", getattr(hydra, "__version__", "unknown")
+)
 
 
 @dataclass
