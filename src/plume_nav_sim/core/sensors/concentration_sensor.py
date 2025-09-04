@@ -61,7 +61,6 @@ Notes:
 
 from __future__ import annotations
 import time
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 import numpy as np
@@ -778,25 +777,38 @@ class ConcentrationSensor(BaseSensor):
             # Check for mock plume object (testing)
             elif hasattr(plume_state, 'current_frame'):
                 return self._sample_from_array(plume_state.current_frame, positions)
-            
+
             # Fallback for unknown plume state types
             else:
-                warnings.warn(f"Unknown plume_state type: {type(plume_state)}, returning zeros")
-                return np.zeros(positions.shape[0])
-                
+                if self._enable_logging:
+                    logger.error(
+                        "Invalid plume_state type for sampling",
+                        plume_state_type=type(plume_state).__name__,
+                    )
+                raise TypeError(f"Unsupported plume_state type: {type(plume_state)}")
+
+        except TypeError:
+            # Type errors are raised for invalid plume_state types and should propagate
+            raise
         except Exception as e:
             if self._enable_logging:
-                logger.warning(
-                    f"Failed to sample from plume_state: {str(e)}",
+                logger.error(
+                    "Failed to sample from plume_state",
+                    error=str(e),
                     plume_state_type=type(plume_state).__name__,
-                    fallback_to_zeros=True
                 )
-            return np.zeros(positions.shape[0])
+            raise RuntimeError(f"Sampling from plume_state failed: {e}") from e
     
     def _sample_from_array(self, env_array: np.ndarray, positions: np.ndarray) -> np.ndarray:
         """Sample concentrations from a 2D environment array."""
         if not hasattr(env_array, 'shape') or len(env_array.shape) < 2:
-            return np.zeros(positions.shape[0])
+            if self._enable_logging:
+                logger.error(
+                    "Invalid environment array for sampling",
+                    array_type=type(env_array).__name__,
+                    array_shape=getattr(env_array, 'shape', 'unknown'),
+                )
+            raise ValueError("env_array must be a 2D array")
 
         height, width = env_array.shape[:2]
         num_positions = positions.shape[0]
