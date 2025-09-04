@@ -34,39 +34,27 @@ from dataclasses import dataclass, field
 import time
 import threading
 from pathlib import Path
-import logging
 
-logger = logging.getLogger(__name__)
+from plume_nav_sim.utils.logging_setup import get_enhanced_logger
 
-try:
-    from plume_nav_sim.protocols.navigator import NavigatorProtocol
-    from plume_nav_sim.core.navigator import Navigator
-except ImportError as exc:
-    logger.exception("Failed to import navigator dependencies: %s", exc)
-    raise
+logger = get_enhanced_logger(__name__)
 
-try:
-    from plume_nav_sim.config.models import (
-        NavigatorConfig,
-        SingleAgentConfig,
-        MultiAgentConfig,
-    )
-except ImportError as exc:
-    logger.exception("Failed to import configuration models: %s", exc)
-    raise
-
-# Hydra is required for configuration management
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from plume_nav_sim.core.navigator import Navigator
+from plume_nav_sim.config.models import (
+    NavigatorConfig,
+    SingleAgentConfig,
+    MultiAgentConfig,
+)
 from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
-
 from plume_nav_sim.utils.seed_manager import (
     SeedManager,
     set_global_seed,
     get_global_seed_manager,
 )
-from plume_nav_sim.utils.logging_setup import get_enhanced_logger
 
-logger = get_enhanced_logger(__name__)
+logger.info("Navigator utilities dependencies initialized")
 
 
 # A dictionary of *base* local sensor offsets (in arbitrary units).
