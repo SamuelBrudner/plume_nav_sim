@@ -1,0 +1,50 @@
+from loguru import logger as loguru_logger
+import importlib.util
+import pathlib
+import sys
+import types
+
+
+def test_controller_uses_loguru_exclusively():
+    module_path = pathlib.Path(__file__).resolve().parents[2] / 'src' / 'plume_nav_sim' / 'core' / 'controllers.py'
+
+    pkg_plume = types.ModuleType('plume_nav_sim'); pkg_plume.__path__ = []
+    pkg_core = types.ModuleType('plume_nav_sim.core'); pkg_core.__path__ = []
+    pkg_config = types.ModuleType('plume_nav_sim.config'); pkg_config.__path__ = []
+    pkg_schemas = types.ModuleType('plume_nav_sim.config.schemas'); pkg_schemas.__path__ = []
+    class NavigatorConfig: ...
+    class SingleAgentConfig: ...
+    class MultiAgentConfig: ...
+    pkg_schemas.NavigatorConfig = NavigatorConfig
+    pkg_schemas.SingleAgentConfig = SingleAgentConfig
+    pkg_schemas.MultiAgentConfig = MultiAgentConfig
+    pkg_utils = types.ModuleType('plume_nav_sim.utils'); pkg_utils.__path__ = []
+    pkg_frame_cache = types.ModuleType('plume_nav_sim.utils.frame_cache'); pkg_frame_cache.__path__ = []
+    class FrameCache: ...
+    class CacheMode: ...
+    pkg_frame_cache.FrameCache = FrameCache
+    pkg_frame_cache.CacheMode = CacheMode
+    pkg_envs = types.ModuleType('plume_nav_sim.envs'); pkg_envs.__path__ = []
+    pkg_envs_spaces = types.ModuleType('plume_nav_sim.envs.spaces'); pkg_envs_spaces.__path__ = []
+    class SpacesFactory: ...
+    pkg_envs_spaces.SpacesFactory = SpacesFactory
+
+    sys.modules.update({
+        'plume_nav_sim': pkg_plume,
+        'plume_nav_sim.core': pkg_core,
+        'plume_nav_sim.config': pkg_config,
+        'plume_nav_sim.config.schemas': pkg_schemas,
+        'plume_nav_sim.utils': pkg_utils,
+        'plume_nav_sim.utils.frame_cache': pkg_frame_cache,
+        'plume_nav_sim.envs': pkg_envs,
+        'plume_nav_sim.envs.spaces': pkg_envs_spaces,
+    })
+
+    spec = importlib.util.spec_from_file_location('plume_nav_sim.core.controllers', module_path)
+    controllers = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = controllers
+    spec.loader.exec_module(controllers)
+
+    assert controllers.logger is loguru_logger
+    for attr in ["LOGURU_AVAILABLE", "HYDRA_AVAILABLE", "PSUTIL_AVAILABLE", "PERFORMANCE_MONITORING_AVAILABLE"]:
+        assert not hasattr(controllers, attr)
