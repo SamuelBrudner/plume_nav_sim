@@ -38,18 +38,9 @@ from pathlib import Path
 import numpy as np
 
 # Gymnasium and RL framework imports
-try:
-    import gymnasium as gym
-    from gymnasium.spaces import Box, Dict as DictSpace
-    from gymnasium.error import DependencyNotInstalled
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    # Create mock classes to prevent import errors
-    class gym:
-        class Env:
-            def __init__(self): pass
-    Box = DictSpace = None
+import gymnasium as gym
+from gymnasium.spaces import Box, Dict as DictSpace
+from gymnasium.error import DependencyNotInstalled
 
 # Core plume navigation imports
 from odor_plume_nav.core.protocols import NavigatorProtocol, NavigatorFactory
@@ -312,12 +303,6 @@ class GymnasiumEnv(gym.Env):
             When frame_cache is provided, performance metrics including cache hit rates
             and memory utilization are embedded in step() info["perf_stats"] for analysis.
         """
-        if not GYMNASIUM_AVAILABLE:
-            raise ImportError(
-                "gymnasium is required for GymnasiumEnv. "
-                "Install with: pip install 'odor_plume_nav[rl]'"
-            )
-        
         super().__init__()
         
         # Store configuration parameters

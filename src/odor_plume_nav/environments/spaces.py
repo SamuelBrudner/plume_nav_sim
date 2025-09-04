@@ -29,41 +29,23 @@ except ImportError:
     logger = logging.getLogger(__name__)
     logger.warning("Enhanced logging not available, falling back to standard logging")
 
+# Import Gymnasium spaces directly; failure will raise ImportError
+import gymnasium as gym
+from gymnasium.spaces import Box, Dict as DictSpace
+from gymnasium.utils.env_checker import check_env
+
+# Import environment checker utilities for comprehensive validation
 try:
-    import gymnasium as gym
-    from gymnasium.spaces import Box, Dict as DictSpace
-    from gymnasium.utils.env_checker import check_env  # Updated to correct function name
-    GYMNASIUM_AVAILABLE = True
-    
-    # Import environment checker utilities for comprehensive validation
-    try:
-        from gymnasium.utils.env_checker import (
-            check_action_space,
-            check_observation_space,
-            check_env as check_environment  # Alias for backward compatibility
-        )
-        ENV_CHECKER_AVAILABLE = True
-        logger.debug("Gymnasium environment checker utilities loaded successfully")
-    except ImportError:
-        ENV_CHECKER_AVAILABLE = False
-        logger.warning("Gymnasium environment checker utilities not available")
-    
+    from gymnasium.utils.env_checker import (
+        check_action_space,
+        check_observation_space,
+        check_env as check_environment  # Alias for backward compatibility
+    )
+    ENV_CHECKER_AVAILABLE = True
+    logger.debug("Gymnasium environment checker utilities loaded successfully")
 except ImportError:
-    # Fallback for environments without Gymnasium
-    GYMNASIUM_AVAILABLE = False
     ENV_CHECKER_AVAILABLE = False
-    logger.warning("Gymnasium not available, space validation will be limited")
-    
-    # Create mock classes to prevent import errors
-    class Box:
-        def __init__(self, *args, **kwargs):
-            pass
-    
-    class DictSpace:
-        def __init__(self, *args, **kwargs):
-            pass
-    
-    gym = None
+    logger.warning("Gymnasium environment checker utilities not available")
 
 # Type aliases for enhanced clarity and IDE support
 ActionType = np.ndarray
@@ -424,12 +406,6 @@ class ActionSpace:
             ...     max_angular_velocity=180.0
             ... )
         """
-        if not GYMNASIUM_AVAILABLE:
-            raise ImportError(
-                "gymnasium is required for action space creation. "
-                "Install with: pip install 'odor_plume_nav[rl]'"
-            )
-        
         if max_speed <= min_speed:
             raise ValueError(f"max_speed ({max_speed}) must be greater than min_speed ({min_speed})")
         
@@ -627,12 +603,6 @@ class ObservationSpace:
             ...     position_bounds=((10, 990), (10, 790))  # 10-pixel border
             ... )
         """
-        if not GYMNASIUM_AVAILABLE:
-            raise ImportError(
-                "gymnasium is required for observation space creation. "
-                "Install with: pip install 'odor_plume_nav[rl]'"
-            )
-        
         if env_width <= 0 or env_height <= 0:
             raise ValueError(f"Environment dimensions must be positive: width={env_width}, height={env_height}")
         
@@ -1541,19 +1511,13 @@ class SpaceFactory:
         try:
             validation_results = {
                 "overall_valid": False,
-                "gymnasium_available": GYMNASIUM_AVAILABLE,
                 "env_checker_available": ENV_CHECKER_AVAILABLE,
-                "gymnasium_version_support": "0.29.x" if GYMNASIUM_AVAILABLE else "unavailable",
+                "gymnasium_version_support": "0.29.x",
                 "space_validation": {},
                 "compatibility_checks": {},
                 "warnings": [],
                 "errors": []
             }
-            
-            if not GYMNASIUM_AVAILABLE:
-                validation_results["errors"].append("Gymnasium not available")
-                logger.error("Gymnasium compatibility validation failed: Gymnasium not available")
-                return validation_results
             
             # Basic space validation
             basic_valid = SpaceFactory.validate_spaces(action_space, observation_space, use_env_checker=True)
@@ -1600,8 +1564,7 @@ class SpaceFactory:
             )
             return {
                 "overall_valid": False,
-                "error": str(e),
-                "gymnasium_available": GYMNASIUM_AVAILABLE
+                "error": str(e)
             }
     
     @staticmethod
@@ -1707,7 +1670,6 @@ def log_space_diagnostics(
     try:
         diagnostics = {
             "context": context,
-            "gymnasium_available": GYMNASIUM_AVAILABLE,
             "env_checker_available": ENV_CHECKER_AVAILABLE
         }
         
@@ -1889,7 +1851,6 @@ __all__ = [
     "DictSpace",
     
     # Feature flags and constants
-    "GYMNASIUM_AVAILABLE",
     "ENV_CHECKER_AVAILABLE",
     "GYMNASIUM_STEP_RETURN_LENGTH",
     "LEGACY_STEP_RETURN_LENGTH",
