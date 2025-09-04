@@ -84,12 +84,7 @@ from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 PROTOCOLS_AVAILABLE = True
 
 # Configuration management
-try:
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+from omegaconf import DictConfig
 
 # Import all wind field implementations with graceful fallbacks
 WIND_FIELD_IMPLEMENTATIONS = {}  # Registry for successful imports
@@ -310,7 +305,7 @@ def create_wind_field(
         raise ValueError("Configuration cannot be empty")
     
     # Convert DictConfig to regular dict if needed
-    if hasattr(config, 'to_container') and HYDRA_AVAILABLE:
+    if hasattr(config, 'to_container'):
         config_dict = config.to_container(resolve=True)
     else:
         config_dict = dict(config)
@@ -324,43 +319,36 @@ def create_wind_field(
     
     # Priority 1: Hydra-style _target_ field
     if '_target_' in config_dict:
-        if HYDRA_AVAILABLE:
-            try:
-                from hydra import utils as hydra_utils
-                logger.debug(f"Using Hydra instantiation with target: {config_dict['_target_']}")
-                wind_field = hydra_utils.instantiate(config_dict)
-                
-                # Validate protocol compliance if requested
-                if validate_protocol:
-                    missing = [
-                        m for m in ("velocity_at", "step", "reset")
-                        if not callable(getattr(wind_field, m, None))
-                    ]
-                    if missing:
-                        logger.error(
-                            f"Wind field missing required methods: {', '.join(missing)}"
-                        )
-                        raise RuntimeError(
-                            f"Instantiated wind field missing required methods: {', '.join(missing)}"
-                        )
-                    if not isinstance(wind_field, WindFieldProtocol):
-                        logger.error(
-                            f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
-                        )
-                        raise RuntimeError(
-                            f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
-                        )
-                
-                logger.info(f"Successfully created wind field via Hydra: {type(wind_field).__name__}")
-                return wind_field
-            except Exception as e:
-                raise RuntimeError(f"Hydra instantiation failed: {e}") from e
-        else:
-            warnings.warn(
-                "Hydra not available but _target_ specified. "
-                "Falling back to factory instantiation.",
-                UserWarning
-            )
+        try:
+            from hydra import utils as hydra_utils
+            logger.debug(f"Using Hydra instantiation with target: {config_dict['_target_']}")
+            wind_field = hydra_utils.instantiate(config_dict)
+
+            # Validate protocol compliance if requested
+            if validate_protocol:
+                missing = [
+                    m for m in ("velocity_at", "step", "reset")
+                    if not callable(getattr(wind_field, m, None))
+                ]
+                if missing:
+                    logger.error(
+                        f"Wind field missing required methods: {', '.join(missing)}"
+                    )
+                    raise RuntimeError(
+                        f"Instantiated wind field missing required methods: {', '.join(missing)}"
+                    )
+                if not isinstance(wind_field, WindFieldProtocol):
+                    logger.error(
+                        f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
+                    )
+                    raise RuntimeError(
+                        f"Instantiated wind field does not implement WindFieldProtocol: {type(wind_field)}"
+                    )
+
+            logger.info(f"Successfully created wind field via Hydra: {type(wind_field).__name__}")
+            return wind_field
+        except Exception as e:
+            raise RuntimeError(f"Hydra instantiation failed: {e}") from e
     
     # Priority 2: Factory-style type field
     if 'type' in config_dict:
@@ -791,7 +779,6 @@ def _validate_module_integrity() -> Dict[str, Any]:
         'components': {
             'numpy_available': NUMPY_AVAILABLE,
             'protocols_available': PROTOCOLS_AVAILABLE,
-            'hydra_available': HYDRA_AVAILABLE,
             'loguru_available': LOGURU_AVAILABLE
         },
         'implementations': {

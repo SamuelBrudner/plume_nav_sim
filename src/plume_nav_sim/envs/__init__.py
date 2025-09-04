@@ -39,12 +39,8 @@ except Exception as e:  # pragma: no cover - critical dependency
     raise
 
 # Required dependency: Hydra
-try:
-    from hydra import instantiate
-    HYDRA_INSTANTIATE_AVAILABLE = True
-except ImportError as e:  # pragma: no cover - explicit failure
-    logger.error(f"Hydra is required for dependency injection: {e}")
-    raise
+from hydra.utils import instantiate
+HYDRA_INSTANTIATE_AVAILABLE = True
 
 # Required core environment
 try:

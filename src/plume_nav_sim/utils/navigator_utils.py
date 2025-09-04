@@ -55,16 +55,9 @@ except ImportError as exc:
     logger.exception("Failed to import configuration models: %s", exc)
     raise
 
-# Hydra imports with fallback for environments without Hydra
-try:
-    from omegaconf import DictConfig, OmegaConf
-    from hydra.core.hydra_config import HydraConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    DictConfig = dict
-    OmegaConf = None
-    HydraConfig = None
+# Hydra is required for configuration management
+from omegaconf import DictConfig, OmegaConf
+from hydra.core.hydra_config import HydraConfig
 
 # Seed manager imports with updated namespace
 try:
@@ -217,7 +210,7 @@ def create_navigator_from_config(
         if isinstance(config, dict):
             creation_result.configuration_source = "dict"
             config_dict = config
-        elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        elif isinstance(config, DictConfig):
             creation_result.configuration_source = "hydra"
             config_dict = OmegaConf.to_container(config, resolve=True)
         elif isinstance(config, (NavigatorConfig, SingleAgentConfig, MultiAgentConfig)):
@@ -264,7 +257,6 @@ def create_navigator_from_config(
             'agent_count': navigator.num_agents,
             'config_keys': list(config_dict.keys()),
             'validation_enabled': validate_config,
-            'hydra_available': HYDRA_AVAILABLE,
             'seed_manager_available': SEED_MANAGER_AVAILABLE
         })
         
@@ -1418,7 +1410,7 @@ def create_navigator_for_cli(
     
     try:
         # Load configuration
-        if config_path and HYDRA_AVAILABLE:
+    if config_path:
             from hydra import compose, initialize_config_dir
             from pathlib import Path
             
@@ -1645,7 +1637,7 @@ def validate_navigator_configuration(
         # Convert config to dictionary
         if isinstance(config, dict):
             config_dict = config.copy()
-        elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        elif isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
         elif hasattr(config, 'dict'):
             config_dict = config.dict()

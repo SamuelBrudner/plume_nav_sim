@@ -47,18 +47,8 @@ from .protocols import ActionInterfaceProtocol
 logger = logging.getLogger(__name__)
 logger.debug("Loaded actions module with ActionInterfaceProtocol from protocols")
 
-# Gymnasium imports for action space construction
-try:
-    from gymnasium import spaces
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    # Fallback for environments without Gymnasium
-    try:
-        import gym.spaces as spaces
-        GYMNASIUM_AVAILABLE = True
-    except ImportError:
-        spaces = None
-        GYMNASIUM_AVAILABLE = False
+# Gymnasium is a required dependency
+from gymnasium import spaces
 
 
 class Continuous2DAction(ActionInterfaceProtocol):
@@ -239,7 +229,7 @@ class Continuous2DAction(ActionInterfaceProtocol):
         
         return validated_action.astype(np.float32)
     
-    def get_action_space(self) -> Optional[spaces.Space]:
+    def get_action_space(self) -> spaces.Space:
         """
         Get Gymnasium action space for this interface.
         
@@ -259,9 +249,6 @@ class Continuous2DAction(ActionInterfaceProtocol):
             >>> assert action_space.low[0] == -2.0  # min_velocity
             >>> assert action_space.high[0] == 2.0   # max_velocity
         """
-        if not GYMNASIUM_AVAILABLE:
-            return None
-        
         return spaces.Box(
             low=np.array([self._min_velocity, self._min_angular_velocity], dtype=np.float32),
             high=np.array([self._max_velocity, self._max_angular_velocity], dtype=np.float32),
@@ -572,30 +559,26 @@ class CardinalDiscreteAction(ActionInterfaceProtocol):
         else:
             return int(np.clip(action, 0, self._num_actions - 1))
     
-    def get_action_space(self) -> Optional[spaces.Space]:
+    def get_action_space(self) -> spaces.Space:
         """
         Get Gymnasium action space for this interface.
-        
+
         Returns:
-            Optional[spaces.Space]: Discrete action space with appropriate number of actions,
-                                   or None if Gymnasium is not available
-                                   
+            spaces.Space: Discrete action space with appropriate number of actions.
+
         Notes:
             Action space size depends on configuration:
             - 4-direction + stay: 5 actions
-            - 4-direction no stay: 4 actions  
+            - 4-direction no stay: 4 actions
             - 8-direction + stay: 9 actions
             - 8-direction no stay: 8 actions
-            
+
         Examples:
             Get action space for RL training:
             >>> action_space = action_interface.get_action_space()
             >>> assert isinstance(action_space, gymnasium.spaces.Discrete)
             >>> print(f"Number of actions: {action_space.n}")
         """
-        if not GYMNASIUM_AVAILABLE:
-            return None
-        
         return spaces.Discrete(self._num_actions)
     
     def get_action_mapping(self) -> Dict[int, str]:

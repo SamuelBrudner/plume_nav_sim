@@ -92,17 +92,10 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Gymnasium imports are required; fail fast with guidance if missing
-try:
-    import gymnasium as gym
-    from gymnasium.spaces import Box, Dict as DictSpace
-    from gymnasium.error import DependencyNotInstalled
-except ImportError as exc:
-    raise ImportError(
-        "Gymnasium is required for plume_nav_sim. Install with `pip install gymnasium`."
-    ) from exc
-
-GYMNASIUM_AVAILABLE = True
+# Gymnasium is a required dependency
+import gymnasium as gym
+from gymnasium.spaces import Box, Dict as DictSpace
+from gymnasium.error import DependencyNotInstalled
 
 # Core plume navigation imports
 from plume_nav_sim.core.protocols import (
@@ -462,12 +455,6 @@ class PlumeNavigationEnv(gym.Env):
                 >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", hook_manager_config="none")  # Zero overhead
                 >>> env = PlumeNavigationEnv(video_path="plume_movie.mp4", hook_manager_config={"type": "full"})  # Full hooks
         """
-        if not GYMNASIUM_AVAILABLE:
-            raise ImportError(
-                "gymnasium is required for PlumeNavigationEnv. "
-                "Install with: pip install gymnasium>=0.29.0"
-            )
-        
         super().__init__()
         
         # Store configuration parameters
@@ -3072,7 +3059,6 @@ def validate_environment_api_compliance(env: PlumeNavigationEnv) -> Dict[str, An
 logger.info(
     "PlumeNavigationEnv module loaded with Gymnasium 0.29.x support",
     extra={
-        "gymnasium_available": GYMNASIUM_AVAILABLE,
         "spaces_available": SPACES_AVAILABLE,
         "frame_cache_available": FRAME_CACHE_AVAILABLE,
         "dual_api_support": True,
@@ -3107,15 +3093,14 @@ ENVIRONMENT_SPECS = {
     }
 }
 # Gymnasium environment registration for standard gym.make() interface
-if GYMNASIUM_AVAILABLE:
-    try:
-        from gymnasium.envs.registration import register
-        register(
-            id="PlumeNavSim-v0",
-            entry_point="plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv",
-            max_episode_steps=1000,
-            kwargs={'video_path': 'nonexistent.mp4'},
-        )
-    except Exception:
-        # Registration is best-effort; ignore if registry not available at import time
-        pass
+try:
+    from gymnasium.envs.registration import register
+    register(
+        id="PlumeNavSim-v0",
+        entry_point="plume_nav_sim.envs.plume_navigation_env:PlumeNavigationEnv",
+        max_episode_steps=1000,
+        kwargs={'video_path': 'nonexistent.mp4'},
+    )
+except Exception:
+    # Registration is best-effort; ignore if registry not available at import time
+    pass
