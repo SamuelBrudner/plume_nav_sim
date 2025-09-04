@@ -120,9 +120,19 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Optional, Union, List, Tuple, Callable
 from unittest.mock import Mock, MagicMock, patch
 from contextlib import contextmanager
+import importlib.util
+import logging
 
 import pytest
 import numpy as np
+
+
+def _has_module(name: str) -> bool:
+    """Return True if the given module can be imported."""
+    return importlib.util.find_spec(name) is not None
+
+
+logger = logging.getLogger(__name__)
 
 # Core testing framework imports
 try:
@@ -153,48 +163,44 @@ except ImportError:
     warnings.warn("pytest-hydra not available. Advanced configuration testing disabled.", ImportWarning)
 
 # Database testing infrastructure
-try:
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-    SQLALCHEMY_AVAILABLE = True
-except ImportError:
-    SQLALCHEMY_AVAILABLE = False
-    warnings.warn("SQLAlchemy not available. Database testing will be skipped.", ImportWarning)
+# SQLAlchemy is required for database fixtures; tests will skip if missing.
+sqlalchemy = pytest.importorskip(
+    "sqlalchemy", reason="SQLAlchemy not available. Database testing will be skipped."
+)
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 # Gymnasium testing integration
-try:
-    import gymnasium
-    from gymnasium.utils.env_checker import check_env
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    GYMNASIUM_AVAILABLE = False
-    warnings.warn("Gymnasium not available. Environment testing will be limited.", ImportWarning)
+# Gymnasium is required for environment fixtures; tests will skip if missing.
+gymnasium = pytest.importorskip(
+    "gymnasium", reason="Gymnasium not available. Environment testing will be limited."
+)
+from gymnasium.utils.env_checker import check_env
 
 # Performance monitoring for frame cache testing
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
-    warnings.warn("psutil not available. Memory monitoring tests will be skipped.", ImportWarning)
+# psutil enables memory monitoring; fixtures will skip if it's absent.
+psutil = pytest.importorskip(
+    "psutil", reason="psutil not available. Memory monitoring tests will be skipped."
+)
 
 # Import project modules with graceful fallback
-try:
-    from plume_nav_sim.config.schemas import (
-        NavigatorConfig, VideoPlumeConfig, SingleAgentConfig, MultiAgentConfig
-    )
-    SCHEMAS_AVAILABLE = True
-except ImportError:
-    SCHEMAS_AVAILABLE = False
-    warnings.warn("Project schemas not available. Some fixtures will be limited.", ImportWarning)
-
-try:
-    from plume_nav_sim.utils.seed_manager import SeedManager, SeedConfig
-    SEED_MANAGER_AVAILABLE = True
-except ImportError:
-    SEED_MANAGER_AVAILABLE = False
-    warnings.warn("Seed manager not available. Deterministic testing will be limited.", ImportWarning)
+# Project configuration schemas are optional; skip related fixtures when absent.
+schemas = pytest.importorskip(
+    "plume_nav_sim.config.schemas",
+    reason="Project schemas not available. Some fixtures will be limited.",
+)
+NavigatorConfig = schemas.NavigatorConfig
+VideoPlumeConfig = schemas.VideoPlumeConfig
+SingleAgentConfig = schemas.SingleAgentConfig
+MultiAgentConfig = schemas.MultiAgentConfig
+# Seed manager provides deterministic testing; fixtures skip if missing.
+seed_mod = pytest.importorskip(
+    "plume_nav_sim.utils.seed_manager",
+    reason="Seed manager not available. Deterministic testing will be limited.",
+)
+SeedManager = seed_mod.SeedManager
+SeedConfig = seed_mod.SeedConfig
 
 # v1.0 New component imports with graceful fallback
 try:
@@ -435,10 +441,10 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("cli") and not CLICK_TESTING_AVAILABLE:
             item.add_marker(pytest.mark.skip(reason="Click testing not available"))
         
-        if item.get_closest_marker("database") and not SQLALCHEMY_AVAILABLE:
+        if item.get_closest_marker("database") and not _has_module("sqlalchemy"):
             item.add_marker(pytest.mark.skip(reason="SQLAlchemy not available"))
-        
-        if item.get_closest_marker("gymnasium") and not GYMNASIUM_AVAILABLE:
+
+        if item.get_closest_marker("gymnasium") and not _has_module("gymnasium"):
             item.add_marker(pytest.mark.skip(reason="Gymnasium not available"))
         
         if item.get_closest_marker("shim") and not SHIMS_AVAILABLE:
@@ -499,15 +505,14 @@ def hydra_config_store():
     # Initialize ConfigStore
     cs = ConfigStore.instance()
     
-    # Register test configuration schemas if available
-    if SCHEMAS_AVAILABLE:
-        cs.store(name="test_navigator_config", node=NavigatorConfig)
-        cs.store(name="test_video_plume_config", node=VideoPlumeConfig)
-        cs.store(name="test_single_agent_config", node=SingleAgentConfig)
-        cs.store(name="test_multi_agent_config", node=MultiAgentConfig)
-    
-    if SEED_MANAGER_AVAILABLE:
-        cs.store(name="test_seed_config", node=SeedConfig)
+    # Register test configuration schemas
+    cs.store(name="test_navigator_config", node=NavigatorConfig)
+    cs.store(name="test_video_plume_config", node=VideoPlumeConfig)
+    cs.store(name="test_single_agent_config", node=SingleAgentConfig)
+    cs.store(name="test_multi_agent_config", node=MultiAgentConfig)
+
+    # Register seed configuration for deterministic testing
+    cs.store(name="test_seed_config", node=SeedConfig)
     
     yield cs
     
@@ -668,8 +673,12 @@ def gymnasium_env_fixture(tmp_path):
             assert len(step_result) == 5
             obs, reward, terminated, truncated, info = step_result
     """
-    if not GYMNASIUM_AVAILABLE or not ENV_AVAILABLE:
-        pytest.skip("Gymnasium or environment modules not available")
+    pytest.importorskip(
+        "gymnasium", reason="Gymnasium required for environment testing"
+    )
+    logger.debug("Gymnasium dependency satisfied for gymnasium_env_fixture")
+    if not ENV_AVAILABLE:
+        pytest.skip("Environment modules not available")
     
     def _create_env(config_overrides: Optional[Dict[str, Any]] = None, **kwargs):
         """
@@ -748,8 +757,12 @@ def gymnasium_spaces_fixture():
             assert action_space.contains(action_space.sample())
             assert obs_space.contains(obs_space.sample())
     """
-    if not GYMNASIUM_AVAILABLE or not ENV_AVAILABLE:
-        pytest.skip("Gymnasium or environment modules not available")
+    pytest.importorskip(
+        "gymnasium", reason="Gymnasium required for space fixtures"
+    )
+    logger.debug("Gymnasium dependency satisfied for gymnasium_spaces_fixture")
+    if not ENV_AVAILABLE:
+        pytest.skip("Environment modules not available")
     
     def create_test_action_space():
         """Create test action space."""
@@ -1037,8 +1050,10 @@ def memory_monitor_fixture():
             
             assert tracker.peak_memory_mb < 2048  # Memory limit
     """
-    if not PSUTIL_AVAILABLE:
-        pytest.skip("psutil not available for memory monitoring")
+    psutil = pytest.importorskip(
+        "psutil", reason="psutil not available for memory monitoring"
+    )
+    logger.debug("psutil dependency satisfied for memory_monitor_fixture")
     
     @contextmanager
     def track_memory():
@@ -1299,10 +1314,12 @@ def db_session_fixture():
                 # Test file-based operations instead
                 pass
     """
-    if not SQLALCHEMY_AVAILABLE:
-        yield None
-        return
-    
+    # Skip if SQLAlchemy is missing
+    pytest.importorskip(
+        "sqlalchemy", reason="SQLAlchemy required for database tests"
+    )
+    logger.debug("SQLAlchemy dependency satisfied for db_session_fixture")
+
     # Create in-memory SQLite database
     engine = create_engine(
         "sqlite:///:memory:",
@@ -1348,81 +1365,15 @@ def db_session_fixture():
 
 @pytest.fixture
 def mock_seed_manager():
-    """
-    Mock seed manager fixture for deterministic testing behavior.
-    
-    Provides controlled randomization for reproducible test execution across
-    utilities and scientific computing components. Ensures test determinism
-    while validating seed management functionality.
-    
-    Returns:
-        Mock SeedManager instance with controlled behavior
-        
-    Example:
-        def test_reproducible_computation(mock_seed_manager):
-            # Deterministic test execution
-            seed_manager = mock_seed_manager
-            assert seed_manager.current_seed == 42
-            
-            # Test seed management functionality
-            state = seed_manager.get_state()
-            assert state is not None
-    """
-    if SEED_MANAGER_AVAILABLE:
-        # Use real SeedManager for better testing
-        from plume_nav_sim.utils.seed_manager import SeedManager
-        manager = SeedManager(enabled=True, global_seed=42)
-        manager.initialize()
-        return manager
-    else:
-        # Fallback to mock
-        mock_manager = Mock(spec=SeedManager)
-        
-        # Configure mock behavior
-        mock_manager.current_seed = 42
-        mock_manager.run_id = "test_run_001"
-        mock_manager.environment_hash = "test_env_hash"
-        mock_manager.enabled = True
-        
-        # Mock numpy generator
-        mock_generator = Mock()
-        mock_generator.random.return_value = 0.5
-        mock_generator.integers.return_value = np.array([1, 2, 3, 4, 5])
-        mock_manager.numpy_generator = mock_generator
-        
-        # Mock state management
-        mock_state = {
-            'python_state': ('dummy_state',),
-            'numpy_legacy_state': ('dummy_numpy_state',),
-            'numpy_generator_state': {'dummy': 'state'},
-            'seed': 42,
-            'timestamp': time.time()
-        }
-        mock_manager.get_state.return_value = mock_state
-        mock_manager.restore_state.return_value = None
-        
-        # Mock initialization
-        mock_manager.initialize.return_value = 42
-        
-        # Mock validation
-        mock_manager.validate_reproducibility.return_value = True
-        
-        # Mock temporary seed context
-        @contextmanager
-        def mock_temporary_seed(seed):
-            original_seed = mock_manager.current_seed
-            mock_manager.current_seed = seed
-            try:
-                yield seed
-            finally:
-                mock_manager.current_seed = original_seed
-        
-        mock_manager.temporary_seed = mock_temporary_seed
-        
-        # Mock experiment seed generation
-        mock_manager.generate_experiment_seeds.return_value = [42, 43, 44, 45, 46]
-        
-        return mock_manager
+    """Seed manager fixture ensuring deterministic behavior."""
+    seed_mod = pytest.importorskip(
+        "plume_nav_sim.utils.seed_manager",
+        reason="Seed manager required for deterministic testing",
+    )
+    manager = seed_mod.SeedManager(enabled=True, global_seed=42)
+    manager.initialize()
+    logger.debug("Seed manager dependency satisfied for mock_seed_manager")
+    return manager
 
 
 @pytest.fixture
@@ -2112,7 +2063,9 @@ def mock_action_interface_protocol():
     mock_interface.validate_action = mock_validate_action
     
     # Mock action space for Gymnasium compatibility
-    if GYMNASIUM_AVAILABLE:
+    if _has_module("gymnasium"):
+        import gymnasium
+
         mock_interface.get_action_space.return_value = gymnasium.spaces.Box(
             low=np.array([-2.0, -45.0]), high=np.array([2.0, 45.0])
         )
