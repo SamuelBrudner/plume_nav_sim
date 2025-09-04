@@ -2,15 +2,13 @@ import importlib
 import logging
 import builtins
 import sys
-import types
 
 import pytest
 
+pandas = pytest.importorskip("pandas")
 
-def test_agent_initializer_protocol_import_logs_success(caplog, monkeypatch):
-    # Provide minimal pandas stub to satisfy import
-    monkeypatch.setitem(sys.modules, 'pandas', types.ModuleType('pandas'))
 
+def test_agent_initializer_protocol_import_logs_success(caplog):
     caplog.set_level(logging.INFO)
     import plume_nav_sim.core.initialization as init
     importlib.reload(init)
@@ -18,8 +16,6 @@ def test_agent_initializer_protocol_import_logs_success(caplog, monkeypatch):
 
 
 def test_missing_protocols_raises_import_error(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'pandas', types.ModuleType('pandas'))
-
     original_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
