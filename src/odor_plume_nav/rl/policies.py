@@ -56,7 +56,7 @@ except ImportError:
     DictConfig = dict
 
 # Local imports - dependencies analyzed from context
-from odor_plume_nav.environments.spaces import ObservationType, ActionType, GYMNASIUM_AVAILABLE
+from odor_plume_nav.environments.spaces import ObservationType, ActionType
 from odor_plume_nav.config.models import resolve_env_value, validate_env_interpolation
 
 # Enhanced logging
