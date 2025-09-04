@@ -101,7 +101,8 @@ from ..models import create_plume_model, create_wind_field, create_sensors, get_
 try:
     from loguru import logger
     LOGURU_AVAILABLE = True
-except ImportError:
+except ImportError as e:
+                logger.warning(f"Example agent '{agent_name}' unavailable: {e}")
     import logging
     logger = logging.getLogger(__name__)
     LOGURU_AVAILABLE = False
@@ -804,10 +805,10 @@ def run_agent_demonstration(
 def list_available_example_agents() -> List[str]:
     """
     Get list of available example agent types for demonstration.
-    
+
     Returns:
         List[str]: List of agent type names that can be instantiated
-        
+
     Examples:
         Discover available agents:
         >>> agents = list_available_example_agents()
@@ -816,34 +817,31 @@ def list_available_example_agents() -> List[str]:
         ...     info = get_agent_info(agent)
         ...     print(f"  {agent}: {info['description']}")
     """
-    available_agents = list(_EXAMPLE_AGENT_REGISTRY.keys())
-    
-    # Add fallback agents that have direct import support
-    fallback_agents = ['ReactiveAgent', 'InfotaxisAgent', 'CastingAgent']
-    for agent in fallback_agents:
-        if agent not in available_agents:
-            # Check if import status indicates availability
-            status = _AGENT_IMPORT_STATUS.get(agent, {})
-            if not status.get('attempted_import', False) or status.get('available', False):
-                available_agents.append(agent)
-    
-    return sorted(available_agents)
+    available_agents = sorted(_EXAMPLE_AGENT_REGISTRY.keys())
 
+    unavailable = [
+        name for name, status in _AGENT_IMPORT_STATUS.items()
+        if not status.get('available', False)
+    ]
+    if unavailable:
+        logger.debug(f"Unavailable example agents: {unavailable}")
+
+    return available_agents
 
 def get_agent_info(agent_type: str) -> Dict[str, Any]:
     """
     Get comprehensive information about a specific agent type.
-    
+
     Args:
         agent_type: Name of the agent type to inspect
-        
+
     Returns:
         Dict[str, Any]: Dictionary containing agent information:
             - description: Human-readable description
             - memory_required: Whether agent requires memory
             - config_schema: Expected configuration parameters
             - performance_characteristics: Performance metrics and requirements
-            
+
     Examples:
         Inspect agent capabilities:
         >>> info = get_agent_info('ReactiveAgent')
@@ -852,37 +850,9 @@ def get_agent_info(agent_type: str) -> Dict[str, Any]:
     """
     if agent_type in _EXAMPLE_AGENT_REGISTRY:
         return _EXAMPLE_AGENT_REGISTRY[agent_type].copy()
-    
-    # Provide basic information for known agents
-    fallback_info = {
-        'ReactiveAgent': {
-            'description': 'Memory-less gradient-following agent with pure reactive behavior',
-            'memory_required': False,
-            'config_schema': {'gradient_threshold': float, 'step_size': float},
-            'performance_characteristics': {'step_time_ms': 0.5, 'memory_usage_mb': 1}
-        },
-        'InfotaxisAgent': {
-            'description': 'Memory-based information-theoretic agent with spatial belief state',
-            'memory_required': True,
-            'config_schema': {'belief_state_size': tuple, 'information_gain_threshold': float},
-            'performance_characteristics': {'step_time_ms': 2, 'memory_usage_mb': 10}
-        },
-        'CastingAgent': {
-            'description': 'Biologically-inspired zigzag search agent with casting behavior',
-            'memory_required': False,
-            'config_schema': {'casting_angle': float, 'search_radius': float},
-            'performance_characteristics': {'step_time_ms': 0.8, 'memory_usage_mb': 2}
-        }
-    }
-    
-    return fallback_info.get(agent_type, {
-        'description': f'Unknown agent type: {agent_type}',
-        'memory_required': False,
-        'config_schema': {},
-        'performance_characteristics': {}
-    })
 
-
+    logger.warning(f"Requested unknown agent type: {agent_type}")
+    raise KeyError(f"Agent type '{agent_type}' is not available")
 def compare_agent_approaches(
     agent_configs: List[Union[Dict[str, Any], AgentExecutionConfig]],
     environment_config: Optional[Dict[str, Any]] = None,
@@ -1421,7 +1391,8 @@ def _initialize_examples_package():
                     'module_path': module_path
                 }
                 
-            except ImportError:
+            except ImportError as e:
+                logger.warning(f"Example agent '{agent_name}' unavailable: {e}")
                 _AGENT_IMPORT_STATUS[agent_name] = {
                     'available': False,
                     'attempted_import': True,
