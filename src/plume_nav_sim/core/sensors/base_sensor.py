@@ -90,13 +90,7 @@ except ImportError:
     OmegaConf = None
 
 # Loguru integration for enhanced logging
-try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+from loguru import logger
 
 # Configuration schemas - fail fast when they are missing
 try:
@@ -290,7 +284,7 @@ class BaseSensor(ABC):
             self._base_memory_usage = 0
         
         # Setup structured logging with sensor context binding
-        if self._enable_logging and LOGURU_AVAILABLE:
+        if self._enable_logging:
             self._logger = logger.bind(
                 sensor_type=self._sensor_type,
                 sensor_id=self._sensor_id,
@@ -1113,7 +1107,7 @@ def create_sensor_from_config(
             raise ValueError(f"Unknown sensor type: {sensor_type}")
         
     except Exception as e:
-        if enable_logging and LOGURU_AVAILABLE:
+        if enable_logging:
             logger.error(
                 f"Sensor creation failed: {str(e)}",
                 error_type=type(e).__name__,
