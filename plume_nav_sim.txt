@@ -2978,10 +2978,9 @@ import yaml
 import json
 import numpy as np
 
-# Import from the existing io_utils module for now
-# This will be refactored in a future update
+# Import from the current plume_nav_sim implementation
 try:
-    from odor_plume_nav.io_utils import (
+    from plume_nav_sim.utils.io import (
         load_yaml,
         save_yaml,
         load_json,
