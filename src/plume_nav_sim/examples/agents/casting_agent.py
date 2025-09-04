@@ -102,34 +102,21 @@ except ImportError as e:
 # Configuration management imports
 try:
     from ...config.schemas import NavigatorConfig
-
-    SCHEMAS_AVAILABLE = True
-except ImportError:
-    # Minimal fallback during migration
-    NavigatorConfig = Dict[str, Any]
-    SCHEMAS_AVAILABLE = False
+except ImportError as exc:
+    raise ImportError("CastingAgent requires NavigatorConfig schema") from exc
 
 # Hydra integration for configuration
 try:
     from omegaconf import DictConfig
     from hydra.core.config_store import ConfigStore
-
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    ConfigStore = None
-    HYDRA_AVAILABLE = False
+except ImportError as exc:
+    raise ImportError("CastingAgent requires Hydra for configuration management") from exc
 
 # Enhanced logging integration
 try:
     from loguru import logger
-
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+except ImportError as exc:
+    raise ImportError("loguru is required for CastingAgent logging") from exc
 
 
 class CastingState(Enum):
@@ -445,6 +432,10 @@ class CastingAgent(SingleAgentController):
         else:
             self.sensors = sensors
 
+        getattr(self, "_logger", logger).info(
+            "Sensors setup complete", sensor_count=len(self.sensors)
+        )
+
         # Initialize state machine
         self.state = CastingState.SURGE
         self.state_start_time = 0.0
@@ -510,7 +501,7 @@ class CastingAgent(SingleAgentController):
         """
         if isinstance(config, CastingAgentConfig):
             config_dict = config.__dict__.copy()
-        elif isinstance(config, DictConfig) and HYDRA_AVAILABLE:
+        elif isinstance(config, DictConfig):
             config_dict = dict(config)
         elif isinstance(config, dict):
             config_dict = config.copy()
@@ -545,7 +536,10 @@ class CastingAgent(SingleAgentController):
             k: v for k, v in config_dict.items() if k not in non_constructor_params
         }
         constructor_params["sensors"] = sensors
-
+        logger.info(
+            "Configuration resolved for CastingAgent",
+            config_type=type(config).__name__,
+        )
         return cls(**constructor_params)
 
     def step(self, env_array: np.ndarray, dt: float = 1.0) -> None:
@@ -655,21 +649,12 @@ class CastingAgent(SingleAgentController):
         current_position = self.positions.reshape(-1, 2)  # Ensure 2D array
 
         for sensor in self.sensors:
-            try:
-                sensor_detection = sensor.detect(env_array, current_position)
-                # Handle both scalar and array returns
-                if np.isscalar(sensor_detection):
-                    detections.append(bool(sensor_detection))
-                else:
-                    detections.append(bool(sensor_detection[0]))
-            except Exception as e:
-                if self._logger:
-                    self._logger.warning(
-                        f"Sensor detection failed: {str(e)}",
-                        sensor_type=type(sensor).__name__,
-                        using_fallback=True,
-                    )
-                detections.append(False)  # Safe fallback
+            sensor_detection = sensor.detect(env_array, current_position)
+            # Handle both scalar and array returns
+            if np.isscalar(sensor_detection):
+                detections.append(bool(sensor_detection))
+            else:
+                detections.append(bool(sensor_detection[0]))
 
         return detections
 
@@ -1062,10 +1047,10 @@ class CastingAgent(SingleAgentController):
             )
 
 
-# Register configuration with Hydra if available
-if HYDRA_AVAILABLE and ConfigStore is not None:
-    cs = ConfigStore.instance()
-    cs.store(name="casting_agent_config", node=CastingAgentConfig)
+# Register configuration with Hydra
+cs = ConfigStore.instance()
+cs.store(name="casting_agent_config", node=CastingAgentConfig)
+logger.debug("CastingAgentConfig registered with Hydra ConfigStore")
 
 
 # Export public API
