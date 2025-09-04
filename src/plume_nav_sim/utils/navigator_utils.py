@@ -34,57 +34,20 @@ from dataclasses import dataclass, field
 import time
 import threading
 from pathlib import Path
-import logging
 
-logger = logging.getLogger(__name__)
+from plume_nav_sim.protocols.navigator import NavigatorProtocol
+from plume_nav_sim.core.navigator import Navigator
+from plume_nav_sim.config.models import (
+    NavigatorConfig,
+    SingleAgentConfig,
+    MultiAgentConfig,
+)
+from omegaconf import DictConfig, OmegaConf
+from hydra.core.hydra_config import HydraConfig
+from plume_nav_sim.utils.seed_manager import SeedManager, set_global_seed, get_global_seed_manager
+from plume_nav_sim.utils.logging_setup import get_enhanced_logger
 
-try:
-    from plume_nav_sim.protocols.navigator import NavigatorProtocol
-    from plume_nav_sim.core.navigator import Navigator
-except ImportError as exc:
-    logger.exception("Failed to import navigator dependencies: %s", exc)
-    raise
-
-try:
-    from plume_nav_sim.config.models import (
-        NavigatorConfig,
-        SingleAgentConfig,
-        MultiAgentConfig,
-    )
-except ImportError as exc:
-    logger.exception("Failed to import configuration models: %s", exc)
-    raise
-
-# Hydra imports with fallback for environments without Hydra
-try:
-    from omegaconf import DictConfig, OmegaConf
-    from hydra.core.hydra_config import HydraConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    HYDRA_AVAILABLE = False
-    DictConfig = dict
-    OmegaConf = None
-    HydraConfig = None
-
-# Seed manager imports with updated namespace
-try:
-    from plume_nav_sim.utils.seed_manager import SeedManager, set_global_seed, get_global_seed_manager
-    SEED_MANAGER_AVAILABLE = True
-except ImportError:
-    # Fallback for when seed manager is not available yet
-    SEED_MANAGER_AVAILABLE = False
-    SeedManager = None
-
-# Logging setup with updated namespace
-try:
-    from plume_nav_sim.utils.logging_setup import get_enhanced_logger
-    logger = get_enhanced_logger(__name__)
-    ENHANCED_LOGGING_AVAILABLE = True
-except ImportError:
-    # Fallback to basic logging
-    import logging
-    logger = logging.getLogger(__name__)
-    ENHANCED_LOGGING_AVAILABLE = False
+logger = get_enhanced_logger(__name__)
 
 
 # A dictionary of *base* local sensor offsets (in arbitrary units).
@@ -201,23 +164,23 @@ def create_navigator_from_config(
     
     try:
         # Initialize seed management if requested
-        if seed is not None and SEED_MANAGER_AVAILABLE:
+        if seed is not None:
             seed_manager = SeedManager(seed=seed, experiment_id=experiment_id)
             seed_manager.initialize()
             creation_result.seed_value = seed
-            
-            if enable_logging and ENHANCED_LOGGING_AVAILABLE:
+
+            if enable_logging:
                 logger.bind(
                     seed_value=seed,
                     experiment_id=experiment_id,
                     function="create_navigator_from_config"
-                ).info(f"Initialized seed manager for navigator creation")
+                ).info("Initialized seed manager for navigator creation")
         
         # Determine configuration source and convert to standard format
         if isinstance(config, dict):
             creation_result.configuration_source = "dict"
             config_dict = config
-        elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        elif isinstance(config, DictConfig):
             creation_result.configuration_source = "hydra"
             config_dict = OmegaConf.to_container(config, resolve=True)
         elif isinstance(config, (NavigatorConfig, SingleAgentConfig, MultiAgentConfig)):
@@ -242,7 +205,7 @@ def create_navigator_from_config(
                 validation_error = f"Configuration validation failed: {str(e)}"
                 creation_result.validation_errors.append(validation_error)
                 
-                if enable_logging and ENHANCED_LOGGING_AVAILABLE:
+                if enable_logging:
                     logger.warning(validation_error)
                 
                 # Continue with unvalidated config if validation fails
@@ -264,11 +227,9 @@ def create_navigator_from_config(
             'agent_count': navigator.num_agents,
             'config_keys': list(config_dict.keys()),
             'validation_enabled': validate_config,
-            'hydra_available': HYDRA_AVAILABLE,
-            'seed_manager_available': SEED_MANAGER_AVAILABLE
         })
-        
-        if enable_logging and ENHANCED_LOGGING_AVAILABLE:
+
+        if enable_logging:
             logger.bind(
                 navigator_type="multi_agent" if _is_multi_agent_config_dict(config_dict) else "single_agent",
                 agent_count=navigator.num_agents,
@@ -281,7 +242,7 @@ def create_navigator_from_config(
         
     except Exception as e:
         error_msg = f"Failed to create navigator from configuration: {str(e)}"
-        if enable_logging and ENHANCED_LOGGING_AVAILABLE:
+        if enable_logging:
             logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
@@ -318,9 +279,6 @@ def create_reproducible_navigator(
         >>> navigator, repro_info = create_reproducible_navigator(config, seed=42)
         >>> # navigator behavior is guaranteed to be deterministic
     """
-    if not SEED_MANAGER_AVAILABLE:
-        raise RuntimeError("Seed manager not available - reproducible creation requires seed_manager.py")
-    
     reproducibility_info = {
         'seed_value': seed,
         'experiment_id': experiment_id,
@@ -374,8 +332,7 @@ def create_reproducible_navigator(
         
     except Exception as e:
         error_msg = f"Failed to create reproducible navigator: {str(e)}"
-        if ENHANCED_LOGGING_AVAILABLE:
-            logger.error(error_msg)
+        logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
 
@@ -449,7 +406,7 @@ def create_navigator_from_params(
         ... )
     """
     # Initialize seed management if requested
-    if seed is not None and SEED_MANAGER_AVAILABLE:
+    if seed is not None:
         set_global_seed(seed, experiment_id=experiment_id, enable_logging=enable_configuration_logging)
     
     # Create configuration dictionary for validation if requested
@@ -477,7 +434,7 @@ def create_navigator_from_params(
         # Validate configuration
         validation_result = validate_navigator_configuration(config_dict, strict_validation=True)
         
-        if not validation_result['is_valid'] and enable_configuration_logging and ENHANCED_LOGGING_AVAILABLE:
+        if not validation_result['is_valid'] and enable_configuration_logging:
             logger.warning(f"Parameter validation warnings: {validation_result['errors']}")
     
     # Detect if we're creating a single or multi-agent navigator
@@ -523,7 +480,7 @@ def create_navigator_from_params(
         )
     
     # Log creation if enhanced logging is enabled
-    if enable_configuration_logging and ENHANCED_LOGGING_AVAILABLE:
+    if enable_configuration_logging:
         creation_time_ms = (time.perf_counter() - start_time) * 1000
         logger.bind(
             navigator_type="multi_agent" if is_multi_agent else "single_agent",
@@ -532,7 +489,7 @@ def create_navigator_from_params(
             seed_value=seed,
             experiment_id=experiment_id,
             validation_enabled=validate_params
-        ).info(f"Navigator created from parameters")
+        ).info("Navigator created from parameters")
     
     return navigator
 
@@ -736,8 +693,7 @@ def _validate_navigator_determinism(
         validation_result['trajectory_checksum'] = trajectory_checksum
         
         # Reset navigator and run again with same seed
-        if SEED_MANAGER_AVAILABLE:
-            set_global_seed(seed)
+        set_global_seed(seed)
         navigator.reset()
         
         # Run simulation again and compare
@@ -1418,7 +1374,7 @@ def create_navigator_for_cli(
     
     try:
         # Load configuration
-        if config_path and HYDRA_AVAILABLE:
+        if config_path:
             from hydra import compose, initialize_config_dir
             from pathlib import Path
             
@@ -1451,8 +1407,7 @@ def create_navigator_for_cli(
                     return result.navigator, cli_metadata
                     
             except Exception as e:
-                if ENHANCED_LOGGING_AVAILABLE:
-                    logger.error(f"Failed to load Hydra configuration from {config_path}: {str(e)}")
+                logger.error(f"Failed to load Hydra configuration from {config_path}: {str(e)}")
                 raise RuntimeError(f"Configuration loading failed: {str(e)}") from e
         
         # Fallback to default configuration with overrides
@@ -1503,8 +1458,7 @@ def create_navigator_for_cli(
         
     except Exception as e:
         error_msg = f"Failed to create navigator for CLI: {str(e)}"
-        if ENHANCED_LOGGING_AVAILABLE:
-            logger.error(error_msg)
+        logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
 
@@ -1576,16 +1530,14 @@ def create_navigator_with_database_logging(
                 
                 database_metadata['experiment_data'] = experiment_data
                 
-                if ENHANCED_LOGGING_AVAILABLE:
-                    logger.bind(
-                        experiment_id=experiment_id,
-                        database_enabled=True
-                    ).info("Navigator created with database logging enabled")
+                logger.bind(
+                    experiment_id=experiment_id,
+                    database_enabled=True
+                ).info("Navigator created with database logging enabled")
                 
             except Exception as e:
                 database_metadata['database_error'] = str(e)
-                if ENHANCED_LOGGING_AVAILABLE:
-                    logger.warning(f"Database setup failed, continuing without database logging: {str(e)}")
+                logger.warning(f"Database setup failed, continuing without database logging: {str(e)}")
         
         # Enhance navigator with tracking capabilities if requested
         if track_trajectory or track_performance:
@@ -1602,8 +1554,7 @@ def create_navigator_with_database_logging(
         
     except Exception as e:
         error_msg = f"Failed to create navigator with database logging: {str(e)}"
-        if ENHANCED_LOGGING_AVAILABLE:
-            logger.error(error_msg)
+        logger.error(error_msg)
         raise RuntimeError(error_msg) from e
 
 
@@ -1645,7 +1596,7 @@ def validate_navigator_configuration(
         # Convert config to dictionary
         if isinstance(config, dict):
             config_dict = config.copy()
-        elif HYDRA_AVAILABLE and isinstance(config, DictConfig):
+        elif isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
         elif hasattr(config, 'dict'):
             config_dict = config.dict()
@@ -1791,7 +1742,7 @@ def navigator_performance_context(
         if monitor_memory:
             gc.collect()
         
-        if log_results and ENHANCED_LOGGING_AVAILABLE:
+        if log_results:
             logger.bind(
                 navigator_type=type(navigator).__name__,
                 agent_count=navigator.num_agents,
@@ -1845,14 +1796,13 @@ def get_navigator_capabilities(navigator: 'NavigatorProtocol') -> Dict[str, Any]
         capabilities['tracking_metadata'] = navigator._tracking_metadata
     
     # Check for seed manager integration
-    if SEED_MANAGER_AVAILABLE:
-        global_manager = get_global_seed_manager()
-        if global_manager:
-            capabilities['seed_manager_active'] = True
-            capabilities['current_seed'] = global_manager.seed
-            capabilities['experiment_id'] = global_manager.experiment_id
-        else:
-            capabilities['seed_manager_active'] = False
+    global_manager = get_global_seed_manager()
+    if global_manager:
+        capabilities['seed_manager_active'] = True
+        capabilities['current_seed'] = global_manager.seed
+        capabilities['experiment_id'] = global_manager.experiment_id
+    else:
+        capabilities['seed_manager_active'] = False
     
     return capabilities
 
