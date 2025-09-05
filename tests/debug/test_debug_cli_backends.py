@@ -105,13 +105,11 @@ debug_cli = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(debug_cli)
 
 
-def test_launch_viewer_no_backends_auto(monkeypatch, mock_cli_runner):
-    """Launching viewer with --backend auto and no GUI backends should error."""
+def test_launch_viewer_requires_backend(mock_cli_runner):
+    """Launching viewer without specifying --backend should error."""
     runner, env = mock_cli_runner
     if runner is None:
         pytest.skip("CliRunner not available")
-
-    monkeypatch.setattr(debug_cli, "detect_available_backends", lambda: set())
 
     with runner.isolated_filesystem():
         Path("results.json").write_text("{}")
@@ -120,11 +118,16 @@ def test_launch_viewer_no_backends_auto(monkeypatch, mock_cli_runner):
             ["launch-viewer", "--results", "results.json"],
             env=env,
         )
+
     assert result.exit_code != 0
-    assert "No GUI backends available" in result.output
+    assert "Missing option '--backend'" in result.output
 
 
-def test_launch_viewer_backend_unavailable(monkeypatch, mock_cli_runner):
+@pytest.mark.parametrize("backend, hint", [
+    ("qt", "pip install pyside6"),
+    ("streamlit", "pip install streamlit"),
+])
+def test_launch_viewer_backend_unavailable(monkeypatch, mock_cli_runner, backend, hint):
     """Explicit backend request should raise when backend unavailable."""
     runner, env = mock_cli_runner
     if runner is None:
@@ -136,8 +139,10 @@ def test_launch_viewer_backend_unavailable(monkeypatch, mock_cli_runner):
         Path("results.json").write_text("{}")
         result = runner.invoke(
             debug_cli.debug_group,
-            ["launch-viewer", "--backend", "qt", "--results", "results.json"],
+            ["launch-viewer", "--backend", backend, "--results", "results.json"],
             env=env,
         )
+
     assert result.exit_code != 0
-    assert "Backend 'qt' is not available" in result.output
+    assert f"Backend '{backend}' is not available" in result.output
+    assert hint in result.output

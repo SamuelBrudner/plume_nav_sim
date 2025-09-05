@@ -1,5 +1,4 @@
-"""
-CLI Debug Utilities for Plume Navigation Simulation.
+"""CLI Debug Utilities for Plume Navigation Simulation.
 
 This module provides comprehensive command-line interface for debug functionality including
 viewer launch, session management, performance analysis, and collaborative debugging support.
@@ -7,8 +6,10 @@ Integrates with Click framework for robust command parsing and Rich terminal enh
 for improved user experience with colored output and structured formatting.
 
 Key Features:
-- CLI-based debug viewer launch with backend preference and configuration support per Section 7.6.4.1
-- Frame range specification and performance profiling capabilities per Section 7.6.4.1 Advanced Debug Session Control
+- CLI-based debug viewer launch with explicit backend selection and configuration support
+  per Section 7.6.4.1
+- Frame range specification and performance profiling capabilities per Section 7.6.4.1
+  Advanced Debug Session Control
 - Integration with Click ≥8.2.1 CLI framework per Section 7.1.2
 - Rich terminal enhancement for improved UX per Section 7.1.2
 - Debug session management with automated failure analysis per Section 7.6.4.1
@@ -16,7 +17,7 @@ Key Features:
 
 Architecture:
 - Command group structure with logical separation of debug operations
-- Backend detection and preference handling for Qt/Streamlit/console fallback
+- Backend detection with explicit selection between Qt and Streamlit backends
 - Performance monitoring integration with CLI command correlation tracking
 - Rich-based formatting for structured output and progress indication
 - Hydra configuration integration for parameter validation and composition
@@ -95,29 +96,31 @@ CLI_PERFORMANCE_THRESHOLDS = {
 
 # Backend availability detection
 def detect_available_backends() -> Set[str]:
-    """Detect which GUI backends are available for debug viewer launch.
+    """Detect which GUI backends are available for debug viewer launch."""
 
-    Returns:
-        Set of available backend names. An empty set indicates that no GUI
-        backends are installed.
-    """
     available: Set[str] = set()
 
     # Check PySide6 availability for Qt backend
     try:
         if importlib.util.find_spec('PySide6') is not None:
             available.add('qt')
+            logger.info("PySide6 backend available")
+        else:
+            logger.info("PySide6 backend not available")
     except (ImportError, AttributeError):
-        logger.debug("PySide6 not found for Qt backend")
+        logger.info("PySide6 backend not available")
 
     # Check Streamlit availability for web backend
     try:
         if importlib.util.find_spec('streamlit') is not None:
             available.add('streamlit')
+            logger.info("Streamlit backend available")
+        else:
+            logger.info("Streamlit backend not available")
     except (ImportError, AttributeError):
-        logger.debug("Streamlit not found for web backend")
+        logger.info("Streamlit backend not available")
 
-    logger.debug("Detected GUI backends: %s", sorted(available))
+    logger.info("Detected GUI backends: %s", sorted(available))
     return available
 
 
@@ -281,8 +284,8 @@ def debug_group(ctx, verbose: bool, config_path: Optional[str]):
 
 
 @debug_group.command('launch-viewer')
-@click.option('--backend', type=click.Choice(['qt', 'streamlit', 'auto']), default='auto',
-              help='GUI backend preference (auto detects best available)')
+@click.option('--backend', type=click.Choice(['qt', 'streamlit']), required=True,
+              help='GUI backend to use')
 @click.option('--results', type=click.Path(exists=True), required=True,
               help='Path to simulation results directory or file')
 @click.option('--config', type=click.Path(exists=True),
@@ -301,11 +304,11 @@ def debug_group(ctx, verbose: bool, config_path: Optional[str]):
 def launch_debug_viewer(ctx, backend: str, results: str, config: Optional[str],
                        collaborative: bool, host: str, port: int,
                        auto_analyze: bool, frame_range: Optional[str]):
-    """
-    Launch debug viewer with backend selection and configuration support.
-    
-    Supports Qt desktop GUI, Streamlit web interface, and console fallback
-    with comprehensive configuration options and collaborative debugging.
+    """Launch debug viewer with backend selection and configuration support.
+
+    Supports Qt desktop GUI and Streamlit web interface with comprehensive
+    configuration options and collaborative debugging. An explicit backend
+    selection is required.
     """
     from plume_nav_sim.utils.logging_setup import debug_command_timer, log_debug_command_correlation
     
@@ -331,21 +334,21 @@ def launch_debug_viewer(ctx, backend: str, results: str, config: Optional[str],
             
             # Detect available backends
             available_backends = detect_available_backends()
+            logger.info("Available backends: %s", sorted(available_backends))
 
             # Determine effective backend
-            if backend == 'auto':
-                if 'qt' in available_backends:
-                    effective_backend = 'qt'
-                elif 'streamlit' in available_backends:
-                    effective_backend = 'streamlit'
-                else:
-                    raise click.ClickException(
-                        "No GUI backends available. Install PySide6 or Streamlit."
-                    )
-            else:
-                if backend not in available_backends:
-                    raise click.ClickException(f"Backend '{backend}' is not available")
-                effective_backend = backend
+            if backend not in available_backends:
+                hints = {
+                    'qt': "Install PySide6 with: pip install pyside6",
+                    'streamlit': "Install Streamlit with: pip install streamlit",
+                }
+                hint = hints.get(backend, "Install required dependencies")
+                raise click.ClickException(
+                    f"Backend '{backend}' is not available. {hint}"
+                )
+
+            effective_backend = backend
+            logger.info("Selected backend: %s", effective_backend)
             
             # Display launch information
             console.print(f"\n[bold blue]Launching Debug Viewer[/bold blue]")
