@@ -100,13 +100,8 @@ from ..recording import RecorderFactory
 logger = logging.getLogger(__name__)
 
 # Hydra configuration support (fail fast if unavailable)
-try:
-    from hydra import instantiate
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError as e:  # pragma: no cover - executed when Hydra is missing
-    logger.error("Hydra is required for configuration-driven analysis: %s", e)
-    raise
+from hydra import instantiate
+from omegaconf import DictConfig
 
 # Module version for API compatibility tracking
 __version__ = "1.0.0"
@@ -186,15 +181,6 @@ def create_from_config(config: Union[Dict[str, Any], DictConfig]) -> StatsAggreg
         >>> aggregator = create_from_config(config)
     """
     try:
-        # Validate Hydra availability for advanced features
-        if isinstance(config, DictConfig) and not HYDRA_AVAILABLE:
-            warnings.warn(
-                "Hydra not available. Some configuration features may be limited. "
-                "Install hydra-core for full functionality.",
-                UserWarning,
-                stacklevel=2
-            )
-        
         # Handle different configuration types
         if isinstance(config, DictConfig):
             # Check for Hydra instantiation target
@@ -602,12 +588,8 @@ def check_analysis_dependencies() -> Dict[str, Any]:
                     "pip install pyarrow"
                 )
     
-    # Check Hydra availability status
-    dependency_status['hydra_available'] = HYDRA_AVAILABLE
-    if not HYDRA_AVAILABLE:
-        dependency_status['warnings'].append(
-            "Hydra configuration features disabled. Some advanced functionality unavailable."
-        )
+    # Hydra is a required dependency
+    dependency_status['hydra_available'] = True
     
     # Performance recommendations based on available dependencies
     if dependency_status['optional_dependencies'].get('psutil', False):
@@ -969,10 +951,6 @@ try:
     
     # Log successful initialization
     logger.debug(f"Analysis module initialized successfully (version {__version__})")
-    
-    # Log optional dependency status
-    if not HYDRA_AVAILABLE:
-        logger.info("Hydra configuration features disabled - using fallback implementations")
     
     optional_count = sum(dep_status['optional_dependencies'].values())
     total_optional = len(dep_status['optional_dependencies'])
