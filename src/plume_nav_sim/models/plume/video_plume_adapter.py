@@ -535,14 +535,18 @@ class VideoPlumeAdapter:
         method = self.spatial_interpolation_config.get('method', 'bilinear')
         boundary_mode = self.spatial_interpolation_config.get('boundary_mode', 'constant')
         boundary_value = self.spatial_interpolation_config.get('boundary_value', 0.0)
+        logger.debug("Interpolation configuration", extra={"method": method, "boundary_mode": boundary_mode})
         
         concentrations = np.zeros(positions.shape[0], dtype=np.float32)
         
         for i, (x, y) in enumerate(positions):
             # Check bounds
             if (x < 0 or x >= self.width or y < 0 or y >= self.height):
-                concentrations[i] = boundary_value
-                continue
+                logger.error(
+                    "Position out of bounds for interpolation",
+                    extra={"x": float(x), "y": float(y), "width": self.width, "height": self.height},
+                )
+                raise ValueError(f"Position ({x}, {y}) outside frame bounds")
             
             if method == 'nearest':
                 # Nearest neighbor interpolation
@@ -571,25 +575,8 @@ class VideoPlumeAdapter:
                 concentrations[i] = c0 * (1 - fy) + c1 * fy
                 
             elif method == 'cubic':
-                # Simplified bicubic - falls back to bilinear for edge cases
-                x0, y0 = int(np.floor(x)), int(np.floor(y))
-                if (x0 >= 1 and x0 < self.width - 2 and 
-                    y0 >= 1 and y0 < self.height - 2):
-                    # Full bicubic interpolation would go here
-                    # For now, use bilinear as fallback
-                    x1, y1 = x0 + 1, y0 + 1
-                    fx, fy = x - x0, y - y0
-                    c00, c10 = frame[y0, x0], frame[y0, x1]
-                    c01, c11 = frame[y1, x0], frame[y1, x1]
-                    c0 = c00 * (1 - fx) + c10 * fx
-                    c1 = c01 * (1 - fx) + c11 * fx
-                    concentrations[i] = c0 * (1 - fy) + c1 * fy
-                else:
-                    # Fallback to nearest neighbor at boundaries
-                    xi, yi = int(round(x)), int(round(y))
-                    xi = np.clip(xi, 0, self.width - 1)
-                    yi = np.clip(yi, 0, self.height - 1)
-                    concentrations[i] = frame[yi, xi]
+                logger.error("Cubic interpolation requested but not implemented")
+                raise NotImplementedError("Cubic interpolation not implemented")
             
             else:
                 raise ValueError(f"Unknown interpolation method: {method}")
