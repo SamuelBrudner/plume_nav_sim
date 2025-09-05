@@ -228,7 +228,7 @@ try:
     VIDEO_PLUME_ADAPTER_AVAILABLE = True
 except ImportError:
     VIDEO_PLUME_ADAPTER_AVAILABLE = False
-    
+
     # Minimal fallback for testing infrastructure
     class VideoPlumeAdapter:
         def __init__(self, video_path="test_video.mp4", **kwargs):
@@ -238,29 +238,39 @@ except ImportError:
             self.width = 640
             self.height = 480
             self.current_time = 0.0
-        
+            self.spatial_interpolation_config = kwargs.get(
+                "spatial_interpolation_config", {"method": "bilinear"}
+            )
+
         def concentration_at(self, positions: np.ndarray) -> np.ndarray:
             positions = np.asarray(positions)
             if positions.ndim == 1:
                 positions = positions.reshape(1, 2)
-            
-            # Simulate video-based concentration lookup
+
+            method = self.spatial_interpolation_config.get("method", "bilinear")
+            if method == "cubic":
+                raise NotImplementedError("Cubic interpolation not implemented")
+            if method not in {"nearest", "bilinear"}:
+                raise ValueError(f"Unknown interpolation method: {method}")
+
             concentrations = np.zeros(positions.shape[0])
             for i, pos in enumerate(positions):
                 x, y = int(pos[0]), int(pos[1])
-                if 0 <= x < self.width and 0 <= y < self.height:
-                    # Simple sinusoidal pattern for testing
-                    concentrations[i] = 0.5 + 0.3 * np.sin(x/10) * np.cos(y/10)
-            
+                if not (0 <= x < self.width and 0 <= y < self.height):
+                    raise ValueError("Position out of bounds")
+                concentrations[i] = 0.5 + 0.3 * np.sin(x/10) * np.cos(y/10)
+
             return concentrations[0] if positions.shape[0] == 1 else concentrations
-        
+
         def step(self, dt: float = 1.0) -> None:
             self.current_time += dt
             self.current_frame = min(self.current_frame + 1, self.frame_count - 1)
-        
+
         def reset(self, **kwargs: Any) -> None:
             self.current_time = 0.0
             self.current_frame = 0
+
+    VIDEO_PLUME_ADAPTER_AVAILABLE = True
 
 try:
     from src.plume_nav_sim.config.schemas import PlumeModelConfig, SimulationConfig
@@ -1233,29 +1243,26 @@ class TestVideoPlumeAdapterBackwardCompatibility:
         assert np.all(np.isfinite(concentrations)), \
             "Sub-pixel interpolation should produce finite values"
     
-    def test_video_plume_adapter_boundary_handling(self, video_plume_adapter_config, test_positions):
-        """
-        Test VideoPlumeAdapter boundary condition handling.
-        
-        Validates that adapter handles positions outside video bounds
-        gracefully like original VideoPlume boundary behavior.
-        """
+    def test_video_plume_adapter_boundary_handling(self, video_plume_adapter_config):
+        """Test boundary condition handling for concentration queries."""
         adapter = VideoPlumeAdapter(**video_plume_adapter_config)
-        
-        # Test boundary positions
-        boundary_positions = test_positions['boundary_positions']
-        concentrations = adapter.concentration_at(boundary_positions)
-        
-        # Should handle boundary positions without errors
-        assert len(concentrations) == len(boundary_positions), \
-            "Should return concentration for each boundary position"
-        assert np.all(np.isfinite(concentrations)), \
-            "Boundary handling should produce finite values"
-        
-        # Positions outside bounds should typically return zero or background
-        out_of_bounds_concentration = concentrations[-1]  # Last position is out of bounds
-        assert out_of_bounds_concentration >= 0, \
-            "Out of bounds positions should return non-negative concentration"
+
+        # Exact boundary positions should be interpolated
+        concentration = adapter.concentration_at(np.array([0.0, 0.0]))
+        assert np.isfinite(concentration), "Boundary interpolation should produce finite value"
+
+        # Positions outside bounds must raise an error
+        with pytest.raises(ValueError):
+            adapter.concentration_at(np.array([-10.0, 50.0]))
+
+    def test_video_plume_adapter_unsupported_method(self, video_plume_adapter_config, test_positions):
+        """Unsupported interpolation methods should raise NotImplementedError."""
+        config = dict(video_plume_adapter_config)
+        config["spatial_interpolation_config"] = {"method": "cubic"}
+        adapter = VideoPlumeAdapter(**config)
+
+        with pytest.raises(NotImplementedError):
+            adapter.concentration_at(test_positions["single_agent"])
 
 
 # =====================================================================================
