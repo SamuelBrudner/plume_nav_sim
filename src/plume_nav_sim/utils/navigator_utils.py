@@ -1381,7 +1381,7 @@ def create_navigator_for_cli(
     
     try:
         # Load configuration
-    if config_path:
+        if config_path:
             from hydra import compose, initialize_config_dir
             from pathlib import Path
             

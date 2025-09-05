@@ -65,6 +65,8 @@ try:
 except ImportError as exc:  # pragma: no cover - fail fast
     logger.exception("Failed to import SourceProtocol")
     raise
+else:  # pragma: no cover - just logging
+    logger.info("Successfully imported SourceProtocol")
 
 try:
     from PySide6.QtWidgets import (
