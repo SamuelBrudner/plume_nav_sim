@@ -65,20 +65,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Scientific computing imports
-try:
-    import scipy.stats
-    from scipy.spatial.distance import cdist
-    from scipy.interpolate import griddata, RBFInterpolator
+import scipy
+import scipy.stats
+from scipy.spatial.distance import cdist
+from scipy.interpolate import griddata, RBFInterpolator
 
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    warnings.warn(
-        "SciPy not available. Turbulent wind modeling will use simplified algorithms. "
-        "Install scipy>=1.9.0 for full turbulent wind field support.",
-        UserWarning,
-        stacklevel=2,
-    )
+logger.info(
+    "SciPy version %s successfully imported", getattr(scipy, "__version__", "unknown")
+)
 
 # Numba imports for JIT acceleration
 import numba
@@ -365,30 +359,21 @@ class TurbulentWindField:
         # Compute distance matrices for spatial correlation
         n_points = len(self._grid_points)
 
-        if SCIPY_AVAILABLE and n_points < 10000:  # Memory constraint
-            # Full distance matrix for small grids
-            self._distance_matrix = cdist(self._grid_points, self._grid_points)
+        # Full distance matrix for spatial correlation
+        self._distance_matrix = cdist(self._grid_points, self._grid_points)
 
-            # Exponential correlation with characteristic length scale
-            correlation_scale = self.config.correlation_length
-            self._spatial_correlation = np.exp(
-                -self._distance_matrix / correlation_scale
-            )
+        # Exponential correlation with characteristic length scale
+        correlation_scale = self.config.correlation_length
+        self._spatial_correlation = np.exp(-self._distance_matrix / correlation_scale)
 
-            # Apply atmospheric stability corrections
-            stability_factor = 1.0 + 0.2 * self.config.atmospheric_stability
-            self._spatial_correlation *= stability_factor
+        # Apply atmospheric stability corrections
+        stability_factor = 1.0 + 0.2 * self.config.atmospheric_stability
+        self._spatial_correlation *= stability_factor
 
-            logger.debug(
-                f"Initialized full spatial correlation matrix: {n_points}x{n_points}"
-            )
-        else:
-            # Sparse correlation for large grids or when SciPy unavailable
-            self._distance_matrix = None
-            self._spatial_correlation = None
-            logger.debug(
-                "Using local correlation approximation for large grid or missing SciPy"
-            )
+        logger.debug(
+            f"Initialized full spatial correlation matrix: {n_points}x{n_points}"
+        )
+        logger.info("SciPy spatial correlation initialized successfully")
 
     def velocity_at(self, positions: np.ndarray) -> np.ndarray:
         """
@@ -734,7 +719,7 @@ class TurbulentWindField:
         Uses correlation matrices or local approximations to enforce spatial structure
         matching atmospheric boundary layer characteristics.
         """
-        if self._spatial_correlation is not None and SCIPY_AVAILABLE:
+        if self._spatial_correlation is not None:
             # Full correlation matrix approach for smaller grids
             for component in range(2):
                 # Flatten spatial field
@@ -780,30 +765,14 @@ class TurbulentWindField:
         # Apply convolution for spatial correlation
         from scipy import ndimage
 
-        if SCIPY_AVAILABLE:
-            for component in range(2):
-                self._raw_fluctuations[:, :, component] = ndimage.convolve(
-                    self._raw_fluctuations[:, :, component],
-                    correlation_kernel,
-                    mode=(
-                        "wrap"
-                        if self.config.boundary_conditions == "periodic"
-                        else "nearest"
-                    ),
-                )
-        else:
-            # Simple local averaging fallback
-            for component in range(2):
-                smoothed = np.copy(self._raw_fluctuations[:, :, component])
-                for i in range(1, self._grid_ny - 1):
-                    for j in range(1, self._grid_nx - 1):
-                        # 3x3 local average
-                        smoothed[i, j] = np.mean(
-                            self._raw_fluctuations[
-                                i - 1 : i + 2, j - 1 : j + 2, component
-                            ]
-                        )
-                self._raw_fluctuations[:, :, component] = smoothed
+        for component in range(2):
+            self._raw_fluctuations[:, :, component] = ndimage.convolve(
+                self._raw_fluctuations[:, :, component],
+                correlation_kernel,
+                mode=(
+                    "wrap" if self.config.boundary_conditions == "periodic" else "nearest"
+                ),
+            )
 
     def _integrate_temporal_correlation(self, dt: float) -> None:
         """
@@ -1026,7 +995,6 @@ class TurbulentWindField:
             "grid_size": f"{self._grid_nx}x{self._grid_ny}",
             "simulation_time": self._current_time,
             "numba_enabled": self.config.enable_numba,
-            "scipy_available": SCIPY_AVAILABLE,
         }
 
     def get_wind_statistics(self) -> Dict[str, Any]:
