@@ -48,7 +48,7 @@ from matplotlib.animation import FuncAnimation
 
 # Import the utilities we need to test with updated package structure
 from plume_nav_sim.utils.frame_cache import (
-    FrameCache, CacheMode, CacheStatistics, 
+    FrameCache, CacheMode, CacheStatistics,
     create_lru_cache, create_preload_cache, create_no_cache
 )
 from plume_nav_sim.utils.seed_manager import (
@@ -57,21 +57,13 @@ from plume_nav_sim.utils.seed_manager import (
     get_last_seed, generate_experiment_seed, setup_global_seed
 )
 
-try:
-    from plume_nav_sim.utils.visualization import (
-        SimulationVisualization, visualize_trajectory, batch_visualize_trajectories,
-        setup_headless_mode, get_available_themes, DEFAULT_VISUALIZATION_CONFIG
-    )
-    VISUALIZATION_AVAILABLE = True
-except ImportError:
-    VISUALIZATION_AVAILABLE = False
-    # Create mock objects for tests to run
-    SimulationVisualization = Mock()
-    visualize_trajectory = Mock()
-    batch_visualize_trajectories = Mock()
-    setup_headless_mode = Mock()
-    get_available_themes = Mock(return_value={'scientific': {}})
-    DEFAULT_VISUALIZATION_CONFIG = {}
+visualization = pytest.importorskip("plume_nav_sim.utils.visualization")
+SimulationVisualization = visualization.SimulationVisualization
+visualize_trajectory = visualization.visualize_trajectory
+batch_visualize_trajectories = visualization.batch_visualize_trajectories
+setup_headless_mode = visualization.setup_headless_mode
+get_available_themes = visualization.get_available_themes
+DEFAULT_VISUALIZATION_CONFIG = visualization.DEFAULT_VISUALIZATION_CONFIG
 
 # Try to import enhanced logging, fallback if not available
 try:
@@ -585,14 +577,12 @@ class TestVisualizationUtilities:
         """Set up test environment for visualization tests."""
         # Ensure matplotlib backend is set for testing
         matplotlib.use('Agg')  # Non-interactive backend
-        if VISUALIZATION_AVAILABLE:
-            setup_headless_mode()
+        setup_headless_mode()
     
     def teardown_method(self):
         """Clean up after visualization tests."""
         plt.close('all')  # Close all figures
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_headless_mode_setup(self):
         """Test headless mode setup for CI compatibility."""
         setup_headless_mode()
@@ -603,7 +593,6 @@ class TestVisualizationUtilities:
         assert ax is not None
         plt.close(fig)
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_simulation_visualization_initialization(self):
         """Test SimulationVisualization initialization in headless mode."""
         viz = SimulationVisualization(headless=True)
@@ -612,7 +601,6 @@ class TestVisualizationUtilities:
         assert viz.ax is not None
         assert viz.headless is True
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_static_trajectory_visualization(self):
         """Test static trajectory visualization with headless rendering."""
         # Create test trajectory data
@@ -633,7 +621,6 @@ class TestVisualizationUtilities:
         assert isinstance(fig, Figure)
         plt.close(fig)
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_multi_agent_trajectory_visualization(self):
         """Test multi-agent trajectory visualization."""
         # Create test trajectory data for multiple agents
@@ -659,7 +646,6 @@ class TestVisualizationUtilities:
         assert isinstance(fig, Figure)
         plt.close(fig)
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_batch_visualization_processing(self):
         """Test batch visualization processing with headless output."""
         # Create test trajectory data
@@ -686,7 +672,6 @@ class TestVisualizationUtilities:
                 assert path.exists()
                 assert path.suffix == '.png'
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_available_themes(self):
         """Test available themes functionality."""
         themes = get_available_themes()
@@ -701,7 +686,6 @@ class TestVisualizationUtilities:
                 assert 'colormap' in themes[theme]
                 assert 'background' in themes[theme]
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_visualization_performance_scaling(self):
         """Test visualization performance with different agent counts."""
         viz = SimulationVisualization(headless=True)
@@ -723,9 +707,6 @@ class TestVisualizationUtilities:
     
     def test_visualization_error_handling(self):
         """Test error handling in visualization components."""
-        if not VISUALIZATION_AVAILABLE:
-            pytest.skip("Visualization module not available")
-        
         viz = SimulationVisualization(headless=True)
         
         # Test with invalid frame data
@@ -735,9 +716,6 @@ class TestVisualizationUtilities:
     
     def test_visualization_memory_management(self):
         """Test visualization memory management in headless mode."""
-        if not VISUALIZATION_AVAILABLE:
-            pytest.skip("Visualization module not available")
-        
         initial_figures = len(plt.get_fignums())
         
         # Create and close multiple visualizations
@@ -810,9 +788,6 @@ class TestUtilityIntegration:
     
     def test_reproducible_visualization_generation(self):
         """Test reproducible visualization generation with seed management."""
-        if not VISUALIZATION_AVAILABLE:
-            pytest.skip("Visualization module not available")
-        
         # Set deterministic seed
         set_global_seed(42)
         
@@ -866,24 +841,22 @@ class TestUtilityIntegration:
             
             # Test path handling across platforms
             test_file = temp_path / "test_file.png"
-            
-            if VISUALIZATION_AVAILABLE:
-                # Generate test visualization
-                positions = np.column_stack([np.linspace(0, 10, 20), np.linspace(0, 10, 20)])
-                
-                # Save visualization
-                fig = visualize_trajectory(
-                    positions=positions,
-                    output_path=test_file,
-                    show_plot=False,
-                    batch_mode=True
-                )
-                
-                # Verify file was created
-                assert test_file.exists()
-                assert test_file.stat().st_size > 0
-                
-                plt.close(fig)
+            # Generate test visualization
+            positions = np.column_stack([np.linspace(0, 10, 20), np.linspace(0, 10, 20)])
+
+            # Save visualization
+            fig = visualize_trajectory(
+                positions=positions,
+                output_path=test_file,
+                show_plot=False,
+                batch_mode=True
+            )
+
+            # Verify file was created
+            assert test_file.exists()
+            assert test_file.stat().st_size > 0
+
+            plt.close(fig)
     
     @pytest.mark.skipif(not PSUTIL_AVAILABLE, reason="psutil not available")
     def test_memory_management_integration(self):
@@ -996,7 +969,6 @@ class TestUtilityErrorHandling:
         except (ValueError, RuntimeError):
             pass  # Expected
     
-    @pytest.mark.skipif(not VISUALIZATION_AVAILABLE, reason="Visualization module not available")
     def test_visualization_error_handling(self):
         """Test visualization error handling for invalid inputs."""
         # Test with empty trajectory data
