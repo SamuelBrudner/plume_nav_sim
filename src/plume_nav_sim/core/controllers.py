@@ -1457,15 +1457,19 @@ class SingleAgentController(BaseController):
             
             # Validate odor value
             if np.isnan(odor_value) or np.isinf(odor_value):
+                msg = (
+                    f"Invalid odor value {odor_value} from "
+                    f"{type(self._primary_sensor).__name__} at "
+                    f"{self._position[0].tolist()}"
+                )
                 if self._logger:
-                    self._logger.warning(
-                        "Invalid odor value detected from sensor",
+                    self._logger.error(
+                        msg,
                         odor_value=odor_value,
                         position=self._position[0].tolist(),
                         sensor_type=type(self._primary_sensor).__name__,
-                        using_fallback=True
                     )
-                odor_value = 0.0
+                raise ValueError(msg)
             
             # Track sampling performance
             if self._enable_logging:
@@ -1493,8 +1497,7 @@ class SingleAgentController(BaseController):
                     sensor_type=type(self._primary_sensor).__name__,
                     env_array_shape=getattr(env_array, 'shape', 'unknown')
                 )
-            # Return safe default value
-            return 0.0
+            raise RuntimeError(f"Sensor-based odor sampling failed: {e}") from e
     
     def sample_multiple_sensors(
         self,
