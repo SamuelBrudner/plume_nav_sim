@@ -69,30 +69,19 @@ from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
 
 from loguru import logger
-LOGURU_AVAILABLE = True
+import numpy as np
 
-# Core imports with graceful fallbacks during migration
-try:
-    import numpy as np
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
-    np = None
-
-# Protocol import for type safety and interface compliance
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
-PROTOCOLS_AVAILABLE = True
-
-# Configuration management
 from omegaconf import DictConfig
 
-# Import all wind field implementations with graceful fallbacks
-WIND_FIELD_IMPLEMENTATIONS = {}  # Registry for successful imports
+# Import all wind field implementations without graceful fallbacks
+from .constant_wind import ConstantWindField, ConstantWindFieldConfig, create_constant_wind_field
+from .turbulent_wind import TurbulentWindField, TurbulentWindFieldConfig
+from .time_varying_wind import TimeVaryingWindField, TimeVaryingWindFieldConfig
 
-# ConstantWindField implementation
-try:
-    from .constant_wind import ConstantWindField, ConstantWindFieldConfig, create_constant_wind_field
-    WIND_FIELD_IMPLEMENTATIONS['ConstantWindField'] = {
+# Registry for wind field implementations
+WIND_FIELD_IMPLEMENTATIONS = {
+    'ConstantWindField': {
         'class': ConstantWindField,
         'config_class': ConstantWindFieldConfig,
         'factory_function': create_constant_wind_field,
@@ -100,21 +89,8 @@ try:
         'features': ['uniform_flow', 'fast_computation', 'temporal_evolution', 'vectorized_operations'],
         'performance': {'velocity_query_ms': 0.1, 'step_time_ms': 0.05, 'memory_mb': 1},
         'use_cases': ['rapid_prototyping', 'baseline_experiments', 'simple_transport_modeling'],
-        'available': True
-    }
-    CONSTANT_WIND_AVAILABLE = True
-    logger.debug("ConstantWindField imported successfully")
-except ImportError as e:
-    CONSTANT_WIND_AVAILABLE = False
-    logger.warning(f"ConstantWindField not available: {e}")
-    ConstantWindField = None
-    ConstantWindFieldConfig = None
-    create_constant_wind_field = None
-
-# TurbulentWindField implementation
-try:
-    from .turbulent_wind import TurbulentWindField, TurbulentWindFieldConfig
-    WIND_FIELD_IMPLEMENTATIONS['TurbulentWindField'] = {
+    },
+    'TurbulentWindField': {
         'class': TurbulentWindField,
         'config_class': TurbulentWindFieldConfig,
         'factory_function': None,  # Uses class constructor
@@ -122,20 +98,8 @@ try:
         'features': ['stochastic_variations', 'atmospheric_boundary_layer', 'eddy_formation', 'realistic_physics'],
         'performance': {'velocity_query_ms': 0.5, 'step_time_ms': 2.0, 'memory_mb': 50},
         'use_cases': ['realistic_simulation', 'atmospheric_research', 'environmental_modeling'],
-        'available': True
-    }
-    TURBULENT_WIND_AVAILABLE = True
-    logger.debug("TurbulentWindField imported successfully")
-except ImportError as e:
-    TURBULENT_WIND_AVAILABLE = False
-    logger.warning(f"TurbulentWindField not available: {e}")
-    TurbulentWindField = None
-    TurbulentWindFieldConfig = None
-
-# TimeVaryingWindField implementation
-try:
-    from .time_varying_wind import TimeVaryingWindField, TimeVaryingWindFieldConfig
-    WIND_FIELD_IMPLEMENTATIONS['TimeVaryingWindField'] = {
+    },
+    'TimeVaryingWindField': {
         'class': TimeVaryingWindField,
         'config_class': TimeVaryingWindFieldConfig,
         'factory_function': None,  # Uses class constructor
@@ -143,32 +107,11 @@ try:
         'features': ['temporal_evolution', 'data_driven_patterns', 'periodic_variations', 'file_based_loading'],
         'performance': {'velocity_query_ms': 0.5, 'step_time_ms': 2.0, 'memory_mb': 50},
         'use_cases': ['measurement_driven_simulation', 'temporal_dynamics_research', 'long_term_experiments'],
-        'available': True
-    }
-    TIME_VARYING_WIND_AVAILABLE = True
-    logger.debug("TimeVaryingWindField imported successfully")
-except ImportError as e:
-    TIME_VARYING_WIND_AVAILABLE = False
-    logger.warning(f"TimeVaryingWindField not available: {e}")
-    TimeVaryingWindField = None
-    TimeVaryingWindFieldConfig = None
+    },
+}
 
-# Calculate total available implementations
-TOTAL_IMPLEMENTATIONS = len(WIND_FIELD_IMPLEMENTATIONS)
-logger.info(f"Loaded {TOTAL_IMPLEMENTATIONS} wind field implementations")
-
-# Ensure at least one implementation is available
-if TOTAL_IMPLEMENTATIONS == 0:
-    warnings.warn(
-        "No wind field implementations are currently available. "
-        "This may indicate missing dependencies or incomplete migration. "
-        "At least one wind field implementation is required for environmental dynamics.",
-        ImportWarning,
-        stacklevel=2
-    )
-
-# Create the public registry for wind field discovery and validation
-AVAILABLE_WIND_FIELDS: Dict[str, Dict[str, Any]] = WIND_FIELD_IMPLEMENTATIONS.copy()
+# Public registry for wind field discovery and validation
+AVAILABLE_WIND_FIELDS: Dict[str, Dict[str, Any]] = WIND_FIELD_IMPLEMENTATIONS
 """
 Registry of available wind field implementations with metadata.
 
@@ -442,9 +385,8 @@ def get_wind_field_info(wind_field_type: str) -> Dict[str, Any]:
             - features: List of supported features and capabilities
             - performance: Expected performance characteristics
             - use_cases: Recommended application scenarios
-            - available: Import and availability status
-            - class: Wind field implementation class (if available)
-            - config_class: Associated configuration schema (if available)
+            - class: Wind field implementation class
+            - config_class: Associated configuration schema
             
     Raises:
         KeyError: If wind_field_type is not found in the registry.
@@ -456,10 +398,6 @@ def get_wind_field_info(wind_field_type: str) -> Dict[str, Any]:
         >>> print(f"Features: {info['features']}")
         >>> print(f"Expected query time: {info['performance']['velocity_query_ms']}ms")
         
-        Check wind field availability:
-        >>> info = get_wind_field_info('TurbulentWindField')
-        >>> if info['available']:
-        ...     print("TurbulentWindField is available for use")
     """
     if wind_field_type not in AVAILABLE_WIND_FIELDS:
         available_types = list(AVAILABLE_WIND_FIELDS.keys())
@@ -605,10 +543,6 @@ def validate_wind_field_config(
     # Perform wind field-specific validation
     field_info = AVAILABLE_WIND_FIELDS[wind_field_type]
     
-    # Check availability
-    if not field_info['available']:
-        errors.append(f"Wind field type {wind_field_type} is not currently available")
-    
     # Basic parameter validation based on wind field type
     if wind_field_type == 'ConstantWindField':
         # Validate constant wind field parameters
@@ -749,14 +683,11 @@ def get_performance_summary() -> Dict[str, Any]:
     """
     performance_data = {
         'total_wind_fields': len(AVAILABLE_WIND_FIELDS),
-        'available_wind_fields': [name for name, info in AVAILABLE_WIND_FIELDS.items() 
-                                 if info['available']],
         'wind_fields': {}
     }
     
     for field_name, field_info in AVAILABLE_WIND_FIELDS.items():
         performance_data['wind_fields'][field_name] = {
-            'available': field_info['available'],
             'performance': field_info['performance'],
             'features': field_info['features'],
             'description': field_info['description']
@@ -765,114 +696,28 @@ def get_performance_summary() -> Dict[str, Any]:
     return performance_data
 
 
-# Module initialization and integrity validation
-def _validate_module_integrity() -> Dict[str, Any]:
-    """
-    Validate module integrity and component availability.
-    
-    Returns:
-        Dict[str, Any]: Validation results with status and component details.
-    """
-    validation_results = {
-        'status': 'healthy',
-        'issues': [],
-        'components': {
-            'numpy_available': NUMPY_AVAILABLE,
-            'protocols_available': PROTOCOLS_AVAILABLE,
-            'loguru_available': LOGURU_AVAILABLE
-        },
-        'implementations': {
-            'total': len(AVAILABLE_WIND_FIELDS),
-            'available': len([f for f in AVAILABLE_WIND_FIELDS.values() if f['available']]),
-            'wind_fields': list(AVAILABLE_WIND_FIELDS.keys())
-        }
-    }
-    
-    # Check critical dependencies
-    if not NUMPY_AVAILABLE:
-        validation_results['issues'].append("NumPy not available - array operations will fail")
-    
-    if not PROTOCOLS_AVAILABLE:
-        validation_results['issues'].append("Protocol interfaces not available - type safety limited")
-    
-    # Check implementation availability
-    available_count = validation_results['implementations']['available']
-    if available_count == 0:
-        validation_results['issues'].append("No wind field implementations available")
-        validation_results['status'] = 'critical'
-    elif available_count < 2:
-        validation_results['issues'].append("Limited wind field implementations available")
-        validation_results['status'] = 'degraded'
-    
-    # Check for basic functionality
-    if available_count > 0:
-        try:
-            # Test factory function with minimal config
-            test_config = {'type': list(AVAILABLE_WIND_FIELDS.keys())[0]}
-            test_field = create_wind_field(test_config, validate_protocol=False)
-            validation_results['factory_test'] = 'passed'
-        except Exception as e:
-            validation_results['issues'].append(f"Factory function test failed: {e}")
-            validation_results['factory_test'] = 'failed'
-            validation_results['status'] = 'degraded'
-    
-    return validation_results
-
-
-# Perform module integrity validation on import
-_validation_results = _validate_module_integrity()
-if _validation_results['status'] != 'healthy':
-    warning_msg = (
-        f"Wind fields package validation {_validation_results['status']}: "
-        f"{len(_validation_results['issues'])} issues detected. "
-        f"Available implementations: {_validation_results['implementations']['available']}/"
-        f"{_validation_results['implementations']['total']}"
-    )
-    warnings.warn(warning_msg, ImportWarning, stacklevel=2)
-
-# Log successful initialization
-logger.info(
-    f"Wind fields package initialized successfully",
-    total_implementations=_validation_results['implementations']['total'],
-    available_implementations=_validation_results['implementations']['available'],
-    status=_validation_results['status'],
-)
-
 # Define comprehensive public API for maximum flexibility
 __all__ = [
-    # Core wind field implementations (conditionally exported based on availability)
-    *(["ConstantWindField", "ConstantWindFieldConfig", "create_constant_wind_field"] 
-      if CONSTANT_WIND_AVAILABLE else []),
-    *(["TurbulentWindField", "TurbulentWindFieldConfig"] 
-      if TURBULENT_WIND_AVAILABLE else []),
-    *(["TimeVaryingWindField", "TimeVaryingWindFieldConfig"] 
-      if TIME_VARYING_WIND_AVAILABLE else []),
-    
-    # Factory functions and registry
+    "ConstantWindField",
+    "ConstantWindFieldConfig",
+    "create_constant_wind_field",
+    "TurbulentWindField",
+    "TurbulentWindFieldConfig",
+    "TimeVaryingWindField",
+    "TimeVaryingWindFieldConfig",
     "create_wind_field",
-    "AVAILABLE_WIND_FIELDS", 
+    "AVAILABLE_WIND_FIELDS",
     "WIND_FIELD_TYPE_MAPPING",
-    
-    # Discovery and information functions
     "get_wind_field_info",
     "list_available_wind_fields",
     "get_wind_fields_by_feature",
     "get_wind_fields_by_use_case",
-    
-    # Configuration utilities
     "validate_wind_field_config",
     "get_default_config",
-    
-    # Performance and diagnostics
     "get_performance_summary",
-    
-    # Module metadata
-    "TOTAL_IMPLEMENTATIONS",
 ]
 
 # Module metadata for documentation and debugging
 __version__ = "0.1.0"
 __author__ = "Plume Navigation Team"
 __description__ = "Modular wind field implementations with pluggable architecture"
-__module_status__ = _validation_results['status']
-__available_wind_fields__ = _validation_results['implementations']['available']
