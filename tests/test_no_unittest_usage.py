@@ -1,5 +1,9 @@
 import pathlib
+import re
 
-def test_no_unittest_mock_usage_in_migration_test():
-    source = pathlib.Path('tests/integration/test_v1_migration.py').read_text()
-    assert 'from unittest import mock' not in source
+
+def test_no_unittest_usage_in_integration_tests():
+    for path in pathlib.Path('tests/integration').glob('test_*.py'):
+        source = path.read_text()
+        assert re.search(r'\bimport unittest\b', source) is None
+        assert 'unittest.mock' not in source
