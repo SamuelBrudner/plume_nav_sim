@@ -13,12 +13,22 @@ def load_env_module():
     fake_video_plume = types.ModuleType("plume_nav_sim.models.plume.video_plume")
     fake_video_plume.VideoPlume = object
     sys.modules.setdefault("plume_nav_sim.models.plume.video_plume", fake_video_plume)
+    fake_video_plume_adapter = types.ModuleType("plume_nav_sim.models.plume.video_plume_adapter")
+    fake_video_plume_adapter.VideoPlumeAdapter = object
+    sys.modules.setdefault("plume_nav_sim.models.plume.video_plume_adapter", fake_video_plume_adapter)
     sys.modules.setdefault("pandas", types.ModuleType("pandas"))
     fake_db = types.ModuleType("plume_nav_sim.db.session_manager")
     fake_db.DatabaseSessionManager = object
     sys.modules.setdefault("plume_nav_sim.db.session_manager", fake_db)
+    import importlib.metadata as importlib_metadata
+    class _FakeDist:
+        def locate_file(self, path):
+            return path
+    importlib_metadata.distribution = lambda name: _FakeDist()
     fake_hydra = types.ModuleType("hydra")
     fake_hydra.instantiate = lambda *a, **k: None
+    fake_hydra.compose = lambda *a, **k: None
+    fake_hydra.initialize_config_dir = lambda *a, **k: None
     fake_hydra.utils = types.SimpleNamespace(instantiate=lambda *a, **k: None)
     sys.modules["hydra"] = fake_hydra
     sys.modules["hydra.utils"] = fake_hydra.utils
@@ -67,3 +77,57 @@ def test_unknown_sensor_type_raises(monkeypatch):
     monkeypatch.setattr(env_module, "SPACES_AVAILABLE", False)
     with pytest.raises(ValueError):
         env._init_spaces()
+
+
+def test_missing_video_file_raises(monkeypatch, tmp_path):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._plume_model_config = None
+    env._video_path = tmp_path / "missing_video.mp4"
+    env._video_frames = None
+    with pytest.raises(RuntimeError) as exc:
+        env._init_plume_model()
+    assert isinstance(exc.value.__cause__, FileNotFoundError)
+
+
+def test_plume_model_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._plume_model_config = {"type": "GaussianPlumeModel"}
+    env._video_path = None
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_plume_model()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_wind_field_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._wind_field_config = {"type": "ConstantWindField"}
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_wind_field()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_sensors_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._sensors_config = [{"type": "ConcentrationSensor"}]
+    env._legacy_multi_sensor = False
+    env._legacy_num_sensors = 0
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_sensors()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_missing_video_path_raises(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._plume_model_config = None
+    env._video_path = None
+    with pytest.raises(RuntimeError) as exc:
+        env._init_plume_model()
+    assert isinstance(exc.value.__cause__, ValueError)

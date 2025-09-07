@@ -526,11 +526,6 @@ class PlumeNavigationEnv(gym.Env):
         self.env_width = 640  # Default, will be updated
         self.env_height = 480  # Default, will be updated
         
-        # Validate configuration and determine initialization approach
-        # Accept gym.make-created envs without explicit video_path by providing a dummy path
-        if plume_model is None and self._video_path is None:
-            self._video_path = Path("nonexistent.mp4")
-
         # Initialize performance tracking
         self._step_count = 0
         self._episode_count = 0
@@ -764,67 +759,21 @@ class PlumeNavigationEnv(gym.Env):
             if self._plume_model_config is not None:
                 # Use provided plume model configuration
                 if isinstance(self._plume_model_config, dict):
-                    # Configuration-based instantiation
-                    if NAVIGATOR_AVAILABLE:
-                        self.plume_model = NavigatorFactory.create_plume_model(self._plume_model_config)
-                    else:
-                        # Fallback instantiation
-                        model_type = self._plume_model_config.get('type', 'GaussianPlumeModel')
-                        if model_type == 'GaussianPlumeModel':
-                            self.plume_model = GaussianPlumeModel(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
-                        elif model_type == 'TurbulentPlumeModel':
-                            self.plume_model = TurbulentPlumeModel(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
-                        elif model_type == 'VideoPlumeAdapter':
-                            self.plume_model = VideoPlumeAdapter(**{k: v for k, v in self._plume_model_config.items() if k != 'type'})
-                        else:
-                            raise ValueError(f"Unknown plume model type: {model_type}")
+                    if not NAVIGATOR_AVAILABLE:
+                        logger.error("NavigatorFactory is required for plume_model configuration")
+                        raise DependencyNotInstalled("NavigatorFactory is required for plume_model configuration")
+                    self.plume_model = NavigatorFactory.create_plume_model(self._plume_model_config)
                 else:
-                    # Direct instance provided
                     self.plume_model = self._plume_model_config
             else:
                 # Legacy mode: use VideoPlumeAdapter with video_path
                 if self._video_path is None:
                     raise ValueError("Either plume_model or video_path must be provided")
-                # If the specified video file does not exist, fall back to a minimal dummy implementation
-                if isinstance(self._video_path, Path) and not self._video_path.exists():
-                    class _DummyVideoPlume:
-                        """Lightweight stand-in for VideoPlumeAdapter used when the file is absent."""
-                        def __init__(self, video_path: str):
-                            self.video_path = video_path
-                            self.frame_count = 1000
-                            self.width = 640
-                            self.height = 480
-                            self.fps = 30.0
-
-                        # --- Minimal API surface expected by the env ---
-                        def concentration_at(self, positions: np.ndarray) -> np.ndarray:
-                            if positions.ndim == 1:
-                                return np.random.rand()
-                            return np.random.rand(len(positions))
-
-                        def step(self, dt: float = 1.0) -> None:
-                            pass
-
-                        def reset(self, **kwargs) -> None:
-                            pass
-
-                        def get_frame(self, frame_id: int) -> Optional[np.ndarray]:
-                            return np.random.rand(self.height, self.width).astype(np.float32)
-
-                        def get_metadata(self) -> Dict[str, Any]:
-                            return {
-                                "width": self.width,
-                                "height": self.height,
-                                "fps": self.fps,
-                                "frame_count": self.frame_count,
-                            }
-
-                        def close(self):
-                            pass
-
-                    self.plume_model = _DummyVideoPlume(str(self._video_path))
-                else:
-                    self.plume_model = VideoPlumeAdapter(str(self._video_path))
+                video_path = Path(self._video_path)
+                if not video_path.exists():
+                    logger.error(f"Video file not found: {video_path}")
+                    raise FileNotFoundError(f"Video file not found: {video_path}")
+                self.plume_model = VideoPlumeAdapter(str(video_path))
             
             # Extract environment dimensions from plume model
             if hasattr(self.plume_model, 'get_metadata'):
@@ -864,20 +813,11 @@ class PlumeNavigationEnv(gym.Env):
             if self._wind_field_config is not None:
                 # Wind field provided
                 if isinstance(self._wind_field_config, dict):
-                    # Configuration-based instantiation
-                    if NAVIGATOR_AVAILABLE:
-                        self.wind_field = NavigatorFactory.create_wind_field(self._wind_field_config)
-                    else:
-                        # Fallback instantiation
-                        wind_type = self._wind_field_config.get('type', 'ConstantWindField')
-                        if wind_type == 'ConstantWindField':
-                            self.wind_field = ConstantWindField(**{k: v for k, v in self._wind_field_config.items() if k != 'type'})
-                        elif wind_type == 'TurbulentWindField':
-                            self.wind_field = TurbulentWindField(**{k: v for k, v in self._wind_field_config.items() if k != 'type'})
-                        else:
-                            raise ValueError(f"Unknown wind field type: {wind_type}")
+                    if not NAVIGATOR_AVAILABLE:
+                        logger.error("NavigatorFactory is required for wind_field configuration")
+                        raise DependencyNotInstalled("NavigatorFactory is required for wind_field configuration")
+                    self.wind_field = NavigatorFactory.create_wind_field(self._wind_field_config)
                 else:
-                    # Direct instance provided
                     self.wind_field = self._wind_field_config
                 self._wind_enabled = True
             else:
@@ -901,22 +841,11 @@ class PlumeNavigationEnv(gym.Env):
                 self.sensors = []
                 for i, sensor_config in enumerate(self._sensors_config):
                     if isinstance(sensor_config, dict):
-                        # Configuration-based instantiation
-                        if NAVIGATOR_AVAILABLE:
-                            sensor = NavigatorFactory.create_sensors([sensor_config])[0]
-                        else:
-                            # Fallback instantiation
-                            sensor_type = sensor_config.get('type', 'ConcentrationSensor')
-                            if sensor_type == 'BinarySensor':
-                                sensor = BinarySensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
-                            elif sensor_type == 'ConcentrationSensor':
-                                sensor = ConcentrationSensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
-                            elif sensor_type == 'GradientSensor':
-                                sensor = GradientSensor(**{k: v for k, v in sensor_config.items() if k != 'type'})
-                            else:
-                                raise ValueError(f"Unknown sensor type: {sensor_type}")
+                        if not NAVIGATOR_AVAILABLE:
+                            logger.error("NavigatorFactory is required for sensor configuration")
+                            raise DependencyNotInstalled("NavigatorFactory is required for sensor configuration")
+                        sensor = NavigatorFactory.create_sensors([sensor_config])[0]
                     else:
-                        # Direct instance provided
                         sensor = sensor_config
                     self.sensors.append(sensor)
             else:

@@ -4,6 +4,14 @@ import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
 import matplotlib.pyplot as plt
+import importlib.metadata
+
+
+class _DummyDistribution:
+    version = "0.0"
+
+
+importlib.metadata.distribution = lambda name: _DummyDistribution()
 
 from plume_nav_sim.utils.visualization import visualize_trajectory, SimulationVisualization
 
@@ -150,25 +158,34 @@ class TestSimulationVisualization:
         with patch('matplotlib.pyplot.subplots') as mock_subplots:
             mock_fig, mock_ax = MagicMock(), MagicMock()
             mock_subplots.return_value = (mock_fig, mock_ax)
-            
+
             viz = SimulationVisualization(
                 figsize=(10, 8),
                 dpi=150,
                 fps=30,
                 headless=True
             )
-            
+
             assert viz.config['fps'] == 30
             assert viz.config['dpi'] == 150
             assert viz.config['headless'] is True
             mock_subplots.assert_called_once_with(figsize=(10, 8), dpi=150)
+
+    def test_simulation_visualization_invalid_subplots_result(self):
+        """Ensure initialization fails when plt.subplots returns invalid result."""
+        with patch('matplotlib.pyplot.subplots') as mock_subplots:
+            mock_subplots.return_value = MagicMock()
+
+            with pytest.raises(TypeError):
+                SimulationVisualization(headless=True)
     
     @pytest.mark.skipif(not HYDRA_AVAILABLE, reason="Hydra not available")
     def test_simulation_visualization_from_config(self, hydra_visualization_config):
         """Test SimulationVisualization creation from Hydra configuration."""
-        with patch('matplotlib.pyplot.subplots'):
+        with patch('matplotlib.pyplot.subplots') as mock_subplots:
+            mock_subplots.return_value = (MagicMock(), MagicMock())
             viz = SimulationVisualization.from_config(hydra_visualization_config)
-            
+
             assert viz.config['fps'] == 30
             assert viz.config['theme'] == 'scientific'
             assert viz.config['headless'] is False
@@ -211,7 +228,8 @@ class TestSimulationVisualization:
     
     def test_simulation_visualization_animation_creation(self):
         """Test animation creation with configurable performance settings."""
-        with patch('matplotlib.pyplot.subplots'):
+        with patch('matplotlib.pyplot.subplots') as mock_subplots:
+            mock_subplots.return_value = (MagicMock(), MagicMock())
             with patch('matplotlib.animation.FuncAnimation') as mock_anim:
                 viz = SimulationVisualization(fps=60, headless=True)
                 
