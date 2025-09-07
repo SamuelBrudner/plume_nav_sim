@@ -36,9 +36,19 @@ import tempfile
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-from unittest.mock import Mock, MagicMock, patch
 import sys
 from contextlib import contextmanager
+
+# Provide pytest-mock equivalents for legacy stdlib mock usage
+Mock = MagicMock = patch = None
+
+@pytest.fixture(autouse=True)
+def _inject_mock_aliases(mocker):
+    """Expose pytest-mock helpers as global mock constructors."""
+    global Mock, MagicMock, patch
+    Mock = mocker.Mock
+    MagicMock = mocker.MagicMock
+    patch = mocker.patch
 
 # Update sys.path for new project structure
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -187,16 +197,16 @@ try:
 except ImportError:
     # Define minimal fallback fixtures
     @pytest.fixture
-    def mock_video_plume():
-        return MagicMock()
-    
-    @pytest.fixture  
-    def mock_navigator():
-        return MagicMock()
-    
+    def mock_video_plume(mocker):
+        return mocker.MagicMock()
+
     @pytest.fixture
-    def mock_multi_navigator():
-        return MagicMock()
+    def mock_navigator(mocker):
+        return mocker.MagicMock()
+
+    @pytest.fixture
+    def mock_multi_navigator(mocker):
+        return mocker.MagicMock()
 
 # Performance constants from requirements
 PERFORMANCE_TARGET_MS = 10.0  # ≤10ms step execution requirement from Section 0.5.1
@@ -220,7 +230,7 @@ def performance_monitor(operation_name: str, max_time_ms: float = PERFORMANCE_TA
             )
 
 
-def create_mock_plume_model(model_type: str = "gaussian") -> Mock:
+def create_mock_plume_model(model_type: str = "gaussian") -> Any:
     """Create a mock plume model for testing."""
     mock = Mock(spec=PlumeModelProtocol)
     
@@ -237,7 +247,7 @@ def create_mock_plume_model(model_type: str = "gaussian") -> Mock:
     return mock
 
 
-def create_mock_wind_field(field_type: str = "constant") -> Mock:
+def create_mock_wind_field(field_type: str = "constant") -> Any:
     """Create a mock wind field for testing."""
     mock = Mock(spec=WindFieldProtocol)
     
@@ -254,7 +264,7 @@ def create_mock_wind_field(field_type: str = "constant") -> Mock:
     return mock
 
 
-def create_mock_sensor(sensor_type: str = "concentration") -> Mock:
+def create_mock_sensor(sensor_type: str = "concentration") -> Any:
     """Create a mock sensor for testing."""
     mock = Mock(spec=SensorProtocol)
     
@@ -285,7 +295,7 @@ def create_mock_sensor(sensor_type: str = "concentration") -> Mock:
     return mock
 
 
-def create_mock_navigator(num_agents: int = 1) -> Mock:
+def create_mock_navigator(num_agents: int = 1) -> Any:
     """Create a mock navigator for testing."""
     mock = Mock(spec=NavigatorProtocol)
     
@@ -564,21 +574,21 @@ class TestConfigurationIntegration:
         # Test configuration-driven switching
         with performance_monitor("Configuration-driven plume model switching"):
             # Mock factory method for switching
-            with patch('plume_nav_sim.core.protocols.NavigatorFactory.create_plume_model') as mock_factory:
-                mock_factory.side_effect = [
-                    create_mock_plume_model("gaussian"),
-                    create_mock_plume_model("turbulent")
-                ]
-                
-                # Switch from Gaussian to Turbulent
-                if CORE_AVAILABLE:
-                    gaussian_model = NavigatorFactory.create_plume_model(gaussian_config)
-                    turbulent_model = NavigatorFactory.create_plume_model(turbulent_config)
-                    
-                    # Verify both models were created
-                    assert mock_factory.call_count == 2
-                    assert gaussian_model is not None
-                    assert turbulent_model is not None
+            mock_factory = patch('plume_nav_sim.core.protocols.NavigatorFactory.create_plume_model')
+            mock_factory.side_effect = [
+                create_mock_plume_model("gaussian"),
+                create_mock_plume_model("turbulent")
+            ]
+
+            # Switch from Gaussian to Turbulent
+            if CORE_AVAILABLE:
+                gaussian_model = NavigatorFactory.create_plume_model(gaussian_config)
+                turbulent_model = NavigatorFactory.create_plume_model(turbulent_config)
+
+                # Verify both models were created
+                assert mock_factory.call_count == 2
+                assert gaussian_model is not None
+                assert turbulent_model is not None
     
     def test_wind_field_configuration_switching(self):
         """Test wind field switching via configuration without code changes."""
@@ -595,19 +605,19 @@ class TestConfigurationIntegration:
         
         with performance_monitor("Wind field configuration switching"):
             # Mock factory method
-            with patch('plume_nav_sim.core.protocols.NavigatorFactory.create_wind_field') as mock_factory:
-                mock_factory.side_effect = [
-                    create_mock_wind_field("constant"),
-                    create_mock_wind_field("turbulent")
-                ]
-                
-                if CORE_AVAILABLE:
-                    constant_wind = NavigatorFactory.create_wind_field(constant_config)
-                    turbulent_wind = NavigatorFactory.create_wind_field(turbulent_config)
-                    
-                    assert mock_factory.call_count == 2
-                    assert constant_wind is not None
-                    assert turbulent_wind is not None
+            mock_factory = patch('plume_nav_sim.core.protocols.NavigatorFactory.create_wind_field')
+            mock_factory.side_effect = [
+                create_mock_wind_field("constant"),
+                create_mock_wind_field("turbulent")
+            ]
+
+            if CORE_AVAILABLE:
+                constant_wind = NavigatorFactory.create_wind_field(constant_config)
+                turbulent_wind = NavigatorFactory.create_wind_field(turbulent_config)
+
+                assert mock_factory.call_count == 2
+                assert constant_wind is not None
+                assert turbulent_wind is not None
     
     def test_sensor_configuration_composition(self):
         """Test multi-sensor configuration composition."""
@@ -619,18 +629,18 @@ class TestConfigurationIntegration:
         
         with performance_monitor("Multi-sensor configuration composition"):
             # Mock factory method
-            with patch('plume_nav_sim.core.protocols.NavigatorFactory.create_sensors') as mock_factory:
-                mock_factory.return_value = [
-                    create_mock_sensor("binary"),
-                    create_mock_sensor("concentration"),
-                    create_mock_sensor("gradient")
-                ]
-                
-                if CORE_AVAILABLE:
-                    sensors = NavigatorFactory.create_sensors(sensor_configs)
-                    
-                    assert mock_factory.call_count == 1
-                    assert len(sensors) == 3
+            mock_factory = patch('plume_nav_sim.core.protocols.NavigatorFactory.create_sensors')
+            mock_factory.return_value = [
+                create_mock_sensor("binary"),
+                create_mock_sensor("concentration"),
+                create_mock_sensor("gradient")
+            ]
+
+            if CORE_AVAILABLE:
+                sensors = NavigatorFactory.create_sensors(sensor_configs)
+
+                assert mock_factory.call_count == 1
+                assert len(sensors) == 3
     
     def test_complete_modular_environment_configuration(self):
         """Test complete modular environment creation from configuration."""
@@ -656,26 +666,26 @@ class TestConfigurationIntegration:
         
         with performance_monitor("Complete modular environment configuration"):
             # Mock factory method
-            with patch('plume_nav_sim.core.protocols.NavigatorFactory.create_modular_environment') as mock_factory:
-                mock_navigator = create_mock_navigator(1)
-                mock_navigator._modular_components = {
-                    'plume_model': create_mock_plume_model("gaussian"),
-                    'wind_field': create_mock_wind_field("constant"),
-                    'sensors': [create_mock_sensor("concentration")]
-                }
-                mock_factory.return_value = mock_navigator
-                
-                if CORE_AVAILABLE:
-                    environment = NavigatorFactory.create_modular_environment(
-                        navigator_config=env_config["navigator"],
-                        plume_model_config=env_config["plume_model"],
-                        wind_field_config=env_config["wind_field"],
-                        sensor_configs=env_config["sensors"]
-                    )
-                    
-                    assert mock_factory.call_count == 1
-                    assert environment is not None
-                    assert hasattr(environment, '_modular_components')
+            mock_factory = patch('plume_nav_sim.core.protocols.NavigatorFactory.create_modular_environment')
+            mock_navigator = create_mock_navigator(1)
+            mock_navigator._modular_components = {
+                'plume_model': create_mock_plume_model("gaussian"),
+                'wind_field': create_mock_wind_field("constant"),
+                'sensors': [create_mock_sensor("concentration")]
+            }
+            mock_factory.return_value = mock_navigator
+
+            if CORE_AVAILABLE:
+                environment = NavigatorFactory.create_modular_environment(
+                    navigator_config=env_config["navigator"],
+                    plume_model_config=env_config["plume_model"],
+                    wind_field_config=env_config["wind_field"],
+                    sensor_configs=env_config["sensors"]
+                )
+
+                assert mock_factory.call_count == 1
+                assert environment is not None
+                assert hasattr(environment, '_modular_components')
 
 
 class TestMemoryIndependentNavigation:
@@ -1007,16 +1017,16 @@ class TestBackwardCompatibility:
         
         with performance_monitor("Simulation config compatibility"):
             # Mock config creation
-            with patch('plume_nav_sim.core.simulation.SimulationConfig') as MockConfig:
-                mock_config = Mock()
-                mock_config.num_steps = legacy_config["num_steps"]
-                mock_config.dt = legacy_config["dt"] 
-                mock_config.record_trajectories = legacy_config["record_trajectories"]
-                MockConfig.return_value = mock_config
-                
-                if CORE_AVAILABLE:
-                    config = SimulationConfig(**legacy_config)
-                    MockConfig.assert_called_once()
+            MockConfig = patch('plume_nav_sim.core.simulation.SimulationConfig')
+            mock_config = Mock()
+            mock_config.num_steps = legacy_config["num_steps"]
+            mock_config.dt = legacy_config["dt"]
+            mock_config.record_trajectories = legacy_config["record_trajectories"]
+            MockConfig.return_value = mock_config
+
+            if CORE_AVAILABLE:
+                config = SimulationConfig(**legacy_config)
+                MockConfig.assert_called_once()
 
 
 @pytest.mark.skipif(not SENSORS_AVAILABLE, reason="Sensor implementations not available")
@@ -1263,27 +1273,27 @@ class TestSimulationContextOrchestration:
         """Test automatic episode management and lifecycle handling."""
         with performance_monitor("Episode management lifecycle"):
             # Mock simulation context
-            with patch('plume_nav_sim.core.simulation.SimulationContext') as MockContext:
-                mock_context = Mock()
-                mock_context.run_simulation.return_value = Mock(
-                    step_count=100,
-                    success=True,
-                    performance_metrics={"avg_step_time_ms": 5.0}
-                )
-                MockContext.return_value = mock_context
-                
-                # Test episode management
-                config = Mock()
-                config.num_steps = 100
-                config.episode_management_mode = "auto"
-                
-                context = SimulationContext(config)
-                results = context.run_simulation()
-                
-                # Verify episode was managed
-                assert results.step_count == 100
-                assert results.success == True
-                context.run_simulation.assert_called_once()
+            MockContext = patch('plume_nav_sim.core.simulation.SimulationContext')
+            mock_context = Mock()
+            mock_context.run_simulation.return_value = Mock(
+                step_count=100,
+                success=True,
+                performance_metrics={"avg_step_time_ms": 5.0}
+            )
+            MockContext.return_value = mock_context
+
+            # Test episode management
+            config = Mock()
+            config.num_steps = 100
+            config.episode_management_mode = "auto"
+
+            context = SimulationContext(config)
+            results = context.run_simulation()
+
+            # Verify episode was managed
+            assert results.step_count == 100
+            assert results.success == True
+            context.run_simulation.assert_called_once()
     
     def test_result_collection_and_aggregation(self):
         """Test comprehensive result collection and aggregation."""
@@ -1367,32 +1377,32 @@ class TestSimulationContextOrchestration:
         """Test performance monitoring integration throughout simulation."""
         with performance_monitor("Performance monitoring integration"):
             # Mock performance monitor
-            with patch('plume_nav_sim.core.simulation.PerformanceMonitor') as MockMonitor:
-                mock_monitor = Mock()
-                mock_monitor.record_step_time.return_value = None
-                mock_monitor.get_summary.return_value = {
-                    "avg_step_time_ms": 7.5,
-                    "max_step_time_ms": 12.0,
-                    "total_steps": 100,
-                    "performance_target_met": True
-                }
-                MockMonitor.return_value = mock_monitor
-                
-                # Simulate performance monitoring
-                monitor = PerformanceMonitor()
-                
-                # Record multiple step times
-                step_times = [0.005, 0.008, 0.006, 0.009, 0.007]  # In seconds
-                for step_time in step_times:
-                    monitor.record_step_time(step_time)
-                
-                # Get performance summary
-                summary = monitor.get_summary()
-                
-                # Verify monitoring functionality
-                assert summary["avg_step_time_ms"] == 7.5
-                assert summary["performance_target_met"] == True
-                mock_monitor.record_step_time.assert_called()
+            MockMonitor = patch('plume_nav_sim.core.simulation.PerformanceMonitor')
+            mock_monitor = Mock()
+            mock_monitor.record_step_time.return_value = None
+            mock_monitor.get_summary.return_value = {
+                "avg_step_time_ms": 7.5,
+                "max_step_time_ms": 12.0,
+                "total_steps": 100,
+                "performance_target_met": True
+            }
+            MockMonitor.return_value = mock_monitor
+
+            # Simulate performance monitoring
+            monitor = PerformanceMonitor()
+
+            # Record multiple step times
+            step_times = [0.005, 0.008, 0.006, 0.009, 0.007]  # In seconds
+            for step_time in step_times:
+                monitor.record_step_time(step_time)
+
+            # Get performance summary
+            summary = monitor.get_summary()
+
+            # Verify monitoring functionality
+            assert summary["avg_step_time_ms"] == 7.5
+            assert summary["performance_target_met"] is True
+            mock_monitor.record_step_time.assert_called()
 
 
 @pytest.mark.skipif(not GYMNASIUM_AVAILABLE, reason="Gymnasium not available")
