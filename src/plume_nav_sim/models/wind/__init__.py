@@ -69,6 +69,11 @@ from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
 
 from loguru import logger
+
+if not hasattr(logger, "configure"):
+    logger.warning(
+        "Wind models running with lightweight logging stubs; functionality is limited."
+    )
 import numpy as np
 
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol

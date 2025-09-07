@@ -20,12 +20,39 @@ import warnings
 import inspect
 import sys
 import atexit
-import logging
+from pathlib import Path
 from importlib.metadata import PackageNotFoundError, distribution
 
-__version__ = "1.0.0"
+try:  # Prefer Loguru when available
+    from loguru import logger as _logger
+    _LOGGER_IS_STUB = not hasattr(_logger, "configure")
+    logger = _logger
+except Exception:  # pragma: no cover - defensive fallback
+    import logging as _logging
+    logger = _logging.getLogger(__name__)
+    _LOGGER_IS_STUB = True
 
-logger = logging.getLogger(__name__)
+
+def _configure_logger() -> None:
+    """Configure logging from logging.yaml or warn if running in stub mode."""
+    if _LOGGER_IS_STUB:
+        try:
+            logger.warning(
+                "Logging bootstrap not available; running in limited mode with lightweight stubs."
+            )
+        except Exception:  # pragma: no cover - safety
+            pass
+        return
+
+    from .utils.logging_setup import setup_logger
+
+    config_path = Path(__file__).resolve().parents[2] / "logging.yaml"
+    setup_logger(logging_config_path=config_path)
+
+
+_configure_logger()
+
+__version__ = "1.0.0"
 
 # =============================================================================
 # INSTALLATION VALIDATION
