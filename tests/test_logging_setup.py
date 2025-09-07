@@ -726,7 +726,7 @@ class TestEnhancedLoggingSetup:
         assert is_legacy is True
     
     def test_enhanced_logger_legacy_api_logging(self):
-        """Test enhanced logger legacy API usage logging."""
+        """Test enhanced logger legacy API usage logger."""
         string_io = io.StringIO()
         setup_logger(LoggingConfig(level="DEBUG"))
         handler_id = logger.add(string_io, format="{message} | {extra}")

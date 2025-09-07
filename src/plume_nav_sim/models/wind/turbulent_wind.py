@@ -60,10 +60,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 # Logging imports
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Scientific computing imports
 import scipy
 import scipy.stats
@@ -1037,7 +1034,7 @@ class TurbulentWindField:
         }
 
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
+        """String representation for debugging and logger."""
         return (
             f"TurbulentWindField("
             f"grid={self._grid_nx}x{self._grid_ny}, "

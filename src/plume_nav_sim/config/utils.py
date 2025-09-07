@@ -3,16 +3,12 @@ Configuration utilities for plume_nav_sim.
 
 This module provides utility functions for configuration validation and management.
 """
-
-import logging
+from loguru import logger
 import os
 from typing import Dict, Any, Optional, Union, Type
 from pydantic import BaseModel, ValidationError
 
 from dotenv import load_dotenv, find_dotenv
-
-logger = logging.getLogger(__name__)
-
 try:
     from hydra.core.config_store import ConfigStore
     from hydra import initialize, compose

@@ -58,8 +58,8 @@ try:
 except ImportError:
     ENHANCED_LOGGING_AVAILABLE = False
     # Fallback to basic logging
-    import logging
-    logging.basicConfig(level=logging.INFO)
+from loguru import logger
+    logger.basicConfig(level=logger.INFO)
 
 
 class CacheMode(Enum):

@@ -1,5 +1,5 @@
 import csv
-import logging
+from loguru import logger
 import sys
 import types
 import importlib.util
@@ -60,7 +60,7 @@ def test_interpolation_failure_raises(tmp_path, caplog):
         writer.writerow([0, 0.0, 0.0])
         writer.writerow([1, 1.0, 1.0])
 
-    with caplog.at_level(logging.ERROR, logger="time_varying_wind"):
+    with caplog.at_level(logger.ERROR, logger="time_varying_wind"):
         with pytest.raises(Exception):
             TimeVaryingWindField(
                 temporal_pattern="measured",

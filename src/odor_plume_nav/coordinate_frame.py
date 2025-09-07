@@ -10,13 +10,8 @@ so that ``0`` and ``360`` represent the same orientation.
 from __future__ import annotations
 
 from typing import Union
-
-import logging
+from loguru import logger
 import numpy as np
-
-
-logger = logging.getLogger(__name__)
-
 Number = Union[float, np.ndarray]
 
 

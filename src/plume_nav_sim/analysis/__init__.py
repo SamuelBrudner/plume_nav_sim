@@ -78,7 +78,7 @@ from __future__ import annotations
 import warnings
 import time
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
-import logging
+from loguru import logger
 
 # Core protocol imports for interface compliance
 from ..core.protocols import StatsAggregatorProtocol
@@ -97,8 +97,6 @@ from .stats import (
 from ..recording import RecorderFactory
 
 # Configure module logging
-logger = logging.getLogger(__name__)
-
 # Hydra configuration support (fail fast if unavailable)
 from hydra import instantiate
 from omegaconf import DictConfig

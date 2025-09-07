@@ -60,7 +60,7 @@ import abc
 import contextlib
 from contextlib import contextmanager
 import json
-import logging
+from loguru import logger
 import queue
 import threading
 import time
@@ -78,9 +78,6 @@ from ..core.protocols import RecorderProtocol
 
 
 # Configure logging
-logger = logging.getLogger(__name__)
-
-
 @dataclass
 class RecorderConfig:
     """

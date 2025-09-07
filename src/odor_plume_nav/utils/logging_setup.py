@@ -52,7 +52,7 @@ Example Usage:
     ...     # Automatic warning if step() > 10ms, includes cache stats
     
     >>> # YAML configuration with dual sinks
-    >>> setup_logger(logging_config_path="./logging.yaml")
+    >>> setup_logger(logging_config_path="./logger.yaml")
     
     >>> # Cache statistics integration
     >>> update_cache_metrics(cache_hit_count=150, cache_miss_count=25)
@@ -300,7 +300,7 @@ class PerformanceMetrics:
             return 0.0
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert performance metrics to dictionary for logging."""
+        """Convert performance metrics to dictionary for logger."""
         return asdict(self)
 
     def is_slow(self, threshold: Optional[float] = None) -> bool:
@@ -347,7 +347,7 @@ class LoggingConfig(BaseModel):
     )
     file_enabled: bool = Field(
         default=True,
-        description="Enable file logging. Supports ${oc.env:LOG_FILE,true}"
+        description="Enable file logger. Supports ${oc.env:LOG_FILE,true}"
     )
     file_path: Optional[Union[str, Path]] = Field(
         default=None,
@@ -1014,7 +1014,7 @@ class EnhancedLogger:
         **metadata
     ) -> ContextManager[PerformanceMetrics]:
         """
-        Context manager for performance timing with automatic logging.
+        Context manager for performance timing with automatic logger.
         
         Args:
             operation: Name of the operation being timed
@@ -1233,7 +1233,7 @@ def setup_logger(
     Configures the global Loguru logger with comprehensive settings including
     environment-specific defaults, performance monitoring, correlation tracking,
     structured output formatting, and dual sink architecture supporting JSON and
-    console outputs via logging.yaml configuration files.
+    console outputs via logger.yaml configuration files.
     
     Args:
         config: LoggingConfig object or dictionary with configuration settings
@@ -1246,15 +1246,15 @@ def setup_logger(
         backtrace: Whether to include a backtrace for exceptions (backward compatibility)
         diagnose: Whether to diagnose exceptions (backward compatibility)
         environment: Environment type for applying defaults
-        logging_config_path: Path to logging.yaml configuration file for dual sink architecture
+        logging_config_path: Path to logger.yaml configuration file for dual sink architecture
         **kwargs: Additional configuration parameters
         
     Returns:
         LoggingConfig: The resolved configuration object
         
     Example:
-        >>> # Using logging.yaml configuration
-        >>> setup_logger(logging_config_path="./logging.yaml")
+        >>> # Using logger.yaml configuration
+        >>> setup_logger(logging_config_path="./logger.yaml")
         
         >>> # Using configuration object
         >>> config = LoggingConfig(environment="production", level="INFO")
@@ -1266,7 +1266,7 @@ def setup_logger(
         >>> # Using environment-based defaults
         >>> setup_logger(environment="development")
     """
-    # Load configuration from logging.yaml if provided
+    # Load configuration from logger.yaml if provided
     yaml_config = None
     if logging_config_path is not None:
         yaml_config = _load_logging_yaml(logging_config_path)
@@ -1556,12 +1556,12 @@ def _load_logging_yaml(config_path: Union[str, Path]) -> Optional[Dict[str, Any]
     Load logging configuration from YAML file with validation and error handling.
     
     Args:
-        config_path: Path to logging.yaml configuration file
+        config_path: Path to logger.yaml configuration file
         
     Returns:
         Dictionary containing logging configuration or None if loading fails
         
-    Example logging.yaml structure:
+    Example logger.yaml structure:
         sinks:
           console:
             level: INFO

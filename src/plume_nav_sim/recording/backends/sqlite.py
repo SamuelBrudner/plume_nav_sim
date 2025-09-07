@@ -71,7 +71,7 @@ Examples:
 """
 
 import json
-import logging
+from loguru import logger
 import sqlite3
 import threading
 import time
@@ -87,9 +87,6 @@ import numpy as np
 from ..import BaseRecorder, RecorderConfig
 
 # Configure logging
-logger = logging.getLogger(__name__)
-
-
 @dataclass
 class SQLiteConfig(RecorderConfig):
     """

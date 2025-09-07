@@ -28,13 +28,13 @@ try:  # Prefer Loguru when available
     _LOGGER_IS_STUB = not hasattr(_logger, "configure")
     logger = _logger
 except Exception:  # pragma: no cover - defensive fallback
-    import logging as _logging
-    logger = _logging.getLogger(__name__)
+from loguru import logger
+    logger = _logger
     _LOGGER_IS_STUB = True
 
 
 def _configure_logger() -> None:
-    """Configure logging from logging.yaml or warn if running in stub mode."""
+    """Configure logging from logger.yaml or warn if running in stub mode."""
     if _LOGGER_IS_STUB:
         try:
             logger.warning(
@@ -46,7 +46,7 @@ def _configure_logger() -> None:
 
     from .utils.logging_setup import setup_logger
 
-    config_path = Path(__file__).resolve().parents[2] / "logging.yaml"
+    config_path = Path(__file__).resolve().parents[2] / "logger.yaml"
     setup_logger(logging_config_path=config_path)
 
 

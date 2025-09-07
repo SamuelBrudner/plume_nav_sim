@@ -1,13 +1,10 @@
-import logging
+from loguru import logger
 from typing import Dict, Any
 
 import pytest
 from mypy import api as mypy_api
 
 from plume_nav_sim import protocols as sim_protocols
-
-logger = logging.getLogger(__name__)
-
 PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     "NavigatorProtocol": {
         "methods": {

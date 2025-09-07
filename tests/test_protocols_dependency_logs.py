@@ -1,5 +1,5 @@
 import importlib.util
-import logging
+from loguru import logger
 import sys
 import types
 from pathlib import Path
@@ -34,7 +34,7 @@ def test_protocols_module_logs_dependencies(caplog, monkeypatch):
     spec = importlib.util.spec_from_file_location("plume_nav_sim.core.protocols", module_path)
     module = importlib.util.module_from_spec(spec)
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logger.INFO):
         spec.loader.exec_module(module)
 
     assert "NavigatorConfig" in caplog.text

@@ -1,6 +1,6 @@
 import importlib
 import builtins
-import logging
+from loguru import logger
 import types
 import sys
 import pytest
@@ -38,7 +38,7 @@ def test_missing_agent_not_exposed(monkeypatch, caplog):
 
     monkeypatch.setattr(builtins, "__import__", mock_import)
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logger.WARNING):
         importlib.reload(examples)
 
     assert "ReactiveAgent" not in examples.list_available_example_agents()

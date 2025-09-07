@@ -8,12 +8,12 @@ import pytest
 
 def _stub_visualization_dependencies(monkeypatch):
     """Stub heavy dependencies for visualization module."""
-    import logging
+from loguru import logger
 
     pkg = types.ModuleType("plume_nav_sim")
     utils_pkg = types.ModuleType("plume_nav_sim.utils")
     logging_setup = types.ModuleType("plume_nav_sim.utils.logging_setup")
-    logging_setup.get_module_logger = lambda name: logging.getLogger(name)
+    logging_setup.get_module_logger = lambda name: logger
     core_pkg = types.ModuleType("plume_nav_sim.core")
     protocols = types.ModuleType("plume_nav_sim.core.protocols")
     class SourceProtocol:  # minimal placeholder

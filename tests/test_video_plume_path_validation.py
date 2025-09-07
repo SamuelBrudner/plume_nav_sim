@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from unittest.mock import patch
 
 import pytest
@@ -51,7 +51,7 @@ def test_invalid_suffix_logs_and_raises(tmp_path, caplog):
     bad_file = allowed_root / "video.txt"
     bad_file.write_text("data")
 
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logger.ERROR):
         with pytest.raises(ValueError, match="Unsupported video file extension"):
             VideoPlume(video_path=bad_file, allowed_root=allowed_root)
     assert "Unsupported video file extension" in caplog.text
@@ -65,7 +65,7 @@ def test_outside_allowed_root_logs_and_raises(tmp_path, caplog):
     outside_file = outside_dir / "video.mp4"
     outside_file.write_text("data")
 
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logger.ERROR):
         with pytest.raises(ValueError, match="outside allowed root"):
             VideoPlume(video_path=outside_file, allowed_root=allowed_root)
     assert "outside allowed root" in caplog.text

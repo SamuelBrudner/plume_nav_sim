@@ -85,10 +85,7 @@ from .protocols import (
 )
 
 # Controller implementations
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 try:
     from .controllers import SingleAgentController, MultiAgentController
 except ImportError as exc:

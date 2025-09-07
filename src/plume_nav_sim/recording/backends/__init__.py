@@ -55,7 +55,7 @@ Examples:
 """
 
 from typing import Dict, List, Optional, Type, Union, Any, TYPE_CHECKING
-import logging
+from loguru import logger
 
 # Import RecorderProtocol for type validation
 if TYPE_CHECKING:
@@ -64,9 +64,6 @@ if TYPE_CHECKING:
 from .null import NullRecorder
 
 # Configure logging for backend module
-logger = logging.getLogger(__name__)
-
-
 # Backend registration system for automatic discovery and instantiation
 BACKEND_REGISTRY: Dict[str, Type['BaseRecorder']] = {
     'null': NullRecorder,

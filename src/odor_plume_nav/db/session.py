@@ -66,8 +66,7 @@ Examples:
                     pass
         ```
 """
-
-import logging
+from loguru import logger
 import os
 import warnings
 from contextlib import contextmanager
@@ -117,9 +116,6 @@ except ImportError:
     HydraConfig = DictConfig = OmegaConf = None
 
 # Configure module logger
-logger = logging.getLogger(__name__)
-
-
 class DatabaseConfig(BaseModel if PYDANTIC_AVAILABLE else object):
     """
     Database connection configuration schema with comprehensive validation.
@@ -587,7 +583,7 @@ class DatabaseSessionManager:
     
     def _get_safe_url(self) -> str:
         """
-        Get database URL with credentials masked for safe logging.
+        Get database URL with credentials masked for safe logger.
         
         Returns:
             Database URL with password and sensitive information redacted

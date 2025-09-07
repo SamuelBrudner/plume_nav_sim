@@ -149,8 +149,7 @@ try:
     logger = get_enhanced_logger(__name__)
     LOGGING_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGGING_AVAILABLE = False
 
 # Core cache functionality with graceful degradation

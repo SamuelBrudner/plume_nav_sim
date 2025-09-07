@@ -16,10 +16,7 @@ from __future__ import annotations
 from typing import Protocol, Union, Optional, Tuple, List, Any, runtime_checkable
 from typing_extensions import Self
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Hydra imports for configuration integration
 try:
     from omegaconf import DictConfig

@@ -1,6 +1,5 @@
 """Navigation API for plume_nav_sim."""
-
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
@@ -10,10 +9,6 @@ from gymnasium.spaces import Box, Dict as GymDict
 
 from ..core.navigator import Navigator
 from ..data.video_plume import VIDEO_FILE_MISSING_MSG
-
-logger = logging.getLogger(__name__)
-
-
 class ConfigurationError(Exception):
     """Raised when there's an error in configuration."""
     pass

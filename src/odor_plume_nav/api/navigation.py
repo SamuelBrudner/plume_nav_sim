@@ -260,7 +260,7 @@ def create_navigator(
     **kwargs: Any
 ) -> NavigatorProtocol:
     """
-    Create a Navigator instance with enhanced seed management and structured logging.
+    Create a Navigator instance with enhanced seed management and structured logger.
 
     This function provides a unified interface for creating both single-agent and multi-agent
     navigators using either direct parameter specification or Hydra DictConfig objects.
@@ -557,7 +557,7 @@ def create_video_plume(
     **kwargs: Any
 ) -> VideoPlume:
     """
-    Create a VideoPlume instance with enhanced performance monitoring and structured logging.
+    Create a VideoPlume instance with enhanced performance monitoring and structured logger.
 
     This function provides a unified interface for creating video-based odor plume environments
     using either direct parameter specification or Hydra DictConfig objects. Supports
@@ -1727,7 +1727,7 @@ def from_legacy(
     This migration function provides backward compatibility for users transitioning from
     the traditional simulation API to the Gymnasium RL interface. It takes existing
     navigator and video plume instances and wraps them in a Gymnasium-compliant environment
-    with enhanced performance monitoring, compatibility layer integration, and structured logging.
+    with enhanced performance monitoring, compatibility layer integration, and structured logger.
 
     The function serves as a bridge between legacy simulation workflows and modern RL
     training, enabling researchers to leverage their existing configurations while

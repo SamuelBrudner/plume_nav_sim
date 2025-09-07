@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 import pytest
 from plume_nav_sim.models.plume.gaussian_plume import GaussianPlumeModel, create_gaussian_plume_model
 from plume_nav_sim.models.plume import create_plume_model, AVAILABLE_PLUME_MODELS
@@ -16,7 +16,7 @@ def test_gaussian_plume_requires_contract_methods():
 
 
 def test_factory_logs_protocol_compliance(caplog):
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(logger.DEBUG):
         model = create_gaussian_plume_model({})
     assert isinstance(model, PlumeModelProtocol)
     assert "GaussianPlumeModel complies with PlumeModelProtocol" in caplog.text
@@ -42,7 +42,7 @@ def test_create_plume_model_validates_protocol(monkeypatch, caplog):
         'available': True,
     }
     monkeypatch.setitem(AVAILABLE_PLUME_MODELS, 'IncompletePlume', dummy_info)
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(logger.DEBUG):
         with pytest.raises(RuntimeError):
             create_plume_model({'type': 'IncompletePlume'})
     assert "IncompletePlume does not implement PlumeModelProtocol" in caplog.text

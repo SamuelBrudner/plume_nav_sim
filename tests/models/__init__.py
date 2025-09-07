@@ -1040,8 +1040,8 @@ def setup_modular_test_logging():
     """
     if not LOGGING_AVAILABLE:
         # Fallback to basic logging if centralized logging not available
-        import logging
-        logging.basicConfig(level=logging.WARNING)
+from loguru import logger
+        logger.basicConfig(level=logger.WARNING)
         return
     
     # Configure logging for modular testing

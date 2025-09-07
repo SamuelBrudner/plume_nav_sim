@@ -86,10 +86,7 @@ from typing import Optional, Union, Dict, List, Any, Tuple, Type, Callable
 import warnings
 
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Core protocol imports for type safety and validation
 try:
     from plume_nav_sim.protocols.navigator import NavigatorProtocol
@@ -122,9 +119,7 @@ try:
 
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
 
 # Optional dependencies for enhanced functionality

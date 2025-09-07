@@ -25,8 +25,7 @@ try:
     logger = get_logger(__name__)
 except ImportError:
     # Fallback for cases where logging_setup isn't available
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     logger.warning("Enhanced logging not available, falling back to standard logging")
 
 # Import Gymnasium spaces directly; failure will raise ImportError
@@ -932,7 +931,7 @@ class ObservationSpace:
         bounds, while other components maintain their natural scales.
         
         Enhanced for Gymnasium 0.29.x to handle step info from terminated/truncated
-        environments and provide comprehensive normalization logging.
+        environments and provide comprehensive normalization logger.
         
         Args:
             observation: Raw observation dictionary

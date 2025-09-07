@@ -137,7 +137,7 @@ class TestSingleAgentController:
     """Tests for the SingleAgentController with enhanced API compliance and performance monitoring."""
     
     def test_initialization(self) -> None:
-        """Test that a SingleAgentController initializes correctly with enhanced logging."""
+        """Test that a SingleAgentController initializes correctly with enhanced logger."""
         with correlation_context("single_agent_init_test"):
             # Test default initialization
             controller = SingleAgentController()
@@ -388,7 +388,7 @@ class TestMultiAgentController:
     """Tests for the MultiAgentController with enhanced configuration support and performance monitoring."""
     
     def test_initialization(self) -> None:
-        """Test that a MultiAgentController initializes correctly with enhanced logging."""
+        """Test that a MultiAgentController initializes correctly with enhanced logger."""
         with correlation_context("multi_agent_init_test"):
             # Test default initialization
             controller = MultiAgentController()
@@ -808,7 +808,7 @@ class TestNavigatorFactory:
     """Tests for NavigatorFactory with enhanced Hydra integration and dataclass-based configuration."""
     
     def test_single_agent_factory(self) -> None:
-        """Test the single-agent factory method with enhanced logging."""
+        """Test the single-agent factory method with enhanced logger."""
         with correlation_context("single_agent_factory_test"):
             navigator = NavigatorFactory.single_agent(
                 position=(10.0, 20.0), 
@@ -825,7 +825,7 @@ class TestNavigatorFactory:
             logger.info("Single agent factory test completed")
     
     def test_multi_agent_factory(self) -> None:
-        """Test the multi-agent factory method with enhanced logging."""
+        """Test the multi-agent factory method with enhanced logger."""
         with correlation_context("multi_agent_factory_test"):
             positions = [[0.0, 0.0], [10.0, 10.0]]
             orientations = [0.0, 90.0]

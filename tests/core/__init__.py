@@ -353,9 +353,9 @@ def setup_test_logging():
         setup_logger(config)
     except ImportError:
         # Fallback to basic logging configuration
-        import logging
-        logging.basicConfig(
-            level=logging.WARNING,
+from loguru import logger
+        logger.basicConfig(
+            level=logger.WARNING,
             format='%(levelname)s: %(message)s'
         )
 

@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import inspect
-import logging
+from loguru import logger
 from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any, Optional
-
-logger = logging.getLogger(__name__)
-
 APIVersionResult = namedtuple(
     "APIVersionResult", ["is_legacy", "confidence", "detection_method"]
 )

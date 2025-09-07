@@ -3,8 +3,7 @@
 This module provides the VideoPlume class for loading and processing video-based
 plume data for navigation simulations.
 """
-
-import logging
+from loguru import logger
 import hashlib
 import uuid
 from pathlib import Path
@@ -17,7 +16,7 @@ from plume_nav_sim.api.navigation import ConfigurationError
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 from plume_nav_sim.utils.logging_setup import get_correlation_context
 
-py_logger = logging.getLogger(__name__)
+py_logger = logger
 
 
 class VideoPlume:

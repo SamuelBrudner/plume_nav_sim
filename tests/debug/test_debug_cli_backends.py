@@ -2,7 +2,7 @@ from pathlib import Path
 import importlib.util
 import types
 import sys
-import logging
+from loguru import logger
 
 import pytest
 
@@ -66,7 +66,7 @@ sys.modules["rich.text"] = rich_text
 
 logging_setup_stub = types.ModuleType("plume_nav_sim.utils.logging_setup")
 def get_logger(name):
-    return logging.getLogger(name)
+    return logger
 
 def debug_command_timer(*args, **kwargs):
     class Dummy:

@@ -61,8 +61,7 @@ try:
     logger = get_logger(__name__)
     LOGGING_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGGING_AVAILABLE = False
 
 # Hydra configuration support
@@ -80,7 +79,7 @@ ActType = TypeVar("ActType")
 
 class CompatibleWrapper(Wrapper):
     """
-    Base wrapper class providing compatibility layer support and structured logging.
+    Base wrapper class providing compatibility layer support and structured logger.
     
     This base class handles detection of API version (legacy gym vs Gymnasium 0.29.x) 
     and automatically adjusts step() return values for backward compatibility. All 
@@ -237,7 +236,7 @@ class CompatibleWrapper(Wrapper):
         Tuple[ObsType, Dict[str, Any]],  # Standard format
         ObsType  # Legacy format (some old environments)
     ]:
-        """Reset environment with logging."""
+        """Reset environment with logger."""
         if LOGGING_AVAILABLE:
             logger.debug(
                 f"Resetting {self.__class__.__name__} wrapper",

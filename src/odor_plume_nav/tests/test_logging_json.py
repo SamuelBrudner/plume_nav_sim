@@ -2,7 +2,7 @@
 Comprehensive JSON logging validation test suite for structured Loguru observability.
 
 This module provides extensive validation of the Loguru-based structured logging system,
-ensuring JSON-formatted outputs conform to logging.yaml schema requirements and maintain
+ensuring JSON-formatted outputs conform to logger.yaml schema requirements and maintain
 machine-parseable consistency across all deployment environments. The test suite validates
 enterprise-grade observability capabilities essential for production robotics deployments.
 
@@ -78,7 +78,7 @@ class TestJSONSinkValidation:
     """
     Test suite for JSON sink validation ensuring Loguru structured logging compliance.
     
-    Validates that JSON-formatted log outputs conform to the logging.yaml schema
+    Validates that JSON-formatted log outputs conform to the logger.yaml schema
     requirements and maintain machine-parseable consistency across deployment
     environments per Section 0.4.1 requirements.
     """
@@ -141,7 +141,7 @@ class TestJSONSinkValidation:
         except json.JSONDecodeError as e:
             pytest.fail(f"Failed to parse JSON log record: {e}")
         
-        # Validate required fields per logging.yaml schema
+        # Validate required fields per logger.yaml schema
         required_fields = [
             "timestamp", "level", "logger", "message", 
             "correlation_id", "module", "metric_type"
@@ -158,12 +158,12 @@ class TestJSONSinkValidation:
         assert log_record["level"] == "INFO"
     
     def test_json_structure_compliance_with_schema(self, setup_logging_environment):
-        """Test JSON log structure compliance with logging.yaml schema definition."""
-        # Load logging.yaml schema for validation
-        logging_yaml_path = Path(__file__).parent.parent.parent.parent / "logging.yaml"
+        """Test JSON log structure compliance with logger.yaml schema definition."""
+        # Load logger.yaml schema for validation
+        logging_yaml_path = Path(__file__).parent.parent.parent.parent / "logger.yaml"
         
         if not logging_yaml_path.exists():
-            pytest.skip("logging.yaml not found for schema validation")
+            pytest.skip("logger.yaml not found for schema validation")
         
         with open(logging_yaml_path, 'r') as f:
             logging_config = yaml.safe_load(f)
@@ -367,16 +367,16 @@ class TestJSONSinkValidation:
 
 class TestLoggingYAMLSchemaValidation:
     """
-    Test suite for logging.yaml schema validation and sink configuration.
+    Test suite for logger.yaml schema validation and sink configuration.
     
     Validates proper loading and application of logging configuration from
-    logging.yaml file, ensuring dual sink architecture compliance per
+    logger.yaml file, ensuring dual sink architecture compliance per
     Section 6.6.3.2.5 requirements.
     """
     
     @pytest.fixture
     def sample_logging_config(self, tmp_path):
-        """Create sample logging.yaml configuration for testing."""
+        """Create sample logger.yaml configuration for testing."""
         config_dir = tmp_path / "config"
         config_dir.mkdir()
         
@@ -429,14 +429,14 @@ class TestLoggingYAMLSchemaValidation:
             }
         }
         
-        config_file = config_dir / "logging.yaml"
+        config_file = config_dir / "logger.yaml"
         with open(config_file, 'w') as f:
             yaml.dump(logging_config, f)
         
         return config_file, logging_config
     
     def test_logging_yaml_loading_and_parsing(self, sample_logging_config):
-        """Test successful loading and parsing of logging.yaml configuration."""
+        """Test successful loading and parsing of logger.yaml configuration."""
         config_file, expected_config = sample_logging_config
         
         # Test configuration loading
@@ -470,7 +470,7 @@ class TestLoggingYAMLSchemaValidation:
         assert json_config["retention"] == "7 days"
     
     def test_invalid_logging_yaml_handling(self, tmp_path):
-        """Test handling of invalid or malformed logging.yaml files."""
+        """Test handling of invalid or malformed logger.yaml files."""
         # Test non-existent file
         non_existent_file = tmp_path / "missing.yaml"
         result = _load_logging_yaml(non_existent_file)
@@ -501,7 +501,7 @@ class TestLoggingYAMLSchemaValidation:
         assert result is None, "Should return None for non-dictionary YAML"
     
     def test_dual_sink_architecture_setup(self, sample_logging_config, tmp_path):
-        """Test proper setup of dual sink architecture from logging.yaml."""
+        """Test proper setup of dual sink architecture from logger.yaml."""
         config_file, expected_config = sample_logging_config
         
         # Clear existing loggers
@@ -538,7 +538,7 @@ class TestLoggingYAMLSchemaValidation:
             logger.remove()
     
     def test_environment_specific_configuration_loading(self, tmp_path):
-        """Test environment-specific configuration profiles from logging.yaml."""
+        """Test environment-specific configuration profiles from logger.yaml."""
         # Create environment-specific configuration
         environments_config = {
             "environments": {
@@ -607,7 +607,7 @@ class TestCorrelationIDInjection:
     
     @pytest.fixture
     def correlation_test_environment(self, tmp_path):
-        """Setup correlation testing environment with JSON logging."""
+        """Setup correlation testing environment with JSON logger."""
         if not LOGGING_AVAILABLE:
             pytest.skip("Correlation testing requires Loguru logging")
         

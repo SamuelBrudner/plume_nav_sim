@@ -261,8 +261,8 @@ class TestCLIFrameworkIntegration:
         with patch('plume_nav_sim.cli.main._setup_cli_logging') as mock_logging:
             result = self.runner.invoke(cli, ['--verbose'])
             # Even without a subcommand, CLI function should execute and setup logging
-            mock_logging.assert_called_once()
-            args, kwargs = mock_logging.call_args
+            mock_logger.assert_called_once()
+            args, kwargs = mock_logger.call_args
             assert kwargs.get('verbose') is True
 
     def test_cli_command_registration(self):

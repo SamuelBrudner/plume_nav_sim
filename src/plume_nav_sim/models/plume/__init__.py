@@ -65,7 +65,7 @@ Technical Integration:
 
 from __future__ import annotations
 import warnings
-import logging
+from loguru import logger
 from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
 
@@ -302,7 +302,7 @@ def create_plume_model(
             # Validate protocol compliance if requested
             if validate_protocol:
                 if not isinstance(plume_model, PlumeModelProtocol):
-                    logging.getLogger(__name__).debug("Hydra instantiation produced non-compliant PlumeModel")
+                    logger.debug("Hydra instantiation produced non-compliant PlumeModel")
                     raise RuntimeError(
                         f"Instantiated model does not implement PlumeModelProtocol: "
                         f"{type(plume_model)}"
@@ -363,13 +363,13 @@ def create_plume_model(
         # Validate protocol compliance if requested
         if validate_protocol:
             if not isinstance(plume_model, PlumeModelProtocol):
-                logging.getLogger(__name__).debug(f"{model_type} does not implement PlumeModelProtocol")
+                logger.debug(f"{model_type} does not implement PlumeModelProtocol")
                 raise RuntimeError(
                     f"Instantiated model does not implement PlumeModelProtocol: "
                     f"{type(plume_model)}"
                 )
             else:
-                logging.getLogger(__name__).debug(f"{model_type} complies with PlumeModelProtocol")
+                logger.debug(f"{model_type} complies with PlumeModelProtocol")
         
         logger.info(f"Successfully created {model_type} plume model")
         return plume_model

@@ -50,10 +50,7 @@ from dataclasses import dataclass
 import pandas as pd
 from pathlib import Path
 import warnings
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 from .protocols import AgentInitializerProtocol
 
 logger.info("AgentInitializerProtocol import succeeded")

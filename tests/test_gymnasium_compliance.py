@@ -112,8 +112,7 @@ try:
     ENHANCED_LOGGING = True
     logger = get_enhanced_logger(__name__)
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     ENHANCED_LOGGING = False
     
     @contextmanager

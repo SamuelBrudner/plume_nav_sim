@@ -49,13 +49,12 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib.colors import ListedColormap
-
-import logging
+from loguru import logger
 
 try:
     from plume_nav_sim.utils.logging_setup import get_module_logger
 except ImportError as exc:  # pragma: no cover - fail fast
-    logging.getLogger(__name__).exception("Logging setup module missing")
+    logger.exception("Logging setup module missing")
     raise
 
 logger = get_module_logger(__name__)
@@ -1455,7 +1454,7 @@ def register_visualization_hooks(
 
 def _wrap_visualization_hook(func: Callable, hook_type: str) -> Callable:
     """
-    Wrap visualization hook functions with error handling and logging.
+    Wrap visualization hook functions with error handling and logger.
     
     Args:
         func: Hook function to wrap.

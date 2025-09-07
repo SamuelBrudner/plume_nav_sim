@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 import types
 from collections import namedtuple
 import pytest
@@ -49,7 +49,7 @@ class LegacyEnv:
 
 
 def test_wrap_environment_to_legacy(caplog):
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logger.DEBUG)
     dummy_detection = compat_module.APIVersionResult(True, 1.0, 'test')
     mode = compat_module.CompatibilityMode(True, dummy_detection, False, 'abc')
     env = compat_module.wrap_environment(ModernEnv(), mode)
@@ -62,7 +62,7 @@ def test_wrap_environment_to_legacy(caplog):
 
 
 def test_wrap_environment_to_modern(caplog):
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logger.DEBUG)
     dummy_detection = compat_module.APIVersionResult(False, 1.0, 'test')
     mode = compat_module.CompatibilityMode(False, dummy_detection, False, 'def')
     env = compat_module.wrap_environment(LegacyEnv(), mode)

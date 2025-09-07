@@ -67,8 +67,7 @@ try:
     from loguru import logger
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
 
 
@@ -1052,7 +1051,7 @@ class TestSeedManagerIntegration:
 
     @pytest.mark.skipif(not SEED_MANAGER_AVAILABLE, reason="SeedManager not available")
     def test_performance_monitoring_integration(self):
-        """Test integration with performance monitoring and logging."""
+        """Test integration with performance monitoring and logger."""
         # Create manager with performance monitoring enabled
         manager = SeedManager(seed=11111, enable_logging=True)
         

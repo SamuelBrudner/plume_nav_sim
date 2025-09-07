@@ -87,11 +87,8 @@ import warnings
 import inspect
 from typing import Dict, Tuple, Optional, Any, Union, List, SupportsFloat, Literal
 from pathlib import Path
-import logging
+from loguru import logger
 import numpy as np
-
-logger = logging.getLogger(__name__)
-
 # Gymnasium is a required dependency
 import gymnasium as gym
 from gymnasium.spaces import Box, Dict as DictSpace

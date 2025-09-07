@@ -54,15 +54,12 @@ from __future__ import annotations
 import time
 import warnings
 from typing import Optional, Tuple, Union, Dict, Any, Sequence
-import logging
+from loguru import logger
 from dataclasses import dataclass, field
 import numpy as np
 
 # Core protocol import for interface compliance
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
-
-logger = logging.getLogger(__name__)
-
 # Configuration management imports
 try:
     from omegaconf import DictConfig
@@ -783,7 +780,7 @@ class ConstantWindField:
         return X, Y, U, V
     
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
+        """String representation for debugging and logger."""
         return (
             f"ConstantWindField("
             f"velocity={tuple(self.velocity)}, "

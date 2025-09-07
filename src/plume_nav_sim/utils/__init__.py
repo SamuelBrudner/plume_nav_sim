@@ -6,12 +6,8 @@ raised immediately rather than providing silent fallbacks.
 """
 
 from __future__ import annotations
-
-import logging
+from loguru import logger
 from importlib import import_module
-
-logger = logging.getLogger(__name__)
-
 CORE_MODULES = [
     "frame_cache",
     "logging_setup",

@@ -70,10 +70,7 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 
 # Base sensor infrastructure
 from .base_sensor import BaseSensor
-
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 try:
     from loguru import logger as loguru_logger
 except ImportError as e:

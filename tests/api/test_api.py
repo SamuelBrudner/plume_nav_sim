@@ -1119,7 +1119,7 @@ class TestEnhancedLogging:
         assert logger is not None
 
     def test_correlation_context_manager(self):
-        """Test correlation context for structured logging."""
+        """Test correlation context for structured logger."""
         test_correlation_id = str(uuid.uuid4())
         
         with correlation_context("test_operation", correlation_id=test_correlation_id) as ctx:
@@ -1127,7 +1127,7 @@ class TestEnhancedLogging:
             # Test that context provides correlation tracking
 
     def test_performance_metrics_integration(self):
-        """Test performance metrics integration with logging."""
+        """Test performance metrics integration with logger."""
         metrics = PerformanceMetrics(
             operation_name="test_operation",
             start_time=time.time(),
@@ -1138,7 +1138,7 @@ class TestEnhancedLogging:
         assert metrics.correlation_id is not None
 
     def test_logging_in_api_functions(self):
-        """Test that API functions use structured logging."""
+        """Test that API functions use structured logger."""
         # Mock the logger where actual logging occurs during navigator creation
         with patch('plume_nav_sim.core.controllers.logger') as mock_logger:
             # Test navigator creation with logging

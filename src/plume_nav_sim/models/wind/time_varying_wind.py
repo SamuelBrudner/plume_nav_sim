@@ -56,7 +56,7 @@ Example Usage:
 
 from __future__ import annotations
 import json
-import logging
+from loguru import logger
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -64,9 +64,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
-logger = logging.getLogger(__name__)
-
 try:
     from scipy import interpolate
     from scipy.signal import periodogram
@@ -1059,7 +1056,7 @@ class TimeVaryingWindField:
         return X, Y, U, V
     
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
+        """String representation for debugging and logger."""
         return (
             f"TimeVaryingWindField("
             f"base_velocity={tuple(self.base_velocity)}, "

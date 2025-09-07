@@ -864,7 +864,7 @@ class TrainingCallbacks:
     """
     
     class ProgressCallback(BaseCallback):
-        """Callback for real-time progress monitoring and logging."""
+        """Callback for real-time progress monitoring and logger."""
         
         def __init__(self, monitor: ProgressMonitor, log_interval: int = 1000):
             super().__init__()
@@ -1317,7 +1317,7 @@ class RLTrainer:
         logger.info("Monitoring and checkpointing initialized")
     
     def _setup_callbacks(self) -> None:
-        """Setup training callbacks for monitoring and logging."""
+        """Setup training callbacks for monitoring and logger."""
         callback_list = []
         
         # Progress monitoring callback

@@ -620,7 +620,7 @@ class TestLoggingUtilities:
         assert len(results) == 5
     
     def test_logging_environment_variable_tracking(self):
-        """Test environment variable usage logging."""
+        """Test environment variable usage logger."""
         manager = get_logging_manager()
         manager.initialize(LoggingConfig(enable_environment_logging=True))
         

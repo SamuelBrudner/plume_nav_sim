@@ -887,7 +887,7 @@ class TestVideoPlumeErrorHandling:
     """Test suite for VideoPlume error handling and edge case coverage."""
     
     def test_string_representation_methods(self, mock_video_capture, temp_video_file):
-        """Test string representation methods for debugging and logging."""
+        """Test string representation methods for debugging and logger."""
         mock_cap = mock_video_capture
         mock_cap.isOpened.return_value = True
         mock_cap.get.side_effect = lambda prop: {

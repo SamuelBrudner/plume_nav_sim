@@ -79,9 +79,7 @@ try:
     )
     logger = get_enhanced_logger(__name__)
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    
+from loguru import logger
 # Version detection for API compatibility
 import inspect
 

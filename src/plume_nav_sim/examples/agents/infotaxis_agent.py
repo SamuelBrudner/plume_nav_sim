@@ -73,10 +73,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from pathlib import Path
 import json
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Core protocol and controller imports
 try:
     from plume_nav_sim.protocols.navigator import NavigatorProtocol
@@ -104,9 +101,7 @@ try:
 
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
 
 # Scipy imports for probability distributions and optimization

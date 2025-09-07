@@ -1,7 +1,7 @@
 import importlib
 import sys
 import builtins
-import logging
+from loguru import logger
 import pytest
 
 AGENT_MODULES = [
@@ -15,7 +15,7 @@ AGENT_MODULES = [
 def test_protocol_import_logs_success(module_path, caplog):
     import plume_nav_sim.examples.agents  # ensure package is loaded
 
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logger.DEBUG)
     if module_path in sys.modules:
         del sys.modules[module_path]
     importlib.import_module(module_path)

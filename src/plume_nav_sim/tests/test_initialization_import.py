@@ -1,5 +1,5 @@
 import importlib
-import logging
+from loguru import logger
 import builtins
 import sys
 
@@ -9,7 +9,7 @@ pandas = pytest.importorskip("pandas")
 
 
 def test_agent_initializer_protocol_import_logs_success(caplog):
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logger.INFO)
     import plume_nav_sim.core.initialization as init
     importlib.reload(init)
     assert "AgentInitializerProtocol import succeeded" in caplog.text

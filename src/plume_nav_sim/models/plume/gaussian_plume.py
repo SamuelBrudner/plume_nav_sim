@@ -54,16 +54,13 @@ Example Usage:
 """
 
 from __future__ import annotations
-import logging
+from loguru import logger
 import time
 import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
-
-logger = logging.getLogger(__name__)
-
 try:  # Core scientific computing dependencies
     from scipy import stats
     from scipy.spatial import distance
@@ -662,7 +659,7 @@ class GaussianPlumeModel:
         return X, Y, C
     
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
+        """String representation for debugging and logger."""
         return (
             f"GaussianPlumeModel("
             f"source_pos={tuple(self.source_position)}, "
@@ -706,7 +703,6 @@ def create_gaussian_plume_model(config: Union[GaussianPlumeConfig, Dict[str, Any
     model = GaussianPlumeModel(**config_dict)
     if not isinstance(model, PlumeModelProtocol):
         raise TypeError("GaussianPlumeModel does not implement PlumeModelProtocol")
-    logger = logging.getLogger(__name__)
     logger.debug("GaussianPlumeModel complies with PlumeModelProtocol")
     return model
 

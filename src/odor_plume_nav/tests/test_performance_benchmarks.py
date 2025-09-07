@@ -99,8 +99,7 @@ try:
     logger = get_enhanced_logger(__name__)
     ENHANCED_LOGGING_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     ENHANCED_LOGGING_AVAILABLE = False
 
 

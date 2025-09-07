@@ -24,7 +24,7 @@ from typing import Dict, Any
 from unittest.mock import patch, MagicMock, mock_open
 
 import yaml
-import logging
+from loguru import logger
 import importlib.metadata
 from hydra import initialize, compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore
@@ -479,7 +479,7 @@ class TestEnvironmentVariableInterpolation:
     def test_environment_variable_resolution_preserves_strings_and_logs(self, caplog):
         """Environment variables and defaults should remain strings and emit debug logs."""
         with patch.dict(os.environ, {"INT_VAL": "42", "BOOL_VAL": "true"}):
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logger.DEBUG):
                 assert resolve_env_value("${oc.env:INT_VAL}") == "42"
                 assert "Resolved env var INT_VAL as 42" in caplog.text
                 caplog.clear()
@@ -487,7 +487,7 @@ class TestEnvironmentVariableInterpolation:
                 assert "Resolved env var BOOL_VAL as true" in caplog.text
 
         with patch.dict(os.environ, {}, clear=True):
-            with caplog.at_level(logging.DEBUG):
+            with caplog.at_level(logger.DEBUG):
                 assert resolve_env_value("${oc.env:MISSING,default_val}") == "default_val"
                 assert "Using default value for MISSING: default_val" in caplog.text
 

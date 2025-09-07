@@ -384,7 +384,7 @@ def create_navigator_from_params(
     
     This function provides backward-compatible navigator creation while adding
     enhanced capabilities for reproducible initialization, parameter validation,
-    and configuration logging.
+    and configuration logger.
     
     Args:
         positions: Initial positions of the agents

@@ -27,7 +27,7 @@ Modular Architecture Components:
 
 import warnings
 from typing import Dict, Any, Optional, Union, List
-import logging
+from loguru import logger
 
 # Initialize structured logging; fail fast if unavailable
 try:
@@ -35,7 +35,7 @@ try:
     logger = get_enhanced_logger(__name__)
     LOGGING_AVAILABLE = True
 except Exception as e:  # pragma: no cover - critical dependency
-    logging.getLogger(__name__).error("Logging setup unavailable: %s", e)
+    logger.error("Logging setup unavailable: %s", e)
     raise
 
 # Required dependency: Hydra

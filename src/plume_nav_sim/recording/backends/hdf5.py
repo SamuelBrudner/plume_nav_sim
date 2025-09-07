@@ -54,7 +54,7 @@ Examples:
 """
 
 import json
-import logging
+from loguru import logger
 import threading
 import time
 from contextlib import contextmanager
@@ -77,9 +77,6 @@ except ImportError as _h5_err:  # pragma: no cover - dependency validation
     _H5PY_IMPORT_ERROR = _h5_err
 
 # Configure logging
-logger = logging.getLogger(__name__)
-
-
 @dataclass
 class HDF5Config:
     """

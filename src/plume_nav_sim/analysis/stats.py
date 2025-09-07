@@ -63,7 +63,7 @@ Examples:
 """
 
 import json
-import logging
+from loguru import logger
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -77,8 +77,6 @@ import scipy.stats
 from ..core.protocols import StatsAggregatorProtocol, RecorderProtocol
 
 # Configure logging
-logger = logging.getLogger(__name__)
-
 # Type definitions
 T = TypeVar('T')
 MetricsDict = Dict[str, Union[float, int, np.ndarray]]

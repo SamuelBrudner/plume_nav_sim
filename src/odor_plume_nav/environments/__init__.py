@@ -21,8 +21,7 @@ try:
     logger = get_enhanced_logger(__name__)
     LOGGING_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGGING_AVAILABLE = False
 
 # List of all available exports - will be updated based on successful imports

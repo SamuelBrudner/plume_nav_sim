@@ -13,7 +13,7 @@ instantiation and type-safe configuration management.
 
 from typing import List, Optional, Tuple, Union, Dict, Any, Literal
 from dataclasses import dataclass, field
-import logging
+from loguru import logger
 from pathlib import Path
 import os
 import re
@@ -31,9 +31,6 @@ from odor_plume_nav.domain.models import (
 )
 
 # Set up module logger
-logger = logging.getLogger(__name__)
-
-
 # Enum classes to replace Literal types.  Subclass ``str`` so equality
 # comparisons against raw string literals continue to work – this mirrors
 # the behaviour of ``typing.Literal`` while remaining Hydra friendly.

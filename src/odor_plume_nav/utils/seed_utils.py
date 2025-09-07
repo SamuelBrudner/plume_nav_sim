@@ -122,7 +122,7 @@ class SeedContext:
         return hashlib.sha256(state_str).hexdigest()[:16]
     
     def bind_logger_context(self) -> Dict[str, Any]:
-        """Get context dictionary for structured logging."""
+        """Get context dictionary for structured logger."""
         return {
             "seed_context": {
                 "global_seed": self.global_seed,
@@ -158,7 +158,7 @@ def seed_context_manager(
     Context manager for scoped seed management with automatic cleanup.
     
     Provides isolated seed context for experiments or test cases with
-    automatic restoration of previous state and comprehensive logging.
+    automatic restoration of previous state and comprehensive logger.
     
     Args:
         seed: Optional seed value for the context

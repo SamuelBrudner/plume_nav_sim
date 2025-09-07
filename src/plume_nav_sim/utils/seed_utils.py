@@ -13,15 +13,7 @@ from typing import Any, Dict, Iterator, Optional, Tuple
 import threading
 import random
 import numpy as np
-import logging
-
-try:  # Prefer loguru if available for consistency with project logging
-    from loguru import logger
-except ImportError as exc:  # pragma: no cover - explicit failure
-    logging.getLogger(__name__).error(
-        "loguru is required for seed utilities: %s", exc
-    )
-    raise
+from loguru import logger
 
 _THREAD_LOCAL = threading.local()
 from odor_plume_nav.utils.seed_manager import (

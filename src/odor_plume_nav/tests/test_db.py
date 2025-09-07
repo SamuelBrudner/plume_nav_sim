@@ -1119,10 +1119,10 @@ class TestCrossModuleIntegration:
     
     def test_integration_with_logging_system(self, test_config_dict, caplog):
         """Test integration with logging system for debugging and monitoring."""
-        import logging
+from loguru import logger
         
         # Set logging level to capture debug messages
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logger.DEBUG)
         
         session_manager = SessionManager(config=test_config_dict)
         

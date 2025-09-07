@@ -13,8 +13,7 @@ Features:
 - Dataclass-based structured configuration with Pydantic validation
 - Automatic module initialization with configuration loading
 """
-
-import logging
+from loguru import logger
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -24,7 +23,7 @@ from enum import Enum
 try:
     from dotenv import load_dotenv
 except ImportError as e:
-    logging.getLogger(__name__).error("python-dotenv is required for environment variable loading")
+    logger.error("python-dotenv is required for environment variable loading")
     raise
 
 try:
@@ -32,7 +31,7 @@ try:
     from hydra.core.config_store import ConfigStore
     from omegaconf import OmegaConf, DictConfig
 except ImportError as e:
-    logging.getLogger(__name__).error("hydra-core is required for configuration management")
+    logger.error("hydra-core is required for configuration management")
     raise
 
 # Export configuration models and utilities from this module
@@ -70,9 +69,6 @@ from odor_plume_nav.services.validator import (
 )
 
 # Module logger
-logger = logging.getLogger(__name__)
-
-
 # Dataclass-based configuration schemas for Hydra structured configs
 # These provide the dataclass implementations required by Hydra 1.3+ structured configuration
 

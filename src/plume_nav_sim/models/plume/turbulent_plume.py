@@ -58,10 +58,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Sequence
 from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Scientific computing imports
 try:
     import scipy.stats
@@ -916,7 +913,7 @@ class TurbulentPlumeModel:
         }
     
     def __repr__(self) -> str:
-        """String representation for debugging and logging."""
+        """String representation for debugging and logger."""
         return (
             f"TurbulentPlumeModel("
             f"filaments={len(self._filaments)}, "

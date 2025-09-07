@@ -50,8 +50,7 @@ Notes:
     management. The sensor maintains sub-10ms execution targets even for complex
     gradient calculations in multi-agent scenarios.
 """
-
-import logging
+from loguru import logger
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -67,9 +66,9 @@ from .base_sensor import BaseSensor
 try:  # Fail fast if Loguru is missing
     from loguru import logger
 except ImportError as exc:  # pragma: no cover - executed only when Loguru is absent
-    logging.getLogger(__name__).error(
+    logger.error(
         "loguru is required for GradientSensor but is not installed. "
-        "Install loguru to enable advanced logging."
+        "Install loguru to enable advanced logger."
     )
     raise
 

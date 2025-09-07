@@ -77,15 +77,12 @@ Authors: Blitzy Platform Engineering Team
 License: MIT
 Version: 2.0.0
 """
-
-import logging
+from loguru import logger
 import warnings
 from typing import Optional, Dict, Any, Union, TYPE_CHECKING
 from contextlib import contextmanager
 
 # Configure module logger
-logger = logging.getLogger(__name__)
-
 # Type checking imports for development tooling support
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session as SQLASession

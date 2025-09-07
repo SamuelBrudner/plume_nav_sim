@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from pathlib import Path
 import pytest
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 
 def test_invalid_video_path_raises_and_logs(caplog):
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logger.ERROR):
         with pytest.raises(ValueError, match="Video file not found"):
             VideoPlumeConfig(video_path="nonexistent_file.mp4")
     assert "Video file not found" in caplog.text

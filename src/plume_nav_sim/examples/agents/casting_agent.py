@@ -80,10 +80,7 @@ from typing import Optional, Union, Any, Dict, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import numpy as np
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 # Core navigation protocol imports
 try:
     from plume_nav_sim.protocols.navigator import NavigatorProtocol

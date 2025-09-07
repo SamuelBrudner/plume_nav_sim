@@ -80,8 +80,8 @@ from typing_extensions import Self
 try:
     from plume_nav_sim.utils.logging_setup import get_enhanced_logger, PerformanceMetrics
 except ImportError as e:
-    import logging
-    logging.getLogger(__name__).critical(
+from loguru import logger
+    logger.critical(
         "logging_setup module is required for seed_manager: %s", e
     )
     raise
@@ -186,7 +186,7 @@ class RandomState:
             return False
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert state to dictionary for serialization and logging."""
+        """Convert state to dictionary for serialization and logger."""
         return asdict(self)
     
     @classmethod

@@ -1,5 +1,5 @@
 import importlib.util
-import logging
+from loguru import logger
 import sys
 import types
 from pathlib import Path
@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 
-class _DummyLogger(logging.Logger):
+class _DummyLogger(logger.Logger):
     """Logger that ignores reserved fields in extra."""
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None):
         if extra:
-            extra = {k: v for k, v in extra.items() if k not in logging.LogRecord.__dict__}
+            extra = {k: v for k, v in extra.items() if k not in logger.LogRecord.__dict__}
             extra.pop("module", None)
         return super().makeRecord(name, level, fn, lno, msg, args, exc_info, func, extra, sinfo)
 
@@ -22,8 +22,8 @@ def debug_module(monkeypatch):
     # Stub logging setup
     logging_setup = types.ModuleType("plume_nav_sim.utils.logging_setup")
     def get_logger(name):
-        logging.setLoggerClass(_DummyLogger)
-        return logging.getLogger(name)
+        logger.setLoggerClass(_DummyLogger)
+        return logger
     logging_setup.get_logger = get_logger
 
     # Stub gui and cli modules
@@ -55,7 +55,7 @@ def debug_module(monkeypatch):
 
 
 def test_backend_detection_logs(debug_module, caplog):
-    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logger.DEBUG)
     debug_module._detect_backend_availability()
     assert any("PySide6 backend available" in r.message for r in caplog.records)
     assert any("Streamlit backend not available" in r.message for r in caplog.records)

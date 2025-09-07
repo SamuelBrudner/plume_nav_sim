@@ -1,7 +1,6 @@
 """Minimal Gymnasium environment for plume navigation tasks."""
 from __future__ import annotations
-
-import logging
+from loguru import logger
 from typing import Tuple, Optional
 
 import gymnasium as gym
@@ -9,10 +8,6 @@ from gymnasium import spaces
 import numpy as np
 
 from .spaces import default_action_space, default_observation_space
-
-logger = logging.getLogger(__name__)
-
-
 class PlumeNavEnv(gym.Env):
     """A lightweight environment exposing a 2D position state."""
 

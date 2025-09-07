@@ -1,8 +1,7 @@
 """Legacy-compatible environment creation shim for Gymnasium."""
 
 from __future__ import annotations
-
-import logging
+from loguru import logger
 import warnings
 from typing import Any
 
@@ -14,10 +13,6 @@ from plume_nav_sim.envs.compat import (
     detect_api_version,
     wrap_environment,
 )
-
-logger = logging.getLogger(__name__)
-
-
 def gym_make(env_id: str, **kwargs: Any):
     """Create a Gymnasium environment with legacy gym compatibility.
 

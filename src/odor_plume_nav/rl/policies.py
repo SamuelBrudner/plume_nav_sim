@@ -43,8 +43,8 @@ try:
     from stable_baselines3.common.utils import get_device
     import gym
 except ImportError as e:
-    import logging
-    logging.getLogger(__name__).error("stable-baselines3 dependency is missing: %s", e)
+from loguru import logger
+    logger.error("stable-baselines3 dependency is missing: %s", e)
     raise
 
 # Configuration imports
@@ -64,10 +64,7 @@ try:
     from odor_plume_nav.utils.logging_setup import get_enhanced_logger
     logger = get_enhanced_logger(__name__)
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-
-
+from loguru import logger
 class OdorConcentrationExtractor(nn.Module):
     """
     Specialized feature extractor for odor concentration data.

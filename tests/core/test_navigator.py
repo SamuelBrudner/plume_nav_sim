@@ -20,7 +20,7 @@ Key Testing Areas:
 """
 
 import time
-import logging
+from loguru import logger
 import numpy as np
 from pathlib import Path
 from unittest.mock import patch, MagicMock, Mock
@@ -67,8 +67,7 @@ try:
         PerformanceMetrics = dict
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
     correlation_context = None
     PerformanceMetrics = dict
@@ -1024,13 +1023,13 @@ def test_logging_performance_monitoring():
     # Measure performance with logging
     start_time = time.perf_counter()
     for _ in range(50):
-        controller_with_logging.step(env_array)
+        controller_with_logger.step(env_array)
     time_with_logging = time.perf_counter() - start_time
     
     # Measure performance without logging
     start_time = time.perf_counter()
     for _ in range(50):
-        controller_without_logging.step(env_array)
+        controller_without_logger.step(env_array)
     time_without_logging = time.perf_counter() - start_time
     
     # Logging overhead should be minimal (< 20% increase)

@@ -52,13 +52,10 @@ Examples:
 
 from __future__ import annotations
 import time
-import logging
+from loguru import logger
 from typing import Optional, Dict, Any, Union, Tuple, Sequence
 from pathlib import Path
 import numpy as np
-
-logger = logging.getLogger(__name__)
-
 try:
     import cv2
 except ImportError as e:

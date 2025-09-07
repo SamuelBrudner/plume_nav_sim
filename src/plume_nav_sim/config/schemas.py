@@ -7,7 +7,7 @@ This module provides Pydantic models for configuration validation.
 from typing import List, Optional, Tuple, Union, Dict, Any
 from enum import Enum
 from pathlib import Path
-import logging
+from loguru import logger
 import re
 from pydantic import (
     BaseModel,
@@ -19,9 +19,6 @@ from pydantic import (
     AliasChoices,
 )
 from hydra.core.config_store import ConfigStore
-
-logger = logging.getLogger(__name__)
-
 cs = ConfigStore.instance()
 logger.debug("Initialized Hydra ConfigStore for configuration schemas")
 ENV_VAR_PATTERN = re.compile(r"^\$\{[^}]+\}$")

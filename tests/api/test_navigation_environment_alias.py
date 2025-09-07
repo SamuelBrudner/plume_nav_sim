@@ -1,11 +1,11 @@
 from unittest.mock import patch
-import logging
+from loguru import logger
 from plume_nav_sim.api.navigation import create_gymnasium_environment
 
 
 def test_create_gymnasium_environment_normalizes_id(caplog):
     with patch('gymnasium.make') as mock_make:
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logger.INFO):
             create_gymnasium_environment(environment_id='PlumeNavSim_v0')
         mock_make.assert_called_once()
         called_id = mock_make.call_args[0][0]

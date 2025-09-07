@@ -1027,10 +1027,10 @@ class TestLoguruIntegration:
     @pytest.mark.skipif(not LOGURU_AVAILABLE, reason="Loguru not available")
     def test_structured_logging_during_validation(self, valid_hydra_structured_config, caplog):
         """Test that validation warnings are properly logged via Loguru integration."""
-        import logging
+from loguru import logger
         
         # Capture logging output
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logger.WARNING):
             # Test configuration that triggers warnings but doesn't fail
             config_with_warnings = valid_hydra_structured_config.copy()
             config_with_warnings['video_plume']['kernel_size'] = 5
@@ -1057,7 +1057,7 @@ class TestLoguruIntegration:
     
     @pytest.mark.skipif(not LOGURU_AVAILABLE, reason="Loguru not available")
     def test_performance_logging_integration(self, valid_hydra_structured_config):
-        """Test that performance monitoring integrates with Loguru structured logging."""
+        """Test that performance monitoring integrates with Loguru structured logger."""
         import time
         
         # Simulate performance-sensitive validation
@@ -1078,7 +1078,7 @@ class TestLoguruIntegration:
         assert validation_time < 1.0
     
     def test_enhanced_error_context_logging(self):
-        """Test that enhanced error reporting provides structured context for logging."""
+        """Test that enhanced error reporting provides structured context for logger."""
         invalid_config = {
             'navigator': {
                 'speed': 'invalid_speed',  # String instead of float

@@ -75,11 +75,7 @@ from typing import Any, Dict, Optional, Union, Generator, Tuple
 from unittest.mock import patch, MagicMock, Mock
 import sys
 import pathlib
-import logging
-
-logger = logging.getLogger(__name__)
-
-
+from loguru import logger
 # Update sys.path for new project structure
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
@@ -169,7 +165,7 @@ except Exception as exc:
     SEED_MANAGER_AVAILABLE = False
     SeedManager = None
     SeedConfig = None
-    logging.getLogger(__name__).warning(
+    logger.warning(
         "SeedManager unavailable: %s", exc
     )
 

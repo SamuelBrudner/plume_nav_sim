@@ -110,10 +110,7 @@ except ImportError:
 try:
     from loguru import logger
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-
-
+from loguru import logger
 @dataclass
 class SimulationConfig:
     """Configuration parameters for simulation execution.

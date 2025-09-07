@@ -671,9 +671,7 @@ class TestDataclassSecretManagement:
                 cfg = compose(config_name="config")
                 
                 # Simulate configuration logging that might occur in application
-                import logging
-                logger = logging.getLogger("test_logger")
-                
+from loguru import logger
                 # Log configuration (this should exclude sensitive fields)
                 logger.info("Configuration loaded: %s", cfg)
                 logger.debug("Database config: %s", cfg.database)

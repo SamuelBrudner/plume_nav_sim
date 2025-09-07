@@ -254,7 +254,7 @@ def initialize_system(cfg: DictConfig) -> Dict[str, Any]:
     
     # Setup logging if available
     try:
-        log_level = _safe_config_access(cfg, 'logging.level', 'INFO')
+        log_level = _safe_config_access(cfg, 'logger.level', 'INFO')
         setup_logging(level=log_level)
         system_info['logging'] = {'level': log_level}
     except Exception as e:

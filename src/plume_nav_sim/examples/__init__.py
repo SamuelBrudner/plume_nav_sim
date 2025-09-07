@@ -103,8 +103,7 @@ try:
     LOGURU_AVAILABLE = True
 except ImportError as e:
                 logger.warning(f"Example agent '{agent_name}' unavailable: {e}")
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
 
 try:
@@ -179,7 +178,7 @@ class AgentExecutionConfig:
     })
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert configuration to dictionary for serialization and logging."""
+        """Convert configuration to dictionary for serialization and logger."""
         return {
             'agent_type': self.agent_type,
             'memory_enabled': self.memory_enabled,

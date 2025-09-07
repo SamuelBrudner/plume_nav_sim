@@ -98,8 +98,7 @@ try:
     logger = get_enhanced_logger(__name__)
     LOGGING_UTILS_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGGING_UTILS_AVAILABLE = False
 
 # Benchmark testing for performance validation
@@ -136,8 +135,8 @@ class CacheIntegrationTestBase:
         monkeypatch.setenv("MPLBACKEND", "Agg")
         
         # Set up test-specific logging to avoid interference
-        import logging
-        logging.getLogger().setLevel(logging.WARNING)
+from loguru import logger
+        logger.getLogger().setLevel(logger.WARNING)
         
         yield
         

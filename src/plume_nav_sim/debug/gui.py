@@ -69,16 +69,15 @@ try:
     from plume_nav_sim.utils.logging_setup import get_module_logger
     logger = get_module_logger(__name__)
 except ImportError:  # pragma: no cover - fallback for logging setup import
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
+        handler = logger.StreamHandler()
+        formatter = logger.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logger.INFO)
 
 # Import required GUI dependencies
 try:
@@ -847,7 +846,7 @@ class QtDebugGUI(QMainWindow):
                 print(f"Breakpoint evaluation error: {e}")
     
     def _handle_breakpoint_hit(self, breakpoint, state):
-        """Handle breakpoint hit with session logging."""
+        """Handle breakpoint hit with session logger."""
         if not self.session.is_paused:
             self._toggle_play_pause()  # Auto-pause on breakpoint
         

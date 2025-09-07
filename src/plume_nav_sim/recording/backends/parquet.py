@@ -56,8 +56,7 @@ Examples:
     ... )
     >>> recorder = ParquetRecorder(config)
 """
-
-import logging
+from loguru import logger
 import warnings
 import json
 import time
@@ -80,7 +79,7 @@ except ImportError as exc:
         "PyArrow is required for ParquetRecorder. "
         "Install with: pip install pyarrow>=10.0.0"
     )
-    logging.getLogger(__name__).error(msg)
+    logger.error(msg)
     raise ImportError(msg) from exc
 
 try:
@@ -95,9 +94,6 @@ from ..import BaseRecorder
 
 
 # Configure logging for ParquetRecorder
-logger = logging.getLogger(__name__)
-
-
 @dataclass
 class ParquetConfig:
     """

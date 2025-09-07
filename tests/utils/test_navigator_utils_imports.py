@@ -1,6 +1,6 @@
 import importlib
 import builtins
-import logging
+from loguru import logger
 import sys
 from pathlib import Path
 import types
@@ -109,7 +109,7 @@ def test_logs_successful_dependency_initialization(monkeypatch, caplog):
     )
 
     def get_enhanced_logger(name):
-        return logging.getLogger(name)
+        return logger
 
     monkeypatch.setitem(
         sys.modules,
@@ -129,7 +129,7 @@ def test_logs_successful_dependency_initialization(monkeypatch, caplog):
 
     module_file = package_path / 'utils' / 'navigator_utils.py'
     top_lines = ''.join(module_file.read_text().splitlines(keepends=True)[:170])
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logger.INFO):
         exec(compile(top_lines, str(module_file), 'exec'), {})
 
     assert 'Navigator utilities dependencies initialized' in caplog.text

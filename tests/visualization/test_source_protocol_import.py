@@ -4,7 +4,7 @@ import types
 
 import pytest
 import io
-import logging
+from loguru import logger
 
 
 def test_source_protocol_import_logs_success(monkeypatch):
@@ -12,10 +12,9 @@ def test_source_protocol_import_logs_success(monkeypatch):
     stream = io.StringIO()
 
     def fake_get_module_logger(name):
-        logger = logging.getLogger(name)
-        handler = logging.StreamHandler(stream)
+        handler = logger.StreamHandler(stream)
         logger.handlers = [handler]
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logger.INFO)
         return logger
 
     import plume_nav_sim.utils.logging_setup as logging_setup

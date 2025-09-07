@@ -83,13 +83,13 @@ import pathlib
 import warnings
 import inspect
 import numpy as np
-import logging
+from loguru import logger
 
 # Enhanced logging setup for deprecation warnings and structured messaging
 try:
     from loguru import logger
 except ImportError as exc:  # pragma: no cover - defensive
-    logging.getLogger(__name__).error("Loguru is required for odor_plume_nav.api")
+    logger.error("Loguru is required for odor_plume_nav.api")
     raise ImportError("loguru is required for odor_plume_nav.api") from exc
 
 # Core dependency imports for type hints

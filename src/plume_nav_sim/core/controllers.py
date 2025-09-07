@@ -1424,7 +1424,7 @@ class SingleAgentController(BaseController):
         return self.read_single_antenna_odor(env_array)
 
     def observe(self, sensor_output: Any) -> Dict[str, Any]:
-        """Process sensor output with additional debug logging."""
+        """Process sensor output with additional debug logger."""
         log = self._logger if self._logger is not None else logger
         log.debug("SingleAgentController.observe invoked")
         return super().observe(sensor_output)
@@ -2226,7 +2226,7 @@ class MultiAgentController(BaseController):
         return self.read_single_antenna_odor(env_array)
 
     def observe(self, sensor_output: Any) -> Dict[str, Any]:
-        """Process sensor output with additional debug logging."""
+        """Process sensor output with additional debug logger."""
         log = self._logger if self._logger is not None else logger
         log.debug("MultiAgentController.observe invoked")
         return super().observe(sensor_output)

@@ -132,8 +132,8 @@ class IntegrationTestBase:
         monkeypatch.setenv("MPLBACKEND", "Agg")
         
         # Set up test-specific logging to avoid interference
-        import logging
-        logging.getLogger().setLevel(logging.WARNING)
+from loguru import logger
+        logger.getLogger().setLevel(logger.WARNING)
         
         yield
         

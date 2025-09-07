@@ -96,7 +96,7 @@ class TestJSONLoggingValidation:
     
     @pytest.fixture
     def temp_logging_yaml_config(self):
-        """Create temporary logging.yaml configuration for testing."""
+        """Create temporary logger.yaml configuration for testing."""
         config_data = {
             'sinks': {
                 'console': {
@@ -181,10 +181,10 @@ class TestJSONLoggingValidation:
     
     def test_json_sink_configuration_from_logging_yaml(self, temp_logging_yaml_config, temp_json_log_file):
         """
-        Test JSON sink configuration loading from logging.yaml per Section 0.4.1.
+        Test JSON sink configuration loading from logger.yaml per Section 0.4.1.
         
         Validates that JSON sink configuration is properly loaded and applied from
-        logging.yaml configuration file with correct format, rotation, and retention settings.
+        logger.yaml configuration file with correct format, rotation, and retention settings.
         """
         # Load configuration from YAML file
         setup_logger(logging_config_path=temp_logging_yaml_config)
@@ -196,7 +196,7 @@ class TestJSONLoggingValidation:
         test_message = "JSON sink configuration test"
         extra_data = {
             "test_category": "json_sink_validation",
-            "config_source": "logging.yaml",
+            "config_source": "logger.yaml",
             "sink_type": "json"
         }
         
@@ -220,9 +220,9 @@ class TestJSONLoggingValidation:
     
     def test_logging_yaml_structure_validation(self, temp_logging_yaml_config):
         """
-        Test logging.yaml structure validation and parsing.
+        Test logger.yaml structure validation and parsing.
         
-        Validates that logging.yaml file structure conforms to expected schema
+        Validates that logger.yaml file structure conforms to expected schema
         and all required sections are present and properly formatted.
         """
         # Load and validate YAML configuration
@@ -903,7 +903,7 @@ class TestJSONLoggingValidation:
     
     def test_cache_performance_metrics_integration(self, temp_json_log_file, sample_cache_statistics):
         """
-        Test cache performance metrics integration in structured logging.
+        Test cache performance metrics integration in structured logger.
         
         Validates that cache statistics are properly integrated into JSON logs
         with hit rates, memory usage, and eviction information.
@@ -1324,7 +1324,7 @@ class TestJSONLoggingValidation:
     
     def test_cache_hit_rate_monitoring_integration(self, temp_json_log_file):
         """
-        Test cache hit rate monitoring integration with structured logging.
+        Test cache hit rate monitoring integration with structured logger.
         
         Validates that cache hit rate monitoring integrates properly with
         JSON structured logs and threshold-based alerting.

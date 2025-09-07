@@ -77,8 +77,7 @@ try:
     from loguru import logger
     LOGURU_AVAILABLE = True
 except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from loguru import logger
     LOGURU_AVAILABLE = False
 
 # Import configuration models for type-safe configuration

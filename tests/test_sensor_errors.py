@@ -1,5 +1,5 @@
 import importlib.util
-import logging
+from loguru import logger
 import sys
 import types
 
@@ -26,7 +26,7 @@ def load_single_agent_controller():
             CacheMode=object,
         ),
         'plume_nav_sim.utils.logging_setup': types.SimpleNamespace(
-            get_enhanced_logger=logging.getLogger
+            get_enhanced_logger=logger.getLogger
         ),
         'plume_nav_sim.utils.seed_manager': types.ModuleType('seed_manager'),
         'plume_nav_sim.utils.visualization': types.ModuleType('visualization'),

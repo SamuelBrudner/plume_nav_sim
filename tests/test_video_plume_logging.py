@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 import json
 from io import StringIO
 from unittest.mock import MagicMock, patch
@@ -43,7 +43,7 @@ class DummyCapture:
 def test_logs_when_kernel_smoothing_disabled(mock_exists, caplog):
     dummy = DummyCapture()
     with patch('plume_nav_sim.data.video_plume.cv2.VideoCapture', return_value=dummy):
-        with caplog.at_level(logging.INFO):
+        with caplog.at_level(logger.INFO):
             VideoPlume(video_path="video.mp4", kernel_size=0)
     assert "Kernel smoothing disabled" in caplog.text
 

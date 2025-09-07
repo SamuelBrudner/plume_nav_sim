@@ -1,5 +1,5 @@
 import importlib.util
-import logging
+from loguru import logger
 import sys
 import types
 from pathlib import Path
@@ -37,7 +37,7 @@ def test_import_error_without_hydra(monkeypatch, caplog):
     spec = importlib.util.spec_from_file_location("constant_wind", MODULE_PATH)
     module = importlib.util.module_from_spec(spec)
     sys.modules["constant_wind"] = module
-    with caplog.at_level(logging.ERROR):
+    with caplog.at_level(logger.ERROR):
         with pytest.raises(ImportError):
             spec.loader.exec_module(module)
         assert "omegaconf" in caplog.text

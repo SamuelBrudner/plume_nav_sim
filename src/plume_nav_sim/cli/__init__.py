@@ -59,7 +59,7 @@ import platform
 import sys
 import time
 import warnings
-import logging
+from loguru import logger
 from typing import Optional, Dict, Any, List, Callable, Union
 from pathlib import Path
 
@@ -68,9 +68,6 @@ import click
 import hydra
 import numpy
 import psutil
-
-logger = logging.getLogger(__name__)
-
 # Package metadata and version information
 logger.debug("Importing plume_nav_sim version information")
 from plume_nav_sim import __version__

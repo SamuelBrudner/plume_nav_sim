@@ -121,7 +121,7 @@ from typing import Any, Dict, Generator, Optional, Union, List, Tuple, Callable
 from unittest.mock import Mock, MagicMock, patch
 from contextlib import contextmanager
 import importlib.util
-import logging
+from loguru import logger
 
 import pytest
 import numpy as np
@@ -130,10 +130,6 @@ import numpy as np
 def _has_module(name: str) -> bool:
     """Return True if the given module can be imported."""
     return importlib.util.find_spec(name) is not None
-
-
-logger = logging.getLogger(__name__)
-
 # Core testing framework imports
 try:
     from click.testing import CliRunner

@@ -57,14 +57,9 @@ Examples:
 from typing import Dict, Any, Optional, Union, List
 import time
 import warnings
-import logging
+from loguru import logger
 
 from .. import BaseRecorder
-
-
-logger = logging.getLogger(__name__)
-
-
 class NullRecorder(BaseRecorder):
     """
     Zero-overhead null implementation of RecorderProtocol for disabled recording scenarios.

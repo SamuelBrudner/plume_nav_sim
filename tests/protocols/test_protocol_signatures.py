@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from typing import Dict, Any
 
 import numpy as np
@@ -8,9 +8,6 @@ from mypy import api as mypy_api
 # Prefer modern protocol exports but retain core import for legacy types
 import plume_nav_sim.protocols as protocols_pkg
 from plume_nav_sim.core import protocols as core_protocols
-
-logger = logging.getLogger(__name__)
-
 PROTOCOL_SPECS: Dict[str, Dict[str, Any]] = {
     "SourceProtocol": {
         "methods": {

@@ -19,7 +19,7 @@ Version: 1.0.0
 """
 
 import asyncio
-import logging
+from loguru import logger
 import os
 import re
 import sqlite3
@@ -31,9 +31,6 @@ from enum import Enum
 from typing import Any, AsyncGenerator, Dict, Generator, Optional, Protocol, Union, TypedDict
 from typing import AsyncIterator
 from urllib.parse import urlparse
-
-logger = logging.getLogger(__name__)
-
 # Python 3.13+ compatibility: reintroduce asyncio.coroutine for tests
 if not hasattr(asyncio, "coroutine"):
     def _deprecated_coroutine(func):
