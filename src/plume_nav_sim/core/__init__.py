@@ -243,14 +243,8 @@ except ImportError:
     HYDRA_AVAILABLE = False
 
 # Enhanced logging support
-try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    # Fallback to basic logging
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+from loguru import logger
+LOGURU_AVAILABLE = True
 
 
 # Define public API with comprehensive exports for v1.0 architecture
@@ -775,29 +769,24 @@ except Exception as e:
 
 # Configure module-level logging context for enhanced debugging per Section 0.2.1
 try:
-    if LOGURU_AVAILABLE:
-        # Bind core module context for structured logging
-        _module_logger = logger.bind(
-            module="core",
-            version=__version__,
-            gymnasium_migration=True,
-            performance_requirements=__performance_requirements__,
-            compatibility_features=__compatibility_features__
-        )
-        
-        _module_logger.debug(
-            "Core navigation module initialized successfully",
-            exported_components=len(__all__),
-            controllers_available=True,
-            simulation_available=True,
-            hydra_available=HYDRA_AVAILABLE,
-            extensibility_hooks_enabled=True,
-            dual_api_support=True,
-        )
-        
-except ImportError:
-    # Loguru not available - continue without enhanced logging
-    pass
+    _module_logger = logger.bind(
+        module="core",
+        version=__version__,
+        gymnasium_migration=True,
+        performance_requirements=__performance_requirements__,
+        compatibility_features=__compatibility_features__
+    )
+
+    _module_logger.debug(
+        "Core navigation module initialized successfully",
+        exported_components=len(__all__),
+        controllers_available=True,
+        simulation_available=True,
+        hydra_available=HYDRA_AVAILABLE,
+        extensibility_hooks_enabled=True,
+        dual_api_support=True,
+    )
+
 except Exception as e:
     # Log setup failed - continue without structured logging
     warnings.warn(f"Enhanced logging setup failed: {e}", UserWarning, stacklevel=2)

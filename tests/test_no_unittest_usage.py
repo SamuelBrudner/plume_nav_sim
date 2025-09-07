@@ -13,3 +13,4 @@ def test_no_unittest_usage_in_selected_tests():
         source = path.read_text()
         assert re.search(r"\bimport unittest\b", source) is None
         assert "unittest.mock" not in source
+

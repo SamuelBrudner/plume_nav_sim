@@ -61,27 +61,20 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 PROTOCOLS_AVAILABLE = True
 
 # Hydra integration for configuration management
-import logging
+from loguru import logger
 
 try:
     from hydra.core.hydra_config import HydraConfig
     from omegaconf import DictConfig, OmegaConf
 except ImportError as e:  # pragma: no cover - dependency required
-    logging.getLogger(__name__).error("hydra-core is required for configuration management", exc_info=e)
-    raise
-
-# Loguru integration for enhanced logging
-try:
-    from loguru import logger
-except ImportError as e:  # pragma: no cover - dependency required
-    logging.getLogger(__name__).error("loguru is required for logging", exc_info=e)
+    logger.error("hydra-core is required for configuration management", exc_info=e)
     raise
 
 # Performance monitoring
 try:
     import psutil
 except ImportError as e:  # pragma: no cover - dependency required
-    logging.getLogger(__name__).error("psutil is required for performance monitoring", exc_info=e)
+    logger.error("psutil is required for performance monitoring", exc_info=e)
     raise
 
 
