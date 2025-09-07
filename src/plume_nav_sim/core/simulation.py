@@ -70,23 +70,13 @@ from typing import Optional, Tuple, Dict, Any, Union, List, Protocol, TYPE_CHECK
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 import numpy as np
 from dataclasses import dataclass, field
-import logging
+from loguru import logger
 
 from ..protocols import PerformanceMonitorProtocol
 from plume_nav_sim.protocols.sensor import SensorProtocol
 from ..models import create_plume_model, create_wind_field
 from .sensors import create_sensor_from_config
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
-
-try:
-    from loguru import logger as _loguru_logger
-except ImportError as exc:
-    logger.error("loguru is required for simulation", exc_info=True)
-    raise
-else:
-    logger = _loguru_logger
 
 try:
     import gymnasium as gym
@@ -747,7 +737,7 @@ class PerformanceMonitor(PerformanceMonitorProtocol):
             raise ValueError("performance_target_ms must be positive")
         self.performance_target_ms = performance_target_ms
         self._durations: Dict[str, List[float]] = {}
-        self._logger = logging.getLogger(__name__)
+        self._logger = logger.bind(component="PerformanceMonitor")
 
     def record_step_time(self, seconds: float, label: str | None = None) -> None:
         if seconds <= 0:
@@ -1073,7 +1063,7 @@ class SimulationContext:
         if self.performance_monitor is not None:
             results.performance_metrics = self.performance_monitor.get_summary()
 
-        logging.getLogger(__name__).info(
+        logger.info(
             "Simulation completed summary: steps=%d, success=%s, performance=%s",
             results.step_count,
             results.success,

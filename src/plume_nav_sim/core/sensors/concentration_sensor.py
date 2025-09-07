@@ -71,16 +71,7 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 # Base sensor infrastructure
 from .base_sensor import BaseSensor
 
-import logging
-
-logger = logging.getLogger(__name__)
-try:
-    from loguru import logger as loguru_logger
-except ImportError as e:
-    logger.error("loguru is required for ConcentrationSensor")
-    raise
-else:
-    logger = loguru_logger
+from loguru import logger
 
 try:
     from omegaconf import DictConfig

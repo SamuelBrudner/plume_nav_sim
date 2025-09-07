@@ -51,7 +51,6 @@ Notes:
     gradient calculations in multi-agent scenarios.
 """
 
-import logging
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -63,15 +62,7 @@ import numpy as np
 # Core protocol imports
 from plume_nav_sim.protocols.sensor import SensorProtocol
 from .base_sensor import BaseSensor
-
-try:  # Fail fast if Loguru is missing
-    from loguru import logger
-except ImportError as exc:  # pragma: no cover - executed only when Loguru is absent
-    logging.getLogger(__name__).error(
-        "loguru is required for GradientSensor but is not installed. "
-        "Install loguru to enable advanced logging."
-    )
-    raise
+from loguru import logger
 
 try:  # Fail fast if Hydra is missing
     from omegaconf import DictConfig, OmegaConf
