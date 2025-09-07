@@ -1,7 +1,6 @@
 import importlib
 import sys
 import types
-from unittest.mock import patch
 
 import pytest
 
@@ -79,12 +78,22 @@ def test_missing_sensor_dependency_raises():
         importlib.import_module(MODULE_PATH)
 
 
-def test_sensor_initialization_logs():
+def test_sensor_initialization_logs(monkeypatch):
     _setup_minimal_modules(include_sensors=True)
     agent_module = importlib.import_module(MODULE_PATH)
-    with patch.object(agent_module, "logger") as mock_logger:
-        agent_module.InfotaxisAgent(environment_bounds=(10.0, 10.0))
-        bound_logger = mock_logger.bind.return_value
-        assert any(
-            "Initialized" in call.args[0] for call in bound_logger.info.call_args_list
-        )
+
+    class LoggerStub:
+        def __init__(self):
+            self.messages = []
+
+        def bind(self, **kwargs):  # pragma: no cover - simple stub
+            return self
+
+        def info(self, message, *args, **kwargs):  # pragma: no cover - simple stub
+            self.messages.append(message)
+
+    logger_stub = LoggerStub()
+    monkeypatch.setattr(agent_module, "logger", logger_stub)
+
+    agent_module.InfotaxisAgent(environment_bounds=(10.0, 10.0))
+    assert any("Initialized" in msg for msg in logger_stub.messages)
