@@ -46,9 +46,10 @@ HYDRA_INSTANTIATE_AVAILABLE = True
 try:
     from plume_nav_sim.envs.video_plume import VideoPlume
     VIDEO_PLUME_AVAILABLE = True
-except ImportError as e:  # pragma: no cover - explicit failure
+except ImportError as e:  # pragma: no cover - optional dependency
     logger.error(f"VideoPlume import failed: {e}")
-    raise
+    VideoPlume = None  # type: ignore
+    VIDEO_PLUME_AVAILABLE = False
 
 # List of all available exports - will be updated based on successful imports
 __all__ = ["VideoPlume"]

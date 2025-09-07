@@ -57,6 +57,8 @@ from plume_nav_sim.utils.logging_setup import (
     log_cache_memory_pressure_violation,
 )
 
+logger = get_enhanced_logger(__name__)
+
 
 class _ProcessAdapter:
     """
@@ -141,6 +143,28 @@ class CacheMode(Enum):
             if mode.value == mode_str:
                 return mode
         raise ValueError(f"Invalid cache mode: {mode_str}. Valid modes: {[m.value for m in cls]}")
+
+
+@dataclass
+class FrameCacheConfig:
+    """Configuration parameters for :class:`FrameCache`."""
+
+    mode: Union[str, CacheMode] = CacheMode.LRU
+    memory_limit_mb: Optional[int] = None
+    enable_statistics: bool = True
+
+    def __post_init__(self) -> None:
+        """Normalize mode and emit debug configuration details."""
+        if isinstance(self.mode, str):
+            self.mode = CacheMode.from_string(self.mode)
+        logger.debug(
+            "FrameCacheConfig initialized",
+            extra={
+                "mode": self.mode.value,
+                "memory_limit_mb": self.memory_limit_mb,
+                "enable_statistics": self.enable_statistics,
+            },
+        )
 
 
 class CacheStatistics:
@@ -1328,8 +1352,9 @@ def estimate_cache_memory_usage(
 # Export public API
 __all__ = [
     'FrameCache',
-    'CacheMode', 
+    'CacheMode',
     'CacheStatistics',
+    'FrameCacheConfig',
     'create_lru_cache',
     'create_preload_cache',
     'create_no_cache',
