@@ -29,6 +29,24 @@ def test_controller_uses_loguru_exclusively():
     class SpacesFactory: ...
     pkg_envs_spaces.SpacesFactory = SpacesFactory
 
+    pkg_protocols = types.ModuleType('plume_nav_sim.protocols'); pkg_protocols.__path__ = []
+    pkg_protocols_nav = types.ModuleType('plume_nav_sim.protocols.navigator')
+    class NavigatorProtocol: ...
+    pkg_protocols_nav.NavigatorProtocol = NavigatorProtocol
+    pkg_protocols_sensor = types.ModuleType('plume_nav_sim.protocols.sensor')
+    class SensorProtocol: ...
+    pkg_protocols_sensor.SensorProtocol = SensorProtocol
+
+    pkg_core_protocols = types.ModuleType('plume_nav_sim.core.protocols')
+    class BoundaryPolicyProtocol: ...
+    class SourceProtocol: ...
+    pkg_core_protocols.BoundaryPolicyProtocol = BoundaryPolicyProtocol
+    pkg_core_protocols.SourceProtocol = SourceProtocol
+
+    pkg_core_boundaries = types.ModuleType('plume_nav_sim.core.boundaries')
+    def create_boundary_policy(*args, **kwargs): ...
+    pkg_core_boundaries.create_boundary_policy = create_boundary_policy
+
     sys.modules.update({
         'plume_nav_sim': pkg_plume,
         'plume_nav_sim.core': pkg_core,
@@ -38,6 +56,11 @@ def test_controller_uses_loguru_exclusively():
         'plume_nav_sim.utils.frame_cache': pkg_frame_cache,
         'plume_nav_sim.envs': pkg_envs,
         'plume_nav_sim.envs.spaces': pkg_envs_spaces,
+        'plume_nav_sim.protocols': pkg_protocols,
+        'plume_nav_sim.protocols.navigator': pkg_protocols_nav,
+        'plume_nav_sim.protocols.sensor': pkg_protocols_sensor,
+        'plume_nav_sim.core.protocols': pkg_core_protocols,
+        'plume_nav_sim.core.boundaries': pkg_core_boundaries,
     })
 
     spec = importlib.util.spec_from_file_location('plume_nav_sim.core.controllers', module_path)
