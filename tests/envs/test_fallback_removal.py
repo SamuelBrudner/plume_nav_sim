@@ -131,3 +131,4 @@ def test_missing_video_path_raises(monkeypatch):
     with pytest.raises(RuntimeError) as exc:
         env._init_plume_model()
     assert isinstance(exc.value.__cause__, ValueError)
+
