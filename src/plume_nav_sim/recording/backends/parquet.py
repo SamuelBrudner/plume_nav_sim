@@ -18,7 +18,6 @@ Key Features:
 - Buffered asynchronous I/O with configurable batch sizes for ≤33ms step latency
 - Schema evolution support for long-term data storage compatibility
 - Metadata preservation with embedded experimental configuration
-- Graceful fallback when PyArrow dependencies are unavailable
 - Zero-copy operations and memory-efficient data processing
 
 Performance Characteristics:
@@ -71,17 +70,18 @@ from typing import Dict, Any, Optional, Union, List, Tuple
 
 import numpy as np
 
-# External imports with graceful fallback handling
+# External imports
 try:
     import pyarrow as pa
     import pyarrow.parquet as pq
     import pyarrow.dataset as ds
-    PYARROW_AVAILABLE = True
-except ImportError:
-    pa = None
-    pq = None
-    ds = None
-    PYARROW_AVAILABLE = False
+except ImportError as exc:
+    msg = (
+        "PyArrow is required for ParquetRecorder. "
+        "Install with: pip install pyarrow>=10.0.0"
+    )
+    logging.getLogger(__name__).error(msg)
+    raise ImportError(msg) from exc
 
 try:
     import pandas as pd
@@ -245,25 +245,13 @@ class ParquetRecorder(BaseRecorder):
                 metadata=getattr(config, 'metadata', None)
             )
         
-        # Validate PyArrow availability with helpful error message
-        if not PYARROW_AVAILABLE:
-            error_msg = (
-                "PyArrow not available for ParquetRecorder. "
-                "Install with: pip install pyarrow>=10.0.0"
-            )
-            if getattr(config, 'allow_fallback', False):
-                warnings.warn(f"{error_msg}. Falling back to NoneRecorder.", UserWarning)
-                # Could implement fallback to NoneRecorder here
-                raise ImportError(error_msg)
-            else:
-                raise ImportError(error_msg)
-        
         if not PANDAS_AVAILABLE:
-            warnings.warn(
+            msg = (
                 "Pandas not available. Some features may be limited. "
-                "Install with: pip install pandas>=1.5.0", 
-                UserWarning
+                "Install with: pip install pandas>=1.5.0"
             )
+            logger.warning(msg)
+            warnings.warn(msg, UserWarning)
         
         # Initialize base recorder
         super().__init__(base_config)
