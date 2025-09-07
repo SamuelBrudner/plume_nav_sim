@@ -58,6 +58,16 @@ pip install plume_nav_sim[core]
 pip install plume_nav_sim[all]
 ```
 
+### Development Installation
+To work from a source checkout, install the package in editable mode to ensure
+all dependencies are available:
+
+```bash
+pip install -e .
+# or
+./setup_env.sh --dev
+```
+
 ### Optional Dependency Groups
 
 | Group | Components | Install Command |
