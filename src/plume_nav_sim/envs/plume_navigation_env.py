@@ -1016,63 +1016,18 @@ class PlumeNavigationEnv(gym.Env):
                     angular_velocity=0.0  # Start with no rotation
                 )
             else:
-                # Minimal fallback navigator for testing
-                class MockNavigator:
-                    def __init__(self, position, orientation, max_speed):
-                        self.positions = np.array([position], dtype=np.float32)
-                        self.orientations = np.array([orientation], dtype=np.float32)
-                        self.speeds = np.array([0.0], dtype=np.float32)
-                        self.max_speeds = np.array([max_speed], dtype=np.float32)
-                        self.angular_velocities = np.array([0.0], dtype=np.float32)
-                        self.num_agents = 1
-                    
-                    def reset(self, **kwargs):
-                        if 'position' in kwargs:
-                            self.positions[0] = kwargs['position']
-                        if 'orientation' in kwargs:
-                            self.orientations[0] = kwargs['orientation']
-                        if 'speed' in kwargs:
-                            self.speeds[0] = kwargs['speed']
-                        if 'angular_velocity' in kwargs:
-                            self.angular_velocities[0] = kwargs['angular_velocity']
-                    
-                    def step(self, env_array, dt=1.0):
-                        # Simple integration step
-                        angle = np.radians(self.orientations[0])
-                        dx = self.speeds[0] * np.cos(angle) * dt
-                        dy = self.speeds[0] * np.sin(angle) * dt
-                        self.positions[0] += [dx, dy]
-                        self.orientations[0] += np.degrees(self.angular_velocities[0] * dt)
-                        self.orientations[0] = self.orientations[0] % 360
-                    
-                    def sample_odor(self, env_array):
-                        pos = self.positions[0]
-                        h, w = env_array.shape
-                        x, y = int(pos[0]), int(pos[1])
-                        if 0 <= x < w and 0 <= y < h:
-                            return float(env_array[y, x])
-                        return 0.0
-                    
-                    def sample_multiple_sensors(self, env_array, **kwargs):
-                        # Simple multi-sensor implementation
-                        return np.array([self.sample_odor(env_array)], dtype=np.float32)
-                    
-                    def compute_additional_obs(self, base_obs):
-                        return {}
-                    
-                    def compute_extra_reward(self, base_reward, info):
-                        return 0.0
-                    
-                    def on_episode_end(self, final_info):
-                        pass
-                
-                self.navigator = MockNavigator(initial_position, initial_orientation, max_speed)
+                logger.error("NavigatorProtocol implementation not available")
+                raise DependencyNotInstalled(
+                    "NavigatorProtocol implementation is required for PlumeNavigationEnv"
+                )
             
             logger.debug(
                 f"Navigator initialized at {initial_position} with "
                 f"max_speed={max_speed}, max_angular_velocity={max_angular_velocity}"
             )
             
+        except DependencyNotInstalled:
+            raise
         except Exception as e:
             raise RuntimeError(f"Failed to initialize navigator: {e}") from e
     
@@ -1173,10 +1128,8 @@ class PlumeNavigationEnv(gym.Env):
                             low=0.0, high=360.0, shape=(1,), dtype=np.float32
                         )
                     else:
-                        # Generic sensor fallback - matches observation generation logic
-                        obs_spaces[f"sensor_{i}_{sensor_name}_output"] = Box(
-                            low=0.0, high=1.0, shape=(1,), dtype=np.float32
-                        )
+                        logger.error(f"Unsupported sensor type: {type(sensor).__name__}")
+                        raise ValueError(f"Unsupported sensor type: {type(sensor).__name__}")
                 
                 # Add wind components if enabled
                 if self._wind_enabled:
@@ -1192,6 +1145,8 @@ class PlumeNavigationEnv(gym.Env):
                 f"Sensor count: {len(self.sensors)}, Wind enabled: {self._wind_enabled}"
             )
             
+        except ValueError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Failed to initialize spaces: {e}") from e
     
