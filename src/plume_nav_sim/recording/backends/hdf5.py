@@ -13,7 +13,6 @@ Key Features:
     - Compression support (gzip, lzf, szip) with configurable chunk sizes for time-series data
     - Structured group hierarchy (/run_id/episode_id/datasets) for scalable multi-experiment organization
     - Attribute metadata preservation with HDF5 attributes for experimental parameters
-    - Graceful fallback when h5py dependencies are unavailable per optional dependency handling
 
 Performance Characteristics:
     - F-017-RQ-001: <1ms overhead per 1000 steps when disabled for minimal simulation impact
@@ -65,19 +64,17 @@ from typing import Dict, Any, Optional, Union, List, Tuple, TYPE_CHECKING
 
 import numpy as np
 
-# Import BaseRecorder from recording framework
-from .. import BaseRecorder, RecorderConfig
-
-# HDF5 dependency required
-_H5PY_IMPORT_ERROR = None
-try:
-    import h5py  # type: ignore
-except ImportError as _h5_err:  # pragma: no cover - dependency validation
-    h5py = None  # type: ignore
-    _H5PY_IMPORT_ERROR = _h5_err
-
 # Configure logging
 logger = logging.getLogger(__name__)
+
+try:  # pragma: no cover - dependency validation
+    import h5py  # type: ignore
+except ImportError as err:  # pragma: no cover - dependency validation
+    logger.error("h5py is required for HDF5Recorder but is not installed")
+    raise
+
+# Import BaseRecorder from recording framework
+from .. import BaseRecorder, RecorderConfig
 
 
 @dataclass
@@ -175,7 +172,6 @@ class HDF5Recorder(BaseRecorder):
     - Comprehensive compression support with configurable algorithms and options
     - Scientific metadata preservation with HDF5 attributes and embedded documentation
     - Buffered asynchronous I/O coordination for minimal simulation performance impact
-    - Graceful fallback handling when h5py dependencies are unavailable
     - Cross-platform compatibility and long-term data preservation capabilities
     
     Performance Characteristics:
@@ -248,7 +244,7 @@ class HDF5Recorder(BaseRecorder):
                    Can be HDF5Config or RecorderConfig with HDF5-specific parameters.
         
         Raises:
-            ImportError: If h5py is not available and graceful fallback is disabled
+            ImportError: If h5py is not installed
             ValueError: If configuration parameters are invalid or incompatible
             OSError: If file system permissions prevent HDF5 file creation
         """
@@ -272,10 +268,6 @@ class HDF5Recorder(BaseRecorder):
                 compression=config.compression if config.compression != 'none' else None,
                 buffer_size=config.buffer_size
             )
-        
-        # Validate h5py dependency
-        if h5py is None:  # pragma: no cover - defensive
-            raise ImportError("h5py is required for HDF5Recorder") from _H5PY_IMPORT_ERROR
         
         # HDF5-specific state
         self._h5_file: Optional["h5py.File"] = None

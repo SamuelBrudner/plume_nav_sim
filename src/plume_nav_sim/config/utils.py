@@ -134,12 +134,6 @@ def get_config_schema(schema_name: str) -> Optional[Type[BaseModel]]:
         Configuration schema class or None if not found
     """
     schemas = {
-        "navigator": NavigatorConfig,
-        "single_agent": SingleAgentConfig,
-        "multi_agent": MultiAgentConfig,
-        "video_plume": VideoPlumeConfig,
-        "simulation": SimulationConfig,
-        # Class-name keys for convenience
         "NavigatorConfig": NavigatorConfig,
         "SingleAgentConfig": SingleAgentConfig,
         "MultiAgentConfig": MultiAgentConfig,
@@ -147,8 +141,10 @@ def get_config_schema(schema_name: str) -> Optional[Type[BaseModel]]:
         "SimulationConfig": SimulationConfig,
     }
 
-    # Try exact key first, then lower-case fallback
-    return schemas.get(schema_name) or schemas.get(schema_name.lower())
+    try:
+        return schemas[schema_name]
+    except KeyError as exc:
+        raise KeyError(f"Unknown configuration schema: {schema_name}") from exc
 
 
 def register_config_schemas():

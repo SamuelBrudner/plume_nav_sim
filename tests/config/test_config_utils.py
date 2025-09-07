@@ -25,6 +25,7 @@ from unittest.mock import patch, MagicMock, mock_open
 
 import yaml
 import logging
+import importlib.metadata
 from hydra import initialize, compose, initialize_config_dir
 from hydra.core.config_store import ConfigStore
 from hydra.core.global_hydra import GlobalHydra
@@ -32,6 +33,12 @@ from omegaconf import DictConfig, OmegaConf
 from pydantic import ValidationError
 
 # Import from the new config module structure
+class _DummyDistribution:
+    version = "0.0"
+
+
+importlib.metadata.distribution = lambda name: _DummyDistribution()
+
 from plume_nav_sim.config import (
     NavigatorConfig,
     SingleAgentConfig,
@@ -623,8 +630,13 @@ class TestConfigStoreIntegration:
             assert retrieved_schema == expected_class
         
         # Test invalid schema name
-        invalid_schema = get_config_schema("NonexistentConfig")
-        assert invalid_schema is None
+        with pytest.raises(KeyError):
+            get_config_schema("NonexistentConfig")
+
+    def test_get_config_schema_is_case_sensitive(self):
+        """Schema lookup should not silently fall back on lowercase."""
+        with pytest.raises(KeyError):
+            get_config_schema("navigator")
 
 
 class TestConfigurationSecurity:
