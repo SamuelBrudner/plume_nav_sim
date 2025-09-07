@@ -84,13 +84,8 @@ except ImportError:
     OmegaConf = None
 
 # Enhanced logging integration
-try:
-    from loguru import logger
-    LOGURU_AVAILABLE = True
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
-    LOGURU_AVAILABLE = False
+from loguru import logger
+LOGURU_AVAILABLE = True
 
 # Performance monitoring
 try:
