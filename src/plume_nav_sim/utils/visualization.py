@@ -187,17 +187,16 @@ class SimulationVisualization:
             matplotlib.use('Agg')
             logger.debug("Configured matplotlib for headless mode")
         
-        # Initialize figure and axes.  Test suites sometimes patch
-        # ``plt.subplots`` without specifying a return value which results in
-        # a single ``MagicMock`` object.  The fallback below ensures that the
-        # constructor still succeeds in such scenarios while allowing the
-        # patch to register the call.
+        # Initialize figure and axes. Fail fast if ``plt.subplots`` is improperly
+        # patched and does not return the expected ``(figure, axes)`` tuple.
         subplots_result = plt.subplots(figsize=figsize, dpi=dpi)
-        if isinstance(subplots_result, tuple) and len(subplots_result) == 2:
-            self.fig, self.ax = subplots_result
-        else:  # pragma: no cover - exercised only in patched environments
-            self.fig = plt.figure(figsize=figsize, dpi=dpi)
-            self.ax = self.fig.add_subplot(111)
+        if not (isinstance(subplots_result, tuple) and len(subplots_result) == 2):
+            logger.error(
+                "plt.subplots returned invalid result %r; expected (figure, axes) tuple"
+                % (subplots_result,)
+            )
+            raise TypeError("plt.subplots must return (figure, axes) tuple")
+        self.fig, self.ax = subplots_result
         
         # Store configuration parameters
         self.config = {
