@@ -46,7 +46,6 @@ import warnings
 import tempfile
 from pathlib import Path
 import contextlib
-from unittest import mock
 
 # Import integration testing infrastructure with migration support
 from tests.integration import (
@@ -381,7 +380,7 @@ def test_performance_regression_detection():
     perf.validate_performance_sla()
 
 
-def test_backward_compatibility_layer():
+def test_backward_compatibility_layer(mocker):
     """
     Test backward compatibility layer for legacy Gym environments.
     
@@ -450,7 +449,7 @@ def test_backward_compatibility_layer():
                 DeprecationWarning,
                 stacklevel=2
             )
-            return mock.MagicMock()
+            return mocker.MagicMock()
         
         with warnings.catch_warnings(record=True) as gym_warnings:
             warnings.simplefilter("always")
@@ -762,5 +761,6 @@ def run_migration_performance_benchmark():
         # Record comprehensive metrics
         perf.record_performance_metric("total_benchmark_time_ms", total_benchmark_time)
         perf.record_performance_metric("component_count", len(perf.component_timings))
-        
+
         return perf.get_timing_metrics()
+
