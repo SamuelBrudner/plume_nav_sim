@@ -88,3 +88,47 @@ def test_missing_video_file_raises(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError) as exc:
         env._init_plume_model()
     assert isinstance(exc.value.__cause__, FileNotFoundError)
+
+
+def test_plume_model_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._plume_model_config = {"type": "GaussianPlumeModel"}
+    env._video_path = None
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_plume_model()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_wind_field_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._wind_field_config = {"type": "ConstantWindField"}
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_wind_field()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_sensors_config_requires_navigator(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._sensors_config = [{"type": "ConcentrationSensor"}]
+    env._legacy_multi_sensor = False
+    env._legacy_num_sensors = 0
+    monkeypatch.setattr(env_module, "NAVIGATOR_AVAILABLE", False)
+    with pytest.raises(RuntimeError) as exc:
+        env._init_sensors()
+    assert isinstance(exc.value.__cause__, env_module.DependencyNotInstalled)
+
+
+def test_missing_video_path_raises(monkeypatch):
+    env_module = load_env_module()
+    env = object.__new__(env_module.PlumeNavigationEnv)
+    env._plume_model_config = None
+    env._video_path = None
+    with pytest.raises(RuntimeError) as exc:
+        env._init_plume_model()
+    assert isinstance(exc.value.__cause__, ValueError)
+
