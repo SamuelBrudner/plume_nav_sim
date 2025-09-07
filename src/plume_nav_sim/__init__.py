@@ -192,7 +192,16 @@ _gymnasium_registered = True
 # CONDITIONAL IMPORTS AND API EXPORTS
 # =============================================================================
 
-# Core API functions - always available
+# Utility for creating placeholders when optional components fail to import
+def _missing_component(name: str, exc: Exception):
+    """Return a callable that raises an informative ImportError when used."""
+    def _unavailable(*args, **kwargs):  # pragma: no cover - simple helper
+        raise ImportError(f"{name} is unavailable: {exc}") from exc
+
+    return _unavailable
+
+
+# Core API functions - attempt import but continue if unavailable
 try:
     from plume_nav_sim.api import (
         create_navigator,
@@ -201,9 +210,15 @@ try:
         visualize_simulation_results,
     )
     _core_api_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001 - broad to surface any failure
     logger.error("Failed to import core API functions: %s", e)
-    raise
+    create_navigator = _missing_component("create_navigator", e)
+    create_video_plume = _missing_component("create_video_plume", e)
+    run_plume_simulation = _missing_component("run_plume_simulation", e)
+    visualize_simulation_results = _missing_component(
+        "visualize_simulation_results", e
+    )
+    _core_api_available = False
 
 # Enhanced API factory functions
 try:
@@ -213,9 +228,12 @@ try:
         run_experiment_sweep,
     )
     _enhanced_api_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import enhanced API factory functions: %s", e)
-    raise
+    create_simulation_runner = _missing_component("create_simulation_runner", e)
+    create_batch_processor = _missing_component("create_batch_processor", e)
+    run_experiment_sweep = _missing_component("run_experiment_sweep", e)
+    _enhanced_api_available = False
 
 # Core navigation components
 try:
@@ -224,12 +242,17 @@ try:
         SingleAgentController,
         MultiAgentController,
         NavigatorProtocol,
-        run_simulation
+        run_simulation,
     )
     _core_navigation_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import core navigation components: %s", e)
-    raise
+    Navigator = _missing_component("Navigator", e)
+    SingleAgentController = _missing_component("SingleAgentController", e)
+    MultiAgentController = _missing_component("MultiAgentController", e)
+    NavigatorProtocol = _missing_component("NavigatorProtocol", e)
+    run_simulation = _missing_component("run_simulation", e)
+    _core_navigation_available = False
 
 # New v1.0 protocol interfaces for pluggable architecture
 from plume_nav_sim.core.protocols import (
@@ -246,9 +269,11 @@ try:
     from plume_nav_sim.envs import VideoPlume
     from plume_nav_sim.envs import PlumeNavigationEnv
     _env_components_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import environment components: %s", e)
-    raise
+    VideoPlume = _missing_component("VideoPlume", e)
+    PlumeNavigationEnv = _missing_component("PlumeNavigationEnv", e)
+    _env_components_available = False
 
 # Configuration management
 try:
@@ -261,9 +286,15 @@ try:
         save_config,
     )
     _config_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import configuration management components: %s", e)
-    raise
+    NavigatorConfig = _missing_component("NavigatorConfig", e)
+    SingleAgentConfig = _missing_component("SingleAgentConfig", e)
+    MultiAgentConfig = _missing_component("MultiAgentConfig", e)
+    VideoPlumeConfig = _missing_component("VideoPlumeConfig", e)
+    load_config = _missing_component("load_config", e)
+    save_config = _missing_component("save_config", e)
+    _config_available = False
 
 # Utility functions
 try:
@@ -284,9 +315,20 @@ try:
         LOG_LEVELS,
     )
     _utils_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import utility functions: %s", e)
-    raise
+    load_yaml = _missing_component("load_yaml", e)
+    save_yaml = _missing_component("save_yaml", e)
+    load_json = _missing_component("load_json", e)
+    save_json = _missing_component("save_json", e)
+    load_numpy = _missing_component("load_numpy", e)
+    save_numpy = _missing_component("save_numpy", e)
+    setup_logger = _missing_component("setup_logger", e)
+    get_module_logger = _missing_component("get_module_logger", e)
+    DEFAULT_FORMAT = None
+    MODULE_FORMAT = None
+    LOG_LEVELS = None
+    _utils_available = False
 
 # Gymnasium and RL integration features
 try:
@@ -301,75 +343,92 @@ try:
         RewardShapingWrapper,
     )
     _gymnasium_components_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import Gymnasium integration features: %s", e)
-    raise
+    GymnasiumEnv = _missing_component("GymnasiumEnv", e)
+    ActionSpace = _missing_component("ActionSpace", e)
+    ObservationSpace = _missing_component("ObservationSpace", e)
+    NormalizationWrapper = _missing_component("NormalizationWrapper", e)
+    FrameStackWrapper = _missing_component("FrameStackWrapper", e)
+    RewardShapingWrapper = _missing_component("RewardShapingWrapper", e)
+    _gymnasium_components_available = False
 
 # Gymnasium environment factory
 try:
     from plume_nav_sim.api.navigation import create_gymnasium_environment
     _gymnasium_factory_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import Gymnasium environment factory: %s", e)
-    raise
+    create_gymnasium_environment = _missing_component(
+        "create_gymnasium_environment", e
+    )
+    _gymnasium_factory_available = False
 
 # Shim compatibility layer
 try:
     from plume_nav_sim.shims import gym_make
     _shim_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import shim compatibility layer: %s", e)
-    raise
+    gym_make = _missing_component("gym_make", e)
+    _shim_available = False
 
 # Recording framework components for v1.0 architecture
 try:
     from plume_nav_sim.recording import (
         BaseRecorder,
         RecorderFactory,
-        RecorderManager
+        RecorderManager,
     )
     _recording_components_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import recording framework components: %s", e)
-    raise
+    BaseRecorder = _missing_component("BaseRecorder", e)
+    RecorderFactory = _missing_component("RecorderFactory", e)
+    RecorderManager = _missing_component("RecorderManager", e)
+    _recording_components_available = False
 
 # Analysis framework components for v1.0 architecture
 try:
     from plume_nav_sim.analysis import (
         StatsAggregator,
-        generate_summary
+        generate_summary,
     )
     _analysis_components_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import analysis framework components: %s", e)
-    raise
+    StatsAggregator = _missing_component("StatsAggregator", e)
+    generate_summary = _missing_component("generate_summary", e)
+    _analysis_components_available = False
 
 # Debug framework components for v1.0 architecture
 try:
     from plume_nav_sim.debug import (
         DebugGUI,
-        plot_initial_state
+        plot_initial_state,
     )
     _debug_components_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Failed to import debug framework components: %s", e)
-    raise
+    DebugGUI = _missing_component("DebugGUI", e)
+    plot_initial_state = _missing_component("plot_initial_state", e)
+    _debug_components_available = False
 
 # Check for stable-baselines3 availability
 try:
-    import stable_baselines3
+    import stable_baselines3  # noqa: F401
     _stable_baselines3_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("stable-baselines3 is required but failed to import: %s", e)
-    raise
+    _stable_baselines3_available = False
 
 # Check for Gymnasium availability
 try:
-    import gymnasium
+    import gymnasium  # noqa: F401
     _gymnasium_available = True
-except ImportError as e:
+except Exception as e:  # noqa: BLE001
     logger.error("Gymnasium is required but failed to import: %s", e)
-    raise
+    _gymnasium_available = False
 
 # =============================================================================
 # FEATURE AVAILABILITY MAPPING
