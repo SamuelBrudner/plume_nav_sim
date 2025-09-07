@@ -39,12 +39,11 @@ Examples:
 
 from __future__ import annotations
 from typing import Union, Optional, Dict, Any, Tuple, List
-import logging
 import numpy as np
 
 from .protocols import ActionInterfaceProtocol
+from loguru import logger
 
-logger = logging.getLogger(__name__)
 logger.debug("Loaded actions module with ActionInterfaceProtocol from protocols")
 
 # Gymnasium is a required dependency

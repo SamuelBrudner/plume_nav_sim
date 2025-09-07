@@ -32,14 +32,12 @@ from typing_extensions import Self
 import numpy as np
 import warnings
 import inspect
-import logging
+from loguru import logger
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 from plume_nav_sim.protocols import PlumeModelProtocol, SensorProtocol
 
 # Use shared NavigatorProtocol definition
 from plume_nav_sim.protocols.navigator import NavigatorProtocol
-
-logger = logging.getLogger(__name__)
 
 # Hydra imports for configuration integration
 try:
