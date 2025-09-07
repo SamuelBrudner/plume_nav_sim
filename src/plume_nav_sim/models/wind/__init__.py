@@ -68,11 +68,31 @@ import warnings
 from typing import Dict, Any, List, Optional, Union, Type, Tuple
 from pathlib import Path
 
-from loguru import logger
+import logging
 import numpy as np
 
+from plume_nav_sim.utils.logging_setup import get_module_logger, setup_logger
 from plume_nav_sim.protocols.wind_field import WindFieldProtocol
 from omegaconf import DictConfig
+
+_CONFIG_PATH = Path(__file__).resolve().parents[4] / "logging.yaml"
+try:  # pragma: no cover - defensive
+    import plume_nav_sim as _root_pkg
+    _bootstrapped = getattr(_root_pkg, "_BOOTSTRAP_COMPLETED", False)
+except Exception:  # pragma: no cover - defensive
+    _bootstrapped = False
+
+if not _bootstrapped:
+    try:  # pragma: no cover - configuration load
+        setup_logger(logging_config_path=_CONFIG_PATH)
+    except Exception:  # pragma: no cover - fallback if config fails
+        logging.basicConfig(level=logging.INFO)
+    logger = get_module_logger(__name__)
+    logger.warning(
+        "Lightweight plume_nav_sim stubs detected; running in limited mode without full package bootstrap.",
+    )
+else:
+    logger = get_module_logger(__name__)
 
 # Import all wind field implementations without graceful fallbacks
 from .constant_wind import ConstantWindField, ConstantWindFieldConfig, create_constant_wind_field

@@ -21,10 +21,20 @@ import inspect
 import sys
 import atexit
 import logging
+from pathlib import Path
+
+from plume_nav_sim.utils.logging_setup import get_module_logger, setup_logger
 
 __version__ = "1.0.0"
 
-logger = logging.getLogger(__name__)
+_LOGGING_CONFIG = Path(__file__).resolve().parents[2] / "logging.yaml"
+try:  # pragma: no cover - exercised in tests
+    setup_logger(logging_config_path=_LOGGING_CONFIG)
+except Exception:  # pragma: no cover - fall back to basic logging if config fails
+    logging.basicConfig(level=logging.INFO)
+
+logger = get_module_logger(__name__)
+_BOOTSTRAP_COMPLETED = True
 
 # =============================================================================
 # LEGACY GYM DETECTION AND DEPRECATION WARNING SYSTEM
@@ -204,7 +214,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _core_api_available = False
     create_navigator = create_video_plume = run_plume_simulation = visualize_simulation_results = None  # type: ignore
-    logger.error("Failed to import core API functions: %s", e)
+    logger.error(f"Failed to import core API functions: {e}")
 
 # Enhanced API factory functions
 try:
@@ -217,7 +227,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _enhanced_api_available = False
     create_simulation_runner = create_batch_processor = run_experiment_sweep = None  # type: ignore
-    logger.error("Failed to import enhanced API factory functions: %s", e)
+    logger.error(f"Failed to import enhanced API factory functions: {e}")
 
 # Core navigation components
 try:
@@ -232,7 +242,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _core_navigation_available = False
     Navigator = SingleAgentController = MultiAgentController = NavigatorProtocol = run_simulation = None  # type: ignore
-    logger.error("Failed to import core navigation components: %s", e)
+    logger.error(f"Failed to import core navigation components: {e}")
 
 # New v1.0 protocol interfaces for pluggable architecture
 try:
@@ -247,7 +257,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _v1_protocols_available = False
     SourceProtocol = BoundaryPolicyProtocol = ActionInterfaceProtocol = RecorderProtocol = StatsAggregatorProtocol = None  # type: ignore
-    logger.error("Failed to import protocol interfaces: %s", e)
+    logger.error(f"Failed to import protocol interfaces: {e}")
 
 # Environment components
 try:
@@ -257,7 +267,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _env_components_available = False
     VideoPlume = PlumeNavigationEnv = None  # type: ignore
-    logger.error("Failed to import environment components: %s", e)
+    logger.error(f"Failed to import environment components: {e}")
 
 # Configuration management
 try:
@@ -273,7 +283,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _config_available = False
     NavigatorConfig = SingleAgentConfig = MultiAgentConfig = VideoPlumeConfig = load_config = save_config = None  # type: ignore
-    logger.error("Failed to import configuration management components: %s", e)
+    logger.error(f"Failed to import configuration management components: {e}")
 
 # Utility functions
 try:
@@ -298,7 +308,7 @@ except Exception as e:  # pragma: no cover - optional
     _utils_available = False
     load_yaml = save_yaml = load_json = save_json = load_numpy = save_numpy = None  # type: ignore
     setup_logger = get_module_logger = DEFAULT_FORMAT = MODULE_FORMAT = LOG_LEVELS = None  # type: ignore
-    logger.error("Failed to import utility functions: %s", e)
+    logger.error(f"Failed to import utility functions: {e}")
 
 # Gymnasium and RL integration features
 try:
@@ -316,7 +326,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _gymnasium_components_available = False
     GymnasiumEnv = ActionSpace = ObservationSpace = NormalizationWrapper = FrameStackWrapper = RewardShapingWrapper = None  # type: ignore
-    logger.error("Failed to import Gymnasium integration features: %s", e)
+    logger.error(f"Failed to import Gymnasium integration features: {e}")
 
 # Gymnasium environment factory
 try:
@@ -325,7 +335,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _gymnasium_factory_available = False
     create_gymnasium_environment = None  # type: ignore
-    logger.error("Failed to import Gymnasium environment factory: %s", e)
+    logger.error(f"Failed to import Gymnasium environment factory: {e}")
 
 # Shim compatibility layer
 try:
@@ -334,7 +344,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _shim_available = False
     gym_make = None  # type: ignore
-    logger.error("Failed to import shim compatibility layer: %s", e)
+    logger.error(f"Failed to import shim compatibility layer: {e}")
 
 # Recording framework components for v1.0 architecture
 try:
@@ -347,7 +357,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _recording_components_available = False
     BaseRecorder = RecorderFactory = RecorderManager = None  # type: ignore
-    logger.error("Failed to import recording framework components: %s", e)
+    logger.error(f"Failed to import recording framework components: {e}")
 
 # Analysis framework components for v1.0 architecture
 try:
@@ -359,7 +369,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _analysis_components_available = False
     StatsAggregator = generate_summary = None  # type: ignore
-    logger.error("Failed to import analysis framework components: %s", e)
+    logger.error(f"Failed to import analysis framework components: {e}")
 
 # Debug framework components for v1.0 architecture
 try:
@@ -371,7 +381,7 @@ try:
 except Exception as e:  # pragma: no cover - optional
     _debug_components_available = False
     DebugGUI = plot_initial_state = None  # type: ignore
-    logger.error("Failed to import debug framework components: %s", e)
+    logger.error(f"Failed to import debug framework components: {e}")
 
 # Check for stable-baselines3 availability
 try:
@@ -379,7 +389,7 @@ try:
     _stable_baselines3_available = True
 except Exception as e:  # pragma: no cover - optional
     _stable_baselines3_available = False
-    logger.error("stable-baselines3 is required but failed to import: %s", e)
+    logger.error(f"stable-baselines3 is required but failed to import: {e}")
 
 # Check for Gymnasium availability
 try:
@@ -387,7 +397,7 @@ try:
     _gymnasium_available = True
 except Exception as e:  # pragma: no cover - optional
     _gymnasium_available = False
-    logger.error("Gymnasium is required but failed to import: %s", e)
+    logger.error(f"Gymnasium is required but failed to import: {e}")
 
 # =============================================================================
 # FEATURE AVAILABILITY MAPPING
