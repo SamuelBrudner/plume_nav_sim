@@ -1862,9 +1862,13 @@ def validate_sensor_observation_compatibility(
                 logger.error("Wind data enabled but no wind observations found")
                 return False
         
-        logger.debug("Sensor observation compatibility validation successful")
-        return True
+    logger.debug("Sensor observation compatibility validation successful")
+    return True
 
+
+# Backward compatibility alias for legacy pluralized class name
+SpacesFactory = SpaceFactory
+logger.debug("SpacesFactory alias mapped to SpaceFactory for backward compatibility")
 
 # Backward compatibility functions for legacy code
 def create_gym_spaces() -> Tuple[Box, DictSpace]:
@@ -1903,6 +1907,7 @@ __all__ = [
     "ObservationSpaceFactory",
     "SensorAwareSpaceFactory",
     "SpaceFactory",
+    "SpacesFactory",
     
     # Utility functions
     "get_cached_space",

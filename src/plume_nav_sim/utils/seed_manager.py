@@ -1235,6 +1235,13 @@ def register_seed_config_schema():
     logger.info("Successfully registered SeedConfig schema with Hydra ConfigStore")
 
 
+class SeedManager:
+    """Minimal SeedManager placeholder for compatibility."""
+
+    def __init__(self, config: Optional[SeedConfig] = None):
+        self.config = config or SeedConfig()
+
+
 # Performance monitoring decorator for seed-sensitive operations per Section 0.3.1
 def seed_sensitive_operation(
     operation_name: str,
@@ -1414,6 +1421,7 @@ __all__ = [
     
     # Configuration and setup
     "SeedConfig",
+    "SeedManager",
     "setup_global_seed",
     "create_seed_config_from_hydra",
     

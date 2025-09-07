@@ -78,15 +78,20 @@ try:
     )
     from PySide6.QtCore import QTimer, Signal, QThread
     from PySide6.QtGui import QPixmap, QPainter
-except ImportError as exc:  # pragma: no cover - fail fast
-    logger.exception("PySide6 is required for visualization")
-    raise
+    PYSIDE6_AVAILABLE = True
+except ImportError as exc:  # pragma: no cover - optional dependency
+    PYSIDE6_AVAILABLE = False
+    logger.warning("PySide6 is required for interactive visualization", exc_info=exc)
+    QApplication = QMainWindow = QWidget = QVBoxLayout = QHBoxLayout = None  # type: ignore
+    QTimer = Signal = QThread = QPixmap = QPainter = None  # type: ignore
 
 try:
     import streamlit as st
-except ImportError as exc:  # pragma: no cover - fail fast
-    logger.exception("Streamlit is required for visualization")
-    raise
+    STREAMLIT_AVAILABLE = True
+except ImportError as exc:  # pragma: no cover - optional dependency
+    STREAMLIT_AVAILABLE = False
+    logger.warning("Streamlit is not installed; streamlit-based visualization disabled", exc_info=exc)
+    st = None  # type: ignore
 
 try:
     from hydra.core.config_store import ConfigStore
@@ -2699,6 +2704,25 @@ cs.store(group="visualization", name="base", node=VisualizationConfig)
 
 logger.debug("Registered Hydra configuration schemas for visualization")
 
+DEFAULT_VISUALIZATION_CONFIG = VisualizationConfig()
+
+
+def setup_headless_mode() -> None:
+    """Configure matplotlib for headless operation."""
+    matplotlib.use("Agg")
+    logger.info("Headless mode setup complete")
+
+
+def batch_visualize_trajectories(*args, **kwargs) -> None:
+    """Placeholder for batch trajectory visualization (not implemented)."""
+    logger.error("batch_visualize_trajectories is not implemented")
+    raise NotImplementedError("batch_visualize_trajectories is not implemented")
+
+
+def get_available_themes() -> List[str]:
+    """Return supported visualization themes."""
+    return ["scientific", "presentation", "high_contrast"]
+
 
 # Public API exports
 __all__ = [
@@ -2707,6 +2731,10 @@ __all__ = [
     "visualize_plume_simulation",
     "create_realtime_visualizer",
     "create_static_plotter",
+    "batch_visualize_trajectories",
+    "setup_headless_mode",
+    "get_available_themes",
+    "DEFAULT_VISUALIZATION_CONFIG",
     "VisualizationConfig",
     # New v1.0 debug and hook functions
     "plot_initial_state",
