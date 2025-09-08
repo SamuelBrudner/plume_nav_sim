@@ -2090,14 +2090,16 @@ class PlumeNavigationEnv(gym.Env):
                     observation[f"sensor_{i}_{sensor_name}_direction"] = np.array([direction], dtype=np.float32)
                     
                 else:
-                    # Generic sensor - use detect method or fallback
+                    # Generic sensor must implement detect or measure
                     if hasattr(sensor, 'detect'):
                         reading = sensor.detect(concentration_array, agent_positions)
                     elif hasattr(sensor, 'measure'):
                         reading = sensor.measure(concentration_array, agent_positions)
                     else:
-                        reading = concentration_array  # Fallback
-                    
+                        raise AttributeError(
+                            f"Sensor {sensor_name} must implement 'detect' or 'measure'"
+                        )
+
                     if hasattr(reading, '__len__') and len(reading) == 1:
                         reading = reading[0]
                     observation[f"sensor_{i}_{sensor_name}_output"] = np.array([reading], dtype=np.float32)
