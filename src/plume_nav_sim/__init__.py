@@ -23,27 +23,14 @@ import atexit
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, distribution
 
-try:  # Prefer Loguru when available
-    from loguru import logger as _logger
-    _LOGGER_IS_STUB = not hasattr(_logger, "configure")
-    logger = _logger
-except Exception:  # pragma: no cover - defensive fallback
-    import logging as _logging
-    logger = _logging.getLogger(__name__)
-    _LOGGER_IS_STUB = True
+from loguru import logger as logger
+
+if not hasattr(logger, "configure"):
+    raise ImportError("loguru.logger missing 'configure'; install full loguru package")
 
 
 def _configure_logger() -> None:
-    """Configure logging from logging.yaml or warn if running in stub mode."""
-    if _LOGGER_IS_STUB:
-        try:
-            logger.warning(
-                "Logging bootstrap not available; running in limited mode with lightweight stubs."
-            )
-        except Exception:  # pragma: no cover - safety
-            pass
-        return
-
+    """Configure logging from logging.yaml using loguru."""
     from .utils.logging_setup import setup_logger
 
     config_path = Path(__file__).resolve().parents[2] / "logging.yaml"
