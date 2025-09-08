@@ -698,7 +698,7 @@ class RecorderFactory:
     Features:
     - Automatic dependency validation and optional dependency handling
     - Configuration validation with helpful error messages
-    - Backend availability detection with graceful degradation
+    - Backend availability detection with explicit error handling
     - Performance optimization recommendations based on configuration
     """
     
@@ -803,79 +803,69 @@ class RecorderFactory:
         Returns:
             Dict[str, Any]: Validation results with recommendations
         """
-        try:
-            # ------------------------------------------------------------------
-            # Special-case: Hydra style dict / DictConfig with `_target_`
-            # ------------------------------------------------------------------
-            if isinstance(config, (dict, DictConfig)) and '_target_' in config:
-                target: str = str(config['_target_'])
+        # ------------------------------------------------------------------
+        # Special-case: Hydra style dict / DictConfig with `_target_`
+        # ------------------------------------------------------------------
+        if isinstance(config, (dict, DictConfig)) and '_target_' in config:
+            target: str = str(config['_target_'])
 
-                # Derive backend name from recorder class suffix
-                target_lower = target.lower()
-                if target_lower.endswith('nullrecorder'):
-                    backend_name = 'none'
-                elif target_lower.endswith('parquetrecorder'):
-                    backend_name = 'parquet'
-                elif target_lower.endswith(('hdf5recorder', 'hdf5recorder')):  # case-insensitive match
-                    backend_name = 'hdf5'
-                elif target_lower.endswith('sqliterecorder'):
-                    backend_name = 'sqlite'
-                else:
-                    backend_name = 'none'  # Fallback
-
-                backend_available: bool = backend_name in cls.get_available_backends()
-
-                return {
-                    'valid': True,
-                    'backend_available': backend_available,
-                    'warnings': [] if backend_available else [f"Backend '{backend_name}' is not available"],
-                    'recommendations': []
-                }
-
-            # ------------------------------------------------------------------
-            # Existing path: plain dict or RecorderConfig instance
-            # ------------------------------------------------------------------
-            # Convert to RecorderConfig for validation
-            if isinstance(config, dict):
-                recorder_config = RecorderConfig(**config)
+            # Derive backend name from recorder class suffix
+            target_lower = target.lower()
+            if target_lower.endswith('nullrecorder'):
+                backend_name = 'none'
+            elif target_lower.endswith('parquetrecorder'):
+                backend_name = 'parquet'
+            elif target_lower.endswith(('hdf5recorder', 'hdf5recorder')):  # case-insensitive match
+                backend_name = 'hdf5'
+            elif target_lower.endswith('sqliterecorder'):
+                backend_name = 'sqlite'
             else:
-                recorder_config = config
-                
-            validation_results = {
-                'valid': True,
-                'backend_available': recorder_config.backend in cls.get_available_backends(),
-                'warnings': [],
-                'recommendations': []
-            }
-            
-            # Performance recommendations
-            if recorder_config.buffer_size < 100:
-                validation_results['recommendations'].append(
-                    "Consider increasing buffer_size (>=100) for better I/O performance"
-                )
-            
-            if recorder_config.memory_limit_mb < 64:
-                validation_results['warnings'].append(
-                    "Low memory limit may cause frequent buffer flushes"
-                )
-            
-            # Backend-specific validation
-            if not validation_results['backend_available']:
-                validation_results['valid'] = False
-                validation_results['warnings'].append(
-                    f"Backend '{recorder_config.backend}' is not available"
-                )
-            
-            return validation_results
-            
-        except Exception as e:
+                raise ValueError(f"Unknown recorder target '{target}'")
+
+            backend_available: bool = backend_name in cls.get_available_backends()
+
             return {
-                'valid': False,
-                'backend_available': False,
-                'error': str(e),
-                'warnings': [f"Configuration validation failed: {e}"],
+                'valid': True,
+                'backend_available': backend_available,
+                'warnings': [] if backend_available else [f"Backend '{backend_name}' is not available"],
                 'recommendations': []
             }
+
+        # ------------------------------------------------------------------
+        # Existing path: plain dict or RecorderConfig instance
+        # ------------------------------------------------------------------
+        # Convert to RecorderConfig for validation
+        if isinstance(config, dict):
+            recorder_config = RecorderConfig(**config)
+        else:
+            recorder_config = config
+
+        validation_results = {
+            'valid': True,
+            'backend_available': recorder_config.backend in cls.get_available_backends(),
+            'warnings': [],
+            'recommendations': []
+        }
+
+        # Performance recommendations
+        if recorder_config.buffer_size < 100:
+            validation_results['recommendations'].append(
+                "Consider increasing buffer_size (>=100) for better I/O performance"
+            )
+
+        if recorder_config.memory_limit_mb < 64:
+            validation_results['warnings'].append(
+                "Low memory limit may cause frequent buffer flushes"
+            )
+
+        # Backend-specific validation
+        if not validation_results['backend_available']:
+            validation_results['valid'] = False
+            validation_results['warnings'].append(
+                f"Backend '{recorder_config.backend}' is not available"
+            )
+
+        return validation_results
     
     @classmethod
     def register_backend(cls, name: str, backend_class: type) -> None:
@@ -958,8 +948,7 @@ class RecorderManager:
             episode_id: Optional episode identifier (auto-generated if not provided)
         """
         if not self.recorder:
-            logger.warning("No recorder configured, creating none recorder")
-            self.recorder = NoneRecorder(RecorderConfig(backend='none'))
+            raise RuntimeError("No recorder configured for RecorderManager")
         
         if episode_id is None:
             episode_id = self._episode_count

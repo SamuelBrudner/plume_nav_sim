@@ -20,6 +20,7 @@ import warnings
 import inspect
 import sys
 import atexit
+import os
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, distribution
 
@@ -44,15 +45,16 @@ __version__ = "1.0.0"
 # =============================================================================
 # INSTALLATION VALIDATION
 # =============================================================================
-try:  # pragma: no cover - exercised in tests via monkeypatch
-    distribution("plume_nav_sim")
-except PackageNotFoundError as e:  # pragma: no cover - executed when not installed
-    msg = (
-        "plume_nav_sim must be installed before use. "
-        "Run 'pip install -e .' or './setup_env.sh --dev'."
-    )
-    logger.error(msg)
-    raise ImportError(msg) from e
+if os.environ.get("PLUME_NAV_SIM_SKIP_INSTALL_CHECK") != "1":
+    try:  # pragma: no cover - exercised in tests via monkeypatch
+        distribution("plume_nav_sim")
+    except PackageNotFoundError as e:  # pragma: no cover - executed when not installed
+        msg = (
+            "plume_nav_sim must be installed before use. "
+            "Run 'pip install -e .' or './setup_env.sh --dev'."
+        )
+        logger.error(msg)
+        raise ImportError(msg) from e
 
 # =============================================================================
 # LEGACY GYM DETECTION AND DEPRECATION WARNING SYSTEM
