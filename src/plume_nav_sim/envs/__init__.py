@@ -45,13 +45,11 @@ HYDRA_INSTANTIATE_AVAILABLE = True
 # Required core environment
 try:
     from plume_nav_sim.envs.video_plume import VideoPlume
-    VIDEO_PLUME_AVAILABLE = True
-except ImportError as e:  # pragma: no cover - optional dependency
-    logger.error(f"VideoPlume import failed: {e}")
-    VideoPlume = None  # type: ignore
-    VIDEO_PLUME_AVAILABLE = False
+except ImportError as e:  # pragma: no cover - fail fast
+    logger.error("VideoPlume import failed", exc_info=e)
+    raise
 
-# List of all available exports - will be updated based on successful imports
+# List of all available exports
 __all__ = ["VideoPlume"]
 
 # Check for legacy gym import attempts and issue deprecation warnings
@@ -100,7 +98,6 @@ except ImportError as e:  # pragma: no cover - explicit failure
 try:
     from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
     __all__.append("PlumeNavigationEnv")
-    PLUME_ENV_AVAILABLE = True
     logger.info(
         "PlumeNavigationEnv available with extensibility hooks",
         extra={
@@ -110,17 +107,9 @@ try:
             "frame_cache_support": True
         }
     ) if LOGGING_AVAILABLE else None
-except ImportError as e:
-    PlumeNavigationEnv = None
-    PLUME_ENV_AVAILABLE = False
-    logger.warning(
-        f"PlumeNavigationEnv not available: {e}",
-        extra={
-            "metric_type": "environment_limitation",
-            "missing_component": "plume_navigation_env",
-            "error": str(e)
-        }
-    ) if LOGGING_AVAILABLE else None
+except ImportError as e:  # pragma: no cover - fail fast
+    logger.error("PlumeNavigationEnv import failed", exc_info=e)
+    raise
 
 # Minimal reference environment for testing
 try:
