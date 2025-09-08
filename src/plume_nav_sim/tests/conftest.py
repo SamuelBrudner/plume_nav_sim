@@ -179,10 +179,8 @@ gymnasium = pytest.importorskip(
 from gymnasium.utils.env_checker import check_env
 
 # Performance monitoring for frame cache testing
-# psutil enables memory monitoring; fixtures will skip if it's absent.
-psutil = pytest.importorskip(
-    "psutil", reason="psutil not available. Memory monitoring tests will be skipped."
-)
+import psutil
+logger.debug("psutil dependency satisfied for memory monitoring fixtures")
 
 # Import project modules with graceful fallback
 # Project configuration schemas are optional; skip related fixtures when absent.

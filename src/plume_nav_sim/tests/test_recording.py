@@ -41,6 +41,7 @@ License: MIT
 
 import gc
 import json
+import logging
 import os
 import sqlite3
 import tempfile
@@ -64,9 +65,11 @@ from plume_nav_sim.recording import (
     RecorderManager, RecorderConfig, BaseRecorder, NoneRecorder
 )
 from plume_nav_sim.recording.backends import (
-    create_backend, get_available_backends, BACKEND_REGISTRY, 
+    create_backend, get_available_backends, BACKEND_REGISTRY,
     get_backend_capabilities, validate_backend_config
 )
+
+logger = logging.getLogger(__name__)
 
 # Performance and testing constants per Section 6.6.2.4 requirements
 PERFORMANCE_TARGET_MS = 33.0  # ≤33ms/step latency requirement per Section 5.2.8
@@ -1390,13 +1393,11 @@ class TestBufferedIO:
     
     def _get_process_memory_mb(self) -> float:
         """Get current process memory usage in MB."""
-        try:
-            import psutil
-            process = psutil.Process()
-            return process.memory_info().rss / (1024 * 1024)
-        except ImportError:
-            # Fallback if psutil not available
-            return 0.0
+        import psutil
+        process = psutil.Process()
+        mem_mb = process.memory_info().rss / (1024 * 1024)
+        logger.debug("Current process memory usage: %s MB", mem_mb)
+        return mem_mb
 
 
 class TestRecorderFactory:

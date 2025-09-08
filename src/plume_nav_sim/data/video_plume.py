@@ -4,7 +4,6 @@ This module provides the VideoPlume class for loading and processing video-based
 plume data for navigation simulations.
 """
 
-import logging
 import hashlib
 import uuid
 from pathlib import Path
@@ -15,8 +14,6 @@ import numpy as np
 from loguru import logger
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 from plume_nav_sim.utils.logging_setup import get_correlation_context
-
-py_logger = logging.getLogger(__name__)
 
 
 class VideoPlume:
@@ -84,19 +81,19 @@ class VideoPlume:
         root = Path(allowed_root).expanduser().resolve() if allowed_root else Path.cwd().resolve()
         if not self.video_path.is_relative_to(root):
             msg = "Video path is outside allowed root"
-            py_logger.error(msg)
+            logger.error(msg)
             raise ValueError(msg)
 
         # Validate file suffix
         allowed_suffixes = {".mp4", ".avi", ".mov"}
         if self.video_path.suffix.lower() not in allowed_suffixes:
             msg = f"Unsupported video file extension: {self.video_path.suffix}"
-            py_logger.error(msg)
+            logger.error(msg)
             raise ValueError(msg)
 
         # Validate file existence
         if not self.video_path.exists():
-            py_logger.error(VIDEO_FILE_MISSING_MSG)
+            logger.error(VIDEO_FILE_MISSING_MSG)
             raise IOError(VIDEO_FILE_MISSING_MSG)
 
         # store allowed root for reference
@@ -122,7 +119,7 @@ class VideoPlume:
 
         if self.kernel_size == 0:
             # Log explicitly when smoothing is turned off
-            py_logger.info("Kernel smoothing disabled")
+            logger.info("Kernel smoothing disabled")
         
         # Store any additional keyword arguments as attributes
         for key, value in kwargs.items():
