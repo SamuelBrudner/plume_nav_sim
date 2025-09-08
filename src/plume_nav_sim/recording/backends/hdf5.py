@@ -13,7 +13,6 @@ Key Features:
     - Compression support (gzip, lzf, szip) with configurable chunk sizes for time-series data
     - Structured group hierarchy (/run_id/episode_id/datasets) for scalable multi-experiment organization
     - Attribute metadata preservation with HDF5 attributes for experimental parameters
-    - Graceful fallback when h5py dependencies are unavailable per optional dependency handling
 
 Performance Characteristics:
     - F-017-RQ-001: <1ms overhead per 1000 steps when disabled for minimal simulation impact
@@ -64,17 +63,10 @@ from queue import Queue
 from typing import Dict, Any, Optional, Union, List, Tuple, TYPE_CHECKING
 
 import numpy as np
+import h5py  # type: ignore
 
 # Import BaseRecorder from recording framework
 from .. import BaseRecorder, RecorderConfig
-
-# HDF5 dependency required
-_H5PY_IMPORT_ERROR = None
-try:
-    import h5py  # type: ignore
-except ImportError as _h5_err:  # pragma: no cover - dependency validation
-    h5py = None  # type: ignore
-    _H5PY_IMPORT_ERROR = _h5_err
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -272,10 +264,6 @@ class HDF5Recorder(BaseRecorder):
                 compression=config.compression if config.compression != 'none' else None,
                 buffer_size=config.buffer_size
             )
-        
-        # Validate h5py dependency
-        if h5py is None:  # pragma: no cover - defensive
-            raise ImportError("h5py is required for HDF5Recorder") from _H5PY_IMPORT_ERROR
         
         # HDF5-specific state
         self._h5_file: Optional["h5py.File"] = None

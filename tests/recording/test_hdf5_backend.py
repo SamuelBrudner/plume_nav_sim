@@ -67,19 +67,19 @@ def test_hdf5_recorder_normal_operation(tmp_path, monkeypatch):
     assert episode_dir.exists() or True  # minimal check
 
 
-def test_missing_h5py_raises_import_error(monkeypatch, tmp_path):
+def test_missing_h5py_raises_import_error(monkeypatch):
+    """HDF5 module import should fail when h5py is unavailable."""
     original_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
-        if name == 'h5py':
-            raise ImportError('No module named h5py')
+        if name == "h5py":
+            raise ImportError("No module named h5py")
         return original_import(name, *args, **kwargs)
 
-    monkeypatch.setattr(builtins, '__import__', fake_import)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
     if MODULE_NAME in sys.modules:
         del sys.modules[MODULE_NAME]
-    module = load_module(monkeypatch)
-    HDF5Recorder = module.HDF5Recorder
-
     with pytest.raises(ImportError):
-        HDF5Recorder(RecorderConfig(backend='hdf5', output_dir=str(tmp_path)))
+        load_module(monkeypatch)
+    sys.modules.pop("plume_nav_sim.recording", None)
+    sys.modules.pop("plume_nav_sim", None)
