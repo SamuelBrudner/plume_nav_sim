@@ -65,12 +65,7 @@ setup_headless_mode = visualization.setup_headless_mode
 get_available_themes = visualization.get_available_themes
 DEFAULT_VISUALIZATION_CONFIG = visualization.DEFAULT_VISUALIZATION_CONFIG
 
-# Try to import enhanced logging, fallback if not available
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    PSUTIL_AVAILABLE = False
+import psutil
 
 
 class TestFrameCache:
@@ -215,7 +210,6 @@ class TestFrameCache:
         if cache.statistics:
             assert cache.statistics._evictions > 0
     
-    @pytest.mark.skipif(not PSUTIL_AVAILABLE, reason="psutil not available for memory monitoring")
     def test_memory_pressure_monitoring(self):
         """Test memory pressure monitoring with PSUtil integration."""
         cache = FrameCache(
@@ -858,7 +852,6 @@ class TestUtilityIntegration:
 
             plt.close(fig)
     
-    @pytest.mark.skipif(not PSUTIL_AVAILABLE, reason="psutil not available")
     def test_memory_management_integration(self):
         """Test memory management across utility components."""
         process = psutil.Process()

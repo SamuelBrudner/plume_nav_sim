@@ -484,17 +484,17 @@ class FrameCache:
         # Initialize psutil process monitoring
         try:
             process = psutil.Process()
-            
+
             # Wrap process with adapter for RSS clamping if needed
             clamp_mb = None
             if memory_limit_mb >= 512:
                 clamp_mb = 900  # Clamp to 900MB for large caches
-            
+
             self._process = _ProcessAdapter(process, clamp_mb=clamp_mb)
-        except (psutil.Error, ImportError) as e:
+        except psutil.Error as e:
             if self.logger:
-                self.logger.warning(f"Failed to initialize psutil monitoring: {e}")
-            self._process = None
+                self.logger.critical(f"Failed to initialize psutil monitoring: {e}")
+            raise
     
     def get(
         self, 
