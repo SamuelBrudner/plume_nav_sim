@@ -78,20 +78,15 @@ try:
     )
     from PySide6.QtCore import QTimer, Signal, QThread
     from PySide6.QtGui import QPixmap, QPainter
-    PYSIDE6_AVAILABLE = True
-except ImportError as exc:  # pragma: no cover - optional dependency
-    PYSIDE6_AVAILABLE = False
-    logger.warning("PySide6 is required for interactive visualization", exc_info=exc)
-    QApplication = QMainWindow = QWidget = QVBoxLayout = QHBoxLayout = None  # type: ignore
-    QTimer = Signal = QThread = QPixmap = QPainter = None  # type: ignore
+except ImportError as exc:  # pragma: no cover - fail fast
+    logger.error("PySide6 is required for interactive visualization", exc_info=exc)
+    raise
 
 try:
     import streamlit as st
-    STREAMLIT_AVAILABLE = True
-except ImportError as exc:  # pragma: no cover - optional dependency
-    STREAMLIT_AVAILABLE = False
-    logger.warning("Streamlit is not installed; streamlit-based visualization disabled", exc_info=exc)
-    st = None  # type: ignore
+except ImportError as exc:  # pragma: no cover - fail fast
+    logger.error("Streamlit is required for streamlit-based visualization", exc_info=exc)
+    raise
 
 try:
     from hydra.core.config_store import ConfigStore
