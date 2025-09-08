@@ -68,17 +68,10 @@ from plume_nav_sim.envs.plume_navigation_env import PlumeNavigationEnv
 try:
     from plume_nav_sim.utils.logging_setup import get_module_logger
     logger = get_module_logger(__name__)
-except ImportError:  # pragma: no cover - fallback for logging setup import
-    import logging
-    logger = logging.getLogger(__name__)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+except ImportError as exc:  # pragma: no cover - fail fast on missing logging setup
+    raise ImportError(
+        "plume_nav_sim.utils.logging_setup is required for debug GUI logging"
+    ) from exc
 
 # Import required GUI dependencies
 try:
