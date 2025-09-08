@@ -824,8 +824,11 @@ def auto_discover_models() -> None:
                                 performance_characteristics={'auto_discovered': True}
                             )
                             
-            except ImportError:
-                pass  # Skip modules that can't be imported
+            except ImportError as e:
+                logger.exception(
+                    "Failed to import plume model module %s", module_name
+                )
+                raise
     
     # Try to auto-discover wind fields
     wind_path = models_package_path / 'wind'
@@ -852,8 +855,11 @@ def auto_discover_models() -> None:
                                 performance_characteristics={'auto_discovered': True}
                             )
                             
-            except ImportError:
-                pass
+            except ImportError as e:
+                logger.exception(
+                    "Failed to import wind field module %s", module_name
+                )
+                raise
 
 
 # Initialize the package by attempting auto-discovery
