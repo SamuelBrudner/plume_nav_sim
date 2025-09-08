@@ -6,6 +6,7 @@ import pytest
 MISSING_MODULES = [
     "hydra",
     "plume_nav_sim.envs.video_plume",
+    "plume_nav_sim.envs.plume_nav_env",
     "plume_nav_sim.utils.logging_setup",
     "gymnasium",
     "plume_nav_sim.utils.seed_utils",
