@@ -13,7 +13,6 @@ from typing import Optional, Union, Any, Dict
 import cv2
 import numpy as np
 from loguru import logger
-from plume_nav_sim.api.navigation import ConfigurationError
 from odor_plume_nav.data.video_plume import VIDEO_FILE_MISSING_MSG
 from plume_nav_sim.utils.logging_setup import get_correlation_context
 
@@ -148,8 +147,9 @@ class VideoPlume:
     def _init_video_capture(self):
         """Initialize the OpenCV VideoCapture and validate it can be opened."""
         self._cap = cv2.VideoCapture(str(self.video_path))
-        
+
         if not self._cap.isOpened():
+            from plume_nav_sim.api.navigation import ConfigurationError
             raise ConfigurationError(f"Failed to open video file: {self.video_path}")
         
         # Store video properties

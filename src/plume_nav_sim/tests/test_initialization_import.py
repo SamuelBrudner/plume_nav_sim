@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-pandas = pytest.importorskip("pandas")
+import pandas
 
 
 def test_agent_initializer_protocol_import_logs_success(caplog):
