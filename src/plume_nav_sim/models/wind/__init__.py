@@ -71,8 +71,8 @@ from pathlib import Path
 from loguru import logger
 
 if not hasattr(logger, "configure"):
-    logger.warning(
-        "Wind models running with lightweight logging stubs; functionality is limited."
+    raise ImportError(
+        "loguru.logger missing 'configure'; install full loguru package"
     )
 import numpy as np
 
