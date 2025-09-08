@@ -234,13 +234,8 @@ from ..debug import (
     plot_initial_state,
 )
 
-# Hydra configuration support
-try:
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+# Hydra configuration is a required dependency
+from omegaconf import DictConfig
 
 # Enhanced logging support
 from loguru import logger
@@ -380,7 +375,7 @@ __performance_requirements__ = {
 __compatibility_features__ = {
     "gymnasium_integration": True,  # Gymnasium 0.29.x primary API
     "legacy_gym_compatibility": True,  # Via shim layer with deprecation warnings
-    "hydra_configuration": HYDRA_AVAILABLE,  # Hierarchical configuration management
+    "hydra_configuration": True,  # Hierarchical configuration management
     "kedro_integration": True,  # Pipeline framework compatibility
     "rl_framework_support": True,  # Stable-baselines3, RLLib, etc.
     "extensibility_hooks": True,  # compute_additional_obs, compute_extra_reward, on_episode_end
@@ -479,7 +474,7 @@ def validate_core_module_integrity() -> Dict[str, Any]:
             validation_results['compatibility_status']['gymnasium'] = False
         
         # Validate configuration support
-        validation_results['compatibility_status']['hydra'] = HYDRA_AVAILABLE
+        validation_results['compatibility_status']['hydra'] = True
         validation_results['compatibility_status']['loguru'] = LOGURU_AVAILABLE
         
         # Performance requirements validation
@@ -782,7 +777,7 @@ try:
         exported_components=len(__all__),
         controllers_available=True,
         simulation_available=True,
-        hydra_available=HYDRA_AVAILABLE,
+        hydra_available=True,
         extensibility_hooks_enabled=True,
         dual_api_support=True,
     )
