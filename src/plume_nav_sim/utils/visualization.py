@@ -1259,7 +1259,7 @@ def plot_initial_state(
 
 
 def create_debug_visualizer(
-    backend: Literal['qt', 'streamlit', 'auto'] = 'auto',
+    backend: Literal['qt', 'streamlit'] = 'qt',
     real_time_updates: bool = True,
     performance_monitoring: bool = True,
     state_inspection: bool = True,
@@ -1275,7 +1275,7 @@ def create_debug_visualizer(
     parameter manipulation, and performance monitoring capabilities for advanced debugging workflows.
     
     Args:
-        backend: GUI backend selection ('qt', 'streamlit', 'auto' for automatic fallback).
+        backend: GUI backend selection ('qt' or 'streamlit').
         real_time_updates: Enable real-time visualization updates during simulation.
         performance_monitoring: Include performance metrics and profiling tools.
         state_inspection: Enable detailed agent state and sensor reading inspection.
@@ -1304,12 +1304,6 @@ def create_debug_visualizer(
         ... )
         >>> debugger.launch_web_interface(port=8501)
         
-        Auto-fallback with full features:
-        >>> debugger = create_debug_visualizer(
-        ...     backend='auto',
-        ...     performance_monitoring=True,
-        ...     parameter_controls=True
-        ... )
     """
     logger.info(f"Creating debug visualizer with backend: {backend}")
     
@@ -1319,15 +1313,11 @@ def create_debug_visualizer(
     logger.debug("PySide6 available for Qt backend")
     logger.debug("Streamlit available for web backend")
 
-    if backend == 'auto':
-        selected_backend = 'qt'
-    else:
-        if backend not in available_backends and backend != 'console':
-            raise ImportError(
-                f"Requested backend '{backend}' not available. "
-                f"Available backends: {available_backends}"
-            )
-        selected_backend = backend
+    if backend not in available_backends:
+        raise ImportError(
+            f"Requested backend '{backend}' not available. Available backends: {available_backends}"
+        )
+    selected_backend = backend
     
     logger.info(f"Selected debug backend: {selected_backend}")
     

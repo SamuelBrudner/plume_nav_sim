@@ -631,19 +631,15 @@ class BaseController:
         )
 
     def get_observation_space_info(self) -> Dict[str, Any]:
-        """Return basic observation space metadata.
-
-        This stub provides minimal information required by tests and can be
-        extended by subclasses for richer observation descriptions.
-
-        Returns:
-            Dict[str, Any]: Dictionary with observation space details.
-        """
-        info = {
-            "num_agents": getattr(self, "num_agents", 0),
-            "sensors": [type(s).__name__ for s in getattr(self, "_sensors", [])],
+        """Return basic observation space metadata."""
+        if not hasattr(self, "num_agents"):
+            raise AttributeError("Controller must define 'num_agents'")
+        if not hasattr(self, "_sensors"):
+            raise AttributeError("Controller must define '_sensors'")
+        return {
+            "num_agents": self.num_agents,
+            "sensors": [type(s).__name__ for s in self._sensors],
         }
-        return info
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """

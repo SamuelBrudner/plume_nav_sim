@@ -90,3 +90,13 @@ def test_console_backend_removed(monkeypatch):
 
     with pytest.raises(ImportError):
         vis.create_debug_visualizer(backend="console")
+
+def test_auto_backend_disallowed(monkeypatch):
+    _stub_visualization_dependencies(monkeypatch)
+    path = Path("src/plume_nav_sim/utils/visualization.py")
+    spec = importlib.util.spec_from_file_location("plume_nav_sim.utils.visualization", path)
+    vis = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vis)
+
+    with pytest.raises(ImportError):
+        vis.create_debug_visualizer(backend="auto")
