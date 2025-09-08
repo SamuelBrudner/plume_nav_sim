@@ -13,6 +13,10 @@ def test_base_sensor_requires_dependencies():
     pkg_core_sensors = types.ModuleType('plume_nav_sim.core.sensors'); pkg_core_sensors.__path__ = []
     pkg_config = types.ModuleType('plume_nav_sim.config'); pkg_config.__path__ = []
     pkg_schemas = types.ModuleType('plume_nav_sim.config.schemas'); pkg_schemas.__path__ = []
+    pkg_protocols = types.ModuleType('plume_nav_sim.protocols'); pkg_protocols.__path__ = []
+    pkg_sensor_protocol = types.ModuleType('plume_nav_sim.protocols.sensor')
+    class SensorProtocol: ...
+    pkg_sensor_protocol.SensorProtocol = SensorProtocol
     class SensorConfig: ...
     pkg_schemas.SensorConfig = SensorConfig
 
@@ -22,6 +26,8 @@ def test_base_sensor_requires_dependencies():
         'plume_nav_sim.core.sensors': pkg_core_sensors,
         'plume_nav_sim.config': pkg_config,
         'plume_nav_sim.config.schemas': pkg_schemas,
+        'plume_nav_sim.protocols': pkg_protocols,
+        'plume_nav_sim.protocols.sensor': pkg_sensor_protocol,
     })
 
     spec = importlib.util.spec_from_file_location('plume_nav_sim.core.sensors.base_sensor', module_path)

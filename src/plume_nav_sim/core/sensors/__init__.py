@@ -132,15 +132,9 @@ from plume_nav_sim.protocols.sensor import SensorProtocol
 PROTOCOLS_AVAILABLE = True
 
 # Hydra integration for configuration management
-try:
-    from hydra import utils as hydra_utils
-    from omegaconf import DictConfig, OmegaConf
-    HYDRA_AVAILABLE = True
-except ImportError:
-    hydra_utils = None
-    DictConfig = dict
-    OmegaConf = None
-    HYDRA_AVAILABLE = False
+from hydra import utils as hydra_utils
+from omegaconf import DictConfig, OmegaConf
+HYDRA_AVAILABLE = True
 
 # Performance monitoring integration
 try:
