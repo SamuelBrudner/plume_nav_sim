@@ -232,9 +232,9 @@ class VideoPlume:
         Returns:
             Concentration value at the specified position
         """
-        # This is a placeholder implementation
-        # In a real implementation, this would extract concentration from the current frame
-        return 0.0
+        raise NotImplementedError(
+            "concentration extraction from video frames is not implemented"
+        )
 
     @property
     def duration(self) -> float:
