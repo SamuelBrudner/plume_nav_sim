@@ -39,47 +39,19 @@ from plume_nav_sim.protocols import PlumeModelProtocol, SensorProtocol
 # Use shared NavigatorProtocol definition
 from plume_nav_sim.protocols.navigator import NavigatorProtocol
 
-# Hydra imports for configuration integration
-try:
-    from omegaconf import DictConfig
-    HYDRA_AVAILABLE = True
-except ImportError:
-    DictConfig = dict
-    HYDRA_AVAILABLE = False
+from omegaconf import DictConfig
+HYDRA_AVAILABLE = True
 
-# Gymnasium imports for modern API support
-try:
-    import gymnasium
-    from gymnasium import spaces
-    GYMNASIUM_AVAILABLE = True
-except ImportError:
-    try:
-        import gym as gymnasium
-        from gym import spaces
-        GYMNASIUM_AVAILABLE = True
-    except ImportError:
-        gymnasium = None
-        spaces = None
-        GYMNASIUM_AVAILABLE = False
+import gymnasium
+from gymnasium import spaces
+GYMNASIUM_AVAILABLE = True
 
-try:
-    from ..config.schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
-    logger.info("NavigatorConfig, SingleAgentConfig, MultiAgentConfig successfully imported")
-except ImportError as e:
-    logger.error("Required configuration schemas are missing", exc_info=e)
-    raise ImportError(
-        "Required configuration schemas are missing. Ensure `plume_nav_sim.config.schemas` defines `NavigatorConfig`, "
-        "`SingleAgentConfig`, and `MultiAgentConfig`."
-    ) from e
+from ..config.schemas import NavigatorConfig, SingleAgentConfig, MultiAgentConfig
+logger.info("NavigatorConfig, SingleAgentConfig, MultiAgentConfig successfully imported")
 
-try:
-    from ..envs.spaces import SpaceFactory  # type: ignore
-    SPACE_FACTORY_AVAILABLE = True
-    logger.info("SpaceFactory successfully imported")
-except ImportError as e:  # pragma: no cover - import error path
-    SPACE_FACTORY_AVAILABLE = False
-    SpaceFactory = None  # type: ignore
-    logger.error("SpaceFactory import failed", exc_info=e)
+from ..envs.spaces import SpaceFactory  # type: ignore
+SPACE_FACTORY_AVAILABLE = True
+logger.info("SpaceFactory successfully imported")
 
 
 @runtime_checkable
@@ -2440,35 +2412,15 @@ class NavigatorFactory:
             ... }
             >>> navigator = NavigatorFactory.from_config(config)
         """
-        # Import here to avoid circular imports - these will be created by other agents
-        try:
-            from ..core.controllers import SingleAgentController, MultiAgentController
-        except ImportError:
-            # Fallback imports from source packages during migration
-            try:
-                from plume_nav_sim.core.controllers import SingleAgentController, MultiAgentController
-            except ImportError:
-                # If controllers don't exist yet, raise informative error
-                raise ImportError(
-                    "Navigator controllers not yet available. Ensure "
-                    "plume_nav_sim.core.controllers module has been created."
-                )
+        # Import here to avoid circular imports
+        from .controllers import SingleAgentController, MultiAgentController
         
         # Convert to NavigatorConfig if needed for validation
         if isinstance(config, dict):
             config = NavigatorConfig(**config)
-        elif hasattr(config, 'to_container') and HYDRA_AVAILABLE:
+        elif hasattr(config, 'to_container'):
             config_dict = config.to_container(resolve=True)
             config = NavigatorConfig(**config_dict)
-        
-        # Validate Gymnasium availability for enhanced features
-        if not GYMNASIUM_AVAILABLE:
-            warnings.warn(
-                "Gymnasium not available. Some advanced features may be limited. "
-                "Install gymnasium>=0.29.0 for full functionality.",
-                UserWarning,
-                stacklevel=2
-            )
         
         # Determine navigator type and create appropriate implementation
         if _is_multi_agent_config(config):
@@ -2645,15 +2597,6 @@ class NavigatorFactory:
             ...     navigator, include_additional_obs=True
             ... )
         """
-        if not GYMNASIUM_AVAILABLE:
-            return None
-
-        if not SPACE_FACTORY_AVAILABLE or SpaceFactory is None:
-            logger.error("SpaceFactory is required for observation space creation")
-            raise ImportError(
-                "SpaceFactory is required for NavigatorFactory.create_observation_space"
-            )
-
         return SpaceFactory.create_observation_space(
             num_agents=navigator.num_agents,
             include_additional_obs=include_additional_obs,
@@ -2684,15 +2627,6 @@ class NavigatorFactory:
             >>> navigator = NavigatorFactory.single_agent()
             >>> action_space = NavigatorFactory.create_action_space(navigator)
         """
-        if not GYMNASIUM_AVAILABLE:
-            return None
-
-        if not SPACE_FACTORY_AVAILABLE or SpaceFactory is None:
-            logger.error("SpaceFactory is required for action space creation")
-            raise ImportError(
-                "SpaceFactory is required for NavigatorFactory.create_action_space"
-            )
-
         return SpaceFactory.create_action_space(
             num_agents=navigator.num_agents,
             **space_kwargs
@@ -2728,7 +2662,7 @@ class NavigatorFactory:
             ... }
             >>> plume_model = NavigatorFactory.create_plume_model(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             # Use Hydra instantiation for dependency injection
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
@@ -2779,7 +2713,7 @@ class NavigatorFactory:
             ... }
             >>> wind_field = NavigatorFactory.create_wind_field(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -2825,7 +2759,7 @@ class NavigatorFactory:
         """
         sensors = []
         for config in sensor_configs:
-            if HYDRA_AVAILABLE and '_target_' in config:
+            if '_target_' in config:
                 from hydra import utils as hydra_utils
                 sensors.append(hydra_utils.instantiate(config))
             else:
@@ -2874,7 +2808,7 @@ class NavigatorFactory:
             ... }
             >>> source = NavigatorFactory.create_source(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -2922,7 +2856,7 @@ class NavigatorFactory:
             ... }
             >>> policy = NavigatorFactory.create_boundary_policy(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -2973,7 +2907,7 @@ class NavigatorFactory:
             >>> config = {'type': 'CardinalDiscrete', 'action_count': 9}
             >>> action_interface = NavigatorFactory.create_action_interface(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -3022,7 +2956,7 @@ class NavigatorFactory:
             ... }
             >>> recorder = NavigatorFactory.create_recorder(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -3072,7 +3006,7 @@ class NavigatorFactory:
             ... }
             >>> aggregator = NavigatorFactory.create_stats_aggregator(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
@@ -3121,7 +3055,7 @@ class NavigatorFactory:
             ... }
             >>> initializer = NavigatorFactory.create_agent_initializer(config)
         """
-        if HYDRA_AVAILABLE and '_target_' in config:
+        if '_target_' in config:
             from hydra import utils as hydra_utils
             return hydra_utils.instantiate(config)
         else:
