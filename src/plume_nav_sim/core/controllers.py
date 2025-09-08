@@ -2476,10 +2476,12 @@ def _read_odor_values(env_array: np.ndarray, positions: np.ndarray) -> np.ndarra
     if hasattr(env_array, 'current_frame'):
         env_array = env_array.current_frame
 
-    # Get dimensions of environment array
+    # Validate environment array structure
     if not hasattr(env_array, 'shape') or len(env_array.shape) < 2:
-        # For mock objects in tests or arrays without shape
-        return np.zeros(len(positions))
+        logger.error("Invalid env_array passed to _read_odor_values", env_array=env_array)
+        raise ValueError(
+            "env_array must have a 'shape' attribute with at least two dimensions"
+        )
 
     height, width = env_array.shape[:2]
     num_positions = positions.shape[0]
