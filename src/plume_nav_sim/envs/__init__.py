@@ -112,18 +112,10 @@ except ImportError as e:  # pragma: no cover - fail fast
     raise
 
 # Minimal reference environment for testing
-try:
-    from plume_nav_sim.envs.plume_nav_env import PlumeNavEnv
-    __all__.append("PlumeNavEnv")
-    logger.debug(
-        "PlumeNavEnv available", extra={"metric_type": "environment_capability"}
-    ) if LOGGING_AVAILABLE else None
-except Exception as e:  # pragma: no cover - optional component
-    PlumeNavEnv = None
-    logger.warning(
-        f"PlumeNavEnv not available: {e}",
-        extra={"metric_type": "environment_limitation", "error": str(e)}
-    ) if LOGGING_AVAILABLE else None
+from plume_nav_sim.envs.plume_nav_env import PlumeNavEnv
+__all__.append("PlumeNavEnv")
+if LOGGING_AVAILABLE:
+    logger.debug("PlumeNavEnv available", extra={"metric_type": "environment_capability"})
 
 # Import compatibility utilities for dual API support
 try:
