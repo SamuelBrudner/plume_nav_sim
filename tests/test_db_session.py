@@ -75,10 +75,16 @@ from src.plume_nav_sim.db.session import (
     is_database_enabled,
     test_async_database_connection,
     test_database_connection,
-    DOTENV_AVAILABLE,
-    HYDRA_AVAILABLE,
-    SQLALCHEMY_AVAILABLE,
 )
+
+try:  # Define availability flags if exposed by the module
+    from src.plume_nav_sim.db.session import (
+        DOTENV_AVAILABLE,
+        HYDRA_AVAILABLE,
+        SQLALCHEMY_AVAILABLE,
+    )
+except ImportError:  # Defaults when constants are not provided
+    DOTENV_AVAILABLE = HYDRA_AVAILABLE = SQLALCHEMY_AVAILABLE = False
 
 # Test data and fixtures setup
 TEST_DATABASE_URL_SQLITE = "sqlite:///:memory:"
@@ -202,25 +208,23 @@ class TestDatabaseBackend:
             assert backend in [DatabaseBackend.SQLITE, DatabaseBackend.MEMORY], f"Failed for URL: {url}"
     
     def test_detect_backend_empty_url(self):
-        """Test backend detection with empty or None URL."""
-        assert DatabaseBackend.detect_backend("") == DatabaseBackend.SQLITE
-        assert DatabaseBackend.detect_backend(None) == DatabaseBackend.SQLITE
-    
+        """Empty or None URLs should raise errors instead of defaulting."""
+        with pytest.raises(ValueError):
+            DatabaseBackend.detect_backend("")
+        with pytest.raises(ValueError):
+            DatabaseBackend.detect_backend(None)
+
     def test_detect_backend_unknown_scheme(self):
-        """Test backend detection with unknown URL schemes."""
+        """Unknown URL schemes should raise errors."""
         unknown_urls = [
             "unknown://localhost/db",
             "ftp://example.com/database",
             "http://api.example.com/db"
         ]
-        
+
         for url in unknown_urls:
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
-                backend = DatabaseBackend.detect_backend(url)
-                assert backend == DatabaseBackend.SQLITE
-                assert len(w) >= 1
-                assert "Unknown database backend" in str(w[0].message)
+            with pytest.raises(ValueError):
+                DatabaseBackend.detect_backend(url)
     
     def test_get_backend_defaults_sqlite(self):
         """Test SQLite backend default configuration."""
