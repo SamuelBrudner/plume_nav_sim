@@ -51,7 +51,7 @@ if os.environ.get("PLUME_NAV_SIM_SKIP_INSTALL_CHECK") != "1":
     except PackageNotFoundError as e:  # pragma: no cover - executed when not installed
         msg = (
             "plume_nav_sim must be installed before use. "
-            "Run 'pip install -e .' or './setup_env.sh --dev'."
+            "Run './setup_env.sh --dev' or 'pip install -e .' first."
         )
         logger.error(msg)
         raise ImportError(msg) from e
