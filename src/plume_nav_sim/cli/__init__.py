@@ -232,21 +232,10 @@ def get_version_info() -> Dict[str, str]:
         'cli_module': 'plume_nav_sim.cli'
     }
     
-    # Add dependency versions if available
-    try:
-        version_info['click_version'] = click.__version__
-    except (ImportError, AttributeError):
-        version_info['click_version'] = 'Not available'
-    
-    try:
-        version_info['hydra_version'] = hydra.__version__
-    except (ImportError, AttributeError):
-        version_info['hydra_version'] = 'Not available'
-    
-    try:
-        version_info['numpy_version'] = numpy.__version__
-    except (ImportError, AttributeError):
-        version_info['numpy_version'] = 'Not available'
+    # Dependency versions (fail fast if missing)
+    version_info['click_version'] = click.__version__
+    version_info['hydra_version'] = hydra.__version__
+    version_info['numpy_version'] = numpy.__version__
     
     return version_info
 
@@ -549,62 +538,41 @@ def invoke_command(args: List[str], **kwargs) -> Dict[str, Any]:
 
 
 def setup_development_environment() -> Dict[str, Any]:
-    """
-    Setup development environment for CLI operations.
-    
-    Configures development-specific settings including enhanced logging,
-    performance monitoring, error diagnostics, and development utilities.
-    
-    Returns:
-        dict: Setup results and configuration information
-        
-    Example:
-        >>> setup_results = setup_development_environment()
-        >>> print(f"Development setup: {setup_results['success']}")
-    """
+    """Setup development environment for CLI operations."""
     setup_results = {
         'success': True,
         'actions': [],
         'configuration': {},
         'errors': []
     }
-    
-    try:
-        # Enable development mode
-        CLI_CONFIG['development_mode'] = True
-        CLI_CONFIG['hydra_full_error'] = True
-        CLI_CONFIG['enable_performance_monitoring'] = True
-        CLI_CONFIG['timing_reports'] = True
-        CLI_CONFIG['error_diagnostics'] = True
-        
-        setup_results['actions'].append('Enabled development mode')
-        setup_results['configuration']['development_mode'] = True
-        
-        # Setup enhanced logging if available
-        if CLI_CONFIG['auto_setup_logging']:
-            try:
-                from plume_nav_sim.utils.logging_setup import setup_logger
-                setup_logger(level='DEBUG', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-                setup_results['actions'].append('Configured enhanced logging')
-                setup_results['configuration']['logging_level'] = 'DEBUG'
-            except ImportError as e:
-                setup_results['errors'].append(f"Failed to setup enhanced logging: {e}")
-        
-        # Set environment variables for development
-        os.environ['CLI_DEVELOPMENT_MODE'] = 'true'
-        os.environ['HYDRA_FULL_ERROR'] = 'true'
-        setup_results['actions'].append('Set development environment variables')
-        
-        # Initialize performance monitoring
-        if not _cli_state['initialized']:
-            _cli_state['initialized'] = True
-            _cli_state['performance_metrics'] = {}
-            setup_results['actions'].append('Initialized performance monitoring')
-        
-    except Exception as e:
-        setup_results['success'] = False
-        setup_results['errors'].append(f"Development setup failed: {e}")
-    
+
+    # Enable development mode
+    CLI_CONFIG['development_mode'] = True
+    CLI_CONFIG['hydra_full_error'] = True
+    CLI_CONFIG['enable_performance_monitoring'] = True
+    CLI_CONFIG['timing_reports'] = True
+    CLI_CONFIG['error_diagnostics'] = True
+    setup_results['actions'].append('Enabled development mode')
+    setup_results['configuration']['development_mode'] = True
+
+    # Setup enhanced logging
+    if CLI_CONFIG['auto_setup_logging']:
+        from plume_nav_sim.utils.logging_setup import setup_logger
+        setup_logger(level='DEBUG', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        setup_results['actions'].append('Configured enhanced logging')
+        setup_results['configuration']['logging_level'] = 'DEBUG'
+
+    # Set environment variables for development
+    os.environ['CLI_DEVELOPMENT_MODE'] = 'true'
+    os.environ['HYDRA_FULL_ERROR'] = 'true'
+    setup_results['actions'].append('Set development environment variables')
+
+    # Initialize performance monitoring
+    if not _cli_state['initialized']:
+        _cli_state['initialized'] = True
+        _cli_state['performance_metrics'] = {}
+        setup_results['actions'].append('Initialized performance monitoring')
+
     return setup_results
 
 

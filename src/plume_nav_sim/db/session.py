@@ -122,17 +122,13 @@ class DatabaseBackend(Enum):
         Returns:
             DatabaseBackend enum value
         """
-        # Handle non-string URL
-        if url is not None and not isinstance(url, str):
-            warnings.warn("Invalid URL type; defaulting to SQLite", UserWarning)
-            return cls.SQLITE
-            
-        # Handle empty/None URLs - default to SQLite
-        if not url:
-            warnings.warn("Empty URL provided, defaulting to SQLite backend", UserWarning)
-            return cls.SQLITE
-            
-        url_lower = url.lower() if url else ""
+        # Validate URL parameter
+        if url is None or url == "":
+            raise ValueError("Database URL is required")
+        if not isinstance(url, str):
+            raise TypeError("Database URL must be a string")
+
+        url_lower = url.lower()
         
         # Handle memory URLs
         if url_lower.startswith("memory://"):
@@ -148,13 +144,12 @@ class DatabaseBackend(Enum):
             url_lower.startswith("postgresql+")):
             return cls.POSTGRESQL
             
-        # Handle MySQL URLs  
+        # Handle MySQL URLs
         if url_lower.startswith("mysql://") or url_lower.startswith("mysql+"):
             return cls.MYSQL
-            
-        # Unknown scheme - warn and default to SQLite
-        warnings.warn(f"Unknown database backend in URL: {url}, defaulting to SQLite", UserWarning)
-        return cls.SQLITE
+
+        # Unknown scheme - fail fast
+        raise ValueError(f"Unknown database backend in URL: {url}")
     
     @classmethod
     def get_backend_defaults(cls, backend: Union["DatabaseBackend", str]) -> Dict[str, Any]:
