@@ -59,13 +59,21 @@ pip install plume_nav_sim[all]
 ```
 
 ### Development Installation
-To work from a source checkout, install the package in editable mode to ensure
-all dependencies are available:
+On Unix-like systems (Linux or macOS), use the provided setup script for a
+fully configured development environment:
 
 ```bash
-pip install -e .
-# or
 ./setup_env.sh --dev
+```
+
+The script emits verbose logging for each step and fails fast on any error.
+It does not support Windows shells.
+
+If the script cannot run, install the package in editable mode with the
+development extras:
+
+```bash
+pip install -e .[dev]
 ```
 
 ### Optional Dependency Groups
