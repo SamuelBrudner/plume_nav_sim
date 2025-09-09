@@ -1,11 +1,12 @@
+"""Validate import behaviour when package metadata is missing."""
+
 import importlib.metadata
 import sys
 
 import pytest
 
 
-def test_import_requires_installation(monkeypatch):
-    """Importing without installed distribution should fail."""
+def test_import_warns_when_not_installed(monkeypatch):
     from importlib.metadata import PackageNotFoundError
 
     def fake_distribution(name: str):
@@ -14,5 +15,5 @@ def test_import_requires_installation(monkeypatch):
     monkeypatch.setattr(importlib.metadata, "distribution", fake_distribution)
     sys.modules.pop("plume_nav_sim", None)
 
-    with pytest.raises(ImportError, match="pip install -e"):
+    with pytest.warns(UserWarning, match="pip install -e"):
         __import__("plume_nav_sim")

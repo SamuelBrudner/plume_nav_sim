@@ -48,11 +48,11 @@ try:  # pragma: no cover - exercised in tests via monkeypatch
     distribution("plume_nav_sim")
 except PackageNotFoundError as e:  # pragma: no cover - executed when not installed
     msg = (
-        "plume_nav_sim must be installed before use. "
-        "Run 'pip install -e .' or './setup_env.sh --dev'."
+        "plume_nav_sim is running from source without being installed. "
+        "Run 'pip install -e .' or './setup_env.sh --dev' for full functionality."
     )
-    logger.error(msg)
-    raise ImportError(msg) from e
+    warnings.warn(msg)
+    logger.warning(msg)
 
 # =============================================================================
 # LEGACY GYM DETECTION AND DEPRECATION WARNING SYSTEM
