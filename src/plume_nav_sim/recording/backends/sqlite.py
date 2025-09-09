@@ -1039,8 +1039,7 @@ class SQLiteRecorder(BaseRecorder):
         Custom JSON serializer for numpy arrays and other non-serializable objects.
         
         Handles serialization of complex data types commonly used in simulation data
-        including numpy arrays, complex numbers, and custom objects. Provides fallback
-        string representation for unsupported types.
+        including numpy arrays, complex numbers, and custom objects.
         
         Args:
             obj: Object to serialize
@@ -1061,7 +1060,12 @@ class SQLiteRecorder(BaseRecorder):
         elif hasattr(obj, '__dict__'):
             return obj.__dict__
         else:
-            return str(obj)
+            logger.error(
+                "Unsupported object type for JSON serialization", obj_type=type(obj).__name__
+            )
+            raise TypeError(
+                f"Object of type {type(obj).__name__} is not JSON serializable"
+            )
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """

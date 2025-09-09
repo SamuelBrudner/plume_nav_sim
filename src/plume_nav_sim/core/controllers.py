@@ -631,19 +631,24 @@ class BaseController:
         )
 
     def get_observation_space_info(self) -> Dict[str, Any]:
-        """Return basic observation space metadata.
+        """Raise ``NotImplementedError`` for undefined observation metadata.
 
-        This stub provides minimal information required by tests and can be
-        extended by subclasses for richer observation descriptions.
+        BaseController no longer provides a stub implementation. Subclasses must
+        explicitly implement this method to expose their observation space
+        structure. Failing fast avoids silent assumptions about observation
+        semantics and surfaces incomplete implementations early.
 
-        Returns:
-            Dict[str, Any]: Dictionary with observation space details.
+        Raises:
+            NotImplementedError: Always raised to require subclass override.
         """
-        info = {
-            "num_agents": getattr(self, "num_agents", 0),
-            "sensors": [type(s).__name__ for s in getattr(self, "_sensors", [])],
-        }
-        return info
+        if self._logger:
+            self._logger.error(
+                "get_observation_space_info not implemented for %s",
+                self.__class__.__name__,
+            )
+        raise NotImplementedError(
+            "Subclasses must implement get_observation_space_info"
+        )
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """
