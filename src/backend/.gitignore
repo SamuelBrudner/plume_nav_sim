@@ -1,0 +1,514 @@
+# =============================================================================
+# plume_nav_sim Backend .gitignore
+# Comprehensive Git ignore configuration for plume navigation simulation package
+# Version: 1.0 - Compatible with Python >=3.10, Hatchling build system, pytest
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python Runtime Artifacts
+# Standard Python interpreter generated files including bytecode, cache
+# directories, and optimization files - platform and version specific
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# -----------------------------------------------------------------------------
+# Build and Distribution Artifacts (Hatchling)
+# Build system outputs, wheel files, source distributions, and intermediate
+# build files generated from source code - can be reproduced from source
+# -----------------------------------------------------------------------------
+build/
+dist/
+*.wheel
+*.tar.gz
+*.zip
+*.dmg
+*.pkg
+*.exe
+*.msi
+*.msix
+*.deb
+*.rpm
+
+# Hatchling specific
+.eggs/
+*.manifest
+*.spec
+MANIFEST.in
+
+# PyInstaller
+*.manifest
+*.spec
+*.exe
+*.app
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -----------------------------------------------------------------------------
+# Testing and Coverage Artifacts (pytest)
+# Pytest execution artifacts, coverage reports, test logs, and performance
+# benchmarking outputs - vary by environment and execution context
+# -----------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Test databases
+test_*.db
+*.db-journal
+
+# Test outputs and logs
+tests/logs/
+test_results/
+pytest.log
+test.log
+tests/output/
+tests/temp/
+debug_test_output/
+
+# Benchmarking and profiling
+.benchmarks/
+benchmark-results.json
+benchmark_*.json
+profile_*.dat
+*.prof
+memory_profiler.log
+profiling_results/
+
+# Tox testing
+.tox/
+.nox/
+
+# -----------------------------------------------------------------------------
+# Development Tool Artifacts
+# Code quality tool caches, type checker artifacts, linting outputs, and
+# formatter caches - environment-specific performance improvements
+# -----------------------------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linting and formatting caches
+.flake8_cache/
+.black_cache/
+.isort.cfg
+.ruff_cache/
+.pycodestyle
+.pyflakes
+pylint.log
+
+# Security scanning
+bandit.yaml
+.bandit
+safety-report.txt
+
+# Pre-commit
+.pre-commit-config.local.yaml
+
+# Type checking
+.pytype/
+.pyre/
+.pyright/
+
+# -----------------------------------------------------------------------------
+# Documentation Build Outputs (Sphinx)
+# Documentation build artifacts, API documentation outputs, and generated
+# documentation files - generated from source and can be rebuilt
+# -----------------------------------------------------------------------------
+docs/build/
+docs/_build/
+docs/source/_autosummary/
+*.doctree
+.doctrees/
+site/
+.readthedocs.yml.backup
+
+# Sphinx
+docs/_static/
+docs/_templates/
+
+# MkDocs
+site/
+
+# Jupyter Book
+_build/
+
+# -----------------------------------------------------------------------------
+# Scientific Computing Artifacts (NumPy, Matplotlib)
+# Temporary files, cache data, and output files specific to scientific
+# computing workflows - often temporary or environment-specific
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.npy
+*.npz
+*.hdf5
+*.h5
+
+# Matplotlib
+matplotlib_cache/
+*.png
+*.jpg
+*.gif
+*.svg
+*.pdf
+*.eps
+*.ps
+
+# Profiling
+memory_profiler.log
+profile_*.dat
+*.prof
+*.pstats
+
+# Scientific computing temporary files
+temp_data/
+cache_data/
+*.tmp.npy
+*.cache
+
+# Plume navigation simulation specific outputs
+render_output/
+visualization_cache/
+example_outputs/
+demo_frames/
+plume_renders/
+agent_trajectories/
+
+# -----------------------------------------------------------------------------
+# Virtual Environments
+# Python virtual environment directories and related activation scripts
+# Environment-specific installations should be created locally
+# -----------------------------------------------------------------------------
+venv/
+env/
+.venv/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Project specific virtual environments
+plume-nav-env/
+plume_nav_sim_env/
+plumenavenv/
+
+# Virtual environment configuration
+pyvenv.cfg
+.python-version
+
+# Conda
+.conda/
+conda-meta/
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# -----------------------------------------------------------------------------
+# IDE and Editor Files
+# Development environment configuration files, editor settings, and workspace
+# files - user-specific and should not be imposed on other developers
+# -----------------------------------------------------------------------------
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# IntelliJ IDEA / PyCharm
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Vim
+*.swp
+*.swo
+*~
+.viminfo
+
+# Emacs
+*~
+\#*\#
+.\#*
+.emacs.desktop
+.emacs.desktop.lock
+
+# Kate
+.kateconfig
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# OS-generated metadata files, system thumbnails, and platform-specific
+# temporary files - no value in version control, potential compatibility issues
+# -----------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Network storage
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# -----------------------------------------------------------------------------
+# Temporary and Log Files
+# Application logs, temporary processing files, and runtime generated data
+# files - runtime artifacts potentially containing sensitive information
+# -----------------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# Application specific logs
+plume_nav_sim.log
+debug.log
+error.log
+app.log
+run.log
+
+# Temporary directories
+temp/
+tmp/
+cache/
+logs/
+log/
+
+# Lock files
+*.lock
+*.pid
+*.seed
+*.pid.lock
+
+# Session files
+.session
+session.dat
+
+# Debug files
+debug/
+debug_output/
+*.debug
+
+# -----------------------------------------------------------------------------
+# Development Workflow Patterns
+# Files generated during specific development workflows and processes
+# -----------------------------------------------------------------------------
+
+# Local development customizations
+.env.local
+*.local
+local_config.py
+local_settings.py
+
+# Testing and debugging artifacts
+debug_output/
+test_temp/
+profiling_results/
+memory_dumps/
+
+# Development databases
+dev.db
+test.db
+local.db
+
+# Configuration overrides
+config.local.json
+settings.local.py
+
+# -----------------------------------------------------------------------------
+# Performance and Monitoring
+# Files related to performance monitoring, profiling, and system metrics
+# -----------------------------------------------------------------------------
+
+# Performance profiling
+*.profile
+*.pstats
+profiling/
+perf.data*
+
+# Memory profiling
+memory_profile.log
+*.memprof
+
+# Coverage files
+.coverage*
+coverage.xml
+
+# Monitoring and metrics
+metrics/
+monitoring/
+
+# -----------------------------------------------------------------------------
+# Special Inclusions - DO NOT IGNORE
+# Essential static assets, reference outputs, documentation sources, and
+# repository configuration that are required for package functionality
+# -----------------------------------------------------------------------------
+!src/backend/assets/
+!src/backend/assets/**
+!examples/reference_outputs/
+!examples/reference_outputs/**
+!docs/source/
+!docs/source/**
+!.github/
+!.github/**
+!*.md
+!*.rst
+!*.txt
+!LICENSE*
+!MANIFEST.in
+!pyproject.toml
+!setup.py
+!setup.cfg
+!requirements*.txt
+!environment.yml
+!Pipfile
+!poetry.lock
+
+# Configuration files that should be preserved
+!.gitignore
+!.gitattributes
+!.editorconfig
+!.pre-commit-config.yaml
+
+# Essential documentation
+!README*
+!CHANGELOG*
+!CONTRIBUTING*
+!CODE_OF_CONDUCT*
+!SECURITY*
+
+# -----------------------------------------------------------------------------
+# Platform-Specific Patterns
+# Additional patterns for specific operating systems and environments
+# -----------------------------------------------------------------------------
+
+# Windows specific
+*.log
+*.tmp
+*.bak
+*.gid
+*.chk
+*.old
+
+# macOS specific
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Linux specific
+*~
+.fuse_hidden*
+
+# -----------------------------------------------------------------------------
+# Future Extension Patterns
+# Placeholder patterns for potential future requirements
+# -----------------------------------------------------------------------------
+
+# Cloud deployment artifacts (future consideration)
+# .aws/
+# .gcp/
+# .azure/
+
+# Container artifacts (future consideration)  
+# Dockerfile.local
+# docker-compose.override.yml
+
+# Research data patterns (future consideration)
+# data/raw/
+# data/processed/
+# experiments/
+
+# =============================================================================
+# End of .gitignore - plume_nav_sim Backend
+# Last updated: Compatible with proof-of-life scope requirements
+# =============================================================================
