@@ -1,0 +1,209 @@
+# Pre-commit hooks configuration for plume_nav_sim reinforcement learning environment
+# Provides comprehensive automated code quality enforcement integrating black, flake8, mypy, 
+# bandit, isort, pydocstyle, and custom validation hooks for scientific Python development
+
+default_language_version:
+  python: python3.10
+
+minimum_pre_commit_version: '3.6.0'
+
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+
+# File patterns for hook execution optimization
+files: '\.(py|pyi|ipynb|yaml|yml|toml|json|md|txt)$'
+exclude: '^(build/|dist/|\.tox/|\.venv/|venv/|node_modules/|\.pytest_cache/|__pycache__/|\.mypy_cache/|\.coverage|\.git/)'
+
+# Fail fast disabled to run all hooks and provide comprehensive feedback
+fail_fast: false
+
+ci:
+  autofix_commit_msg: 'style: auto-fix code style and formatting issues'
+  autofix_prs: true
+  autoupdate_commit_msg: 'chore: update pre-commit hooks'
+  autoupdate_schedule: weekly
+  skip: []
+
+repos:
+  # Official pre-commit hooks repository for basic file validation and quality checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        description: Remove trailing whitespace from all files
+        args: ['--markdown-linebreak-ext=md']
+        types: [text]
+        exclude: '^(.*\.md|.*\.txt)$'
+      
+      - id: end-of-file-fixer
+        name: Fix End of Files
+        description: Ensure files end with newline character
+        types: [text]
+        exclude: '^(.*\.svg|.*\.png|.*\.jpg)$'
+      
+      - id: check-yaml
+        name: Check YAML Syntax
+        description: Validate YAML file syntax including pre-commit config files
+        types: [yaml]
+        args: ['--multi']
+      
+      - id: check-toml
+        name: Check TOML Syntax
+        description: Validate TOML file syntax including pyproject.toml
+        types: [toml]
+      
+      - id: check-json
+        name: Check JSON Syntax
+        description: Validate JSON file syntax for configuration files
+        types: [json]
+      
+      - id: check-added-large-files
+        name: Check Large Files
+        description: Prevent accidental large file commits
+        args: ['--maxkb=1000']
+      
+      - id: check-merge-conflict
+        name: Check Merge Conflicts
+        description: Prevent commits with merge conflict markers
+        types: [text]
+      
+      - id: debug-statements
+        name: Debug Statement Detection
+        description: Detect and prevent Python debug statements
+        language: python
+        types: [python]
+      
+      - id: name-tests-test
+        name: Test File Naming
+        description: Ensure test files follow naming conventions
+        files: 'tests/.*\.py$'
+        args: ['--django']
+
+  # Black code formatter for consistent Python code style
+  - repo: https://github.com/psf/black
+    rev: '24.2.0'
+    hooks:
+      - id: black
+        name: Black Code Formatting
+        description: Automated Python code formatting with Black formatter
+        language: python
+        types: [python]
+        args: ['--line-length=88', '--target-version=py310']
+        exclude: '^(build/|dist/|\.tox/)'
+      
+      - id: black-jupyter
+        name: Black Jupyter Formatting
+        description: Black formatting for Jupyter notebooks
+        language: python
+        types: [jupyter]
+        additional_dependencies: ['black[jupyter]']
+
+  # isort import sorting utility for consistent import organization
+  - repo: https://github.com/PyCQA/isort
+    rev: '5.13.2'
+    hooks:
+      - id: isort
+        name: Import Sorting
+        description: Automated Python import organization and sorting
+        language: python
+        types: [python]
+        args: ['--profile=black', '--line-length=88', '--multi-line=3']
+        additional_dependencies: ['isort[colors]']
+
+  # flake8 comprehensive Python linting with extensive plugin support
+  - repo: https://github.com/PyCQA/flake8
+    rev: '7.0.0'
+    hooks:
+      - id: flake8
+        name: Flake8 Linting
+        description: Comprehensive Python code linting and style checking
+        language: python
+        types: [python]
+        args: ['--max-line-length=88', '--extend-ignore=E203,W503,E501', '--max-complexity=10', '--select=E,W,F,C,N']
+        additional_dependencies: ['flake8-docstrings', 'flake8-comprehensions', 'flake8-bugbear']
+
+  # MyPy static type checking for comprehensive type analysis
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v1.8.0'
+    hooks:
+      - id: mypy
+        name: MyPy Type Checking
+        description: Static type analysis and checking for Python code
+        language: python
+        types: [python]
+        args: ['--config-file=mypy.ini', '--show-error-codes']
+        additional_dependencies: ['types-setuptools', 'types-requests', 'numpy', 'gymnasium', 'matplotlib']
+        exclude: '^(tests/|examples/|benchmarks/)'
+
+  # Bandit security linting for vulnerability detection and secure coding practices
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.5'
+    hooks:
+      - id: bandit
+        name: Bandit Security Scanning
+        description: Security vulnerability detection and analysis
+        language: python
+        types: [python]
+        args: ['-r', 'src/', '-f', 'json', '-o', 'bandit-report.json', '-ll', '--skip=B101,B601']
+        exclude: '^(tests/|examples/)'
+
+  # pydocstyle docstring style checker enforcing PEP 257 and scientific documentation standards
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: '6.3.0'
+    hooks:
+      - id: pydocstyle
+        name: Docstring Style Checking
+        description: Python docstring style validation and enforcement
+        language: python
+        types: [python]
+        args: ['--convention=numpy', '--add-ignore=D100,D104,D105']
+        files: '^src/plume_nav_sim/'
+
+  # Commitizen commit message standardization and versioning
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: '3.13.0'
+    hooks:
+      - id: commitizen
+        name: Commitizen Check
+        description: Commit message format validation
+        stages: [commit-msg]
+        args: ['check', '--commit-msg-file']
+
+  # Local pytest execution for quick test validation before commits
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: Quick Test Suite
+        description: Run fast test subset for pre-commit validation
+        entry: python -m pytest
+        language: system
+        args: ['tests/', '-x', '-q', '--tb=short', '--durations=5', '-m', 'not slow']
+        pass_filenames: false
+        always_run: true
+
+  # Custom local hooks for project-specific validation and quality assurance
+  - repo: local
+    hooks:
+      - id: requirements-sync
+        name: Requirements Synchronization
+        description: Validate requirements files are synchronized with pyproject.toml
+        entry: python scripts/validate_requirements_sync.py
+        language: system
+        files: '^(requirements.*\.txt|pyproject\.toml)$'
+        pass_filenames: false
+      
+      - id: changelog-update
+        name: Changelog Update Check
+        description: Ensure CHANGELOG.md is updated for significant changes
+        entry: python scripts/check_changelog_update.py
+        language: system
+        files: '^src/plume_nav_sim/'
+        pass_filenames: false
+      
+      - id: license-headers
+        name: License Header Validation
+        description: Ensure proper license headers in source files
+        entry: python scripts/check_license_headers.py
+        language: system
+        files: '\.py$'
+        exclude: '^(tests/|setup\.py)'
