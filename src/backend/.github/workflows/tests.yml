@@ -1,0 +1,381 @@
+name: Comprehensive Test Suite
+
+on:
+  push:
+    branches: [main, develop, feature/*, release/*]
+    paths:
+      - 'src/backend/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'pytest.ini'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/backend/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'pytest.ini'
+      - '.github/workflows/tests.yml'
+  schedule:
+    # Weekly scheduled run every Monday at 6 AM UTC for comprehensive validation
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      test_category:
+        description: 'Test category to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'unit'
+          - 'integration'
+          - 'performance'
+          - 'reproducibility'
+          - 'api_compliance'
+      python_version:
+        description: 'Python version to test'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+      enable_performance_tests:
+        description: 'Run performance benchmarks'
+        required: false
+        default: true
+        type: boolean
+
+# Workflow-level concurrency control to cancel outdated runs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Enhanced permissions for comprehensive CI/CD operations
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  actions: read
+
+# Global environment variables for consistent test execution
+env:
+  PYTHONUNBUFFERED: '1'
+  PYTEST_CURRENT_TEST: ''
+  COVERAGE_CORE: 'sysmon'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PIP_NO_COLOR: '1'
+  FORCE_COLOR: '1'
+
+jobs:
+  # Multi-platform, multi-Python version testing matrix
+  test-matrix:
+    name: 'Test Suite (${{ matrix.os }}, Python ${{ matrix.python-version }})'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+        exclude:
+          # Exclude Python 3.13 on macOS due to limited availability
+          - os: macos-latest
+            python-version: '3.13'
+        include:
+          # Limited Windows support for community validation
+          - os: windows-latest
+            python-version: '3.10'
+            experimental: true
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v4  # actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: 'Set up Python ${{ matrix.python-version }}'
+        uses: actions/setup-python@v5  # actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: 'src/backend/requirements*.txt'
+
+      - name: 'Cache pip dependencies'
+        uses: actions/cache@v4  # actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/backend/requirements*.txt', 'src/backend/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Install X11 virtual framebuffer and OpenGL libraries for headless matplotlib testing
+      - name: 'Install system dependencies (Ubuntu)'
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-glx libglib2.0-0
+
+      # Install X11 support for matplotlib on macOS, continue on failure for compatibility
+      - name: 'Install system dependencies (macOS)'
+        if: runner.os == 'macOS'
+        run: |
+          brew install --cask xquartz || true
+
+      - name: 'Upgrade pip and build tools'
+        working-directory: src/backend
+        run: |
+          python -m pip install --upgrade pip setuptools wheel hatchling
+
+      - name: 'Install package in development mode'
+        working-directory: src/backend
+        run: |
+          python -m pip install -e .
+
+      - name: 'Install test dependencies'
+        working-directory: src/backend
+        run: |
+          python -m pip install -r requirements-test.txt
+
+      - name: 'Validate installation'
+        working-directory: src/backend
+        run: |
+          python scripts/validate_installation.py
+
+      - name: 'Create test results directory'
+        working-directory: src/backend
+        run: |
+          mkdir -p test-results coverage-reports performance-reports
+
+      # Unit tests with coverage reporting
+      - name: 'Run unit tests'
+        working-directory: src/backend
+        env:
+          PYTEST_CURRENT_TEST: 'unit'
+        run: |
+          python -m pytest tests/ -m unit -v --tb=short \
+            --cov=plume_nav_sim \
+            --cov-report=xml:coverage-reports/unit-coverage.xml \
+            --cov-report=html:coverage-reports/unit-html \
+            --junit-xml=test-results/unit-results.xml
+
+      # Integration tests with coverage appending
+      - name: 'Run integration tests'
+        working-directory: src/backend
+        env:
+          PYTEST_CURRENT_TEST: 'integration'
+        run: |
+          python -m pytest tests/ -m integration -v --tb=short \
+            --cov=plume_nav_sim --cov-append \
+            --cov-report=xml:coverage-reports/integration-coverage.xml \
+            --junit-xml=test-results/integration-results.xml
+
+      # API compliance tests ensuring Gymnasium standard compliance
+      - name: 'Run API compliance tests'
+        working-directory: src/backend
+        env:
+          PYTEST_CURRENT_TEST: 'api_compliance'
+        run: |
+          python -m pytest tests/ -m api_compliance -v --tb=short \
+            --cov=plume_nav_sim --cov-append \
+            --cov-report=xml:coverage-reports/api-coverage.xml \
+            --junit-xml=test-results/api-results.xml
+
+      # Reproducibility tests for deterministic behavior validation
+      - name: 'Run reproducibility tests'
+        working-directory: src/backend
+        env:
+          PYTEST_CURRENT_TEST: 'reproducibility'
+        run: |
+          python -m pytest tests/ -m reproducibility -v --tb=short \
+            --junit-xml=test-results/reproducibility-results.xml
+
+      # Performance benchmarking with timeout control
+      - name: 'Run performance tests'
+        if: github.event.inputs.enable_performance_tests != 'false'
+        working-directory: src/backend
+        timeout-minutes: 15
+        env:
+          PYTEST_CURRENT_TEST: 'performance'
+        run: |
+          python -m pytest tests/ -m performance \
+            --benchmark-json=performance-reports/benchmarks-${{ matrix.os }}-${{ matrix.python-version }}.json \
+            --benchmark-verbose \
+            --junit-xml=test-results/performance-results.xml
+
+      # Generate combined coverage report with detailed analysis
+      - name: 'Generate combined coverage report'
+        working-directory: src/backend
+        run: |
+          python -m coverage combine
+          python -m coverage xml -o coverage-reports/combined-coverage.xml
+          python -m coverage html -d coverage-reports/combined-html
+          python -m coverage report --show-missing
+
+      # Enforce 95% coverage threshold as quality gate
+      - name: 'Check coverage threshold'
+        working-directory: src/backend
+        run: |
+          python -m coverage report --fail-under=95
+
+      # Preserve test results for analysis and debugging
+      - name: 'Upload test results'
+        if: always()
+        uses: actions/upload-artifact@v4  # actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
+          path: src/backend/test-results/
+          retention-days: 30
+
+      # Preserve coverage reports for comprehensive analysis
+      - name: 'Upload coverage reports'
+        if: always()
+        uses: actions/upload-artifact@v4  # actions/upload-artifact@v4
+        with:
+          name: coverage-reports-${{ matrix.os }}-${{ matrix.python-version }}
+          path: src/backend/coverage-reports/
+          retention-days: 30
+
+      # Preserve performance benchmarks for trend analysis
+      - name: 'Upload performance reports'
+        if: always() && github.event.inputs.enable_performance_tests != 'false'
+        uses: actions/upload-artifact@v4  # actions/upload-artifact@v4
+        with:
+          name: performance-reports-${{ matrix.os }}-${{ matrix.python-version }}
+          path: src/backend/performance-reports/
+          retention-days: 30
+
+      # Upload coverage to Codecov for centralized analysis
+      - name: 'Upload to Codecov'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
+        uses: codecov/codecov-action@v4  # codecov/codecov-action@v4
+        with:
+          file: src/backend/coverage-reports/combined-coverage.xml
+          flags: unittests
+          name: plume-nav-sim-coverage
+          fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Parallel test execution for performance optimization
+  test-parallel:
+    name: 'Parallel Test Execution (Ubuntu Latest)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v4  # actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Set up Python 3.10'
+        uses: actions/setup-python@v5  # actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 'Install system dependencies'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-glx
+
+      - name: 'Install dependencies'
+        working-directory: src/backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install -r requirements-test.txt
+
+      # Parallel test execution with pytest-xdist for faster feedback
+      - name: 'Run parallel test suite'
+        working-directory: src/backend
+        env:
+          PYTEST_XDIST_WORKER_COUNT: 'auto'
+        run: |
+          python -m pytest tests/ -n auto --dist=worksteal -v --tb=short \
+            --cov=plume_nav_sim \
+            --cov-report=xml:parallel-coverage.xml \
+            --junit-xml=parallel-results.xml
+
+      - name: 'Upload parallel test results'
+        if: always()
+        uses: actions/upload-artifact@v4  # actions/upload-artifact@v4
+        with:
+          name: parallel-test-results
+          path: src/backend/parallel-*.xml
+          retention-days: 30
+
+  # Comprehensive test suite using run_tests.py orchestrator
+  test-comprehensive:
+    name: 'Comprehensive Test Suite with Scripts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v4  # actions/checkout@v4
+
+      - name: 'Set up Python 3.10'
+        uses: actions/setup-python@v5  # actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 'Install system dependencies'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-glx
+
+      - name: 'Install dependencies'
+        working-directory: src/backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install -r requirements-test.txt
+
+      # Execute comprehensive test suite using the sophisticated run_tests.py orchestrator
+      - name: 'Run comprehensive test suite using script'
+        working-directory: src/backend
+        run: |
+          python scripts/run_tests.py --categories all --enable-performance --generate-reports --parallel
+
+      - name: 'Upload comprehensive test artifacts'
+        if: always()
+        uses: actions/upload-artifact@v4  # actions/upload-artifact@v4
+        with:
+          name: comprehensive-test-artifacts
+          path: src/backend/test_results/
+          retention-days: 30
+
+  # Test results summary and consolidation
+  test-summary:
+    name: 'Test Results Summary'
+    runs-on: ubuntu-latest
+    needs: [test-matrix, test-parallel, test-comprehensive]
+    if: always()
+
+    steps:
+      - name: 'Download all test artifacts'
+        uses: actions/download-artifact@v4  # actions/download-artifact@v4
+        with:
+          path: test-artifacts/
+
+      # Generate test execution summary for comprehensive analysis
+      - name: 'Generate test summary'
+        continue-on-error: true
+        run: |
+          find test-artifacts/ -name '*.xml' -exec echo 'Processing: {}' \; -exec head -20 {} \;
+
+      - name: 'Check test results'
+        run: |
+          echo "Test execution completed. Check individual job results for detailed information."
