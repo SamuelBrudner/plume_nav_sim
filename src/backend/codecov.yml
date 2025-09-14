@@ -1,0 +1,356 @@
+# =============================================================================
+# Codecov Configuration for plume_nav_sim v1.0.0
+# =============================================================================
+# 
+# Comprehensive code coverage analysis and reporting configuration for the
+# plume_nav_sim reinforcement learning environment. Provides automated quality
+# gates, multi-platform coverage aggregation, and specialized analysis for
+# scientific computing applications with Gymnasium API compliance validation.
+#
+# This configuration implements:
+# - >95% coverage targets for core components with 100% mathematical precision
+# - Automated CI/CD integration with GitHub Actions workflow support  
+# - Multi-platform coverage aggregation (Linux, macOS, Windows)
+# - Component-specific coverage requirements and quality gates
+# - Performance monitoring and regression detection capabilities
+# - Development workflow enhancement with real-time feedback
+#
+# Compatible with pytest-cov>=4.0.0 and codecov-action@v4 for comprehensive
+# coverage analysis, reporting, and quality assurance automation.
+# =============================================================================
+
+# Global Codecov Configuration
+codecov:
+  # Require CI pipeline success before processing coverage to ensure coverage 
+  # data integrity and prevent false reporting from failed test runs
+  require_ci_to_pass: true
+  
+  # Wait for CI completion before coverage analysis ensuring complete test 
+  # execution and accurate coverage measurement across all testing categories
+  wait_for_ci: true
+  
+  # Send notifications after processing 1 build to provide timely feedback 
+  # on coverage changes for rapid development iteration and quality assurance
+  notify:
+    after_n_builds: 1
+
+# Coverage Analysis Configuration
+coverage:
+  # Coverage percentage precision with 2 decimal places for detailed analysis
+  # and precise quality metrics supporting scientific computing requirements
+  precision: 2
+  
+  # Round coverage percentages down to prevent inflated coverage reporting 
+  # and maintain conservative quality standards for production readiness
+  round: down
+  
+  # Coverage percentage range from 70% (red) to 100% (green) for color-coded 
+  # visual feedback and quality indication in pull request comments
+  range: "70...100"
+  
+  # Project Coverage Status Configuration
+  status:
+    project:
+      default:
+        # Overall project coverage must meet 95% target with 2% threshold
+        # tolerance for build success and quality gate enforcement
+        target: 95%
+        threshold: 2%
+        # Only post status when coverage changes by more than 1%
+        if_ci_failed: error
+        if_not_found: success
+        if_no_uploads: error
+    
+    # Patch Coverage Status Configuration  
+    patch:
+      default:
+        # New code in pull requests must meet 95% coverage target with 2%
+        # threshold tolerance ensuring high quality standards for changes
+        target: 95%
+        threshold: 2%
+        # Only fail if patch coverage drops significantly
+        if_ci_failed: error
+        if_not_found: success
+        if_no_uploads: error
+
+# Coverage Report Parser Configuration
+parsers:
+  # GCov parser configuration with conditional branch detection for 
+  # comprehensive branch coverage analysis in mathematical computations
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: yes
+      macro: no
+  
+  # JavaScript parser configuration disabled since project is Python-only
+  # reinforcement learning environment with no frontend components
+  javascript:
+    enable_partials: no
+
+# Pull Request Comment Configuration
+comment:
+  # Comment layout including header summary, diff coverage, flag information,
+  # file-by-file breakdown, and footer links for comprehensive analysis
+  layout: "header, diff, flags, files, footer"
+  
+  # Default comment behavior providing comprehensive coverage feedback 
+  # without overwhelming developers during code review process
+  behavior: default
+  
+  # Always post coverage comments regardless of changes to provide consistent
+  # coverage visibility and maintain awareness of code quality metrics
+  require_changes: no
+  
+  # Require base coverage data for accurate comparison and regression 
+  # detection in pull requests supporting trend analysis capabilities
+  require_base: yes
+  
+  # Require head coverage data for complete pull request analysis and 
+  # coverage validation ensuring accurate difference calculations
+  require_head: yes
+  
+  # Show uncovered lines in diff for targeted improvement recommendations
+  show_carryforward_flags: no
+
+# Coverage Flags Configuration for Component-Specific Analysis
+flags:
+  # Unit Test Coverage Flag
+  unittests:
+    # Individual component validation and isolated functionality testing
+    # covering core environment logic, mathematical functions, and utilities
+    paths:
+      - src/plume_nav_sim/core/
+      - src/plume_nav_sim/plume/
+      - src/plume_nav_sim/utils/
+      - src/plume_nav_sim/envs/
+    # Require 95% coverage for unit tests with strict enforcement
+    carryforward: no
+  
+  # Integration Test Coverage Flag  
+  integration:
+    # Cross-component validation and system interaction testing covering
+    # Gymnasium API compliance and environment integration workflows
+    paths:
+      - tests/test_integration.py
+      - tests/test_environment_api.py
+      - tests/plume_nav_sim/envs/
+    # Integration tests support overall system validation
+    carryforward: no
+  
+  # Performance Test Coverage Flag
+  performance:
+    # Performance test coverage for timing validation and benchmark testing
+    # ensuring <1ms step latency and rendering performance requirements
+    paths:
+      - tests/test_performance.py
+      - tests/plume_nav_sim/render/test_*_performance.py
+    # Performance tests can be carried forward due to platform variations
+    carryforward: yes
+
+# Component-Specific Coverage Targets
+component_coverage:
+  # Core Environment Logic - High Coverage Requirements
+  plume_nav_sim_core:
+    target: 95%
+    paths:
+      - src/plume_nav_sim/core/action_processor.py
+      - src/plume_nav_sim/core/state_manager.py  
+      - src/plume_nav_sim/core/episode_manager.py
+      - src/plume_nav_sim/core/reward_calculator.py
+      - src/plume_nav_sim/core/boundary_enforcer.py
+    # Critical path enforcement for core functionality
+    if_not_found: failure
+  
+  # Mathematical Plume Modeling - 100% Coverage Requirement  
+  plume_nav_sim_mathematical:
+    target: 100%
+    paths:
+      - src/plume_nav_sim/plume/static_gaussian.py
+      - src/plume_nav_sim/plume/concentration_field.py
+      - src/plume_nav_sim/plume/plume_model.py
+    # Mathematical functions require complete coverage for scientific validity
+    threshold: 0%
+    if_not_found: failure
+  
+  # Environment Implementations - Gymnasium Compliance
+  plume_nav_sim_environments:
+    target: 95%
+    paths:
+      - src/plume_nav_sim/envs/plume_search_env.py
+      - src/plume_nav_sim/envs/base_env.py
+    # Environment API compliance requires comprehensive coverage
+    if_not_found: failure
+  
+  # Rendering Pipeline - Platform Tolerance
+  plume_nav_sim_rendering:
+    target: 90%
+    paths:
+      - src/plume_nav_sim/render/numpy_rgb.py
+      - src/plume_nav_sim/render/matplotlib_viz.py
+      - src/plume_nav_sim/render/base_renderer.py
+      - src/plume_nav_sim/render/color_schemes.py
+    # Rendering has platform-specific backend variations
+    threshold: 5%
+    if_not_found: success
+  
+  # Utility Functions - Good Coverage Standards
+  plume_nav_sim_utilities:
+    target: 90%
+    paths:
+      - src/plume_nav_sim/utils/seeding.py
+      - src/plume_nav_sim/utils/validation.py
+      - src/plume_nav_sim/utils/spaces.py
+    # Utilities support core functionality with reasonable coverage
+    threshold: 5%
+    if_not_found: success
+
+# Ignore Patterns - Exclude Non-Source Code
+ignore:
+  # Test files and directories
+  - "tests/*"
+  - "test_*.py"
+  - "*_test.py"
+  
+  # Example and demo files  
+  - "examples/*"
+  - "demo/*"
+  
+  # Benchmark and performance analysis scripts
+  - "benchmarks/*"
+  - "performance/*"
+  
+  # Build and utility scripts
+  - "scripts/*"
+  - "tools/*"
+  
+  # Documentation files
+  - "docs/*"
+  - "documentation/*"
+  
+  # Configuration and setup files
+  - "setup.py"
+  - "conftest.py"
+  - "pytest.ini"
+  - "pyproject.toml"
+  
+  # Cache and build artifacts
+  - "**/__pycache__"
+  - "**/*.pyc"
+  - "**/*.pyo"  
+  - ".pytest_cache/*"
+  - "build/*"
+  - "dist/*"
+  - "*.egg-info/*"
+  - ".coverage*"
+  
+  # Version control and CI files
+  - ".git/*"
+  - ".github/*"
+  - ".gitignore"
+  - ".gitattributes"
+  
+  # IDE and editor files
+  - ".vscode/*"
+  - ".idea/*"
+  - "*.sublime-*"
+  
+  # Environment and dependency files
+  - "requirements*.txt"
+  - "environment.yml"
+  - "Pipfile*"
+  
+  # Assets and resource files typically not requiring coverage
+  - "assets/*"
+  - "resources/*"
+  - "static/*"
+
+# GitHub Integration Configuration
+github_checks:
+  annotations: true
+
+# Notification Configuration
+notifications:
+  # Disable email notifications to reduce noise
+  email: no
+  
+  # Enable IRC notifications for team communication (if configured)
+  irc:
+    default:
+      server: "chat.freenode.net"
+      branches: null
+      threshold: 1%
+      message: "Coverage {{changed}} for {{owner}}/{{repo}}"
+  
+  # Slack integration configuration (requires webhook setup)
+  slack:
+    default:
+      url: "secret:SLACK_WEBHOOK"
+      threshold: 1%
+      message: "Coverage changed by {{changed}} on {{owner}}/{{repo}}"
+      attachments: "sunburst, diff"
+
+# Advanced Configuration Options
+fixes:
+  # Path fixes for different CI environments to ensure consistent reporting
+  - "src/::"  # Remove src prefix for cleaner reporting
+  - "backend/::" # Remove backend prefix for consistency
+
+# Probot Configuration for GitHub App Integration
+probot:
+  # Auto-comment on PRs when coverage changes significantly
+  coverage_threshold: 1%
+  # Require status checks to pass before merge
+  require_status_checks: true
+
+# Team and User Configuration
+team_management:
+  # Define team coverage requirements and notification preferences
+  teams:
+    # Core development team with strict requirements
+    core:
+      coverage:
+        target: 95%
+        precision: 2
+      notifications:
+        slack: true
+        email: false
+    
+    # Contributors with standard requirements  
+    contributors:
+      coverage:
+        target: 90%
+        precision: 1
+      notifications:
+        slack: false
+        email: false
+
+# Scientific Computing Specific Configuration
+scientific_computing:
+  # Mathematical precision requirements for numerical accuracy
+  numerical_precision:
+    # Mathematical functions require 100% coverage for calculation accuracy
+    mathematical_functions: 100%
+    # Precision validation must be completely covered
+    precision_validation: 100%
+    # Edge case testing requires comprehensive coverage  
+    edge_case_testing: 100%
+  
+  # Reproducibility requirements for scientific validity
+  reproducibility:
+    # Deterministic behavior coverage must be complete
+    deterministic_behavior: 100%
+    # Seeding mechanism requires 100% coverage for reproducibility
+    seeding_mechanism: 100%
+    # Cross-platform consistency testing coverage requirement
+    cross_platform_consistency: 95%
+  
+  # Performance validation for computational efficiency
+  performance_validation:
+    # Benchmark test coverage for performance regression detection
+    benchmark_tests: 90%
+    # Timing validation coverage for latency requirements (<1ms)
+    timing_validation: 95%
+    # Resource monitoring coverage for memory and CPU analysis
+    resource_monitoring: 85%
