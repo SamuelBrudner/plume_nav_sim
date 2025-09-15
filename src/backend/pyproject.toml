@@ -1,0 +1,135 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plume-nav-sim"
+version = "0.0.1"
+description = "Proof-of-life Gymnasium-compatible reinforcement learning environment for plume navigation research"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "plume_nav_sim Development Team", email = "plume-nav-sim@example.com"}
+]
+maintainers = [
+    {name = "plume_nav_sim Development Team", email = "plume-nav-sim@example.com"}
+]
+keywords = [
+    "reinforcement learning",
+    "gymnasium", 
+    "plume navigation",
+    "chemical plume",
+    "simulation",
+    "robotics",
+    "autonomous navigation",
+    "olfactory navigation",
+    "scientific computing"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11", 
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: Gymnasium"
+]
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=0.29.0",
+    "numpy>=2.1.0",
+    "matplotlib>=3.9.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/plume-nav-sim/plume_nav_sim"
+Documentation = "https://plume-nav-sim.readthedocs.io"
+Repository = "https://github.com/plume-nav-sim/plume_nav_sim.git"
+Issues = "https://github.com/plume-nav-sim/plume_nav_sim/issues"
+Changelog = "https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0", 
+    "pytest-xdist>=3.0.0",
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+    "mypy>=1.8.0"
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0", 
+    "pytest-benchmark>=4.0.0",
+    "pytest-mock>=3.12.0"
+]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinxcontrib-napoleon>=0.7"
+]
+benchmark = [
+    "pytest-benchmark>=4.0.0",
+    "memory-profiler>=0.61.0",
+    "psutil>=5.9.0"
+]
+
+[project.scripts]
+plume-nav-validate = "plume_nav_sim.scripts:validate_installation"
+plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*", "*Test"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "unit: marks unit tests",
+    "integration: marks integration tests", 
+    "performance: marks performance tests",
+    "slow: marks slow running tests"
+]
+
+[tool.coverage.run]
+source = ["src/plume_nav_sim"]
+omit = ["tests/*", "setup.py", "conftest.py"]
+branch = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312", "py313"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    build
+  | dist
+  | \.tox
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_third_party = ["gymnasium", "numpy", "matplotlib", "pytest"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
