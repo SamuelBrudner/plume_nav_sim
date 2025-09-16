@@ -159,7 +159,9 @@ def register_env(
             id=effective_env_id,
             entry_point=effective_entry_point,
             max_episode_steps=None,
-            kwargs=registration_kwargs
+            disable_env_checker=True,
+            kwargs=registration_kwargs,
+            additional_wrappers=()
         )
         
         # Update registration cache with successful registration information and timestamp
