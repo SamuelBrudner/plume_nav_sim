@@ -26,16 +26,16 @@ from ..conftest import (
     edge_case_test_env, test_environment_manager, performance_tracker, 
     memory_monitor, cleanup_validator
 )
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..plume_nav_sim.utils.validation import (
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.utils.validation import (
     validate_environment_config, validate_action_parameter, validate_coordinates, 
     ParameterValidator
 )
-from ..plume_nav_sim.utils.exceptions import (
+from plume_nav_sim.utils.exceptions import (
     ValidationError, StateError, RenderingError, ConfigurationError, ResourceError
 )
-from ..plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-from ..plume_nav_sim.core.types import Action, Coordinates
+from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
+from plume_nav_sim.core.types import Action, Coordinates
 
 # Global constants for edge case testing parameters
 EDGE_CASE_TIMEOUT_SECONDS = 30.0

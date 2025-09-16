@@ -30,7 +30,7 @@ import time  # >=3.10 - High-precision timing measurements using perf_counter fo
 import warnings  # >=3.10 - Warning management for performance test execution and deprecation handling
 
 # Internal imports for environment benchmarking and comprehensive performance analysis
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 from ..benchmarks.environment_performance import (
     run_environment_performance_benchmark,
     benchmark_step_latency,
