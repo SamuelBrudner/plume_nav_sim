@@ -36,6 +36,20 @@ try:
 except Exception:
     warnings.warn('Gymnasium registry may not be fully compatible - some features may be limited')
 
+
+# Compatibility shim: ensure common wrappers forward unknown attributes to underlying env
+try:
+    from gymnasium.wrappers.common import OrderEnforcing
+    if not hasattr(OrderEnforcing, '__getattr__'):
+        def __getattr__(self, name):
+            env = getattr(self, 'env', None)
+            if env is not None:
+                return getattr(env, name)
+            raise AttributeError(name)
+        OrderEnforcing.__getattr__ = __getattr__
+except Exception:
+    pass
+
 # Internal imports for core registration functionality
 from .register import (
     register_env,
