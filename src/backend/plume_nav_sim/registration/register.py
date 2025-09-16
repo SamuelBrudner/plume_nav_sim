@@ -63,7 +63,8 @@ def register_env(
     entry_point: Optional[str] = None, 
     max_episode_steps: Optional[int] = None,
     kwargs: Optional[Dict[str, Any]] = None,
-    force_reregister: bool = False
+    force_reregister: bool = False,
+    **compat_flags: Any
 ) -> str:
     """
     Main environment registration function for Gymnasium compatibility with comprehensive parameter 
@@ -119,8 +120,11 @@ def register_env(
             )
         
         # Check if environment already registered using is_registered() with cache validation
+        # Support 'force' alias used by some tests
+        force_flag = bool(compat_flags.get('force', False)) or force_reregister
+
         if is_registered(effective_env_id, use_cache=True):
-            if not force_reregister:
+            if not force_flag:
                 _logger.warning(f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override.")
                 return effective_env_id
             else:
