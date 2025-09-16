@@ -833,7 +833,14 @@ def validate_environment_config(config: Union[EnvironmentConfig, dict], strict_m
     })
     
     context.add_timing_data('total_validation', validation_time)
-    
+
+    # If invalid, raise for callers that expect exception-driven control flow (e.g., registration tests)
+    if not result.is_valid:
+        raise ConfigurationError(
+            "Environment configuration validation failed",
+            config_parameter='environment_config',
+            invalid_value=result.errors
+        )
     return result
 
 
@@ -2153,7 +2160,14 @@ def validate_with_context(validation_function: Callable, validation_args: tuple,
         logger.debug(f"Validation {context.operation_name} completed successfully")
     else:
         logger.warning(f"Validation {context.operation_name} failed with {len(result.errors)} errors")
-    
+
+    # If invalid, raise for callers that expect exception-driven control flow (e.g., registration tests)
+    if not result.is_valid:
+        raise ConfigurationError(
+            "Environment configuration validation failed",
+            config_parameter='environment_config',
+            invalid_value=result.errors
+        )
     return result
 
 
@@ -2432,7 +2446,14 @@ def validate_component_state(component: Any, expected_state: Dict[str, Any],
     
     # Implementation would check component state against expected values
     # This is a placeholder for the full implementation
-    
+
+    # If invalid, raise for callers that expect exception-driven control flow (e.g., registration tests)
+    if not result.is_valid:
+        raise ConfigurationError(
+            "Environment configuration validation failed",
+            config_parameter='environment_config',
+            invalid_value=result.errors
+        )
     return result
 
 def validate_resource_constraints(resource_usage: Dict[str, Any],
@@ -2446,7 +2467,14 @@ def validate_resource_constraints(resource_usage: Dict[str, Any],
     
     # Implementation would check resource usage against limits
     # This is a placeholder for the full implementation
-    
+
+    # If invalid, raise for callers that expect exception-driven control flow (e.g., registration tests)
+    if not result.is_valid:
+        raise ConfigurationError(
+            "Environment configuration validation failed",
+            config_parameter='environment_config',
+            invalid_value=result.errors
+        )
     return result
 
 def validate_mathematical_consistency(parameters: Dict[str, Any],
