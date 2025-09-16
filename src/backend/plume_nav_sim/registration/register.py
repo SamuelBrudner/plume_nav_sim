@@ -768,7 +768,9 @@ def validate_registration_config(
                     validation_report['warnings'].append("Entry point class name may not be valid Python identifier")
         
         # Validate max_episode_steps parameter for positive integer within reasonable training limits
-        if not isinstance(max_episode_steps, int):
+        if max_episode_steps is None:
+            validation_report['warnings'].append("max_episode_steps not set; TimeLimit wrapper will not be applied")
+        elif not isinstance(max_episode_steps, int):
             validation_report['errors'].append("max_episode_steps must be an integer")
             is_valid = False
         elif max_episode_steps <= 0:
