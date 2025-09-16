@@ -141,7 +141,7 @@ def register_env(
         is_valid, validation_report = validate_registration_config(
             env_id=effective_env_id,
             entry_point=effective_entry_point,
-            max_episode_steps=effective_max_steps,
+            max_episode_steps=None,
             kwargs=registration_kwargs,
             strict_validation=True
         )
@@ -158,7 +158,7 @@ def register_env(
         gymnasium.register(
             id=effective_env_id,
             entry_point=effective_entry_point,
-            max_episode_steps=effective_max_steps,
+            max_episode_steps=None,
             kwargs=registration_kwargs
         )
         
