@@ -31,7 +31,7 @@ import warnings  # >=3.10 - Warning management for performance test execution an
 
 # Internal imports for environment benchmarking and comprehensive performance analysis
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..benchmarks.environment_performance import (
+from benchmarks.environment_performance import (
     run_environment_performance_benchmark,
     benchmark_step_latency,
     benchmark_episode_performance, 
