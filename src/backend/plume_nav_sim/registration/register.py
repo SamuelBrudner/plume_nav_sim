@@ -661,6 +661,11 @@ def create_registration_kwargs(
                 _logger.warning(f"Parameter conflicts detected, additional_kwargs will override: {conflicts}")
             
             base_kwargs.update(additional_kwargs)
+
+            # Drop testing/internal metadata keys that the environment constructor doesn't accept
+            for _k in list(base_kwargs.keys()):
+                if isinstance(_k, str) and _k.startswith('_'):
+                    del base_kwargs[_k]
         
         # Validate complete kwargs dictionary for parameter consistency and constraint satisfaction
         # Cross-validate source location with goal radius
