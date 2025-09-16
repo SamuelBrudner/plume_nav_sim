@@ -374,7 +374,7 @@ class ValidationError(PlumeNavSimError):
                     error_context = context
                 elif isinstance(context, dict):
                     error_context = create_error_context(
-                        operation_name='validation_error',
+                        operation_name='rendering_error',
                         additional_context=context,
                         include_caller_info=True,
                         include_system_info=False
@@ -557,7 +557,7 @@ class RenderingError(PlumeNavSimError):
     suggestions and backend compatibility analysis.
     """
     
-    def __init__(self, message: str, render_mode: Optional[str] = None, backend_name: Optional[str] = None, underlying_error: Optional[Exception] = None):
+    def __init__(self, message: str, render_mode: Optional[str] = None, backend_name: Optional[str] = None, underlying_error: Optional[Exception] = None, context: Optional[Any] = None):
         """Initialize rendering error with render mode, backend information, and underlying error details.
         
         Args:
@@ -574,7 +574,7 @@ class RenderingError(PlumeNavSimError):
                     error_context = context
                 elif isinstance(context, dict):
                     error_context = create_error_context(
-                        operation_name='validation_error',
+                        operation_name='rendering_error',
                         additional_context=context,
                         include_caller_info=True,
                         include_system_info=False
