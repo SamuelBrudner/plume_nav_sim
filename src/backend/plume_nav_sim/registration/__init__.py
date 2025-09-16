@@ -42,10 +42,13 @@ try:
     from gymnasium.wrappers.common import OrderEnforcing
     if not hasattr(OrderEnforcing, '__getattr__'):
         def __getattr__(self, name):
-            env = getattr(self, 'env', None)
-            if env is not None:
-                return getattr(env, name)
-            raise AttributeError(name)
+            if name == 'env':
+                raise AttributeError(name)
+            try:
+                env = object.__getattribute__(self, 'env')
+            except Exception:
+                raise AttributeError(name)
+            return getattr(env, name)
         OrderEnforcing.__getattr__ = __getattr__
 except Exception:
     pass
