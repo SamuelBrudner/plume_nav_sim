@@ -60,7 +60,12 @@ dev = [
     "pytest-xdist>=3.0.0",
     "black>=24.0.0",
     "flake8>=7.0.0",
-    "mypy>=1.8.0"
+    "mypy>=1.8.0",
+    "isort>=5.12.0"
+]
+security = [
+    "bandit>=1.7.0",
+    "safety>=2.0.0"
 ]
 test = [
     "pytest>=8.0.0",
@@ -99,14 +104,38 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/plume_nav_sim"]
-omit = ["tests/*", "setup.py", "conftest.py"]
+source = ["plume_nav_sim"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py",
+    "conftest.py",
+    "*/examples/*",
+    "*/benchmarks/*",
+]
 branch = true
+parallel = true
+concurrency = ["thread", "multiprocessing"]
 
 [tool.coverage.report]
 precision = 2
 show_missing = true
 skip_covered = false
+fail_under = 95
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+skip_covered = false
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
 [tool.black]
 line-length = 88
@@ -122,9 +151,22 @@ extend-exclude = '''
 
 [tool.isort]
 profile = "black"
-multi_line_output = 3
-line_length = 88
-known_third_party = ["gymnasium", "numpy", "matplotlib", "pytest"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501", "F401"]
+exclude = [".git", "__pycache__", "build", "dist", ".tox", ".pytest_cache", "*.egg-info"]
+select = ["E", "W", "F", "C"]
+max-complexity = 10
+per-file-ignores = ["__init__.py:F401", "tests/*:F401,F811", "examples/*:F401,E402", "conftest.py:F401"]
+count = true
+statistics = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist", ".tox", ".pytest_cache"]
+skips = ["B101", "B601"]
+severity = "medium"
+confidence = "medium"
 
 [tool.mypy]
 python_version = "3.10"
