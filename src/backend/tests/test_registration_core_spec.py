@@ -1,4 +1,4 @@
-import gymnasium as gym
+import gymnasium
 import pytest
 
 from plume_nav_sim.registration.register import (
@@ -17,7 +17,7 @@ def test_register_make_isinstance_and_cleanup():
     assert is_registered(env_id)
 
     # make() should yield an instance recognized as PlumeSearchEnv (even if wrapped)
-    env = gym.make(env_id)
+    env = gymnasium.make(env_id)
     try:
         assert isinstance(env, PlumeSearchEnv)
     finally:
