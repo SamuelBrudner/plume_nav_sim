@@ -357,7 +357,7 @@ class ValidationError(PlumeNavSimError):
     and specific recovery suggestions for resolving validation issues.
     """
     
-    def __init__(self, message: str, parameter_name: Optional[str] = None, invalid_value: Optional[Any] = None, expected_format: Optional[str] = None, context: Optional[Any] = None):
+    def __init__(self, message: str, parameter_name: Optional[str] = None, invalid_value: Optional[Any] = None, expected_format: Optional[str] = None, context: Optional[Any] = None, parameter_constraints: Optional[Dict[str, Any]] = None):
         """Initialize validation error with parameter details and validation context.
         
         Args:
@@ -393,8 +393,8 @@ class ValidationError(PlumeNavSimError):
         self.expected_format = expected_format
         # Initialize empty validation_errors list
         self.validation_errors: List[Dict[str, str]] = []
-        # Initialize empty parameter_constraints dictionary
-        self.parameter_constraints: Dict[str, Any] = {}
+        # Initialize parameter_constraints dictionary from argument if provided
+        self.parameter_constraints: Dict[str, Any] = parameter_constraints or {}
         
         # Set default recovery suggestion for validation failures
         self.set_recovery_suggestion("Check input parameters and ensure they meet the expected format and constraints.")
