@@ -37,6 +37,7 @@ from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, 
     PERFORMANCE_TARGET_STEP_LATENCY_MS, PERFORMANCE_TARGET_RGB_RENDER_MS
 )
+from plume_nav_sim.utils.seeding import SeedManager
 
 
 # ===== GLOBAL REGISTRY AND STATE MANAGEMENT =====
