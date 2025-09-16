@@ -6,7 +6,7 @@ import numpy as np
 from .base_env import BaseEnvironment, create_base_environment_config
 
 
-class _InstanceCheckMeta(type):
+class _InstanceCheckMeta(type(BaseEnvironment)):
     def __instancecheck__(cls, instance):
         if type.__instancecheck__(cls, instance):
             return True
@@ -16,8 +16,11 @@ class _InstanceCheckMeta(type):
             inner = getattr(current, 'env', None)
             if inner is None or inner is current or inner in visited:
                 break
-            if type.__instancecheck__(cls, inner):
-                return True
+            try:
+                if super().__instancecheck__(inner) or type.__instancecheck__(cls, inner):
+                    return True
+            except Exception:
+                pass
             visited.add(inner)
             current = inner
         return False
