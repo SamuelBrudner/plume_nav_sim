@@ -592,7 +592,8 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             try:
                 renderer = self._get_or_create_renderer()
             except Exception as e:
-                raise RenderingError(f"Failed to initialize renderer: {e}")
+                self.logger.error(f"Rendering failed to initialize renderer: {e}")
+                return None
             
             # Create render context using abstract _create_render_context() method
             try:
