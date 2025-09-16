@@ -565,7 +565,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 raise StateError(f"Environment step failed: {e}")
     
     @monitor_performance('base_render', 50.0, False)
-    def render(self) -> Union[np.ndarray, None]:
+    def render(self, mode: Optional[str] = None) -> Union[np.ndarray, None]:
         """
         Render environment visualization in specified mode with lazy renderer initialization, performance 
         monitoring, error handling, and fallback strategies following Gymnasium render specification.
@@ -576,6 +576,11 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         render_start_time = time.perf_counter()
         
         try:
+            # Optionally apply per-call render mode override
+            original_mode = self.render_mode
+            if mode is not None:
+                self.render_mode = mode
+
             # Validate environment is initialized
             if not self._environment_initialized:
                 self.logger.warning("Render called on uninitialized environment")
