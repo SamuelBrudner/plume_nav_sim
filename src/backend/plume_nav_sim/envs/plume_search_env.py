@@ -10,12 +10,16 @@ class _InstanceCheckMeta(type):
     def __instancecheck__(cls, instance):
         if type.__instancecheck__(cls, instance):
             return True
-        inner = getattr(instance, "env", None)
-        if inner is not None and inner is not instance:
-            try:
-                return isinstance(inner, cls)
-            except Exception:
-                return False
+        visited = set()
+        current = instance
+        for _ in range(10):
+            inner = getattr(current, 'env', None)
+            if inner is None or inner is current or inner in visited:
+                break
+            if type.__instancecheck__(cls, inner):
+                return True
+            visited.add(inner)
+            current = inner
         return False
 
 from ..core.geometry import Coordinates, GridSize
