@@ -450,16 +450,8 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                     context={'environment_state': 'uninitialized'}
                 )
             
-            # Validate action parameter using validate_action_parameter
-            if not validate_action_parameter(action, self.action_space):
-                raise ValidationError(
-                    f"Invalid action: {action}",
-                    context={
-                        'action_value': action,
-                        'action_type': type(action).__name__,
-                        'valid_range': f"0-{ACTION_SPACE_SIZE-1}"
-                    }
-                )
+            # Validate action parameter; returns canonical integer in [0, ACTION_SPACE_SIZE-1]
+            action = validate_action_parameter(action, allow_enum_types=True)
             
             # Increment step counter and update performance timing
             self._step_count += 1
