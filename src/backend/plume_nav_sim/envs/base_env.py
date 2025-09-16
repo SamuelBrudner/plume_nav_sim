@@ -451,7 +451,10 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 )
             
             # Validate action parameter; returns canonical integer in [0, ACTION_SPACE_SIZE-1]
-            action = validate_action_parameter(action, allow_enum_types=True)
+            try:
+                action = validate_action_parameter(action, allow_enum_types=True)
+            except ValidationError as ve:
+                raise ValueError(str(ve))
             
             # Increment step counter and update performance timing
             self._step_count += 1
