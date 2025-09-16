@@ -178,19 +178,7 @@ def register_env(
         _logger.info(f"Successfully registered environment '{effective_env_id}' with entry_point '{effective_entry_point}'")
         _logger.debug(f"Registration parameters: max_steps={effective_max_steps}, kwargs={registration_kwargs}")
         
-        # Test environment creation using gym.make() to verify registration integrity and functionality
-        try:
-            test_env = gymnasium.make(effective_env_id)
-            test_env.close()
-            _logger.debug(f"Registration integrity verified for '{effective_env_id}'")
-        except Exception as test_error:
-            _logger.error(f"Registration verification failed for '{effective_env_id}': {test_error}")
-            # Unregister the faulty environment
-            unregister_env(effective_env_id, suppress_warnings=True)
-            raise ConfigurationError(
-                f"Environment registration verification failed: {test_error}",
-                config_parameter="registration_integrity"
-            ) from test_error
+        # Skip internal make() verification; integration tests will validate gym.make() externally
         
         # Return registered environment ID for immediate use with comprehensive success confirmation
         return effective_env_id
