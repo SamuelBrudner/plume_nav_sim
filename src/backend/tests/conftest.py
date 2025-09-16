@@ -113,9 +113,19 @@ def pytest_configure(config: pytest.Config) -> None:
     # Validate system capabilities and set performance testing thresholds
     if _config_factory and _config_factory._system_capabilities:
         caps = _config_factory._system_capabilities
-        memory_gb = caps.get('memory_gb', 8)
-        cpu_count = caps.get('cpu_count', 4)
-        
+        memory_gb = caps.get('memory_gb')
+        cpu_count = caps.get('cpu_count')
+
+        # Be robust to None or unexpected types from capability detection
+        try:
+            memory_gb = float(memory_gb) if memory_gb is not None else 8.0
+        except Exception:
+            memory_gb = 8.0
+        try:
+            cpu_count = int(cpu_count) if cpu_count is not None else 4
+        except Exception:
+            cpu_count = 4
+
         # Adjust performance thresholds based on system capabilities
         if memory_gb < 8 or cpu_count < 4:
             _performance_data['session']['performance_multiplier'] = 2.0
