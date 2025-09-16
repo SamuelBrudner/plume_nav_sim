@@ -33,14 +33,18 @@ from typing import (  # >=3.10 - Type hints for boundary enforcer methods and in
 from dataclasses import dataclass, field  # >=3.10 - Data class utilities for configuration and result structures
 
 # Internal imports from core modules for coordinate and action type system integration
-from .types import (
-    Coordinates,
-    GridSize,
-    Action,
-    ActionType,
-    CoordinateType,
-    create_coordinates
-)
+from .enums import Action
+from .geometry import Coordinates, GridSize
+from .typing import ActionType, CoordinateType
+
+
+def create_coordinates(coords: CoordinateType) -> Coordinates:
+    """Factory function to create a Coordinates object from various inputs."""
+    if isinstance(coords, Coordinates):
+        return coords
+    if isinstance(coords, (tuple, list)) and len(coords) == 2:
+        return Coordinates(x=coords[0], y=coords[1])
+    raise TypeError(f"Cannot create Coordinates from {type(coords)}")
 
 # Internal imports for system-wide constants and configuration values
 from .constants import (

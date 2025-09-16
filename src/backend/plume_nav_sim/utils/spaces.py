@@ -22,9 +22,9 @@ import dataclasses  # >=3.10 - Data class decorators for configuration and valid
 from dataclasses import dataclass  # >=3.10 - Dataclass decorator for structured configuration management
 
 # Internal imports from core module
-from ..core.types import (
-    Action, ActionType, ObservationType, Coordinates, GridSize
-)
+from ..core.enums import Action
+from ..core.typing import ActionType, ObservationType
+from ..core.geometry import Coordinates, GridSize
 from ..core.constants import (
     ACTION_SPACE_SIZE, ACTION_UP, ACTION_RIGHT, ACTION_DOWN, ACTION_LEFT,
     CONCENTRATION_RANGE, OBSERVATION_DTYPE
@@ -32,7 +32,7 @@ from ..core.constants import (
 
 # Internal imports from utils module
 from .exceptions import ValidationError
-from .logging import get_component_logger
+from .logging import get_component_logger, ComponentType
 
 # Global constants for caching and performance
 SPACE_VALIDATION_CACHE_SIZE = 1000
@@ -49,7 +49,7 @@ __all__ = [
 ]
 
 # Initialize component logger for space operations and validation monitoring
-logger = get_component_logger(__name__)
+logger = get_component_logger('validation', ComponentType.UTILS)
 
 
 @functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Internal imports - core types and data structures
-from .types import (
+from .typing import (
     Coordinates, GridSize, Action, AgentState, EpisodeState, StateSnapshot, 
     PerformanceMetrics, create_agent_state, create_episode_state, create_coordinates
 )

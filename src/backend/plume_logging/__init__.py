@@ -47,8 +47,8 @@ from .formatters import (
     # Utility functions for formatter configuration
     detect_color_support, sanitize_message,
     # Formatting constants and color specifications
-    CONSOLE_COLOR_CODES, PERFORMANCE_FORMAT_TEMPLATE,
-    SECURITY_REDACTION_PATTERNS, DEFAULT_LOG_FORMAT
+    CONSOLE_COLOR_CODES, PERFORMANCE_LOG_FORMAT,
+    SENSITIVE_REGEX_PATTERNS, DEFAULT_LOG_FORMAT
 )
 
 # Internal imports - Logger classes and management system (no __all__ in loggers.py)
@@ -67,7 +67,7 @@ from .loggers import (
 )
 
 # Internal imports - System constants for performance and configuration
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS as CORE_PERFORMANCE_TARGET,
     COMPONENT_NAMES as CORE_COMPONENT_NAMES,
     LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT

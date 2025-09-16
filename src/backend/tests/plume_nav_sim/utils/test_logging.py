@@ -44,7 +44,7 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS
 )
 
-from logging.config import ComponentType
+from plume_logging.config import ComponentType
 
 # Test constants and global variables for consistent testing
 TEST_COMPONENT_NAME = 'test_component'

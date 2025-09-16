@@ -48,13 +48,11 @@ _configure_configuration_warnings()
 try:
     # Primary imports from default configuration module
     from .default_config import (
-        EnvironmentConfig, PlumeConfig, RenderConfig, PerformanceConfig, 
+        EnvironmentConfig, PlumeConfig, PerformanceConfig, 
         CompleteConfig, ConfigurationError,
-        get_default_environment_config, get_default_plume_config, 
-        get_default_render_config, get_default_performance_config, 
-        get_complete_default_config, validate_configuration_compatibility,
-        merge_configurations, create_config_from_dict
+        get_complete_default_config
     )
+    from .render_configs import RenderConfig
     
     logger.info("Successfully imported default configuration components")
     DEFAULT_CONFIG_AVAILABLE = True

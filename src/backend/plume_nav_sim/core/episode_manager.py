@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple  # >=3.10 - Type hint
 from dataclasses import dataclass, field  # >=3.10 - Data class utilities for episode configuration and result data structures
 
 # Internal core imports - data types and system constants
-from .types import (
+from .typing import (
     Coordinates, GridSize, Action, AgentState, EpisodeState, EnvironmentConfig, 
     StateSnapshot, PerformanceMetrics, create_episode_state, create_step_info
 )
@@ -1655,7 +1655,7 @@ def create_episode_manager(config: Optional[EpisodeManagerConfig] = None,
             default_grid_size = GridSize(width=DEFAULT_GRID_SIZE[0], height=DEFAULT_GRID_SIZE[1])
             
             # Import PlumeParameters for default configuration
-            from .types import PlumeParameters
+            from .typing import PlumeParameters
             default_plume_params = PlumeParameters(
                 source_location=DEFAULT_SOURCE_LOCATION,
                 sigma=12.0,  # Default dispersion parameter

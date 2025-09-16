@@ -14,13 +14,22 @@ import time  # >=3.10 - Time utilities for timestamp formatting and performance 
 import datetime  # >=3.10 - Date and time handling for advanced timestamp formatting and timezone support
 import threading  # >=3.10 - Thread synchronization for thread-safe formatting operations and shared formatter state
 import functools  # >=3.10 - Function utilities for caching, memoization, and decorator support in formatters
-from typing import Dict, List, Optional, Any, Tuple, Union  # >=3.10 - Type hints for formatter method signatures, record processing, and color scheme definitions
-from enum import Enum  # >=3.10 - Enumeration definitions for color codes, format types, and security filter patterns
-from dataclasses import dataclass  # >=3.10 - Data classes for formatter configuration, color schemes, and performance metric structures
+from typing import Dict, List, Optional, Any, Tuple, Union
+from dataclasses import dataclass, field
+
+# Console color codes for enhanced readability
+CONSOLE_COLOR_CODES = {
+    'DEBUG': '\033[94m',    # Blue
+    'INFO': '\033[92m',     # Green
+    'WARNING': '\033[93m',  # Yellow
+    'ERROR': '\033[91m',    # Red
+    'CRITICAL': '\033[91m', # Red
+    'RESET': '\033[0m'      # Reset color
+}
 
 # Internal imports - Import performance constants and handle missing constants gracefully
 try:
-    from ..plume_nav_sim.core.constants import (
+    from plume_nav_sim.core.constants import (
         PERFORMANCE_TARGET_STEP_LATENCY_MS,
         PERFORMANCE_TARGET_RGB_RENDER_MS,
         PERFORMANCE_TARGET_PLUME_GENERATION_MS as PERFORMANCE_TARGET_HUMAN_RENDER_MS
@@ -33,12 +42,12 @@ except ImportError:
 
 # Handle missing constants with reasonable defaults
 try:
-    from ..plume_nav_sim.core.constants import LOG_LEVEL_DEFAULT
+    from plume_nav_sim.core.constants import LOG_LEVEL_DEFAULT
 except ImportError:
     LOG_LEVEL_DEFAULT = 'INFO'
 
 try:
-    from ..plume_nav_sim.core.constants import COMPONENT_NAMES
+    from plume_nav_sim.core.constants import COMPONENT_NAMES
 except ImportError:
     COMPONENT_NAMES = ['plume_nav_sim', 'environment', 'rendering', 'plume_model', 'utilities']
 
@@ -1304,7 +1313,7 @@ class SecurityFilter(logging.Filter):
             redaction_count = 0
             
             # Apply regex_patterns to detect sensitive information in message
-            for pattern in self.regex_patterns:
+            for i, pattern in enumerate(self.regex_patterns):
                 if redaction_count >= self.max_redactions_per_message:
                     break
                     

@@ -19,7 +19,7 @@ performance optimization suitable for production reinforcement learning environm
 
 # Standard library imports
 import sys
-import logging
+import logging as std_logging
 from typing import Any, Dict, List, Optional, Tuple, Union, Type
 
 # Package version definition for distribution and compatibility tracking
@@ -113,19 +113,19 @@ from .spaces import (
 
 # Configuration handling and lifecycle management with validation framework
 # Import configuration utilities providing centralized configuration operations
-from .config import (
-    # Create configuration quickly with common parameter overrides and sensible defaults
-    create_quick_config,
-    
-    # Comprehensive configuration validation with detailed error reporting
-    validate_config,
-    
-    # Configuration manager class for centralized configuration operations and lifecycle
-    ConfigManager
-)
+try:
+    from .config import (
+        create_quick_config,
+        validate_config,
+        ConfigManager,
+    )
+except Exception:  # Module may be unavailable during minimal test runs
+    create_quick_config = None  # type: ignore
+    validate_config = None  # type: ignore
+    ConfigManager = None  # type: ignore
 
 # Module-level logger for utility package initialization and configuration tracking
-_logger = logging.getLogger(__name__)
+_logger = std_logging.getLogger(__name__)
 
 # Initialize module-level logging for package lifecycle tracking and debugging
 try:

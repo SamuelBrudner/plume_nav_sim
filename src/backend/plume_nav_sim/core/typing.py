@@ -1,7 +1,30 @@
 """
 Custom type aliases for the plume navigation simulation.
 """
-from typing import Any
+from typing import Any, Union, Tuple, Dict, List
+from .enums import Action
+from .geometry import Coordinates
 import numpy as np
 
 RGBArray = np.ndarray[Any, np.dtype[np.uint8]]
+ActionType = Union[Action, int]
+MovementVector = Tuple[int, int]
+CoordinateType = Union[Coordinates, Tuple[int, int]]
+ObservationType = np.ndarray
+
+RewardType = float
+InfoType = Dict[str, Any]
+
+
+class PerformanceMetrics:
+    """Minimal performance metrics collector used by lightweight components.
+
+    Provides a record_timing(name, value_ms) API compatible with callers in the
+    core modules without introducing heavy dependencies.
+    """
+
+    def __init__(self) -> None:
+        self.timings: Dict[str, List[float]] = {}
+
+    def record_timing(self, name: str, value_ms: float) -> None:
+        self.timings.setdefault(name, []).append(float(value_ms))

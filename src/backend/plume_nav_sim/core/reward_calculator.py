@@ -26,7 +26,7 @@ from .constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS
 )
 
-from .types import (
+from .typing import (
     Coordinates,
     AgentState, 
     EpisodeState,

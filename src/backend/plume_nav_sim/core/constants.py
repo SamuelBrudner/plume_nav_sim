@@ -15,6 +15,16 @@ relationships remain mathematically sound.
 import numpy as np  # >=2.1.0 - Data type constants and mathematical precision specifications
 from typing import Dict, Tuple, Any  # >=3.10 - Type hints for factory functions and validation
 
+# Component Names for Logging and Identification
+COMPONENT_NAMES = [
+    'environment', 'plume_model', 'agent_state', 'episode_manager',
+    'state_manager', 'action_processor', 'reward_calculator', 'boundary_enforcer',
+    'renderer', 'validation', 'seeding', 'logging', 'exceptions'
+]
+
+# Logging Defaults
+LOG_LEVEL_DEFAULT = 'INFO'
+
 # Package identification constants
 PACKAGE_NAME = 'plume_nav_sim'
 PACKAGE_VERSION = '0.0.1'
@@ -26,6 +36,8 @@ DEFAULT_SOURCE_LOCATION = (64, 64)
 DEFAULT_PLUME_SIGMA = 12.0
 DEFAULT_GOAL_RADIUS = 0
 DEFAULT_MAX_STEPS = 1000
+MIN_GRID_SIZE = (16, 16)
+MAX_GRID_SIZE = (1024, 1024)
 
 # Discrete action space constants for cardinal direction navigation
 ACTION_UP = 0
@@ -65,11 +77,15 @@ SOURCE_MARKER_SIZE = (5, 5)  # Source marker dimensions in pixels
 PIXEL_VALUE_MIN = 0
 PIXEL_VALUE_MAX = 255
 SUPPORTED_RENDER_MODES = ['rgb_array', 'human']
+MATPLOTLIB_DEFAULT_FIGSIZE = (8, 8)
+BACKEND_PRIORITY_LIST = ['TkAgg', 'Qt5Agg', 'Agg']
 
 # Performance target constants for system optimization
+PERFORMANCE_TRACKING_ENABLED = True
 PERFORMANCE_TARGET_STEP_LATENCY_MS = 1.0
 PERFORMANCE_TARGET_RGB_RENDER_MS = 5.0
 PERFORMANCE_TARGET_PLUME_GENERATION_MS = 10.0
+PERFORMANCE_TARGET_HUMAN_RENDER_MS = 50.0
 
 # Memory management constants for resource constraints
 MEMORY_LIMIT_TOTAL_MB = 50
@@ -301,6 +317,7 @@ def get_testing_constants() -> Dict[str, Any]:
         }
     }
 
+TESTING_CONSTANTS = get_testing_constants()
 
 def validate_constant_consistency(strict_mode: bool = False) -> Tuple[bool, Dict[str, Any]]:
     """
@@ -486,12 +503,19 @@ def validate_constant_consistency(strict_mode: bool = False) -> Tuple[bool, Dict
 
 # Export list for comprehensive public interface
 __all__ = [
+    # Component Names
+    'COMPONENT_NAMES',
+
+    # Logging
+    'LOG_LEVEL_DEFAULT',
+
     # Package identification
     'PACKAGE_NAME', 'PACKAGE_VERSION', 'ENVIRONMENT_ID',
     
     # Environment defaults
     'DEFAULT_GRID_SIZE', 'DEFAULT_SOURCE_LOCATION', 'DEFAULT_PLUME_SIGMA',
     'DEFAULT_GOAL_RADIUS', 'DEFAULT_MAX_STEPS',
+    'MIN_GRID_SIZE', 'MAX_GRID_SIZE',
     
     # Action space constants
     'ACTION_UP', 'ACTION_RIGHT', 'ACTION_DOWN', 'ACTION_LEFT',
@@ -510,10 +534,13 @@ __all__ = [
     'AGENT_MARKER_COLOR', 'SOURCE_MARKER_COLOR', 'AGENT_MARKER_SIZE',
     'SOURCE_MARKER_SIZE', 'PIXEL_VALUE_MIN', 'PIXEL_VALUE_MAX',
     'SUPPORTED_RENDER_MODES',
+    'MATPLOTLIB_DEFAULT_FIGSIZE',
+    'BACKEND_PRIORITY_LIST',
     
     # Performance targets
     'PERFORMANCE_TARGET_STEP_LATENCY_MS', 'PERFORMANCE_TARGET_RGB_RENDER_MS',
     'PERFORMANCE_TARGET_PLUME_GENERATION_MS',
+    'PERFORMANCE_TARGET_HUMAN_RENDER_MS',
     
     # Memory constraints
     'MEMORY_LIMIT_TOTAL_MB', 'MEMORY_LIMIT_PLUME_FIELD_MB',
@@ -527,6 +554,7 @@ __all__ = [
     'get_action_space_constants', 'get_rendering_constants',
     'get_performance_constants', 'get_validation_constants',
     'get_testing_constants',
+    'TESTING_CONSTANTS',
     
     # Validation function
     'validate_constant_consistency'

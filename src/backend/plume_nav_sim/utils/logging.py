@@ -20,16 +20,16 @@ import threading  # >=3.10
 import weakref  # >=3.10
 import inspect  # >=3.10
 from typing import (  # >=3.10
-    Optional, 
-    Dict, 
-    Any, 
-    Union, 
-    List, 
-    Callable, 
-    Type, 
-    Tuple,
-    TracebackType
+    Optional,
+    Dict,
+    Any,
+    Union,
+    List,
+    Callable,
+    Type,
+    Tuple
 )
+from types import TracebackType
 
 # Internal imports for exception handling and error logging integration
 from .exceptions import (
@@ -47,14 +47,15 @@ from ..core.constants import (
 )
 
 # Centralized logging infrastructure components
-from ...logging.config import (
-    get_logger,
+from plume_logging.config import (
     ComponentType,
-    configure_development_logging
+    configure_development_logging,
+    get_logger as _plume_get_logger,
+    ComponentLogger as _PlumeComponentLogger,
 )
 
 # Specialized performance logging formatter for timing analysis
-from ...logging.formatters import PerformanceFormatter
+from plume_logging.formatters import PerformanceFormatter
 
 
 # Global state for logger caching and thread-safe operations
@@ -78,6 +79,7 @@ __all__ = [
     'log_with_context',
     'create_performance_logger',
     'setup_error_logging',
+    'monitor_performance',
     'ComponentLogger',
     'PerformanceTimer',
     'LoggingMixin'
@@ -86,84 +88,49 @@ __all__ = [
 
 def get_component_logger(
     component_name: str,
-    component_type: ComponentType,
+    component_type: Optional[ComponentType] = None,
     logger_level: Optional[str] = None,
     enable_performance_tracking: bool = True
-) -> 'ComponentLogger':
+) -> '_PlumeComponentLogger':
     """
-    Factory function for creating or retrieving component-specific loggers with automatic
-    configuration, caching, and component-appropriate settings for plume_nav_sim system components.
-    
-    Args:
-        component_name: Name of the component, must be in COMPONENT_NAMES
-        component_type: ComponentType enumeration for specialized configuration
-        logger_level: Logging level override, defaults to component-specific level
-        enable_performance_tracking: Enable performance timing and monitoring
-        
-    Returns:
-        Configured ComponentLogger with appropriate settings, performance tracking,
-        and security filtering
-        
-    Raises:
-        ValidationError: If component_name is invalid or component_type is incorrect
-        PlumeNavSimError: If logger creation or configuration fails
+    Factory function for creating or retrieving component-specific loggers using the
+    centralized plume_logging infrastructure. This wrapper preserves the existing
+    utils.logging API while delegating creation to the shared logging system.
     """
     try:
-        # Validate component_name against COMPONENT_NAMES and component_type enumeration
-        if component_name not in COMPONENT_NAMES:
-            raise ValidationError(
-                f"Invalid component name '{component_name}'. Must be one of: {COMPONENT_NAMES}"
-            )
-        
-        if not isinstance(component_type, ComponentType):
-            raise ValidationError(
-                f"component_type must be ComponentType enum, got {type(component_type)}"
-            )
-        
-        # Generate cache key combining component_name and component_type for logger identification
-        cache_key = f"{component_name}_{component_type.value}"
-        
-        # Check _logger_cache for existing logger instance using cache key with thread-safe access
+        # Infer component type if not provided
+        comp_type = component_type or ComponentType.UTILS
+
+        # Normalize name under package namespace
+        logger_name = f"{PACKAGE_NAME}.{component_name}"
+
+        # Simple cache keyed by name and type
+        cache_key = f"{logger_name}_{comp_type.value}"
         with _cache_lock:
-            if cache_key in _logger_cache:
-                cached_logger = _logger_cache[cache_key]
-                # Return cached logger if found and configuration matches requested parameters
-                if (cached_logger.performance_tracking_enabled == enable_performance_tracking and 
-                    (logger_level is None or cached_logger.base_logger.level == getattr(logging, logger_level.upper()))):
-                    return cached_logger
-            
-            # Create new ComponentLogger using get_logger function from logging.config module
-            base_logger = get_logger(
-                logger_name=f"{PACKAGE_NAME}.{component_name}",
-                component_type=component_type
+            cached = _logger_cache.get(cache_key)
+            if cached is not None:
+                return cached  # Return cached plume logger directly
+
+            plume_logger = _plume_get_logger(
+                name=logger_name,
+                component_type=comp_type,
+                enable_performance_tracking=enable_performance_tracking,
             )
-            
-            # Configure logger with component-specific settings based on component_type
+
+            # Optional level override
             if logger_level is not None:
-                # Set logger level from logger_level parameter or use component default
-                base_logger.setLevel(getattr(logging, logger_level.upper()))
-            
-            # Create ComponentLogger instance with enhanced capabilities
-            component_logger = ComponentLogger(
-                component_name=component_name,
-                component_type=component_type,
-                base_logger=base_logger
-            )
-            
-            # Enable performance tracking if enable_performance_tracking is True and appropriate for component
-            component_logger.performance_tracking_enabled = enable_performance_tracking
-            
-            # Apply security filtering configuration for sensitive information protection
-            # Security filtering is handled by the centralized logging infrastructure
-            
-            # Cache logger instance in _logger_cache using weak reference for memory management
-            _logger_cache[cache_key] = component_logger
-            
-            # Return fully configured component logger ready for use
-            return component_logger
-            
+                try:
+                    desired = getattr(logging, logger_level.upper())
+                    underlying = getattr(plume_logger, 'logger', None) or getattr(plume_logger, 'base_logger', None)
+                    if isinstance(underlying, logging.Logger):
+                        underlying.setLevel(desired)
+                except Exception:
+                    pass
+
+            _logger_cache[cache_key] = plume_logger
+            return plume_logger
+
     except Exception as e:
-        # Handle any errors during logger creation and provide proper context
         error_details = {
             'component_name': component_name,
             'component_type': component_type,
@@ -174,11 +141,13 @@ def get_component_logger(
         raise PlumeNavSimError(f"Failed to create component logger: {e}") from e
 
 
+
 def configure_logging_for_development(
     log_level: str = "DEBUG",
     enable_console_colors: bool = True,
     enable_file_logging: bool = False,
-    log_directory: str = "./logs"
+    log_directory: str = "./logs",
+    log_file_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Configures development-optimized logging for plume_nav_sim with enhanced debugging information,
@@ -216,11 +185,10 @@ def configure_logging_for_development(
         
         # Call configure_development_logging from logging.config with enhanced parameters
         config_result = configure_development_logging(
-            log_level=log_level,
-            enable_console_output=True,
-            enable_color_output=enable_console_colors,
-            enable_performance_logging=True,
-            log_file_path=log_directory if enable_file_logging else None
+            enable_verbose_output=True,
+            enable_color_console=enable_console_colors,
+            log_to_file=enable_file_logging,
+            development_log_level=log_level,
         )
         
         # Set global _logging_initialized flag to prevent re-initialization
@@ -1614,3 +1582,45 @@ class LoggingMixin:
         except Exception as e:
             # Fallback logging if method exit logging fails
             self.logger.error(f"Method exit logging failed for {method_name}: {e}")
+
+def monitor_performance(operation_name: str, timing_threshold_ms: Optional[float] = None,
+                        update_baseline: bool = False) -> Callable:
+    """
+    Decorator for measuring function execution time and logging via the component logger
+    attached to `self` (if present). Provides a lightweight fallback used in tests and
+    core modules to avoid import-time failures when the advanced timing utilities are
+    unavailable.
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            exc: Optional[BaseException] = None
+            try:
+                return func(*args, **kwargs)
+            except BaseException as e:  # Ensure timing is logged even on error
+                exc = e
+                raise
+            finally:
+                duration_ms = (time.perf_counter() - start) * 1000.0
+                try:
+                    self_obj = args[0] if args else None
+                    logger = getattr(self_obj, 'logger', None)
+                    if logger and hasattr(logger, 'performance'):
+                        metrics = {}
+                        if timing_threshold_ms is not None:
+                            metrics['threshold_ms'] = timing_threshold_ms
+                        if exc is not None:
+                            metrics['exception'] = type(exc).__name__
+                            metrics['operation_failed'] = True
+                        logger.performance(
+                            operation_name=operation_name,
+                            duration_ms=duration_ms,
+                            metrics=metrics or None,
+                            update_baseline=update_baseline,
+                        )
+                except Exception:
+                    # Never let performance logging break the wrapped function
+                    pass
+        return wrapper
+    return decorator

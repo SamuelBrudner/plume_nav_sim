@@ -1,5 +1,5 @@
 # Pre-commit hooks configuration for plume_nav_sim reinforcement learning environment
-# Provides comprehensive automated code quality enforcement integrating black, flake8, mypy, 
+# Provides comprehensive automated code quality enforcement integrating black, flake8, mypy,
 # bandit, isort, pydocstyle, and custom validation hooks for scientific Python development
 
 default_language_version:
@@ -34,45 +34,45 @@ repos:
         args: ['--markdown-linebreak-ext=md']
         types: [text]
         exclude: '^(.*\.md|.*\.txt)$'
-      
+
       - id: end-of-file-fixer
         name: Fix End of Files
         description: Ensure files end with newline character
         types: [text]
         exclude: '^(.*\.svg|.*\.png|.*\.jpg)$'
-      
+
       - id: check-yaml
         name: Check YAML Syntax
         description: Validate YAML file syntax including pre-commit config files
         types: [yaml]
         args: ['--multi']
-      
+
       - id: check-toml
         name: Check TOML Syntax
         description: Validate TOML file syntax including pyproject.toml
         types: [toml]
-      
+
       - id: check-json
         name: Check JSON Syntax
         description: Validate JSON file syntax for configuration files
         types: [json]
-      
+
       - id: check-added-large-files
         name: Check Large Files
         description: Prevent accidental large file commits
         args: ['--maxkb=1000']
-      
+
       - id: check-merge-conflict
         name: Check Merge Conflicts
         description: Prevent commits with merge conflict markers
         types: [text]
-      
+
       - id: debug-statements
         name: Debug Statement Detection
         description: Detect and prevent Python debug statements
         language: python
         types: [python]
-      
+
       - id: name-tests-test
         name: Test File Naming
         description: Ensure test files follow naming conventions
@@ -90,7 +90,7 @@ repos:
         types: [python]
         args: ['--line-length=88', '--target-version=py310']
         exclude: '^(build/|dist/|\.tox/)'
-      
+
       - id: black-jupyter
         name: Black Jupyter Formatting
         description: Black formatting for Jupyter notebooks
@@ -131,7 +131,7 @@ repos:
         description: Static type analysis and checking for Python code
         language: python
         types: [python]
-        args: ['--config-file=mypy.ini', '--show-error-codes']
+        args: ['--show-error-codes']
         additional_dependencies: ['types-setuptools', 'types-requests', 'numpy', 'gymnasium', 'matplotlib']
         exclude: '^(tests/|examples/|benchmarks/)'
 
@@ -144,7 +144,8 @@ repos:
         description: Security vulnerability detection and analysis
         language: python
         types: [python]
-        args: ['-r', 'src/', '-f', 'json', '-o', 'bandit-report.json', '-ll', '--skip=B101,B601']
+        args: ['-r', 'src/backend', '-f', 'json', '-o', 'bandit-report.json', '-ll', '--skip=B101,B601']
+        additional_dependencies: ['pbr']
         exclude: '^(tests/|examples/)'
 
   # pydocstyle docstring style checker enforcing PEP 257 and scientific documentation standards
@@ -161,7 +162,7 @@ repos:
 
   # Commitizen commit message standardization and versioning
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: '3.13.0'
+    rev: 'v4.9.1'
     hooks:
       - id: commitizen
         name: Commitizen Check
@@ -177,7 +178,7 @@ repos:
         description: Run fast test subset for pre-commit validation
         entry: python -m pytest
         language: system
-        args: ['tests/', '-x', '-q', '--tb=short', '--durations=5', '-m', 'not slow']
+        args: ['src/backend/tests/', '-x', '-q', '--tb=short', '--durations=5', '-m', 'not slow']
         pass_filenames: false
         always_run: true
 
@@ -187,23 +188,23 @@ repos:
       - id: requirements-sync
         name: Requirements Synchronization
         description: Validate requirements files are synchronized with pyproject.toml
-        entry: python scripts/validate_requirements_sync.py
+        entry: python src/backend/scripts/validate_requirements_sync.py
         language: system
         files: '^(requirements.*\.txt|pyproject\.toml)$'
         pass_filenames: false
-      
+
       - id: changelog-update
         name: Changelog Update Check
         description: Ensure CHANGELOG.md is updated for significant changes
-        entry: python scripts/check_changelog_update.py
+        entry: python src/backend/scripts/check_changelog_update.py
         language: system
         files: '^src/plume_nav_sim/'
         pass_filenames: false
-      
+
       - id: license-headers
         name: License Header Validation
         description: Ensure proper license headers in source files
-        entry: python scripts/check_license_headers.py
+        entry: python src/backend/scripts/check_license_headers.py
         language: system
         files: '\.py$'
         exclude: '^(tests/|setup\.py)'

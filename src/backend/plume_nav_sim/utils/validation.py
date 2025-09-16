@@ -20,10 +20,11 @@ import dataclasses  # >=3.10 - Data classes for validation context, results, and
 import numpy as np  # >=2.1.0 - Array validation, dtype checking, mathematical operations, and bounds verification for observation and coordinate validation
 
 # Internal imports from core types and constants
-from ..core.types import (
-    Action, ActionType, Coordinates, GridSize, PlumeParameters, 
-    EnvironmentConfig, RenderMode
-)
+from ..core.enums import Action, RenderMode
+from ..core.geometry import Coordinates, GridSize
+from ..core.models import PlumeModel as PlumeParameters
+from ..core.typing import ActionType
+from config.default_config import EnvironmentConfig
 
 from ..core.constants import (
     DEFAULT_GRID_SIZE, MIN_GRID_SIZE, MAX_GRID_SIZE, MIN_PLUME_SIGMA, 

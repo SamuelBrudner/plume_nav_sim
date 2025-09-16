@@ -37,7 +37,7 @@ import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework
 import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and performance-optimized numerical computing
 
 # Internal imports - Core types and constants
-from ..core.types import (
+from ..core import (
     Action, ActionType, Coordinates, GridSize, EnvironmentConfig, RenderMode  # Core data types for environment state management
 )
 
@@ -48,8 +48,9 @@ from ..core.constants import (
 )
 
 # Internal imports - Rendering system
-from ..render.base_renderer import BaseRenderer, RenderContext  # Abstract renderer interface and context management
-from ..render.numpy_rgb import NumpyRGBRenderer  # High-performance RGB array renderer implementation
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:  # Avoid importing heavy rendering stack at import time
+    from ..render.base_renderer import BaseRenderer, RenderContext
 
 # Internal imports - Utility framework
 from ..utils.logging import get_component_logger, monitor_performance  # Component logging and performance tracking
@@ -748,7 +749,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             self._environment_initialized = False
             self._renderer = None
     
-    def _get_or_create_renderer(self) -> BaseRenderer:
+    def _get_or_create_renderer(self) -> 'BaseRenderer':
         """
         Get existing renderer or create new renderer based on render mode with lazy initialization, 
         backend selection, and error handling for dual-mode visualization system.
@@ -1056,7 +1057,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         )
     
     @abc.abstractmethod
-    def _create_render_context(self) -> RenderContext:
+    def _create_render_context(self) -> 'RenderContext':
         """
         Abstract method for render context creation containing environment state, visualization 
         data, and rendering metadata for visualization pipeline.
@@ -1071,7 +1072,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         )
     
     @abc.abstractmethod
-    def _create_renderer(self) -> BaseRenderer:
+    def _create_renderer(self) -> 'BaseRenderer':
         """
         Abstract method for renderer creation based on render mode with backend selection, 
         optimization configuration, and error handling.
