@@ -50,6 +50,8 @@ _performance_data: Dict[str, Dict[str, Any]] = {}
 # Global TestConfigFactory instance for intelligent configuration management
 _config_factory: Optional[TestConfigFactory] = None
 
+_global_seed_manager: Optional[SeedManager] = None
+
 # Configuration flags for test behavior and monitoring
 TEST_ISOLATION_ENABLED = True  # Flag enabling test isolation and independent fixture management
 PERFORMANCE_MONITORING_ENABLED = True  # Flag enabling comprehensive performance monitoring during tests
@@ -209,6 +211,31 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     
     # Validate system state restoration and resource cleanup completion
     print("=== Test session cleanup completed ===")
+
+
+# ===== PUBLIC ACCESSORS USED BY TEST PACKAGES =====
+
+def get_test_config_factory() -> TestConfigFactory:
+    """Return a shared TestConfigFactory instance for tests that import it.
+
+    Lazily creates the factory if pytest_configure hasn't run yet.
+    """
+    global _config_factory
+    if _config_factory is None:
+        _config_factory = TestConfigFactory(auto_optimize=True)
+        try:
+            _config_factory.detect_system_capabilities(force_refresh=True)
+        except Exception:
+            pass
+    return _config_factory
+
+
+def get_global_seed_manager() -> SeedManager:
+    """Return a shared SeedManager instance for reproducibility tests."""
+    global _global_seed_manager
+    if _global_seed_manager is None:
+        _global_seed_manager = SeedManager(enable_validation=True, thread_safe=True)
+    return _global_seed_manager
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
