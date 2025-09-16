@@ -24,6 +24,18 @@ import time  # >=3.10 - Timestamp generation for cache management and registrati
 import threading  # >=3.10 - Thread-safe registration operations and cache consistency management
 from typing import Dict, Any, Optional, Union, List  # >=3.10 - Type hints for registration functions, cache management, and error handling
 
+
+# Compatibility shim: older tests expect registry.env_specs; gymnasium>=1.x uses a dict
+try:
+    reg = gymnasium.envs.registry
+    if isinstance(reg, dict) and not hasattr(reg, 'env_specs'):
+        class _RegistryAdapter:
+            def __init__(self, mapping):
+                self.env_specs = mapping
+        gymnasium.envs.registry = _RegistryAdapter(reg)
+except Exception:
+    warnings.warn('Gymnasium registry may not be fully compatible - some features may be limited')
+
 # Internal imports for core registration functionality
 from .register import (
     register_env,
