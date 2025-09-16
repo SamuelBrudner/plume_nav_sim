@@ -357,7 +357,7 @@ class ValidationError(PlumeNavSimError):
     and specific recovery suggestions for resolving validation issues.
     """
     
-    def __init__(self, message: str, parameter_name: Optional[str] = None, invalid_value: Optional[Any] = None, expected_format: Optional[str] = None):
+    def __init__(self, message: str, parameter_name: Optional[str] = None, invalid_value: Optional[Any] = None, expected_format: Optional[str] = None, context: Optional[Any] = None):
         """Initialize validation error with parameter details and validation context.
         
         Args:
@@ -366,8 +366,24 @@ class ValidationError(PlumeNavSimError):
             invalid_value (Optional[Any]): The invalid value that caused validation failure
             expected_format (Optional[str]): Expected format or constraint description
         """
-        # Call parent constructor with message and MEDIUM severity
-        super().__init__(message, severity=ErrorSeverity.MEDIUM)
+        # Prepare optional context: accept either ErrorContext or a plain dict
+        error_context = None
+        if context is not None:
+            try:
+                if isinstance(context, ErrorContext):
+                    error_context = context
+                elif isinstance(context, dict):
+                    error_context = create_error_context(
+                        operation_name='validation_error',
+                        additional_context=context,
+                        include_caller_info=True,
+                        include_system_info=False
+                    )
+            except Exception:
+                error_context = None
+
+        # Call parent constructor with message, optional context and MEDIUM severity
+        super().__init__(message, context=error_context, severity=ErrorSeverity.MEDIUM)
         
         # Store parameter_name for parameter-specific error handling
         self.parameter_name = parameter_name
@@ -550,8 +566,24 @@ class RenderingError(PlumeNavSimError):
             backend_name (Optional[str]): Backend that caused the error
             underlying_error (Optional[Exception]): Underlying exception that caused rendering failure
         """
-        # Call parent constructor with message and MEDIUM severity
-        super().__init__(message, severity=ErrorSeverity.MEDIUM)
+        # Prepare optional context: accept either ErrorContext or a plain dict
+        error_context = None
+        if context is not None:
+            try:
+                if isinstance(context, ErrorContext):
+                    error_context = context
+                elif isinstance(context, dict):
+                    error_context = create_error_context(
+                        operation_name='validation_error',
+                        additional_context=context,
+                        include_caller_info=True,
+                        include_system_info=False
+                    )
+            except Exception:
+                error_context = None
+
+        # Call parent constructor with message, optional context and MEDIUM severity
+        super().__init__(message, context=error_context, severity=ErrorSeverity.MEDIUM)
         
         # Store render_mode for mode-specific error handling
         self.render_mode = render_mode
