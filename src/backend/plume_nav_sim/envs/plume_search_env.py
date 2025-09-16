@@ -45,13 +45,37 @@ class PlumeSearchEnv(BaseEnvironment, metaclass=_InstanceCheckMeta):
         )
         super().__init__(config=config, render_mode=render_mode)
         # Minimal internal state
-        self.agent_pos = Coordinates(0, 0)
+
+        # Initialize agent position; if seeded RNG is available, randomize start for reproducibility
+        try:
+            if getattr(self, 'np_random', None) is not None:
+                w, h = self.config.grid_size.width, self.config.grid_size.height
+                x = int(self.np_random.integers(0, max(1, w)))
+                y = int(self.np_random.integers(0, max(1, h)))
+                self.agent_pos = Coordinates(x, y)
+            else:
+                self.agent_pos = Coordinates(0, 0)
+        except Exception:
+            self.agent_pos = Coordinates(0, 0)
+
         self._terminated = False
         self._truncated = False
 
     # Abstract method implementations
     def _reset_environment_state(self) -> None:
-        self.agent_pos = Coordinates(0, 0)
+
+        # Initialize agent position; if seeded RNG is available, randomize start for reproducibility
+        try:
+            if getattr(self, 'np_random', None) is not None:
+                w, h = self.config.grid_size.width, self.config.grid_size.height
+                x = int(self.np_random.integers(0, max(1, w)))
+                y = int(self.np_random.integers(0, max(1, h)))
+                self.agent_pos = Coordinates(x, y)
+            else:
+                self.agent_pos = Coordinates(0, 0)
+        except Exception:
+            self.agent_pos = Coordinates(0, 0)
+
         self._terminated = False
         self._truncated = False
 
