@@ -699,7 +699,6 @@ class ParameterValidator:
 
 # Core validation functions with comprehensive error handling and performance optimization
 
-@functools.lru_cache(maxsize=VALIDATION_CACHE_SIZE)
 def validate_environment_config(config: Union[EnvironmentConfig, dict], strict_mode: bool = False,
                                check_performance: bool = True, 
                                validation_context: Optional[dict] = None) -> ValidationResult:
