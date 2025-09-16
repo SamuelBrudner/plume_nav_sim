@@ -35,14 +35,15 @@ import matplotlib.pyplot as plt  # >=3.9.0 - Interactive plotting interface for 
 import numpy as np  # >=2.1.0 - Array operations for RGB array analysis, pixel manipulation, and mathematical visualization processing
 
 # Internal imports - Project modules for environment and visualization
-from ..plume_nav_sim.registration.register import register_env, ENV_ID
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
-from ..plume_nav_sim.render.matplotlib_viz import (
+from plume_nav_sim.registration.register import register_env, ENV_ID
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.render.matplotlib_renderer import (
     MatplotlibRenderer, create_matplotlib_renderer, detect_matplotlib_capabilities
 )
-from ..plume_nav_sim.render.color_schemes import ColorSchemeManager, create_accessibility_scheme
-from ..plume_nav_sim.core.types import Action, RenderMode, Coordinates, GridSize
-from ..plume_nav_sim.utils.exceptions import RenderingError, ValidationError
+from plume_nav_sim.render.color_schemes import ColorSchemeManager, create_accessibility_scheme
+from plume_nav_sim.core.enums import Action, RenderMode
+from plume_nav_sim.core.geometry import Coordinates, GridSize
+from plume_nav_sim.utils.exceptions import RenderingError, ValidationError
 
 # Global demonstration configuration constants
 DEMO_SEED = 123
@@ -478,7 +479,6 @@ def demonstrate_interactive_visualization(env: gymnasium.Env, interactive_steps:
         
         # Create matplotlib renderer using create_matplotlib_renderer() with optimized configuration
         try:
-            from ..plume_nav_sim.core.types import GridSize
             
             grid_size = GridSize(width=128, height=128)  # Default grid size
             renderer = create_matplotlib_renderer(

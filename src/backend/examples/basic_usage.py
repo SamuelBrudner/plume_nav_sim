@@ -23,7 +23,7 @@ from plume_nav_sim.registration.register import (
     register_env,  # Environment registration function for Gymnasium compatibility enabling gym.make() instantiation
     ENV_ID  # Environment identifier constant 'PlumeNav-StaticGaussian-v0' for gym.make() calls
 )
-from plume_nav_sim.core.types import Action  # Action enumeration for demonstrating discrete action space usage and movement directions
+from plume_nav_sim.core.enums import Action  # Action enumeration for demonstrating discrete action space usage and movement directions
 from plume_nav_sim.utils.exceptions import (
     ValidationError,  # Exception handling for input validation failures and error demonstration
     PlumeNavSimError  # Base exception handling for comprehensive error management and user guidance

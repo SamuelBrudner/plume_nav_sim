@@ -34,12 +34,12 @@ from ..core.constants import (
 )
 
 # Internal imports from utilities
-from ./exceptions import (
+from .exceptions import (
     ValidationError, ConfigurationError, ResourceError, 
     sanitize_error_context
 )
 
-from ./spaces import validate_action, validate_observation
+from .spaces import validate_action, validate_observation
 
 # Global validation configuration constants
 VALIDATION_CACHE_SIZE = 2000

@@ -13,7 +13,7 @@ import copy  # >=3.10
 from typing import Union, Optional, Dict, List, Any, Tuple  # >=3.10
 
 # Internal imports from plume_nav_sim core
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,
     DEFAULT_SOURCE_LOCATION, 
     DEFAULT_PLUME_SIGMA,
@@ -21,14 +21,8 @@ from ..plume_nav_sim.core.constants import (
     TESTING_CONSTANTS
 )
 
-from ..plume_nav_sim.core.types import (
-    GridSize,
-    Coordinates,
-    PlumeParameters,
-    RenderMode,
-    create_grid_size,
-    create_coordinates
-)
+from plume_nav_sim.core.geometry import GridSize, Coordinates
+from plume_nav_sim.core.models import PlumeModel as PlumeParameters
 
 # Try to import from default_config - may not exist in early development phases
 try:

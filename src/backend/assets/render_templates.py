@@ -21,9 +21,9 @@ from .default_colormap import (
 )
 
 # Core types for template sizing and positioning
-from ..plume_nav_sim.core.types import (
-    GridSize, Coordinates, RenderMode, RGBArray
-)
+from plume_nav_sim.core.geometry import GridSize, Coordinates
+from plume_nav_sim.core.enums import RenderMode
+from plume_nav_sim.core.typing import RGBArray
 
 # Performance constants and configuration
 from ..plume_nav_sim.core.constants import (

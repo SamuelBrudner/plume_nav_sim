@@ -45,13 +45,13 @@ import inspect  # >=3.10 - Code introspection utilities for automatic user docum
 from typing import Any, Dict, List, Optional, Tuple, Union  # >=3.10 - Type annotations for clear user documentation and tutorial parameter specifications with educational clarity
 
 # Internal imports - Environment registration and core functionality
-from ../plume_nav_sim.registration.register import register_env, ENV_ID  # Environment registration function and identifier for Gymnasium compatibility and user tutorial examples
-from ../plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env  # Main environment class and factory function for comprehensive user tutorials and practical usage examples
-from ../plume_nav_sim.core.types import Action  # Action enumeration for user-friendly action space documentation and tutorial examples
-from ../plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, DEFAULT_MAX_STEPS  # Default configuration constants for user configuration examples and tutorials
-from ../plume_nav_sim.utils.seeding import SeedManager, validate_seed  # Seed management utilities for user reproducibility tutorials and scientific research examples
-from ../examples.basic_usage import demonstrate_basic_episode, demonstrate_reproducibility  # Basic demonstration functions for user tutorial integration and practical examples
-from ../examples.visualization_demo import demonstrate_rendering_modes  # Rendering demonstration function for user visualization tutorials and practical guidance
+from plume_nav_sim.registration.register import register_env, ENV_ID  # Environment registration function and identifier for Gymnasium compatibility and user tutorial examples
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env  # Main environment class and factory function for comprehensive user tutorials and practical usage examples
+from plume_nav_sim.core.enums import Action  # Action enumeration for user-friendly action space documentation and tutorial examples
+from plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, DEFAULT_MAX_STEPS  # Default configuration constants for user configuration examples and tutorials
+from plume_nav_sim.utils.seeding import SeedManager, validate_seed  # Seed management utilities for user reproducibility tutorials and scientific research examples
+from examples.basic_usage import demonstrate_basic_episode, demonstrate_reproducibility  # Basic demonstration functions for user tutorial integration and practical examples
+from examples.visualization_demo import demonstrate_rendering_modes  # Rendering demonstration function for user visualization tutorials and practical guidance
 
 # Global constants for user guide configuration
 USER_GUIDE_VERSION = '1.0.0'  # Version identifier for user guide documentation and compatibility tracking
@@ -386,7 +386,7 @@ print(f"Initial Observation: {{obs}}")
 print(f"Info Dictionary: {{info}}")
 
 # Explore action meanings
-from plume_nav_sim.core.types import Action
+from plume_nav_sim.core.enums import Action
 print("\\nAction Mappings:")
 for action in Action:
     print(f"{{action.value}}: {{action.name}}")
@@ -1550,7 +1550,7 @@ try:
     from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
     print("✓ Main environment class available")
     
-    from plume_nav_sim.core.types import Action
+    from plume_nav_sim.core.enums import Action
     print("✓ Core types available")
     
     print("\\n🎉 plume_nav_sim successfully installed!")
@@ -1651,7 +1651,7 @@ The observation tells us the chemical concentration at the agent's current posit
 #### Take Actions and Explore
 
 ```python
-from plume_nav_sim.core.types import Action
+from plume_nav_sim.core.enums import Action
 import numpy as np
 
 # Display action meanings
@@ -2379,7 +2379,7 @@ except Exception as e:
 
 # Issue 2: Import errors
 try:
-    from plume_nav_sim.core.types import Action
+    from plume_nav_sim.core.enums import Action
     print("✓ Core types import successful")
 except ImportError as e:
     print(f"✗ Import failed: {{e}}")
@@ -2578,7 +2578,7 @@ def create_configuration_guide(
         and practical customization patterns for scientific applications
     """
     guide_sections = []
-    
+
     # Generate configuration overview explaining environment customization capabilities and research benefits
     guide_sections.append(f"""
 ## Configuration Guide
@@ -2639,7 +2639,7 @@ env = PlumeSearchEnv(
 )
 ```
     """)
-    
+
     # Document core parameters including grid_size, source_location, max_steps, and goal_radius with research context
     guide_sections.append(f"""
 ### Core Parameters Documentation
@@ -2881,7 +2881,7 @@ def test_goal_radius_impact():
 test_goal_radius_impact()
 ```
     """)
-    
+
     # Create parameter effects section if include_parameter_effects enabled with performance and behavior implications
     if include_parameter_effects:
         guide_sections.append(f"""
@@ -3129,7 +3129,7 @@ def visualization_parameter_effects():
 visualization_parameter_effects()
 ```
         """)
-    
+
     # Add research preset configurations if include_research_presets enabled with common experimental designs
     if include_research_presets:
         guide_sections.append(f"""
@@ -3210,5 +3210,7 @@ for preset_name in EDUCATIONAL_PRESETS.keys():
     env.close()
     print()
 ```
+        """
+        )
 
-#### Research Benchmark Presets
+    return '\n\n'.join(guide_sections)

@@ -80,6 +80,11 @@ MIN_PLUME_SIGMA = 0.1
 MAX_PLUME_SIGMA = 100.0
 STATIC_GAUSSIAN_MODEL_TYPE = 'static_gaussian'
 
+# Seeding and Reproducibility Constants
+SEED_MIN_VALUE = 0
+SEED_MAX_VALUE = 2**31 - 1
+VALID_SEED_TYPES = (int, np.integer)
+
 # Comprehensive error message templates for validation
 VALIDATION_ERROR_MESSAGES = {
     'invalid_action': 'Action must be integer in range [0, 3] for cardinal directions',

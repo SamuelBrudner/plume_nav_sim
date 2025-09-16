@@ -29,8 +29,9 @@ from enum import Enum  # >=3.10 - Base enumeration class for rendering configura
 from typing import Dict, List, Optional, Union  # >=3.10 - Type hints for rendering configuration management
 
 # Internal imports for core types and functionality
-from ..plume_nav_sim.core.types import RenderMode, GridSize, create_grid_size
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.enums import RenderMode
+from plume_nav_sim.core.geometry import GridSize
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
     MATPLOTLIB_DEFAULT_FIGSIZE,

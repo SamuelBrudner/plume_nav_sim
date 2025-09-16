@@ -24,16 +24,16 @@ from typing import Dict, List, Tuple, Any, Optional, Generator, Union
 from dataclasses import dataclass, field
 
 # Internal imports from plume_nav_sim core modules
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..config.test_configs import (
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.config.test_configs import (
     create_unit_test_config, create_integration_test_config, create_performance_test_config,
     create_reproducibility_test_config, create_edge_case_test_config, TestConfigFactory,
     REPRODUCIBILITY_SEEDS
 )
-from ..plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     Action, Coordinates, GridSize, create_coordinates, create_grid_size
 )
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, 
     PERFORMANCE_TARGET_STEP_LATENCY_MS, PERFORMANCE_TARGET_RGB_RENDER_MS
 )

@@ -287,7 +287,8 @@ All code must pass automated quality checks configured in `.pre-commit-config.ya
 import numpy as np  # >=2.1.0 - Mathematical computing
 from typing import Tuple, Optional, Dict, Any
 
-from plume_nav_sim.core.types import Coordinates, Action
+from plume_nav_sim.core.geometry import Coordinates
+from plume_nav_sim.core.enums import Action
 
 
 class PlumeSearchEnvironment:
@@ -516,7 +517,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 from plume_nav_sim.core.plume_model import StaticGaussianPlume
-from plume_nav_sim.core.types import Coordinates
+from plume_nav_sim.core.geometry import Coordinates
 
 
 class TestStaticGaussianPlume:

@@ -42,10 +42,11 @@ import numpy as np  # >=2.1.0 - Statistical analysis, timing calculations, and p
 import psutil  # >=5.8.0 - System resource monitoring including memory usage and process-level profiling
 
 # Internal imports for environment benchmarking and validation framework integration
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..plume_nav_sim.utils.validation import validate_environment_config, ValidationResult
-from ..plume_nav_sim.core.types import Action, GridSize
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.utils.validation import validate_environment_config, ValidationResult
+from plume_nav_sim.core.enums import Action
+from plume_nav_sim.core.geometry import GridSize
+from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE, PERFORMANCE_TARGET_STEP_LATENCY_MS, MEMORY_LIMIT_TOTAL_MB
 )
 

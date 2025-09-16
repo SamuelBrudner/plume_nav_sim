@@ -38,7 +38,6 @@ __all__ = [
 ]
 
 
-@enum.IntEnum
 class ErrorSeverity(enum.IntEnum):
     """Enumeration class defining error severity levels for exception classification and handling priority in development and monitoring contexts.
     
