@@ -762,6 +762,20 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             self._episode_count = 0
 
 
+            self._renderer = None
+            self.np_random = None
+            self._seed = None
+            
+            # Log environment closure with performance summary
+            self.logger.info(f"Environment closed - Performance summary: {performance_summary}")
+            
+        except Exception as e:
+            self.logger.error(f"Environment close failed: {e}")
+            # Force cleanup even if errors occurred
+            self._environment_initialized = False
+            self._renderer = None
+    
+
     # Expose common configuration attributes expected by tests
     @property
     def grid_size(self) -> Tuple[int, int]:
@@ -776,19 +790,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             return (int(self.config.source_location.x), int(self.config.source_location.y))
         except Exception:
             return (0, 0)
-            self._renderer = None
-            self.np_random = None
-            self._seed = None
-            
-            # Log environment closure with performance summary
-            self.logger.info(f"Environment closed - Performance summary: {performance_summary}")
-            
-        except Exception as e:
-            self.logger.error(f"Environment close failed: {e}")
-            # Force cleanup even if errors occurred
-            self._environment_initialized = False
-            self._renderer = None
-    
+
     def _get_or_create_renderer(self) -> 'BaseRenderer':
         """
         Get existing renderer or create new renderer based on render mode with lazy initialization, 
