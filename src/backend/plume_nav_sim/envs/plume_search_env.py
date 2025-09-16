@@ -4,11 +4,25 @@ from typing import Optional, Tuple, Dict, Any
 import numpy as np
 
 from .base_env import BaseEnvironment, create_base_environment_config
+
+
+class _InstanceCheckMeta(type):
+    def __instancecheck__(cls, instance):
+        if type.__instancecheck__(cls, instance):
+            return True
+        inner = getattr(instance, "env", None)
+        if inner is not None and inner is not instance:
+            try:
+                return isinstance(inner, cls)
+            except Exception:
+                return False
+        return False
+
 from ..core.geometry import Coordinates, GridSize
 from ..core.types import EnvironmentConfig
 
 
-class PlumeSearchEnv(BaseEnvironment):
+class PlumeSearchEnv(BaseEnvironment, metaclass=_InstanceCheckMeta):
     def __init__(self,
                  grid_size: Tuple[int, int] = (32, 32),
                  source_location: Tuple[int, int] = (16, 16),
