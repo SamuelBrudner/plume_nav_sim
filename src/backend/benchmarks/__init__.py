@@ -28,7 +28,7 @@ from .environment_performance import (
 )
 
 # Internal imports - Logging infrastructure for benchmark orchestration and progress tracking
-from ..plume_nav_sim.utils.logging import get_component_logger  # Component-specific logger factory for benchmark orchestration logging
+from plume_nav_sim.utils.logging import get_component_logger  # Component-specific logger factory for benchmark orchestration logging
 
 # Graceful handling of missing benchmark modules with placeholder implementations
 # This ensures the package works even when some benchmark files don't exist yet
