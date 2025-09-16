@@ -395,6 +395,13 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                     'reset_time_ms': 0.0  # Will be updated below
                 }
             }
+            # Include agent position if available for integration tests
+            try:
+                agent = getattr(self, 'agent_pos', None)
+                if agent is not None and hasattr(agent, 'x') and hasattr(agent, 'y'):
+                    info['agent_xy'] = (int(agent.x), int(agent.y))
+            except Exception:
+                pass
             
             # Set environment initialized flag
             self._environment_initialized = True
