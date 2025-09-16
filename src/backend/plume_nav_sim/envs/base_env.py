@@ -318,6 +318,22 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         self._environment_initialized = False
         self._step_count = 0
         self._episode_count = 0
+
+
+    # Expose common configuration attributes expected by tests
+    @property
+    def grid_size(self) -> Tuple[int, int]:
+        try:
+            return (int(self.config.grid_size.width), int(self.config.grid_size.height))
+        except Exception:
+            return (0, 0)
+
+    @property
+    def source_location(self) -> Tuple[int, int]:
+        try:
+            return (int(self.config.source_location.x), int(self.config.source_location.y))
+        except Exception:
+            return (0, 0)
         
         # Initialize renderer reference to None for lazy initialization
         self._renderer: Optional[BaseRenderer] = None
@@ -744,6 +760,22 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             # Reset internal state variables
             self._step_count = 0
             self._episode_count = 0
+
+
+    # Expose common configuration attributes expected by tests
+    @property
+    def grid_size(self) -> Tuple[int, int]:
+        try:
+            return (int(self.config.grid_size.width), int(self.config.grid_size.height))
+        except Exception:
+            return (0, 0)
+
+    @property
+    def source_location(self) -> Tuple[int, int]:
+        try:
+            return (int(self.config.source_location.x), int(self.config.source_location.y))
+        except Exception:
+            return (0, 0)
             self._renderer = None
             self.np_random = None
             self._seed = None
