@@ -61,7 +61,11 @@ class PlumeSearchEnv(BaseEnvironment):
         return {'grid_size': (self.config.grid_size.width, self.config.grid_size.height)}
 
     def _create_renderer(self):
-        return None
+        try:
+            from ..render.numpy_rgb import NumpyRGBRenderer
+            return NumpyRGBRenderer(self.config.grid_size)
+        except Exception:
+            return None
 
     def _seed_components(self, seed: Optional[int]) -> None:
         return None
