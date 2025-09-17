@@ -22,6 +22,8 @@ ENVIRONMENT_ID = 'PlumeNav-StaticGaussian-v0'
 
 # Environment default configuration constants
 DEFAULT_GRID_SIZE = (128, 128)
+MIN_GRID_SIZE = (4, 4)
+MAX_GRID_SIZE = (512, 512)
 DEFAULT_SOURCE_LOCATION = (64, 64)
 DEFAULT_PLUME_SIGMA = 12.0
 DEFAULT_GOAL_RADIUS = 0
@@ -66,10 +68,15 @@ PIXEL_VALUE_MIN = 0
 PIXEL_VALUE_MAX = 255
 SUPPORTED_RENDER_MODES = ['rgb_array', 'human']
 
+COMPONENT_NAMES = ('core', 'env', 'plume', 'render')
+LOG_LEVEL_DEFAULT = 'INFO'
+
 # Performance target constants for system optimization
 PERFORMANCE_TARGET_STEP_LATENCY_MS = 1.0
 PERFORMANCE_TARGET_RGB_RENDER_MS = 5.0
+PERFORMANCE_TARGET_HUMAN_RENDER_MS = 33.0
 PERFORMANCE_TARGET_PLUME_GENERATION_MS = 10.0
+PERFORMANCE_TRACKING_ENABLED = True
 
 # Memory management constants for resource constraints
 MEMORY_LIMIT_TOTAL_MB = 50

@@ -27,9 +27,9 @@ from typing import (  # >=3.10
     List, 
     Callable, 
     Type, 
-    Tuple,
-    TracebackType
+    Tuple
 )
+from types import TracebackType
 
 # Internal imports for exception handling and error logging integration
 from .exceptions import (
