@@ -350,9 +350,9 @@ class PlumeNavSimError(Exception):
         self.error_details[key] = value
 
 
-class ValidationError(PlumeNavSimError):
+class ValidationError(PlumeNavSimError, ValueError):
     """Exception class for input parameter and action validation failures with specific validation context, detailed error reporting, and parameter-specific recovery suggestions for development debugging.
-    
+
     This exception handles all input validation failures with detailed parameter information
     and specific recovery suggestions for resolving validation issues.
     """

@@ -15,3 +15,4 @@ def test_render_validation_error_alias():
     utils_exceptions = importlib.import_module("plume_nav_sim.utils.exceptions")
 
     assert render_module.ValidationError is utils_exceptions.ValidationError
+    assert issubclass(utils_exceptions.ValidationError, ValueError)
