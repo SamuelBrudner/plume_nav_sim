@@ -26,7 +26,7 @@ from functools import wraps  # >=3.10 - Decorator utilities for performance moni
 import json  # >=3.10 - JSON serialization for configuration data
 
 # Internal imports
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # Performance target for timing threshold configuration
     PACKAGE_NAME  # System package identifier for logger hierarchy
 )

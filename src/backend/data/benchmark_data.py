@@ -21,11 +21,11 @@ from dataclasses import dataclass, field  # >=3.10 - Data structure definitions 
 from typing import List, Dict, Any, Optional, Tuple, Union  # >=3.10 - Type hints for benchmark data structures, analysis functions, and statistical calculations
 
 # Internal imports from plume_nav_sim core modules
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS, 
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
-    PERFORMANCE_TARGET_EPISODE_RESET_MS,
+    # PERFORMANCE_TARGET_EPISODE_RESET_MS,  # Not available in constants; omit/reset metric
     MEMORY_LIMIT_TOTAL_MB,
     DEFAULT_GRID_SIZE,
     MIN_GRID_SIZE,
@@ -33,7 +33,7 @@ from ..plume_nav_sim.core.constants import (
     TESTING_CONSTANTS
 )
 
-from ..plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     GridSize,
     EnvironmentConfig,
     create_grid_size
@@ -53,7 +53,7 @@ STATISTICAL_OUTLIER_THRESHOLD = 2.0
 # Performance target definitions for all benchmark categories and validation
 PERFORMANCE_TARGETS = {
     'step_latency_ms': PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    'episode_reset_ms': PERFORMANCE_TARGET_EPISODE_RESET_MS,
+    'episode_reset_ms': 10.0,
     'rgb_render_ms': PERFORMANCE_TARGET_RGB_RENDER_MS,
     'human_render_ms': PERFORMANCE_TARGET_HUMAN_RENDER_MS,
     'memory_usage_mb': MEMORY_LIMIT_TOTAL_MB,

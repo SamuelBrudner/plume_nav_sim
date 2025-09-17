@@ -137,9 +137,9 @@ class NumpyRGBRenderer(BaseRenderer):
         }
         
         # Initialize cache structures for RGB array storage and retrieval optimization
-        if self.caching_enabled and len(_RGB_ARRAY_CACHE) == 0:
-            global _RGB_ARRAY_CACHE
-            _RGB_ARRAY_CACHE = {}
+        global _RGB_ARRAY_CACHE
+        if self.caching_enabled:
+            _RGB_ARRAY_CACHE.clear()
         
         # Set up vectorized operation parameters for NumPy array manipulation efficiency
         np.seterr(invalid='ignore', over='ignore')  # Optimize NumPy error handling for performance

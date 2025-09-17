@@ -44,20 +44,9 @@ from .core.types import (
     RenderMode,
     Coordinates,
     GridSize,
-    AgentState,
     EnvironmentConfig,
     create_coordinates,
     create_grid_size,
-    validate_action,
-    PlumeParameters,
-    EpisodeState,
-    StateSnapshot,
-    create_agent_state,
-    create_environment_config,
-    validate_coordinates,
-    validate_grid_size,
-    calculate_euclidean_distance,
-    create_state_snapshot
 )
 
 # Internal imports for system constants and configuration values
@@ -69,9 +58,9 @@ from .core.constants import (
     DEFAULT_SOURCE_LOCATION,
     DEFAULT_MAX_STEPS,
     DEFAULT_GOAL_RADIUS,
-    DEFAULT_SIGMA,
+    DEFAULT_PLUME_SIGMA,
     get_default_environment_constants,
-    get_default_plume_constants,
+    get_plume_model_constants,
     get_performance_constants,
     validate_constant_consistency
 )
@@ -130,22 +119,12 @@ __all__ = [
     'RenderMode', 
     'Coordinates',
     'GridSize',
-    'AgentState',
     'EnvironmentConfig',
-    'PlumeParameters',
-    'EpisodeState',
-    'StateSnapshot',
     
     # Type factory functions and validation utilities
     'create_coordinates',
     'create_grid_size',
-    'create_agent_state',
-    'create_environment_config',
-    'create_state_snapshot',
-    'validate_action',
-    'validate_coordinates',
-    'validate_grid_size',
-    'calculate_euclidean_distance',
+    # Minimal factories exported
     
     # Exception handling classes and utilities
     'PlumeNavSimError',
@@ -169,9 +148,9 @@ __all__ = [
     'DEFAULT_SOURCE_LOCATION',
     'DEFAULT_MAX_STEPS', 
     'DEFAULT_GOAL_RADIUS',
-    'DEFAULT_SIGMA',
+    'DEFAULT_PLUME_SIGMA',
     'get_default_environment_constants',
-    'get_default_plume_constants',
+    'get_plume_model_constants',
     'get_performance_constants',
     'validate_constant_consistency',
     
@@ -468,7 +447,7 @@ def quick_start(
             'source_location': DEFAULT_SOURCE_LOCATION,
             'max_steps': DEFAULT_MAX_STEPS,
             'goal_radius': DEFAULT_GOAL_RADIUS,
-            'sigma': DEFAULT_SIGMA
+            'sigma': DEFAULT_PLUME_SIGMA
         }
         
         effective_config = default_config.copy()
@@ -577,7 +556,7 @@ def create_example_environment(
                 'source_location': DEFAULT_SOURCE_LOCATION,
                 'max_steps': DEFAULT_MAX_STEPS,
                 'goal_radius': DEFAULT_GOAL_RADIUS,
-                'sigma': DEFAULT_SIGMA,
+                'sigma': DEFAULT_PLUME_SIGMA,
                 'description': 'Standard research environment with default parameters',
                 'difficulty': 'intermediate'
             },

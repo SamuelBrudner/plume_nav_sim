@@ -21,6 +21,7 @@ from plume_nav_sim.utils.exceptions import ConfigurationError, ResourceError
 __all__ = [
     'CompleteConfig',
     'EnvironmentConfig',
+    'PlumeConfig',
     'PerformanceConfig',
     'get_complete_default_config'
 ]
@@ -58,7 +59,7 @@ class CompleteConfig:
     advanced_options: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def clone_with_overrides(self, overrides: Dict[str, Any]) -> 'CompleteConfig':
+    def clone_with_overrides(self, **overrides: Any) -> 'CompleteConfig':
         """Create deep copy of configuration with parameter overrides applied.
 
         Args:
@@ -117,6 +118,15 @@ class CompleteConfig:
                 invalid_value="multiple_parameters"
             )
         return True
+
+@dataclass
+class PlumeConfig:
+    """Configuration class for plume-specific parameters."""
+
+    sigma: float = DEFAULT_PLUME_SIGMA
+    model_type: str = 'static_gaussian'
+    update_interval: int = 1
+
 
 @dataclass
 class EnvironmentConfig:

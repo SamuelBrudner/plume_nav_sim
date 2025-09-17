@@ -20,8 +20,9 @@ from dataclasses import dataclass, field  # >=3.10
 from enum import Enum  # >=3.10
 from functools import wraps, lru_cache  # >=3.10
 from typing import (  # >=3.10
-    Dict, List, Optional, Union, Callable, Any, Tuple, Type, WeakSet
+    Dict, List, Optional, Union, Callable, Any, Tuple, Type
 )
+from weakref import WeakSet
 
 # Internal imports - configuration and enumeration infrastructure
 from .config import (
@@ -34,7 +35,7 @@ from .formatters import (
 )
 
 # Internal imports - system constants
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     COMPONENT_NAMES, LOG_LEVEL_DEFAULT, PERFORMANCE_TARGET_STEP_LATENCY_MS
 )
 

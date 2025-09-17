@@ -37,6 +37,7 @@ from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, 
     PERFORMANCE_TARGET_STEP_LATENCY_MS, PERFORMANCE_TARGET_RGB_RENDER_MS
 )
+from plume_nav_sim.utils.seeding import SeedManager
 
 
 # ===== GLOBAL REGISTRY AND STATE MANAGEMENT =====
@@ -49,6 +50,8 @@ _performance_data: Dict[str, Dict[str, Any]] = {}
 
 # Global TestConfigFactory instance for intelligent configuration management
 _config_factory: Optional[TestConfigFactory] = None
+
+_global_seed_manager: Optional[SeedManager] = None
 
 # Configuration flags for test behavior and monitoring
 TEST_ISOLATION_ENABLED = True  # Flag enabling test isolation and independent fixture management
@@ -113,9 +116,19 @@ def pytest_configure(config: pytest.Config) -> None:
     # Validate system capabilities and set performance testing thresholds
     if _config_factory and _config_factory._system_capabilities:
         caps = _config_factory._system_capabilities
-        memory_gb = caps.get('memory_gb', 8)
-        cpu_count = caps.get('cpu_count', 4)
-        
+        memory_gb = caps.get('memory_gb')
+        cpu_count = caps.get('cpu_count')
+
+        # Be robust to None or unexpected types from capability detection
+        try:
+            memory_gb = float(memory_gb) if memory_gb is not None else 8.0
+        except Exception:
+            memory_gb = 8.0
+        try:
+            cpu_count = int(cpu_count) if cpu_count is not None else 4
+        except Exception:
+            cpu_count = 4
+
         # Adjust performance thresholds based on system capabilities
         if memory_gb < 8 or cpu_count < 4:
             _performance_data['session']['performance_multiplier'] = 2.0
@@ -199,6 +212,31 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     
     # Validate system state restoration and resource cleanup completion
     print("=== Test session cleanup completed ===")
+
+
+# ===== PUBLIC ACCESSORS USED BY TEST PACKAGES =====
+
+def get_test_config_factory() -> TestConfigFactory:
+    """Return a shared TestConfigFactory instance for tests that import it.
+
+    Lazily creates the factory if pytest_configure hasn't run yet.
+    """
+    global _config_factory
+    if _config_factory is None:
+        _config_factory = TestConfigFactory(auto_optimize=True)
+        try:
+            _config_factory.detect_system_capabilities(force_refresh=True)
+        except Exception:
+            pass
+    return _config_factory
+
+
+def get_global_seed_manager() -> SeedManager:
+    """Return a shared SeedManager instance for reproducibility tests."""
+    global _global_seed_manager
+    if _global_seed_manager is None:
+        _global_seed_manager = SeedManager(enable_validation=True, thread_safe=True)
+    return _global_seed_manager
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:

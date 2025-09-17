@@ -66,6 +66,7 @@ __all__ = [
     'EnvironmentPerformanceSuite', 
     'BenchmarkResult',
     'EnvironmentBenchmarkConfig',
+    'PerformanceAnalysis',
     'TimingAnalyzer',
     'MemoryProfiler',
     'ScalabilityAnalyzer',
@@ -73,6 +74,7 @@ __all__ = [
     'benchmark_step_latency',
     'benchmark_episode_performance', 
     'benchmark_memory_usage',
+    'benchmark_rendering_performance',
     'analyze_scaling_performance',
     'validate_performance_targets',
     'generate_performance_report'
@@ -2330,3 +2332,161 @@ class PerformanceReport:
         """
         
         return html_content
+
+def benchmark_rendering_performance(env: PlumeSearchEnv, num_renders: int = 50) -> dict:
+    """Benchmark RGB-array rendering performance for a given environment.
+
+    Measures multiple rgb_array renders and returns timing statistics and basic
+    output-format validations. This utility is intentionally lightweight so it
+    can be imported by tests without requiring optional rendering backends.
+
+    Args:
+        env (PlumeSearchEnv): Initialized environment instance.
+        num_renders (int): Number of render calls to time.
+
+    Returns:
+        dict: Results containing timing stats and validation flags, e.g.::
+
+            {
+              'count': 50,
+              'mean_ms': 1.2,
+              'p95_ms': 2.5,
+              'std_ms': 0.3,
+              'format_compliant_rate': 1.0
+            }
+    """
+    import statistics
+
+    timings_ms = []
+    compliant = 0
+
+    try:
+        env.reset(seed=42)
+    except Exception:
+        pass
+
+    for i in range(max(1, num_renders)):
+        try:
+            if i > 0 and hasattr(env, 'action_space'):
+                env.step(env.action_space.sample())
+        except Exception:
+            pass
+
+        start = time.perf_counter()
+        try:
+            arr = env.render(mode='rgb_array')
+        finally:
+            dt = (time.perf_counter() - start) * 1000.0
+            timings_ms.append(dt)
+
+        try:
+            import numpy as _np
+            ok = (
+                arr is not None and hasattr(arr, 'shape') and len(arr.shape) == 3 and arr.shape[2] == 3
+                and getattr(arr, 'dtype', None) == _np.uint8
+                and _np.all((arr >= 0) & (arr <= 255))
+            )
+            compliant += 1 if ok else 0
+        except Exception:
+            pass
+
+    mean_ms = statistics.mean(timings_ms)
+    std_ms = statistics.pstdev(timings_ms) if len(timings_ms) > 1 else 0.0
+    try:
+        import numpy as _np
+        p95 = float(_np.percentile(timings_ms, 95))
+    except Exception:
+        p95 = max(timings_ms) if timings_ms else 0.0
+
+    return {
+        'count': len(timings_ms),
+        'mean_ms': float(mean_ms),
+        'p95_ms': float(p95),
+        'std_ms': float(std_ms),
+        'format_compliant_rate': (compliant / len(timings_ms)) if timings_ms else 0.0,
+        'timings_ms': timings_ms,
+    }
+
+
+class PerformanceAnalysis:
+    """High-level helper for post-benchmark analysis used by tests.
+
+    Provides simple wrappers to analyze performance trends and generate
+    optimization recommendations using the data structures produced by this
+    module. The implementation intentionally reuses existing analyzers where
+    possible and degrades gracefully if some metrics are missing.
+    """
+
+    def analyze_performance_trends(self, performance_data: dict) -> dict:
+        """Analyze trends across step latency, memory, and scalability data.
+
+        Args:
+            performance_data (dict): Expected keys include 'step_latency',
+                'memory_usage', and optionally 'scalability'.
+
+        Returns:
+            dict: Consolidated trend analysis with best-effort contents.
+        """
+        trends: Dict[str, Any] = {}
+
+        scalability = performance_data.get('scalability') or {}
+        measurements = scalability.get('scaling_measurements') or {}
+        if measurements:
+            analyzer = ScalabilityAnalyzer()
+            trends['scaling'] = analyzer._analyze_scaling_trends(measurements)
+
+        step = performance_data.get('step_latency') or {}
+        mem = performance_data.get('memory_usage') or {}
+
+        def _summary(stats: dict, keys: list[str]) -> dict:
+            return {k: stats.get(k) for k in keys if k in stats}
+
+        if step:
+            trends['step_latency_summary'] = _summary(step, [
+                'mean_step_time_ms', 'p95_step_time_ms', 'std_dev_step_time_ms',
+            ])
+        if mem:
+            trends['memory_summary'] = _summary(mem, [
+                'mean_memory_delta_mb', 'peak_memory_mb', 'memory_leak_suspected',
+            ])
+
+        return trends
+
+    def generate_optimization_recommendations(
+        self,
+        benchmark_results: 'BenchmarkResult',
+        trend_analysis: dict,
+        include_scaling_guidance: bool = True,
+    ) -> list[str]:
+        """Generate human-readable optimization suggestions from results and trends.
+
+        Args:
+            benchmark_results: Completed BenchmarkResult from a suite run.
+            trend_analysis: Output of analyze_performance_trends.
+            include_scaling_guidance: Whether to include grid-scaling hints.
+
+        Returns:
+            list[str]: Recommendation strings.
+        """
+        recs: List[str] = []
+
+        step = benchmark_results.step_latency_metrics or {}
+        if step and step.get('mean_step_time_ms') is not None:
+            mean = step['mean_step_time_ms']
+            target = benchmark_results.config.performance_targets.get('step_latency_ms', PERFORMANCE_TARGET_STEP_LATENCY_MS)
+            if mean > target:
+                recs.append("Optimize action processing and state update loops to reduce step latency")
+
+        mem = benchmark_results.memory_usage_metrics or {}
+        if mem and mem.get('peak_memory_mb') is not None:
+            mem_limit = benchmark_results.config.performance_targets.get('memory_limit_mb', MEMORY_LIMIT_TOTAL_MB)
+            if mem.get('peak_memory_mb', 0) > mem_limit:
+                recs.append("Reduce intermediate allocations or enable in-place operations to lower peak memory")
+
+        if include_scaling_guidance and 'scaling' in trend_analysis:
+            scaling = trend_analysis['scaling']
+            cls = scaling.get('latency_scaling', {}).get('scaling_classification')
+            if cls == 'super_linear':
+                recs.append("Super-linear latency scaling detected; profile hotspots and improve algorithmic complexity")
+
+        return recs

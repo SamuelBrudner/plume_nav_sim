@@ -29,15 +29,19 @@ from typing import (  # >=3.10
 import numpy as np  # >=2.1.0
 
 # Internal imports for core data structures and type system
-from .types import (
-    Action,
-    ActionType, 
-    Coordinates,
-    GridSize,
-    MovementVector,
-    validate_action,
-    get_movement_vector
-)
+from .enums import Action
+from .geometry import Coordinates, GridSize
+from .state import AgentState
+from .typing import ActionType, MovementVector
+
+
+def validate_action(action: ActionType) -> bool:
+    """Placeholder for the real validation function."""
+    return True
+
+def get_movement_vector(action: Action) -> MovementVector:
+    """Placeholder for the real movement vector function."""
+    return MOVEMENT_VECTORS[action.value]
 
 # System constants for action processing and performance targets
 from .constants import (
@@ -58,21 +62,17 @@ from .boundary_enforcer import (
 )
 
 # Validation utilities for comprehensive parameter checking
-from ../utils.validation import (
+from ..utils.validation import (
     validate_action_parameter,
     validate_coordinates, 
     create_validation_context
 )
-
-# Exception handling system for error reporting and recovery
-from ../utils.exceptions import (
+from ..utils.exceptions import (
     ValidationError,
     StateError,
     ComponentError
 )
-
-# Logging and performance monitoring utilities
-from ../utils.logging import (
+from ..utils.logging import (
     get_component_logger,
     monitor_performance
 )

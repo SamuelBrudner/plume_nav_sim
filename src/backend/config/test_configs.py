@@ -14,11 +14,11 @@ import copy  # >=3.10 - Deep copying of test configurations for parameter modifi
 from typing import Union, Optional, Dict, List, Tuple, Any  # >=3.10 - Type hints for test configuration management and validation functions
 
 # Internal imports from plume_nav_sim core modules
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, DEFAULT_PLUME_SIGMA, DEFAULT_GOAL_RADIUS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS, MEMORY_LIMIT_TOTAL_MB
 )
-from ..plume_nav_sim.utils.exceptions import ValidationError, ConfigurationError, ResourceError
+from plume_nav_sim.utils.exceptions import ValidationError, ConfigurationError, ResourceError
 from .default_config import CompleteConfig
 
 
