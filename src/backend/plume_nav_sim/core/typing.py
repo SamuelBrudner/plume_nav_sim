@@ -1,15 +1,20 @@
 """
 Custom type aliases for the plume navigation simulation.
 """
-from typing import Any, Union, Tuple, Dict, List
+
+from typing import Any, Dict, List, Tuple, Union
+
+import numpy as np
+
 from .enums import Action
 from .geometry import Coordinates
-import numpy as np
 
 RGBArray = np.ndarray[Any, np.dtype[np.uint8]]
 ActionType = Union[Action, int]
 MovementVector = Tuple[int, int]
 CoordinateType = Union[Coordinates, Tuple[int, int]]
+# Alias for plain tuple grid dimensions to distinguish from the GridSize dataclass.
+GridDimensions = Tuple[int, int]
 ObservationType = np.ndarray
 
 RewardType = float
@@ -27,4 +32,4 @@ class PerformanceMetrics:
         self.timings: Dict[str, List[float]] = {}
 
     def record_timing(self, name: str, value_ms: float) -> None:
-        self.timings.setdefault(name, []).append(float(value_ms))
+        self.timings.setdefault(name, []).append(value_ms)

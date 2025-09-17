@@ -27,9 +27,9 @@ import numpy as np  # >=2.1.0 - Array operations and mathematical computing
 import typing_extensions  # >=4.0.0 - Advanced typing features including Protocol definitions
 
 # Internal imports - Core types and data structures
-from ..core.types import (
-    Coordinates, GridSize, PlumeParameters, CoordinateType, GridDimensions
-)
+from ..core.geometry import Coordinates, GridSize
+from ..core.models import PlumeModel as PlumeParameters
+from ..core.typing import CoordinateType, GridDimensions
 
 # Internal imports - Constants and configuration
 from ..core.constants import (
@@ -46,7 +46,7 @@ from ..utils.logging import get_component_logger, ComponentLogger, monitor_perfo
 
 # Internal imports - Validation framework
 from ..utils.validation import (
-    validate_plume_parameters, validate_coordinates, validate_grid_dimensions
+    validate_plume_parameters, validate_coordinates, validate_grid_size
 )
 
 # Internal imports - Core concentration field implementation
@@ -205,7 +205,7 @@ class BasePlumeModel(abc.ABC):
         else:
             raise ValidationError("Invalid grid_size type, must be GridSize or tuple")
         
-        validate_grid_dimensions(self.grid_size, 
+        validate_grid_size(self.grid_size, 
                                max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB)
         
         # Convert and validate source_location using validate_coordinates with grid bounds
@@ -372,7 +372,7 @@ class BasePlumeModel(abc.ABC):
                 else:
                     # Basic parameter validation
                     validate_coordinates(self.source_location, self.grid_size)
-                    validate_grid_dimensions(self.grid_size, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB)
+                    validate_grid_size(self.grid_size, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB)
             except ValidationError as e:
                 is_valid = False
                 validation_report['errors'].append(f"Parameter validation failed: {e}")
@@ -1087,7 +1087,7 @@ class PlumeModelRegistry:
                 grid_obj = GridSize(width=grid_size[0], height=grid_size[1])
             else:
                 grid_obj = grid_size
-            validate_grid_dimensions(grid_obj, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB)
+            validate_grid_size(grid_obj, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB)
             
             # Source location validation
             if isinstance(source_location, (tuple, list)):
