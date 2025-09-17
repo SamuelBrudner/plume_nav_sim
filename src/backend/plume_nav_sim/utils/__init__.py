@@ -19,6 +19,7 @@ performance optimization suitable for production reinforcement learning environm
 
 # Standard library imports
 import sys
+import importlib
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union, Type
 
@@ -125,7 +126,7 @@ from .config import (
 )
 
 # Module-level logger for utility package initialization and configuration tracking
-_logger = logging.getLogger(__name__)
+_logger = importlib.import_module("logging").getLogger(__name__)
 
 # Initialize module-level logging for package lifecycle tracking and debugging
 try:

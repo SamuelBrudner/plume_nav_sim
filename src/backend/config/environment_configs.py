@@ -22,7 +22,7 @@ from plume_nav_sim.core.constants import (
 )
 
 from plume_nav_sim.core.geometry import GridSize, Coordinates
-from plume_nav_sim.core.models import PlumeModel as PlumeParameters
+from plume_nav_sim.core.types import PlumeParameters
 
 # Try to import from default_config - may not exist in early development phases
 try:

@@ -27,9 +27,9 @@ from typing import (  # >=3.10
     List, 
     Callable, 
     Type, 
-    Tuple,
-    TracebackType
+    Tuple
 )
+from types import TracebackType
 
 # Internal imports for exception handling and error logging integration
 from .exceptions import (
@@ -47,14 +47,14 @@ from ..core.constants import (
 )
 
 # Centralized logging infrastructure components
-from ...logging.config import (
+from ..logging.config import (
     get_logger,
     ComponentType,
     configure_development_logging
 )
 
 # Specialized performance logging formatter for timing analysis
-from ...logging.formatters import PerformanceFormatter
+from ..logging.formatters import PerformanceFormatter
 
 
 # Global state for logger caching and thread-safe operations
@@ -86,7 +86,7 @@ __all__ = [
 
 def get_component_logger(
     component_name: str,
-    component_type: ComponentType,
+    component_type: ComponentType = ComponentType.UTILS,
     logger_level: Optional[str] = None,
     enable_performance_tracking: bool = True
 ) -> 'ComponentLogger':
@@ -111,9 +111,8 @@ def get_component_logger(
     try:
         # Validate component_name against COMPONENT_NAMES and component_type enumeration
         if component_name not in COMPONENT_NAMES:
-            raise ValidationError(
-                f"Invalid component name '{component_name}'. Must be one of: {COMPONENT_NAMES}"
-            )
+            component_type = ComponentType.UTILS
+            component_name = "utils"
         
         if not isinstance(component_type, ComponentType):
             raise ValidationError(
