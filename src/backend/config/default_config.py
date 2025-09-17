@@ -17,6 +17,7 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS, MEMORY_LIMIT_TOTAL_MB
 )
 from plume_nav_sim.utils.exceptions import ConfigurationError, ResourceError
+from plume_nav_sim.core.types import EnvironmentConfig as CoreEnvironmentConfig, create_environment_config
 
 __all__ = [
     'CompleteConfig',
@@ -118,23 +119,8 @@ class CompleteConfig:
             )
         return True
 
-@dataclass
-class EnvironmentConfig:
-    """Configuration class for environment-specific parameters."""
-
-    grid_size: Tuple[int, int] = DEFAULT_GRID_SIZE
-    source_location: Tuple[int, int] = DEFAULT_SOURCE_LOCATION
-    max_steps: int = 1000
-    goal_radius: float = DEFAULT_GOAL_RADIUS
-    enable_rendering: bool = True
-
-    def clone_with_overrides(self, overrides: Dict[str, Any]) -> 'EnvironmentConfig':
-        """Create copy with environment parameter overrides."""
-        new_config = copy.deepcopy(self)
-        for key, value in overrides.items():
-            if hasattr(new_config, key):
-                setattr(new_config, key, value)
-        return new_config
+# Re-export canonical EnvironmentConfig from core.types to avoid duplication
+EnvironmentConfig = CoreEnvironmentConfig
 
 @dataclass
 class PerformanceConfig:
