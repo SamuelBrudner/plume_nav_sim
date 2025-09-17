@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -23,6 +23,23 @@ from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
 from .typing import RGBArray
 
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    from ..utils.exceptions import ValidationError as _ValidationError
+
+
+def _validation_error_class():
+    """Return the canonical ValidationError class on demand."""
+
+    from ..utils.exceptions import ValidationError as _ValidationError  # Local import avoids circular dependency
+
+    return _ValidationError
+
+
+def _raise_validation_error(message: str, **kwargs: Any) -> None:
+    """Raise the shared ValidationError with deferred import semantics."""
+
+    raise _validation_error_class()(message, **kwargs)
+
 CoordinateType = Union[Coordinates, Tuple[int, int], Sequence[int]]
 GridDimensions = Union[GridSize, Tuple[int, int], Sequence[int]]
 MovementVector = Tuple[int, int]
@@ -32,11 +49,6 @@ RewardType = float
 InfoType = Dict[str, Any]
 
 PlumeParameters = PlumeModel
-
-
-class ValidationError(Exception):
-    """Raised when type validation fails within core factories."""
-
 
 @dataclass
 class PerformanceMetrics:
@@ -87,21 +99,21 @@ class EnvironmentConfig:
         object.__setattr__(self, "plume_params", plume)
 
         if not isinstance(self.max_steps, int) or self.max_steps <= 0:
-            raise ValidationError("max_steps must be a positive integer")
+            _raise_validation_error("max_steps must be a positive integer")
 
         if not isinstance(self.goal_radius, (int, float)) or self.goal_radius < 0:
-            raise ValidationError("goal_radius must be a non-negative number")
+            _raise_validation_error("goal_radius must be a non-negative number")
 
         if not isinstance(self.enable_rendering, bool):
-            raise ValidationError("enable_rendering must be a boolean flag")
+            _raise_validation_error("enable_rendering must be a boolean flag")
 
         if not self.source_location.is_within_bounds(self.grid_size):
-            raise ValidationError(
+            _raise_validation_error(
                 "source_location must be within the provided grid_size bounds"
             )
 
         if plume.grid_compatibility and plume.grid_compatibility != self.grid_size:
-            raise ValidationError(
+            _raise_validation_error(
                 "plume_params.grid_compatibility must match the environment grid_size"
             )
 
@@ -132,7 +144,7 @@ class EnvironmentConfig:
                 grid_compatibility=grid,
             )
 
-        raise ValidationError("plume_params must be a PlumeParameters instance or mapping")
+        _raise_validation_error("plume_params must be a PlumeParameters instance or mapping")
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize configuration for downstream consumers."""
@@ -168,11 +180,11 @@ class EnvironmentConfig:
 
 def _coerce_pair(value: Sequence[int], *, name: str) -> Tuple[int, int]:
     if len(value) != 2:
-        raise ValidationError(f"{name} must contain exactly two values")
+        _raise_validation_error(f"{name} must contain exactly two values")
     try:
         first, second = int(value[0]), int(value[1])
     except (TypeError, ValueError) as exc:
-        raise ValidationError(f"{name} values must be integers") from exc
+        raise _validation_error_class()(f"{name} values must be integers") from exc
     return first, second
 
 
@@ -183,7 +195,7 @@ def create_coordinates(value: CoordinateType) -> Coordinates:
     if isinstance(value, Sequence):
         x, y = _coerce_pair(value, name="Coordinates")
         return Coordinates(x=x, y=y)
-    raise ValidationError("Coordinates must be a Coordinates instance or length-2 sequence")
+    _raise_validation_error("Coordinates must be a Coordinates instance or length-2 sequence")
 
 
 def create_grid_size(value: GridDimensions) -> GridSize:
@@ -193,7 +205,7 @@ def create_grid_size(value: GridDimensions) -> GridSize:
     if isinstance(value, Sequence):
         width, height = _coerce_pair(value, name="GridSize")
         return GridSize(width=width, height=height)
-    raise ValidationError("GridSize must be a GridSize instance or length-2 sequence")
+    _raise_validation_error("GridSize must be a GridSize instance or length-2 sequence")
 
 
 def create_agent_state(
@@ -218,7 +230,7 @@ def create_agent_state(
 
     if step_count is not None:
         if step_count < 0:
-            raise ValidationError("step_count override must be non-negative")
+            _raise_validation_error("step_count override must be non-negative")
         base.step_count = int(step_count)
     if total_reward is not None:
         base.total_reward = float(total_reward)
@@ -266,7 +278,7 @@ def create_environment_config(
     elif isinstance(config, Mapping):
         data = dict(config)
     elif config is not None:
-        raise ValidationError("config must be EnvironmentConfig, mapping, or None")
+        _raise_validation_error("config must be EnvironmentConfig, mapping, or None")
 
     data.update(overrides)
     return EnvironmentConfig(**data)
@@ -278,7 +290,7 @@ def create_step_info(
 ) -> Dict[str, Any]:
     """Create the info dictionary returned from environment step calls."""
     if not isinstance(agent_state, AgentState):
-        raise ValidationError("agent_state must be an AgentState instance")
+        _raise_validation_error("agent_state must be an AgentState instance")
 
     info: Dict[str, Any] = {
         "agent_position": agent_state.position.to_tuple(),
@@ -298,7 +310,7 @@ def validate_action(action: ActionType) -> Action:
         return action
     if isinstance(action, int) and action in MOVEMENT_VECTORS:
         return Action(action)
-    raise ValidationError("Action must be an Action enum or integer in the action space")
+    _raise_validation_error("Action must be an Action enum or integer in the action space")
 
 
 def get_movement_vector(action: ActionType) -> MovementVector:
@@ -306,6 +318,12 @@ def get_movement_vector(action: ActionType) -> MovementVector:
     validated = validate_action(action)
     return validated.to_vector()
 
+def __getattr__(name: str) -> Any:
+    if name == "ValidationError":
+        cls = _validation_error_class()
+        globals()["ValidationError"] = cls
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [

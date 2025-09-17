@@ -35,3 +35,11 @@ public API unusable, and leave tests unable to guard against regressions.
   aliases and guaranteeing that plume-specific components refer to a single canonical type.
 - Augment the test suite so that it codifies the new contracts, preventing future divergence
   between documentation and implementation.
+
+## Canonical Validation Semantics
+- Centralize validation failures on the shared `plume_nav_sim.utils.exceptions.ValidationError`
+  so every subsystem, including rendering, surfaces identical error metadata (parameter names,
+  expected formats, recovery suggestions).
+- Re-export the shared exception via `plume_nav_sim.core.types` and
+  `plume_nav_sim.render` to maintain backwards compatibility while preventing redundant
+  subclass definitions that fragment error handling logic.

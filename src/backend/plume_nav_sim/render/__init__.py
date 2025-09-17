@@ -81,6 +81,7 @@ from ..core.types import (
     RenderMode,               # Rendering mode enumeration for dual-mode visualization support
     GridSize                  # Grid dimension representation for renderer configuration
 )
+from ..utils.exceptions import ValidationError
 
 # Module-level logger configuration
 _logger = logging.getLogger('plume_nav_sim.render')
@@ -979,25 +980,6 @@ def _warn_about_limitations(
 class PerformanceWarning(UserWarning):
     """Warning category for performance-related system limitations."""
     pass
-
-
-# Validation error class for configuration issues  
-class ValidationError(ValueError):
-    """Exception raised when renderer configuration validation fails."""
-    
-    def __init__(self, message: str, parameter_name: str = None, 
-                 invalid_value: Any = None, expected_format: str = None):
-        self.parameter_name = parameter_name
-        self.invalid_value = invalid_value
-        self.expected_format = expected_format
-        
-        detailed_message = message
-        if parameter_name:
-            detailed_message += f" (parameter: {parameter_name})"
-        if expected_format:
-            detailed_message += f" (expected: {expected_format})"
-            
-        super().__init__(detailed_message)
 
 
 # Register cleanup handlers on module import
