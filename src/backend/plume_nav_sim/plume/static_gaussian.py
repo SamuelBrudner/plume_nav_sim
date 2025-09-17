@@ -20,9 +20,8 @@ from .plume_model import BasePlumeModel, PlumeModelInterface
 from .concentration_field import ConcentrationField, create_concentration_field
 
 # Core data types and coordinate handling
-from ..core.types import (
-    Coordinates, GridSize, PlumeParameters, CoordinateType, GridDimensions
-)
+from ..core.geometry import Coordinates, GridSize
+from ..core.typing import CoordinateType, GridDimensions
 
 # System constants for configuration and performance targets
 from ..core.constants import (
@@ -859,13 +858,6 @@ class StaticGaussianPlume(BasePlumeModel):
         
         # Set model_type to STATIC_GAUSSIAN_MODEL_TYPE for registry and validation consistency
         self.model_type = STATIC_GAUSSIAN_MODEL_TYPE
-        
-        # Create PlumeParameters dataclass with source_location, sigma, and model_type for configuration management
-        self.plume_params = PlumeParameters(
-            source_location=source_coords,
-            sigma=effective_sigma,
-            model_type=STATIC_GAUSSIAN_MODEL_TYPE
-        )
         
         # Initialize ConcentrationField with proper configuration
         self.concentration_field: Optional[ConcentrationField] = None

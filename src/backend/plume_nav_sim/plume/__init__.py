@@ -16,13 +16,14 @@ import time  # >=3.10 - Timestamp generation for performance monitoring and modu
 import threading  # >=3.10 - Thread-safe module initialization and registry operations
 from typing import Dict, Any, Optional, List, Tuple, Union  # >=3.10 - Type hints for comprehensive type safety
 
-# Core type system imports from shared types module
-from ..core.types import (
-    # Core data structures for coordinate and grid management
-    Coordinates,           # 2D coordinate representation for type annotations and parameter validation
-    GridSize,             # Grid dimension representation for type annotations and factory functions
-    CoordinateType,       # Type alias for flexible coordinate parameter validation
-    GridDimensions        # Type alias for grid size parameters in factory functions
+# Core type system imports from canonical modules
+from ..core.geometry import (  # Coordinates & GridSize live in geometry
+    Coordinates,            # 2D coordinate representation for type annotations and parameter validation
+    GridSize                # Grid dimension representation for type annotations and factory functions
+)
+from ..core.typing import (    # Type aliases are defined in typing
+    CoordinateType,        # Type alias for flexible coordinate parameter validation
+    GridDimensions         # Type alias for grid size parameters in factory functions
 )
 
 # Static Gaussian plume model implementation imports
