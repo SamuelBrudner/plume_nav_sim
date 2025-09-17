@@ -1,4 +1,8 @@
-"""Simplified package initializer exposing constants and core type system."""
+"""Public package initializer exposing canonical constants, types, and utilities."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
 
 from .core import (
     PACKAGE_NAME,
@@ -39,6 +43,143 @@ from .core import (
     get_movement_vector,
 )
 
+try:
+    from .envs import PlumeSearchEnv, create_plume_search_env
+except Exception as env_import_error:  # pragma: no cover - optional dependency guard
+    PlumeSearchEnv = None  # type: ignore[assignment]
+    create_plume_search_env = None  # type: ignore[assignment]
+    _ENV_IMPORT_ERROR = env_import_error
+else:
+    _ENV_IMPORT_ERROR: Optional[Exception] = None
+
+
+def initialize_package(
+    *,
+    configure_logging: bool = True,
+    auto_register_environment: bool = True,
+    validate_constants: bool = False,
+) -> Dict[str, Any]:
+    """Initialize core plume_nav_sim subsystems and return status information.
+
+    This compatibility helper keeps the legacy package-level bootstrap routine
+    available while delegating to the modern module structure.  It conditionally
+    configures logging, registers the Gymnasium environment, and can validate the
+    exported constants without raising hard failures when optional dependencies
+    are absent.
+
+    Args:
+        configure_logging: Configure the development logging profile using the
+            :mod:`plume_nav_sim.utils.logging` helpers.
+        auto_register_environment: Register the default environment with
+            Gymnasium if the dependency is available.
+        validate_constants: Run the lightweight constant consistency validation
+            utility from :mod:`plume_nav_sim.core.constants`.
+
+    Returns:
+        A dictionary containing initialization metadata, success flags, and any
+        captured errors for optional steps.
+    """
+
+    status: Dict[str, Any] = {
+        "package_name": PACKAGE_NAME,
+        "package_version": PACKAGE_VERSION,
+        "environment_id": ENVIRONMENT_ID,
+        "initialized": True,
+        "logging_configured": False,
+        "environment_registered": False,
+        "constants_validated": False,
+        "errors": [],
+    }
+
+    if configure_logging:
+        try:
+            from plume_nav_sim.utils.logging import configure_logging_for_development
+
+            configure_logging_for_development()
+            status["logging_configured"] = True
+        except Exception as exc:  # pragma: no cover - defensive guard
+            status["errors"].append({"step": "configure_logging", "error": str(exc)})
+            status["initialized"] = False
+
+    if auto_register_environment:
+        try:
+            from plume_nav_sim.registration import ensure_registered
+
+            ensure_registered()
+            status["environment_registered"] = True
+        except Exception as exc:  # pragma: no cover - defensive guard
+            status["errors"].append({"step": "register_environment", "error": str(exc)})
+            status["initialized"] = False
+
+    if validate_constants:
+        try:
+            from plume_nav_sim.core.constants import validate_constant_consistency
+
+            is_valid, report = validate_constant_consistency(strict_mode=False)
+            status["constants_validated"] = bool(is_valid)
+            status["constant_validation_report"] = report
+        except Exception as exc:  # pragma: no cover - defensive guard
+            status["errors"].append({"step": "validate_constants", "error": str(exc)})
+            status["initialized"] = False
+
+    return status
+
+
+def get_package_info(
+    *,
+    include_environment_info: bool = True,
+    include_defaults: bool = True,
+    include_performance_targets: bool = True,
+    include_registration_status: bool = False,
+) -> Dict[str, Any]:
+    """Return high-level package metadata for tooling and legacy scripts."""
+
+    info: Dict[str, Any] = {
+        "package_name": PACKAGE_NAME,
+        "package_version": PACKAGE_VERSION,
+        "environment_id": ENVIRONMENT_ID,
+    }
+
+    if include_defaults:
+        info["default_configuration"] = {
+            "grid_size": DEFAULT_GRID_SIZE,
+            "source_location": DEFAULT_SOURCE_LOCATION,
+            "max_steps": DEFAULT_MAX_STEPS,
+            "goal_radius": DEFAULT_GOAL_RADIUS,
+            "plume_sigma": DEFAULT_PLUME_SIGMA,
+        }
+
+    if include_performance_targets:
+        info["performance_targets"] = {
+            "step_latency_ms": PERFORMANCE_TARGET_STEP_LATENCY_MS,
+            "rgb_render_ms": PERFORMANCE_TARGET_RGB_RENDER_MS,
+        }
+
+    if include_environment_info:
+        environment_details: Dict[str, Any] = {
+            "available": [],
+        }
+
+        if PlumeSearchEnv is not None:
+            environment_details["available"].append("PlumeSearchEnv")
+            environment_details["factory"] = "create_plume_search_env"
+            environment_details["module"] = "plume_nav_sim.envs.plume_search_env"
+        else:
+            environment_details["error"] = str(_ENV_IMPORT_ERROR)
+
+        info["environment"] = environment_details
+
+    if include_registration_status:
+        try:
+            from plume_nav_sim.registration import get_registration_status
+
+            info["registration"] = get_registration_status()
+        except Exception as exc:  # pragma: no cover - defensive guard
+            info["registration_error"] = str(exc)
+
+    return info
+
+
 __all__ = [
     "PACKAGE_NAME",
     "PACKAGE_VERSION",
@@ -76,6 +217,10 @@ __all__ = [
     "create_step_info",
     "validate_action",
     "get_movement_vector",
+    "PlumeSearchEnv",
+    "create_plume_search_env",
+    "initialize_package",
+    "get_package_info",
 ]
 
 __version__ = PACKAGE_VERSION
