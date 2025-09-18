@@ -67,6 +67,8 @@ SOURCE_MARKER_SIZE = (5, 5)  # Source marker dimensions in pixels
 PIXEL_VALUE_MIN = 0
 PIXEL_VALUE_MAX = 255
 SUPPORTED_RENDER_MODES = ['rgb_array', 'human']
+MATPLOTLIB_DEFAULT_FIGSIZE = (8, 8)
+BACKEND_PRIORITY_LIST = ['TkAgg', 'Qt5Agg', 'Agg']
 
 COMPONENT_NAMES = ('core', 'env', 'plume', 'render')
 LOG_LEVEL_DEFAULT = 'INFO'

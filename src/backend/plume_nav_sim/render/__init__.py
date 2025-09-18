@@ -33,14 +33,57 @@ External Dependencies:
 
 # Standard library imports for configuration and logging
 from typing import Optional, Union, Dict, List, Any, Tuple
-import logging  # >=3.10 - Module-level logging for renderer operations and error reporting
-import warnings  # >=3.10 - Compatibility warnings for matplotlib backend availability and limitations
+import importlib
 import atexit
 import signal
 import sys
 import gc
 from functools import wraps
 from pathlib import Path
+
+
+def _import_stdlib_module(module_name: str):
+    """Import a standard library module even when repo-local packages shadow it."""
+
+    existing = sys.modules.get(module_name)
+    repo_root = Path(__file__).resolve().parents[4]
+    repo_root_str = str(repo_root)
+
+    if existing is not None:
+        module_file = getattr(existing, "__file__", None)
+        module_origin = getattr(getattr(existing, "__spec__", None), "origin", None)
+        if (
+            module_file and not str(Path(module_file).resolve()).startswith(repo_root_str)
+        ) or module_origin in {"built-in", "frozen"}:
+            return existing
+
+        sys.modules.pop(module_name, None)
+
+    original_path = list(sys.path)
+    try:
+        sanitized_path: List[str] = []
+        for entry in original_path:
+            try:
+                resolved = str(Path(entry).resolve())
+            except (OSError, RuntimeError, ValueError):
+                sanitized_path.append(entry)
+                continue
+
+            if resolved.startswith(repo_root_str):
+                continue
+
+            sanitized_path.append(entry)
+
+        sys.path = sanitized_path
+        module = importlib.import_module(module_name)
+    finally:
+        sys.path = original_path
+
+    return module
+
+
+logging = _import_stdlib_module("logging")
+warnings = _import_stdlib_module("warnings")
 
 # Internal imports from base renderer module
 from .base_renderer import (
