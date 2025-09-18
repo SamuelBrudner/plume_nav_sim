@@ -174,7 +174,13 @@ class PlumeSearchEnv:
         max_steps: Optional[int] = None,
         goal_radius: Optional[float] = None,
         plume_params: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> None:
+        if kwargs:
+            logger.debug(
+                "Ignoring unsupported configuration fields for PlumeSearchEnv: %s",
+                sorted(kwargs.keys()),
+            )
         self.grid_size = _validate_grid_size(grid_size)
         self.source_location = _validate_source_location(source_location, self.grid_size)
 
