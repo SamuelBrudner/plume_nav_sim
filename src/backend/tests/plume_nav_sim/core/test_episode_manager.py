@@ -11,17 +11,17 @@ import tempfile  # >=3.10 - Temporary file handling for state persistence testin
 import pathlib  # >=3.10 - Path handling for file operations in testing
 
 # Internal imports from plume_nav_sim core components
-from ....plume_nav_sim.core.episode_manager import (
+from plume_nav_sim.core.episode_manager import (
     EpisodeManager, EpisodeManagerConfig, EpisodeResult, EpisodeStatistics,
     create_episode_manager, validate_episode_config
 )
-from ....plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     Action, Coordinates, AgentState, EpisodeState, EnvironmentConfig,
     create_environment_config, create_coordinates
 )
-from ....plume_nav_sim.core.state_manager import StateManager
-from ....plume_nav_sim.utils.seeding import SeedManager
-from ....plume_nav_sim.utils.exceptions import ValidationError, StateError, ComponentError
+from plume_nav_sim.core.state_manager import StateManager
+from plume_nav_sim.utils.seeding import SeedManager
+from plume_nav_sim.utils.exceptions import ValidationError, StateError, ComponentError
 
 # Global test constants from JSON specification
 TEST_TIMEOUT = 30.0
@@ -1234,7 +1234,7 @@ class TestEpisodeManagerErrorHandling:
             resource_exhaustion_count += 1
             
             if resource_exhaustion_count > 3:
-                from ....plume_nav_sim.utils.exceptions import ResourceError
+                from plume_nav_sim.utils.exceptions import ResourceError
                 raise ResourceError(
                     message="Simulated memory exhaustion during validation",
                     resource_type="memory",

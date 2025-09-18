@@ -11,7 +11,7 @@ import threading  # >=3.10 - Thread safety testing for concurrent rendering oper
 from typing import Optional, Dict, Any, List, Union
 
 # Internal imports for BaseRenderer and related components
-from ....plume_nav_sim.render.base_renderer import (
+from plume_nav_sim.render.base_renderer import (
     BaseRenderer, 
     RenderContext, 
     RenderingMetrics,
@@ -19,7 +19,7 @@ from ....plume_nav_sim.render.base_renderer import (
     validate_rendering_parameters,
     create_rendering_metrics
 )
-from ....plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     RenderMode, 
     Coordinates, 
     GridSize, 
@@ -28,13 +28,13 @@ from ....plume_nav_sim.core.types import (
     create_grid_size,
     calculate_euclidean_distance
 )
-from ....plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
     FIELD_DTYPE,
     RGB_DTYPE
 )
-from ....plume_nav_sim.utils.exceptions import (
+from plume_nav_sim.utils.exceptions import (
     ValidationError,
     RenderingError,
     ComponentError

@@ -19,13 +19,13 @@ import warnings  # >=3.10 - Warning testing for development feedback, deprecatio
 from contextlib import contextmanager  # >=3.10 - Context manager testing for resource management validation, cleanup testing, and exception handling context testing
 
 # Internal imports for BaseEnvironment and supporting classes
-from ....plume_nav_sim.envs.base_env import (
+from plume_nav_sim.envs.base_env import (
     BaseEnvironment, AbstractEnvironmentError, create_base_environment_config, 
     validate_base_environment_setup
 )
 
 # Core types and data structures for testing
-from ....plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     Action, Coordinates, GridSize, AgentState, EpisodeState, PlumeParameters, 
     EnvironmentConfig, RenderMode, create_coordinates, create_grid_size, 
     create_agent_state, create_environment_config, validate_action, 
@@ -33,7 +33,7 @@ from ....plume_nav_sim.core.types import (
 )
 
 # Exception handling for comprehensive error testing
-from ....plume_nav_sim.utils.exceptions import (
+from plume_nav_sim.utils.exceptions import (
     ValidationError, StateError, ConfigurationError, ComponentError, 
     RenderingError, ErrorSeverity, ErrorContext
 )

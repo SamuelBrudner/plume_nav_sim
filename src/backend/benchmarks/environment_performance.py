@@ -63,7 +63,7 @@ GRID_SIZE_SCALING_FACTORS = [1, 2, 4, 8]  # Scaling factors for grid size scalab
 # Module exports for comprehensive benchmarking functionality and external integration
 __all__ = [
     'run_environment_performance_benchmark',
-    'EnvironmentPerformanceSuite', 
+    'EnvironmentPerformanceSuite',
     'BenchmarkResult',
     'EnvironmentBenchmarkConfig',
     'TimingAnalyzer',
@@ -71,11 +71,13 @@ __all__ = [
     'ScalabilityAnalyzer',
     'PerformanceReport',
     'benchmark_step_latency',
-    'benchmark_episode_performance', 
+    'benchmark_episode_performance',
     'benchmark_memory_usage',
+    'benchmark_rendering_performance',
     'analyze_scaling_performance',
     'validate_performance_targets',
-    'generate_performance_report'
+    'generate_performance_report',
+    'PerformanceAnalysis'
 ]
 
 
@@ -534,6 +536,173 @@ class BenchmarkResult:
             result_dict['statistical_analysis'] = self.calculate_statistics()
             
         return result_dict
+
+
+class PerformanceAnalysis:
+    """High-level helper that interprets benchmark output for the test suite.
+
+    The original performance tests expected an object capable of summarising raw
+    measurements, identifying regressions, and synthesising actionable guidance.
+    This lightweight implementation focuses on the behaviours exercised by the
+    rewritten tests: trend analysis across the collected benchmark dictionaries
+    and generation of concise optimisation recommendations.
+    """
+
+    def __init__(self) -> None:
+        self.logger = logging.getLogger(f"{__name__}.PerformanceAnalysis")
+        self._trend_history: List[dict] = []
+
+    # ------------------------------------------------------------------
+    # Trend analysis
+    def analyze_performance_trends(self, performance_data: dict) -> dict:
+        """Analyse benchmark dictionaries for stability and regressions.
+
+        Args:
+            performance_data: Mapping of metric names to measurement dictionaries.
+
+        Returns:
+            Dict with summary statistics, detected regressions and optimisation
+            opportunities. The structure mirrors what the tests expect to store
+            in their trackers while remaining tolerant of partial data.
+        """
+
+        analysis = {
+            'analysis_timestamp': time.time(),
+            'metrics_analyzed': list(performance_data.keys()),
+            'trend_patterns': {},
+            'regression_indicators': [],
+            'optimization_opportunities': [],
+            'statistical_significance': {},
+            'performance_forecast': {},
+            'optimization_recommendations': []
+        }
+
+        for metric_name, metrics in performance_data.items():
+            if not isinstance(metrics, dict) or not metrics:
+                continue
+
+            timings = metrics.get('timings')
+            if timings:
+                values = np.asarray(timings, dtype=float)
+                mean_latency = float(np.mean(values))
+                std_latency = float(np.std(values))
+                analysis['trend_patterns'][metric_name] = {
+                    'mean': mean_latency,
+                    'stdev': std_latency,
+                    'min': float(np.min(values)),
+                    'max': float(np.max(values)),
+                    'samples': len(values)
+                }
+                analysis['statistical_significance'][metric_name] = {
+                    'mean': mean_latency,
+                    'stdev': std_latency,
+                    'sample_count': len(values)
+                }
+
+                if mean_latency > PERFORMANCE_TARGET_STEP_LATENCY_MS:
+                    analysis['regression_indicators'].append({
+                        'metric': metric_name,
+                        'observed_mean': mean_latency,
+                        'target': PERFORMANCE_TARGET_STEP_LATENCY_MS,
+                        'degradation_ms': mean_latency - PERFORMANCE_TARGET_STEP_LATENCY_MS
+                    })
+                else:
+                    analysis['optimization_opportunities'].append({
+                        'metric': metric_name,
+                        'observed_mean': mean_latency,
+                        'headroom_ms': PERFORMANCE_TARGET_STEP_LATENCY_MS - mean_latency
+                    })
+
+            memory_samples = metrics.get('memory_samples')
+            if memory_samples:
+                values = np.asarray(memory_samples, dtype=float)
+                peak_memory = float(np.max(values))
+                analysis['trend_patterns'][f"{metric_name}_memory"] = {
+                    'mean': float(np.mean(values)),
+                    'peak': peak_memory,
+                    'samples': len(values)
+                }
+                if peak_memory > MEMORY_LIMIT_TOTAL_MB:
+                    analysis['regression_indicators'].append({
+                        'metric': f"{metric_name}_memory",
+                        'observed_peak': peak_memory,
+                        'target': MEMORY_LIMIT_TOTAL_MB,
+                        'degradation_mb': peak_memory - MEMORY_LIMIT_TOTAL_MB
+                    })
+
+        if analysis['regression_indicators']:
+            for regression in analysis['regression_indicators']:
+                if 'degradation_ms' in regression:
+                    analysis['optimization_recommendations'].append(
+                        f"Reduce latency for {regression['metric']} by {regression['degradation_ms']:.3f}ms"
+                    )
+                elif 'degradation_mb' in regression:
+                    analysis['optimization_recommendations'].append(
+                        f"Lower memory usage for {regression['metric']} by {regression['degradation_mb']:.1f}MB"
+                    )
+        elif analysis['optimization_opportunities']:
+            for opportunity in analysis['optimization_opportunities']:
+                analysis['optimization_recommendations'].append(
+                    f"Maintain optimisation for {opportunity['metric']} (headroom {opportunity['headroom_ms']:.3f}ms)"
+                )
+        else:
+            analysis['optimization_recommendations'].append(
+                "Insufficient performance data to derive trends"
+            )
+
+        self._trend_history.append(analysis)
+        return analysis
+
+    # ------------------------------------------------------------------
+    # Recommendation synthesis
+    def generate_optimization_recommendations(
+        self,
+        benchmark_results: BenchmarkResult,
+        trend_analysis: dict,
+        include_scaling_guidance: bool = False
+    ) -> List[str]:
+        """Create actionable recommendations from benchmark and trend data."""
+
+        recommendations: List[str] = []
+
+        # Start with any recommendations already produced by the benchmark suite.
+        if benchmark_results.optimization_recommendations:
+            recommendations.extend(benchmark_results.optimization_recommendations)
+
+        # Interpret validation results.
+        if benchmark_results.validation_results.get('compliance_results'):
+            for metric, result in benchmark_results.validation_results['compliance_results'].items():
+                if not result.get('compliant', True):
+                    recommendations.append(
+                        f"Improve {metric.replace('_', ' ')}: observed {result.get('actual')} vs target {result.get('target')}"
+                    )
+
+        # Incorporate any trend-level recommendations.
+        recommendations.extend(trend_analysis.get('optimization_recommendations', []))
+
+        # Provide generic guidance when all targets are currently met.
+        if benchmark_results.targets_met and not recommendations:
+            recommendations.append(
+                "Performance targets satisfied; continue monitoring for regressions."
+            )
+
+        # Optionally include scalability hints when data is available.
+        if include_scaling_guidance and benchmark_results.scalability_metrics:
+            recommendations.append("Review scalability metrics for larger grid sizes before deployment.")
+
+        # Deduplicate while preserving order for deterministic tests.
+        seen = set()
+        deduped: List[str] = []
+        for rec in recommendations:
+            if rec not in seen:
+                deduped.append(rec)
+                seen.add(rec)
+
+        if not deduped:
+            deduped.append("No optimisation changes required based on current measurements.")
+
+        self.logger.debug("Generated %d performance recommendations", len(deduped))
+        return deduped
         
     def compare_with_baseline(self, baseline_result: 'BenchmarkResult',
                             detect_regressions: bool = True,
@@ -1893,8 +2062,34 @@ def benchmark_memory_usage(env: PlumeSearchEnv, monitoring_duration: int = 30,
     # Stop monitoring and get results
     results = profiler.stop_monitoring()
     results['total_operations'] = operation_count
-    
+
     return results
+
+
+def benchmark_rendering_performance(env: PlumeSearchEnv, iterations: int = 25, mode: str = "rgb_array") -> Dict[str, Any]:
+    """Lightweight rendering benchmark used by the trimmed test harness."""
+
+    if mode != "rgb_array":
+        raise ValueError("Only rgb_array rendering is supported in the educational benchmark")
+
+    render_times_ms: List[float] = []
+    output_shape: Optional[Tuple[int, int, int]] = None
+
+    for _ in range(max(1, iterations)):
+        start_time = time.perf_counter()
+        frame = env.render(mode="rgb_array")
+        render_times_ms.append((time.perf_counter() - start_time) * 1000)
+        if hasattr(frame, "shape"):
+            output_shape = tuple(int(v) for v in frame.shape)
+
+    return {
+        'mode': mode,
+        'frames_rendered': len(render_times_ms),
+        'average_render_time_ms': statistics.mean(render_times_ms),
+        'max_render_time_ms': max(render_times_ms),
+        'min_render_time_ms': min(render_times_ms),
+        'output_shape': output_shape,
+    }
 
 
 def analyze_scaling_performance(grid_sizes: List[tuple], iterations_per_size: int = 100,
