@@ -1,8 +1,8 @@
 """
 Default colormap and color scheme configuration module for plume navigation environment.
 
-This module provides standardized color definitions, colormap utilities, and scheme 
-management for dual-mode rendering with optimized color schemes for both RGB array 
+This module provides standardized color definitions, colormap utilities, and scheme
+management for dual-mode rendering with optimized color schemes for both RGB array
 generation and matplotlib human mode visualization. Includes accessibility features,
 performance optimization, and cross-platform compatibility.
 
@@ -14,6 +14,8 @@ Key Features:
 - Comprehensive validation and error handling
 - LRU caching for colormap operations
 """
+
+from __future__ import annotations
 
 import numpy as np  # >=2.1.0 - RGB array operations, mathematical transformations
 import matplotlib.colors  # >=3.9.0 - Colormap objects and normalization utilities  

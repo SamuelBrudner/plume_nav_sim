@@ -44,6 +44,10 @@ class TestCoreTypeContracts:
         }
         assert expected_names.issubset(set(core_types.__all__))
 
+    def test_validation_error_alias(self):
+        utils_exceptions = importlib.import_module("plume_nav_sim.utils.exceptions")
+        assert core_types.ValidationError is utils_exceptions.ValidationError
+
 
 class TestCoreTypeFactories:
     """Functional expectations for the helper factories defined in core.types."""

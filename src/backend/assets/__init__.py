@@ -29,17 +29,30 @@ from .default_colormap import (
     DEFAULT_COLORMAP  # Default colormap constant for consistency
 )
 
-# Internal imports from rendering template system
-from .render_templates import (
-    RGBTemplate,  # RGB array rendering template for programmatic visualization
-    MatplotlibTemplate,  # Matplotlib visualization template for human mode rendering
-    BaseRenderTemplate,  # Abstract base template interface for consistent API
-    TemplateConfig,  # Template configuration data structure
-    TemplateQuality,  # Template quality level enumeration
-    create_rgb_template,  # Factory function for RGB template creation
-    create_matplotlib_template,  # Factory function for matplotlib template creation
-    get_template_registry  # Template registry access utility
-)
+# Internal imports from rendering template system (optional in minimal environments)
+try:
+    from .render_templates import (
+        RGBTemplate,  # RGB array rendering template for programmatic visualization
+        MatplotlibTemplate,  # Matplotlib visualization template for human mode rendering
+        BaseRenderTemplate,  # Abstract base template interface for consistent API
+        TemplateConfig,  # Template configuration data structure
+        TemplateQuality,  # Template quality level enumeration
+        create_rgb_template,  # Factory function for RGB template creation
+        create_matplotlib_template,  # Factory function for matplotlib template creation
+        get_template_registry  # Template registry access utility
+    )
+except ImportError:  # pragma: no cover - template utilities may be unavailable during tests
+    RGBTemplate = MatplotlibTemplate = BaseRenderTemplate = None  # type: ignore[assignment]
+    TemplateConfig = TemplateQuality = None  # type: ignore[assignment]
+
+    def create_rgb_template(*args, **kwargs):  # type: ignore[override]
+        raise RuntimeError("Rendering templates are unavailable in this environment.")
+
+    def create_matplotlib_template(*args, **kwargs):  # type: ignore[override]
+        raise RuntimeError("Rendering templates are unavailable in this environment.")
+
+    def get_template_registry() -> dict:  # type: ignore[override]
+        return {}
 
 # Package version and metadata constants
 __version__ = '0.0.1'

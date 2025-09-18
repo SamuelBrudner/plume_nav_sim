@@ -119,9 +119,11 @@ class NumpyRGBRenderer(BaseRenderer):
     
     def _initialize_renderer_resources(self) -> None:
         """
-        Initialize RGB renderer-specific resources including color scheme optimization, array buffers, 
+        Initialize RGB renderer-specific resources including color scheme optimization, array buffers,
         performance baselines, and validation implementing BaseRenderer abstract method.
         """
+        global _RGB_ARRAY_CACHE
+
         # Optimize color scheme for RGB_ARRAY mode using ColorSchemeManager optimization methods
         self.color_manager.optimize_scheme(self.current_color_scheme, RenderMode.RGB_ARRAY)
         
@@ -138,7 +140,6 @@ class NumpyRGBRenderer(BaseRenderer):
         
         # Initialize cache structures for RGB array storage and retrieval optimization
         if self.caching_enabled and len(_RGB_ARRAY_CACHE) == 0:
-            global _RGB_ARRAY_CACHE
             _RGB_ARRAY_CACHE = {}
         
         # Set up vectorized operation parameters for NumPy array manipulation efficiency

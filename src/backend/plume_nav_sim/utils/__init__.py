@@ -19,7 +19,7 @@ performance optimization suitable for production reinforcement learning environm
 
 # Standard library imports
 import sys
-import logging
+import logging as std_logging
 from typing import Any, Dict, List, Optional, Tuple, Union, Type
 
 # Package version definition for distribution and compatibility tracking
@@ -113,19 +113,24 @@ from .spaces import (
 
 # Configuration handling and lifecycle management with validation framework
 # Import configuration utilities providing centralized configuration operations
-from .config import (
-    # Create configuration quickly with common parameter overrides and sensible defaults
-    create_quick_config,
-    
-    # Comprehensive configuration validation with detailed error reporting
-    validate_config,
-    
-    # Configuration manager class for centralized configuration operations and lifecycle
-    ConfigManager
-)
+try:
+    from .config import (
+        # Create configuration quickly with common parameter overrides and sensible defaults
+        create_quick_config,
+
+        # Comprehensive configuration validation with detailed error reporting
+        validate_config,
+
+        # Configuration manager class for centralized configuration operations and lifecycle
+        ConfigManager
+    )
+except ImportError:  # pragma: no cover - optional configuration utilities may be absent
+    create_quick_config = None
+    validate_config = None
+    ConfigManager = None
 
 # Module-level logger for utility package initialization and configuration tracking
-_logger = logging.getLogger(__name__)
+_logger = std_logging.getLogger(__name__)
 
 # Initialize module-level logging for package lifecycle tracking and debugging
 try:
@@ -200,11 +205,15 @@ __all__ = [
     'validate_action',         # Runtime action validation ensuring space compliance
     'validate_observation',    # Runtime observation validation ensuring space compliance
     
-    # Configuration handling and lifecycle management with validation framework
-    'create_quick_config',  # Quick configuration creation with overrides and defaults
-    'validate_config',      # Comprehensive configuration validation with error reporting
-    'ConfigManager'         # Configuration manager for centralized operations and lifecycle
 ]
+
+if create_quick_config is not None:
+    __all__.extend([
+        # Configuration handling and lifecycle management with validation framework
+        'create_quick_config',  # Quick configuration creation with overrides and defaults
+        'validate_config',      # Comprehensive configuration validation with error reporting
+        'ConfigManager'         # Configuration manager for centralized operations and lifecycle
+    ])
 
 # Module initialization completion logging for system tracking and debugging
 try:

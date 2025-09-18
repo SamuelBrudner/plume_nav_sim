@@ -20,14 +20,15 @@ import threading  # >=3.10
 import weakref  # >=3.10
 import inspect  # >=3.10
 from typing import (  # >=3.10
-    Optional, 
-    Dict, 
-    Any, 
-    Union, 
-    List, 
-    Callable, 
-    Type, 
-    Tuple
+    Optional,
+    Dict,
+    Any,
+    Union,
+    List,
+    Callable,
+    Type,
+    Tuple,
+    TypeVar
 )
 from types import TracebackType
 
@@ -47,14 +48,70 @@ from ..core.constants import (
 )
 
 # Centralized logging infrastructure components
-from ...logging.config import (
-    get_logger,
-    ComponentType,
-    configure_development_logging
-)
+try:
+    from ...logging.config import (
+        get_logger,
+        ComponentType,
+        configure_development_logging
+    )
 
-# Specialized performance logging formatter for timing analysis
-from ...logging.formatters import PerformanceFormatter
+    # Specialized performance logging formatter for timing analysis
+    from ...logging.formatters import PerformanceFormatter
+except ImportError:  # pragma: no cover - fallback for optional logging package
+    from enum import Enum
+
+    class ComponentType(Enum):
+        """Fallback component enumeration when centralized logging package is unavailable."""
+
+        ENVIRONMENT = 'ENVIRONMENT'
+        PLUME_MODEL = 'PLUME_MODEL'
+        RENDERING = 'RENDERING'
+        ACTION_PROCESSOR = 'ACTION_PROCESSOR'
+        REWARD_CALCULATOR = 'REWARD_CALCULATOR'
+        STATE_MANAGER = 'STATE_MANAGER'
+        BOUNDARY_ENFORCER = 'BOUNDARY_ENFORCER'
+        EPISODE_MANAGER = 'EPISODE_MANAGER'
+        UTILS = 'UTILS'
+
+    def get_logger(logger_name: str, component_type: 'ComponentType') -> logging.Logger:
+        """Fallback logger factory delegating to the standard logging module."""
+
+        return logging.getLogger(logger_name)
+
+    def configure_development_logging(
+        log_level: str = 'INFO',
+        enable_console_output: bool = True,
+        enable_color_output: bool = True,
+        enable_performance_logging: bool = False,
+        log_file_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Basic development logging configuration when centralized logging is missing."""
+
+        level = getattr(logging, log_level.upper(), logging.INFO)
+        logging.basicConfig(level=level)
+        return {
+            'status': 'stdlib_fallback',
+            'log_level': log_level,
+            'console_output': enable_console_output,
+            'color_output': enable_color_output,
+            'performance_logging': enable_performance_logging,
+            'log_file_path': log_file_path
+        }
+
+    class PerformanceFormatter:
+        """Lightweight performance formatter used when custom formatters are unavailable."""
+
+        def format_timing(
+            self,
+            operation_name: str,
+            duration_ms: float,
+            additional_data: Optional[Dict[str, Any]] = None
+        ) -> str:
+            metrics = additional_data or {}
+            if metrics:
+                extra = ', '.join(f"{key}={value}" for key, value in metrics.items())
+                return f"{operation_name}: {duration_ms:.3f}ms [{extra}]"
+            return f"{operation_name}: {duration_ms:.3f}ms"
 
 
 # Global state for logger caching and thread-safe operations
@@ -62,6 +119,8 @@ _logger_cache: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _performance_baselines: Dict[str, Dict[str, Any]] = {}
 _logging_initialized: bool = False
 _cache_lock: threading.Lock = threading.Lock()
+
+_T = TypeVar('_T')
 
 # Default configuration for component loggers with security and performance features
 DEFAULT_LOGGER_CONFIG = {
@@ -73,8 +132,9 @@ DEFAULT_LOGGER_CONFIG = {
 # Public API exports for the logging utilities module
 __all__ = [
     'get_component_logger',
-    'configure_logging_for_development', 
+    'configure_logging_for_development',
     'log_performance',
+    'monitor_performance',
     'log_with_context',
     'create_performance_logger',
     'setup_error_logging',
@@ -86,7 +146,7 @@ __all__ = [
 
 def get_component_logger(
     component_name: str,
-    component_type: ComponentType,
+    component_type: ComponentType = ComponentType.UTILS,
     logger_level: Optional[str] = None,
     enable_performance_tracking: bool = True
 ) -> 'ComponentLogger':
@@ -96,7 +156,7 @@ def get_component_logger(
     
     Args:
         component_name: Name of the component, must be in COMPONENT_NAMES
-        component_type: ComponentType enumeration for specialized configuration
+        component_type: ComponentType enumeration for specialized configuration (defaults to UTILS)
         logger_level: Logging level override, defaults to component-specific level
         enable_performance_tracking: Enable performance timing and monitoring
         
@@ -111,8 +171,9 @@ def get_component_logger(
     try:
         # Validate component_name against COMPONENT_NAMES and component_type enumeration
         if component_name not in COMPONENT_NAMES:
-            raise ValidationError(
-                f"Invalid component name '{component_name}'. Must be one of: {COMPONENT_NAMES}"
+            logging.getLogger(PACKAGE_NAME).warning(
+                "Unknown component name '%s'. Proceeding with default configuration.",
+                component_name
             )
         
         if not isinstance(component_type, ComponentType):
@@ -417,6 +478,55 @@ def log_performance(
         handle_component_error(e, "log_performance")
         # Don't re-raise to prevent logging failures from breaking application flow
         logging.getLogger(PACKAGE_NAME).error(f"Performance logging failed: {e}")
+
+
+def monitor_performance(
+    operation_name: Optional[str] = None,
+    performance_threshold_ms: Optional[float] = None,
+    compare_to_baseline: bool = False
+):
+    """Decorator to measure execution time and log performance metrics.
+
+    Supports optional performance thresholds and baseline comparisons. Can be used
+    without parentheses (``@monitor_performance``) or with parameters such as
+    ``@monitor_performance('operation', 10.0, True)``.
+    """
+
+    if callable(operation_name):  # Decorator used without parentheses
+        func = operation_name
+        return monitor_performance()(func)
+
+    def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.perf_counter()
+            result = func(*args, **kwargs)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+
+            metrics: Optional[Dict[str, Any]] = None
+            if performance_threshold_ms is not None:
+                metrics = {'threshold_ms': performance_threshold_ms}
+
+            try:
+                log_performance(
+                    logging.getLogger(PACKAGE_NAME),
+                    operation_name or func.__name__,
+                    duration_ms,
+                    additional_metrics=metrics,
+                    compare_to_baseline=compare_to_baseline
+                )
+            except Exception:
+                logging.getLogger(PACKAGE_NAME).debug(
+                    "Performance logging fallback for %s completed in %.3fms",
+                    operation_name or func.__name__,
+                    duration_ms
+                )
+
+            return result
+
+        return wrapper
+
+    return decorator
 
 
 def log_with_context(

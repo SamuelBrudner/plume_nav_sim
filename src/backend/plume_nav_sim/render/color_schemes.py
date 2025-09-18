@@ -25,7 +25,7 @@ from ..core.constants import (
     PIXEL_VALUE_MIN, PIXEL_VALUE_MAX, CONCENTRATION_RANGE, RGB_DTYPE,
     PERFORMANCE_TARGET_RGB_RENDER_MS
 )
-from ../../assets.default_colormap import ColorScheme, PredefinedScheme, DEFAULT_COLORMAP
+from assets.default_colormap import ColorScheme, PredefinedScheme, DEFAULT_COLORMAP
 from ..utils.exceptions import ValidationError, RenderingError
 from ..utils.validation import validate_render_mode, sanitize_parameters
 
