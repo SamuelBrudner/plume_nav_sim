@@ -36,7 +36,7 @@ try:  # pragma: no cover - import guard for optional fixtures
         # Context manager classes for resource management and performance tracking
         TestEnvironmentManager, PerformanceTracker
     )
-except Exception:  # pragma: no cover - exercised only in minimal kata builds
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised only in minimal kata builds
     def _missing_fixture(*_args: Any, **_kwargs: Any):  # type: ignore[override]
         pytest.skip(
             "Comprehensive environment fixtures are unavailable in the kata sandbox."
@@ -75,7 +75,7 @@ try:  # pragma: no cover - import guard for optional API compliance tests
         test_gymnasium_api_compliance,
         test_seeding_and_reproducibility
     )
-except Exception:  # pragma: no cover - exercised only in minimal kata builds
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised only in minimal kata builds
     TestEnvironmentAPI = None  # type: ignore[assignment]
 
     def test_environment_inheritance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
@@ -100,7 +100,8 @@ try:  # pragma: no cover - import guard for optional performance tests
         test_memory_usage_constraints,
         test_comprehensive_performance_suite
     )
-except Exception:  # pragma: no cover - exercised only in minimal kata builds
+except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - exercised only in minimal kata builds
+    warnings.warn(f"Performance test suite could not be imported: {exc}")
     TestPerformanceValidation = None  # type: ignore[assignment]
 
     def test_environment_step_latency_performance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
@@ -122,17 +123,10 @@ try:  # pragma: no cover - import guard for optional integration tests
         test_cross_component_seeding,
         test_system_level_performance
     )
-except Exception:  # pragma: no cover - exercised only in minimal kata builds
-    TestEnvironmentIntegration = None  # type: ignore[assignment]
-
-    def test_complete_episode_workflow(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Integration tests are unavailable in this minimal environment.")
-
-    def test_cross_component_seeding(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Integration tests are unavailable in this minimal environment.")
-
-    def test_system_level_performance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Integration tests are unavailable in this minimal environment.")
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised only in minimal kata builds
+    raise ImportError(
+        "The integration test module is missing; add tests/test_integration.py to restore coverage."
+    ) from exc
 
 # Package metadata and version information
 __version__ = "0.0.1"  # Test package version for compatibility and version tracking

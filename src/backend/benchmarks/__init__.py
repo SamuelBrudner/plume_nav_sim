@@ -28,7 +28,7 @@ from .environment_performance import (
 )
 
 # Internal imports - Logging infrastructure for benchmark orchestration and progress tracking
-from ..plume_nav_sim.utils.logging import get_component_logger  # Component-specific logger factory for benchmark orchestration logging
+from plume_nav_sim.utils.logging import get_component_logger  # Component-specific logger factory for benchmark orchestration logging
 
 # Graceful handling of missing benchmark modules with placeholder implementations
 # This ensures the package works even when some benchmark files don't exist yet
@@ -125,7 +125,7 @@ except ImportError:
 
 # Graceful handling of missing configuration module with fallback defaults
 try:
-    from ..config.default_config import get_complete_default_config
+    from config.default_config import get_complete_default_config
 except ImportError:
     # Fallback implementation for missing default configuration
     def get_complete_default_config():

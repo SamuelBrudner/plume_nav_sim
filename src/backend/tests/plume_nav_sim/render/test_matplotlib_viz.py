@@ -31,18 +31,18 @@ from typing import Dict, List, Optional, Union, Any, Tuple  # >=3.10 - Type hint
 from unittest.mock import Mock, patch, MagicMock, call  # >=3.10 - Mock objects for comprehensive testing scenarios
 
 # Internal imports from plume_nav_sim modules
-from ....plume_nav_sim.render.matplotlib_viz import (
+from plume_nav_sim.render.matplotlib_viz import (
     MatplotlibRenderer, MatplotlibBackendManager, InteractiveUpdateManager,
     create_matplotlib_renderer, detect_matplotlib_capabilities, configure_matplotlib_backend,
     validate_matplotlib_integration
 )
-from ....plume_nav_sim.render.base_renderer import BaseRenderer, RenderContext, create_render_context
-from ....plume_nav_sim.render.color_schemes import CustomColorScheme, get_default_scheme, create_accessibility_scheme
-from ....plume_nav_sim.core.types import RenderMode, Coordinates, GridSize
-from ....plume_nav_sim.core.constants import (
+from plume_nav_sim.render.base_renderer import BaseRenderer, RenderContext, create_render_context
+from plume_nav_sim.render.color_schemes import CustomColorScheme, get_default_scheme, create_accessibility_scheme
+from plume_nav_sim.core.types import RenderMode, Coordinates, GridSize
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_HUMAN_RENDER_MS, MATPLOTLIB_DEFAULT_FIGSIZE, BACKEND_PRIORITY_LIST
 )
-from ....plume_nav_sim.utils.exceptions import ValidationError, RenderingError
+from plume_nav_sim.utils.exceptions import ValidationError, RenderingError
 
 # Global test constants for consistent test execution
 MATPLOTLIB_AVAILABLE = True  # Flag indicating matplotlib availability for test setup

@@ -31,14 +31,14 @@ import tempfile  # >=3.10 - Temporary file management for testing figure saving,
 from typing import Dict, List, Tuple, Optional, Any, Union  # >=3.10 - Type annotations for comprehensive test validation and parameter specification
 
 # Internal imports - Environment and rendering components
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..plume_nav_sim.render.numpy_rgb import NumpyRGBRenderer
-from ..plume_nav_sim.render.matplotlib_viz import MatplotlibRenderer, detect_matplotlib_capabilities, configure_matplotlib_backend
-from ..plume_nav_sim.render.base_renderer import BaseRenderer, RenderContext, create_render_context, RenderingMetrics
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.render.numpy_rgb import NumpyRGBRenderer
+from plume_nav_sim.render.matplotlib_viz import MatplotlibRenderer, detect_matplotlib_capabilities, configure_matplotlib_backend
+from plume_nav_sim.render.base_renderer import BaseRenderer, RenderContext, create_render_context, RenderingMetrics
 
 # Internal imports - Core types and constants
-from ..plume_nav_sim.core.types import RenderMode, Coordinates, GridSize
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.types import RenderMode, Coordinates, GridSize
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_RGB_RENDER_MS,  # Performance target (<5ms) for RGB array rendering benchmark validation in integration tests
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,  # Performance target (<50ms) for human mode rendering benchmark validation in integration tests
     SUPPORTED_RENDER_MODES,  # Supported render mode list for testing mode validation and compatibility

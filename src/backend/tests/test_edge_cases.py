@@ -22,20 +22,25 @@ import sys  # standard library - System utilities for testing system limit edge 
 import math  # standard library - Mathematical utilities for edge case calculations
 
 # Internal imports - core environment and utilities
-from ..conftest import (
-    edge_case_test_env, test_environment_manager, performance_tracker, 
-    memory_monitor, cleanup_validator
+from .conftest import (
+    edge_case_test_env,
+    test_environment_manager,
+    performance_tracker,
+    memory_monitor,
+    cleanup_validator,
+    matplotlib_available,
+    single_threaded_only,
 )
-from ..plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from ..plume_nav_sim.utils.validation import (
-    validate_environment_config, validate_action_parameter, validate_coordinates, 
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.utils.validation import (
+    validate_environment_config, validate_action_parameter, validate_coordinates,
     ParameterValidator
 )
-from ..plume_nav_sim.utils.exceptions import (
+from plume_nav_sim.utils.exceptions import (
     ValidationError, StateError, RenderingError, ConfigurationError, ResourceError
 )
-from ..plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-from ..plume_nav_sim.core.types import Action, Coordinates
+from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
+from plume_nav_sim.core.types import Action, Coordinates
 
 # Global constants for edge case testing parameters
 EDGE_CASE_TIMEOUT_SECONDS = 30.0
@@ -78,12 +83,12 @@ class EdgeCaseTestFixture:
         self.error_scenarios = {}
         
         # Create PerformanceTracker instance for monitoring edge case performance impact
-        from ..conftest import performance_tracker
-        self.performance_tracker = performance_tracker
-        
+        from tests.conftest import PerformanceTracker as _PerformanceTracker
+        self.performance_tracker = _PerformanceTracker()
+
         # Initialize MemoryMonitor for detecting resource issues during edge case execution
-        from ..conftest import memory_monitor
-        self.memory_monitor = memory_monitor
+        from tests.conftest import MemoryMonitor as _MemoryMonitor
+        self.memory_monitor = _MemoryMonitor()
     
     def create_extreme_environment(self, edge_case_type: str, custom_params: dict = None) -> PlumeSearchEnv:
         """
