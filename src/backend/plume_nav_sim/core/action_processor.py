@@ -58,21 +58,22 @@ from .boundary_enforcer import (
 )
 
 # Validation utilities for comprehensive parameter checking
-from ../utils.validation import (
+from ..utils.validation import (
     validate_action_parameter,
-    validate_coordinates, 
+    validate_coordinates,
     create_validation_context
 )
 
 # Exception handling system for error reporting and recovery
-from ../utils.exceptions import (
+from ..utils.exceptions import (
     ValidationError,
     StateError,
     ComponentError
 )
 
 # Logging and performance monitoring utilities
-from ../utils.logging import (
+from ..utils.logging import (
+    ComponentType,
     get_component_logger,
     monitor_performance
 )
@@ -368,7 +369,12 @@ class ActionProcessor:
             )
             
         except Exception as e:
-            raise ComponentError(f"Failed to initialize ActionProcessor: {e}") from e
+            raise ComponentError(
+                f"Failed to initialize ActionProcessor: {e}",
+                component_name="action_processor",
+                operation_name="__init__",
+                underlying_error=e
+            ) from e
     
     @monitor_performance('action_processing', ACTION_PROCESSING_PERFORMANCE_TARGET_MS, True)
     def process_action(
@@ -435,7 +441,7 @@ class ActionProcessor:
             else:
                 # Calculate final position without boundary enforcement
                 try:
-                    final_position = current_position.move(movement_delta[0], movement_delta[1])
+                    final_position = current_position.move(movement_delta)
                 except Exception as e:
                     final_position = current_position
                     is_valid = False
@@ -482,7 +488,7 @@ class ActionProcessor:
         except Exception as e:
             # Update error statistics
             self.validation_errors += 1
-            
+
             # Create error result
             error_result = ActionProcessingResult(
                 action=action,
@@ -491,16 +497,21 @@ class ActionProcessor:
                 action_valid=False
             )
             object.__setattr__(error_result, 'validation_error', str(e))
-            object.__setattr__(error_result, 'processing_time_ms', 
+            object.__setattr__(error_result, 'processing_time_ms',
                              (time.perf_counter() - start_time) * 1000.0)
-            
+
             # Log error with context
             self.logger.error(f"Action processing failed: {e}", exception=e)
-            
+
             if isinstance(e, (ValidationError, StateError)):
                 raise
             else:
-                raise ComponentError(f"Unexpected error in action processing: {e}") from e
+                raise ComponentError(
+                    f"Unexpected error in action processing: {e}",
+                    component_name="action_processor",
+                    operation_name="process_action",
+                    underlying_error=e
+                ) from e
     
     @functools.lru_cache(maxsize=ACTION_VALIDATION_CACHE_SIZE)
     def validate_action(self, action: ActionType, raise_on_invalid: bool = True) -> bool:
@@ -627,7 +638,7 @@ class ActionProcessor:
             movement_delta = calculate_movement_delta(action, validate_action=False)
             
             # Compute proposed destination
-            proposed_position = current_position.move(movement_delta[0], movement_delta[1])
+            proposed_position = current_position.move(movement_delta)
             
             boundary_hit = False
             final_position = proposed_position
@@ -635,9 +646,9 @@ class ActionProcessor:
             # Apply boundary enforcement if enabled
             if apply_boundary_enforcement and self.boundary_enforcer:
                 enforcement_result = self.boundary_enforcer.enforce_movement_bounds(
-                    current_position, proposed_position
+                    current_position, action
                 )
-                
+
                 final_position = enforcement_result.final_position
                 boundary_hit = enforcement_result.boundary_hit
                 
@@ -852,7 +863,7 @@ def process_action(
         movement_delta = calculate_movement_delta(action, validate_action=False)
         
         # Calculate proposed destination
-        proposed_position = current_position.move(movement_delta[0], movement_delta[1])
+        proposed_position = current_position.move(movement_delta)
         
         boundary_hit = False
         final_position = proposed_position

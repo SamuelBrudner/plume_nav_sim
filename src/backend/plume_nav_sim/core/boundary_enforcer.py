@@ -60,6 +60,7 @@ from ..utils.exceptions import (
     StateError
 )
 from ..utils.logging import (
+    ComponentType,
     get_component_logger,
     monitor_performance
 )
@@ -394,7 +395,7 @@ class BoundaryEnforcer:
         # Initialize component logger using get_component_logger for boundary enforcement operations
         self.logger = get_component_logger(
             component_name='boundary_enforcer',
-            component_type='DOMAIN_LOGIC',  # Part of domain logic layer
+            component_type=ComponentType.BOUNDARY_ENFORCER,
             enable_performance_tracking=True
         )
         
