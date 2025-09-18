@@ -52,11 +52,10 @@ __all__ = [
 logger = get_component_logger(__name__)
 
 
-@functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
 def create_action_space(num_actions: Optional[int] = None, validate_actions: bool = True,
                        space_config: Optional[Dict] = None) -> gymnasium.spaces.Discrete:
     """
-    Creates Gymnasium Discrete action space for cardinal direction navigation with validation, 
+    Creates Gymnasium Discrete action space for cardinal direction navigation with validation,
     caching, and performance optimization for environment initialization.
     
     Args:
@@ -71,82 +70,93 @@ def create_action_space(num_actions: Optional[int] = None, validate_actions: boo
         ValidationError: If num_actions is invalid or space creation fails
         TypeError: If parameters are of incorrect type
     """
+    if space_config:
+        return _create_action_space_impl(num_actions, validate_actions, space_config)
+
+    return _create_action_space_cached(num_actions, validate_actions)
+
+
+@functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
+def _create_action_space_cached(num_actions: Optional[int], validate_actions: bool) -> gymnasium.spaces.Discrete:
+    return _create_action_space_impl(num_actions, validate_actions, None)
+
+
+def _create_action_space_impl(
+    num_actions: Optional[int],
+    validate_actions: bool,
+    space_config: Optional[Dict]
+) -> gymnasium.spaces.Discrete:
     start_time = time.time()
-    
+    final_num_actions = num_actions if num_actions is not None else ACTION_SPACE_SIZE
+    config = dict(space_config or {})
+
     try:
-        # Validate num_actions parameter defaulting to ACTION_SPACE_SIZE (4) with bounds checking
-        if num_actions is None:
-            num_actions = ACTION_SPACE_SIZE
-        
-        if not isinstance(num_actions, int) or num_actions <= 0:
+        if not isinstance(final_num_actions, int) or final_num_actions <= 0:
             raise ValidationError(
-                f"Invalid num_actions: {num_actions}. Must be positive integer.",
-                context={'expected_type': 'int', 'expected_range': '> 0', 'received': num_actions}
+                f"Invalid num_actions: {final_num_actions}. Must be positive integer.",
+                context={'expected_type': 'int', 'expected_range': '> 0', 'received': final_num_actions}
             )
-        
-        if num_actions != ACTION_SPACE_SIZE:
+
+        if final_num_actions != ACTION_SPACE_SIZE:
             warnings.warn(
-                f"Creating action space with {num_actions} actions, but standard size is {ACTION_SPACE_SIZE}",
+                f"Creating action space with {final_num_actions} actions, but standard size is {ACTION_SPACE_SIZE}",
                 UserWarning
             )
-        
-        # Create gymnasium.spaces.Discrete(num_actions) with proper configuration
-        action_space = gymnasium.spaces.Discrete(num_actions)
-        
-        # Add action space metadata including action names and movement vectors
+
+        action_space = gymnasium.spaces.Discrete(final_num_actions)
+
         action_metadata = {
-            'action_names': ['up', 'right', 'down', 'left'][:num_actions],
+            'action_names': ['up', 'right', 'down', 'left'][:final_num_actions],
             'movement_vectors': [
-                (0, -1),  # UP: decrease y
-                (1, 0),   # RIGHT: increase x  
-                (0, 1),   # DOWN: increase y
-                (-1, 0)   # LEFT: decrease x
-            ][:num_actions],
+                (0, -1),
+                (1, 0),
+                (0, 1),
+                (-1, 0)
+            ][:final_num_actions],
             'space_type': 'discrete',
             'creation_time': time.time()
         }
-        
-        # Store metadata in action space for later access
+
         if hasattr(action_space, '_metadata'):
             action_space._metadata.update(action_metadata)
         else:
             action_space._metadata = action_metadata
-            
-        # Validate action space properties if validate_actions is True
+
         if validate_actions:
             validation_result = validate_action_space(action_space, check_metadata=True)
             if not validation_result:
                 raise ValidationError(
                     "Action space validation failed after creation",
-                    context={'num_actions': num_actions, 'space_type': type(action_space).__name__}
+                    context={'num_actions': final_num_actions, 'space_type': type(action_space).__name__}
                 )
-        
-        # Apply custom space configuration from space_config if provided
-        if space_config:
-            if 'seed' in space_config:
-                action_space.seed(space_config['seed'])
-            if 'custom_metadata' in space_config:
-                action_metadata.update(space_config['custom_metadata'])
-        
-        # Log action space creation with configuration details and performance metrics
+
+        if config:
+            seed_value = config.get('seed')
+            if seed_value is not None:
+                action_space.seed(seed_value)
+
+            custom_metadata = config.get('custom_metadata')
+            if custom_metadata:
+                action_metadata.update(custom_metadata)
+
         elapsed_time = (time.time() - start_time) * 1000
         logger.info(
-            f"Created action space with {num_actions} actions",
+            f"Created action space with {final_num_actions} actions",
             extra={
                 'duration_ms': elapsed_time,
-                'space_size': num_actions,
+                'space_size': final_num_actions,
                 'validation_enabled': validate_actions,
-                'custom_config': space_config is not None
+                'custom_config': bool(config)
             }
         )
-        
+
         return action_space
-        
+
     except Exception as e:
         logger.error(
             f"Failed to create action space: {e}",
             extra={
-                'num_actions': num_actions,
+                'num_actions': final_num_actions,
                 'validate_actions': validate_actions,
                 'error_type': type(e).__name__
             }
@@ -154,157 +164,168 @@ def create_action_space(num_actions: Optional[int] = None, validate_actions: boo
         raise
 
 
-@functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
 def create_observation_space(observation_shape: Optional[Tuple] = None,
                            concentration_bounds: Optional[Tuple] = None,
                            observation_dtype: Optional[np.dtype] = None,
                            validate_bounds: bool = True,
                            space_config: Optional[Dict] = None) -> gymnasium.spaces.Box:
     """
-    Creates Gymnasium Box observation space for concentration values with proper bounds, 
+    Creates Gymnasium Box observation space for concentration values with proper bounds,
     dtype, and shape configuration for plume navigation observations.
-    
+
     Args:
         observation_shape: Shape of observation array (defaults to DEFAULT_OBSERVATION_SHAPE)
         concentration_bounds: Low and high bounds for concentration values
-        observation_dtype: NumPy dtype for observations  
+        observation_dtype: NumPy dtype for observations
         validate_bounds: Whether to validate observation space properties
         space_config: Custom space configuration dictionary
-        
+
     Returns:
         Configured Box observation space for concentration values with proper bounds and dtype specifications
-        
+
     Raises:
         ValidationError: If bounds or shape are invalid
         TypeError: If dtype is not supported
     """
-    start_time = time.time()
-    
-    try:
-        # Validate observation_shape defaulting to DEFAULT_OBSERVATION_SHAPE (1,) with proper dimensions
-        if observation_shape is None:
-            observation_shape = DEFAULT_OBSERVATION_SHAPE
-            
-        if not isinstance(observation_shape, tuple) or len(observation_shape) == 0:
-            raise ValidationError(
-                f"Invalid observation_shape: {observation_shape}. Must be non-empty tuple.",
-                context={'expected_type': 'tuple', 'received': observation_shape}
-            )
-        
-        if not all(isinstance(dim, int) and dim > 0 for dim in observation_shape):
-            raise ValidationError(
-                f"All shape dimensions must be positive integers: {observation_shape}",
-                context={'shape': observation_shape}
-            )
-        
-        # Validate concentration_bounds defaulting to CONCENTRATION_RANGE (0.0, 1.0) with mathematical consistency
-        if concentration_bounds is None:
-            concentration_bounds = CONCENTRATION_RANGE
-            
-        if not isinstance(concentration_bounds, tuple) or len(concentration_bounds) != 2:
-            raise ValidationError(
-                f"Invalid concentration_bounds: {concentration_bounds}. Must be tuple of (low, high).",
-                context={'expected_format': '(float, float)', 'received': concentration_bounds}
-            )
-            
-        low_bound, high_bound = concentration_bounds
-        if not isinstance(low_bound, (int, float)) or not isinstance(high_bound, (int, float)):
-            raise ValidationError(
-                f"Concentration bounds must be numeric: {concentration_bounds}",
-                context={'low_bound': low_bound, 'high_bound': high_bound}
-            )
-            
-        if low_bound >= high_bound:
-            raise ValidationError(
-                f"Low bound must be less than high bound: {concentration_bounds}",
-                context={'low_bound': low_bound, 'high_bound': high_bound}
-            )
-        
-        # Validate observation_dtype defaulting to OBSERVATION_DTYPE (float32) for performance and compatibility
-        if observation_dtype is None:
-            observation_dtype = OBSERVATION_DTYPE
-            
-        if not isinstance(observation_dtype, (type, np.dtype)):
-            try:
-                observation_dtype = np.dtype(observation_dtype)
-            except (TypeError, ValueError) as e:
-                raise ValidationError(
-                    f"Invalid observation_dtype: {observation_dtype}",
-                    context={'error': str(e), 'expected_types': ['numpy.dtype', 'type']}
-                )
-        
-        # Create gymnasium.spaces.Box with validated low/high bounds, shape, and dtype
-        low_array = np.full(observation_shape, low_bound, dtype=observation_dtype)
-        high_array = np.full(observation_shape, high_bound, dtype=observation_dtype)
-        
-        observation_space = gymnasium.spaces.Box(
-            low=low_array,
-            high=high_array, 
-            shape=observation_shape,
-            dtype=observation_dtype
+    if space_config:
+        return _create_observation_space_impl(
+            observation_shape,
+            concentration_bounds,
+            observation_dtype,
+            validate_bounds,
+            space_config,
         )
-        
-        # Add observation space metadata including concentration semantics and units
+
+    return _create_observation_space_cached(
+        observation_shape,
+        concentration_bounds,
+        observation_dtype,
+        validate_bounds,
+    )
+
+
+@functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
+def _create_observation_space_cached(
+    observation_shape: Optional[Tuple],
+    concentration_bounds: Optional[Tuple],
+    observation_dtype: Optional[np.dtype],
+    validate_bounds: bool,
+) -> gymnasium.spaces.Box:
+    return _create_observation_space_impl(
+        observation_shape,
+        concentration_bounds,
+        observation_dtype,
+        validate_bounds,
+        None,
+    )
+
+
+def _create_observation_space_impl(
+    observation_shape: Optional[Tuple],
+    concentration_bounds: Optional[Tuple],
+    observation_dtype: Optional[np.dtype],
+    validate_bounds: bool,
+    space_config: Optional[Dict],
+) -> gymnasium.spaces.Box:
+    start_time = time.time()
+    final_shape = observation_shape if observation_shape is not None else DEFAULT_OBSERVATION_SHAPE
+    bounds = concentration_bounds if concentration_bounds is not None else CONCENTRATION_RANGE
+    dtype = observation_dtype if observation_dtype is not None else OBSERVATION_DTYPE
+    config = dict(space_config or {})
+
+    try:
+        if not isinstance(final_shape, tuple) or len(final_shape) == 0:
+            raise ValidationError(
+                f"Invalid observation_shape: {final_shape}. Must be non-empty tuple.",
+                context={'expected_type': 'tuple', 'received': final_shape}
+            )
+
+        if not all(isinstance(dim, int) and dim > 0 for dim in final_shape):
+            raise ValidationError(
+                f"All shape dimensions must be positive integers: {final_shape}",
+                context={'shape': final_shape}
+            )
+
+        if (not isinstance(bounds, tuple) or len(bounds) != 2 or bounds[0] >= bounds[1]):
+            raise ValidationError(
+                f"Invalid concentration_bounds: {bounds}. Must be (low, high) with low < high.",
+                context={'bounds': bounds}
+            )
+
+        try:
+            np.dtype(dtype)
+        except TypeError as e:
+            raise ValidationError(
+                f"Invalid observation_dtype: {dtype}",
+                context={'dtype': dtype, 'error': str(e)}
+            )
+
+        low_bound = np.full(final_shape, bounds[0], dtype=dtype)
+        high_bound = np.full(final_shape, bounds[1], dtype=dtype)
+
+        observation_space = gymnasium.spaces.Box(
+            low=low_bound,
+            high=high_bound,
+            dtype=dtype
+        )
+
         observation_metadata = {
-            'concentration_range': concentration_bounds,
-            'units': 'normalized_concentration',
-            'semantics': 'plume_concentration_field',
+            'concentration_bounds': bounds,
+            'observation_dtype': dtype,
+            'observation_shape': final_shape,
             'space_type': 'box',
             'creation_time': time.time()
         }
-        
-        # Store metadata in observation space
+
         if hasattr(observation_space, '_metadata'):
             observation_space._metadata.update(observation_metadata)
         else:
             observation_space._metadata = observation_metadata
-        
-        # Validate observation space properties if validate_bounds is True
+
         if validate_bounds:
             validation_result = validate_observation_space(
-                observation_space, 
-                check_bounds=True, 
+                observation_space,
+                check_bounds=True,
                 check_dtype=True
             )
             if not validation_result:
                 raise ValidationError(
                     "Observation space validation failed after creation",
-                    context={
-                        'shape': observation_shape,
-                        'bounds': concentration_bounds,
-                        'dtype': str(observation_dtype)
-                    }
+                    context={'bounds': bounds, 'dtype': str(dtype)}
                 )
-        
-        # Apply custom space configuration from space_config if provided
-        if space_config:
-            if 'seed' in space_config:
-                observation_space.seed(space_config['seed'])
-            if 'custom_metadata' in space_config:
-                observation_metadata.update(space_config['custom_metadata'])
-        
-        # Log observation space creation with bounds, shape, and performance metrics
+
+        if config:
+            seed_value = config.get('seed')
+            if seed_value is not None:
+                observation_space.seed(seed_value)
+
+            custom_metadata = config.get('custom_metadata')
+            if custom_metadata:
+                observation_metadata.update(custom_metadata)
+
         elapsed_time = (time.time() - start_time) * 1000
         logger.info(
-            f"Created observation space with shape {observation_shape}",
+            f"Created observation space with shape {final_shape}",
             extra={
                 'duration_ms': elapsed_time,
-                'observation_shape': observation_shape,
-                'concentration_bounds': concentration_bounds,
-                'dtype': str(observation_dtype),
-                'validation_enabled': validate_bounds
+                'shape': final_shape,
+                'bounds': bounds,
+                'dtype': str(dtype),
+                'validation_enabled': validate_bounds,
+                'custom_config': bool(config)
             }
         )
-        
+
         return observation_space
-        
+
     except Exception as e:
         logger.error(
             f"Failed to create observation space: {e}",
             extra={
-                'observation_shape': observation_shape,
-                'concentration_bounds': concentration_bounds,
-                'observation_dtype': str(observation_dtype) if observation_dtype else None,
+                'observation_shape': final_shape,
+                'concentration_bounds': bounds,
+                'observation_dtype': str(dtype),
+                'validate_bounds': validate_bounds,
                 'error_type': type(e).__name__
             }
         )
@@ -336,17 +357,28 @@ def validate_action(action: ActionType, action_space: Optional[gymnasium.spaces.
         # Check if action is None and handle with appropriate error message
         if action is None:
             raise ValidationError(
-                "Action cannot be None",
-                context={'expected_type': 'int or Action enum', 'received': None}
+                "Action type NoneType is invalid; expected integer or Action enum",
+                context={
+                    'expected_type': 'int or Action enum',
+                    'received': None,
+                    'received_type': 'NoneType'
+                }
             )
-        
+
         # Validate action is numeric type (int, numpy.integer, or Action enum) with type conversion
         validated_action = None
-        
+
         if isinstance(action, Action):
             # Convert Action enum to integer value if action is Action type
             validated_action = action.value
         elif isinstance(action, (int, np.integer)):
+            validated_action = int(action)
+        elif isinstance(action, (float, np.floating)):
+            if not float(action).is_integer():
+                raise ValidationError(
+                    f"Action value {action} must be an integer",
+                    context={'action_value': action, 'action_type': type(action).__name__}
+                )
             validated_action = int(action)
         else:
             # Attempt conversion to int
@@ -362,30 +394,38 @@ def validate_action(action: ActionType, action_space: Optional[gymnasium.spaces.
                     }
                 )
         
-        # Validate action is within valid range [ACTION_UP, ACTION_LEFT] for cardinal directions
-        if not (ACTION_UP <= validated_action <= ACTION_LEFT):
-            raise ValidationError(
-                f"Action {validated_action} out of valid range [{ACTION_UP}, {ACTION_LEFT}]",
-                context={
-                    'action': validated_action,
-                    'valid_range': (ACTION_UP, ACTION_LEFT),
-                    'action_meanings': {
-                        ACTION_UP: 'UP',
-                        ACTION_RIGHT: 'RIGHT', 
-                        ACTION_DOWN: 'DOWN',
-                        ACTION_LEFT: 'LEFT'
-                    }
-                }
-            )
-        
-        # Check action against provided action_space using space.contains() if available
+        # Determine allowable action range either from constants or provided action space
+        lower_bound = ACTION_UP
+        upper_bound = ACTION_LEFT
+
         if action_space is not None:
             if not isinstance(action_space, gymnasium.spaces.Discrete):
                 raise ValidationError(
                     f"Expected Discrete action space, got {type(action_space)}",
                     context={'space_type': type(action_space).__name__}
                 )
-                
+
+            lower_bound = 0
+            upper_bound = action_space.n - 1
+
+        # Validate action is within valid range for the configured space
+        if not (lower_bound <= validated_action <= upper_bound):
+            raise ValidationError(
+                f"Action {validated_action} out of valid range [{lower_bound}, {upper_bound}]",
+                context={
+                    'action': validated_action,
+                    'valid_range': (lower_bound, upper_bound),
+                    'action_meanings': {
+                        ACTION_UP: 'UP',
+                        ACTION_RIGHT: 'RIGHT',
+                        ACTION_DOWN: 'DOWN',
+                        ACTION_LEFT: 'LEFT'
+                    }
+                }
+            )
+
+        # Check action against provided action_space using space.contains() if available
+        if action_space is not None:
             if not action_space.contains(validated_action):
                 raise ValidationError(
                     f"Action {validated_action} not contained in action space",
@@ -890,16 +930,24 @@ def validate_observation_space(observation_space: gymnasium.spaces.Box, check_bo
         # Check observation space contains() method works correctly for valid observations
         try:
             # Test with valid observation
-            valid_obs = np.array([0.5], dtype=observation_space.dtype)
+            valid_obs = np.full(
+                observation_space.shape,
+                0.5,
+                dtype=observation_space.dtype
+            )
             if not observation_space.contains(valid_obs):
                 raise ValidationError(
                     f"Observation space contains() returned False for valid observation",
                     context={'test_observation': valid_obs.tolist()}
                 )
-            
+
             # Test with invalid observation (out of bounds)
             if check_bounds:
-                invalid_obs = np.array([2.0], dtype=observation_space.dtype)  # Outside [0, 1]
+                invalid_obs = np.full(
+                    observation_space.shape,
+                    2.0,
+                    dtype=observation_space.dtype
+                )  # Outside [0, 1]
                 if observation_space.contains(invalid_obs):
                     raise ValidationError(
                         f"Observation space contains() returned True for invalid observation",
@@ -1646,6 +1694,12 @@ class SpaceConfig:
                 f"Invalid observation_shape: {self.observation_shape}. Must be non-empty tuple.",
                 context={'received': self.observation_shape, 'expected_type': 'tuple'}
             )
+
+        if any(not isinstance(dimension, int) or dimension <= 0 for dimension in self.observation_shape):
+            raise ValidationError(
+                f"Observation shape dimensions must be positive integers: {self.observation_shape}",
+                context={'received': self.observation_shape}
+            )
         
         # Store concentration_bounds with mathematical consistency validation
         if (not isinstance(self.concentration_bounds, tuple) or 
@@ -1659,6 +1713,14 @@ class SpaceConfig:
         # Store observation_dtype with performance and compatibility considerations
         if self.observation_dtype is None:
             self.observation_dtype = OBSERVATION_DTYPE
+        else:
+            try:
+                np.dtype(self.observation_dtype)
+            except TypeError as exc:
+                raise ValidationError(
+                    f"Invalid observation_dtype: {self.observation_dtype}",
+                    context={'received': self.observation_dtype, 'error': str(exc)}
+                )
         
         # Initialize empty metadata dictionary for space documentation
         if self.metadata is None:
@@ -1949,12 +2011,25 @@ class SpaceValidator:
             cache_key = None
             if self.enable_caching:
                 cache_key = f"{space_type}:{type(space).__name__}:{str(space)}:{str(validation_requirements)}"
-                
+
                 # Check validation cache if enable_caching is True and return cached result
                 if cache_key in self.validation_cache:
+                    cached_result = self.validation_cache[cache_key]
                     self.validation_stats['cache_hits'] += 1
-                    return self.validation_cache[cache_key]
-                
+                    self.validation_stats['total_validations'] += 1
+
+                    if cached_result.get('valid', False):
+                        self.validation_stats['successful_validations'] += 1
+                    else:
+                        self.validation_stats['failed_validations'] += 1
+
+                    elapsed_cached = (time.time() - start_time) * 1000
+                    self._update_performance_metrics(elapsed_cached)
+
+                    cached_copy = dict(cached_result)
+                    cached_copy['validation_time_ms'] = elapsed_cached
+                    return cached_copy
+
                 self.validation_stats['cache_misses'] += 1
             
             # Initialize validation result structure

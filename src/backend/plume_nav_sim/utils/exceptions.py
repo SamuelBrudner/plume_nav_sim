@@ -187,7 +187,12 @@ class PlumeNavSimError(Exception):
     the plume_nav_sim system, ensuring consistent error reporting, logging, and recovery patterns.
     """
     
-    def __init__(self, message: str, context: Optional[ErrorContext] = None, severity: ErrorSeverity = ErrorSeverity.MEDIUM):
+    def __init__(
+        self,
+        message: str,
+        context: Optional[Union[ErrorContext, Dict[str, Any]]] = None,
+        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+    ):
         """Initialize base exception with message, context, severity level, and error tracking.
         
         Args:
@@ -196,10 +201,12 @@ class PlumeNavSimError(Exception):
             severity (ErrorSeverity): Error severity level for classification and handling priority
         """
         super().__init__(message)
-        
+
         # Store message as primary error description
         self.message = message
-        # Store context for debugging and error analysis
+        # Initialize context containers and normalize provided context
+        self._context_obj: Optional[ErrorContext] = None
+        self._context_dict: Optional[Dict[str, Any]] = None
         self.context = context
         # Set severity level for error classification and handling priority
         self.severity = severity
@@ -213,10 +220,37 @@ class PlumeNavSimError(Exception):
         self.error_details: Dict[str, Any] = {}
         # Set logged to False initially
         self.logged = False
-        
+
+    @property
+    def context(self) -> Optional[Union[Dict[str, Any], ErrorContext]]:
+        if self._context_dict is not None:
+            return dict(self._context_dict)
+        return self._context_obj
+
+    @context.setter
+    def context(self, value: Optional[Union[ErrorContext, Dict[str, Any]]]) -> None:
+        if value is None:
+            self._context_obj = None
+            self._context_dict = None
+        elif isinstance(value, ErrorContext):
+            self._context_obj = value
+            self._context_dict = None
+        elif isinstance(value, dict):
+            self._context_dict = dict(value)
+            self._context_obj = ErrorContext(
+                component_name=self.__class__.__module__,
+                operation_name=self.__class__.__name__,
+                timestamp=time.time(),
+                additional_data=dict(value),
+            )
+        else:
+            raise TypeError(
+                "context must be an ErrorContext instance, a dictionary, or None"
+            )
+
     def get_error_details(self) -> Dict[str, Any]:
         """Get comprehensive error details including context, timestamp, and recovery information for debugging and logging.
-        
+
         Returns:
             dict: Dictionary containing all error details and metadata
         """
@@ -231,9 +265,11 @@ class PlumeNavSimError(Exception):
             'module': self.__class__.__module__
         }
         
-        # Include context information if available using context.to_dict()
-        if self.context:
-            details['context'] = self.context.to_dict()
+        # Include context information if available using stored context data
+        if self._context_obj:
+            details['context'] = self._context_obj.to_dict()
+        elif self._context_dict is not None:
+            details['context'] = dict(self._context_dict)
             
         # Add recovery_suggestion if available
         if self.recovery_suggestion:
@@ -290,10 +326,11 @@ class PlumeNavSimError(Exception):
         
         # Include sanitized context information for debugging
         context_str = ""
-        if self.context:
-            if not self.context.is_sanitized:
-                self.context.sanitize()
-            context_str = f" | Context: {self.context.component_name}.{self.context.operation_name}"
+        context_obj = self._context_obj
+        if context_obj:
+            if not context_obj.is_sanitized:
+                context_obj.sanitize()
+            context_str = f" | Context: {context_obj.component_name}.{context_obj.operation_name}"
             
         # Add stack trace if include_stack_trace is True
         stack_trace_str = ""
@@ -363,7 +400,8 @@ class ValidationError(PlumeNavSimError, ValueError):
         parameter_name: Optional[str] = None,
         invalid_value: Optional[Any] = None,
         expected_format: Optional[str] = None,
-        parameter_constraints: Optional[Dict[str, Any]] = None
+        parameter_constraints: Optional[Dict[str, Any]] = None,
+        context: Optional[Union[ErrorContext, Dict[str, Any]]] = None,
     ):
         """Initialize validation error with parameter details and validation context.
         
@@ -373,8 +411,8 @@ class ValidationError(PlumeNavSimError, ValueError):
             invalid_value (Optional[Any]): The invalid value that caused validation failure
             expected_format (Optional[str]): Expected format or constraint description
         """
-        # Call parent constructor with message and MEDIUM severity
-        super().__init__(message, severity=ErrorSeverity.MEDIUM)
+        # Call parent constructor with message, context, and MEDIUM severity
+        super().__init__(message, context=context, severity=ErrorSeverity.MEDIUM)
         
         # Store parameter_name for parameter-specific error handling
         self.parameter_name = parameter_name

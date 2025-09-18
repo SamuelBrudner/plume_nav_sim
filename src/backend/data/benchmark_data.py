@@ -21,7 +21,7 @@ from dataclasses import dataclass, field  # >=3.10 - Data structure definitions 
 from typing import List, Dict, Any, Optional, Tuple, Union  # >=3.10 - Type hints for benchmark data structures, analysis functions, and statistical calculations
 
 # Internal imports from plume_nav_sim core modules
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS, 
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
@@ -33,14 +33,14 @@ from ..plume_nav_sim.core.constants import (
     TESTING_CONSTANTS
 )
 
-from ..plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     GridSize,
     EnvironmentConfig,
     create_grid_size
 )
 
 # Import example configurations for benchmark reference
-from .example_configs import get_quick_start_config
+from config.default_config import get_complete_default_config
 
 # Global benchmark data constants and configuration
 BENCHMARK_DATA_VERSION = '1.0.0'
@@ -61,6 +61,12 @@ PERFORMANCE_TARGETS = {
     'environment_creation_ms': 50.0,  # Target for environment instantiation
     'configuration_validation_ms': 5.0  # Target for configuration validation
 }
+
+
+def get_quick_start_config() -> Any:
+    """Return a default configuration suitable for quick benchmarking."""
+
+    return get_complete_default_config()
 
 
 @dataclass

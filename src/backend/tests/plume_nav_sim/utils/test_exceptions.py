@@ -25,7 +25,9 @@ import inspect  # >=3.10 - Inspect module for testing frame inspection and error
 import tempfile  # >=3.10 - Temporary file operations for testing file-related error scenarios
 import json  # >=3.10 - JSON operations for testing error context serialization
 import re  # >=3.10 - Regular expressions for validating error message formats and security filtering
-from typing import Dict, List, Any, Optional, Callable, Exception as ExceptionType
+from typing import Dict, List, Any, Optional, Callable
+
+ExceptionType = Exception
 
 # Internal imports
 from plume_nav_sim.utils.exceptions import (

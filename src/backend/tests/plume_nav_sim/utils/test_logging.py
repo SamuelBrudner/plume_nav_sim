@@ -29,6 +29,7 @@ from plume_nav_sim.utils.logging import (
     ComponentLogger,
     PerformanceTimer,
     LoggingMixin,
+    ComponentType,
     clear_logger_cache,
     get_caller_info
 )
@@ -43,8 +44,6 @@ from plume_nav_sim.core.constants import (
     COMPONENT_NAMES,
     PERFORMANCE_TARGET_STEP_LATENCY_MS
 )
-
-from logging.config import ComponentType
 
 # Test constants and global variables for consistent testing
 TEST_COMPONENT_NAME = 'test_component'

@@ -50,10 +50,11 @@ ERROR_LOGGING_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 RECOVERY_STRATEGIES = ['retry', 'fallback', 'reset', 'degraded_mode', 'graceful_shutdown']
 
 
-def create_invalid_environment_configs(include_type_errors: bool = True, 
+def create_invalid_environment_configs(include_type_errors: bool = True,
                                       include_range_violations: bool = True,
                                       include_mathematical_inconsistencies: bool = True,
-                                      include_resource_violations: bool = True) -> List[Dict[str, Any]]:
+                                      include_resource_violations: bool = True,
+                                      include_all: Optional[bool] = None) -> List[Dict[str, Any]]:
     """
     Factory function to create comprehensive invalid environment configuration test scenarios 
     including parameter type errors, range violations, mathematical inconsistencies, and 
@@ -64,10 +65,22 @@ def create_invalid_environment_configs(include_type_errors: bool = True,
         include_range_violations: Include parameter range violation scenarios  
         include_mathematical_inconsistencies: Include mathematical constraint violations
         include_resource_violations: Include resource limit violation scenarios
+        include_all: When provided, overrides the four include_* flags. The
+            value must be a boolean which allows the caller to request either
+            the complete set of scenarios (``True``) or none of the optional
+            scenarios (``False``). A non-boolean value raises ``TypeError`` to
+            fail fast during misconfiguration.
         
     Returns:
         List of invalid configuration dictionaries with expected error types and descriptions
     """
+    if include_all is not None:
+        if not isinstance(include_all, bool):
+            raise TypeError("include_all must be a boolean when provided")
+        include_type_errors = include_range_violations = (
+            include_mathematical_inconsistencies
+        ) = include_resource_violations = include_all
+
     invalid_configs = []
     
     # Type error configurations for systematic error testing scenarios

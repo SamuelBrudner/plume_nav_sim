@@ -20,22 +20,22 @@ from contextlib import contextmanager  # >=3.10 - Context manager utilities for 
 from typing import Dict, Any, Tuple, List, Optional  # >=3.10 - Type hints for test function parameters and return values
 
 # Internal imports from the module under test and supporting components
-from src.backend.plume_nav_sim.render.numpy_rgb import (
+from plume_nav_sim.render.numpy_rgb import (
     NumpyRGBRenderer, create_rgb_renderer, generate_rgb_array_fast,
     validate_rgb_array_output, clear_rgb_cache, get_rgb_performance_stats
 )
-from src.backend.plume_nav_sim.render.base_renderer import (
+from plume_nav_sim.render.base_renderer import (
     BaseRenderer, RenderContext, create_render_context
 )
-from src.backend.plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     RenderMode, Coordinates, GridSize, create_coordinates, create_grid_size
 )
-from src.backend.plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_RGB_RENDER_MS, RGB_DTYPE, FIELD_DTYPE,
     AGENT_MARKER_COLOR, SOURCE_MARKER_COLOR, AGENT_MARKER_SIZE, SOURCE_MARKER_SIZE,
     PIXEL_VALUE_MIN, PIXEL_VALUE_MAX, get_testing_constants
 )
-from src.backend.plume_nav_sim.utils.exceptions import (
+from plume_nav_sim.utils.exceptions import (
     ValidationError, RenderingError, ComponentError
 )
 
