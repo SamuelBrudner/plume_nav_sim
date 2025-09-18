@@ -46,8 +46,6 @@ from .test_exceptions import (
 
 # Import all test classes from test_seeding.py
 from .test_seeding import (
-    TestSeedManager,
-    TestReproducibilityTracker,
     test_validate_seed_valid_inputs,
     test_create_seeded_rng_reproducibility,
     test_seeding_performance_benchmarks
@@ -57,21 +55,24 @@ from .test_seeding import (
 from .test_logging import (
     TestComponentLogger,
     TestLoggingMixin,
-    test_get_component_logger
 )
 
-# Import all test classes from test_spaces.py
+# Import relevant space validation tests
 from .test_spaces import (
-    TestActionSpaceValidation,
-    TestObservationSpaceValidation
+    TestSpaceConfig,
+    TestSpaceValidator,
 )
 
-# Import all test classes from test_validation.py
+# Import validation test helpers and expose concise aliases
 from .test_validation import (
-    TestParameterValidator,
-    TestValidationResult,
-    test_validate_environment_config
+    TestEnvironmentConfigValidation,
+    TestParameterValidatorClass,
+    TestValidationResultClass,
 )
+
+# Maintain backward-compatible aliases for aggregated exports
+TestParameterValidator = TestParameterValidatorClass
+TestValidationResult = TestValidationResultClass
 
 # Configure logging for test utilities
 logger = logging.getLogger('plume_nav_sim.tests.utils')
@@ -1233,19 +1234,16 @@ __all__ = [
     'TestConfigurationError',
     'TestErrorSecurity',
     
-    # Seeding and reproducibility test classes
-    'TestSeedManager',
-    'TestReproducibilityTracker',
-    
     # Logging test classes
     'TestComponentLogger',
     'TestLoggingMixin',
     
     # Spaces validation test classes
-    'TestActionSpaceValidation',
-    'TestObservationSpaceValidation',
+    'TestSpaceConfig',
+    'TestSpaceValidator',
     
     # Parameter validation test classes
+    'TestEnvironmentConfigValidation',
     'TestParameterValidator',
     'TestValidationResult',
     
@@ -1258,12 +1256,6 @@ __all__ = [
     'test_validate_seed_valid_inputs',
     'test_create_seeded_rng_reproducibility',
     'test_seeding_performance_benchmarks',
-    
-    # Logging testing utility functions
-    'test_get_component_logger',
-    
-    # Validation testing utility functions
-    'test_validate_environment_config',
     
     # Comprehensive test suite functions
     'create_shared_test_fixtures',

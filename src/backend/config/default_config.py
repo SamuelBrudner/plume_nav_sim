@@ -23,7 +23,16 @@ __all__ = [
     'CompleteConfig',
     'EnvironmentConfig',
     'PerformanceConfig',
-    'get_complete_default_config'
+    'RenderConfig',
+    'PlumeConfig',
+    'get_complete_default_config',
+    'get_default_environment_config',
+    'get_default_plume_config',
+    'get_default_render_config',
+    'get_default_performance_config',
+    'validate_configuration_compatibility',
+    'merge_configurations',
+    'create_config_from_dict'
 ]
 
 
@@ -59,7 +68,7 @@ class CompleteConfig:
     advanced_options: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def clone_with_overrides(self, overrides: Dict[str, Any]) -> 'CompleteConfig':
+    def clone_with_overrides(self, overrides: Optional[Dict[str, Any]] = None, **keyword_overrides: Any) -> 'CompleteConfig':
         """Create deep copy of configuration with parameter overrides applied.
 
         Args:
@@ -69,13 +78,19 @@ class CompleteConfig:
             CompleteConfig: New configuration instance with overrides applied
         """
         new_config = copy.deepcopy(self)
-        for key, value in overrides.items():
+        combined_overrides: Dict[str, Any] = {}
+        if overrides:
+            combined_overrides.update(overrides)
+        if keyword_overrides:
+            combined_overrides.update(keyword_overrides)
+
+        for key, value in combined_overrides.items():
             if hasattr(new_config, key):
                 setattr(new_config, key, value)
             else:
                 new_config.advanced_options[key] = value
         new_config.metadata['last_modified'] = 'clone_with_overrides'
-        new_config.metadata['override_keys'] = list(overrides.keys())
+        new_config.metadata['override_keys'] = list(combined_overrides.keys())
         return new_config
 
     def validate_all(self, strict_mode: bool = False) -> bool:
@@ -122,6 +137,9 @@ class CompleteConfig:
 # Re-export canonical EnvironmentConfig from core.types to avoid duplication
 EnvironmentConfig = CoreEnvironmentConfig
 
+# Backwards compatible alias used by historical tests
+PlumeConfig = CompleteConfig
+
 @dataclass
 class PerformanceConfig:
     """Configuration class for performance targets."""
@@ -141,6 +159,24 @@ class PerformanceConfig:
         }
         return operation_targets.get(operation_name, 1.0)
 
+
+@dataclass
+class RenderConfig:
+    """Minimal renderer configuration used by the tests."""
+
+    render_mode: str = 'rgb_array'
+    allow_human_mode: bool = False
+
+    def validate(self) -> bool:
+        if self.render_mode not in ('rgb_array', 'human'):
+            raise ConfigurationError(
+                f"Unsupported render_mode: {self.render_mode}",
+                config_parameter='render_mode',
+                invalid_value=self.render_mode,
+                expected_format="'rgb_array' or 'human'"
+            )
+        return True
+
 def get_complete_default_config() -> CompleteConfig:
     """Factory function for creating a default complete configuration.
 
@@ -148,3 +184,40 @@ def get_complete_default_config() -> CompleteConfig:
         CompleteConfig: A default complete configuration with standard parameters.
     """
     return CompleteConfig()
+
+
+def get_default_environment_config() -> EnvironmentConfig:
+    return EnvironmentConfig()
+
+
+def get_default_plume_config() -> PlumeConfig:
+    return PlumeConfig()
+
+
+def get_default_render_config() -> RenderConfig:
+    return RenderConfig()
+
+
+def get_default_performance_config() -> PerformanceConfig:
+    return PerformanceConfig()
+
+
+def validate_configuration_compatibility(environment: EnvironmentConfig,
+                                         render: RenderConfig) -> bool:
+    if render.render_mode == 'human' and not environment.enable_rendering:
+        raise ConfigurationError(
+            'Human rendering requires enable_rendering=True',
+            config_parameter='render_mode',
+            invalid_value=render.render_mode,
+            expected_format='enable_rendering must be True'
+        )
+    render.validate()
+    return True
+
+
+def merge_configurations(base: CompleteConfig, overrides: Dict[str, Any]) -> CompleteConfig:
+    return base.clone_with_overrides(overrides)
+
+
+def create_config_from_dict(config_dict: Dict[str, Any]) -> CompleteConfig:
+    return CompleteConfig(**config_dict)

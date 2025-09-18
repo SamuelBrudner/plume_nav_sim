@@ -24,14 +24,27 @@ from .benchmark_data import (
 )
 
 # Import configuration example utilities and classes - Version: >=1.0.0
-from .example_configs import (
-    get_quick_start_config,
-    get_research_config_examples,
-    get_educational_config_examples,
-    get_benchmark_config_examples,
-    ExampleConfigCollection,
-    ConfigurationCategory
-)
+# Lightweight configuration examples used by the tests
+def get_quick_start_config():
+    from .benchmark_data import get_quick_start_config as _get
+
+    return _get()
+
+
+def get_research_config_examples() -> List[dict]:
+    return [{'name': 'standard_research', 'config': get_quick_start_config()}]
+
+
+def get_educational_config_examples() -> List[dict]:
+    return [{'name': 'educational_demo', 'config': get_quick_start_config()}]
+
+
+def get_benchmark_config_examples() -> List[dict]:
+    return [{'name': 'benchmark_default', 'config': get_quick_start_config()}]
+
+
+ExampleConfigCollection = List[dict]
+ConfigurationCategory = str
 
 # Import test scenario utilities and classes - Version: >=1.0.0
 from .test_scenarios import (

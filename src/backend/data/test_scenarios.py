@@ -7,7 +7,7 @@ import uuid  # >=3.10 - Unique identifier generation for test scenario tracking 
 from enum import Enum, IntEnum  # >=3.10 - Enumeration types for test scenario categories, priorities, and execution states
 
 # Internal imports
-from ..config.test_configs import (
+from config.test_configs import (
     create_unit_test_config,
     create_integration_test_config,
     create_performance_test_config,
@@ -16,16 +16,16 @@ from ..config.test_configs import (
     TestConfigFactory,
     REPRODUCIBILITY_SEEDS
 )
-from ..data.benchmark_data import (
+from .benchmark_data import (
     create_benchmark_scenario,
     get_scalability_test_data,
     PerformanceBaseline
 )
-from ..data.example_configs import (
+from . import (
     get_quick_start_config,
     ExampleConfigCollection
 )
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     TESTING_CONSTANTS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     MEMORY_LIMIT_TOTAL_MB,
@@ -34,7 +34,7 @@ from ..plume_nav_sim.core.constants import (
     MAX_GRID_SIZE,
     VALIDATION_ERROR_MESSAGES
 )
-from ..plume_nav_sim.core.types import (
+from plume_nav_sim.core.types import (
     create_grid_size,
     create_coordinates,
     RenderMode

@@ -9,19 +9,21 @@ reproducibility testing tools for comprehensive PlumeSearchEnv and BaseEnvironme
 """
 
 # External imports with version comments
+import logging
+import time
+
+import numpy as np
 import pytest  # >=8.0.0 - Testing framework integration for fixture management and test utilities in environment testing
 from typing import Dict, List, Optional, Union, Any, Tuple, Callable  # >=3.10 - Type hints for test utility functions and shared testing interfaces
 
-# Internal imports from test modules - importing all test helper functions and utilities
-from .test_plume_search_env import (
-    setup_test_environment,
-    assert_gymnasium_api_compliance, 
-    assert_step_response_format,
-    assert_rendering_output_valid,
-    assert_performance_targets_met,
-    assert_reproducibility_identical
-)
+# Production helpers used by the lightweight shims below
+from plume_nav_sim.core.types import create_environment_config, EnvironmentConfig
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.utils.exceptions import ValidationError
+from plume_nav_sim.utils.seeding import create_seeded_rng, verify_reproducibility
+from plume_nav_sim.utils.validation import validate_environment_config
 
+# Internal imports from test modules that provide reusable helpers
 from .test_base_env import (
     create_mock_concrete_environment,
     create_test_environment_config,
@@ -35,11 +37,12 @@ ENV_TEST_UTILITIES_VERSION = '1.0.0'
 # Export list defining all publicly available testing utilities and functions
 __all__ = [
     'setup_test_environment',
-    'assert_gymnasium_api_compliance', 
+    'assert_gymnasium_api_compliance',
     'assert_step_response_format',
     'assert_rendering_output_valid',
     'assert_performance_targets_met',
     'assert_reproducibility_identical',
+    'measure_operation_performance',
     'create_mock_concrete_environment',
     'create_test_environment_config',
     'assert_gymnasium_compliance',
@@ -49,6 +52,121 @@ __all__ = [
     'generate_test_report',
     'ENV_TEST_UTILITIES_VERSION'
 ]
+
+_logger = logging.getLogger(__name__)
+
+
+def _environment_kwargs(config: EnvironmentConfig) -> Dict[str, Any]:
+    """Convert :class:`EnvironmentConfig` into keyword arguments."""
+
+    data = config.to_dict()
+    plume_params = data.pop('plume_params', {})
+    data['plume_params'] = {'sigma': plume_params.get('sigma')}
+    return data
+
+
+def setup_test_environment(config_overrides: Optional[Dict[str, Any]] = None,
+                           *,
+                           strict_validation: bool = True) -> PlumeSearchEnv:
+    """Create a :class:`PlumeSearchEnv` configured for deterministic tests."""
+
+    overrides = config_overrides or {}
+    config = create_environment_config(None, **overrides)
+    if strict_validation:
+        validation = validate_environment_config(config)
+        if not validation.is_valid:
+            raise ValidationError(
+                "Environment configuration failed validation",
+                parameter_name="environment_config",
+                invalid_value=overrides,
+                expected_format="Valid plume navigation environment configuration"
+            )
+
+    env = PlumeSearchEnv(**_environment_kwargs(config))
+    _logger.info("Created test environment with grid=%s", env.grid_size)
+    return env
+
+
+def assert_gymnasium_api_compliance(environment: PlumeSearchEnv) -> None:
+    """Verify the environment exposes the core Gymnasium API surface."""
+
+    observation, info = environment.reset(seed=0)
+    assert isinstance(observation, np.ndarray), "reset must return an observation array"
+    assert isinstance(info, dict), "reset must return an info mapping"
+    assert 'agent_position' in info, "info must include agent_position"
+
+    observation, reward, terminated, truncated, info = environment.step(0)
+    assert isinstance(reward, float), "step reward must be a float"
+    assert isinstance(terminated, bool) and isinstance(truncated, bool)
+    assert isinstance(info, dict), "step must return an info mapping"
+
+
+def assert_step_response_format(step_result: Tuple[Any, float, bool, bool, Dict[str, Any]]) -> None:
+    """Validate the tuple returned from :meth:`PlumeSearchEnv.step`."""
+
+    observation, reward, terminated, truncated, info = step_result
+    assert isinstance(observation, np.ndarray)
+    assert observation.ndim == 3 and observation.shape[-1] == 1
+    assert isinstance(reward, float)
+    assert isinstance(terminated, bool)
+    assert isinstance(truncated, bool)
+    assert isinstance(info, dict)
+
+
+def assert_rendering_output_valid(environment: PlumeSearchEnv,
+                                  mode: str = 'rgb_array') -> None:
+    """Ensure rendering returns arrays of the expected shape and dtype."""
+
+    environment.reset(seed=0)
+    field = environment.render(mode=mode)
+    if mode == 'rgb_array':
+        assert isinstance(field, np.ndarray)
+        assert field.ndim == 3 and field.shape[-1] == 3
+        assert field.dtype == np.uint8
+
+
+def measure_operation_performance(operation: Callable[[], Any],
+                                  *,
+                                  repetitions: int = 1) -> Dict[str, Any]:
+    """Measure execution time for the provided operation."""
+
+    if not callable(operation):
+        raise TypeError("operation must be callable")
+    if not isinstance(repetitions, int) or repetitions <= 0:
+        raise ValueError("repetitions must be a positive integer")
+
+    start = time.perf_counter()
+    last_value = None
+    for _ in range(repetitions):
+        last_value = operation()
+    duration = (time.perf_counter() - start) / repetitions
+    return {
+        'duration_seconds': duration,
+        'repetitions': repetitions,
+        'last_value': last_value,
+    }
+
+
+def assert_performance_targets_met(environment: PlumeSearchEnv,
+                                   *,
+                                   max_step_ms: float = 5.0) -> None:
+    """Check that stepping the environment meets simple latency goals."""
+
+    environment.reset(seed=0)
+    measurement = measure_operation_performance(lambda: environment.step(0), repetitions=1)
+    if measurement['duration_seconds'] * 1000 > max_step_ms:
+        raise AssertionError(
+            f"Environment step latency {measurement['duration_seconds'] * 1000:.3f}ms exceeds {max_step_ms}ms"
+        )
+
+
+def assert_reproducibility_identical(seed: int = 1234) -> None:
+    """Verify seeded RNGs produce identical sequences using utility helpers."""
+
+    rng_a, _ = create_seeded_rng(seed)
+    rng_b, _ = create_seeded_rng(seed)
+    if not verify_reproducibility(rng_a, rng_b, num_samples=256).is_valid:
+        raise AssertionError("Seeded RNGs produced divergent sequences")
 
 
 def create_environment_test_suite(test_suite_type: Optional[str] = None,
