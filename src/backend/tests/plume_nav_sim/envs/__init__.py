@@ -165,7 +165,8 @@ def assert_reproducibility_identical(seed: int = 1234) -> None:
 
     rng_a, _ = create_seeded_rng(seed)
     rng_b, _ = create_seeded_rng(seed)
-    if not verify_reproducibility(rng_a, rng_b, num_samples=256).is_valid:
+    result = verify_reproducibility(rng_a, rng_b, sequence_length=256)
+    if not result['is_valid']:
         raise AssertionError("Seeded RNGs produced divergent sequences")
 
 
