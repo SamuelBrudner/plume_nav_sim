@@ -37,32 +37,9 @@ try:  # pragma: no cover - import guard for optional fixtures
         TestEnvironmentManager, PerformanceTracker
     )
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised only in minimal kata builds
-    def _missing_fixture(*_args: Any, **_kwargs: Any):  # type: ignore[override]
-        pytest.skip(
-            "Comprehensive environment fixtures are unavailable in the kata sandbox."
-        )
-
-    unit_test_env = integration_test_env = performance_test_env = reproducibility_test_env = _missing_fixture  # type: ignore[assignment]
-
-    class TestEnvironmentManager:  # type: ignore[override]
-        """Fallback stub used when the full test harness is absent."""
-
-        def __enter__(self) -> "TestEnvironmentManager":
-            pytest.skip("Test environment manager not available in this build.")
-            return self
-
-        def __exit__(self, *_exc: Any) -> None:
-            return None
-
-    class PerformanceTracker:  # type: ignore[override]
-        """Fallback stub used when the full test harness is absent."""
-
-        def __enter__(self) -> "PerformanceTracker":
-            pytest.skip("Performance tracking not available in this build.")
-            return self
-
-        def __exit__(self, *_exc: Any) -> None:
-            return None
+    raise ImportError(
+        "Required test fixtures are missing; ensure src/backend/tests/conftest.py is available."
+    ) from exc
 
 # Internal imports - Main test classes and functions from test modules
 try:  # pragma: no cover - import guard for optional API compliance tests
@@ -76,16 +53,9 @@ try:  # pragma: no cover - import guard for optional API compliance tests
         test_seeding_and_reproducibility
     )
 except ModuleNotFoundError as exc:  # pragma: no cover - exercised only in minimal kata builds
-    TestEnvironmentAPI = None  # type: ignore[assignment]
-
-    def test_environment_inheritance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Environment API tests are unavailable in this minimal environment.")
-
-    def test_gymnasium_api_compliance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Environment API tests are unavailable in this minimal environment.")
-
-    def test_seeding_and_reproducibility(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Environment API tests are unavailable in this minimal environment.")
+    raise ImportError(
+        "Environment API tests are unavailable; ensure test_environment_api.py is present."
+    ) from exc
 
 # Performance modules are optional in the pared-down kata repository.  Guard the imports
 # so we can still run lightweight contract tests without the heavy Gymnasium dependency
@@ -101,17 +71,9 @@ try:  # pragma: no cover - import guard for optional performance tests
         test_comprehensive_performance_suite
     )
 except (ModuleNotFoundError, ImportError) as exc:  # pragma: no cover - exercised only in minimal kata builds
-    warnings.warn(f"Performance test suite could not be imported: {exc}")
-    TestPerformanceValidation = None  # type: ignore[assignment]
-
-    def test_environment_step_latency_performance(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Performance tests are unavailable in this minimal environment.")
-
-    def test_memory_usage_constraints(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Performance tests are unavailable in this minimal environment.")
-
-    def test_comprehensive_performance_suite(*_args: Any, **_kwargs: Any) -> None:  # type: ignore[override]
-        pytest.skip("Performance tests are unavailable in this minimal environment.")
+    raise ImportError(
+        "Performance test suite could not be imported; ensure test_performance.py and its dependencies are available."
+    ) from exc
 
 try:  # pragma: no cover - import guard for optional integration tests
     from .test_integration import (
