@@ -34,7 +34,7 @@ from ..plume_nav_sim.utils.logging import (
 from ..plume_nav_sim.core.constants import (
     PACKAGE_NAME            # Package identifier for cache directory identification and cleanup scope determination
 )
-from ..logging.config import (
+from ..plume_nav_sim.logging.config import (
     DEFAULT_LOG_DIR,        # Default log directory path for log file cleanup and cache management
     LoggerFactory           # Logger factory for clearing logging system cache and performance logger cleanup
 )
@@ -550,7 +550,7 @@ def clean_logging_cache(root_dir: Path, preserve_recent_logs: bool = True,
         # Clear LoggerFactory cache using LoggerFactory.clear_cache method
         try:
             # Create temporary factory to access cache clearing functionality
-            from ..logging.config import LoggerFactory, LoggingConfig
+            from ..plume_nav_sim.logging.config import LoggerFactory, LoggingConfig
             temp_factory = LoggerFactory(LoggingConfig())
             
             if not dry_run:

@@ -34,7 +34,7 @@ from .formatters import (
 )
 
 # Internal imports - system constants
-from ..plume_nav_sim.core.constants import (
+from ..core.constants import (
     COMPONENT_NAMES, LOG_LEVEL_DEFAULT, PERFORMANCE_TARGET_STEP_LATENCY_MS
 )
 

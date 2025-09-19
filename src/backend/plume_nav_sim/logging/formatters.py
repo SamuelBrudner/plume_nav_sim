@@ -20,7 +20,7 @@ from dataclasses import dataclass  # >=3.10 - Data classes for formatter configu
 
 # Internal imports - Import performance constants and handle missing constants gracefully
 try:
-    from ..plume_nav_sim.core.constants import (
+    from ..core.constants import (
         PERFORMANCE_TARGET_STEP_LATENCY_MS,
         PERFORMANCE_TARGET_RGB_RENDER_MS,
         PERFORMANCE_TARGET_PLUME_GENERATION_MS as PERFORMANCE_TARGET_HUMAN_RENDER_MS
@@ -33,12 +33,12 @@ except ImportError:
 
 # Handle missing constants with reasonable defaults
 try:
-    from ..plume_nav_sim.core.constants import LOG_LEVEL_DEFAULT
+    from ..core.constants import LOG_LEVEL_DEFAULT
 except ImportError:
     LOG_LEVEL_DEFAULT = 'INFO'
 
 try:
-    from ..plume_nav_sim.core.constants import COMPONENT_NAMES
+    from ..core.constants import COMPONENT_NAMES
 except ImportError:
     COMPONENT_NAMES = ['plume_nav_sim', 'environment', 'rendering', 'plume_model', 'utilities']
 

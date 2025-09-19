@@ -29,6 +29,7 @@ import itertools  # Standard library - Test parameter generation for comprehensi
 import random  # Standard library - Random test data generation for edge case boundary validation and stress testing
 import unittest.mock  # Standard library - Component mocking for isolated boundary enforcement testing
 import copy  # Standard library - Deep copying for boundary enforcement result validation and state preservation testing
+from typing import Any, Dict, List  # >=3.10 - Type hints for structured analysis helpers
 
 # Internal imports from boundary enforcer module for comprehensive testing coverage
 from plume_nav_sim.core.boundary_enforcer import (

@@ -230,7 +230,7 @@ def get_package_data() -> dict:
             ])
         
         # Include logging configurations and formatters for development and debugging support
-        logging_dir = PACKAGE_DIR / 'logging'
+        logging_dir = PACKAGE_DIR / 'plume_nav_sim' / 'logging'
         if logging_dir.exists():
             package_data_patterns.extend([
                 'logging/*.py',

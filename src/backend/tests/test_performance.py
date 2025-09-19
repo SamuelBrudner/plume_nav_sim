@@ -21,8 +21,7 @@ failure analysis including component-specific recommendations for development op
 # External imports with version requirements for comprehensive testing framework
 import contextlib  # >=3.10 - Context managers for resource isolation and performance measurement
 import gc  # >=3.10 - Garbage collection control for memory leak detection and baseline measurement
-import numpy as np  # >=2.1.0 - Statistical analysis and performance data processing for benchmark validation  
-import psutil  # >=5.8.0 - System resource monitoring for memory usage tracking and process performance metrics
+import numpy as np  # >=2.1.0 - Statistical analysis and performance data processing for benchmark validation
 import pytest  # >=8.0.0 - Testing framework with fixtures, parametrization, and comprehensive execution support
 import statistics  # >=3.10 - Statistical functions for performance metric calculation and confidence intervals
 import threading  # >=3.10 - Thread safety utilities for concurrent performance testing and resource monitoring
@@ -31,6 +30,16 @@ import warnings  # >=3.10 - Warning management for performance test execution an
 
 # Internal imports for environment benchmarking and comprehensive performance analysis
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+
+try:
+    import psutil  # type: ignore  # >=5.8.0 - Real system metrics module required for performance validation
+except ImportError:  # pragma: no cover - dependency may be unavailable in lightweight environments
+    psutil = None  # type: ignore[assignment]
+
+pytestmark = pytest.mark.skipif(
+    psutil is None,
+    reason="psutil is required for performance benchmark validation",
+)
 from benchmarks.environment_performance import (
     run_environment_performance_benchmark,
     benchmark_step_latency,
