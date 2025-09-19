@@ -21,6 +21,7 @@ failure analysis including component-specific recommendations for development op
 # External imports with version requirements for comprehensive testing framework
 import contextlib  # >=3.10 - Context managers for resource isolation and performance measurement
 import gc  # >=3.10 - Garbage collection control for memory leak detection and baseline measurement
+import logging  # >=3.10 - Structured logging for fail-fast diagnostics during performance test import
 import numpy as np  # >=2.1.0 - Statistical analysis and performance data processing for benchmark validation
 import pytest  # >=8.0.0 - Testing framework with fixtures, parametrization, and comprehensive execution support
 import statistics  # >=3.10 - Statistical functions for performance metric calculation and confidence intervals
@@ -31,28 +32,32 @@ import warnings  # >=3.10 - Warning management for performance test execution an
 # Internal imports for environment benchmarking and comprehensive performance analysis
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 
-psutil = pytest.importorskip(
-    "psutil",
-    reason="psutil is required for performance benchmark validation",
-)
+LOGGER = logging.getLogger(__name__)
 
-pytest.importorskip(
-    "benchmarks.environment_performance",
-    reason="Performance benchmark module is required",
-)
+try:
+    import psutil  # type: ignore[import-not-found] - validated at runtime
+except ImportError as exc:  # pragma: no cover - failure handled immediately
+    _MESSAGE = "psutil is required for performance benchmark validation"
+    LOGGER.error(_MESSAGE)
+    raise RuntimeError(_MESSAGE) from exc
 
-from benchmarks.environment_performance import (
-    run_environment_performance_benchmark,
-    benchmark_step_latency,
-    benchmark_episode_performance,
-    benchmark_memory_usage,
-    benchmark_rendering_performance,
-    validate_performance_targets,
-    EnvironmentPerformanceSuite,
-    PerformanceAnalysis,
-    EnvironmentBenchmarkConfig,
-    BenchmarkResult
-)
+try:
+    from benchmarks.environment_performance import (
+        run_environment_performance_benchmark,
+        benchmark_step_latency,
+        benchmark_episode_performance,
+        benchmark_memory_usage,
+        benchmark_rendering_performance,
+        validate_performance_targets,
+        EnvironmentPerformanceSuite,
+        PerformanceAnalysis,
+        EnvironmentBenchmarkConfig,
+        BenchmarkResult
+    )
+except ImportError as exc:  # pragma: no cover - failure handled immediately
+    _MESSAGE = "Performance benchmark module is required"
+    LOGGER.error(_MESSAGE)
+    raise RuntimeError(_MESSAGE) from exc
 from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS,  
