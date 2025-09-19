@@ -20,13 +20,15 @@ except ImportError:  # pragma: no cover - dependency may be unavailable in light
 
 
 def _require_psutil() -> "psutil":
-    """Return the real :mod:`psutil` module or skip dependent fixtures."""
+    """Return the real :mod:`psutil` module or fail loudly when unavailable."""
 
     if _psutil is None:
-        pytest.skip(
-            "psutil is required for performance monitoring fixtures",
-            allow_module_level=False,
+        message = (
+            "psutil is required for performance monitoring fixtures; install psutil to run "
+            "the trimmed performance suite."
         )
+        logging.getLogger(__name__).error(message)
+        raise RuntimeError(message)
     return _psutil
 
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env

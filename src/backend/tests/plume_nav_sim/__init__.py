@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
+import logging
 
 __all__ = ["require_full_test_suite"]
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def require_full_test_suite() -> None:
-    """Signal that the expansive upstream test helpers are not bundled."""
+    """Raise an explicit error indicating the trimmed test harness."""
 
-    pytest.skip(
-        "The full plume_nav_sim test harness is not included in this kata-oriented repository."
+    message = (
+        "The full plume_nav_sim test suite is not included in this kata repository; "
+        "install the upstream test harness to exercise these helpers."
     )
+    _LOGGER.error(message)
+    raise RuntimeError(message)
