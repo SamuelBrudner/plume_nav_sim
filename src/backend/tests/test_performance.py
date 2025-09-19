@@ -31,15 +31,16 @@ import warnings  # >=3.10 - Warning management for performance test execution an
 # Internal imports for environment benchmarking and comprehensive performance analysis
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 
-try:
-    import psutil  # type: ignore  # >=5.8.0 - Real system metrics module required for performance validation
-except ImportError:  # pragma: no cover - dependency may be unavailable in lightweight environments
-    psutil = None  # type: ignore[assignment]
-
-pytestmark = pytest.mark.skipif(
-    psutil is None,
+psutil = pytest.importorskip(
+    "psutil",
     reason="psutil is required for performance benchmark validation",
 )
+
+pytest.importorskip(
+    "benchmarks.environment_performance",
+    reason="Performance benchmark module is required",
+)
+
 from benchmarks.environment_performance import (
     run_environment_performance_benchmark,
     benchmark_step_latency,
