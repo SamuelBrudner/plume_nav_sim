@@ -49,14 +49,14 @@ from ..core.constants import (
 
 # Centralized logging infrastructure components
 try:
-    from ...logging.config import (
+    from ..logging.config import (
         get_logger,
         ComponentType,
         configure_development_logging
     )
 
     # Specialized performance logging formatter for timing analysis
-    from ...logging.formatters import PerformanceFormatter
+    from ..logging.formatters import PerformanceFormatter
 except ImportError:  # pragma: no cover - fallback for optional logging package
     from enum import Enum
 

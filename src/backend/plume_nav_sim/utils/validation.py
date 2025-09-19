@@ -837,6 +837,17 @@ def validate_environment_config(config: Union[EnvironmentConfig, dict], strict_m
     return result
 
 
+def validate_action_input(action: ActionType, context: Optional[ValidationContext] = None) -> int:
+    """Compatibility wrapper that validates an action value using default parameters."""
+
+    return validate_action_parameter(
+        action,
+        allow_enum_types=True,
+        strict_bounds_checking=False,
+        context=context,
+    )
+
+
 def validate_action_parameter(action: ActionType, allow_enum_types: bool = True,
                              strict_bounds_checking: bool = False,
                              context: Optional[ValidationContext] = None) -> int:
@@ -2393,6 +2404,7 @@ def optimize_validation_performance(validation_config: Dict[str, Any],
 __all__ = [
     # Core validation functions
     'validate_environment_config',
+    'validate_action_input',
     'validate_action_parameter',
     'validate_observation_parameter',
     'validate_coordinates',

@@ -67,7 +67,7 @@ from .loggers import (
 )
 
 # Internal imports - System constants for performance and configuration
-from ..plume_nav_sim.core.constants import (
+from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS as CORE_PERFORMANCE_TARGET,
     COMPONENT_NAMES as CORE_COMPONENT_NAMES,
     LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT

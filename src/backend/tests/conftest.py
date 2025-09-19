@@ -11,8 +11,23 @@ from collections.abc import MutableMapping, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, Optional
 
-import psutil
 import pytest
+
+try:
+    import psutil as _psutil
+except ImportError:  # pragma: no cover - dependency may be unavailable in lightweight environments
+    _psutil = None
+
+
+def _require_psutil() -> "psutil":
+    """Return the real :mod:`psutil` module or skip dependent fixtures."""
+
+    if _psutil is None:
+        pytest.skip(
+            "psutil is required for performance monitoring fixtures",
+            allow_module_level=False,
+        )
+    return _psutil
 
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 
@@ -26,40 +41,6 @@ except Exception:  # pragma: no cover - matplotlib is optional in CI
     matplotlib_available = False
 
 single_threaded_only = False
-
-
-def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register coverage and custom options defined in pytest.ini."""
-
-    parser.addoption("--cov", action="append", default=[], help="Stub option.")
-    parser.addoption("--cov-report", action="append", default=[], help="Stub option.")
-    parser.addoption("--cov-branch", action="store_true", default=False, help="Stub option.")
-    parser.addoption("--cov-fail-under", action="store", default=None, help="Stub option.")
-    parser.addini("addopts_faulthandler", "Stub ini option for kata environment.", default="")
-    parser.addini(
-        "collect_ignore",
-        "Stub ini option for kata environment.",
-        type="linelist",
-        default=[],
-    )
-    parser.addini(
-        "collect_ignore_glob",
-        "Stub ini option for kata environment.",
-        type="linelist",
-        default=[],
-    )
-    parser.addini(
-        "random-order",
-        "Stub ini option for kata environment.",
-        default="false",
-    )
-    parser.addini(
-        "random-order-bucket",
-        "Stub ini option for kata environment.",
-        default="none",
-    )
-
-
 @dataclass
 class PerformanceTracker(MutableMapping[str, Any]):
     """Lightweight performance tracker used by the edge-case suite.
@@ -76,7 +57,9 @@ class PerformanceTracker(MutableMapping[str, Any]):
     _step_durations: list[float] = field(default_factory=list)
     _total_steps: int = 0
     _lock: threading.RLock = field(default_factory=threading.RLock)
-    _process: psutil.Process = field(default_factory=psutil.Process)
+    _process: "psutil.Process" = field(
+        default_factory=lambda: _require_psutil().Process()
+    )
     _store: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
