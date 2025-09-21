@@ -104,8 +104,7 @@ except ImportError:  # pragma: no cover - fallback for optional logging package
             duration_ms: float,
             additional_data: Optional[Dict[str, Any]] = None,
         ) -> str:
-            metrics = additional_data or {}
-            if metrics:
+            if metrics := additional_data or {}:
                 extra = ", ".join(f"{key}={value}" for key, value in metrics.items())
                 return f"{operation_name}: {duration_ms:.3f}ms [{extra}]"
             return f"{operation_name}: {duration_ms:.3f}ms"
@@ -338,7 +337,7 @@ def configure_logging_for_development(
             "performance_monitoring": performance_config,
             "component_loggers": component_loggers_initialized,
             "initialization_time": time.time(),
-            "config_source": config_result if config_result else "development_defaults",
+            "config_source": config_result or "development_defaults",
         }
 
     except Exception as e:
@@ -589,7 +588,7 @@ def log_with_context(
         }
 
         if extra_context:
-            context.update(extra_context)
+            context |= extra_context
 
         # Apply security filtering to context and message content
         # Security filtering is handled by the logging infrastructure's SecurityFilter
@@ -605,7 +604,7 @@ def log_with_context(
         # Fallback logging without context if enhanced logging fails
         try:
             logger.error(f"Context logging failed: {e}. Original message: {message}")
-        except:
+        except Exception:
             # Ultimate fallback to basic logging
             logging.getLogger(PACKAGE_NAME).error(
                 f"All logging failed. Message: {message}, Error: {e}"
@@ -866,12 +865,11 @@ def clear_logger_cache(
     try:
         # Acquire _cache_lock for thread-safe cache clearing operation
         with _cache_lock:
-            # Filter cached loggers by component_filter if provided, otherwise clear all
-            keys_to_remove = []
-            for key in list(_logger_cache.keys()):
-                if component_filter is None or component_filter in key:
-                    keys_to_remove.append(key)
-
+            keys_to_remove = [
+                key
+                for key in list(_logger_cache.keys())
+                if component_filter is None or component_filter in key
+            ]
             # Remove logger entries from _logger_cache weak reference dictionary
             for key in keys_to_remove:
                 if key in _logger_cache:
@@ -976,14 +974,7 @@ class ComponentLogger:
             message: Debug message to log
             extra: Additional context information
         """
-        # Capture caller information automatically using get_caller_info function
-        caller_info = get_caller_info(stack_depth=2, include_locals=False)
-
-        # Merge extra parameters with component_context and caller information
-        context = {**self.component_context, **caller_info}
-        if extra:
-            context.update(extra)
-
+        context = self._extracted_from_warning_11(extra)
         # Apply security filtering to message and context information
         # (Handled by the logging infrastructure's SecurityFilter)
 
@@ -1005,7 +996,7 @@ class ComponentLogger:
         # Merge extra parameters with component_context for comprehensive logging
         context = {**self.component_context}
         if extra:
-            context.update(extra)
+            context |= extra
 
         # Apply security filtering to message content and context data
         # (Handled by the logging infrastructure)
@@ -1039,12 +1030,7 @@ class ComponentLogger:
             extra: Additional context information
             recovery_suggestion: Optional recovery guidance for the warning
         """
-        # Capture extended context information including system state
-        caller_info = get_caller_info(stack_depth=2, include_locals=False)
-        context = {**self.component_context, **caller_info}
-        if extra:
-            context.update(extra)
-
+        context = self._extracted_from_warning_11(extra)
         # Include recovery_suggestion in log message if provided
         if recovery_suggestion:
             context["recovery_suggestion"] = recovery_suggestion
@@ -1056,6 +1042,14 @@ class ComponentLogger:
         # Merge extra context with component metadata and caller information
         # Log warning message with enhanced context and recovery information
         self.base_logger.warning(formatted_message, extra=context)
+
+    # TODO Rename this here and in `debug` and `warning`
+    def _extracted_from_warning_11(self, extra):
+        caller_info = get_caller_info(stack_depth=2, include_locals=False)
+        result = {**self.component_context, **caller_info}
+        if extra:
+            result |= extra
+        return result
 
     def error(
         self,
@@ -1083,7 +1077,7 @@ class ComponentLogger:
             "component_state": "error",
         }
         if extra:
-            context.update(extra)
+            context |= extra
 
         # Extract exception details if exception parameter provided
         if exception:
@@ -1674,7 +1668,7 @@ class LoggingMixin:
                             # Limit parameter value length to prevent log bloat
                             str_value = str(value)
                             safe_parameters[key] = (
-                                str_value[:100] + "..."
+                                f"{str_value[:100]}..."
                                 if len(str_value) > 100
                                 else str_value
                             )
@@ -1723,14 +1717,14 @@ class LoggingMixin:
                 try:
                     # Apply security filtering to return_value to prevent data exposure
                     str_return = str(return_value)
-                    if len(str_return) > 200:
-                        safe_return = str_return[:200] + "..."
-                    else:
-                        safe_return = str_return
-
+                    safe_return = (
+                        f"{str_return[:200]}..."
+                        if len(str_return) > 200
+                        else str_return
+                    )
                     # Check for sensitive information in return value
-                    if not any(
-                        sensitive in safe_return.lower()
+                    if all(
+                        sensitive not in safe_return.lower()
                         for sensitive in ["password", "token", "key", "secret"]
                     ):
                         exit_message += f" → {safe_return}"
@@ -1791,7 +1785,7 @@ def monitor_performance(
                 raise
             finally:
                 duration_ms = (time.perf_counter() - start) * 1000.0
-                try:
+                with suppress(Exception):
                     self_obj = args[0] if args else None
                     logger = getattr(self_obj, "logger", None)
                     if logger and hasattr(logger, "performance"):
@@ -1807,9 +1801,6 @@ def monitor_performance(
                             metrics=metrics or None,
                             update_baseline=update_baseline,
                         )
-                except Exception:
-                    # Never let performance logging break the wrapped function
-                    pass
 
         return wrapper
 

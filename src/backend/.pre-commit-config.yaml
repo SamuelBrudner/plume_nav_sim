@@ -169,6 +169,7 @@ repos:
         args: ['--convention=numpy', '--add-ignore=D100,D102,D104,D105,D200,D202,D205,D400,D401,D406,D407']
         files: '^src/backend/plume_nav_sim/'
         exclude: '^(src/backend/plume_nav_sim/render/|src/backend/plume_nav_sim/utils/spaces\.py$)'
+        additional_dependencies: ['tomli']
 
   # Commitizen commit message standardization and versioning
   - repo: https://github.com/commitizen-tools/commitizen
