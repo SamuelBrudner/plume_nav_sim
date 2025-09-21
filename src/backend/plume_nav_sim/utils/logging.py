@@ -19,6 +19,7 @@ import logging  # >=3.10
 import threading  # >=3.10
 import time  # >=3.10
 import weakref  # >=3.10
+from contextlib import suppress
 from types import TracebackType
 from typing import (  # >=3.10
     Any,
@@ -187,23 +188,21 @@ def get_component_logger(
             if cached is not None:
                 return cached  # Return cached plume logger directly
 
-            plume_logger = _plume_get_logger(
-                name=logger_name,
-                component_type=comp_type,
+            plume_logger = get_logger(
+                name=component_name,
+                component_type=component_type,
                 enable_performance_tracking=enable_performance_tracking,
             )
 
             # Optional level override
             if logger_level is not None:
-                try:
+                with suppress(Exception):
                     desired = getattr(logging, logger_level.upper())
                     underlying = getattr(plume_logger, "logger", None) or getattr(
                         plume_logger, "base_logger", None
                     )
                     if isinstance(underlying, logging.Logger):
                         underlying.setLevel(desired)
-                except Exception:
-                    pass
 
             _logger_cache[cache_key] = plume_logger
             return plume_logger
