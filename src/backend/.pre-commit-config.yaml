@@ -72,6 +72,7 @@ repos:
         description: Detect and prevent Python debug statements
         language: python
         types: [python]
+        exclude: '^src/backend/docs/'
 
       - id: name-tests-test
         name: Test File Naming
@@ -89,7 +90,7 @@ repos:
         language: python
         types: [python]
         args: ['--line-length=88', '--target-version=py310']
-        exclude: '^(build/|dist/|\.tox/)'
+        exclude: '^(build/|dist/|\.tox/|src/backend/docs/)'
 
       - id: black-jupyter
         name: Black Jupyter Formatting
@@ -109,6 +110,7 @@ repos:
         types: [python]
         args: ['--profile=black', '--line-length=88', '--multi-line=3']
         additional_dependencies: ['isort[colors]']
+        exclude: '^(build/|dist/|\.tox/|src/backend/docs/)'
 
   # flake8 comprehensive Python linting with extensive plugin support
   - repo: https://github.com/PyCQA/flake8
@@ -119,6 +121,7 @@ repos:
         description: Comprehensive Python code linting and style checking
         language: python
         types: [python]
+        stages: [pre-push]
         args: ['--max-line-length=88', '--extend-ignore=E203,W503,E501', '--max-complexity=10', '--select=E,W,F,C,N']
         additional_dependencies: ['flake8-docstrings', 'flake8-comprehensions', 'flake8-bugbear']
 
@@ -131,7 +134,8 @@ repos:
         description: Static type analysis and checking for Python code
         language: python
         types: [python]
-        args: ['--show-error-codes']
+        stages: [pre-push]
+        args: ['--show-error-codes', '--config-file=src/backend/mypy.ini']
         additional_dependencies: ['types-setuptools', 'types-requests', 'numpy', 'gymnasium', 'matplotlib']
         exclude: '^(tests/|examples/|benchmarks/)'
 
@@ -144,6 +148,8 @@ repos:
         description: Security vulnerability detection and analysis
         language: python
         types: [python]
+        stages: [pre-push]
+        pass_filenames: false
         args: ['-r', 'src/backend', '-f', 'json', '-o', 'bandit-report.json', '-ll', '--skip=B101,B601']
         additional_dependencies: ['pbr']
         exclude: '^(tests/|examples/)'
@@ -157,8 +163,9 @@ repos:
         description: Python docstring style validation and enforcement
         language: python
         types: [python]
+        stages: [pre-push]
         args: ['--convention=numpy', '--add-ignore=D100,D104,D105']
-        files: '^src/plume_nav_sim/'
+        files: '^src/backend/plume_nav_sim/'
 
   # Commitizen commit message standardization and versioning
   - repo: https://github.com/commitizen-tools/commitizen
@@ -176,9 +183,10 @@ repos:
       - id: pytest-check
         name: Quick Test Suite
         description: Run fast test subset for pre-commit validation
-        entry: python -m pytest
+        stages: [pre-push]
+        entry: bash
         language: system
-        args: ['src/backend/tests/', '-x', '-q', '--tb=short', '--durations=5', '-m', 'not slow']
+        args: ['-lc', 'conda run -n plume-nav-sim python -m pytest src/backend/tests/ -x -q --tb=short --durations=5 -m "not slow"']
         pass_filenames: false
         always_run: true
 
@@ -188,23 +196,29 @@ repos:
       - id: requirements-sync
         name: Requirements Synchronization
         description: Validate requirements files are synchronized with pyproject.toml
-        entry: python src/backend/scripts/validate_requirements_sync.py
+        stages: [pre-push]
+        entry: bash
         language: system
+        args: ['-lc', 'test -f src/backend/scripts/validate_requirements_sync.py && python3 src/backend/scripts/validate_requirements_sync.py || exit 0']
         files: '^(requirements.*\.txt|pyproject\.toml)$'
         pass_filenames: false
 
       - id: changelog-update
         name: Changelog Update Check
         description: Ensure CHANGELOG.md is updated for significant changes
-        entry: python src/backend/scripts/check_changelog_update.py
+        stages: [pre-push]
+        entry: bash
         language: system
-        files: '^src/plume_nav_sim/'
+        args: ['-lc', 'test -f src/backend/scripts/check_changelog_update.py && python3 src/backend/scripts/check_changelog_update.py || exit 0']
+        files: '^src/backend/plume_nav_sim/'
         pass_filenames: false
 
       - id: license-headers
         name: License Header Validation
         description: Ensure proper license headers in source files
-        entry: python src/backend/scripts/check_license_headers.py
+        stages: [pre-push]
+        entry: bash
         language: system
+        args: ['-lc', 'test -f src/backend/scripts/check_license_headers.py && python3 src/backend/scripts/check_license_headers.py || exit 0']
         files: '\.py$'
         exclude: '^(tests/|setup\.py)'

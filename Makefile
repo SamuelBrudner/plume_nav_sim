@@ -1,7 +1,24 @@
-# Makefile for the plume_nav_sim project
+SHELL := /bin/bash
+MAKEFLAGS += --warn-undefined-variables
 
-.PHONY: test
+SETUP_SCRIPT := ./setup_env.sh
+ENV_NAME ?= plume-nav-sim
+PYTHON_VERSION ?= 3.10
+DEV ?= 0
 
-test:
-	@echo "Running the test suite..."
-	@conda run --prefix src/backend/conda_env pytest src/backend/tests/
+ifeq ($(DEV),1)
+DEV_FLAG := --dev
+else
+DEV_FLAG :=
+endif
+
+.PHONY: setup setup-dev maintain
+
+setup:
+	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) $(DEV_FLAG)
+
+setup-dev:
+	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) --dev
+
+maintain:
+	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) --update $(DEV_FLAG)

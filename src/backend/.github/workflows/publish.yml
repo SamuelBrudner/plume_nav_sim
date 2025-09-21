@@ -9,11 +9,11 @@ on:
       - 'v*.*.*-alpha.*'  # Alpha releases (v1.0.0-alpha.1)
       - 'v*.*.*-beta.*'   # Beta releases (v1.0.0-beta.1)
       - 'v*.*.*-rc.*'     # Release candidates (v1.0.0-rc.1)
-  
+
   # GitHub release publication and edits
   release:
     types: [published, edited]
-  
+
   # Manual workflow dispatch with comprehensive options
   workflow_dispatch:
     inputs:
@@ -21,31 +21,31 @@ on:
         description: 'Version to publish (e.g., 1.0.0, 1.0.0-alpha.1)'
         required: true
         type: string
-      
+
       publish_to_pypi:
         description: 'Publish to PyPI (disabled for proof-of-life)'
         required: false
         default: false
         type: boolean
-      
+
       publish_to_test_pypi:
         description: 'Publish to Test PyPI'
         required: false
         default: false
         type: boolean
-      
+
       create_github_release:
         description: 'Create GitHub release'
         required: false
         default: true
         type: boolean
-      
+
       run_full_test_suite:
         description: 'Run complete test suite before publishing'
         required: false
         default: true
         type: boolean
-      
+
       enable_security_scanning:
         description: 'Enable security scanning and vulnerability assessment'
         required: false
@@ -83,26 +83,26 @@ jobs:
     name: 'Validate Release Information'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     outputs:
       version: ${{ steps.extract-version.outputs.version }}
       is-prerelease: ${{ steps.extract-version.outputs.prerelease }}
       release-type: ${{ steps.extract-version.outputs.release_type }}
       should-publish: ${{ steps.validate-inputs.outputs.should_publish }}
-    
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4  # v4 - Repository checkout with full history
         with:
           fetch-depth: 0  # Full history for comprehensive package building
           submodules: false
-      
+
       - name: 'Extract version information'
         id: extract-version
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           # Extract version from tag or workflow input
           if [[ '${{ github.event_name }}' == 'workflow_dispatch' ]]; then
               VERSION='${{ github.event.inputs.version }}'
@@ -114,14 +114,14 @@ jobs:
               echo "Error: Cannot determine version for release"
               exit 1
           fi
-          
+
           # Validate semantic versioning format
           if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
               echo "Error: Invalid semantic version format: $VERSION"
               echo "Expected format: X.Y.Z or X.Y.Z-{alpha|beta|rc}.N"
               exit 1
           fi
-          
+
           # Determine release type
           if [[ $VERSION =~ -(alpha|beta|rc) ]]; then
               IS_PRERELEASE=true
@@ -130,25 +130,25 @@ jobs:
               IS_PRERELEASE=false
               RELEASE_TYPE=stable
           fi
-          
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
           echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
-          
+
           echo "=== Release Information ==="
           echo "Version: $VERSION"
           echo "Pre-release: $IS_PRERELEASE"
           echo "Release type: $RELEASE_TYPE"
           echo "========================="
-      
+
       - name: 'Validate release inputs and configuration'
         id: validate-inputs
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           SHOULD_PUBLISH=false
-          
+
           # Validate PyPI publishing configuration
           if [[ '${{ github.event.inputs.publish_to_pypi }}' == 'true' ]]; then
               echo "⚠️ PyPI publishing is disabled for proof-of-life implementation"
@@ -161,25 +161,25 @@ jobs:
               echo "📦 GitHub release only (current proof-of-life scope)"
               SHOULD_PUBLISH=true
           fi
-          
+
           # Validate version in pyproject.toml matches release version
           PROJECT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
           RELEASE_VERSION='${{ steps.extract-version.outputs.version }}'
-          
+
           echo "Project version: $PROJECT_VERSION"
           echo "Release version: $RELEASE_VERSION"
-          
+
           if [[ "$PROJECT_VERSION" != "$RELEASE_VERSION" ]]; then
               echo "⚠️ Version mismatch detected - will update pyproject.toml"
               echo "This is expected for automated releases"
           fi
-          
+
           echo "should_publish=$SHOULD_PUBLISH" >> $GITHUB_OUTPUT
-          
+
           echo "=== Validation Summary ==="
           echo "Should publish: $SHOULD_PUBLISH"
           echo "========================="
-      
+
       - name: 'Generate release summary'
         run: |
           echo "## 📋 Release Validation Summary"
@@ -203,62 +203,62 @@ jobs:
     needs: validate-release
     if: github.event.inputs.enable_security_scanning != 'false'
     timeout-minutes: 20
-    
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4  # v4 - Repository checkout with full history
         with:
           fetch-depth: 0
-      
+
       - name: 'Set up Python 3.10'
         uses: actions/setup-python@v5  # v5 - Python environment setup with build tools
         with:
           python-version: '3.10'
           cache: 'pip'
-      
+
       - name: 'Install security scanning tools'
         run: |
           python -m pip install --upgrade pip
           python -m pip install safety bandit semgrep pip-audit
-      
+
       - name: 'Run dependency vulnerability scan'
         run: |
           echo "🔍 Scanning dependencies for known vulnerabilities..."
-          
+
           # Generate requirements for scanning
           python -m pip freeze > requirements-scan.txt
-          
+
           # Run safety check
           echo "Running safety check..."
           python -m safety check --json --output safety-report.json || true
-          
+
           # Run pip-audit
           echo "Running pip-audit..."
           python -m pip_audit --format=json --output=pip-audit-report.json . || true
-          
+
           echo "✅ Dependency vulnerability scan completed"
-      
+
       - name: 'Run static code security analysis'
         run: |
           echo "🔍 Running static code security analysis..."
-          
+
           # Run bandit for Python security issues
           echo "Running bandit security scanner..."
           python -m bandit -r plume_nav_sim/ -f json -o bandit-report.json || true
-          
+
           # Display summary
           echo "✅ Static code security analysis completed"
-      
+
       - name: 'Evaluate security scan results'
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           echo "📊 Security Scan Results Summary"
           echo "================================="
-          
+
           FAILED_CHECKS=0
-          
+
           # Check safety results
           if [[ -f safety-report.json ]]; then
               SAFETY_ISSUES=$(jq '.vulnerabilities | length' safety-report.json 2>/dev/null || echo "0")
@@ -268,20 +268,20 @@ jobs:
                   FAILED_CHECKS=$((FAILED_CHECKS + 1))
               fi
           fi
-          
+
           # Check bandit results
           if [[ -f bandit-report.json ]]; then
               BANDIT_HIGH=$(jq '.results | map(select(.issue_severity == "HIGH")) | length' bandit-report.json 2>/dev/null || echo "0")
               BANDIT_MEDIUM=$(jq '.results | map(select(.issue_severity == "MEDIUM")) | length' bandit-report.json 2>/dev/null || echo "0")
               echo "Bandit HIGH severity issues: $BANDIT_HIGH"
               echo "Bandit MEDIUM severity issues: $BANDIT_MEDIUM"
-              
+
               if [[ $BANDIT_HIGH -gt 0 ]]; then
                   echo "🚨 High severity security issues detected!"
                   FAILED_CHECKS=$((FAILED_CHECKS + 1))
               fi
           fi
-          
+
           if [[ $FAILED_CHECKS -gt 0 ]]; then
               echo "❌ Security scan failed with $FAILED_CHECKS critical issues"
               echo "Review the detailed reports and resolve security issues before publishing"
@@ -289,7 +289,7 @@ jobs:
           else
               echo "✅ Security scan passed - no critical issues detected"
           fi
-      
+
       - name: 'Upload security scan reports'
         if: always()
         uses: actions/upload-artifact@v4  # v4 - Distribution artifact upload
@@ -307,34 +307,34 @@ jobs:
     needs: [validate-release, security-scan]
     if: github.event.inputs.run_full_test_suite != 'false'
     timeout-minutes: 45
-    
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4  # v4 - Repository checkout with full history
         with:
           fetch-depth: 0
-      
+
       - name: 'Set up Python 3.10'
         uses: actions/setup-python@v5  # v5 - Python environment setup with build tools
         with:
           python-version: '3.10'
           cache: 'pip'
-      
+
       - name: 'Install system dependencies'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libgl1-mesa-glx libglib2.0-0
-      
+
       - name: 'Install package and test dependencies'
         run: |
           python -m pip install --upgrade pip hatchling
           python -m pip install -e .
           python -m pip install -r requirements-test.txt
-      
+
       - name: 'Validate package installation'
         run: |
           python scripts/validate_installation.py --verbose --check-all
-      
+
       - name: 'Run comprehensive test suite'
         run: |
           python scripts/run_tests.py \
@@ -343,7 +343,7 @@ jobs:
             --generate-reports \
             --coverage-threshold 95 \
             --output-dir test-results-publication
-      
+
       - name: 'Run publication-specific benchmarks'
         run: |
           python scripts/performance_profiling.py \
@@ -351,18 +351,18 @@ jobs:
             --validate-targets \
             --generate-report \
             --output-file publication-benchmarks.json
-      
+
       - name: 'Validate package metadata and distribution readiness'
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           echo "🔍 Validating package metadata and distribution readiness..."
-          
+
           # Check pyproject.toml validity
           python -c "import tomllib; import sys; tomllib.load(open('pyproject.toml', 'rb'))"
           echo "✅ pyproject.toml is valid TOML"
-          
+
           # Validate project metadata
           python -c "
           import sys
@@ -370,7 +370,7 @@ jobs:
           from plume_nav_sim.core.constants import PACKAGE_VERSION
           print(f'Package version: {PACKAGE_VERSION}')
           "
-          
+
           # Check required files exist
           for file in README.md LICENSE CHANGELOG.md; do
               if [[ ! -f "$file" ]]; then
@@ -379,7 +379,7 @@ jobs:
               fi
               echo "✅ Found required file: $file"
           done
-          
+
           # Validate import structure
           python -c "
           import plume_nav_sim
@@ -387,9 +387,9 @@ jobs:
           from plume_nav_sim.envs import PlumeSearchEnv
           print('✅ All core imports successful')
           "
-          
+
           echo "✅ Package metadata validation completed"
-      
+
       - name: 'Upload comprehensive test results'
         if: always()
         uses: actions/upload-artifact@v4  # v4 - Distribution artifact upload
@@ -406,7 +406,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [validate-release, security-scan]
     timeout-minutes: 30
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -421,32 +421,32 @@ jobs:
           - os: windows-latest
             platform: windows
             wheel-platform: win_amd64
-    
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4  # v4 - Repository checkout with full history
         with:
           fetch-depth: 0
-      
+
       - name: 'Set up Python 3.10'
         uses: actions/setup-python@v5  # v5 - Python environment setup with build tools
         with:
           python-version: '3.10'
           cache: 'pip'
-      
+
       - name: 'Install build dependencies'
         run: |
           python -m pip install --upgrade pip build hatchling twine
-      
+
       - name: 'Update version in pyproject.toml'
         shell: bash
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           VERSION='${{ needs.validate-release.outputs.version }}'
           echo "Updating version to: $VERSION"
-          
+
           # Update version in pyproject.toml
           if command -v sed >/dev/null 2>&1; then
               sed -i.bak "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
@@ -461,59 +461,59 @@ jobs:
               f.write(content)
           "
           fi
-          
+
           # Verify version update
           grep "^version = " pyproject.toml
           echo "✅ Version updated successfully"
-      
+
       - name: 'Build distribution packages'
         run: |
           echo "🏗️ Building distribution packages for ${{ matrix.platform }}..."
-          
+
           # Clean any existing build artifacts
           if [ -d "dist" ]; then rm -rf dist; fi
           if [ -d "build" ]; then rm -rf build; fi
           if [ -d "*.egg-info" ]; then rm -rf *.egg-info; fi
-          
+
           # Build source distribution (only on Linux)
           if [[ '${{ matrix.os }}' == 'ubuntu-latest' ]]; then
               echo "Building source distribution..."
               python -m build --sdist
           fi
-          
+
           # Build wheel distribution
           echo "Building wheel distribution..."
           python -m build --wheel
-          
+
           # List built packages
           echo "📦 Built packages:"
           ls -la dist/
-          
+
           # Verify packages
           echo "🔍 Verifying built packages..."
           python -m twine check dist/*
-          
+
           echo "✅ Distribution packages built successfully"
-      
+
       - name: 'Test distribution package installation'
         run: |
           echo "🧪 Testing distribution package installation..."
-          
+
           # Create test environment
           python -m venv test-install-env
-          
+
           # Activate virtual environment (platform-specific)
           if [[ '${{ runner.os }}' == 'Windows' ]]; then
               source test-install-env/Scripts/activate
           else
               source test-install-env/bin/activate
           fi
-          
+
           # Install from built wheel
           WHEEL_FILE=$(find dist/ -name "*.whl" | head -1)
           echo "Installing wheel: $WHEEL_FILE"
           pip install "$WHEEL_FILE"
-          
+
           # Test basic functionality
           echo "Testing package functionality..."
           python -c "
@@ -522,10 +522,10 @@ jobs:
           register_env()
           print('✅ Package installation and basic functionality test passed')
           "
-          
+
           deactivate
           echo "✅ Distribution package installation test completed"
-      
+
       - name: 'Upload distribution artifacts'
         uses: actions/upload-artifact@v4  # v4 - Distribution artifact upload
         with:
@@ -542,76 +542,76 @@ jobs:
     needs: [validate-release, comprehensive-testing, build-distribution]
     if: github.event.inputs.create_github_release != 'false' && needs.validate-release.outputs.should-publish == 'true'
     timeout-minutes: 15
-    
+
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4  # v4 - Repository checkout with full history
         with:
           fetch-depth: 0
-      
+
       - name: 'Download all distribution artifacts'
         uses: actions/download-artifact@v4
         with:
           pattern: 'dist-*'
           path: release-artifacts/
           merge-multiple: true
-      
+
       - name: 'Generate release notes'
         id: release-notes
         run: |
           #!/bin/bash
           set -euo pipefail
-          
+
           VERSION='${{ needs.validate-release.outputs.version }}'
           IS_PRERELEASE='${{ needs.validate-release.outputs.is-prerelease }}'
           RELEASE_TYPE='${{ needs.validate-release.outputs.release-type }}'
-          
+
           echo "📝 Generating release notes for version $VERSION..."
-          
+
           # Create release notes
           cat > release-notes.md << EOF
           # 🚀 plume-nav-sim $VERSION
-          
+
           ## Release Information
           - **Version**: $VERSION
           - **Release Type**: $RELEASE_TYPE
           - **Pre-release**: $IS_PRERELEASE
           - **Build Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           - **Commit SHA**: ${{ github.sha }}
-          
+
           ## 📋 What's New
-          
+
           This release includes:
-          
+
           - ✅ **Gymnasium Environment**: Complete RL environment implementation
           - ✅ **Static Gaussian Plume Model**: Mathematical plume distribution
-          - ✅ **Dual Rendering Modes**: RGB array and interactive matplotlib visualization  
+          - ✅ **Dual Rendering Modes**: RGB array and interactive matplotlib visualization
           - ✅ **Reproducible Episodes**: Deterministic behavior through seeding
           - ✅ **Performance Optimized**: <1ms step execution, <5ms rendering
           - ✅ **Cross-Platform Support**: Linux, macOS, and limited Windows compatibility
-          
+
           ## 🔧 Installation
-          
+
           \`\`\`bash
           # Install from GitHub release
           pip install https://github.com/plume-nav-sim/plume_nav_sim/releases/download/v$VERSION/plume_nav_sim-$VERSION-py3-none-any.whl
-          
+
           # Or install in development mode
           git clone https://github.com/plume-nav-sim/plume_nav_sim.git
           cd plume_nav_sim/src/backend
           pip install -e .
           \`\`\`
-          
+
           ## 📚 Quick Start
-          
+
           \`\`\`python
           import gymnasium as gym
           from plume_nav_sim.registration import register_env, ENV_ID
-          
+
           # Register and create environment
           register_env()
           env = gym.make(ENV_ID, render_mode="human")
-          
+
           # Run episode
           obs, info = env.reset(seed=42)
           for step in range(100):
@@ -622,45 +622,45 @@ jobs:
                   break
           env.close()
           \`\`\`
-          
+
           ## 🎯 System Requirements
-          
+
           - Python >= 3.10
           - gymnasium >= 0.29.0
           - numpy >= 2.1.0
           - matplotlib >= 3.9.0 (optional, for human rendering)
-          
+
           ## 📊 Performance Metrics
-          
+
           - Environment step execution: <1ms
-          - RGB array rendering: <5ms  
+          - RGB array rendering: <5ms
           - Interactive rendering: <50ms
           - Memory footprint: <50MB
           - Test coverage: >95%
-          
+
           ## 🔗 Documentation
-          
+
           - [API Reference](https://plume-nav-sim.readthedocs.io)
           - [User Guide](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/docs/user_guide.py)
           - [Developer Guide](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/docs/developer_guide.py)
           - [Examples](https://github.com/plume-nav-sim/plume_nav_sim/tree/main/examples)
-          
+
           ## 🐛 Bug Reports
-          
+
           Please report issues at: https://github.com/plume-nav-sim/plume_nav_sim/issues
-          
+
           ## 📄 License
-          
+
           MIT License - see [LICENSE](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/LICENSE)
-          
+
           EOF
-          
+
           # Extract changelog section if available
           if [[ -f CHANGELOG.md ]]; then
               echo ""
               echo "## 📝 Detailed Changelog"
               echo ""
-              
+
               # Try to extract relevant changelog section
               if grep -q "## \[$VERSION\]" CHANGELOG.md; then
                   sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | head -n -1
@@ -668,18 +668,18 @@ jobs:
                   echo "See [CHANGELOG.md](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.md) for detailed changes."
               fi
           fi >> release-notes.md
-          
+
           echo "✅ Release notes generated"
           cat release-notes.md
-      
+
       - name: 'Prepare release assets'
         run: |
           echo "📦 Preparing release assets..."
-          
+
           # List available artifacts
           echo "Available artifacts:"
           find release-artifacts/ -type f -name "*.whl" -o -name "*.tar.gz" | sort
-          
+
           # Create checksums
           echo "Generating checksums..."
           cd release-artifacts/
@@ -689,12 +689,12 @@ jobs:
               fi
           done
           cd ..
-          
+
           echo "📋 Checksums:"
           cat release-artifacts/checksums.sha256
-          
+
           echo "✅ Release assets prepared"
-      
+
       - name: 'Create GitHub Release'
         uses: actions/create-release@v1  # v1 - Automated GitHub release creation
         env:
@@ -705,20 +705,20 @@ jobs:
           body_path: release-notes.md
           draft: false
           prerelease: ${{ needs.validate-release.outputs.is-prerelease }}
-      
+
       - name: 'Upload release assets'
         run: |
           echo "📤 Uploading release assets..."
-          
+
           # This would upload distribution files to the GitHub release
           # Implementation would use GitHub CLI or REST API to attach assets
-          
+
           for file in release-artifacts/*.whl release-artifacts/*.tar.gz release-artifacts/checksums.sha256; do
               if [[ -f "$file" ]]; then
                   echo "Would upload: $(basename "$file")"
               fi
           done
-          
+
           echo "✅ Release assets upload completed"
           echo "🎉 GitHub release created successfully!"
 
@@ -731,18 +731,18 @@ jobs:
     needs: [validate-release, comprehensive-testing, build-distribution]
     if: github.event.inputs.publish_to_test_pypi == 'true' && needs.validate-release.outputs.should-publish == 'true'
     timeout-minutes: 15
-    
+
     environment:
       name: test-pypi
       url: https://test.pypi.org/project/plume-nav-sim/
-    
+
     steps:
       - name: 'Download Linux distribution artifacts'
         uses: actions/download-artifact@v4
         with:
           name: dist-linux
           path: dist/
-      
+
       - name: 'Prepare Test PyPI publication'
         run: |
           echo "🚀 Preparing Test PyPI publication..."
@@ -750,10 +750,10 @@ jobs:
           echo "Version: ${{ needs.validate-release.outputs.version }}"
           echo "Files to publish:"
           ls -la dist/
-          
+
           echo "⚠️ Test PyPI publication is prepared but not executed in proof-of-life"
           echo "This would require Test PyPI API tokens and account setup"
-      
+
       - name: 'Future Test PyPI Publication'
         run: |
           echo "📋 Test PyPI Publication Configuration (Future Implementation)"
@@ -775,11 +775,11 @@ jobs:
     needs: [validate-release, comprehensive-testing, build-distribution, create-github-release]
     if: github.event.inputs.publish_to_pypi == 'true' && needs.validate-release.outputs.should-publish == 'true' && needs.validate-release.outputs.is-prerelease == 'false'
     timeout-minutes: 15
-    
+
     environment:
       name: production-pypi
       url: https://pypi.org/project/plume-nav-sim/
-    
+
     steps:
       - name: 'Production PyPI Publication Placeholder'
         run: |
@@ -806,14 +806,14 @@ jobs:
     needs: [create-github-release, publish-test-pypi]
     if: always() && (needs.create-github-release.result == 'success' || needs.publish-test-pypi.result == 'success')
     timeout-minutes: 10
-    
+
     steps:
       - name: 'Validate published release'
         run: |
           echo "🔍 Validating published release..."
-          
+
           VERSION='${{ needs.validate-release.outputs.version }}'
-          
+
           # Check GitHub release
           echo "Checking GitHub release v$VERSION..."
           if curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/v$VERSION" | grep -q "tag_name"; then
@@ -821,15 +821,15 @@ jobs:
           else
               echo "⚠️ GitHub release may not be immediately accessible (propagation delay)"
           fi
-          
+
           # Future: Validate PyPI publication
           echo "📋 Future PyPI validation would check:"
           echo "- Package availability at pypi.org/project/plume-nav-sim/"
           echo "- Installation via 'pip install plume-nav-sim==$VERSION'"
           echo "- Basic import functionality"
-          
+
           echo "✅ Post-publication validation completed"
-      
+
       - name: 'Generate publication summary'
         run: |
           echo "## 🎉 Publication Summary"
@@ -857,7 +857,7 @@ jobs:
           echo "- Plan next development milestone"
           echo ""
           echo "**Publication completed successfully! 🎊**"
-      
+
       - name: 'Future notification integration'
         run: |
           echo "📢 Future Notification Integration"
@@ -880,28 +880,28 @@ jobs:
     needs: [create-github-release, publish-test-pypi, post-publication-validation]
     if: always()
     timeout-minutes: 5
-    
+
     steps:
       - name: 'Clean up workflow artifacts'
         run: |
           echo "🧹 Cleaning up workflow artifacts and temporary files..."
-          
+
           # This would handle cleanup of:
           # - Temporary build artifacts
           # - Security scan results
           # - Large test outputs
           # - Cached dependencies
-          
+
           echo "✅ Cleanup tasks would be implemented here for:"
           echo "- Build artifact cleanup"
           echo "- Cache management"
           echo "- Temporary file removal"
           echo "- Resource optimization"
-      
+
       - name: 'Archive publication logs'
         run: |
           echo "📋 Archiving publication logs and metadata..."
-          
+
           # Generate publication metadata
           cat > publication-metadata.json << EOF
           {
@@ -918,8 +918,8 @@ jobs:
             "test_pypi_published": ${{ needs.publish-test-pypi.result == 'success' }}
           }
           EOF
-          
+
           echo "📊 Publication Metadata:"
           cat publication-metadata.json
-          
+
           echo "✅ Publication logs archived"

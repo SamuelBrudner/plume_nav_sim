@@ -4,8 +4,9 @@ Minimal example configuration stubs used by benchmark and scenario utilities.
 These stubs provide just enough structure for test collection/imports without
 pulling in heavy configuration systems.
 """
+
 from dataclasses import dataclass
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -16,9 +17,9 @@ class QuickStartConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'grid_size': self.grid_size,
-            'source_location': self.source_location,
-            'plume_sigma': self.plume_sigma,
+            "grid_size": self.grid_size,
+            "source_location": self.source_location,
+            "plume_sigma": self.plume_sigma,
         }
 
 
@@ -33,7 +34,10 @@ class ExampleConfigCollection:
         return len(self._configs)
 
 
-def get_quick_start_config(*, complexity_level: str | None = None,
-                           include_documentation: bool | None = None,
-                           validate_configuration: bool | None = None) -> QuickStartConfig:
+def get_quick_start_config(
+    *,
+    complexity_level: str | None = None,
+    include_documentation: bool | None = None,
+    validate_configuration: bool | None = None,
+) -> QuickStartConfig:
     return QuickStartConfig()

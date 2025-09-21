@@ -1,11 +1,14 @@
 import gymnasium
 import pytest
 
-from plume_nav_sim.registration.register import (
-    register_env, unregister_env, is_registered, ENV_ID
-)
-from plume_nav_sim.registration import ensure_registered
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.registration import ensure_registered
+from plume_nav_sim.registration.register import (
+    ENV_ID,
+    is_registered,
+    register_env,
+    unregister_env,
+)
 
 
 def test_register_make_isinstance_and_cleanup():

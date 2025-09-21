@@ -1,10 +1,13 @@
 """
 Custom type aliases for the plume navigation simulation.
 """
-from typing import Any, Union, Tuple, Dict, List
+
+from typing import Any, Dict, List, Tuple, Union
+
+import numpy as np
+
 from .enums import Action
 from .geometry import Coordinates
-import numpy as np
 
 RGBArray = np.ndarray[Any, np.dtype[np.uint8]]
 ActionType = Union[Action, int]

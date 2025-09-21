@@ -1,14 +1,14 @@
 """
-Comprehensive developer guide documentation module for plume_nav_sim providing technical implementation 
-guidance, system architecture analysis, development workflows, contribution guidelines, and advanced 
-usage patterns for developers, contributors, and researchers extending the plume navigation reinforcement 
-learning environment. Serves as the central technical resource combining API reference, implementation 
+Comprehensive developer guide documentation module for plume_nav_sim providing technical implementation
+guidance, system architecture analysis, development workflows, contribution guidelines, and advanced
+usage patterns for developers, contributors, and researchers extending the plume navigation reinforcement
+learning environment. Serves as the central technical resource combining API reference, implementation
 details, performance optimization, testing strategies, and extension patterns.
 
-This module implements a complete technical documentation system including DeveloperGuideGenerator for 
-structured content creation, ArchitectureAnalyzer for system analysis, PerformanceBenchmarker for 
-optimization guidance, TestingFramework for quality assurance documentation, and ExtensionManager for 
-customization patterns. The implementation provides comprehensive coverage of development workflows, 
+This module implements a complete technical documentation system including DeveloperGuideGenerator for
+structured content creation, ArchitectureAnalyzer for system analysis, PerformanceBenchmarker for
+optimization guidance, TestingFramework for quality assurance documentation, and ExtensionManager for
+customization patterns. The implementation provides comprehensive coverage of development workflows,
 architectural decisions, performance optimization, and extension strategies.
 
 Key Features:
@@ -37,51 +37,71 @@ Architecture Integration:
 - Research integration templates for scientific Python ecosystem and RL frameworks
 """
 
+import ast  # >=3.10 - Abstract syntax tree analysis for code quality tools and static analysis examples
+import inspect  # >=3.10 - Code introspection for automated documentation generation and development tool integration
+import json  # >=3.10 - Configuration management and serialization examples for development workflows
+import logging  # >=3.10 - Development logging patterns, debugging strategies, and monitoring implementation guidance
+import textwrap  # >=3.10 - Documentation formatting utilities for generating readable developer documentation
+import time  # >=3.10 - Performance timing and profiling for development optimization examples and benchmarking
+import unittest  # >=3.10 - Testing framework integration for development testing workflow examples and test writing guidance
+from pathlib import (
+    Path,  # >=3.10 - Path operations for development workflow documentation and file system examples
+)
+from typing import (  # >=3.10 - Advanced type hints for comprehensive type safety documentation and development guidance
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+
 # External imports with version requirements for development and documentation
 import gymnasium as gym  # >=0.29.0 - Reinforcement learning framework for understanding API compliance and environment development patterns
+import matplotlib.pyplot as plt  # >=3.9.0 - Visualization framework for rendering system development and debugging visualization examples
 import numpy as np  # >=2.1.0 - Mathematical operations, array processing, and performance optimization for technical implementation examples
-import matplotlib.pyplot as plt  # >=3.9.0 - Visualization framework for rendering system development and debugging visualization examples  
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable  # >=3.10 - Advanced type hints for comprehensive type safety documentation and development guidance
-from pathlib import Path  # >=3.10 - Path operations for development workflow documentation and file system examples
-import inspect  # >=3.10 - Code introspection for automated documentation generation and development tool integration
-import ast  # >=3.10 - Abstract syntax tree analysis for code quality tools and static analysis examples
-import unittest  # >=3.10 - Testing framework integration for development testing workflow examples and test writing guidance
 import pytest  # >=8.0 - Primary testing framework for development workflow documentation and testing strategy guidance
-import time  # >=3.10 - Performance timing and profiling for development optimization examples and benchmarking
-import logging  # >=3.10 - Development logging patterns, debugging strategies, and monitoring implementation guidance
-import json  # >=3.10 - Configuration management and serialization examples for development workflows
-import textwrap  # >=3.10 - Documentation formatting utilities for generating readable developer documentation
 
-# Internal imports - API documentation and user guide integration
-from .api_reference import (  # API documentation generation for technical reference integration in developer workflows
-    generate_api_documentation, 
-    APIDocumentationGenerator
+from ..examples.basic_usage import (  # Basic usage demonstration for developer onboarding and understanding user workflows
+    demonstrate_basic_episode,
+    demonstrate_reproducibility,
 )
-from .user_guide import (  # User guide generation for understanding user-facing features that developers must maintain
-    generate_user_guide, 
-    create_quick_start_tutorial
+from ..plume_nav_sim.core.constants import (  # System constants for development examples and configuration understanding
+    DEFAULT_GRID_SIZE,
+    DEFAULT_SOURCE_LOCATION,
 )
-from .troubleshooting import (  # Troubleshooting utilities for development environment setup and debugging
-    TroubleshootingGuide,
-    run_full_diagnostic
+from ..plume_nav_sim.core.types import (  # Core type system for understanding data structures and type safety in development
+    Action,
+    Coordinates,
+    EnvironmentConfig,
+    GridSize,
+)
+from ..plume_nav_sim.envs.base_env import (
+    BaseEnvironment,  # Base environment architecture for understanding extension patterns and custom environment development
 )
 
 # Internal imports - Core environment and components for technical implementation examples
 from ..plume_nav_sim.envs.plume_search_env import (  # Main environment class for technical implementation examples and performance analysis
     PlumeSearchEnv,
-    create_plume_search_env
+    create_plume_search_env,
 )
-from ..plume_nav_sim.envs.base_env import BaseEnvironment  # Base environment architecture for understanding extension patterns and custom environment development
-from ..plume_nav_sim.plume.static_gaussian import StaticGaussianPlume  # Plume model implementation for understanding mathematical components and custom plume development
-from ..plume_nav_sim.core.types import (  # Core type system for understanding data structures and type safety in development
-    Action, Coordinates, GridSize, EnvironmentConfig
+from ..plume_nav_sim.plume.static_gaussian import (
+    StaticGaussianPlume,  # Plume model implementation for understanding mathematical components and custom plume development
 )
-from ..plume_nav_sim.core.constants import (  # System constants for development examples and configuration understanding
-    DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION
+
+# Internal imports - API documentation and user guide integration
+from .api_reference import (  # API documentation generation for technical reference integration in developer workflows
+    APIDocumentationGenerator,
+    generate_api_documentation,
 )
-from ..examples.basic_usage import (  # Basic usage demonstration for developer onboarding and understanding user workflows
-    demonstrate_basic_episode,
-    demonstrate_reproducibility
+from .troubleshooting import (  # Troubleshooting utilities for development environment setup and debugging
+    TroubleshootingGuide,
+    run_full_diagnostic,
+)
+from .user_guide import (  # User guide generation for understanding user-facing features that developers must maintain
+    create_quick_start_tutorial,
+    generate_user_guide,
 )
 
 # Global constants for developer guide configuration
@@ -128,14 +148,14 @@ def generate_developer_guide(
     generation_options: dict = None
 ) -> str:
     """
-    Main function for generating comprehensive developer guide documentation including system architecture 
-    analysis, development workflows, contribution guidelines, performance optimization, testing strategies, 
+    Main function for generating comprehensive developer guide documentation including system architecture
+    analysis, development workflows, contribution guidelines, performance optimization, testing strategies,
     and extension patterns for technical contributors and advanced users.
-    
+
     This function orchestrates the creation of a complete developer guide covering all aspects of the
     plume_nav_sim system from architectural understanding to advanced extension development. It integrates
     multiple specialized documentation components and provides comprehensive technical guidance.
-    
+
     Args:
         output_format (Optional[str]): Output format for developer guide ('markdown', 'html', 'restructuredtext')
         include_architecture_diagrams (bool): Include component relationship diagrams and system architecture visualization
@@ -143,7 +163,7 @@ def generate_developer_guide(
         include_extension_examples (bool): Include custom component implementations and integration patterns
         output_directory (Optional[Path]): Directory for output files and generated documentation assets
         generation_options (dict): Additional generation configuration options and customization settings
-        
+
     Returns:
         str: Complete developer guide with technical documentation, workflows, and implementation guidance
         ready for distribution to technical contributors and system architects
@@ -165,23 +185,23 @@ def generate_developer_guide(
         'api_reference_integration': "",
         'appendices': ""
     }
-    
+
     # Apply generation options and customization settings with developer-focused defaults
     if generation_options is None:
         generation_options = {}
-    
+
     technical_depth = generation_options.get('technical_depth', 'advanced')
     include_code_examples = generation_options.get('include_code_examples', True)
     include_performance_tips = generation_options.get('include_performance_tips', True)
     target_audience = generation_options.get('target_audience', 'developers')
-    
+
     try:
         # Generate comprehensive introduction covering system overview, architecture principles, and development philosophy
         guide_sections['introduction'] = f"""
 ## Introduction
 
-Welcome to the comprehensive developer guide for plume_nav_sim! This guide is designed for technical 
-contributors, system architects, and researchers who want to understand, extend, or contribute to the 
+Welcome to the comprehensive developer guide for plume_nav_sim! This guide is designed for technical
+contributors, system architects, and researchers who want to understand, extend, or contribute to the
 plume navigation simulation environment.
 
 ### Developer Guide Scope
@@ -229,15 +249,15 @@ This developer guide is organized progressively from system understanding to adv
 Each section includes executable code examples, implementation details, and practical guidance for
 productive development work.
         """
-        
+
         # Generate system overview explaining the modular layered design and component-based patterns
         guide_sections['system_overview'] = f"""
 ## System Overview
 
 ### High-Level Architecture
 
-plume_nav_sim employs a **modular layered architecture** designed around the Gymnasium reinforcement 
-learning framework. The system prioritizes simplicity, maintainability, and extensibility while 
+plume_nav_sim employs a **modular layered architecture** designed around the Gymnasium reinforcement
+learning framework. The system prioritizes simplicity, maintainability, and extensibility while
 providing a foundation for research-grade plume navigation experiments.
 
 ```
@@ -267,7 +287,7 @@ providing a foundation for research-grade plume navigation experiments.
 - **Key Methods**: `reset()`, `step()`, `render()`, `seed()`, `close()`
 - **Performance**: <1ms step execution, efficient state management
 
-#### StaticGaussianPlume (Domain Layer)  
+#### StaticGaussianPlume (Domain Layer)
 - **Purpose**: Mathematical plume model with Gaussian concentration distribution
 - **Responsibilities**: Concentration field generation, observation sampling
 - **Key Features**: Vectorized NumPy operations, O(1) concentration lookup
@@ -299,10 +319,10 @@ graph TB
     H --> I[Performance Monitor]
     I --> J[Return Observation]
     J --> A
-    
+
     B --> K[Rendering Pipeline]
     K --> L[Visualization Output]
-    
+
     style B fill:#e1f5fe
     style F fill:#f3e5f5
     style K fill:#e8f5e8
@@ -351,61 +371,61 @@ Comprehensive quality assurance with automated validation:
 - **Reproducibility Testing**: Statistical validation of seeded episode consistency
 - **Documentation Testing**: Code example execution and output validation
         """
-        
+
         # Create architecture documentation using create_architecture_documentation with component analysis and interaction patterns
         guide_sections['architecture_documentation'] = create_architecture_documentation(
             include_component_diagrams=include_architecture_diagrams,
             include_performance_analysis=include_performance_analysis,
             include_design_rationale=True
         )
-        
+
         # Generate development setup guide using create_development_setup_guide with environment configuration and tool setup
         guide_sections['development_setup'] = create_development_setup_guide(
             include_advanced_setup=True,
             include_ide_configuration=True,
             include_debugging_setup=True
         )
-        
+
         # Create contribution guidelines using create_contribution_guidelines with workflow standards and code quality requirements
         guide_sections['contribution_guidelines'] = create_contribution_guidelines(
             include_workflow_diagrams=include_architecture_diagrams,
             include_code_examples=include_code_examples,
             include_review_criteria=True
         )
-        
+
         # Generate performance guide using create_performance_guide with optimization strategies and benchmarking procedures
         guide_sections['performance_guide'] = create_performance_guide(
             include_benchmarking_tools=True,
             include_optimization_examples=include_extension_examples,
             include_profiling_analysis=include_performance_analysis
         )
-        
+
         # Create testing guide using create_testing_guide with comprehensive testing frameworks and quality assurance procedures
         guide_sections['testing_guide'] = create_testing_guide(
             include_test_examples=include_code_examples,
             include_ci_configuration=True,
             include_coverage_analysis=include_performance_analysis
         )
-        
+
         # Generate extension guide using create_extension_guide with customization patterns and advanced development techniques
         guide_sections['extension_guide'] = create_extension_guide(
             include_custom_examples=include_extension_examples,
             include_integration_patterns=True,
             include_research_extensions=True
         )
-        
+
         # Include architecture diagrams if include_architecture_diagrams enabled with component relationships and data flow visualization
         if include_architecture_diagrams:
             guide_sections['architecture_diagrams'] = generate_architecture_diagrams()
-        
+
         # Add performance analysis if include_performance_analysis enabled with benchmarking results and optimization recommendations
         if include_performance_analysis:
             guide_sections['performance_analysis'] = generate_performance_analysis()
-        
+
         # Include extension examples if include_extension_examples enabled with custom component implementations and integration patterns
         if include_extension_examples:
             guide_sections['extension_examples'] = generate_extension_examples()
-        
+
         # Generate troubleshooting section with development environment issues and debugging strategies
         guide_sections['troubleshooting'] = f"""
 ## Developer Troubleshooting Guide
@@ -422,10 +442,10 @@ import importlib.util
 
 def diagnose_import_issues():
     \"\"\"Diagnose common import problems in development environment.\"\"\"
-    
+
     print("Development Environment Diagnostics")
     print("=" * 40)
-    
+
     # Check Python version
     print(f"Python version: {{sys.version}}")
     version_tuple = sys.version_info[:2]
@@ -434,7 +454,7 @@ def diagnose_import_issues():
         return False
     else:
         print("✅ Python version compatible")
-    
+
     # Check development installation
     try:
         import plume_nav_sim
@@ -443,7 +463,7 @@ def diagnose_import_issues():
         print(f"❌ plume_nav_sim import failed: {{e}}")
         print("Solution: Run 'pip install -e .' from project root")
         return False
-    
+
     # Check core dependencies
     dependencies = ['gymnasium', 'numpy', 'matplotlib']
     for dep in dependencies:
@@ -455,7 +475,7 @@ def diagnose_import_issues():
                 print(f"❌ {{dep}} missing")
         except Exception as e:
             print(f"❌ {{dep}} check failed: {{e}}")
-    
+
     return True
 
 # Run diagnostics
@@ -474,50 +494,50 @@ diagnose_import_issues()
 ```python
 def debug_performance_issues():
     \"\"\"Debug and analyze performance bottlenecks.\"\"\"
-    
+
     import time
     from ..plume_nav_sim.envs.plume_search_env import create_plume_search_env
-    
+
     print("Performance Debugging Analysis")
     print("-" * 30)
-    
+
     # Create test environment with profiling
     env = create_plume_search_env(grid_size=(128, 128))
-    
+
     # Profile component initialization
     start_time = time.perf_counter()
     obs, info = env.reset(seed=42)
     init_time = (time.perf_counter() - start_time) * 1000
-    
+
     print(f"Environment initialization: {{init_time:.2f}}ms")
-    
+
     # Profile step execution with breakdown
     step_times = []
     for i in range(100):
         action = env.action_space.sample()
-        
+
         step_start = time.perf_counter()
         obs, reward, terminated, truncated, info = env.step(action)
         step_time = (time.perf_counter() - step_start) * 1000
         step_times.append(step_time)
-        
+
         if terminated or truncated:
             obs, info = env.reset(seed=42 + i)
-    
+
     avg_step_time = np.mean(step_times)
     max_step_time = np.max(step_times)
-    
+
     print(f"Average step time: {{avg_step_time:.3f}}ms")
     print(f"Maximum step time: {{max_step_time:.3f}}ms")
     print(f"Target compliance: {{'✅ PASS' if avg_step_time <= 1.0 else '❌ FAIL'}}")
-    
+
     if avg_step_time > 1.0:
         print("\\nOptimization recommendations:")
         print("- Use smaller grid sizes during development")
         print("- Profile individual components with cProfile")
         print("- Check for debug logging overhead")
         print("- Verify NumPy is using optimized BLAS")
-    
+
     env.close()
 
 debug_performance_issues()
@@ -529,50 +549,50 @@ debug_performance_issues()
 ```python
 def debug_reproducibility_issues():
     \"\"\"Debug reproducibility and seeding problems.\"\"\"
-    
+
     print("Reproducibility Debugging")
     print("-" * 25)
-    
+
     from ..plume_nav_sim.utils.seeding import SeedManager
-    
+
     # Test seed validation
     seed_manager = SeedManager()
     test_seeds = [42, -1, "invalid", 2**32]
-    
+
     for seed in test_seeds:
         try:
             is_valid = seed_manager.validate_seed(seed)
             print(f"Seed {{seed}}: {{'Valid' if is_valid else 'Invalid'}}")
         except Exception as e:
             print(f"Seed {{seed}}: Error - {{e}}")
-    
+
     # Test episode reproducibility
     env = create_plume_search_env()
-    
+
     episodes = []
     for run in range(2):
         obs, info = env.reset(seed=42)
         episode_data = [obs[0]]
-        
+
         for step in range(10):
             action = 0  # Deterministic action
             obs, reward, terminated, truncated, info = env.step(action)
             episode_data.append(obs[0])
-            
+
             if terminated or truncated:
                 break
-        
+
         episodes.append(episode_data)
-    
+
     identical = episodes[0] == episodes[1]
     print(f"\\nEpisode reproducibility: {{'✅ PASS' if identical else '❌ FAIL'}}")
-    
+
     if not identical:
         print("Reproducibility issues detected:")
         for i, (obs1, obs2) in enumerate(zip(episodes[0], episodes[1])):
             if obs1 != obs2:
                 print(f"  Step {{i}}: {{obs1}} != {{obs2}}")
-    
+
     env.close()
 
 debug_reproducibility_issues()
@@ -594,68 +614,68 @@ debug_reproducibility_issues()
 # Example of comprehensive test structure
 class TestEnvironmentDevelopment:
     \"\"\"Example test class showing development testing patterns.\"\"\"
-    
+
     def test_environment_creation_performance(self):
         \"\"\"Test that environment creation meets performance targets.\"\"\"
-        
+
         start_time = time.perf_counter()
         env = create_plume_search_env()
         creation_time = time.perf_counter() - start_time
-        
+
         assert creation_time < 0.1, f"Environment creation too slow: {{creation_time:.3f}}s"
         env.close()
-    
+
     def test_step_latency_compliance(self):
         \"\"\"Test that step execution meets <1ms target.\"\"\"
-        
+
         env = create_plume_search_env()
         obs, info = env.reset(seed=42)
-        
+
         step_times = []
         for i in range(1000):  # Statistical sample
             action = env.action_space.sample()
-            
+
             start_time = time.perf_counter()
             obs, reward, terminated, truncated, info = env.step(action)
             step_time = time.perf_counter() - start_time
             step_times.append(step_time * 1000)  # Convert to ms
-            
+
             if terminated or truncated:
                 obs, info = env.reset(seed=42 + i)
-        
+
         avg_step_time = np.mean(step_times)
         p99_step_time = np.percentile(step_times, 99)
-        
+
         assert avg_step_time <= 1.0, f"Average step time exceeds target: {{avg_step_time:.3f}}ms"
         assert p99_step_time <= 5.0, f"P99 step time too high: {{p99_step_time:.3f}}ms"
-        
+
         env.close()
-    
+
     def test_reproducibility_validation(self):
         \"\"\"Test that seeded episodes are perfectly reproducible.\"\"\"
-        
+
         env = create_plume_search_env()
-        
+
         # Run identical episodes
         episodes = []
         for run in range(3):
             obs, info = env.reset(seed=12345)
             episode_data = []
-            
+
             for step in range(50):
                 action = (step % 4)  # Deterministic policy
                 obs, reward, terminated, truncated, info = env.step(action)
                 episode_data.append((obs[0], reward, terminated, truncated))
-                
+
                 if terminated or truncated:
                     break
-            
+
             episodes.append(episode_data)
-        
+
         # Verify all episodes are identical
         for i in range(1, len(episodes)):
             assert episodes[0] == episodes[i], f"Episode {{i}} differs from baseline"
-        
+
         env.close()
 ```
 
@@ -706,14 +726,14 @@ repos:
       - id: check-yaml
 ```
         """
-        
+
         # Create advanced topics section covering research applications and production deployment considerations
         guide_sections['advanced_topics'] = f"""
 ## Advanced Development Topics
 
 ### Multi-Agent Architecture Considerations
 
-While the current implementation focuses on single-agent scenarios, the architecture provides 
+While the current implementation focuses on single-agent scenarios, the architecture provides
 foundation patterns for multi-agent extensions:
 
 ```python
@@ -723,56 +743,56 @@ class MultiAgentPlumeSearchEnv(BaseEnvironment):
     Conceptual multi-agent environment extending current architecture.
     NOTE: This is architectural guidance, not current implementation.
     \"\"\"
-    
+
     def __init__(self, num_agents: int = 2, agent_coordination: str = 'independent'):
         super().__init__()
         self.num_agents = num_agents
         self.agent_coordination = agent_coordination
         self.agents = {{}}
-        
+
         # Multi-agent observation and action spaces
         self.observation_space = spaces.Dict({{
             f'agent_{{i}}': spaces.Box(0.0, 1.0, (3,), np.float32)  # [concentration, x_pos, y_pos]
             for i in range(num_agents)
         }})
-        
+
         self.action_space = spaces.Dict({{
             f'agent_{{i}}': spaces.Discrete(4)
             for i in range(num_agents)
         }})
-    
+
     def step(self, actions: Dict[str, int]):
         \"\"\"Process multi-agent actions with coordination handling.\"\"\"
-        
+
         observations = {{}}
         rewards = {{}}
         terminated = {{}}
         truncated = {{}}
         infos = {{}}
-        
+
         # Process each agent's action
         for agent_id, action in actions.items():
             obs, reward, term, trunc, info = self._step_single_agent(agent_id, action)
-            
+
             observations[agent_id] = obs
             rewards[agent_id] = reward
             terminated[agent_id] = term
             truncated[agent_id] = trunc
             infos[agent_id] = info
-        
+
         # Apply coordination effects
         if self.agent_coordination == 'cooperative':
             rewards = self._apply_cooperative_rewards(rewards, observations)
         elif self.agent_coordination == 'competitive':
             rewards = self._apply_competitive_rewards(rewards, observations)
-        
+
         return observations, rewards, terminated, truncated, infos
-    
+
     def _apply_cooperative_rewards(self, rewards, observations):
         \"\"\"Apply cooperative reward shaping based on agent proximity.\"\"\"
         # Implementation would consider agent coordination benefits
         return rewards
-    
+
     def _apply_competitive_rewards(self, rewards, observations):
         \"\"\"Apply competitive reward structure with resource competition.\"\"\"
         # Implementation would handle competitive agent interactions
@@ -792,23 +812,23 @@ class DynamicPlumeModel(ABC):
     Abstract base class for dynamic plume models.
     Extends current StaticGaussianPlume for temporal dynamics.
     \"\"\"
-    
+
     def __init__(self, grid_size: GridSize, time_step: float = 0.1):
         self.grid_size = grid_size
         self.time_step = time_step
         self.current_time = 0.0
         self.concentration_field = None
-        
+
     @abstractmethod
     def update_field(self, delta_time: float) -> np.ndarray:
         \"\"\"Update concentration field based on temporal dynamics.\"\"\"
         pass
-    
+
     @abstractmethod
     def add_source(self, location: Coordinates, strength: float, start_time: float = 0.0):
         \"\"\"Add dynamic source with temporal activation.\"\"\"
         pass
-    
+
     def step(self) -> np.ndarray:
         \"\"\"Advance plume model by one time step.\"\"\"
         self.current_time += self.time_step
@@ -817,62 +837,62 @@ class DynamicPlumeModel(ABC):
 
 class WindDrivenPlume(DynamicPlumeModel):
     \"\"\"Example dynamic plume with wind transport.\"\"\"
-    
+
     def __init__(self, grid_size: GridSize, wind_velocity: Tuple[float, float] = (1.0, 0.0)):
         super().__init__(grid_size)
         self.wind_velocity = wind_velocity
         self.sources = []
-        
+
     def update_field(self, delta_time: float) -> np.ndarray:
         \"\"\"Update field with wind-driven advection.\"\"\"
-        
+
         # Initialize field
         field = np.zeros((self.grid_size.height, self.grid_size.width))
-        
+
         # Add contribution from each active source
         for source in self.sources:
             if self.current_time >= source['start_time']:
                 field += self._compute_wind_driven_concentration(source)
-        
+
         return field.astype(np.float32)
-    
+
     def _compute_wind_driven_concentration(self, source: dict) -> np.ndarray:
         \"\"\"Compute wind-driven Gaussian plume concentration.\"\"\"
-        
+
         # Time since source activation
         active_time = self.current_time - source['start_time']
-        
+
         # Wind-advected source location
         advected_x = source['location'].x + self.wind_velocity[0] * active_time
         advected_y = source['location'].y + self.wind_velocity[1] * active_time
-        
+
         # Compute Gaussian plume with wind transport
         y, x = np.meshgrid(np.arange(self.grid_size.height), np.arange(self.grid_size.width), indexing='ij')
-        
+
         # Distance calculations with wind direction consideration
         dx = x - advected_x
         dy = y - advected_y
-        
+
         # Anisotropic dispersion (different spreading along/across wind)
         sigma_x = source['dispersion'] * (1 + 0.1 * active_time)  # Spreading over time
         sigma_y = source['dispersion'] * (1 + 0.05 * active_time)
-        
+
         concentration = source['strength'] * np.exp(
             -(dx**2 / (2 * sigma_x**2) + dy**2 / (2 * sigma_y**2))
         )
-        
+
         return concentration
-    
+
     def add_source(self, location: Coordinates, strength: float, start_time: float = 0.0):
         \"\"\"Add wind-driven source to simulation.\"\"\"
-        
+
         source = {{
             'location': location,
             'strength': strength,
             'start_time': start_time,
             'dispersion': 12.0  # Base dispersion parameter
         }}
-        
+
         self.sources.append(source)
 ```
 
@@ -888,13 +908,13 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 
 class PlumeNavigationCallback(BaseCallback):
     \"\"\"Custom callback for plume navigation training monitoring.\"\"\"
-    
+
     def __init__(self, eval_env, eval_freq: int = 10000, verbose=1):
         super().__init__(verbose)
         self.eval_env = eval_env
         self.eval_freq = eval_freq
         self.evaluation_results = []
-        
+
     def _on_step(self) -> bool:
         if self.n_calls % self.eval_freq == 0:
             # Evaluate current policy
@@ -903,34 +923,34 @@ class PlumeNavigationCallback(BaseCallback):
                 'timestep': self.n_calls,
                 'success_rate': success_rate
             }})
-            
+
             if self.verbose >= 1:
                 print(f"Timestep {{self.n_calls}}: Success rate {{success_rate:.2%}}")
-        
+
         return True
-    
+
     def _evaluate_policy(self, num_episodes: int = 100) -> float:
         \"\"\"Evaluate current policy performance.\"\"\"
-        
+
         successes = 0
         for episode in range(num_episodes):
             obs = self.eval_env.reset(seed=episode)
             done = False
-            
+
             while not done:
                 action, _ = self.model.predict(obs, deterministic=True)
                 obs, reward, terminated, truncated, info = self.eval_env.step(action)
                 done = terminated or truncated
-                
+
                 if terminated:
                     successes += 1
-        
+
         return successes / num_episodes
 
 # Research training workflow
 def advanced_training_workflow():
     \"\"\"Comprehensive training workflow with monitoring and evaluation.\"\"\"
-    
+
     # Create training and evaluation environments
     def make_env():
         return create_plume_search_env(
@@ -938,10 +958,10 @@ def advanced_training_workflow():
             goal_radius=1.0,
             max_steps=200
         )
-    
+
     train_env = DummyVecEnv([make_env])
     eval_env = make_env()
-    
+
     # Create model with optimized hyperparameters
     model = PPO(
         "MlpPolicy",
@@ -956,24 +976,24 @@ def advanced_training_workflow():
         verbose=1,
         tensorboard_log="./plume_nav_tensorboard/"
     )
-    
+
     # Setup callback for evaluation and monitoring
     callback = PlumeNavigationCallback(eval_env, eval_freq=5000)
-    
+
     # Train model with monitoring
     model.learn(
         total_timesteps=1000000,
         callback=callback,
         tb_log_name="plume_nav_ppo_experiment"
     )
-    
+
     # Save trained model
     model.save("plume_nav_ppo_final")
-    
+
     # Comprehensive evaluation
     final_success_rate = callback._evaluate_policy(num_episodes=1000)
     print(f"Final evaluation success rate: {{final_success_rate:.2%}}")
-    
+
     return model, callback.evaluation_results
 ```
 
@@ -988,7 +1008,7 @@ from ray.rllib.env.env_context import EnvContext
 
 def create_rllib_env(env_config: EnvContext):
     \"\"\"Create environment for RLlib training.\"\"\"
-    
+
     return create_plume_search_env(
         grid_size=env_config.get("grid_size", (64, 64)),
         goal_radius=env_config.get("goal_radius", 1.0),
@@ -997,9 +1017,9 @@ def create_rllib_env(env_config: EnvContext):
 
 def hyperparameter_optimization_study():
     \"\"\"Distributed hyperparameter optimization with Ray Tune.\"\"\"
-    
+
     ray.init()
-    
+
     # Define search space
     config = {{
         "env": create_rllib_env,
@@ -1018,7 +1038,7 @@ def hyperparameter_optimization_study():
         "train_batch_size": tune.choice([4000, 8000, 16000]),
         "sgd_minibatch_size": tune.choice([128, 256, 512])
     }}
-    
+
     # Run hyperparameter optimization
     analysis = tune.run(
         PPOTrainer,
@@ -1029,11 +1049,11 @@ def hyperparameter_optimization_study():
         stop={{"training_iteration": 100}},
         resources_per_trial={{"cpu": 6, "gpu": 0.5}}
     )
-    
+
     # Get best hyperparameters
     best_config = analysis.get_best_config(metric="episode_reward_mean", mode="max")
     print("Best hyperparameters:", best_config)
-    
+
     ray.shutdown()
     return analysis
 ```
@@ -1097,30 +1117,30 @@ SUCCESS_RATE = Gauge('plume_nav_success_rate', 'Episode success rate')
 
 class MonitoredPlumeSearchEnv:
     \"\"\"Production environment wrapper with monitoring.\"\"\"
-    
+
     def __init__(self, **kwargs):
         self.env = create_plume_search_env(**kwargs)
         self.episode_count = 0
         self.success_count = 0
         ACTIVE_ENVIRONMENTS.inc()
-    
+
     def step(self, action):
         with STEP_DURATION.time():
             result = self.env.step(action)
             ENVIRONMENT_STEPS.inc()
-            
+
             # Track success rate
             obs, reward, terminated, truncated, info = result
             if terminated:
                 self.success_count += 1
                 SUCCESS_RATE.set(self.success_count / max(1, self.episode_count))
-            
+
             return result
-    
+
     def reset(self, **kwargs):
         self.episode_count += 1
         return self.env.reset(**kwargs)
-    
+
     def close(self):
         ACTIVE_ENVIRONMENTS.dec()
         return self.env.close()
@@ -1135,7 +1155,7 @@ prometheus_client.start_http_server(8080)
 
 1. **Phase 1** (Current): Static single-agent environment with Gaussian plumes
 2. **Phase 2**: Dynamic plume models with temporal evolution
-3. **Phase 3**: Multi-agent environments with coordination mechanisms  
+3. **Phase 3**: Multi-agent environments with coordination mechanisms
 4. **Phase 4**: 3D environments with altitude-dependent plume dynamics
 5. **Phase 5**: Real-world sensor integration and hardware-in-the-loop testing
 
@@ -1152,7 +1172,7 @@ The current architecture provides foundation patterns for future extensions:
 This advanced topics section provides architectural guidance for extending plume_nav_sim beyond
 its current proof-of-life implementation toward research-grade and production-ready applications.
         """
-        
+
         # Integrate API reference documentation for comprehensive technical coverage
         guide_sections['api_reference_integration'] = f"""
 ## API Reference Integration
@@ -1180,7 +1200,7 @@ Detailed documentation for system components:
 
 The API reference provides:
 - Code examples with expected outputs
-- Performance benchmarking procedures  
+- Performance benchmarking procedures
 - Testing strategies and quality assurance
 - Extension development patterns
 
@@ -1197,7 +1217,7 @@ api_docs = generate_api_documentation(
 print(api_docs)
 ```
         """
-        
+
         # Generate comprehensive appendices with reference materials and development resources
         guide_sections['appendices'] = f"""
 ## Appendices
@@ -1212,7 +1232,7 @@ gymnasium>=0.29.0          # RL environment framework
 numpy>=2.1.0               # Mathematical operations and arrays
 matplotlib>=3.9.0          # Visualization and rendering
 
-# Development dependencies  
+# Development dependencies
 pytest>=8.0                # Testing framework
 black>=22.0                # Code formatting
 isort>=5.10                # Import sorting
@@ -1281,7 +1301,7 @@ kernprof -l -v examples/detailed_profile.py
 #### Test Categories
 
 1. **Unit Tests**: Individual component testing
-2. **Integration Tests**: Component interaction validation  
+2. **Integration Tests**: Component interaction validation
 3. **Performance Tests**: Latency and throughput validation
 4. **Reproducibility Tests**: Seeding and determinism validation
 5. **API Compliance Tests**: Gymnasium interface validation
@@ -1296,7 +1316,7 @@ testpaths = tests
 python_files = test_*.py
 python_classes = Test*
 python_functions = test_*
-addopts = 
+addopts =
     --verbose
     --tb=short
     --cov=src/plume_nav_sim
@@ -1305,7 +1325,7 @@ addopts =
     --cov-fail-under=95
 markers =
     unit: Unit tests
-    integration: Integration tests  
+    integration: Integration tests
     performance: Performance tests
     slow: Slow tests
 ```
@@ -1321,21 +1341,21 @@ from ..core.types import Coordinates, GridSize
 
 class CustomPlumeModel(ABC):
     \"\"\"Template for custom plume model development.\"\"\"
-    
+
     def __init__(self, grid_size: GridSize):
         self.grid_size = grid_size
         self.concentration_field = None
-    
+
     @abstractmethod
     def initialize_plume(self, source_location: Coordinates) -> np.ndarray:
         \"\"\"Initialize plume concentration field.\"\"\"
         pass
-    
+
     @abstractmethod
     def sample_concentration(self, position: Coordinates) -> float:
         \"\"\"Sample concentration at specific position.\"\"\"
         pass
-    
+
     def validate_model(self) -> bool:
         \"\"\"Validate model configuration and state.\"\"\"
         return True
@@ -1346,15 +1366,15 @@ class CustomPlumeModel(ABC):
 ```python
 class CustomRenderer(ABC):
     \"\"\"Template for custom rendering backend development.\"\"\"
-    
+
     def __init__(self, grid_size: GridSize):
         self.grid_size = grid_size
-    
+
     @abstractmethod
     def render_rgb_array(self, state: dict) -> np.ndarray:
         \"\"\"Generate RGB array representation.\"\"\"
         pass
-    
+
     def cleanup_resources(self):
         \"\"\"Clean up rendering resources.\"\"\"
         pass
@@ -1392,7 +1412,7 @@ EXPERIMENT_CONFIGS = {{
 # results_analysis.py
 def generate_publication_results():
     \"\"\"Generate results formatted for research publication.\"\"\"
-    
+
     results = {{
         'environment': 'PlumeNav-StaticGaussian-v0',
         'grid_size': '64x64',
@@ -1407,7 +1427,7 @@ def generate_publication_results():
             'episodes_per_second': 2222
         }}
     }}
-    
+
     return results
 ```
 
@@ -1416,7 +1436,7 @@ def generate_publication_results():
 #### Version {DEVELOPER_GUIDE_VERSION}
 - Comprehensive developer guide with architecture analysis
 - Performance optimization guidance and benchmarking tools
-- Testing framework documentation and quality standards  
+- Testing framework documentation and quality standards
 - Extension development patterns and customization examples
 - Research integration templates and workflow automation
 - Advanced topics covering multi-agent and dynamic plume considerations
@@ -1431,16 +1451,16 @@ This comprehensive developer guide provides technical contributors with all nece
 for understanding, extending, and maintaining the plume_nav_sim system while ensuring quality,
 performance, and scientific reproducibility standards.
         """
-        
+
         # Generate table of contents based on included sections
         toc_entries = []
         section_order = [
-            'introduction', 'system_overview', 'architecture_documentation', 
+            'introduction', 'system_overview', 'architecture_documentation',
             'development_setup', 'contribution_guidelines', 'performance_guide',
-            'testing_guide', 'extension_guide', 'advanced_topics', 
+            'testing_guide', 'extension_guide', 'advanced_topics',
             'troubleshooting', 'api_reference_integration', 'appendices'
         ]
-        
+
         for section_name in section_order:
             if section_name in guide_sections and guide_sections[section_name]:
                 # Extract main headings from content
@@ -1451,28 +1471,28 @@ performance, and scientific reproducibility standards.
                         heading = line.replace('##', '').strip()
                         anchor = heading.lower().replace(' ', '-').replace('&', '').replace('(', '').replace(')', '')
                         toc_entries.append(f"- [{heading}](#{anchor})")
-        
+
         guide_sections['table_of_contents'] = f"""
 ## Table of Contents
 
 {chr(10).join(toc_entries)}
         """
-        
+
         # Format complete developer guide with technical styling, code syntax highlighting, and comprehensive cross-references
         complete_guide = []
-        
+
         # Add header and table of contents
         complete_guide.append(guide_sections['header'])
         complete_guide.append(guide_sections['table_of_contents'])
-        
+
         # Add main content sections in logical order
         for section_name in section_order:
             if section_name in guide_sections and guide_sections[section_name]:
                 complete_guide.append(guide_sections[section_name])
-        
+
         # Join all sections with appropriate spacing
         formatted_guide = '\n\n'.join(complete_guide)
-        
+
         # Apply output format-specific formatting
         if output_format == 'html':
             # Convert markdown to HTML (simplified transformation)
@@ -1484,10 +1504,10 @@ performance, and scientific reproducibility standards.
             formatted_guide = formatted_guide.replace('#', '=')
             formatted_guide = formatted_guide.replace('```python', '.. code-block:: python')
             formatted_guide = formatted_guide.replace('```', '')
-        
+
         # Return comprehensive developer guide optimized for technical contributors and system architects
         return formatted_guide
-        
+
     except Exception as e:
         # Handle any errors in guide generation with technical fallback content
         error_guide = f"""
@@ -1531,10 +1551,10 @@ env.close()
 - **Quality Standards**: >95% test coverage, 100% type hints
 - **Extension Points**: Custom plume models, rendering backends, multi-agent patterns
 
-Please check the system configuration and dependencies. For technical support, 
+Please check the system configuration and dependencies. For technical support,
 refer to the troubleshooting section or contact the development team.
         """
-        
+
         return error_guide
 
 
@@ -1544,33 +1564,33 @@ def create_architecture_documentation(
     include_design_rationale: bool = True
 ) -> str:
     """
-    Creates comprehensive system architecture documentation including component analysis, interaction 
-    patterns, data flow diagrams, and design decision analysis for understanding and extending the 
+    Creates comprehensive system architecture documentation including component analysis, interaction
+    patterns, data flow diagrams, and design decision analysis for understanding and extending the
     plume_nav_sim system.
-    
-    This function generates detailed technical documentation of the system's modular layered 
+
+    This function generates detailed technical documentation of the system's modular layered
     architecture, component relationships, performance characteristics, and extensibility patterns
     for developers and system architects.
-    
+
     Args:
         include_component_diagrams (bool): Include visual architecture representation and component relationship diagrams
         include_performance_analysis (bool): Include architectural performance implications and optimization guidance
         include_design_rationale (bool): Include design decisions and architectural trade-offs documentation
-        
+
     Returns:
         str: Detailed architecture documentation with diagrams, analysis, and technical insights
         for system understanding and extension development
     """
     architecture_sections = []
-    
+
     # Generate architecture overview explaining modular layered design and component-based patterns
     architecture_sections.append(f"""
 ## System Architecture Deep Dive
 
 ### Architectural Design Principles
 
-The plume_nav_sim system implements a **modular layered architecture** with clear separation of concerns 
-and well-defined interfaces between components. This design supports maintainability, testability, and 
+The plume_nav_sim system implements a **modular layered architecture** with clear separation of concerns
+and well-defined interfaces between components. This design supports maintainability, testability, and
 extensibility while optimizing for research-grade performance.
 
 #### Core Architectural Principles
@@ -1615,7 +1635,7 @@ class PlumeSearchEnv:
     Central orchestrator implementing modular component coordination.
     Demonstrates architectural patterns for component integration.
     \"\"\"
-    
+
     def __init__(self, grid_size, source_location, max_steps, goal_radius):
         # Component initialization with dependency injection pattern
         self.state_manager = StateManager(grid_size)
@@ -1624,18 +1644,18 @@ class PlumeSearchEnv:
         self.reward_calculator = RewardCalculator(source_location, goal_radius)
         self.boundary_enforcer = BoundaryEnforcer(grid_size)
         self.performance_monitor = PerformanceMonitor()
-        
+
         # Rendering system with optional initialization
         self.rgb_renderer = self._initialize_renderer() if render_mode else None
-        
+
         # Validation system for component integrity
         self._validate_component_consistency()
-    
+
     def step(self, action):
         \"\"\"
         Orchestrated step execution demonstrating component interaction patterns.
         \"\"\"
-        
+
         # Performance monitoring wrapper
         with self.performance_monitor.step_timer():
             # Component interaction sequence
@@ -1645,10 +1665,10 @@ class PlumeSearchEnv:
             concentration = self.plume_model.sample_concentration(bounded_position)
             reward = self.reward_calculator.calculate_reward(bounded_position)
             terminated = self.reward_calculator.check_termination(bounded_position)
-            
+
             # State synchronization across components
             self.state_manager.update_episode_state(bounded_position, self.step_count)
-            
+
             return self._construct_gymnasium_response(
                 concentration, reward, terminated, self.step_count >= self.max_steps
             )
@@ -1671,50 +1691,50 @@ class StaticGaussianPlume:
     Domain component demonstrating mathematical computation architecture.
     Optimized for performance with vectorized NumPy operations.
     \"\"\"
-    
+
     def __init__(self, grid_size: GridSize, source_location: Coordinates):
         self.grid_size = grid_size
         self.source_location = source_location
-        
+
         # Pre-computed concentration field for O(1) sampling
         self.concentration_field = self._generate_concentration_field()
-        
+
         # Performance optimization with field caching
         self._field_cache_valid = True
-        
+
     def _generate_concentration_field(self) -> np.ndarray:
         \"\"\"
         Vectorized field generation demonstrating performance-optimized mathematics.
         \"\"\"
-        
+
         # Mesh generation for vectorized operations
         y_coords, x_coords = np.meshgrid(
             np.arange(self.grid_size.height),
             np.arange(self.grid_size.width),
             indexing='ij'
         )
-        
+
         # Distance calculation with broadcasting
         dx = x_coords - self.source_location.x
         dy = y_coords - self.source_location.y
         distance_squared = dx**2 + dy**2
-        
+
         # Gaussian concentration with optimized parameters
         dispersion_factor = 2 * (12.0 ** 2)  # Pre-computed for efficiency
         concentration = np.exp(-distance_squared / dispersion_factor)
-        
+
         return concentration.astype(np.float32)  # Memory optimization
-    
+
     def sample_concentration(self, position: Coordinates) -> float:
         \"\"\"
         O(1) concentration sampling with bounds checking.
         \"\"\"
-        
+
         # Bounds validation with performance optimization
-        if not (0 <= position.x < self.grid_size.width and 
+        if not (0 <= position.x < self.grid_size.width and
                 0 <= position.y < self.grid_size.height):
             return 0.0
-        
+
         # Direct array access for optimal performance
         return float(self.concentration_field[position.y, position.x])
 ```
@@ -1735,45 +1755,45 @@ class RenderingPipeline:
     Infrastructure component demonstrating plugin architecture patterns.
     Supports multiple rendering backends with consistent interfaces.
     \"\"\"
-    
+
     def __init__(self, grid_size: GridSize, render_mode: str):
         self.grid_size = grid_size
         self.render_mode = render_mode
-        
+
         # Backend selection with factory pattern
         self.renderer = self._create_renderer(render_mode)
-        
+
         # Resource management for matplotlib backends
         self._matplotlib_resources = None
-        
+
     def _create_renderer(self, mode: str):
         \"\"\"Factory method for renderer instantiation.\"\"\"
-        
+
         if mode == 'rgb_array':
             return NumpyRGBRenderer(self.grid_size)
         elif mode == 'human':
             return MatplotlibRenderer(self.grid_size)
         else:
             raise ValueError(f"Unsupported render mode: {{mode}}")
-    
+
     def render(self, environment_state: dict) -> Optional[np.ndarray]:
         \"\"\"
         Unified rendering interface supporting multiple backends.
         \"\"\"
-        
+
         try:
             return self.renderer.render_frame(environment_state)
         except Exception as e:
             # Graceful degradation with error logging
             logging.warning(f"Rendering failed: {{e}}")
             return self._create_fallback_frame()
-    
+
     def cleanup_resources(self):
         \"\"\"Resource cleanup with backend-specific handling.\"\"\"
-        
+
         if hasattr(self.renderer, 'cleanup'):
             self.renderer.cleanup()
-        
+
         # Matplotlib-specific cleanup
         if self.render_mode == 'human':
             plt.close('all')
@@ -1785,7 +1805,7 @@ class RenderingPipeline:
 - **Resource Management**: Explicit cleanup and memory management
 - **Error Recovery**: Graceful degradation with fallback mechanisms
     """)
-    
+
     # Document core components including PlumeSearchEnv, StaticGaussianPlume, rendering pipeline, and state management
     architecture_sections.append(f"""
 ### Component Interaction Analysis
@@ -1801,43 +1821,43 @@ def analyze_step_data_flow():
     Demonstrates the complete data flow through system components during step execution.
     Shows how data transforms and flows between architectural layers.
     \"\"\"
-    
+
     # 1. Input Layer: Action validation and preprocessing
     raw_action = 2  # DOWN action from agent
-    
+
     # 2. Core Layer: Action processing and validation
     validated_action = ActionProcessor.validate_action(
         action=raw_action,
         action_space_bounds=(0, 3),
         current_state="valid"
     )
-    
+
     # 3. Domain Layer: State transformation
     current_position = Coordinates(x=32, y=32)
     new_position = ActionProcessor.apply_action_to_position(
         position=current_position,
         action=validated_action
     )
-    
+
     # 4. Infrastructure Layer: Boundary enforcement
     bounded_position = BoundaryEnforcer.enforce_grid_bounds(
         position=new_position,
         grid_bounds=GridSize(width=128, height=128)
     )
-    
+
     # 5. Domain Layer: Plume interaction
     concentration = StaticGaussianPlume.sample_concentration(
         position=bounded_position,
         concentration_field=np.ndarray  # Pre-computed field
     )
-    
+
     # 6. Domain Layer: Reward calculation
     reward = RewardCalculator.calculate_sparse_reward(
         agent_position=bounded_position,
         source_location=Coordinates(x=64, y=64),
         goal_radius=1.0
     )
-    
+
     # 7. Core Layer: Episode state management
     episode_status = StateManager.update_episode_state(
         step_count=150,
@@ -1845,7 +1865,7 @@ def analyze_step_data_flow():
         terminated=reward > 0,
         agent_position=bounded_position
     )
-    
+
     # 8. Interface Layer: Gymnasium response construction
     gym_response = {
         'observation': np.array([concentration], dtype=np.float32),
@@ -1854,7 +1874,7 @@ def analyze_step_data_flow():
         'truncated': episode_status['truncated'],
         'info': episode_status['info_dict']
     }
-    
+
     return gym_response
 ```
 
@@ -1886,78 +1906,78 @@ class ComponentLifecycleManager:
     Demonstrates component lifecycle management patterns used throughout the system.
     Ensures proper initialization, operation, and cleanup of system components.
     \"\"\"
-    
+
     def __init__(self):
         self.components = {}
         self.initialization_order = [
             'state_manager',
-            'plume_model', 
+            'plume_model',
             'action_processor',
             'reward_calculator',
             'boundary_enforcer',
             'renderer',
             'performance_monitor'
         ]
-    
+
     def initialize_components(self, config: EnvironmentConfig):
         \"\"\"
         Initialize components in dependency order with validation.
         \"\"\"
-        
+
         for component_name in self.initialization_order:
             try:
                 component = self._create_component(component_name, config)
                 self._validate_component(component)
                 self.components[component_name] = component
-                
+
                 logging.debug(f"Initialized {{component_name}} successfully")
-                
+
             except Exception as e:
                 logging.error(f"Failed to initialize {{component_name}}: {{e}}")
                 self._cleanup_partial_initialization()
                 raise
-    
+
     def _create_component(self, name: str, config: EnvironmentConfig):
         \"\"\"Factory method for component creation with configuration injection.\"\"\"
-        
+
         component_factories = {
             'state_manager': lambda: StateManager(config.grid_size),
             'plume_model': lambda: StaticGaussianPlume(
-                config.grid_size, 
+                config.grid_size,
                 config.source_location
             ),
             'action_processor': lambda: ActionProcessor(config.grid_size),
             'reward_calculator': lambda: RewardCalculator(
-                config.source_location, 
+                config.source_location,
                 config.goal_radius
             ),
             'boundary_enforcer': lambda: BoundaryEnforcer(config.grid_size),
             'renderer': lambda: self._create_renderer(config.render_mode),
             'performance_monitor': lambda: PerformanceMonitor()
         }
-        
+
         return component_factories[name]()
-    
+
     def validate_component_integration(self):
         \"\"\"
         Validate that components are properly integrated and compatible.
         \"\"\"
-        
+
         validation_results = {}
-        
+
         # Check grid size consistency across components
         grid_size = self.components['state_manager'].grid_size
         for component_name, component in self.components.items():
             if hasattr(component, 'grid_size'):
                 if component.grid_size != grid_size:
                     validation_results[component_name] = f"Grid size mismatch: {{component.grid_size}} != {{grid_size}}"
-        
+
         # Check source location consistency
         source_location = self.components['plume_model'].source_location
         if hasattr(self.components['reward_calculator'], 'source_location'):
             if self.components['reward_calculator'].source_location != source_location:
                 validation_results['reward_calculator'] = "Source location mismatch with plume model"
-        
+
         # Validate component interfaces
         required_methods = {
             'plume_model': ['sample_concentration', 'get_concentration_field'],
@@ -1965,20 +1985,20 @@ class ComponentLifecycleManager:
             'action_processor': ['validate_action', 'apply_action'],
             'reward_calculator': ['calculate_reward', 'check_termination']
         }
-        
+
         for component_name, methods in required_methods.items():
             component = self.components[component_name]
             for method_name in methods:
                 if not hasattr(component, method_name):
                     validation_results[component_name] = f"Missing required method: {{method_name}}"
-        
+
         if validation_results:
             raise ComponentValidationError(f"Component validation failed: {{validation_results}}")
-        
+
         return True
 ```
     """)
-    
+
     # Create component interaction analysis showing data flow, method calls, and dependency relationships
     architecture_sections.append(f"""
 ### Performance Architecture Analysis
@@ -1994,41 +2014,41 @@ class PerformanceOptimizedComponent:
     Demonstrates pre-computation patterns used throughout the architecture.
     Expensive operations are performed once and cached for repeated access.
     \"\"\"
-    
+
     def __init__(self, grid_size: GridSize, source_location: Coordinates):
         # Pre-compute expensive mathematical operations
         self.distance_field = self._precompute_distance_field(grid_size, source_location)
         self.concentration_field = self._precompute_concentration_field()
-        
+
         # Cache frequently accessed values
         self._cached_gradients = None
         self._cache_valid = True
-        
+
     def _precompute_distance_field(self, grid_size: GridSize, source: Coordinates) -> np.ndarray:
         \"\"\"Pre-compute distance field for O(1) distance lookups.\"\"\"
-        
+
         y_coords, x_coords = np.meshgrid(
             np.arange(grid_size.height),
             np.arange(grid_size.width),
             indexing='ij'
         )
-        
+
         # Vectorized distance calculation
         dx = x_coords - source.x
         dy = y_coords - source.y
         distances = np.sqrt(dx**2 + dy**2)
-        
+
         return distances.astype(np.float32)
-    
+
     def _precompute_concentration_field(self) -> np.ndarray:
         \"\"\"Transform distances to concentrations with optimized parameters.\"\"\"
-        
+
         # Avoid repeated division in hot path
         dispersion_inv = 1.0 / (2 * 12.0**2)
-        
-        # Vectorized exponential calculation  
+
+        # Vectorized exponential calculation
         concentration = np.exp(-self.distance_field**2 * dispersion_inv)
-        
+
         return concentration.astype(np.float32)
 ```
 
@@ -2044,19 +2064,19 @@ def demonstrate_vectorization_patterns():
     \"\"\"
     Shows how vectorization is used throughout the architecture for performance.
     \"\"\"
-    
+
     # Instead of Python loops (slow):
     # concentrations = []
     # for x in range(width):
     #     for y in range(height):
     #         distance = sqrt((x - source_x)**2 + (y - source_y)**2)
     #         concentrations.append(exp(-distance**2 / (2 * sigma**2)))
-    
+
     # Use vectorized operations (fast):
     y_coords, x_coords = np.meshgrid(np.arange(height), np.arange(width), indexing='ij')
     distances = np.sqrt((x_coords - source_x)**2 + (y_coords - source_y)**2)
     concentrations = np.exp(-distances**2 / (2 * sigma**2))
-    
+
     # Performance benefit: ~100x faster for 128x128 grids
     return concentrations
 ```
@@ -2078,23 +2098,23 @@ class ArchitecturePerformanceMonitor:
     \"\"\"
     Integrated performance monitoring demonstrating observability patterns.
     \"\"\"
-    
+
     def __init__(self):
         self.component_timings = {}
         self.memory_usage = {}
         self.call_counts = {}
-        
+
     def profile_component_step(self, component_name: str):
         \"\"\"Context manager for component-level performance profiling.\"\"\"
-        
+
         return ComponentProfiler(
             component_name=component_name,
             monitor=self
         )
-    
+
     def get_performance_summary(self) -> dict:
         \"\"\"Generate comprehensive performance analysis.\"\"\"
-        
+
         summary = {
             'total_components': len(self.component_timings),
             'average_step_time': np.mean([
@@ -2109,30 +2129,30 @@ class ArchitecturePerformanceMonitor:
             ) / (1024 * 1024),
             'performance_bottlenecks': self._identify_bottlenecks()
         }
-        
+
         return summary
-    
+
     def _identify_bottlenecks(self) -> List[str]:
         \"\"\"Identify performance bottlenecks in component architecture.\"\"\"
-        
+
         bottlenecks = []
         avg_times = {
-            name: np.mean(times) 
+            name: np.mean(times)
             for name, times in self.component_timings.items()
         }
-        
+
         # Components taking >10% of step time are considered bottlenecks
         total_time = sum(avg_times.values())
         threshold = total_time * 0.1
-        
+
         for component, avg_time in avg_times.items():
             if avg_time > threshold:
                 bottlenecks.append(f"{{component}}: {{avg_time:.3f}}ms ({{avg_time/total_time:.1%}})")
-        
+
         return bottlenecks
 ```
     """)
-    
+
     # Include component diagrams if include_component_diagrams enabled with visual architecture representation
     if include_component_diagrams:
         architecture_sections.append(f"""
@@ -2144,54 +2164,54 @@ class ArchitecturePerformanceMonitor:
 graph TB
     subgraph "Application Layer"
         A[Training Scripts]
-        B[Research Workflows]  
+        B[Research Workflows]
         C[Educational Examples]
     end
-    
+
     subgraph "Interface Layer"
         D[Gymnasium API]
         E[Environment Registration]
         F[Documentation System]
     end
-    
+
     subgraph "Core Layer"
         G[PlumeSearchEnv]
         H[BaseEnvironment]
         I[Episode Management]
     end
-    
+
     subgraph "Domain Layer"
         J[StaticGaussianPlume]
         K[RewardCalculator]
         L[ActionProcessor]
     end
-    
+
     subgraph "Infrastructure Layer"
         M[RenderingPipeline]
         N[SeedingSystem]
         O[PerformanceMonitor]
         P[ValidationFramework]
     end
-    
+
     A --> D
     B --> D
     C --> D
-    
+
     D --> G
     E --> G
     F --> G
-    
+
     G --> H
     G --> I
     H --> J
     H --> K
     H --> L
-    
+
     G --> M
     G --> N
     G --> O
     G --> P
-    
+
     style G fill:#e1f5fe
     style J fill:#f3e5f5
     style M fill:#e8f5e8
@@ -2209,28 +2229,28 @@ sequenceDiagram
     participant PlumeModel as StaticGaussianPlume
     participant RewardCalc as RewardCalculator
     participant PerfMon as PerformanceMonitor
-    
+
     Agent->>PlumeEnv: step(action)
-    
+
     PlumeEnv->>PerfMon: start_step_timer()
     PlumeEnv->>ActionProc: validate_action(action)
     ActionProc-->>PlumeEnv: validated_action
-    
+
     PlumeEnv->>StateMan: update_position(action)
     StateMan-->>PlumeEnv: new_position
-    
+
     PlumeEnv->>PlumeModel: sample_concentration(position)
     PlumeModel-->>PlumeEnv: concentration_value
-    
+
     PlumeEnv->>RewardCalc: calculate_reward(position)
     RewardCalc-->>PlumeEnv: reward_value
-    
+
     PlumeEnv->>StateMan: update_episode_state()
     StateMan-->>PlumeEnv: episode_status
-    
+
     PlumeEnv->>PerfMon: end_step_timer()
     PerfMon-->>PlumeEnv: performance_metrics
-    
+
     PlumeEnv-->>Agent: (obs, reward, terminated, truncated, info)
 ```
 
@@ -2242,12 +2262,12 @@ Memory Layout Optimization:
 │                    Environment Instance                     │
 │  ┌─────────────────┐ ┌─────────────────┐ ┌───────────────┐   │
 │  │  State Manager  │ │ Action Processor│ │ Reward Calc   │   │
-│  │    ~1MB         │ │     ~0.5MB      │ │    ~0.5MB     │   │  
+│  │    ~1MB         │ │     ~0.5MB      │ │    ~0.5MB     │   │
 │  └─────────────────┘ └─────────────────┘ └───────────────┘   │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │              Plume Model (StaticGaussian)               │ │
 │  │  Concentration Field: Width × Height × 4 bytes         │ │
-│  │  Example 128×128: 65,536 cells × 4 = 262KB            │ │  
+│  │  Example 128×128: 65,536 cells × 4 = 262KB            │ │
 │  │  Distance cache (optional): +262KB                     │ │
 │  │  Total: ~525KB - 20MB (depends on grid size)          │ │
 │  └─────────────────────────────────────────────────────────┘ │
@@ -2265,11 +2285,11 @@ Memory Layout Optimization:
 
 Total Memory Footprint:
 - Small grid (32×32):   ~5-8MB
-- Standard grid (128×128): ~25-30MB  
+- Standard grid (128×128): ~25-30MB
 - Large grid (256×256): ~80-100MB
 ```
         """)
-    
+
     # Generate integration patterns for external framework compatibility and workflow integration
     architecture_sections.append(f"""
 ### Integration Architecture Patterns
@@ -2284,67 +2304,67 @@ class FrameworkIntegrationLayer:
     Demonstrates integration patterns for external RL frameworks.
     Provides adapter patterns and compatibility layers.
     \"\"\"
-    
+
     def __init__(self, base_environment: PlumeSearchEnv):
         self.base_env = base_environment
         self.integration_adapters = {}
-        
+
     def create_stable_baselines3_adapter(self):
         \"\"\"
         Adapter pattern for Stable-Baselines3 integration.
         Ensures compatibility with SB3's environment requirements.
         \"\"\"
-        
+
         class SB3Adapter(gym.Wrapper):
             def __init__(self, env):
                 super().__init__(env)
-                
+
                 # SB3-specific environment validation
                 self._validate_sb3_compatibility()
-                
+
             def _validate_sb3_compatibility(self):
                 \"\"\"Validate environment meets SB3 requirements.\"\"\"
-                
+
                 # Check observation space compatibility
                 assert isinstance(self.observation_space, gym.spaces.Box), \\
                     "SB3 requires Box observation space"
-                
-                # Check action space compatibility  
+
+                # Check action space compatibility
                 assert isinstance(self.action_space, gym.spaces.Discrete), \\
                     "SB3 requires Discrete action space for this environment"
-                
+
                 # Validate step function signature
                 obs, info = self.env.reset(seed=42)
                 obs, reward, terminated, truncated, info = self.env.step(0)
-                
+
                 assert isinstance(obs, np.ndarray), "Observation must be numpy array"
                 assert isinstance(reward, (int, float)), "Reward must be numeric"
                 assert isinstance(terminated, bool), "Terminated must be boolean"
                 assert isinstance(truncated, bool), "Truncated must be boolean"
                 assert isinstance(info, dict), "Info must be dictionary"
-            
+
             def reset(self, **kwargs):
                 \"\"\"SB3-compatible reset method.\"\"\"
                 obs, info = self.env.reset(**kwargs)
                 return obs, info
-            
+
             def step(self, action):
                 \"\"\"SB3-compatible step method with validation.\"\"\"
-                
+
                 # Validate action type and range
                 action = int(action)  # Ensure integer action
                 assert self.action_space.contains(action), f"Invalid action: {{action}}"
-                
+
                 return self.env.step(action)
-        
+
         return SB3Adapter(self.base_env)
-    
+
     def create_ray_rllib_config(self):
         \"\"\"
         Configuration generator for Ray RLlib integration.
         Provides optimized configuration for distributed training.
         \"\"\"
-        
+
         config = {{
             "env": lambda config: create_plume_search_env(**config),
             "env_config": {{
@@ -2353,56 +2373,56 @@ class FrameworkIntegrationLayer:
                 "max_steps": 200,
                 "render_mode": None  # Disable rendering for distributed training
             }},
-            
+
             # Performance optimizations for RLlib
             "num_workers": 8,
             "num_envs_per_worker": 4,
             "batch_mode": "complete_episodes",
             "rollout_fragment_length": 200,
-            
+
             # Framework-specific settings
             "framework": "torch",
             "torch_compile_learner": True,
             "torch_compile_learner_dynamo_backend": "inductor",
-            
+
             # Environment-specific optimizations
             "preprocessor_pref": None,  # Skip preprocessing for simple obs space
             "observation_filter": "NoFilter",
             "normalize_actions": False,  # Discrete actions don't need normalization
-            
+
             # Resource management
             "placement_strategy": "SPREAD",  # Distribute workers across nodes
         }}
-        
+
         return config
-    
+
     def create_jupyter_integration(self):
         \"\"\"
         Jupyter notebook integration with enhanced visualization.
         Provides interactive exploration and analysis tools.
         \"\"\"
-        
+
         class JupyterIntegration:
             def __init__(self, env: PlumeSearchEnv):
                 self.env = env
                 self.episode_data = []
-                
+
             def create_interactive_widget(self):
                 \"\"\"Create interactive widget for environment control.\"\"\"
-                
+
                 try:
                     from IPython.widgets import interact, IntSlider, Dropdown
                     from IPython.display import display
-                    
+
                     def step_environment(action_idx):
                         action_names = ['UP', 'RIGHT', 'DOWN', 'LEFT']
                         obs, reward, terminated, truncated, info = self.env.step(action_idx)
-                        
+
                         print(f"Action: {{action_names[action_idx]}}")
                         print(f"Observation: {{obs[0]:.4f}}")
                         print(f"Reward: {{reward}}")
                         print(f"Terminated: {{terminated}}")
-                        
+
                         # Store for analysis
                         self.episode_data.append({{
                             'action': action_idx,
@@ -2410,7 +2430,7 @@ class FrameworkIntegrationLayer:
                             'reward': reward,
                             'terminated': terminated
                         }})
-                        
+
                         # Render if possible
                         if hasattr(self.env, 'render'):
                             frame = self.env.render()
@@ -2420,7 +2440,7 @@ class FrameworkIntegrationLayer:
                                 plt.axis('off')
                                 plt.title(f'Step {{len(self.episode_data)}}')
                                 plt.show()
-                    
+
                     # Create interactive controls
                     interact(
                         step_environment,
@@ -2429,38 +2449,38 @@ class FrameworkIntegrationLayer:
                             description='Action:'
                         )
                     )
-                    
+
                 except ImportError:
                     print("IPython widgets not available. Install with: pip install ipywidgets")
-            
+
             def analyze_episode_data(self):
                 \"\"\"Analyze collected episode data with visualizations.\"\"\"
-                
+
                 if not self.episode_data:
                     print("No episode data available.")
                     return
-                
+
                 import pandas as pd
-                
+
                 df = pd.DataFrame(self.episode_data)
-                
+
                 # Create analysis plots
                 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-                
+
                 # Observation trajectory
                 axes[0, 0].plot(df['observation'])
                 axes[0, 0].set_title('Concentration Over Time')
                 axes[0, 0].set_xlabel('Step')
                 axes[0, 0].set_ylabel('Concentration')
                 axes[0, 0].grid(True)
-                
+
                 # Reward trajectory
                 axes[0, 1].plot(df['reward'], 'ro-', markersize=3)
                 axes[0, 1].set_title('Rewards Over Time')
                 axes[0, 1].set_xlabel('Step')
                 axes[0, 1].set_ylabel('Reward')
                 axes[0, 1].grid(True)
-                
+
                 # Action distribution
                 action_counts = df['action'].value_counts().sort_index()
                 action_names = ['UP', 'RIGHT', 'DOWN', 'LEFT']
@@ -2470,24 +2490,24 @@ class FrameworkIntegrationLayer:
                 axes[1, 0].set_ylabel('Count')
                 axes[1, 0].set_xticks(range(len(action_names)))
                 axes[1, 0].set_xticklabels(action_names)
-                
+
                 # Cumulative reward
                 axes[1, 1].plot(df['reward'].cumsum())
                 axes[1, 1].set_title('Cumulative Reward')
                 axes[1, 1].set_xlabel('Step')
                 axes[1, 1].set_ylabel('Cumulative Reward')
                 axes[1, 1].grid(True)
-                
+
                 plt.tight_layout()
                 plt.show()
-                
+
                 # Summary statistics
                 print("Episode Summary:")
                 print(f"Total steps: {{len(df)}}")
                 print(f"Total reward: {{df['reward'].sum()}}")
                 print(f"Average concentration: {{df['observation'].mean():.4f}}")
                 print(f"Goal reached: {{df['terminated'].any()}}")
-        
+
         return JupyterIntegration(self.base_env)
 ```
 
@@ -2502,127 +2522,127 @@ class ExtensionArchitecture:
     Demonstrates extension patterns and customization points in the architecture.
     Shows how to extend the system while maintaining compatibility and performance.
     \"\"\"
-    
+
     @staticmethod
     def create_custom_plume_model():
         \"\"\"
         Extension pattern for custom plume models.
         Demonstrates how to extend the domain layer with new mathematical models.
         \"\"\"
-        
+
         class DynamicWindPlume(BasePlumeModel):
             \"\"\"Custom plume model with wind effects and temporal dynamics.\"\"\"
-            
+
             def __init__(self, grid_size: GridSize, wind_velocity: Tuple[float, float]):
                 super().__init__(grid_size)
                 self.wind_velocity = wind_velocity
                 self.time_step = 0.0
-                
+
             def sample_concentration(self, position: Coordinates) -> float:
                 \"\"\"Sample concentration with wind-driven dynamics.\"\"\"
-                
+
                 # Time-dependent source location due to wind advection
                 effective_source_x = self.source_location.x + self.wind_velocity[0] * self.time_step
                 effective_source_y = self.source_location.y + self.wind_velocity[1] * self.time_step
-                
+
                 # Distance to wind-advected source
                 dx = position.x - effective_source_x
                 dy = position.y - effective_source_y
                 distance_squared = dx**2 + dy**2
-                
+
                 # Anisotropic dispersion (different along/across wind)
                 sigma_along_wind = 12.0 * (1 + 0.1 * self.time_step)
                 sigma_across_wind = 8.0 * (1 + 0.05 * self.time_step)
-                
+
                 # Wind-direction dependent concentration
                 concentration = np.exp(
-                    -(dx**2 / (2 * sigma_along_wind**2) + 
+                    -(dx**2 / (2 * sigma_along_wind**2) +
                       dy**2 / (2 * sigma_across_wind**2))
                 )
-                
+
                 return float(concentration)
-            
+
             def update_dynamics(self, delta_time: float):
                 \"\"\"Update temporal dynamics - called by environment.\"\"\"
                 self.time_step += delta_time
-        
+
         return DynamicWindPlume
-    
+
     @staticmethod
     def create_custom_reward_function():
         \"\"\"
         Extension pattern for custom reward functions.
         Shows how to implement domain-specific reward shaping.
         \"\"\"
-        
+
         class ShapedRewardCalculator(BaseRewardCalculator):
             \"\"\"Custom reward function with dense reward shaping.\"\"\"
-            
+
             def __init__(self, source_location: Coordinates, goal_radius: float):
                 super().__init__(source_location, goal_radius)
                 self.previous_distance = None
-                
+
             def calculate_reward(self, agent_position: Coordinates) -> float:
                 \"\"\"Calculate shaped reward with progress incentive.\"\"\"
-                
+
                 # Sparse goal reward (unchanged)
                 goal_reward = self._calculate_goal_reward(agent_position)
                 if goal_reward > 0:
                     return goal_reward
-                
+
                 # Dense shaping reward based on progress
                 current_distance = agent_position.distance_to(self.source_location)
-                
+
                 if self.previous_distance is not None:
                     # Reward for getting closer, penalty for getting farther
                     progress_reward = (self.previous_distance - current_distance) * 0.01
                 else:
                     progress_reward = 0.0
-                
+
                 self.previous_distance = current_distance
-                
+
                 # Optional: concentration-based reward
                 # concentration_reward = concentration_value * 0.1
-                
+
                 return progress_reward
-            
+
             def reset_episode_state(self):
                 \"\"\"Reset internal state for new episode.\"\"\"
                 self.previous_distance = None
-        
+
         return ShapedRewardCalculator
-    
-    @staticmethod  
+
+    @staticmethod
     def create_custom_renderer():
         \"\"\"
         Extension pattern for custom rendering backends.
         Demonstrates how to extend visualization capabilities.
         \"\"\"
-        
+
         class HeatmapRenderer(BaseRenderer):
             \"\"\"Custom renderer with enhanced heatmap visualization.\"\"\"
-            
+
             def __init__(self, grid_size: GridSize):
                 super().__init__(grid_size)
                 self.colormap = plt.cm.plasma  # Custom colormap
                 self.trail_history = []  # Agent trail visualization
-                
+
             def render_frame(self, environment_state: dict) -> np.ndarray:
                 \"\"\"Generate enhanced visualization with heatmap and trail.\"\"\"
-                
+
                 # Extract state information
                 agent_position = environment_state['agent_position']
                 concentration_field = environment_state['concentration_field']
                 source_location = environment_state['source_location']
-                
+
                 # Update trail history
                 self.trail_history.append(agent_position)
                 if len(self.trail_history) > 20:  # Limit trail length
                     self.trail_history.pop(0)
-                
+
                 # Create enhanced visualization
                 fig, ax = plt.subplots(figsize=(8, 8))
-                
+
                 # Concentration heatmap with custom colormap
                 im = ax.imshow(
                     concentration_field,
@@ -2630,13 +2650,13 @@ class ExtensionArchitecture:
                     alpha=0.8,
                     extent=[0, self.grid_size.width, 0, self.grid_size.height]
                 )
-                
+
                 # Agent trail
                 if len(self.trail_history) > 1:
                     trail_x = [pos.x for pos in self.trail_history]
                     trail_y = [pos.y for pos in self.trail_history]
                     ax.plot(trail_x, trail_y, 'w--', alpha=0.7, linewidth=2)
-                
+
                 # Current agent position (enhanced marker)
                 ax.scatter(
                     agent_position.x, agent_position.y,
@@ -2644,7 +2664,7 @@ class ExtensionArchitecture:
                     edgecolors='white', linewidth=2,
                     zorder=10
                 )
-                
+
                 # Source location (enhanced marker)
                 ax.scatter(
                     source_location.x, source_location.y,
@@ -2652,23 +2672,23 @@ class ExtensionArchitecture:
                     edgecolors='black', linewidth=2,
                     zorder=10
                 )
-                
+
                 # Enhanced styling
                 ax.set_title('Plume Navigation with Agent Trail', fontsize=14)
                 ax.set_xlabel('X Position', fontsize=12)
                 ax.set_ylabel('Y Position', fontsize=12)
-                
+
                 # Add colorbar
                 plt.colorbar(im, ax=ax, label='Concentration')
-                
+
                 # Convert to RGB array
                 fig.canvas.draw()
                 frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
                 frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-                
+
                 plt.close(fig)
                 return frame
-        
+
         return HeatmapRenderer
 ```
 
@@ -2676,10 +2696,10 @@ This comprehensive architecture documentation provides developers with deep unde
 design patterns, performance characteristics, and extension mechanisms for building upon the plume_nav_sim
 foundation.
         """)
-    
+
     # Combine all architecture sections into complete documentation
     complete_architecture_docs = '\n\n'.join(architecture_sections)
-    
+
     return complete_architecture_docs
 
 
@@ -2689,32 +2709,32 @@ def create_development_setup_guide(
     include_debugging_setup: bool = True
 ) -> str:
     """
-    Creates detailed development environment setup guide including Python version management, dependency 
-    installation, virtual environment configuration, development tools, and workflow setup for contributor 
+    Creates detailed development environment setup guide including Python version management, dependency
+    installation, virtual environment configuration, development tools, and workflow setup for contributor
     onboarding and productive development work.
-    
+
     This function generates comprehensive documentation for setting up a complete development environment
     optimized for contributing to plume_nav_sim with all necessary tools, configurations, and workflows.
-    
+
     Args:
         include_advanced_setup (bool): Include performance profiling tools, debugging utilities, and advanced development configurations
         include_ide_configuration (bool): Include IDE-specific setup for VSCode, PyCharm, and other development environments
         include_debugging_setup (bool): Include debugger configuration, logging setup, and troubleshooting tools
-        
+
     Returns:
         str: Complete development setup guide with step-by-step instructions, configuration examples,
         and tool integration for productive development workflows
     """
     setup_sections = []
-    
+
     # Generate development setup overview with system requirements and compatibility matrix
     setup_sections.append(f"""
 ## Development Environment Setup Guide
 
 ### Overview
 
-This guide provides comprehensive instructions for setting up a complete development environment for 
-plume_nav_sim. It covers everything from basic Python installation to advanced debugging and profiling 
+This guide provides comprehensive instructions for setting up a complete development environment for
+plume_nav_sim. It covers everything from basic Python installation to advanced debugging and profiling
 tools for productive contribution and development work.
 
 ### System Requirements
@@ -2735,7 +2755,7 @@ python3 --version
 
 **Operating System Support**:
 - **Linux**: Full support (Ubuntu 20.04+, CentOS 8+, Arch Linux)
-- **macOS**: Full support (10.15+ with Homebrew or MacPorts) 
+- **macOS**: Full support (10.15+ with Homebrew or MacPorts)
 - **Windows**: Limited support (Windows 10+ with WSL recommended)
 
 #### Hardware Requirements
@@ -2756,7 +2776,7 @@ python3 --version
 
 Choose one of the following methods based on your preference and system setup:
     """)
-    
+
     # Create Python environment setup with version management using pyenv or similar tools
     setup_sections.append(f"""
 ### Method 1: Basic Development Setup
@@ -2907,7 +2927,7 @@ pip install --upgrade pip
 pip install -e .[dev]
 ```
     """)
-    
+
     # Document development tools setup including pytest, type checking, and linting configuration
     setup_sections.append(f"""
 ### Development Tools Configuration
@@ -3010,12 +3030,12 @@ cat > .flake8 << EOF
 [flake8]
 max-line-length = 100
 max-complexity = 10
-ignore = 
+ignore =
     # Black compatibility
     E203,  # whitespace before ':'
     E501,  # line too long (handled by black)
     W503,  # line break before binary operator
-exclude = 
+exclude =
     .git,
     __pycache__,
     build,
@@ -3046,7 +3066,7 @@ testpaths = tests
 python_files = test_*.py
 python_classes = Test*
 python_functions = test_*
-addopts = 
+addopts =
     --verbose
     --tb=short
     --cov=src/plume_nav_sim
@@ -3130,7 +3150,7 @@ pre-commit run --all-files
 pre-commit autoupdate
 ```
     """)
-    
+
     # Include advanced setup if include_advanced_setup enabled with performance profiling and debugging tools
     if include_advanced_setup:
         setup_sections.append(f"""
@@ -3157,9 +3177,9 @@ from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 
 def profile_environment_performance():
     \"\"\"Profile environment performance with detailed breakdown.\"\"\"
-    
+
     env = create_plume_search_env(grid_size=(128, 128))
-    
+
     # Profile environment operations
     def run_episode():
         obs, info = env.reset(seed=42)
@@ -3169,22 +3189,22 @@ def profile_environment_performance():
             if terminated or truncated:
                 break
         env.close()
-    
+
     return run_episode
 
 if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()
-    
+
     # Run profiled code
     profile_func = profile_environment_performance()
     profile_func()
-    
+
     profiler.disable()
-    
+
     # Save profile results
     profiler.dump_stats('profile_results.prof')
-    
+
     # Display results
     stats = pstats.Stats('profile_results.prof')
     stats.sort_stats('cumulative')
@@ -3218,21 +3238,21 @@ from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 @profile
 def memory_test():
     \"\"\"Profile memory usage of environment operations.\"\"\"
-    
+
     # Test different grid sizes
     for size in [(32, 32), (64, 64), (128, 128)]:
         print(f"Testing grid size: {{size}}")
-        
+
         env = create_plume_search_env(grid_size=size)
         obs, info = env.reset(seed=42)
-        
+
         # Run episode
         for step in range(50):
             action = env.action_space.sample()
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 break
-        
+
         env.close()
         print(f"Completed {{size}} test")
 
@@ -3264,48 +3284,48 @@ from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 
 class TestEnvironmentBenchmarks:
     \"\"\"Benchmark tests for environment performance.\"\"\"
-    
+
     @pytest.fixture
     def env(self):
         \"\"\"Create environment for benchmarking.\"\"\"
         return create_plume_search_env(grid_size=(64, 64))
-    
+
     def test_environment_reset_benchmark(self, benchmark, env):
         \"\"\"Benchmark environment reset performance.\"\"\"
-        
+
         def reset_env():
             return env.reset(seed=42)
-        
+
         result = benchmark(reset_env)
         assert result[0] is not None  # obs should not be None
-    
+
     def test_environment_step_benchmark(self, benchmark, env):
         \"\"\"Benchmark environment step performance.\"\"\"
-        
+
         env.reset(seed=42)
-        
+
         def step_env():
             return env.step(0)  # UP action
-        
+
         result = benchmark(step_env)
         assert len(result) == 5  # obs, reward, terminated, truncated, info
-    
+
     def test_rendering_benchmark(self, benchmark):
         \"\"\"Benchmark rendering performance.\"\"\"
-        
+
         env = create_plume_search_env(
             grid_size=(64, 64),
             render_mode='rgb_array'
         )
         env.reset(seed=42)
-        
+
         def render_env():
             return env.render()
-        
+
         result = benchmark(render_env)
         assert result is not None
         assert result.shape == (64, 64, 3)  # RGB array
-        
+
         env.close()
 EOF
 
@@ -3319,7 +3339,7 @@ pytest tests/benchmarks/ --benchmark-only --benchmark-save=baseline
 pytest tests/benchmarks/ --benchmark-only --benchmark-compare=baseline
 ```
         """)
-    
+
     # Add IDE configuration if include_ide_configuration enabled with VSCode, PyCharm, and editor setup
     if include_ide_configuration:
         setup_sections.append(f"""

@@ -16,7 +16,7 @@ maintainers = [
 ]
 keywords = [
     "reinforcement learning",
-    "gymnasium", 
+    "gymnasium",
     "plume navigation",
     "chemical plume",
     "simulation",
@@ -35,7 +35,7 @@ classifiers = [
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11", 
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
@@ -56,7 +56,7 @@ Changelog = "https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "pytest-cov>=4.0.0", 
+    "pytest-cov>=4.0.0",
     "pytest-xdist>=3.0.0",
     "black>=24.0.0",
     "flake8>=7.0.0",
@@ -70,7 +70,7 @@ security = [
 test = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.0.0", 
+    "pytest-xdist>=3.0.0",
     "pytest-benchmark>=4.0.0",
     "pytest-mock>=3.12.0"
 ]
@@ -99,7 +99,7 @@ python_functions = ["test_*"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "unit: marks unit tests",
-    "integration: marks integration tests", 
+    "integration: marks integration tests",
     "performance: marks performance tests",
     "slow: marks slow running tests"
 ]

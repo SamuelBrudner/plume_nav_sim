@@ -1,8 +1,8 @@
 """
-Package initialization file for plume_nav_sim logging infrastructure providing 
-centralized access to logging configuration, formatters, handlers, and loggers. 
-Exposes comprehensive logging capabilities including security-aware formatting, 
-performance monitoring, component-specific loggers, and development-focused 
+Package initialization file for plume_nav_sim logging infrastructure providing
+centralized access to logging configuration, formatters, handlers, and loggers.
+Exposes comprehensive logging capabilities including security-aware formatting,
+performance monitoring, component-specific loggers, and development-focused
 debugging tools for the proof-of-life reinforcement learning environment implementation.
 
 This module serves as the unified entry point for the entire logging system, providing
@@ -10,72 +10,91 @@ factory functions, configuration management, and resource cleanup capabilities f
 robust production-ready logging throughout the plume_nav_sim system.
 """
 
+import atexit  # >=3.10 - Cleanup registration for graceful shutdown
+import datetime  # >=3.10 - Timestamp management for package lifecycle tracking
+
 # Standard library imports with version comments
 import logging  # >=3.10 - Base logging functionality and system integration
 import threading  # >=3.10 - Thread synchronization for concurrent operations
-import datetime  # >=3.10 - Timestamp management for package lifecycle tracking
-import atexit  # >=3.10 - Cleanup registration for graceful shutdown
-from typing import Dict, Optional, Any, Union  # >=3.10 - Type hints for package interface functions and logger factory methods
-
-# Internal imports - Configuration and enumeration infrastructure
-from .config import (
-    # Core configuration classes and enums
-    LogLevel, ComponentType, LoggingConfig,
-    # Configuration and setup functions
-    configure_logging, configure_development_logging, setup_performance_logging,
-    # Logger factory and management functions
-    LoggerFactory, ComponentLogger as ConfigComponentLogger,
-    # Security and filtering infrastructure
-    SensitiveInfoFilter,
-    # Factory functions and utilities
-    get_logger as config_get_logger, create_component_logger,
-    # Validation and configuration management
-    validate_logging_config, reset_logging_config, get_logging_status,
-    # Configuration constants and defaults
-    DEFAULT_LOGGING_CONFIG, LOGGER_NAME_PREFIX, COMPONENT_NAMES,
-    LOG_LEVEL_DEFAULT, PERFORMANCE_TARGET_STEP_LATENCY_MS
-)
-
-# Internal imports - Formatting infrastructure with security filtering
-from .formatters import (
-    # Core formatter classes
-    LogFormatter, ConsoleFormatter, PerformanceFormatter,
-    # Security filtering and sanitization
-    SecurityFilter, 
-    # Color support and scheme management
-    ColorScheme,
-    # Utility functions for formatter configuration
-    detect_color_support, sanitize_message,
-    # Formatting constants and color specifications
-    CONSOLE_COLOR_CODES, PERFORMANCE_LOG_FORMAT,
-    SENSITIVE_REGEX_PATTERNS, DEFAULT_LOG_FORMAT
-)
-
-# Internal imports - Logger classes and management system (no __all__ in loggers.py)
-from .loggers import (
-    # Core logger classes for component and performance monitoring
-    ComponentLogger, PerformanceLogger, LoggerManager,
-    # Primary logger factory functions
-    get_logger, get_component_logger, get_performance_logger,
-    # System configuration and lifecycle management
-    configure_logging_system, ensure_logging_initialized,
-    shutdown_logging_system, get_logging_statistics,
-    # Handler creation factory functions
-    create_console_handler, create_file_handler, create_performance_handler,
-    # Cleanup and resource management functions
-    register_cleanup_handlers
+from typing import (  # >=3.10 - Type hints for package interface functions and logger factory methods
+    Any,
+    Dict,
+    Optional,
+    Union,
 )
 
 # Internal imports - System constants for performance and configuration
-from plume_nav_sim.core.constants import (
+from ..core.constants import COMPONENT_NAMES as CORE_COMPONENT_NAMES
+from ..core.constants import LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT
+from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS as CORE_PERFORMANCE_TARGET,
-    COMPONENT_NAMES as CORE_COMPONENT_NAMES,
-    LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT
+)
+
+# Internal imports - Configuration and enumeration infrastructure
+from .config import (
+    COMPONENT_NAMES,
+    DEFAULT_LOGGING_CONFIG,
+    LOG_LEVEL_DEFAULT,
+    LOGGER_NAME_PREFIX,
+    PERFORMANCE_TARGET_STEP_LATENCY_MS,
+)
+from .config import (
+    ComponentLogger as ConfigComponentLogger,  # Core configuration classes and enums; Configuration and setup functions; Logger factory and management functions; Security and filtering infrastructure; Factory functions and utilities; Validation and configuration management; Configuration constants and defaults
+)
+from .config import (
+    ComponentType,
+    LoggerFactory,
+    LoggingConfig,
+    LogLevel,
+    SensitiveInfoFilter,
+    configure_development_logging,
+    configure_logging,
+    create_component_logger,
+)
+from .config import get_logger as config_get_logger
+from .config import (
+    get_logging_status,
+    reset_logging_config,
+    setup_performance_logging,
+    validate_logging_config,
+)
+
+# Internal imports - Formatting infrastructure with security filtering
+from .formatters import (  # Core formatter classes; Security filtering and sanitization; Color support and scheme management; Utility functions for formatter configuration; Formatting constants and color specifications
+    CONSOLE_COLOR_CODES,
+    DEFAULT_LOG_FORMAT,
+    PERFORMANCE_LOG_FORMAT,
+    SENSITIVE_REGEX_PATTERNS,
+    ColorScheme,
+    ConsoleFormatter,
+    LogFormatter,
+    PerformanceFormatter,
+    SecurityFilter,
+    detect_color_support,
+    sanitize_message,
+)
+
+# Internal imports - Logger classes and management system (no __all__ in loggers.py)
+from .loggers import (  # Core logger classes for component and performance monitoring; Primary logger factory functions; System configuration and lifecycle management; Handler creation factory functions; Cleanup and resource management functions
+    ComponentLogger,
+    LoggerManager,
+    PerformanceLogger,
+    configure_logging_system,
+    create_console_handler,
+    create_file_handler,
+    create_performance_handler,
+    ensure_logging_initialized,
+    get_component_logger,
+    get_logger,
+    get_logging_statistics,
+    get_performance_logger,
+    register_cleanup_handlers,
+    shutdown_logging_system,
 )
 
 # Package version and identification constants
-PACKAGE_VERSION = '0.0.1'
-LOGGER_NAME_PREFIX = 'plume_nav_sim'
+PACKAGE_VERSION = "0.0.1"
+LOGGER_NAME_PREFIX = "plume_nav_sim"
 DEFAULT_LOG_LEVEL = LogLevel.INFO
 DEVELOPMENT_LOG_LEVEL = LogLevel.DEBUG
 
@@ -91,40 +110,42 @@ _performance_loggers_registry: Dict[str, PerformanceLogger] = {}
 
 # Package statistics and monitoring for health tracking
 _package_stats = {
-    'initialization_count': 0,
-    'component_loggers_created': 0,
-    'performance_loggers_created': 0,
-    'configuration_resets': 0,
-    'cleanup_operations': 0
+    "initialization_count": 0,
+    "component_loggers_created": 0,
+    "performance_loggers_created": 0,
+    "configuration_resets": 0,
+    "cleanup_operations": 0,
 }
 
 
-def init_logging_package(use_development_config: bool = True,
-                        enable_performance_monitoring: bool = True,
-                        custom_config_overrides: Optional[Dict[str, Any]] = None) -> bool:
+def init_logging_package(
+    use_development_config: bool = True,
+    enable_performance_monitoring: bool = True,
+    custom_config_overrides: Optional[Dict[str, Any]] = None,
+) -> bool:
     """
-    Initializes the plume_nav_sim logging package with default configuration, 
-    component loggers, and performance monitoring setup for system-wide 
+    Initializes the plume_nav_sim logging package with default configuration,
+    component loggers, and performance monitoring setup for system-wide
     logging infrastructure.
-    
+
     Args:
         use_development_config: Enable development-friendly logging configuration
         enable_performance_monitoring: Enable performance tracking and monitoring
         custom_config_overrides: Dictionary of custom configuration overrides
-        
+
     Returns:
         bool: True if package initialized successfully, False if initialization failed
     """
     global _package_initialized, _default_logging_config, _package_init_time
     global _package_stats
-    
+
     with _initialization_lock:
         try:
             # Check if logging package already initialized to avoid duplicate initialization
             if _package_initialized:
-                _package_stats['initialization_count'] += 1
+                _package_stats["initialization_count"] += 1
                 return True
-            
+
             # Create default LoggingConfig with development or production settings based on parameters
             if use_development_config:
                 base_config = LoggingConfig(
@@ -132,7 +153,7 @@ def init_logging_package(use_development_config: bool = True,
                     enable_console_output=True,
                     enable_file_output=False,
                     enable_color_output=True,
-                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 )
             else:
                 base_config = LoggingConfig(
@@ -140,25 +161,23 @@ def init_logging_package(use_development_config: bool = True,
                     enable_console_output=True,
                     enable_file_output=True,
                     enable_color_output=False,
-                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 )
-            
+
             # Apply custom configuration overrides if provided in custom_config_overrides
             if custom_config_overrides:
                 for key, value in custom_config_overrides.items():
                     if hasattr(base_config, key):
                         setattr(base_config, key, value)
-            
+
             # Initialize logging system using configure_logging_system with validated configuration
             success = configure_logging_system(
-                config=base_config,
-                force_reconfiguration=True,
-                validate_config=True
+                config=base_config, force_reconfiguration=True, validate_config=True
             )
-            
+
             if not success:
                 return False
-            
+
             # Set up component loggers registry for centralized logger management
             for component_name in CORE_COMPONENT_NAMES:
                 try:
@@ -168,135 +187,152 @@ def init_logging_package(use_development_config: bool = True,
                         if comp_type.name.lower() in component_name.lower():
                             component_type = comp_type
                             break
-                    
+
                     # Create component logger with appropriate configuration
                     logger = get_component_logger(component_type, component_name)
                     registry_key = f"{component_type.name}:{component_name}"
                     _component_loggers_registry[registry_key] = logger
-                    _package_stats['component_loggers_created'] += 1
-                    
+                    _package_stats["component_loggers_created"] += 1
+
                 except Exception as e:
                     # Log warning but continue initialization
-                    logging.warning(f"Failed to create component logger for {component_name}: {e}")
-            
+                    logging.warning(
+                        f"Failed to create component logger for {component_name}: {e}"
+                    )
+
             # Initialize performance monitoring infrastructure if enable_performance_monitoring enabled
             if enable_performance_monitoring:
-                for operation_name in ['step_execution', 'rendering', 'plume_calculation']:
+                for operation_name in [
+                    "step_execution",
+                    "rendering",
+                    "plume_calculation",
+                ]:
                     try:
                         perf_logger = get_performance_logger(
                             operation_name=operation_name,
                             timing_threshold_ms=CORE_PERFORMANCE_TARGET,
-                            enable_memory_tracking=True
+                            enable_memory_tracking=True,
                         )
                         _performance_loggers_registry[operation_name] = perf_logger
-                        _package_stats['performance_loggers_created'] += 1
-                        
+                        _package_stats["performance_loggers_created"] += 1
+
                     except Exception as e:
-                        logging.warning(f"Failed to create performance logger for {operation_name}: {e}")
-            
+                        logging.warning(
+                            f"Failed to create performance logger for {operation_name}: {e}"
+                        )
+
             # Configure security filtering and sensitive information protection
             # This is handled automatically by the formatters with SecurityFilter
-            
+
             # Set package initialization flag and store default configuration
             _package_initialized = True
             _default_logging_config = base_config
             _package_init_time = datetime.datetime.now()
-            _package_stats['initialization_count'] += 1
-            
+            _package_stats["initialization_count"] += 1
+
             # Register cleanup handlers for graceful shutdown
             register_cleanup_handlers()
-            
+
             # Return initialization success status with error handling
             return True
-            
+
         except Exception as e:
             logging.error(f"Failed to initialize logging package: {e}", exc_info=True)
             return False
 
 
-def get_default_config(development_mode: bool = True,
-                      enable_console_colors: bool = True,
-                      enable_file_logging: bool = False) -> LoggingConfig:
+def get_default_config(
+    development_mode: bool = True,
+    enable_console_colors: bool = True,
+    enable_file_logging: bool = False,
+) -> LoggingConfig:
     """
-    Returns default logging configuration for plume_nav_sim with development-friendly 
+    Returns default logging configuration for plume_nav_sim with development-friendly
     settings, security filtering, and performance monitoring configuration.
-    
+
     Args:
         development_mode: Enable development-friendly configuration settings
         enable_console_colors: Enable color support in console output
         enable_file_logging: Enable file-based logging with rotation
-        
+
     Returns:
         LoggingConfig: Default logging configuration with specified settings and security filtering
     """
     # Create LoggingConfig with development or production log levels based on development_mode
     base_log_level = DEVELOPMENT_LOG_LEVEL if development_mode else DEFAULT_LOG_LEVEL
-    
+
     # Configure console logging with color support if enable_console_colors and terminal supports colors
     console_colors_enabled = enable_console_colors and detect_color_support()
-    
+
     # Create comprehensive logging configuration
     config = LoggingConfig(
         log_level=base_log_level,
         enable_console_output=True,
         enable_file_output=enable_file_logging,
         enable_color_output=console_colors_enabled,
-        log_format=DEFAULT_LOG_FORMAT if not development_mode else 
-                  "%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
+        log_format=(
+            DEFAULT_LOG_FORMAT
+            if not development_mode
+            else "%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+        ),
         component_log_levels={},
         security_filtering_enabled=True,
-        performance_monitoring_enabled=development_mode
+        performance_monitoring_enabled=development_mode,
     )
-    
+
     # Set up file logging with rotation and compression if enable_file_logging enabled
     if enable_file_logging:
         config.file_handler_config = {
-            'filename': f"{LOGGER_NAME_PREFIX}.log",
-            'max_bytes': 10 * 1024 * 1024,  # 10MB
-            'backup_count': 5,
-            'encoding': 'utf-8'
+            "filename": f"{LOGGER_NAME_PREFIX}.log",
+            "max_bytes": 10 * 1024 * 1024,  # 10MB
+            "backup_count": 5,
+            "encoding": "utf-8",
         }
-    
+
     # Configure component-specific log levels based on ComponentType defaults
     for component_type in ComponentType:
-        if hasattr(component_type, 'get_default_log_level'):
-            config.component_log_levels[component_type] = component_type.get_default_log_level()
-    
+        if hasattr(component_type, "get_default_log_level"):
+            config.component_log_levels[component_type] = (
+                component_type.get_default_log_level()
+            )
+
     # Add security filtering patterns for sensitive information protection
     config.security_patterns = SECURITY_REDACTION_PATTERNS.copy()
-    
+
     # Set up performance logging configuration with appropriate thresholds
     if development_mode:
         config.performance_config = {
-            'step_threshold_ms': CORE_PERFORMANCE_TARGET,
-            'render_threshold_ms': 50.0,
-            'memory_tracking_enabled': True,
-            'baseline_measurements': 10
+            "step_threshold_ms": CORE_PERFORMANCE_TARGET,
+            "render_threshold_ms": 50.0,
+            "memory_tracking_enabled": True,
+            "baseline_measurements": 10,
         }
-    
+
     # Configure formatters for console, file, and performance logging
     config.formatter_configs = {
-        'console': ConsoleFormatter if console_colors_enabled else LogFormatter,
-        'file': LogFormatter,
-        'performance': PerformanceFormatter
+        "console": ConsoleFormatter if console_colors_enabled else LogFormatter,
+        "file": LogFormatter,
+        "performance": PerformanceFormatter,
     }
-    
+
     # Return comprehensive default configuration ready for system use
     return config
 
 
-def setup_quick_logging(log_level: LogLevel = LogLevel.INFO,
-                       enable_console: bool = True,
-                       enable_colors: bool = True) -> ComponentLogger:
+def setup_quick_logging(
+    log_level: LogLevel = LogLevel.INFO,
+    enable_console: bool = True,
+    enable_colors: bool = True,
+) -> ComponentLogger:
     """
-    Quick setup function for basic logging configuration with minimal parameters, 
+    Quick setup function for basic logging configuration with minimal parameters,
     providing convenient initialization for development and testing scenarios.
-    
+
     Args:
         log_level: Logging level for quick setup configuration
         enable_console: Enable console output for quick logging setup
         enable_colors: Enable color support in console output
-        
+
     Returns:
         ComponentLogger: Configured default logger ready for immediate use
     """
@@ -306,71 +342,76 @@ def setup_quick_logging(log_level: LogLevel = LogLevel.INFO,
             use_development_config=True,
             enable_performance_monitoring=False,
             custom_config_overrides={
-                'log_level': log_level,
-                'enable_console_output': enable_console,
-                'enable_color_output': enable_colors and detect_color_support()
-            }
+                "log_level": log_level,
+                "enable_console_output": enable_console,
+                "enable_color_output": enable_colors and detect_color_support(),
+            },
         )
-        
+
         if not init_success:
             # Fallback to basic logging if initialization fails
             logging.basicConfig(
                 level=log_level.get_numeric_level(),
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             )
-    
+
     # Create console handler with color support if enable_colors and terminal supports it
     if enable_console:
-        formatter_class = ConsoleFormatter if (enable_colors and detect_color_support()) else LogFormatter
+        formatter_class = (
+            ConsoleFormatter
+            if (enable_colors and detect_color_support())
+            else LogFormatter
+        )
         console_formatter = formatter_class()
-        
+
         # Configure basic formatter with specified log level and development-friendly format
         console_handler = create_console_handler(console_formatter)
         console_handler.setLevel(log_level.get_numeric_level())
-    
+
     # Create default component logger with quick configuration settings
     default_logger = get_logger(
-        name='quick_setup',
+        name="quick_setup",
         component_type=ComponentType.UTILS,
         log_level=log_level,
-        enable_performance_tracking=False
+        enable_performance_tracking=False,
     )
-    
+
     # Apply security filtering for sensitive information protection
     # This is automatically handled by the formatters
-    
+
     # Return configured logger ready for immediate use in development or testing
     return default_logger
 
 
-def cleanup_logging_package(shutdown_timeout: float = 10.0,
-                           force_cleanup: bool = False) -> Dict[str, Any]:
+def cleanup_logging_package(
+    shutdown_timeout: float = 10.0, force_cleanup: bool = False
+) -> Dict[str, Any]:
     """
-    Cleans up logging package resources including handlers, loggers, and registry 
+    Cleans up logging package resources including handlers, loggers, and registry
     management for graceful shutdown and resource release.
-    
+
     Args:
         shutdown_timeout: Maximum time in seconds to wait for cleanup completion
         force_cleanup: Force immediate cleanup without graceful shutdown
-        
+
     Returns:
         Dict[str, Any]: Dictionary containing cleanup results including resources freed and handlers closed
     """
     global _package_initialized, _component_loggers_registry, _performance_loggers_registry
     global _default_logging_config, _package_stats
-    
+
     cleanup_start_time = datetime.datetime.now()
-    
+
     try:
         with _initialization_lock:
             # Flush all active loggers and handlers to ensure data integrity
             flushed_handlers = 0
             for logger in _component_loggers_registry.values():
-                if hasattr(logger, 'base_logger'):
+                if hasattr(logger, "base_logger"):
                     for handler in logger.base_logger.handlers:
                         handler.flush()
                         flushed_handlers += 1
-            
+
             # Close file handlers and release file system resources
             closed_handlers = 0
             for handler in logging.root.handlers[:]:
@@ -380,176 +421,208 @@ def cleanup_logging_package(shutdown_timeout: float = 10.0,
                     closed_handlers += 1
                 except Exception as e:
                     logging.warning(f"Error closing handler: {e}")
-            
+
             # Shutdown performance monitoring and export remaining performance data
             performance_reports = {}
             for name, perf_logger in _performance_loggers_registry.items():
                 try:
-                    performance_reports[name] = perf_logger.get_performance_report('summary', False)
+                    performance_reports[name] = perf_logger.get_performance_report(
+                        "summary", False
+                    )
                 except Exception as e:
                     logging.warning(f"Error getting performance report for {name}: {e}")
-            
+
             # Clear component and performance logger registries
             initial_component_count = len(_component_loggers_registry)
             initial_performance_count = len(_performance_loggers_registry)
-            
+
             _component_loggers_registry.clear()
             _performance_loggers_registry.clear()
-            
+
             # Release handler resources and cleanup temporary files
             # This is handled by the individual handler close() methods
-            
+
             # Reset package initialization flags and configuration
             _package_initialized = False
             _default_logging_config = None
-            
+
             # Shutdown the logging system infrastructure
             system_shutdown_results = shutdown_logging_system(
-                shutdown_timeout=shutdown_timeout / 2,
-                force_cleanup=force_cleanup
+                shutdown_timeout=shutdown_timeout / 2, force_cleanup=force_cleanup
             )
-            
+
             # Update cleanup statistics
-            _package_stats['cleanup_operations'] += 1
-            
+            _package_stats["cleanup_operations"] += 1
+
             # Generate cleanup report with resources freed and status information
-            cleanup_duration = (datetime.datetime.now() - cleanup_start_time).total_seconds()
-            
+            cleanup_duration = (
+                datetime.datetime.now() - cleanup_start_time
+            ).total_seconds()
+
             cleanup_results = {
-                'cleanup_completed': True,
-                'cleanup_duration_seconds': cleanup_duration,
-                'resources_freed': {
-                    'component_loggers_cleared': initial_component_count,
-                    'performance_loggers_cleared': initial_performance_count,
-                    'handlers_flushed': flushed_handlers,
-                    'handlers_closed': closed_handlers
+                "cleanup_completed": True,
+                "cleanup_duration_seconds": cleanup_duration,
+                "resources_freed": {
+                    "component_loggers_cleared": initial_component_count,
+                    "performance_loggers_cleared": initial_performance_count,
+                    "handlers_flushed": flushed_handlers,
+                    "handlers_closed": closed_handlers,
                 },
-                'performance_reports': performance_reports,
-                'system_shutdown': system_shutdown_results,
-                'package_statistics': _package_stats.copy(),
-                'cleanup_timestamp': cleanup_start_time.isoformat()
+                "performance_reports": performance_reports,
+                "system_shutdown": system_shutdown_results,
+                "package_statistics": _package_stats.copy(),
+                "cleanup_timestamp": cleanup_start_time.isoformat(),
             }
-            
+
             # Return comprehensive cleanup results dictionary
             return cleanup_results
-            
+
     except Exception as e:
-        cleanup_duration = (datetime.datetime.now() - cleanup_start_time).total_seconds()
+        cleanup_duration = (
+            datetime.datetime.now() - cleanup_start_time
+        ).total_seconds()
         return {
-            'cleanup_completed': False,
-            'cleanup_error': str(e),
-            'cleanup_duration_seconds': cleanup_duration,
-            'partial_cleanup': True,
-            'cleanup_timestamp': cleanup_start_time.isoformat()
+            "cleanup_completed": False,
+            "cleanup_error": str(e),
+            "cleanup_duration_seconds": cleanup_duration,
+            "partial_cleanup": True,
+            "cleanup_timestamp": cleanup_start_time.isoformat(),
         }
 
 
-def get_package_info(include_logger_details: bool = False,
-                    include_performance_stats: bool = False) -> Dict[str, Any]:
+def get_package_info(
+    include_logger_details: bool = False, include_performance_stats: bool = False
+) -> Dict[str, Any]:
     """
-    Returns comprehensive package information including version, configuration status, 
+    Returns comprehensive package information including version, configuration status,
     active loggers, and system health for monitoring and debugging.
-    
+
     Args:
         include_logger_details: Include detailed information about active loggers
         include_performance_stats: Include performance statistics from performance loggers
-        
+
     Returns:
         Dict[str, Any]: Dictionary containing package information, configuration status, and system statistics
     """
     global _package_initialized, _package_init_time, _default_logging_config
     global _component_loggers_registry, _performance_loggers_registry, _package_stats
-    
+
     # Collect package version and initialization status information
     package_info = {
-        'package_version': PACKAGE_VERSION,
-        'logger_name_prefix': LOGGER_NAME_PREFIX,
-        'initialization_status': {
-            'initialized': _package_initialized,
-            'init_time': _package_init_time.isoformat() if _package_init_time else None,
-            'uptime_seconds': (datetime.datetime.now() - _package_init_time).total_seconds() 
-                            if _package_init_time else 0,
-            'has_default_config': _default_logging_config is not None
+        "package_version": PACKAGE_VERSION,
+        "logger_name_prefix": LOGGER_NAME_PREFIX,
+        "initialization_status": {
+            "initialized": _package_initialized,
+            "init_time": _package_init_time.isoformat() if _package_init_time else None,
+            "uptime_seconds": (
+                (datetime.datetime.now() - _package_init_time).total_seconds()
+                if _package_init_time
+                else 0
+            ),
+            "has_default_config": _default_logging_config is not None,
         },
-        'registry_status': {
-            'component_loggers_count': len(_component_loggers_registry),
-            'performance_loggers_count': len(_performance_loggers_registry),
-            'total_active_loggers': len(_component_loggers_registry) + len(_performance_loggers_registry)
+        "registry_status": {
+            "component_loggers_count": len(_component_loggers_registry),
+            "performance_loggers_count": len(_performance_loggers_registry),
+            "total_active_loggers": len(_component_loggers_registry)
+            + len(_performance_loggers_registry),
         },
-        'package_statistics': _package_stats.copy()
+        "package_statistics": _package_stats.copy(),
     }
-    
+
     # Include active logger counts and registry status
     if _component_loggers_registry:
         component_types = {}
         for key in _component_loggers_registry.keys():
-            comp_type = key.split(':')[0] if ':' in key else 'unknown'
+            comp_type = key.split(":")[0] if ":" in key else "unknown"
             component_types[comp_type] = component_types.get(comp_type, 0) + 1
-        package_info['logger_breakdown'] = {
-            'by_component_type': component_types,
-            'performance_operations': list(_performance_loggers_registry.keys())
+        package_info["logger_breakdown"] = {
+            "by_component_type": component_types,
+            "performance_operations": list(_performance_loggers_registry.keys()),
         }
-    
+
     # Add configuration details and handler status information
     if _default_logging_config:
-        package_info['configuration_summary'] = {
-            'log_level': _default_logging_config.log_level.name,
-            'console_output': getattr(_default_logging_config, 'enable_console_output', True),
-            'file_output': getattr(_default_logging_config, 'enable_file_output', False),
-            'color_output': getattr(_default_logging_config, 'enable_color_output', False),
-            'security_filtering': getattr(_default_logging_config, 'security_filtering_enabled', True)
+        package_info["configuration_summary"] = {
+            "log_level": _default_logging_config.log_level.name,
+            "console_output": getattr(
+                _default_logging_config, "enable_console_output", True
+            ),
+            "file_output": getattr(
+                _default_logging_config, "enable_file_output", False
+            ),
+            "color_output": getattr(
+                _default_logging_config, "enable_color_output", False
+            ),
+            "security_filtering": getattr(
+                _default_logging_config, "security_filtering_enabled", True
+            ),
         }
-    
+
     # Include logger details with component types and levels if requested
     if include_logger_details:
         logger_details = {}
         for key, logger in _component_loggers_registry.items():
             try:
                 logger_details[key] = {
-                    'component_name': getattr(logger, 'component_name', 'unknown'),
-                    'log_level': logger.configured_log_level.name if hasattr(logger, 'configured_log_level') else 'unknown',
-                    'creation_time': logger.creation_time.isoformat() if hasattr(logger, 'creation_time') else 'unknown',
-                    'message_count': getattr(logger, 'message_count', 0),
-                    'performance_tracking': getattr(logger, 'performance_tracking_enabled', False)
+                    "component_name": getattr(logger, "component_name", "unknown"),
+                    "log_level": (
+                        logger.configured_log_level.name
+                        if hasattr(logger, "configured_log_level")
+                        else "unknown"
+                    ),
+                    "creation_time": (
+                        logger.creation_time.isoformat()
+                        if hasattr(logger, "creation_time")
+                        else "unknown"
+                    ),
+                    "message_count": getattr(logger, "message_count", 0),
+                    "performance_tracking": getattr(
+                        logger, "performance_tracking_enabled", False
+                    ),
                 }
             except Exception as e:
-                logger_details[key] = {'error': str(e)}
-        
-        package_info['logger_details'] = logger_details
-    
+                logger_details[key] = {"error": str(e)}
+
+        package_info["logger_details"] = logger_details
+
     # Add performance statistics from performance loggers if requested
     if include_performance_stats:
         performance_stats = {}
         for name, perf_logger in _performance_loggers_registry.items():
             try:
                 performance_stats[name] = {
-                    'measurement_count': getattr(perf_logger, 'measurement_count', 0),
-                    'average_timing_ms': getattr(perf_logger, 'average_timing', 0.0),
-                    'threshold_ms': getattr(perf_logger, 'timing_threshold_ms', 0.0),
-                    'memory_tracking': getattr(perf_logger, 'memory_tracking_enabled', False)
+                    "measurement_count": getattr(perf_logger, "measurement_count", 0),
+                    "average_timing_ms": getattr(perf_logger, "average_timing", 0.0),
+                    "threshold_ms": getattr(perf_logger, "timing_threshold_ms", 0.0),
+                    "memory_tracking": getattr(
+                        perf_logger, "memory_tracking_enabled", False
+                    ),
                 }
             except Exception as e:
-                performance_stats[name] = {'error': str(e)}
-        
-        package_info['performance_statistics'] = performance_stats
-    
+                performance_stats[name] = {"error": str(e)}
+
+        package_info["performance_statistics"] = performance_stats
+
     # Include system health indicators and resource utilization
     try:
         system_stats = get_logging_statistics(
             include_performance_data=include_performance_stats,
-            include_registry_details=include_logger_details
+            include_registry_details=include_logger_details,
         )
-        package_info['system_health'] = {
-            'logging_system_active': system_stats.get('system_status', {}).get('logging_initialized', False),
-            'resource_utilization': system_stats.get('resource_utilization', {}),
-            'health_status': 'healthy' if _package_initialized else 'uninitialized'
+        package_info["system_health"] = {
+            "logging_system_active": system_stats.get("system_status", {}).get(
+                "logging_initialized", False
+            ),
+            "resource_utilization": system_stats.get("resource_utilization", {}),
+            "health_status": "healthy" if _package_initialized else "uninitialized",
         }
     except Exception as e:
-        package_info['system_health'] = {'error': str(e)}
-    
+        package_info["system_health"] = {"error": str(e)}
+
     # Format comprehensive package information report
-    package_info['report_generated'] = datetime.datetime.now().isoformat()
-    
+    package_info["report_generated"] = datetime.datetime.now().isoformat()
+
     # Return detailed package information dictionary
     return package_info
 
@@ -557,28 +630,38 @@ def get_package_info(include_logger_details: bool = False,
 # Comprehensive exports for external access to logging infrastructure
 __all__ = [
     # Enums and configuration classes
-    'LogLevel', 'ComponentType', 'LoggingConfig',
-    
+    "LogLevel",
+    "ComponentType",
+    "LoggingConfig",
     # Formatter classes and security infrastructure
-    'LogFormatter', 'ConsoleFormatter', 'PerformanceFormatter', 'SecurityFilter',
-    
+    "LogFormatter",
+    "ConsoleFormatter",
+    "PerformanceFormatter",
+    "SecurityFilter",
     # Handler creation functions (from loggers.py since handlers.py doesn't exist)
-    'ConsoleHandler', 'FileHandler', 'PerformanceHandler',
-    
+    "ConsoleHandler",
+    "FileHandler",
+    "PerformanceHandler",
     # Logger classes for component and performance monitoring
-    'ComponentLogger', 'PerformanceLogger',
-    
+    "ComponentLogger",
+    "PerformanceLogger",
     # Primary logger factory functions
-    'get_logger', 'get_component_logger', 'get_performance_logger',
-    
+    "get_logger",
+    "get_component_logger",
+    "get_performance_logger",
     # Configuration and system management functions
-    'configure_logging', 'configure_development_logging', 'setup_performance_logging',
-    'configure_logging_system',
-    
+    "configure_logging",
+    "configure_development_logging",
+    "setup_performance_logging",
+    "configure_logging_system",
     # Handler factory functions
-    'create_console_handler', 'create_file_handler', 'create_performance_handler',
-    
+    "create_console_handler",
+    "create_file_handler",
+    "create_performance_handler",
     # Package-level initialization and management functions
-    'init_logging_package', 'get_default_config', 'setup_quick_logging',
-    'cleanup_logging_package', 'get_package_info'
+    "init_logging_package",
+    "get_default_config",
+    "setup_quick_logging",
+    "cleanup_logging_package",
+    "get_package_info",
 ]
