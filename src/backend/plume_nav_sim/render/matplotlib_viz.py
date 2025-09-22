@@ -24,9 +24,7 @@ Architecture Integration:
 import atexit  # >=3.10 - Automatic resource cleanup registration for matplotlib figures at program exit
 import os  # >=3.10 - Environment variable detection for headless operation and display availability
 import sys  # >=3.10 - Platform detection and system capability assessment for backend selection
-import threading  # >=3.10 - Thread-safe matplotlib operations and resource cleanup for concurrent access
 import time  # >=3.10 - High-precision timing for performance measurement and interactive update delays
-import warnings  # >=3.10 - Backend compatibility warnings and fallback notifications for matplotlib setup
 from typing import (  # >=3.10 - Type hints for matplotlib renderer type safety
     Dict,
     List,
@@ -53,9 +51,6 @@ from ..core.constants import (
 from ..core.constants import (
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,  # Performance target (<50ms) for human mode rendering operations and timing validation
 )
-from ..core.constants import (
-    SUPPORTED_RENDER_MODES,  # List of supported visualization modes ['rgb_array', 'human'] for mode validation
-)
 
 # Internal imports - Core types and constants for rendering operations
 from ..core.types import (
@@ -75,9 +70,6 @@ from ..utils.exceptions import (
 from ..utils.exceptions import (
     RenderingError,  # Exception handling for rendering operation failures and matplotlib backend errors
 )
-from ..utils.exceptions import (
-    ValidationError,  # Exception handling for rendering parameter validation failures with detailed error context
-)
 from ..utils.logging import (
     get_component_logger,  # Component-specific logger creation for matplotlib renderer with performance monitoring integration
 )
@@ -91,9 +83,6 @@ from .base_renderer import (
 )
 from .base_renderer import (
     RenderContext,  # Immutable rendering context with environment state and visual configuration for consistent renderer operations
-)
-from .base_renderer import (
-    RenderingMetrics,  # Performance metrics tracking for rendering operations with timing analysis and resource monitoring
 )
 
 # Internal imports - Color scheme management and matplotlib integration
@@ -409,7 +398,7 @@ class MatplotlibBackendManager:
             # Attempt to restore original backend on failure
             try:
                 plt.switch_backend(original_backend)
-            except:
+            except Exception:
                 pass  # Ignore restoration errors
             return False
 
@@ -457,7 +446,7 @@ class MatplotlibBackendManager:
                     ["xset", "q"], capture_output=True, text=True, timeout=1
                 )
                 return result.returncode != 0
-        except:
+        except Exception:
             pass  # Assume headless if detection fails
 
         return False
@@ -475,15 +464,19 @@ class MatplotlibBackendManager:
         try:
             # Attempt to import backend module
             if backend_name == "TkAgg":
-                import tkinter
+                import importlib
 
-                import matplotlib.backends.backend_tkagg
+                importlib.import_module("tkinter")
+                importlib.import_module("matplotlib.backends.backend_tkagg")
             elif backend_name == "Qt5Agg":
-                import matplotlib.backends.backend_qt5agg
+                import importlib
 
+                importlib.import_module("matplotlib.backends.backend_qt5agg")
                 # PyQt5 or PySide2 availability test would go here
             elif backend_name == "Agg":
-                import matplotlib.backends.backend_agg
+                import importlib
+
+                importlib.import_module("matplotlib.backends.backend_agg")
 
             return True
 
@@ -533,7 +526,7 @@ class MatplotlibBackendManager:
             # Attempt to restore original backend
             try:
                 plt.switch_backend(original_backend)
-            except:
+            except Exception:
                 pass
             return False
 
@@ -917,7 +910,6 @@ class InteractiveUpdateManager:
                 performance_report["total_changes"] += 1
 
             # Perform coordinated display refresh
-            refresh_start = time.time()
             refresh_duration = self.refresh_display(
                 force_refresh=not optimize_updates, measure_performance=True
             )
@@ -1565,22 +1557,20 @@ def detect_matplotlib_capabilities(
 
             for backend in backends_to_test:
                 try:
-                    # Test backend import and basic functionality
+                    # Test backend import and basic functionality using importlib to avoid unused import warnings
+                    import importlib
+
                     if backend == "TkAgg":
-                        import tkinter
-
-                        import matplotlib.backends.backend_tkagg
-
+                        importlib.import_module("tkinter")
+                        importlib.import_module("matplotlib.backends.backend_tkagg")
                         capabilities["backend_availability"][backend] = True
                         capabilities["gui_toolkits"]["tkinter"] = True
                     elif backend == "Qt5Agg":
-                        import matplotlib.backends.backend_qt5agg
-
+                        importlib.import_module("matplotlib.backends.backend_qt5agg")
                         capabilities["backend_availability"][backend] = True
                         capabilities["gui_toolkits"]["qt5"] = True
                     elif backend == "Agg":
-                        import matplotlib.backends.backend_agg
-
+                        importlib.import_module("matplotlib.backends.backend_agg")
                         capabilities["backend_availability"][backend] = True
 
                 except ImportError:
@@ -1686,7 +1676,6 @@ def configure_matplotlib_backend(
 
             try:
                 # Test backend availability and functionality
-                original_backend = plt.get_backend()
                 plt.switch_backend(backend_name)
 
                 # Test basic functionality with sample operations
@@ -1872,7 +1861,7 @@ def validate_matplotlib_integration(
             # Attempt to restore original backend
             try:
                 plt.switch_backend(original_backend)
-            except:
+            except Exception:
                 pass
 
         # Set integration status based on results

@@ -67,7 +67,7 @@ class PerformanceMetrics:
 
     def record_step(self, duration_ms: float) -> None:
         """Record a single step duration in milliseconds."""
-        self.step_durations_ms.append(float(duration_ms))
+        self.step_durations_ms.append(duration_ms)
         self.total_steps += 1
 
     def record_timing(self, name: str, value_ms: float) -> None:
@@ -75,7 +75,7 @@ class PerformanceMetrics:
         if name == "episode_step":
             self.record_step(value_ms)
             return
-        self.other_timings_ms.setdefault(name, []).append(float(value_ms))
+        self.other_timings_ms.setdefault(name, []).append(value_ms)
 
     def average_step_time_ms(self) -> float:
         """Return the rolling average step duration."""
