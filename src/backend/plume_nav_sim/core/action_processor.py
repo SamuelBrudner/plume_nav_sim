@@ -25,7 +25,7 @@ import numpy as np  # >=2.1.0
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .state import AgentState
-from .typing import ActionType, MovementVector
+from .types import ActionType, MovementVector
 
 
 def validate_action(action: ActionType) -> bool:

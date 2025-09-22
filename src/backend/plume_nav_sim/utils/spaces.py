@@ -45,7 +45,7 @@ from ..core.constants import (
 # Internal imports from core module
 from ..core.enums import Action
 from ..core.geometry import Coordinates, GridSize
-from ..core.typing import ActionType, ObservationType
+from ..core.types import ActionType, ObservationType
 
 # Internal imports from utils module
 from .exceptions import ValidationError

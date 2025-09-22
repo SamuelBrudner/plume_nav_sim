@@ -15,13 +15,52 @@ import logging  # >=3.10 - Logging integration for module initialization and err
 import threading  # >=3.10 - Thread-safe module initialization and registry operations
 import time  # >=3.10 - Timestamp generation for performance monitoring and module tracking
 from typing import (  # >=3.10 - Type hints for comprehensive type safety
-    Any,
     Dict,
     List,
+    Mapping,
     Optional,
     Tuple,
     Union,
+    cast,
 )
+
+from typing_extensions import NotRequired, TypedDict  # 3.10 compatible TypedDict extras
+
+
+# Typed structures for performance and cache reporting
+class PerformanceEntry(TypedDict, total=False):
+    last_execution_time: float
+    execution_count: int
+
+
+class PerformanceImpactEntry(TypedDict):
+    items_cleared: int
+    impact: str
+
+
+class GarbageCollectionInfo(TypedDict):
+    forced: bool
+    objects_collected: int
+    impact: str
+
+
+class CacheSummary(TypedDict, total=False):
+    total_caches_cleared: int
+    total_memory_freed_kb: float
+    total_memory_freed_mb: float
+    operation_successful: bool
+    critical_error: NotRequired[str]
+
+
+class CacheReport(TypedDict, total=False):
+    operation_timestamp: float
+    caches_cleared: List[str]
+    memory_freed_estimate_kb: float
+    performance_impact: Dict[str, PerformanceImpactEntry]
+    errors: List[str]
+    garbage_collection: GarbageCollectionInfo
+    summary: CacheSummary
+
 
 # Core type system imports from shared types module
 from ..core.types import (
@@ -109,9 +148,9 @@ _initialization_timestamp: Optional[float] = None
 _registry_instance: Optional[PlumeModelRegistry] = None
 
 # Performance monitoring and caching
-_performance_cache: Dict[str, Any] = {}
-_field_cache: Dict[str, Any] = {}
-_model_cache: Dict[str, Any] = {}
+_performance_cache: Dict[str, PerformanceEntry] = {}
+_field_cache: Dict[str, object] = {}
+_model_cache: Dict[str, object] = {}
 
 # Module initialization logger
 _logger = logging.getLogger(__name__)
@@ -165,11 +204,9 @@ def initialize_plume_module(
                     )
                 except ImportError as e:
                     _logger.error(f"Critical dependency missing: {e}")
-                    if validate_dependencies:
-                        raise ImportError(
-                            f"Required dependency missing for plume module: {e}"
-                        )
-                    return False
+                    raise ImportError(
+                        f"Required dependency missing for plume module: {e}"
+                    )
 
             # Initialize PlumeModelRegistry with default configuration and thread safety
             _logger.debug("Initializing plume model registry")
@@ -182,7 +219,9 @@ def initialize_plume_module(
                     _registry_instance.register_model(
                         model_type=_DEFAULT_PLUME_TYPE,
                         model_class=StaticGaussianPlume,
-                        description="Built-in static Gaussian plume model for RL environments",
+                        metadata={
+                            "description": "Built-in static Gaussian plume model for RL environments"
+                        },
                     )
                     _logger.info(
                         f"Successfully registered built-in model: {_DEFAULT_PLUME_TYPE}"
@@ -241,7 +280,7 @@ def initialize_plume_module(
 
 def get_plume_module_info(
     include_model_details: bool = True, include_performance_data: bool = False
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """Get comprehensive information about plume module including registered models, capabilities,
     version information, and performance characteristics for debugging and system analysis.
 
@@ -324,14 +363,17 @@ def get_plume_module_info(
 
             # Include recent performance metrics if available
             if _performance_cache:
-                recent_metrics = {}
+                recent_metrics: Dict[str, Dict[str, float | int]] = {}
                 for operation, metrics in _performance_cache.items():
-                    if isinstance(metrics, dict) and "last_execution_time" in metrics:
+                    if "last_execution_time" in metrics:
                         recent_metrics[operation] = {
-                            "last_execution_ms": metrics["last_execution_time"] * 1000,
+                            "last_execution_ms": metrics["last_execution_time"]
+                            * 1000.0,
                             "execution_count": metrics.get("execution_count", 0),
                         }
-                performance_data["recent_metrics"] = recent_metrics
+                performance_data["recent_metrics"] = cast(
+                    Dict[str, object], recent_metrics
+                )
 
             module_info["performance_data"] = performance_data
 
@@ -386,7 +428,7 @@ def clear_plume_caches(
     clear_field_cache: bool = True,
     clear_model_cache: bool = True,
     force_gc: bool = False,
-) -> Dict[str, Any]:
+) -> CacheReport:
     """Clear all plume-related caches including field generation cache, model instance cache,
     and performance data for memory optimization and testing scenarios.
 
@@ -401,7 +443,7 @@ def clear_plume_caches(
     Returns:
         dict: Cache clearing report with memory freed and performance impact analysis
     """
-    cache_report = {
+    cache_report: CacheReport = {
         "operation_timestamp": time.time(),
         "caches_cleared": [],
         "memory_freed_estimate_kb": 0,
@@ -489,7 +531,7 @@ def clear_plume_caches(
                 _logger.error(f"Error during garbage collection: {e}")
 
         # Calculate total memory freed from all cache clearing operations
-        total_memory_freed = cache_report["memory_freed_estimate_kb"]
+        total_memory_freed: float = cache_report["memory_freed_estimate_kb"]
         cache_report["summary"] = {
             "total_caches_cleared": len(cache_report["caches_cleared"]),
             "total_memory_freed_kb": total_memory_freed,
@@ -525,7 +567,9 @@ def clear_plume_caches(
 # Internal utility functions for module management
 
 
-def _estimate_cache_memory_kb(cache_dict: Optional[Dict[str, Any]] = None) -> float:
+def _estimate_cache_memory_kb(
+    cache_dict: Optional[Mapping[str, object]] = None,
+) -> float:
     """Estimate memory usage of cache dictionary in kilobytes."""
     if cache_dict is None:
         return 0.0

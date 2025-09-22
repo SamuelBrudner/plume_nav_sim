@@ -39,7 +39,7 @@ import numpy as np  # >=2.1.0 - Array operations, coordinate calculations, and m
 # Internal imports from core modules for coordinate and action type system integration
 from .enums import Action
 from .geometry import Coordinates, GridSize
-from .typing import ActionType, CoordinateType
+from .types import ActionType, CoordinateType
 
 
 def create_coordinates(coords: CoordinateType) -> Coordinates:

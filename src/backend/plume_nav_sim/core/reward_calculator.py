@@ -42,13 +42,9 @@ from .constants import (
     REWARD_DEFAULT,
     REWARD_GOAL_REACHED,
 )
-from .typing import (
-    AgentState,
-    Coordinates,
-    EpisodeState,
-    PerformanceMetrics,
-    calculate_euclidean_distance,
-)
+from .geometry import Coordinates, calculate_euclidean_distance
+from .state import AgentState, EpisodeState
+from .types import PerformanceMetrics
 
 # Module version and metadata
 REWARD_CALCULATOR_VERSION = "1.0.0"

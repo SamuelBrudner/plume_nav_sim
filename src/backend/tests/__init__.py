@@ -34,52 +34,11 @@ except (
         "Required test fixtures are missing; ensure src/backend/tests/conftest.py is available."
     ) from exc
 
-# Internal imports - Main test classes and functions from test modules
-try:  # pragma: no cover - import guard for optional API compliance tests
-    from .test_environment_api import (  # Main environment API testing class for Gymnasium compliance validation; Core API compliance test functions
-        TestEnvironmentAPI,
-        test_environment_inheritance,
-        test_gymnasium_api_compliance,
-        test_seeding_and_reproducibility,
-    )
-except (
-    ModuleNotFoundError
-) as exc:  # pragma: no cover - exercised only in minimal kata builds
-    raise ImportError(
-        "Environment API tests are unavailable; ensure test_environment_api.py is present."
-    ) from exc
-
-# Performance modules are optional in the pared-down kata repository.  Guard the imports
-# so we can still run lightweight contract tests without the heavy Gymnasium dependency
-# tree.
-try:  # pragma: no cover - import guard for optional performance tests
-    from .test_performance import (  # Performance validation test class for benchmarking and performance target verification; Performance test functions for latency and resource validation
-        TestPerformanceValidation,
-        test_comprehensive_performance_suite,
-        test_environment_step_latency_performance,
-        test_memory_usage_constraints,
-    )
-except (
-    ModuleNotFoundError,
-    ImportError,
-) as exc:  # pragma: no cover - exercised only in minimal kata builds
-    raise ImportError(
-        "Performance test suite could not be imported; ensure test_performance.py and its dependencies are available."
-    ) from exc
-
-try:  # pragma: no cover - import guard for optional integration tests
-    from .test_integration import (  # Main integration test class for cross-component coordination and system-level testing; Integration test functions for end-to-end workflow validation
-        TestEnvironmentIntegration,
-        test_complete_episode_workflow,
-        test_cross_component_seeding,
-        test_system_level_performance,
-    )
-except (
-    ModuleNotFoundError
-) as exc:  # pragma: no cover - exercised only in minimal kata builds
-    raise ImportError(
-        "The integration test module is missing; add tests/test_integration.py to restore coverage."
-    ) from exc
+"""
+Avoid importing individual test modules here. Pytest will discover tests on its
+own, and importing them at package import time can cause import-time side
+effects and optional-dependency failures (e.g., psutil in performance tests).
+"""
 
 # Package metadata and version information
 __version__ = "0.0.1"  # Test package version for compatibility and version tracking

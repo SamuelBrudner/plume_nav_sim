@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .constants import (
     DEFAULT_GOAL_RADIUS,
@@ -21,7 +22,6 @@ from .geometry import Coordinates, GridSize, calculate_euclidean_distance
 from .models import PlumeModel
 from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
-from .typing import RGBArray
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from ..utils.exceptions import ValidationError as _ValidationError
@@ -51,20 +51,34 @@ ObservationType = np.ndarray
 RewardType = float
 InfoType = Dict[str, Any]
 
+RGBArray = NDArray[np.uint8]
+
 PlumeParameters = PlumeModel
 
 
 @dataclass
 class PerformanceMetrics:
-    """Minimal performance metrics container shared across components."""
+    """Minimal performance metrics container shared across components.
+
+    Provides step timing capture plus a simple record_timing/get_performance_summary
+    interface used by higher-level modules.
+    """
 
     step_durations_ms: list[float] = field(default_factory=list)
     total_steps: int = 0
+    other_timings_ms: Dict[str, list[float]] = field(default_factory=dict)
 
     def record_step(self, duration_ms: float) -> None:
         """Record a single step duration in milliseconds."""
         self.step_durations_ms.append(float(duration_ms))
         self.total_steps += 1
+
+    def record_timing(self, name: str, value_ms: float) -> None:
+        """Generic timing recorder; maps the "episode_step" series to record_step."""
+        if name == "episode_step":
+            self.record_step(value_ms)
+            return
+        self.other_timings_ms.setdefault(name, []).append(float(value_ms))
 
     def average_step_time_ms(self) -> float:
         """Return the rolling average step duration."""
@@ -78,6 +92,19 @@ class PerformanceMetrics:
             "total_steps": self.total_steps,
             "average_step_time_ms": self.average_step_time_ms(),
             "step_durations_ms": list(self.step_durations_ms),
+            "other_timings_ms": {k: list(v) for k, v in self.other_timings_ms.items()},
+        }
+
+    def get_performance_summary(self) -> Dict[str, Any]:
+        """Return a lightweight summary compatible with EpisodeManager consumers."""
+        total_ms = sum(self.step_durations_ms)
+        return {
+            "total_step_time_ms": total_ms,
+            "average_step_time_ms": self.average_step_time_ms(),
+            "timings": {
+                "episode_step": list(self.step_durations_ms),
+                **{k: list(v) for k, v in self.other_timings_ms.items()},
+            },
         }
 
 

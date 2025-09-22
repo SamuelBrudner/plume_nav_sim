@@ -34,7 +34,7 @@ from plume_nav_sim.core.enums import RenderMode
 
 # Core types for template sizing and positioning
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.typing import RGBArray
+from plume_nav_sim.core.types import RGBArray
 
 # Performance constants and configuration
 from ..plume_nav_sim.core.constants import (

@@ -42,15 +42,13 @@ from .constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 
-# Internal imports - core types and data structures
-from .typing import (
-    Action,
-    AgentState,
-    Coordinates,
-    EpisodeState,
-    GridSize,
+# Internal imports - core types and data structures (single source of truth)
+from .enums import Action
+from .geometry import Coordinates, GridSize
+from .snapshots import StateSnapshot
+from .state import AgentState, EpisodeState
+from .types import (
     PerformanceMetrics,
-    StateSnapshot,
     create_agent_state,
     create_coordinates,
     create_episode_state,

@@ -50,7 +50,7 @@ from ..core.constants import (
 from ..core.enums import Action, RenderMode
 from ..core.geometry import Coordinates, GridSize
 from ..core.models import PlumeModel as PlumeParameters
-from ..core.typing import ActionType
+from ..core.types import ActionType
 
 # Internal imports from utilities
 from .exceptions import (

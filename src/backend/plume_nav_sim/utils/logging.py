@@ -31,7 +31,11 @@ from typing import (  # >=3.10
     Type,
     TypeVar,
     Union,
+    cast,
+    overload,
 )
+
+from typing_extensions import ParamSpec
 
 # Core system constants for component identification and configuration
 from ..core.constants import (
@@ -117,6 +121,7 @@ _logging_initialized: bool = False
 _cache_lock: threading.Lock = threading.Lock()
 
 _T = TypeVar("_T")
+P = ParamSpec("P")
 
 # Default configuration for component loggers with security and performance features
 DEFAULT_LOGGER_CONFIG = {
@@ -482,11 +487,26 @@ def log_performance(
         logging.getLogger(PACKAGE_NAME).error(f"Performance logging failed: {e}")
 
 
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+@overload
+def monitor_performance(func: F) -> F: ...
+
+
+@overload
+def monitor_performance(
+    operation_name: Optional[str] = ...,
+    performance_threshold_ms: Optional[float] = ...,
+    compare_to_baseline: bool = ...,
+) -> Callable[[F], F]: ...
+
+
 def monitor_performance(
     operation_name: Optional[str] = None,
     performance_threshold_ms: Optional[float] = None,
     compare_to_baseline: bool = False,
-):
+) -> Any:
     """Decorator to measure execution time and log performance metrics.
 
     Supports optional performance thresholds and baseline comparisons. Can be used
@@ -495,10 +515,10 @@ def monitor_performance(
     """
 
     if callable(operation_name):  # Decorator used without parentheses
-        func = operation_name
-        return monitor_performance()(func)
+        func = operation_name  # type: ignore[assignment]
+        return monitor_performance()(func)  # type: ignore[misc]
 
-    def decorator(func: Callable[..., _T]) -> Callable[..., _T]:
+    def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             start_time = time.perf_counter()
@@ -526,7 +546,7 @@ def monitor_performance(
 
             return result
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
