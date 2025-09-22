@@ -9,19 +9,16 @@ management, and parameter security.
 import dataclasses  # >=3.10 - Data classes for validation context, results, and configuration structures
 
 # Standard library imports with version comments
-import functools  # >=3.10 - Caching decorators for performance optimization of validation operations with LRU cache
 import inspect  # >=3.10 - Caller information extraction for validation error context and debugging support
 import logging  # >=3.10 - Validation operation logging, error reporting, and performance monitoring for development debugging
 import re  # >=3.10 - Regular expression validation for string parameters and input sanitization
 import time  # >=3.10 - Performance timing measurements for validation operations and latency monitoring
-import warnings  # >=3.10 - Validation warnings for deprecated parameters, performance issues, and compatibility concerns
 from typing import (  # >=3.10 - Advanced type hints for validation functions, parameter specifications, and return type annotations
     Any,
     Callable,
     Dict,
     List,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -33,7 +30,6 @@ from config.default_config import EnvironmentConfig
 from ..core.constants import (
     ACTION_SPACE_SIZE,
     CONCENTRATION_RANGE,
-    DEFAULT_GRID_SIZE,
     MAX_GRID_SIZE,
     MAX_PLUME_SIGMA,
     MEMORY_LIMIT_TOTAL_MB,
@@ -43,7 +39,6 @@ from ..core.constants import (
     SEED_MAX_VALUE,
     SEED_MIN_VALUE,
     SUPPORTED_RENDER_MODES,
-    VALIDATION_ERROR_MESSAGES,
 )
 
 # Internal imports from core types and constants
@@ -53,12 +48,7 @@ from ..core.models import PlumeModel as PlumeParameters
 from ..core.types import ActionType
 
 # Internal imports from utilities
-from .exceptions import (
-    ConfigurationError,
-    ResourceError,
-    ValidationError,
-    sanitize_error_context,
-)
+from .exceptions import ConfigurationError, ResourceError, ValidationError
 from .spaces import validate_action, validate_observation
 
 # Global validation configuration constants
@@ -1965,7 +1955,7 @@ def validate_performance_constraints(
                 start_time = time.perf_counter()
                 for _ in range(1000):
                     x = np.random.random()
-                    y = np.sqrt(x)
+                    np.sqrt(x)
                 benchmark_time = (
                     (time.perf_counter() - start_time) * 1000 / 1000
                 )  # Per operation in ms
@@ -2659,7 +2649,6 @@ def optimize_validation_performance(
             optimization_results["optimizations_applied"].append("memory_optimization")
 
         # Generate performance improvement estimates
-        baseline_latency = 10.0  # Assumed baseline in ms
         estimated_improvement = 0.0
 
         if "aggressive_caching" in optimization_results["optimizations_applied"]:
