@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 import tracemalloc
-from collections.abc import MutableMapping, Iterator
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, Optional
 
@@ -15,7 +15,9 @@ import pytest
 
 try:
     import psutil as _psutil
-except ImportError:  # pragma: no cover - dependency may be unavailable in lightweight environments
+except (
+    ImportError
+):  # pragma: no cover - dependency may be unavailable in lightweight environments
     _psutil = None
 
 
@@ -31,6 +33,7 @@ def _require_psutil() -> "psutil":
         raise RuntimeError(message)
     return _psutil
 
+
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,8 @@ except Exception:  # pragma: no cover - matplotlib is optional in CI
     matplotlib_available = False
 
 single_threaded_only = False
+
+
 @dataclass
 class PerformanceTracker(MutableMapping[str, Any]):
     """Lightweight performance tracker used by the edge-case suite.
@@ -115,7 +120,11 @@ class PerformanceTracker(MutableMapping[str, Any]):
 
     def get_metrics(self) -> Dict[str, float | int | str | None]:
         with self._lock:
-            average = sum(self._step_durations) / len(self._step_durations) if self._step_durations else 0.0
+            average = (
+                sum(self._step_durations) / len(self._step_durations)
+                if self._step_durations
+                else 0.0
+            )
             maximum = max(self._step_durations) if self._step_durations else 0.0
             total_runtime = 0.0
             if self._start_time is not None and self._session_name is not None:
@@ -147,7 +156,9 @@ class PerformanceTracker(MutableMapping[str, Any]):
             self._total_steps = 0
             self._store["timing_measurements"] = self._step_durations
             self._store.setdefault("memory_samples", []).clear()
-            self._store["baseline_memory"] = self._process.memory_info().rss / (1024 * 1024)
+            self._store["baseline_memory"] = self._process.memory_info().rss / (
+                1024 * 1024
+            )
 
 
 class MemoryMonitor:
@@ -249,7 +260,9 @@ def test_environment_manager() -> TestEnvironmentManager:
 
 
 @pytest.fixture
-def edge_case_test_env(performance_tracker: PerformanceTracker) -> Generator[PlumeSearchEnv, None, None]:
+def edge_case_test_env(
+    performance_tracker: PerformanceTracker,
+) -> Generator[PlumeSearchEnv, None, None]:
     """Provision a deterministic environment instrumented for the edge-case suite."""
 
     environment = create_plume_search_env(grid_size=(64, 64), source_location=(32, 32))
@@ -306,7 +319,9 @@ def integration_test_env() -> Generator[PlumeSearchEnv, None, None]:
 
 
 @pytest.fixture
-def performance_test_env(performance_tracker: PerformanceTracker) -> Generator[PlumeSearchEnv, None, None]:
+def performance_test_env(
+    performance_tracker: PerformanceTracker,
+) -> Generator[PlumeSearchEnv, None, None]:
     """Environment instrumented for performance tests."""
 
     env = create_plume_search_env(grid_size=(32, 32))

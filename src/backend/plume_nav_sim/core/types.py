@@ -7,13 +7,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .constants import (
-    DEFAULT_GRID_SIZE,
-    DEFAULT_SOURCE_LOCATION,
-    DEFAULT_MAX_STEPS,
     DEFAULT_GOAL_RADIUS,
+    DEFAULT_GRID_SIZE,
+    DEFAULT_MAX_STEPS,
     DEFAULT_PLUME_SIGMA,
+    DEFAULT_SOURCE_LOCATION,
     MOVEMENT_VECTORS,
 )
 from .enums import Action, RenderMode
@@ -21,7 +22,6 @@ from .geometry import Coordinates, GridSize, calculate_euclidean_distance
 from .models import PlumeModel
 from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
-from .typing import RGBArray
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from ..utils.exceptions import ValidationError as _ValidationError
@@ -30,7 +30,9 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
 def _validation_error_class():
     """Return the canonical ValidationError class on demand."""
 
-    from ..utils.exceptions import ValidationError as _ValidationError  # Local import avoids circular dependency
+    from ..utils.exceptions import (
+        ValidationError as _ValidationError,  # Local import avoids circular dependency
+    )
 
     return _ValidationError
 
@@ -40,6 +42,7 @@ def _raise_validation_error(message: str, **kwargs: Any) -> None:
 
     raise _validation_error_class()(message, **kwargs)
 
+
 CoordinateType = Union[Coordinates, Tuple[int, int], Sequence[int]]
 GridDimensions = Union[GridSize, Tuple[int, int], Sequence[int]]
 MovementVector = Tuple[int, int]
@@ -48,19 +51,34 @@ ObservationType = np.ndarray
 RewardType = float
 InfoType = Dict[str, Any]
 
+RGBArray = NDArray[np.uint8]
+
 PlumeParameters = PlumeModel
+
 
 @dataclass
 class PerformanceMetrics:
-    """Minimal performance metrics container shared across components."""
+    """Minimal performance metrics container shared across components.
+
+    Provides step timing capture plus a simple record_timing/get_performance_summary
+    interface used by higher-level modules.
+    """
 
     step_durations_ms: list[float] = field(default_factory=list)
     total_steps: int = 0
+    other_timings_ms: Dict[str, list[float]] = field(default_factory=dict)
 
     def record_step(self, duration_ms: float) -> None:
         """Record a single step duration in milliseconds."""
         self.step_durations_ms.append(float(duration_ms))
         self.total_steps += 1
+
+    def record_timing(self, name: str, value_ms: float) -> None:
+        """Generic timing recorder; maps the "episode_step" series to record_step."""
+        if name == "episode_step":
+            self.record_step(value_ms)
+            return
+        self.other_timings_ms.setdefault(name, []).append(float(value_ms))
 
     def average_step_time_ms(self) -> float:
         """Return the rolling average step duration."""
@@ -74,6 +92,19 @@ class PerformanceMetrics:
             "total_steps": self.total_steps,
             "average_step_time_ms": self.average_step_time_ms(),
             "step_durations_ms": list(self.step_durations_ms),
+            "other_timings_ms": {k: list(v) for k, v in self.other_timings_ms.items()},
+        }
+
+    def get_performance_summary(self) -> Dict[str, Any]:
+        """Return a lightweight summary compatible with EpisodeManager consumers."""
+        total_ms = sum(self.step_durations_ms)
+        return {
+            "total_step_time_ms": total_ms,
+            "average_step_time_ms": self.average_step_time_ms(),
+            "timings": {
+                "episode_step": list(self.step_durations_ms),
+                **{k: list(v) for k, v in self.other_timings_ms.items()},
+            },
         }
 
 
@@ -144,7 +175,9 @@ class EnvironmentConfig:
                 grid_compatibility=grid,
             )
 
-        _raise_validation_error("plume_params must be a PlumeParameters instance or mapping")
+        _raise_validation_error(
+            "plume_params must be a PlumeParameters instance or mapping"
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize configuration for downstream consumers."""
@@ -195,7 +228,9 @@ def create_coordinates(value: CoordinateType) -> Coordinates:
     if isinstance(value, Sequence):
         x, y = _coerce_pair(value, name="Coordinates")
         return Coordinates(x=x, y=y)
-    _raise_validation_error("Coordinates must be a Coordinates instance or length-2 sequence")
+    _raise_validation_error(
+        "Coordinates must be a Coordinates instance or length-2 sequence"
+    )
 
 
 def create_grid_size(value: GridDimensions) -> GridSize:
@@ -310,13 +345,16 @@ def validate_action(action: ActionType) -> Action:
         return action
     if isinstance(action, int) and action in MOVEMENT_VECTORS:
         return Action(action)
-    _raise_validation_error("Action must be an Action enum or integer in the action space")
+    _raise_validation_error(
+        "Action must be an Action enum or integer in the action space"
+    )
 
 
 def get_movement_vector(action: ActionType) -> MovementVector:
     """Return the movement vector associated with an action."""
     validated = validate_action(action)
     return validated.to_vector()
+
 
 def __getattr__(name: str) -> Any:
     if name == "ValidationError":

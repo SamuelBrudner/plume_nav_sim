@@ -14,9 +14,9 @@ that diagnosing future regressions is straightforward.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,9 @@ class PerformanceTestUtilities:
             raise ValueError("repetitions must be a positive integer")
 
         logger.info(
-            "Benchmarking operation '%s' for %s repetitions", operation_name, repetitions
+            "Benchmarking operation '%s' for %s repetitions",
+            operation_name,
+            repetitions,
         )
 
         start = time.perf_counter()
@@ -105,7 +107,11 @@ class PerformanceTestUtilities:
         result = BenchmarkResult(
             operation_name=operation_name,
             duration_seconds=duration,
-            metadata={**(metadata or {}), "repetitions": repetitions, "last_result": last_result},
+            metadata={
+                **(metadata or {}),
+                "repetitions": repetitions,
+                "last_result": last_result,
+            },
         )
         self._results.append(result)
 

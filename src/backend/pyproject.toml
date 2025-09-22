@@ -16,7 +16,7 @@ maintainers = [
 ]
 keywords = [
     "reinforcement learning",
-    "gymnasium", 
+    "gymnasium",
     "plume navigation",
     "chemical plume",
     "simulation",
@@ -35,7 +35,7 @@ classifiers = [
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11", 
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
@@ -56,12 +56,17 @@ Changelog = "https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "pytest-cov>=4.0.0", 
+    "pytest-cov>=4.0.0",
     "pytest-xdist>=3.0.0",
     "black>=24.0.0",
     "flake8>=7.0.0",
+    "flake8-bugbear>=24.0.0",
+    "flake8-comprehensions>=3.14.0",
     "mypy>=1.8.0",
-    "isort>=5.12.0"
+    "isort>=5.12.0",
+    "tomli>=2.0.1",
+    "types-requests",
+    "types-setuptools"
 ]
 security = [
     "bandit>=1.7.0",
@@ -70,7 +75,7 @@ security = [
 test = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "pytest-xdist>=3.0.0", 
+    "pytest-xdist>=3.0.0",
     "pytest-benchmark>=4.0.0",
     "pytest-mock>=3.12.0"
 ]
@@ -92,13 +97,14 @@ plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
+pythonpath = ["src/backend"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*", "*Test"]
 python_functions = ["test_*"]
 addopts = "-ra --strict-markers --strict-config"
 markers = [
     "unit: marks unit tests",
-    "integration: marks integration tests", 
+    "integration: marks integration tests",
     "performance: marks performance tests",
     "slow: marks slow running tests"
 ]
@@ -158,7 +164,7 @@ extend-ignore = ["E203", "W503", "E501", "F401"]
 exclude = [".git", "__pycache__", "build", "dist", ".tox", ".pytest_cache", "*.egg-info"]
 select = ["E", "W", "F", "C"]
 max-complexity = 10
-per-file-ignores = ["__init__.py:F401", "tests/*:F401,F811", "examples/*:F401,E402", "conftest.py:F401"]
+per-file-ignores = ["__init__.py:F401,F403,F405", "tests/*:F401,F811", "examples/*:F401,E402", "conftest.py:F401"]
 count = true
 statistics = true
 

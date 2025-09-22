@@ -44,7 +44,12 @@ from ..core.constants import (
     SEED_MIN_VALUE,
 )
 from ..core.types import Action
-from ..utils.exceptions import ConfigurationError, RenderingError, StateError, ValidationError
+from ..utils.exceptions import (
+    ConfigurationError,
+    RenderingError,
+    StateError,
+    ValidationError,
+)
 
 __all__ = ["PlumeSearchEnv", "create_plume_search_env", "validate_plume_search_config"]
 
@@ -61,7 +66,9 @@ def _validate_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int]
         width = int(grid_size[0])
         height = int(grid_size[1])
     except (TypeError, ValueError, IndexError) as exc:  # pragma: no cover - defensive
-        raise ConfigurationError("grid_size must be a length-2 iterable of integers") from exc
+        raise ConfigurationError(
+            "grid_size must be a length-2 iterable of integers"
+        ) from exc
 
     if width <= 0 or height <= 0:
         raise ConfigurationError("grid_size values must be positive integers")
@@ -69,7 +76,9 @@ def _validate_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int]
     return width, height
 
 
-def _validate_source_location(source: Optional[Tuple[int, int]], grid: Tuple[int, int]) -> Tuple[int, int]:
+def _validate_source_location(
+    source: Optional[Tuple[int, int]], grid: Tuple[int, int]
+) -> Tuple[int, int]:
     """Validate that the source lies within the configured grid bounds."""
 
     if source is None:
@@ -81,7 +90,9 @@ def _validate_source_location(source: Optional[Tuple[int, int]], grid: Tuple[int
         x = int(source[0])
         y = int(source[1])
     except (TypeError, ValueError, IndexError) as exc:  # pragma: no cover - defensive
-        raise ConfigurationError("source_location must be a length-2 iterable of integers") from exc
+        raise ConfigurationError(
+            "source_location must be a length-2 iterable of integers"
+        ) from exc
 
     width, height = grid
     if not (0 <= x < width and 0 <= y < height):
@@ -125,10 +136,15 @@ def _resolve_seed(seed: Optional[Any]) -> Optional[int]:
     elif isinstance(seed, float) and seed.is_integer():
         seed_value = int(seed)
     else:
-        raise ValidationError("Seed must be an integer, float integral value, or None", parameter_name="seed")
+        raise ValidationError(
+            "Seed must be an integer, float integral value, or None",
+            parameter_name="seed",
+        )
 
     if not (SEED_MIN_VALUE <= seed_value <= SEED_MAX_VALUE):
-        raise ValidationError("Seed is outside the supported range", parameter_name="seed")
+        raise ValidationError(
+            "Seed is outside the supported range", parameter_name="seed"
+        )
 
     return seed_value
 
@@ -182,7 +198,9 @@ class PlumeSearchEnv:
                 sorted(kwargs.keys()),
             )
         self.grid_size = _validate_grid_size(grid_size)
-        self.source_location = _validate_source_location(source_location, self.grid_size)
+        self.source_location = _validate_source_location(
+            source_location, self.grid_size
+        )
 
         if max_steps is None:
             max_steps = DEFAULT_MAX_STEPS
@@ -204,7 +222,9 @@ class PlumeSearchEnv:
         self._rng_seed: Optional[int] = None
         self._rng = np.random.default_rng()
         self.action_space = _DiscreteActionSpace(self._rng)
-        self.observation_space = _ObservationSpace(shape=(self.grid_size[0], self.grid_size[1], 1))
+        self.observation_space = _ObservationSpace(
+            shape=(self.grid_size[0], self.grid_size[1], 1)
+        )
 
         self._step_count = 0
         self._episode_active = False
@@ -225,7 +245,11 @@ class PlumeSearchEnv:
     # Internal helpers
     def _ensure_active(self) -> None:
         if self._closed:
-            raise StateError("Environment has been closed", current_state="closed", component_name="env")
+            raise StateError(
+                "Environment has been closed",
+                current_state="closed",
+                component_name="env",
+            )
 
     def _update_rng(self, seed: Optional[int]) -> None:
         if seed is None:
@@ -248,7 +272,7 @@ class PlumeSearchEnv:
 
     def _compute_concentration(self, position: Tuple[int, int]) -> float:
         distance = self._compute_distance(position)
-        exponent = -((distance ** 2) / (2 * (self._sigma ** 2)))
+        exponent = -((distance**2) / (2 * (self._sigma**2)))
         value = math.exp(exponent)
         return max(0.0, min(1.0, value))
 
@@ -270,7 +294,9 @@ class PlumeSearchEnv:
 
     # ------------------------------------------------------------------
     # Gymnasium-style API
-    def reset(self, *, seed: Optional[Any] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def reset(
+        self, *, seed: Optional[Any] = None, options: Optional[Dict[str, Any]] = None
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         with self._lock:
             self._ensure_active()
             resolved_seed = _resolve_seed(seed)
@@ -278,19 +304,29 @@ class PlumeSearchEnv:
             self._step_count = 0
             self._episode_active = True
             self._agent_position = self._random_agent_position()
-            logger.debug("Environment reset with seed=%s position=%s", resolved_seed, self._agent_position)
+            logger.debug(
+                "Environment reset with seed=%s position=%s",
+                resolved_seed,
+                self._agent_position,
+            )
             return self._observation(), self._info()
 
     def step(self, action: Any) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         with self._lock:
             self._ensure_active()
             if not self._episode_active:
-                raise StateError("Environment must be reset before stepping", current_state="inactive", component_name="env")
+                raise StateError(
+                    "Environment must be reset before stepping",
+                    current_state="inactive",
+                    component_name="env",
+                )
 
             try:
                 action_enum = Action(int(action))
             except (ValueError, TypeError):
-                raise ValidationError("Action must be an integer in range [0, 3]", parameter_name="action")
+                raise ValidationError(
+                    "Action must be an integer in range [0, 3]", parameter_name="action"
+                )
 
             dx, dy = action_enum.to_vector()
             x, y = self._agent_position
@@ -325,7 +361,9 @@ class PlumeSearchEnv:
             self._ensure_active()
             mode = mode or "human"
             if mode not in self.metadata["render_modes"]:
-                raise RenderingError(f"Unsupported render mode: {mode}", render_mode=mode)
+                raise RenderingError(
+                    f"Unsupported render mode: {mode}", render_mode=mode
+                )
 
             if mode == "rgb_array":
                 return self._render_rgb_array()
@@ -341,7 +379,9 @@ class PlumeSearchEnv:
                 plt.close(fig)
                 return None
             except Exception as exc:  # pragma: no cover - exercised via tests
-                logger.warning("Human rendering failed, falling back to rgb_array: %s", exc)
+                logger.warning(
+                    "Human rendering failed, falling back to rgb_array: %s", exc
+                )
                 try:
                     return self._render_rgb_array()
                 except Exception as fallback_exc:  # pragma: no cover - defensive
@@ -361,7 +401,9 @@ class PlumeSearchEnv:
     # Additional helpers exercised by the tests
     def validate_environment_integrity(self) -> bool:
         with self._lock:
-            healthy = not self._closed and self.grid_size[0] > 0 and self.grid_size[1] > 0
+            healthy = (
+                not self._closed and self.grid_size[0] > 0 and self.grid_size[1] > 0
+            )
             healthy = healthy and isinstance(self._rng_seed, (int, type(None)))
             healthy = healthy and isinstance(self._agent_position, tuple)
             return healthy
@@ -399,8 +441,11 @@ def validate_plume_search_config(**kwargs: Any) -> Dict[str, Any]:
 
     grid = _validate_grid_size(kwargs.get("grid_size"))
     source = _validate_source_location(kwargs.get("source_location"), grid)
-    sigma = _validate_sigma(kwargs.get("plume_params", {}).get("sigma") if kwargs.get("plume_params") else None)
+    sigma = _validate_sigma(
+        kwargs.get("plume_params", {}).get("sigma")
+        if kwargs.get("plume_params")
+        else None
+    )
     result = {"grid_size": grid, "source_location": source, "sigma": sigma}
     logger.debug("Validated plume configuration: %s", result)
     return result
-

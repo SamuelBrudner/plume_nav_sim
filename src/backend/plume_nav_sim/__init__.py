@@ -2,55 +2,65 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, cast
+
+from typing_extensions import NotRequired, TypedDict
 
 from .core import (
+    DEFAULT_GOAL_RADIUS,
+    DEFAULT_GRID_SIZE,
+    DEFAULT_MAX_STEPS,
+    DEFAULT_PLUME_SIGMA,
+    DEFAULT_SOURCE_LOCATION,
+    ENVIRONMENT_ID,
     PACKAGE_NAME,
     PACKAGE_VERSION,
-    ENVIRONMENT_ID,
-    DEFAULT_GRID_SIZE,
-    DEFAULT_SOURCE_LOCATION,
-    DEFAULT_MAX_STEPS,
-    DEFAULT_GOAL_RADIUS,
-    DEFAULT_PLUME_SIGMA,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
+    PERFORMANCE_TARGET_STEP_LATENCY_MS,
     Action,
-    RenderMode,
-    Coordinates,
-    GridSize,
-    AgentState,
-    EpisodeState,
-    PlumeParameters,
-    EnvironmentConfig,
-    StateSnapshot,
-    PerformanceMetrics,
     ActionType,
+    AgentState,
+    Coordinates,
     CoordinateType,
+    EnvironmentConfig,
+    EpisodeState,
     GridDimensions,
+    GridSize,
+    InfoType,
     MovementVector,
     ObservationType,
+    PerformanceMetrics,
+    PlumeParameters,
+    RenderMode,
     RewardType,
-    InfoType,
+    StateSnapshot,
     calculate_euclidean_distance,
-    create_coordinates,
-    create_grid_size,
     create_agent_state,
-    create_episode_state,
+    create_coordinates,
     create_environment_config,
+    create_episode_state,
+    create_grid_size,
     create_step_info,
-    validate_action,
     get_movement_vector,
+    validate_action,
 )
 
+# Optional environment exports (import may fail if optional deps are missing)
+# Predeclare symbols with precise optional types to satisfy mypy strict rules.
+PlumeSearchEnv: Optional[object]
+create_plume_search_env: Optional[object]
+_ENV_IMPORT_ERROR: Optional[Exception] = None
+
 try:
-    from .envs import PlumeSearchEnv, create_plume_search_env
+    from .envs import PlumeSearchEnv as _PlumeSearchEnv
+    from .envs import create_plume_search_env as _create_plume_search_env
+
+    PlumeSearchEnv = _PlumeSearchEnv
+    create_plume_search_env = _create_plume_search_env
 except Exception as env_import_error:  # pragma: no cover - optional dependency guard
-    PlumeSearchEnv = None  # type: ignore[assignment]
-    create_plume_search_env = None  # type: ignore[assignment]
+    PlumeSearchEnv = None
+    create_plume_search_env = None
     _ENV_IMPORT_ERROR = env_import_error
-else:
-    _ENV_IMPORT_ERROR: Optional[Exception] = None
 
 
 def initialize_package(
@@ -58,7 +68,7 @@ def initialize_package(
     configure_logging: bool = True,
     auto_register_environment: bool = True,
     validate_constants: bool = False,
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """Initialize core plume_nav_sim subsystems and return status information.
 
     This compatibility helper keeps the legacy package-level bootstrap routine
@@ -80,7 +90,7 @@ def initialize_package(
         captured errors for optional steps.
     """
 
-    status: Dict[str, Any] = {
+    status: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
         "package_version": PACKAGE_VERSION,
         "environment_id": ENVIRONMENT_ID,
@@ -98,7 +108,10 @@ def initialize_package(
             configure_logging_for_development()
             status["logging_configured"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            status["errors"].append({"step": "configure_logging", "error": str(exc)})
+            # errors is a List[dict[str, str]] but stored in a heterogeneous mapping
+            errors = status.get("errors")
+            if isinstance(errors, list):
+                errors.append({"step": "configure_logging", "error": str(exc)})
             status["initialized"] = False
 
     if auto_register_environment:
@@ -108,7 +121,9 @@ def initialize_package(
             ensure_registered()
             status["environment_registered"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            status["errors"].append({"step": "register_environment", "error": str(exc)})
+            errors = status.get("errors")
+            if isinstance(errors, list):
+                errors.append({"step": "register_environment", "error": str(exc)})
             status["initialized"] = False
 
     if validate_constants:
@@ -119,7 +134,9 @@ def initialize_package(
             status["constants_validated"] = bool(is_valid)
             status["constant_validation_report"] = report
         except Exception as exc:  # pragma: no cover - defensive guard
-            status["errors"].append({"step": "validate_constants", "error": str(exc)})
+            errors = status.get("errors")
+            if isinstance(errors, list):
+                errors.append({"step": "validate_constants", "error": str(exc)})
             status["initialized"] = False
 
     return status
@@ -131,10 +148,10 @@ def get_package_info(
     include_defaults: bool = True,
     include_performance_targets: bool = True,
     include_registration_status: bool = False,
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """Return high-level package metadata for tooling and legacy scripts."""
 
-    info: Dict[str, Any] = {
+    info: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
         "package_version": PACKAGE_VERSION,
         "environment_id": ENVIRONMENT_ID,
@@ -156,7 +173,14 @@ def get_package_info(
         }
 
     if include_environment_info:
-        environment_details: Dict[str, Any] = {
+
+        class EnvironmentDetails(TypedDict, total=False):
+            available: List[str]
+            factory: NotRequired[str]
+            module: NotRequired[str]
+            error: NotRequired[str]
+
+        environment_details: EnvironmentDetails = {
             "available": [],
         }
 

@@ -25,7 +25,9 @@ def _load_module(module_name: str, relative_path: str) -> ModuleType:
         del sys.modules[module_name]
     spec = importlib.util.spec_from_file_location(module_name, full_path)
     if spec is None or spec.loader is None:  # pragma: no cover - defensive guard
-        raise RuntimeError(f"Unable to load module spec for {module_name} from {full_path}")
+        raise RuntimeError(
+            f"Unable to load module spec for {module_name} from {full_path}"
+        )
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)

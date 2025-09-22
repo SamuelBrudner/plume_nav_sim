@@ -16,7 +16,6 @@ import pytest
 from plume_nav_sim.core.enums import Action
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 
-
 MODULE_NAME = "plume_nav_sim.core.action_processor"
 
 

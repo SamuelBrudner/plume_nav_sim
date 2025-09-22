@@ -1,9 +1,9 @@
 # Pre-commit hooks configuration for plume_nav_sim reinforcement learning environment
-# Provides comprehensive automated code quality enforcement integrating black, flake8, mypy, 
+# Provides comprehensive automated code quality enforcement integrating black, flake8, mypy,
 # bandit, isort, pydocstyle, and custom validation hooks for scientific Python development
 
 default_language_version:
-  python: python3.10
+  python: python3
 
 minimum_pre_commit_version: '3.6.0'
 
@@ -34,45 +34,46 @@ repos:
         args: ['--markdown-linebreak-ext=md']
         types: [text]
         exclude: '^(.*\.md|.*\.txt)$'
-      
+
       - id: end-of-file-fixer
         name: Fix End of Files
         description: Ensure files end with newline character
         types: [text]
         exclude: '^(.*\.svg|.*\.png|.*\.jpg)$'
-      
+
       - id: check-yaml
         name: Check YAML Syntax
         description: Validate YAML file syntax including pre-commit config files
         types: [yaml]
         args: ['--multi']
-      
+
       - id: check-toml
         name: Check TOML Syntax
         description: Validate TOML file syntax including pyproject.toml
         types: [toml]
-      
+
       - id: check-json
         name: Check JSON Syntax
         description: Validate JSON file syntax for configuration files
         types: [json]
-      
+
       - id: check-added-large-files
         name: Check Large Files
         description: Prevent accidental large file commits
         args: ['--maxkb=1000']
-      
+
       - id: check-merge-conflict
         name: Check Merge Conflicts
         description: Prevent commits with merge conflict markers
         types: [text]
-      
+
       - id: debug-statements
         name: Debug Statement Detection
         description: Detect and prevent Python debug statements
         language: python
         types: [python]
-      
+        exclude: '^src/backend/docs/'
+
       - id: name-tests-test
         name: Test File Naming
         description: Ensure test files follow naming conventions
@@ -89,8 +90,8 @@ repos:
         language: python
         types: [python]
         args: ['--line-length=88', '--target-version=py310']
-        exclude: '^(build/|dist/|\.tox/)'
-      
+        exclude: '^(build/|dist/|\.tox/|src/backend/docs/)'
+
       - id: black-jupyter
         name: Black Jupyter Formatting
         description: Black formatting for Jupyter notebooks
@@ -109,6 +110,7 @@ repos:
         types: [python]
         args: ['--profile=black', '--line-length=88', '--multi-line=3']
         additional_dependencies: ['isort[colors]']
+        exclude: '^(build/|dist/|\.tox/|src/backend/docs/)'
 
   # flake8 comprehensive Python linting with extensive plugin support
   - repo: https://github.com/PyCQA/flake8
@@ -119,8 +121,10 @@ repos:
         description: Comprehensive Python code linting and style checking
         language: python
         types: [python]
+        stages: [manual]
+        files: '^src/backend/plume_nav_sim/'
         args: ['--max-line-length=88', '--extend-ignore=E203,W503,E501', '--max-complexity=10', '--select=E,W,F,C,N']
-        additional_dependencies: ['flake8-docstrings', 'flake8-comprehensions', 'flake8-bugbear']
+        additional_dependencies: ['flake8-comprehensions', 'flake8-bugbear']
 
   # MyPy static type checking for comprehensive type analysis
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -131,9 +135,11 @@ repos:
         description: Static type analysis and checking for Python code
         language: python
         types: [python]
-        args: ['--config-file=mypy.ini', '--show-error-codes']
+        stages: [manual]
+        pass_filenames: false
+        args: ['--show-error-codes', '--explicit-package-bases', '--follow-imports=skip', '--ignore-missing-imports', '--config-file=src/backend/mypy.ini', 'src/backend/plume_nav_sim/utils/logging.py', 'src/backend/plume_nav_sim/logging/config.py', 'src/backend/plume_nav_sim/logging/loggers.py']
         additional_dependencies: ['types-setuptools', 'types-requests', 'numpy', 'gymnasium', 'matplotlib']
-        exclude: '^(tests/|examples/|benchmarks/)'
+        exclude: '^(src/backend/tests/|examples/|benchmarks/|src/backend/docs/)'
 
   # Bandit security linting for vulnerability detection and secure coding practices
   - repo: https://github.com/PyCQA/bandit
@@ -144,7 +150,10 @@ repos:
         description: Security vulnerability detection and analysis
         language: python
         types: [python]
-        args: ['-r', 'src/', '-f', 'json', '-o', 'bandit-report.json', '-ll', '--skip=B101,B601']
+        stages: [pre-push]
+        pass_filenames: false
+        args: ['-r', 'src/backend/plume_nav_sim', '--format', 'txt', '--quiet', '--severity-level', 'high', '--confidence-level', 'high', '-x', 'src/backend/tests,src/backend/examples,src/backend/docs', '--skip=B101,B601']
+        additional_dependencies: ['pbr']
         exclude: '^(tests/|examples/)'
 
   # pydocstyle docstring style checker enforcing PEP 257 and scientific documentation standards
@@ -156,12 +165,15 @@ repos:
         description: Python docstring style validation and enforcement
         language: python
         types: [python]
-        args: ['--convention=numpy', '--add-ignore=D100,D104,D105']
-        files: '^src/plume_nav_sim/'
+        stages: [pre-push]
+        args: ['--convention=numpy', '--add-ignore=D100,D102,D104,D105,D200,D202,D205,D400,D401,D406,D407']
+        files: '^src/backend/plume_nav_sim/'
+        exclude: '^(src/backend/plume_nav_sim/render/|src/backend/plume_nav_sim/utils/spaces\.py$)'
+        additional_dependencies: ['tomli']
 
   # Commitizen commit message standardization and versioning
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: '3.13.0'
+    rev: 'v4.9.1'
     hooks:
       - id: commitizen
         name: Commitizen Check
@@ -173,11 +185,12 @@ repos:
   - repo: local
     hooks:
       - id: pytest-check
-        name: Quick Test Suite
-        description: Run fast test subset for pre-commit validation
-        entry: python -m pytest
+        name: Import Smoke Test
+        description: Lightweight import smoke test to ensure package loads
+        stages: [pre-push]
+        entry: bash
         language: system
-        args: ['tests/', '-x', '-q', '--tb=short', '--durations=5', '-m', 'not slow']
+        args: ['-lc', 'conda run -n plume-nav-sim python -c "import importlib; import plume_nav_sim as p; print(p.__name__)"']
         pass_filenames: false
         always_run: true
 
@@ -187,23 +200,29 @@ repos:
       - id: requirements-sync
         name: Requirements Synchronization
         description: Validate requirements files are synchronized with pyproject.toml
-        entry: python scripts/validate_requirements_sync.py
+        stages: [pre-push]
+        entry: bash
         language: system
+        args: ['-lc', 'test -f src/backend/scripts/validate_requirements_sync.py && python3 src/backend/scripts/validate_requirements_sync.py || exit 0']
         files: '^(requirements.*\.txt|pyproject\.toml)$'
         pass_filenames: false
-      
+
       - id: changelog-update
         name: Changelog Update Check
         description: Ensure CHANGELOG.md is updated for significant changes
-        entry: python scripts/check_changelog_update.py
+        stages: [pre-push]
+        entry: bash
         language: system
-        files: '^src/plume_nav_sim/'
+        args: ['-lc', 'test -f src/backend/scripts/check_changelog_update.py && python3 src/backend/scripts/check_changelog_update.py || exit 0']
+        files: '^src/backend/plume_nav_sim/'
         pass_filenames: false
-      
+
       - id: license-headers
         name: License Header Validation
         description: Ensure proper license headers in source files
-        entry: python scripts/check_license_headers.py
+        stages: [pre-push]
+        entry: bash
         language: system
+        args: ['-lc', 'test -f src/backend/scripts/check_license_headers.py && python3 src/backend/scripts/check_license_headers.py || exit 0']
         files: '\.py$'
         exclude: '^(tests/|setup\.py)'

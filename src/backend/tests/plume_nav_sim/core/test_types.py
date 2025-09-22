@@ -1,8 +1,8 @@
 """Contractual and functional tests for the canonical core type exports."""
 
 import importlib
-import pytest
 
+import pytest
 
 core_types = importlib.import_module("plume_nav_sim.core.types")
 geometry = importlib.import_module("plume_nav_sim.core.geometry")

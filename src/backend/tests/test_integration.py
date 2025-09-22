@@ -23,10 +23,14 @@ class TestEnvironmentIntegration:
 def test_complete_episode_workflow() -> None:
     """Run a short deterministic episode to validate Gymnasium-style behaviour."""
 
-    env = create_plume_search_env(grid_size=(16, 16), source_location=(8, 8), max_steps=5, goal_radius=0)
+    env = create_plume_search_env(
+        grid_size=(16, 16), source_location=(8, 8), max_steps=5, goal_radius=0
+    )
     try:
         observation, info = env.reset(seed=21)
-        assert observation.shape == (3,), "Reset should return compact observation vector"
+        assert observation.shape == (
+            3,
+        ), "Reset should return compact observation vector"
         assert info["agent_xy"]
 
         total_steps = 0

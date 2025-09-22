@@ -1,0 +1,12 @@
+name: plume_nav_sim
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  # Core dependencies managed by Conda for performance/compatibility
+  - numpy>=2.1.0
+  - pip:
+    # This line installs the project in editable mode with all optional dependencies.
+    # The '.' refers to the current directory where pyproject.toml is located.
+    - -e .[dev,test,security,docs,benchmark]

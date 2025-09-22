@@ -224,6 +224,7 @@ env/
 ENV/
 env.bak/
 venv.bak/
+conda_env/
 
 # Project specific virtual environments
 plume-nav-env/

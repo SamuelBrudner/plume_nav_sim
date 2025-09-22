@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from _pytest.outcomes import Skipped
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 BACKEND_SRC = SRC_ROOT / "backend"
@@ -32,7 +31,9 @@ def test_performance_module_missing_psutil_is_error(monkeypatch):
         try:
             importlib.import_module(module_name)
         except Skipped as skipped_exc:  # pragma: no cover - triggers red phase
-            raise AssertionError("performance tests should fail, not skip, when psutil is missing") from skipped_exc
+            raise AssertionError(
+                "performance tests should fail, not skip, when psutil is missing"
+            ) from skipped_exc
 
     assert "psutil" in str(excinfo.value)
 
@@ -55,4 +56,6 @@ def test_tests_package_missing_conftest_raises(monkeypatch):
         try:
             importlib.import_module(package_name)
         except Skipped as skipped_exc:  # pragma: no cover - triggers red phase
-            raise AssertionError("tests package should fail loudly when conftest is missing") from skipped_exc
+            raise AssertionError(
+                "tests package should fail loudly when conftest is missing"
+            ) from skipped_exc
