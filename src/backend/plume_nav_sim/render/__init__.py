@@ -269,6 +269,199 @@ def _test_renderer_rgb(grid_size: GridSize, rgb_renderer):
         return {"success": False, "error": str(e)}
 
 
+def _coerce_grid_size(
+    grid_size_val, validation_report: Dict[str, Any]
+) -> Optional[GridSize]:
+    try:
+        if isinstance(grid_size_val, (tuple, list)):
+            grid_obj_local = GridSize(grid_size_val[0], grid_size_val[1])
+        elif isinstance(grid_size_val, GridSize):
+            grid_obj_local = grid_size_val
+        else:
+            validation_report["errors"].append(
+                f"Invalid grid_size type: {type(grid_size_val).__name__}, expected GridSize, tuple, or list"
+            )
+            validation_report["is_valid"] = False
+            return None
+
+        memory_estimate = grid_obj_local.estimate_memory_mb()
+        validation_report["configuration_summary"][
+            "memory_estimate_mb"
+        ] = memory_estimate
+        if memory_estimate > _MEMORY_WARNING_THRESHOLD_MB:
+            validation_report["warnings"].append(
+                f"Memory estimate {memory_estimate:.1f}MB exceeds warning threshold {_MEMORY_WARNING_THRESHOLD_MB}MB"
+            )
+            validation_report["recommendations"].append(
+                "Consider reducing grid size to improve memory usage"
+            )
+        return grid_obj_local
+    except Exception as e:
+        validation_report["errors"].append(f"Grid size validation failed: {e}")
+        validation_report["is_valid"] = False
+        return None
+
+
+def _check_system_capabilities_section(validation_report: Dict[str, Any]) -> None:
+    try:
+        capabilities = detect_rendering_capabilities(
+            test_matplotlib_backends=True,
+            test_performance_characteristics=True,
+            test_color_scheme_support=True,
+            generate_recommendations=True,
+        )
+        validation_report["system_capabilities"] = capabilities
+
+        if not capabilities.get("numpy_available", False):
+            validation_report["errors"].append(
+                "NumPy not available - required for RGB rendering"
+            )
+            validation_report["is_valid"] = False
+
+        if not capabilities.get("matplotlib_backends", []):
+            validation_report["warnings"].append(
+                "No matplotlib backends available - human mode disabled"
+            )
+            validation_report["recommendations"].append(
+                "Install matplotlib with GUI backend support"
+            )
+    except Exception as e:
+        validation_report["warnings"].append(f"System capability check failed: {e}")
+
+
+def _validate_color_scheme_section(
+    color_scheme_val,
+    check_accessibility: bool,
+    validation_report: Dict[str, Any],
+) -> None:
+    if not color_scheme_val:
+        return
+    try:
+        if isinstance(color_scheme_val, str):
+            if hasattr(PredefinedScheme, color_scheme_val.upper()):
+                scheme_obj = getattr(PredefinedScheme, color_scheme_val.upper())
+                validation_report["configuration_summary"][
+                    "color_scheme"
+                ] = scheme_obj.value
+            else:
+                validation_report["warnings"].append(
+                    f"Unknown color scheme: {color_scheme_val}"
+                )
+                validation_report["recommendations"].append(
+                    "Use predefined scheme or create custom scheme"
+                )
+
+        if check_accessibility:
+            try:
+                scheme_manager = ColorSchemeManager()
+                scheme_result = scheme_manager.validate_scheme(
+                    color_scheme_val,
+                    check_accessibility=True,
+                    check_contrast_ratios=True,
+                )
+                validation_report["accessibility_analysis"] = scheme_result
+
+                if not scheme_result.get("accessibility_compliant", True):
+                    validation_report["warnings"].append(
+                        "Color scheme may not meet accessibility standards"
+                    )
+                    validation_report["recommendations"].append(
+                        "Consider using high_contrast or colorblind_friendly schemes"
+                    )
+            except Exception as e:
+                validation_report["warnings"].append(
+                    f"Accessibility validation failed: {e}"
+                )
+    except Exception as e:
+        validation_report["warnings"].append(f"Color scheme validation failed: {e}")
+
+
+def _analyze_performance_section(
+    grid_obj_local: Optional[GridSize],
+    renderer_config: Dict[str, Any],
+    validation_report: Dict[str, Any],
+    check_performance_targets: bool,
+) -> None:
+    if not (check_performance_targets and grid_obj_local):
+        return
+    performance_targets = renderer_config.get("performance_targets", {})
+    rgb_target = performance_targets.get("rgb_ms", 5)
+    human_target = performance_targets.get("human_ms", 50)
+
+    try:
+        estimated_rgb_time = grid_obj_local.total_cells() / 1000000 * 2
+        estimated_human_time = estimated_rgb_time * 10
+
+        validation_report["performance_analysis"] = {
+            "estimated_rgb_ms": estimated_rgb_time,
+            "estimated_human_ms": estimated_human_time,
+            "rgb_target_ms": rgb_target,
+            "human_target_ms": human_target,
+            "rgb_feasible": estimated_rgb_time <= rgb_target,
+            "human_feasible": estimated_human_time <= human_target,
+        }
+
+        if estimated_rgb_time > rgb_target:
+            validation_report["warnings"].append(
+                f"RGB rendering may exceed target {rgb_target}ms (estimated {estimated_rgb_time:.1f}ms)"
+            )
+            validation_report["recommendations"].append(
+                "Enable performance optimization or reduce grid size"
+            )
+
+        if estimated_human_time > human_target:
+            validation_report["warnings"].append(
+                f"Human rendering may exceed target {human_target}ms (estimated {estimated_human_time:.1f}ms)"
+            )
+            validation_report["recommendations"].append(
+                "Consider reducing update frequency for human mode"
+            )
+    except Exception as e:
+        validation_report["warnings"].append(f"Performance analysis failed: {e}")
+
+
+def _strict_validation_section(
+    grid_obj_local: Optional[GridSize],
+    strict_validation: bool,
+    renderer_config: Dict[str, Any],
+    validation_report: Dict[str, Any],
+) -> None:
+    if not strict_validation:
+        return
+    if len(validation_report["errors"]) > 0:
+        error_msg = (
+            f"Strict validation failed: {'; '.join(validation_report['errors'])}"
+        )
+        _logger.error(error_msg)
+        raise ValidationError(
+            error_msg,
+            parameter_name="renderer_config",
+            invalid_value=renderer_config,
+        )
+    if grid_obj_local:
+        try:
+            create_render_context(grid_obj_local)
+            validation_report["configuration_summary"]["test_context_created"] = True
+        except Exception as e:
+            validation_report["errors"].append(f"Test context creation failed: {e}")
+            validation_report["is_valid"] = False
+
+
+def _add_optimization_recommendations(
+    render_modes_val,
+    optimization_settings_val,
+    validation_report: Dict[str, Any],
+) -> None:
+    if optimization_settings_val.get("enable_caching", True):
+        validation_report["recommendations"].append(
+            "Caching enabled - ensure sufficient memory for cache"
+        )
+    if len(render_modes_val) > 1:
+        validation_report["recommendations"].append(
+            "Dual-mode rendering - consider using create_dual_mode_renderer()"
+        )
+
+
 def _test_renderer_matplotlib(grid_size: GridSize, matplotlib_renderer):
     """Run a quick render test for the Matplotlib renderer."""
     if not matplotlib_renderer:
