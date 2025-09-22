@@ -9,17 +9,12 @@ for consistent visual representation across all visualization modes.
 import copy  # >=3.10 - Deep copying for color scheme cloning and parameter overrides
 import functools  # >=3.10 - LRU cache decorator for colormap caching and performance optimization
 import logging  # >=3.10 - Color scheme operation logging and performance monitoring
-import warnings  # >=3.10 - Color scheme compatibility warnings and backend fallback notifications
 from dataclasses import (  # >=3.10 - Structured color scheme configuration with validation
     dataclass,
     field,
 )
-from enum import (  # >=3.10 - Color scheme enumeration and predefined scheme selection
-    Enum,
-)
 from typing import (  # >=3.10 - Type hints for parameters and methods
     Any,
-    Callable,
     Dict,
     List,
     Optional,
@@ -33,15 +28,13 @@ import matplotlib.colors  # >=3.9.0 - Colormap objects, normalization utilities,
 # External imports - Third-party libraries with version requirements
 import numpy as np  # >=2.1.0 - Array operations, RGB color manipulation, concentration field processing
 
-from assets.default_colormap import DEFAULT_COLORMAP, ColorScheme, PredefinedScheme
+from assets.default_colormap import DEFAULT_COLORMAP, PredefinedScheme
 
 from ..core.constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
     CONCENTRATION_RANGE,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
-    PIXEL_VALUE_MAX,
-    PIXEL_VALUE_MIN,
     RGB_DTYPE,
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
@@ -364,7 +357,7 @@ class CustomColorScheme:
 
             # Check matplotlib colormap availability and compatibility
             try:
-                colormap = cm.get_cmap(self.concentration_colormap)
+                cm.get_cmap(self.concentration_colormap)
             except ValueError:
                 raise ValidationError(
                     f"Invalid colormap '{self.concentration_colormap}'"
@@ -1300,7 +1293,7 @@ def validate_color_scheme(
         # Check matplotlib colormap availability and backend compatibility
         if validate_matplotlib_integration:
             try:
-                colormap = cm.get_cmap(scheme_obj.concentration_colormap)
+                cm.get_cmap(scheme_obj.concentration_colormap)
                 validation_report["validation_details"][
                     "matplotlib_colormap"
                 ] = "available"
@@ -1666,7 +1659,7 @@ def get_matplotlib_colormap(
         # Retrieve colormap from matplotlib.cm registry with error handling
         try:
             colormap = cm.get_cmap(colormap_name)
-        except ValueError as e:
+        except ValueError:
             # Handle colormap not found errors with graceful fallback
             logger.warning(
                 f"Colormap '{colormap_name}' not found, falling back to '{DEFAULT_COLORMAP}'"
@@ -1676,9 +1669,7 @@ def get_matplotlib_colormap(
         # Configure colormap normalization for specified range
         norm_range = normalization_range or CONCENTRATION_RANGE
         if norm_range != (0.0, 1.0):
-            # Create custom normalization if needed
-            from matplotlib.colors import Normalize
-
+            # Create custom normalization if needed (placeholder; using existing colormap)
             colormap = (
                 colormap._segmentdata if hasattr(colormap, "_segmentdata") else colormap
             )

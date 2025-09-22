@@ -1408,7 +1408,7 @@ class SeedManager:
                     # Add current state information and seed tracking data
                     try:
                         # Test if generator is still functional
-                        test_val = generator_info["generator"].random()
+                        generator_info["generator"].random()
                         summary_info["status"] = "active"
                         summary_info["last_test_successful"] = True
 
@@ -1717,7 +1717,7 @@ class ReproducibilityTracker:
             hash_obj = hashlib.sha256()
             hash_obj.update(sequence_json.encode("utf-8"))
             return hash_obj.hexdigest()
-        except Exception as e:
+        except Exception:
             # Fallback to string representation hash
             sequence_str = str(sequence)
             hash_obj = hashlib.sha256()
