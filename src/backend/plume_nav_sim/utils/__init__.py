@@ -97,7 +97,7 @@ try:
 
     # Log imported component summary for debugging and system verification
     _package_logger.info(
-        f"Loaded utility components: exceptions, seeding, validation, logging, spaces, config"
+        "Loaded utility components: exceptions, seeding, validation, logging, spaces, config"
     )
 
 except Exception as init_error:
@@ -191,7 +191,7 @@ try:
     else:
         _logger.debug(debug_message)
 
-except Exception as logging_error:
+except Exception:
     # Ensure package initialization completes even if logging fails
     pass
 

@@ -27,10 +27,8 @@ from typing import (  # >=3.10
     Dict,
     List,
     Optional,
-    Tuple,
     Type,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -151,7 +149,7 @@ def get_component_logger(
     component_type: ComponentType = ComponentType.UTILS,
     logger_level: Optional[str] = None,
     enable_performance_tracking: bool = True,
-) -> "_PlumeComponentLogger":
+) -> Any:
     """
     Factory function for creating or retrieving component-specific loggers with automatic
     configuration, caching, and component-appropriate settings for plume_nav_sim system components.
@@ -222,7 +220,7 @@ def get_component_logger(
         raise PlumeNavSimError(f"Failed to create component logger: {e}") from e
 
 
-def configure_logging_for_development(
+def configure_logging_for_development(  # noqa: C901
     log_level: str = "DEBUG",
     enable_console_colors: bool = True,
     enable_file_logging: bool = False,
@@ -318,7 +316,7 @@ def configure_logging_for_development(
                     comp_type = ComponentType.UTILS
 
                 # Create component logger with development configuration
-                logger = get_component_logger(
+                _ = get_component_logger(
                     component_name=component_name,
                     component_type=comp_type,
                     logger_level=log_level,
@@ -350,7 +348,7 @@ def configure_logging_for_development(
         raise PlumeNavSimError(f"Development logging configuration failed: {e}") from e
 
 
-def log_performance(
+def log_performance(  # noqa: C901
     logger: logging.Logger,
     operation_name: str,
     duration_ms: float,
@@ -389,13 +387,7 @@ def log_performance(
                 f"duration_ms must be non-negative number, got {duration_ms}"
             )
 
-        # Format timing information using PerformanceFormatter.format_timing method
-        formatter = PerformanceFormatter()
-        timing_info = formatter.format_timing(
-            operation_name=operation_name,
-            duration_ms=duration_ms,
-            additional_data=additional_metrics or {},
-        )
+        # Optionally format timing information using PerformanceFormatter if needed
 
         # Compare duration_ms against PERFORMANCE_TARGET_STEP_LATENCY_MS and component-specific thresholds
         target_threshold = PERFORMANCE_TARGET_STEP_LATENCY_MS
@@ -1502,14 +1494,6 @@ class PerformanceTimer:
         if not self.logger or self.duration_ms is None:
             return False
 
-        # Format performance message with operation_name and duration
-        if message:
-            perf_message = (
-                f"{message} - {self.operation_name}: {self.duration_ms:.3f}ms"
-            )
-        else:
-            perf_message = f"Performance timing for {self.operation_name}"
-
         # Include additional_metrics in log if include_metrics is True
         metrics_to_log = self.additional_metrics if include_metrics else None
 
@@ -1779,49 +1763,3 @@ class LoggingMixin:
         except Exception as e:
             # Fallback logging if method exit logging fails
             self.logger.error(f"Method exit logging failed for {method_name}: {e}")
-
-
-def monitor_performance(
-    operation_name: str,
-    timing_threshold_ms: Optional[float] = None,
-    update_baseline: bool = False,
-) -> Callable:
-    """
-    Decorator for measuring function execution time and logging via the component logger
-    attached to `self` (if present). Provides a lightweight fallback used in tests and
-    core modules to avoid import-time failures when the advanced timing utilities are
-    unavailable.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            exc: Optional[BaseException] = None
-            try:
-                return func(*args, **kwargs)
-            except BaseException as e:  # Ensure timing is logged even on error
-                exc = e
-                raise
-            finally:
-                duration_ms = (time.perf_counter() - start) * 1000.0
-                with suppress(Exception):
-                    self_obj = args[0] if args else None
-                    logger = getattr(self_obj, "logger", None)
-                    if logger and hasattr(logger, "performance"):
-                        metrics = {}
-                        if timing_threshold_ms is not None:
-                            metrics["threshold_ms"] = timing_threshold_ms
-                        if exc is not None:
-                            metrics["exception"] = type(exc).__name__
-                            metrics["operation_failed"] = True
-                        logger.performance(
-                            operation_name=operation_name,
-                            duration_ms=duration_ms,
-                            metrics=metrics or None,
-                            update_baseline=update_baseline,
-                        )
-
-        return wrapper
-
-    return decorator
