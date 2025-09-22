@@ -23,9 +23,6 @@ from .models import PlumeModel
 from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
 
-if TYPE_CHECKING:  # pragma: no cover - import cycle guard
-    from ..utils.exceptions import ValidationError as _ValidationError
-
 
 def _validation_error_class():
     """Return the canonical ValidationError class on demand."""
@@ -383,7 +380,6 @@ __all__ = [
     "RenderMode",
     "RewardType",
     "StateSnapshot",
-    "ValidationError",
     "calculate_euclidean_distance",
     "create_agent_state",
     "create_coordinates",

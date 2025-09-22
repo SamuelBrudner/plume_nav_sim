@@ -15,28 +15,10 @@ This module implements:
 
 import dataclasses  # >=3.10
 import functools  # standard library
-import logging  # standard library
 import time  # standard library
-from typing import Any, Dict, List, Optional, Tuple, Union  # >=3.10
+from typing import Any, Dict, List, Optional, Tuple  # >=3.10
 
 import numpy as np  # >=2.1.0
-
-# Internal imports for core data structures and type system
-from .enums import Action
-from .geometry import Coordinates, GridSize
-from .state import AgentState
-from .types import ActionType, MovementVector
-
-
-def validate_action(action: ActionType) -> bool:
-    """Placeholder for the real validation function."""
-    return True
-
-
-def get_movement_vector(action: Action) -> MovementVector:
-    """Placeholder for the real movement vector function."""
-    return MOVEMENT_VECTORS[action.value]
-
 
 # Exception handling system for error reporting and recovery
 from ..utils.exceptions import ComponentError, StateError, ValidationError
@@ -45,26 +27,18 @@ from ..utils.exceptions import ComponentError, StateError, ValidationError
 from ..utils.logging import ComponentType, get_component_logger, monitor_performance
 
 # Validation utilities for comprehensive parameter checking
-from ..utils.validation import (
-    create_validation_context,
-    validate_action_parameter,
-    validate_coordinates,
-)
+from ..utils.validation import create_validation_context, validate_action_parameter
 
 # Boundary enforcement integration for movement validation
-from .boundary_enforcer import BoundaryEnforcementResult, BoundaryEnforcer
+from .boundary_enforcer import BoundaryEnforcer
 
 # System constants for action processing and performance targets
-from .constants import (
-    ACTION_DOWN,
-    ACTION_LEFT,
-    ACTION_RIGHT,
-    ACTION_SPACE_SIZE,
-    ACTION_UP,
-    MOVEMENT_VECTORS,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    VALIDATION_ERROR_MESSAGES,
-)
+from .constants import ACTION_SPACE_SIZE, MOVEMENT_VECTORS
+
+# Internal imports for core data structures and type system
+from .enums import Action
+from .geometry import Coordinates, GridSize
+from .types import ActionType, MovementVector
 
 # Global configuration constants for action processing optimization
 ACTION_PROCESSING_PERFORMANCE_TARGET_MS = 0.1
