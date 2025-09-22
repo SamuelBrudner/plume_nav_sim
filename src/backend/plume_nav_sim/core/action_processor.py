@@ -351,9 +351,9 @@ class ActionProcessor:
     @monitor_performance(
         "action_processing", ACTION_PROCESSING_PERFORMANCE_TARGET_MS, True
     )
-    def process_action(
+    def process_action(  # noqa
         self, action: ActionType, current_position: Coordinates
-    ) -> ActionProcessingResult:  # noqa: C901
+    ) -> ActionProcessingResult:
         """
         Primary action processing method with comprehensive validation, movement calculation,
         boundary enforcement, and performance monitoring for environment step integration.
@@ -543,9 +543,7 @@ class ActionProcessor:
                 raise ValidationError(f"Action validation error: {e}") from e
             return False
 
-    def get_valid_actions(
-        self, current_position: Coordinates
-    ) -> List[Action]:  # noqa: C901
+    def get_valid_actions(self, current_position: Coordinates) -> List[Action]:  # noqa
         """
         Analyze current position to determine which actions would result in valid movements
         within grid boundaries for action space filtering.
@@ -574,11 +572,9 @@ class ActionProcessor:
             # Use boundary_enforcer for enhanced analysis if available
             if self.boundary_enforcer:
                 try:
-                    boundary_valid_actions = self.boundary_enforcer.get_valid_moves(
+                    if boundary_valid_actions := self.boundary_enforcer.get_valid_moves(
                         current_position
-                    )
-                    # Intersect with our calculated valid actions for consistency
-                    if boundary_valid_actions:
+                    ):
                         action_ints = [int(action) for action in valid_actions]
                         filtered_actions = [
                             Action(action_int)
