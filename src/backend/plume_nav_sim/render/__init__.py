@@ -476,6 +476,135 @@ def _test_renderer_matplotlib(grid_size: GridSize, matplotlib_renderer):
         return {"success": False, "error": str(e)}
 
 
+def _validate_grid_size_for_factory(grid_size: GridSize) -> None:
+    """Validate grid_size type and warn on memory usage for factory entry."""
+    if not isinstance(grid_size, GridSize):
+        raise ValidationError(
+            "Invalid grid_size type",
+            parameter_name="grid_size",
+            invalid_value=type(grid_size).__name__,
+            expected_format="GridSize instance",
+        )
+    estimated_memory = grid_size.estimate_memory_mb()
+    if estimated_memory > _MEMORY_WARNING_THRESHOLD_MB:
+        _logger.warning(
+            f"Grid size {grid_size.to_tuple()} requires {estimated_memory:.1f}MB memory, "
+            f"exceeding warning threshold {_MEMORY_WARNING_THRESHOLD_MB}MB"
+        )
+
+
+class UnifiedRenderer:
+    """Unified interface wrapper providing transparent mode switching and fallback handling."""
+
+    def __init__(self, rgb_renderer, matplotlib_renderer, config):
+        self.rgb_renderer = rgb_renderer
+        self.matplotlib_renderer = matplotlib_renderer
+        self.config = config
+        # Initialize metrics with a default mode; will be updated per render call
+        self.metrics = RenderingMetrics(
+            renderer_type="UnifiedRenderer",
+            render_mode=(
+                config.get("primary_mode")
+                if isinstance(config, dict)
+                else RenderMode.RGB_ARRAY
+            ),
+            operation_id="unified_renderer",
+        )
+
+    def render(self, context: RenderContext, mode: RenderMode = None):
+        """Render with automatic fallback and performance tracking."""
+        if mode is None:
+            mode = self.config["primary_mode"]
+
+        start_time = logging.time.time()
+
+        try:
+            if mode == RenderMode.RGB_ARRAY:
+                if self.rgb_renderer:
+                    result = self.rgb_renderer.render(context, mode)
+                elif (
+                    self.config["enable_matplotlib_fallback"]
+                    and self.matplotlib_renderer
+                ):
+                    _logger.warning(
+                        "RGB renderer unavailable, falling back to matplotlib"
+                    )
+                    result = self.matplotlib_renderer.render(
+                        context, RenderMode.RGB_ARRAY
+                    )
+                else:
+                    raise RuntimeError("No RGB rendering capability available")
+            elif self.matplotlib_renderer:
+                result = self.matplotlib_renderer.render(context, mode)
+            elif self.config["enable_rgb_fallback"] and self.rgb_renderer:
+                _logger.warning("Matplotlib renderer unavailable, falling back to RGB")
+                result = self.rgb_renderer.render(context, RenderMode.RGB_ARRAY)
+            else:
+                raise RuntimeError("No human rendering capability available")
+
+            # Record performance metrics
+            duration = logging.time.time() - start_time
+            # Keep metrics render mode in sync with the actual call
+            try:
+                self.metrics.render_mode = mode
+            except Exception:
+                pass
+            self.metrics.record_rendering(duration * 1000)
+
+            return result
+
+        except Exception as e:
+            _logger.error(f"Rendering failed for mode {mode}: {e}")
+            raise
+
+    def get_capabilities(self):
+        """Return capability information for the unified renderer."""
+        return {
+            "rgb_available": self.rgb_renderer is not None,
+            "matplotlib_available": self.matplotlib_renderer is not None,
+            "fallback_enabled": self.config["enable_rgb_fallback"]
+            or self.config["enable_matplotlib_fallback"],
+            "primary_mode": self.config["primary_mode"],
+        }
+
+
+def _run_renderer_tests(
+    grid_size: GridSize, rgb_renderer, matplotlib_renderer
+) -> Dict[str, Any]:
+    """Execute quick tests for created renderers and return a results dict."""
+    test_results: Dict[str, Any] = {}
+    rgb_test = _test_renderer_rgb(grid_size, rgb_renderer)
+    if rgb_test is not None:
+        test_results["rgb_test"] = rgb_test
+    mpl_test = _test_renderer_matplotlib(grid_size, matplotlib_renderer)
+    if mpl_test is not None:
+        test_results["matplotlib_test"] = mpl_test
+    return test_results
+
+
+def _register_unified_renderer(
+    rgb_renderer,
+    matplotlib_renderer,
+    grid_size: GridSize,
+    color_scheme,
+    fallback_config: Dict[str, Any],
+) -> Tuple[str, UnifiedRenderer]:
+    """Register the unified renderer in the module registry and return (id, instance)."""
+    renderer_id = f"dual_mode_{len(_RENDERER_REGISTRY)}"
+    unified_renderer = UnifiedRenderer(
+        rgb_renderer, matplotlib_renderer, fallback_config
+    )
+    _RENDERER_REGISTRY[renderer_id] = {
+        "unified_renderer": unified_renderer,
+        "rgb_renderer": rgb_renderer,
+        "matplotlib_renderer": matplotlib_renderer,
+        "creation_time": logging.time.time(),
+        "grid_size": grid_size,
+        "color_scheme": color_scheme,
+    }
+    return renderer_id, unified_renderer
+
+
 def create_dual_mode_renderer(
     grid_size: GridSize,
     color_scheme_name: Optional[str] = None,
@@ -523,38 +652,20 @@ def create_dual_mode_renderer(
     _logger.info(f"Creating dual-mode renderer for grid size {grid_size.to_tuple()}")
 
     try:
-        # Validate grid_size dimensions and memory requirements for dual-mode rendering feasibility
-        if not isinstance(grid_size, GridSize):
-            raise ValidationError(
-                "Invalid grid_size type",
-                parameter_name="grid_size",
-                invalid_value=type(grid_size).__name__,
-                expected_format="GridSize instance",
-            )
+        # Validate grid size and memory warning
+        _validate_grid_size_for_factory(grid_size)
 
-        # Check memory requirements
-        estimated_memory = grid_size.estimate_memory_mb()
-        if estimated_memory > _MEMORY_WARNING_THRESHOLD_MB:
-            _logger.warning(
-                f"Grid size {grid_size.to_tuple()} requires {estimated_memory:.1f}MB memory, "
-                f"exceeding warning threshold {_MEMORY_WARNING_THRESHOLD_MB}MB"
-            )
-
-        # Create unified color scheme
+        # Create unified color scheme and merge options
         color_scheme = _get_color_scheme(color_scheme_name)
-
-        # Merge renderer options with defaults
         rgb_config, matplotlib_config = _merge_renderer_options(renderer_options)
 
-        # Configure RGB renderer safe
+        # Configure renderers safely
         rgb_renderer, rgb_error = _create_rgb_renderer_safe(
             grid_size,
             color_scheme,
             rgb_config,
             allow_fallback=enable_matplotlib_fallback,
         )
-
-        # Configure matplotlib renderer safe
         matplotlib_renderer, matplotlib_error = _create_matplotlib_renderer_safe(
             grid_size,
             color_scheme,
@@ -562,10 +673,8 @@ def create_dual_mode_renderer(
             allow_fallback=enable_rgb_fallback,
         )
 
-        # Set primary_mode for preferred rendering method with automatic fallback
+        # Select primary mode and build fallback configuration
         primary_mode = _auto_select_primary_mode(primary_mode, rgb_renderer)
-
-        # Configure fallback mechanisms
         fallback_config = _build_fallback_config(
             enable_rgb_fallback,
             enable_matplotlib_fallback,
@@ -574,93 +683,13 @@ def create_dual_mode_renderer(
             primary_mode,
         )
 
-        # Test both renderers functionality with sample operations
-        test_results = {}
-        rgb_test = _test_renderer_rgb(grid_size, rgb_renderer)
-        if rgb_test is not None:
-            test_results["rgb_test"] = rgb_test
-        mpl_test = _test_renderer_matplotlib(grid_size, matplotlib_renderer)
-        if mpl_test is not None:
-            test_results["matplotlib_test"] = mpl_test
+        # Run quick tests for both renderers
+        test_results = _run_renderer_tests(grid_size, rgb_renderer, matplotlib_renderer)
 
-        class UnifiedRenderer:
-            """Unified interface wrapper providing transparent mode switching and fallback handling."""
-
-            def __init__(self, rgb_renderer, matplotlib_renderer, config):
-                self.rgb_renderer = rgb_renderer
-                self.matplotlib_renderer = matplotlib_renderer
-                self.config = config
-                self.metrics = RenderingMetrics()
-
-            def render(self, context: RenderContext, mode: RenderMode = None):
-                """Render with automatic fallback and performance tracking."""
-                if mode is None:
-                    mode = self.config["primary_mode"]
-
-                start_time = logging.time.time()
-
-                try:
-                    if mode == RenderMode.RGB_ARRAY:
-                        if self.rgb_renderer:
-                            result = self.rgb_renderer.render(context, mode)
-                        elif (
-                            self.config["enable_matplotlib_fallback"]
-                            and self.matplotlib_renderer
-                        ):
-                            _logger.warning(
-                                "RGB renderer unavailable, falling back to matplotlib"
-                            )
-                            result = self.matplotlib_renderer.render(
-                                context, RenderMode.RGB_ARRAY
-                            )
-                        else:
-                            raise RuntimeError("No RGB rendering capability available")
-                    elif self.matplotlib_renderer:
-                        result = self.matplotlib_renderer.render(context, mode)
-                    elif self.config["enable_rgb_fallback"] and self.rgb_renderer:
-                        _logger.warning(
-                            "Matplotlib renderer unavailable, falling back to RGB"
-                        )
-                        result = self.rgb_renderer.render(context, RenderMode.RGB_ARRAY)
-                    else:
-                        raise RuntimeError("No human rendering capability available")
-
-                    # Record performance metrics
-                    duration = logging.time.time() - start_time
-                    self.metrics.record_rendering(mode, duration * 1000)
-
-                    return result
-
-                except Exception as e:
-                    _logger.error(f"Rendering failed for mode {mode}: {e}")
-                    raise
-
-            def get_capabilities(self):
-                """Return capability information for the unified renderer."""
-                return {
-                    "rgb_available": self.rgb_renderer is not None,
-                    "matplotlib_available": self.matplotlib_renderer is not None,
-                    "fallback_enabled": self.config["enable_rgb_fallback"]
-                    or self.config["enable_matplotlib_fallback"],
-                    "primary_mode": self.config["primary_mode"],
-                }
-
-            # Register dual-mode renderer in _RENDERER_REGISTRY for resource tracking
-
-        # Register dual-mode renderer in _RENDERER_REGISTRY for resource tracking
-        renderer_id = f"dual_mode_{len(_RENDERER_REGISTRY)}"
-        unified_renderer = UnifiedRenderer(
-            rgb_renderer, matplotlib_renderer, fallback_config
+        # Register unified renderer and return
+        renderer_id, unified_renderer = _register_unified_renderer(
+            rgb_renderer, matplotlib_renderer, grid_size, color_scheme, fallback_config
         )
-
-        _RENDERER_REGISTRY[renderer_id] = {
-            "unified_renderer": unified_renderer,
-            "rgb_renderer": rgb_renderer,
-            "matplotlib_renderer": matplotlib_renderer,
-            "creation_time": logging.time.time(),
-            "grid_size": grid_size,
-            "color_scheme": color_scheme,
-        }
 
         # Log dual-mode renderer creation with configuration details
         _logger.info(
@@ -747,175 +776,7 @@ def validate_renderer_config(
         "accessibility_analysis": {},
         "configuration_summary": {},
     }
-
-    def _coerce_grid_size(grid_size_val) -> Optional[GridSize]:
-        try:
-            if isinstance(grid_size_val, (tuple, list)):
-                grid_obj_local = GridSize(grid_size_val[0], grid_size_val[1])
-            elif isinstance(grid_size_val, GridSize):
-                grid_obj_local = grid_size_val
-            else:
-                validation_report["errors"].append(
-                    f"Invalid grid_size type: {type(grid_size_val).__name__}, expected GridSize, tuple, or list"
-                )
-                validation_report["is_valid"] = False
-                return None
-
-            memory_estimate = grid_obj_local.estimate_memory_mb()
-            validation_report["configuration_summary"][
-                "memory_estimate_mb"
-            ] = memory_estimate
-            if memory_estimate > _MEMORY_WARNING_THRESHOLD_MB:
-                validation_report["warnings"].append(
-                    f"Memory estimate {memory_estimate:.1f}MB exceeds warning threshold {_MEMORY_WARNING_THRESHOLD_MB}MB"
-                )
-                validation_report["recommendations"].append(
-                    "Consider reducing grid size to improve memory usage"
-                )
-            return grid_obj_local
-        except Exception as e:
-            validation_report["errors"].append(f"Grid size validation failed: {e}")
-            validation_report["is_valid"] = False
-            return None
-
-    def _check_system_capabilities_section():
-        try:
-            capabilities = detect_rendering_capabilities(
-                test_matplotlib_backends=True,
-                test_performance_characteristics=True,
-                test_color_scheme_support=True,
-                generate_recommendations=True,
-            )
-            validation_report["system_capabilities"] = capabilities
-
-            if not capabilities.get("numpy_available", False):
-                validation_report["errors"].append(
-                    "NumPy not available - required for RGB rendering"
-                )
-                validation_report["is_valid"] = False
-
-            if not capabilities.get("matplotlib_backends", []):
-                validation_report["warnings"].append(
-                    "No matplotlib backends available - human mode disabled"
-                )
-                validation_report["recommendations"].append(
-                    "Install matplotlib with GUI backend support"
-                )
-        except Exception as e:
-            validation_report["warnings"].append(f"System capability check failed: {e}")
-
-    def _validate_color_scheme_section(color_scheme_val):
-        if not color_scheme_val:
-            return
-        try:
-            if isinstance(color_scheme_val, str):
-                if hasattr(PredefinedScheme, color_scheme_val.upper()):
-                    scheme_obj = getattr(PredefinedScheme, color_scheme_val.upper())
-                    validation_report["configuration_summary"][
-                        "color_scheme"
-                    ] = scheme_obj.value
-                else:
-                    validation_report["warnings"].append(
-                        f"Unknown color scheme: {color_scheme_val}"
-                    )
-                    validation_report["recommendations"].append(
-                        "Use predefined scheme or create custom scheme"
-                    )
-
-            if check_accessibility:
-                try:
-                    scheme_manager = ColorSchemeManager()
-                    scheme_result = scheme_manager.validate_scheme(
-                        color_scheme_val,
-                        check_accessibility=True,
-                        check_contrast_ratios=True,
-                    )
-                    validation_report["accessibility_analysis"] = scheme_result
-
-                    if not scheme_result.get("accessibility_compliant", True):
-                        validation_report["warnings"].append(
-                            "Color scheme may not meet accessibility standards"
-                        )
-                        validation_report["recommendations"].append(
-                            "Consider using high_contrast or colorblind_friendly schemes"
-                        )
-                except Exception as e:
-                    validation_report["warnings"].append(
-                        f"Accessibility validation failed: {e}"
-                    )
-        except Exception as e:
-            validation_report["warnings"].append(f"Color scheme validation failed: {e}")
-
-    def _analyze_performance_section(grid_obj_local: Optional[GridSize]):
-        if not (check_performance_targets and grid_obj_local):
-            return
-        performance_targets = renderer_config.get("performance_targets", {})
-        rgb_target = performance_targets.get("rgb_ms", 5)
-        human_target = performance_targets.get("human_ms", 50)
-
-        try:
-            estimated_rgb_time = grid_obj_local.total_cells() / 1000000 * 2
-            estimated_human_time = estimated_rgb_time * 10
-
-            validation_report["performance_analysis"] = {
-                "estimated_rgb_ms": estimated_rgb_time,
-                "estimated_human_ms": estimated_human_time,
-                "rgb_target_ms": rgb_target,
-                "human_target_ms": human_target,
-                "rgb_feasible": estimated_rgb_time <= rgb_target,
-                "human_feasible": estimated_human_time <= human_target,
-            }
-
-            if estimated_rgb_time > rgb_target:
-                validation_report["warnings"].append(
-                    f"RGB rendering may exceed target {rgb_target}ms (estimated {estimated_rgb_time:.1f}ms)"
-                )
-                validation_report["recommendations"].append(
-                    "Enable performance optimization or reduce grid size"
-                )
-
-            if estimated_human_time > human_target:
-                validation_report["warnings"].append(
-                    f"Human rendering may exceed target {human_target}ms (estimated {estimated_human_time:.1f}ms)"
-                )
-                validation_report["recommendations"].append(
-                    "Consider reducing update frequency for human mode"
-                )
-        except Exception as e:
-            validation_report["warnings"].append(f"Performance analysis failed: {e}")
-
-    def _strict_validation_section(grid_obj_local: Optional[GridSize]):
-        if not strict_validation:
-            return
-        if len(validation_report["errors"]) > 0:
-            error_msg = (
-                f"Strict validation failed: {'; '.join(validation_report['errors'])}"
-            )
-            _logger.error(error_msg)
-            raise ValidationError(
-                error_msg,
-                parameter_name="renderer_config",
-                invalid_value=renderer_config,
-            )
-        if grid_obj_local:
-            try:
-                create_render_context(grid_obj_local)
-                validation_report["configuration_summary"][
-                    "test_context_created"
-                ] = True
-            except Exception as e:
-                validation_report["errors"].append(f"Test context creation failed: {e}")
-                validation_report["is_valid"] = False
-
-    def _add_optimization_recommendations(render_modes_val, optimization_settings_val):
-        if optimization_settings_val.get("enable_caching", True):
-            validation_report["recommendations"].append(
-                "Caching enabled - ensure sufficient memory for cache"
-            )
-        if len(render_modes_val) > 1:
-            validation_report["recommendations"].append(
-                "Dual-mode rendering - consider using create_dual_mode_renderer()"
-            )
+    # Using module-level helpers for validation steps
 
     try:
         grid_size_val = renderer_config.get("grid_size")
@@ -923,15 +784,23 @@ def validate_renderer_config(
         render_modes_val = renderer_config.get("render_modes", ["rgb_array"])
         optimization_settings_val = renderer_config.get("optimization_settings", {})
 
-        grid_obj = _coerce_grid_size(grid_size_val)
+        grid_obj = _coerce_grid_size(grid_size_val, validation_report)
 
         if check_system_capabilities:
-            _check_system_capabilities_section()
+            _check_system_capabilities_section(validation_report)
 
-        _validate_color_scheme_section(color_scheme_val)
-        _analyze_performance_section(grid_obj)
-        _strict_validation_section(grid_obj)
-        _add_optimization_recommendations(render_modes_val, optimization_settings_val)
+        _validate_color_scheme_section(
+            color_scheme_val, check_accessibility, validation_report
+        )
+        _analyze_performance_section(
+            grid_obj, renderer_config, validation_report, check_performance_targets
+        )
+        _strict_validation_section(
+            grid_obj, strict_validation, renderer_config, validation_report
+        )
+        _add_optimization_recommendations(
+            render_modes_val, optimization_settings_val, validation_report
+        )
 
         if len(validation_report["errors"]) > 0:
             validation_report["is_valid"] = False
@@ -948,6 +817,147 @@ def validate_renderer_config(
         if strict_validation:
             raise
         return False, validation_report
+
+
+def _detect_numpy(capabilities: Dict[str, Any], test_performance: bool) -> None:
+    """Populate NumPy availability/version and optional performance metrics."""
+    try:
+        import numpy as np
+
+        capabilities["numpy_available"] = True
+        capabilities["numpy_version"] = np.__version__
+        _logger.debug(f"NumPy {np.__version__} detected")
+
+        if test_performance:
+            with contextlib.suppress(Exception):
+                _extracted_from_detect_rendering_capabilities_65(np, capabilities)
+    except ImportError:
+        capabilities["warnings"].append("NumPy not available - RGB rendering disabled")
+
+
+def _detect_matplotlib_section(
+    capabilities: Dict[str, Any], test_performance_characteristics: bool
+) -> None:
+    """Update matplotlib capability fields using existing detector with guards."""
+    try:
+        _extracted_from_detect_rendering_capabilities_99(
+            test_performance_characteristics, capabilities
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        capabilities["warnings"].append(f"Matplotlib capability detection failed: {e}")
+        # Ensure expected keys exist even on failure for downstream consumers/tests
+        capabilities.setdefault("matplotlib_available", False)
+        capabilities.setdefault("matplotlib_version", None)
+        capabilities.setdefault("matplotlib_backends", [])
+        capabilities.setdefault("display_available", False)
+
+
+def _assess_display_environment(capabilities: Dict[str, Any]) -> None:
+    """Assess DISPLAY availability on non-Windows platforms and warn if headless."""
+    display_env = (
+        sys.platform != "win32" and "DISPLAY" in sys.os.environ
+        if hasattr(sys, "os")
+        else True
+    )
+    if not display_env and sys.platform != "win32":
+        capabilities["display_available"] = False
+        capabilities["warnings"].append(
+            "No DISPLAY environment variable - running in headless mode"
+        )
+
+
+def _test_color_scheme_support_section(capabilities: Dict[str, Any]) -> None:
+    """Test a few common colormaps if matplotlib is available and record support."""
+    try:
+        if capabilities.get("matplotlib_available"):
+            import matplotlib.pyplot as plt
+
+            colormaps = ["viridis", "plasma", "inferno", "magma", "gray"]
+            available_colormaps = []
+            for cmap in colormaps:
+                with contextlib.suppress(Exception):
+                    plt.get_cmap(cmap)
+                    available_colormaps.append(cmap)
+            capabilities["color_scheme_support"] = {
+                "available_colormaps": available_colormaps,
+                "total_colormaps": len(available_colormaps),
+                "colormap_support_rating": (
+                    "excellent"
+                    if len(available_colormaps) >= 4
+                    else "good" if len(available_colormaps) >= 2 else "limited"
+                ),
+            }
+    except Exception as e:  # pragma: no cover - defensive
+        capabilities["warnings"].append(f"Color scheme support test failed: {e}")
+
+
+def _platform_support_section(capabilities: Dict[str, Any]) -> None:
+    """Attach platform support info and warnings based on current platform."""
+    platform_capabilities = {
+        "linux": {"full_support": True, "gui_toolkits": ["tkinter", "qt", "gtk"]},
+        "darwin": {
+            "full_support": True,
+            "gui_toolkits": ["tkinter", "qt", "cocoa"],
+        },
+        "win32": {
+            "full_support": False,
+            "community_support": True,
+            "gui_toolkits": ["tkinter", "qt"],
+        },
+    }
+    platform = sys.platform
+    if platform in platform_capabilities:
+        capabilities["platform_support"] = platform_capabilities[platform]
+        if not platform_capabilities[platform].get("full_support", False):
+            capabilities["warnings"].append(
+                f"Platform {platform} has limited official support - community PRs accepted"
+            )
+
+
+def _configure_headless_if_needed(capabilities: Dict[str, Any]) -> None:
+    """Switch matplotlib to Agg backend if available but no display is present."""
+    if capabilities.get("matplotlib_available") and not capabilities.get(
+        "display_available", True
+    ):
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            capabilities["headless_compatible"] = True
+            _logger.debug("Headless operation configured successfully")
+        except Exception as e:  # pragma: no cover - defensive
+            capabilities["headless_compatible"] = False
+            capabilities["warnings"].append(f"Headless operation setup failed: {e}")
+
+
+def _generate_recommendations_section(
+    capabilities: Dict[str, Any], test_performance_characteristics: bool
+) -> None:
+    """Populate recommendations using existing recommendation builder."""
+    _extracted_from_detect_rendering_capabilities_211(
+        capabilities, test_performance_characteristics
+    )
+
+
+def _assess_system_resources_section(capabilities: Dict[str, Any]) -> None:
+    """Attach basic system memory information if psutil is available."""
+    try:
+        import psutil
+
+        memory_info = psutil.virtual_memory()
+        capabilities["system_resources"] = {
+            "total_memory_gb": memory_info.total / (1024**3),
+            "available_memory_gb": memory_info.available / (1024**3),
+            "memory_usage_percent": memory_info.percent,
+        }
+        if memory_info.available < 1024**3:
+            capabilities["warnings"].append(
+                "Low available memory - consider reducing grid size"
+            )
+    except ImportError:
+        capabilities["warnings"].append(
+            "psutil not available - cannot assess system resources"
+        )
 
 
 def detect_rendering_capabilities(
@@ -1003,142 +1013,25 @@ def detect_rendering_capabilities(
     }
 
     try:
-        # Detect NumPy availability and version compatibility
-        try:
-            import numpy as np
+        _detect_numpy(capabilities, test_performance_characteristics)
 
-            capabilities["numpy_available"] = True
-            capabilities["numpy_version"] = np.__version__
-            _logger.debug(f"NumPy {np.__version__} detected")
-
-            # Basic NumPy performance test
-            if test_performance_characteristics:
-                try:
-                    _extracted_from_detect_rendering_capabilities_65(np, capabilities)
-                except Exception as e:
-                    capabilities["warnings"].append(
-                        f"NumPy performance test failed: {e}"
-                    )
-
-        except ImportError:
-            capabilities["warnings"].append(
-                "NumPy not available - RGB rendering disabled"
-            )
-
-        # Test matplotlib backend availability if requested
         if test_matplotlib_backends:
-            try:
-                _extracted_from_detect_rendering_capabilities_99(
-                    test_performance_characteristics, capabilities
-                )
-            except Exception as e:
-                capabilities["warnings"].append(
-                    f"Matplotlib capability detection failed: {e}"
-                )
+            _detect_matplotlib_section(capabilities, test_performance_characteristics)
 
-        # Assess display environment availability
-        display_env = (
-            sys.platform != "win32" and "DISPLAY" in sys.os.environ
-            if hasattr(sys, "os")
-            else True
-        )
-        if not display_env and sys.platform != "win32":
-            capabilities["display_available"] = False
-            capabilities["warnings"].append(
-                "No DISPLAY environment variable - running in headless mode"
-            )
+        _assess_display_environment(capabilities)
 
-        # Test color scheme support if requested
         if test_color_scheme_support:
-            try:
-                # Test colormap availability
-                if capabilities["matplotlib_available"]:
-                    import matplotlib.pyplot as plt
+            _test_color_scheme_support_section(capabilities)
 
-                    colormaps = ["viridis", "plasma", "inferno", "magma", "gray"]
-                    available_colormaps = []
+        _platform_support_section(capabilities)
+        _configure_headless_if_needed(capabilities)
 
-                    for cmap in colormaps:
-                        with contextlib.suppress(Exception):
-                            plt.get_cmap(cmap)
-                            available_colormaps.append(cmap)
-                    capabilities["color_scheme_support"] = {
-                        "available_colormaps": available_colormaps,
-                        "total_colormaps": len(available_colormaps),
-                        "colormap_support_rating": (
-                            "excellent"
-                            if len(available_colormaps) >= 4
-                            else "good" if len(available_colormaps) >= 2 else "limited"
-                        ),
-                    }
-
-            except Exception as e:
-                capabilities["warnings"].append(
-                    f"Color scheme support test failed: {e}"
-                )
-
-        # Evaluate platform-specific rendering capabilities
-        platform_capabilities = {
-            "linux": {"full_support": True, "gui_toolkits": ["tkinter", "qt", "gtk"]},
-            "darwin": {
-                "full_support": True,
-                "gui_toolkits": ["tkinter", "qt", "cocoa"],
-            },
-            "win32": {
-                "full_support": False,
-                "community_support": True,
-                "gui_toolkits": ["tkinter", "qt"],
-            },
-        }
-
-        platform = sys.platform
-        if platform in platform_capabilities:
-            capabilities["platform_support"] = platform_capabilities[platform]
-            if not platform_capabilities[platform].get("full_support", False):
-                capabilities["warnings"].append(
-                    f"Platform {platform} has limited official support - community PRs accepted"
-                )
-
-        # Test headless operation compatibility
-        if (
-            capabilities["matplotlib_available"]
-            and not capabilities["display_available"]
-        ):
-            try:
-                import matplotlib
-
-                matplotlib.use("Agg")  # Set headless backend
-                capabilities["headless_compatible"] = True
-                _logger.debug("Headless operation configured successfully")
-            except Exception as e:
-                capabilities["headless_compatible"] = False
-                capabilities["warnings"].append(f"Headless operation setup failed: {e}")
-
-        # Generate optimization recommendations if requested
         if generate_recommendations:
-            _extracted_from_detect_rendering_capabilities_211(
+            _generate_recommendations_section(
                 capabilities, test_performance_characteristics
             )
-        # Assess memory availability and performance characteristics
-        try:
-            import psutil
 
-            memory_info = psutil.virtual_memory()
-            capabilities["system_resources"] = {
-                "total_memory_gb": memory_info.total / (1024**3),
-                "available_memory_gb": memory_info.available / (1024**3),
-                "memory_usage_percent": memory_info.percent,
-            }
-
-            if memory_info.available < 1024**3:  # Less than 1GB available
-                capabilities["warnings"].append(
-                    "Low available memory - consider reducing grid size"
-                )
-
-        except ImportError:
-            capabilities["warnings"].append(
-                "psutil not available - cannot assess system resources"
-            )
+        _assess_system_resources_section(capabilities)
 
         _logger.info(
             f"Capability detection completed: NumPy={'✓' if capabilities['numpy_available'] else '✗'}, "
@@ -1194,9 +1087,9 @@ def _extracted_from_detect_rendering_capabilities_99(
     test_performance_characteristics, capabilities
 ):
     capabilities_result = detect_matplotlib_capabilities(
-        test_all_backends=True,
-        test_display_capability=True,
-        test_performance=test_performance_characteristics,
+        test_backends=True,
+        check_display_availability=True,
+        assess_performance=test_performance_characteristics,
     )
 
     capabilities["matplotlib_available"] = capabilities_result.get(
@@ -1257,7 +1150,10 @@ def _register_cleanup_handlers(
 
     def cleanup_all_renderers():
         """Clean up all registered renderers and their resources."""
-        _logger.debug(f"Cleaning up {len(renderer_registry)} registered renderers")
+        try:
+            _logger.debug(f"Cleaning up {len(renderer_registry)} registered renderers")
+        except Exception:
+            pass
 
         for renderer_id, renderer_data in renderer_registry.items():
             try:
@@ -1287,7 +1183,10 @@ def _register_cleanup_handlers(
         # Force garbage collection
         gc.collect()
 
-        _logger.info("Renderer cleanup completed")
+        try:
+            _logger.info("Renderer cleanup completed")
+        except Exception:
+            pass
 
     # Register atexit handler for automatic cleanup at program termination
     atexit.register(cleanup_all_renderers)
@@ -1303,6 +1202,88 @@ def _register_cleanup_handlers(
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     _logger.debug("Cleanup handlers registered successfully")
+
+
+def _warn_numpy_missing(capabilities: Dict[str, Any]) -> None:
+    if not capabilities.get("numpy_available", False):
+        warnings.warn(
+            "NumPy not available - RGB array rendering disabled. "
+            "Install numpy>=2.1.0 for full rendering support.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
+def _warn_matplotlib_backends(capabilities: Dict[str, Any]) -> None:
+    if capabilities.get("matplotlib_available", False):
+        available_backends = capabilities.get("matplotlib_backends", [])
+        interactive_backends = [
+            b for b in available_backends if b not in ["Agg", "svg", "pdf"]
+        ]
+        if not interactive_backends:
+            warnings.warn(
+                "No interactive matplotlib backends available - human mode will use non-interactive display. "
+                "Install tkinter or Qt for full interactive visualization.",
+                UserWarning,
+                stacklevel=2,
+            )
+    else:
+        warnings.warn(
+            "Matplotlib not available - human mode visualization disabled. "
+            "Install matplotlib>=3.9.0 for interactive rendering support.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
+def _log_headless_info_if_needed(capabilities: Dict[str, Any]) -> None:
+    if capabilities.get("matplotlib_available", False) and not capabilities.get(
+        "display_available", True
+    ):
+        _logger.info(
+            "Running in headless environment - matplotlib configured for non-interactive use"
+        )
+
+
+def _warn_numpy_performance(capabilities: Dict[str, Any]) -> None:
+    performance_metrics = capabilities.get("performance_characteristics", {})
+    numpy_rating = performance_metrics.get("numpy_performance_rating", "unknown")
+    if numpy_rating in ["acceptable", "slow"]:
+        warnings.warn(
+            f"NumPy performance rating: {numpy_rating}. "
+            "Consider optimizing system or reducing grid size for better performance.",
+            PerformanceWarning,
+            stacklevel=2,
+        )
+
+
+def _warn_windows_support(capabilities: Dict[str, Any]) -> None:
+    if sys.platform == "win32":
+        platform_support = capabilities.get("platform_support", {})
+        if not platform_support.get("full_support", True):
+            _logger.warning(
+                "Running on Windows with community support - "
+                "some features may have limited testing coverage"
+            )
+
+
+def _warn_colormap_limitations(capabilities: Dict[str, Any]) -> None:
+    color_support = capabilities.get("color_scheme_support", {})
+    if color_support.get("colormap_support_rating") == "limited":
+        _logger.warning(
+            "Limited colormap support detected - some accessibility features may be unavailable"
+        )
+
+
+def _log_recommendations(
+    capabilities: Dict[str, Any], include_recommendations: bool
+) -> None:
+    if include_recommendations:
+        recommendations = capabilities.get("recommendations", [])
+        if recommendations:
+            _logger.info("Configuration recommendations:")
+            for i, recommendation in enumerate(recommendations, 1):
+                _logger.info(f"  {i}. {recommendation}")
 
 
 def _warn_about_limitations(
@@ -1323,76 +1304,13 @@ def _warn_about_limitations(
     Returns:
         None: Issues warnings and logs system limitations with guidance
     """
-    # Analyze capabilities for missing dependencies and limitations
-    if not capabilities.get("numpy_available", False):
-        warnings.warn(
-            "NumPy not available - RGB array rendering disabled. "
-            "Install numpy>=2.1.0 for full rendering support.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # Issue matplotlib backend warnings if interactive backends unavailable
-    if capabilities.get("matplotlib_available", False):
-        available_backends = capabilities.get("matplotlib_backends", [])
-        interactive_backends = [
-            b for b in available_backends if b not in ["Agg", "svg", "pdf"]
-        ]
-
-        if not interactive_backends:
-            warnings.warn(
-                "No interactive matplotlib backends available - human mode will use non-interactive display. "
-                "Install tkinter or Qt for full interactive visualization.",
-                UserWarning,
-                stacklevel=2,
-            )
-
-        if not capabilities.get("display_available", True):
-            _logger.info(
-                "Running in headless environment - matplotlib configured for non-interactive use"
-            )
-    else:
-        warnings.warn(
-            "Matplotlib not available - human mode visualization disabled. "
-            "Install matplotlib>=3.9.0 for interactive rendering support.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # Warn about performance limitations if system doesn't meet targets
-    performance_metrics = capabilities.get("performance_characteristics", {})
-    numpy_rating = performance_metrics.get("numpy_performance_rating", "unknown")
-
-    if numpy_rating in ["acceptable", "slow"]:
-        warnings.warn(
-            f"NumPy performance rating: {numpy_rating}. "
-            "Consider optimizing system or reducing grid size for better performance.",
-            PerformanceWarning,
-            stacklevel=2,
-        )
-
-    # Provide platform-specific warnings for Windows community support
-    if sys.platform == "win32":
-        platform_support = capabilities.get("platform_support", {})
-        if not platform_support.get("full_support", True):
-            _logger.warning(
-                "Running on Windows with community support - "
-                "some features may have limited testing coverage"
-            )
-
-    # Issue accessibility warnings if high contrast support unavailable
-    color_support = capabilities.get("color_scheme_support", {})
-    if color_support.get("colormap_support_rating") == "limited":
-        _logger.warning(
-            "Limited colormap support detected - some accessibility features may be unavailable"
-        )
-
-    # Include configuration recommendations if requested
-    if include_recommendations:
-        if recommendations := capabilities.get("recommendations", []):
-            _logger.info("Configuration recommendations:")
-            for i, recommendation in enumerate(recommendations, 1):
-                _logger.info(f"  {i}. {recommendation}")
+    _warn_numpy_missing(capabilities)
+    _warn_matplotlib_backends(capabilities)
+    _log_headless_info_if_needed(capabilities)
+    _warn_numpy_performance(capabilities)
+    _warn_windows_support(capabilities)
+    _warn_colormap_limitations(capabilities)
+    _log_recommendations(capabilities, include_recommendations)
 
 
 # Performance warning class for system capability issues
