@@ -52,18 +52,16 @@ from .test_spaces import TestSpaceConfig, TestSpaceValidator
 
 # Import validation test helpers and expose concise aliases
 from .test_validation import (
+    TestBasicSanitization,
+    TestCoreTypeIntegration,
     TestEnvironmentConfigValidation,
-    TestParameterValidatorClass,
-    TestValidationResultClass,
+    TestUtilityFunctions,
+    TestValidationFunctions,
 )
 
 # Note: test_seeding.py consolidated to tests/test_seeding.py (flat structure)
 # Seeding tests are now in the main tests/ directory for better organization
-
-
-# Maintain backward-compatible aliases for aggregated exports
-TestParameterValidator = TestParameterValidatorClass
-TestValidationResult = TestValidationResultClass
+# Note: Removed YAGNI test classes (TestParameterValidatorClass, TestValidationResultClass, etc.)
 
 # Configure logging for test utilities
 logger = logging.getLogger("plume_nav_sim.tests.utils")
@@ -811,19 +809,17 @@ def _run_validation_performance_tests(
     iterations: int, detailed: bool
 ) -> Dict[str, Any]:
     """Run validation performance tests for parameter checking."""
-    from .test_validation import TestParameterValidator
-
+    # Note: TestParameterValidator removed as YAGNI - simplified performance test
     results = {"iterations": iterations}
 
-    # Test validation performance
-    validator = TestParameterValidator()
+    # Test basic validation performance
     validation_times = []
 
     for i in range(iterations):
         start_time = time.perf_counter()
-        # Simulate parameter validation
+        # Simulate parameter validation (simplified after YAGNI cleanup)
         action_value = i % 4
-        # validator.test_parameter_validation()  # Would call actual validation test
+        _ = action_value >= 0 and action_value < 4  # Basic validation check
         validation_times.append(time.perf_counter() - start_time)
 
     results["parameter_validation"] = {
@@ -1255,8 +1251,6 @@ __all__ = [
     "TestSpaceValidator",
     # Parameter validation test classes
     "TestEnvironmentConfigValidation",
-    "TestParameterValidator",
-    "TestValidationResult",
     # Exception testing utility functions
     "create_test_error_context",
     "create_mock_logger",
