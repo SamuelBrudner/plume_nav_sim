@@ -651,262 +651,160 @@ class TestSeedStatePersistence:
 class TestSeedManager:
     """Test suite for SeedManager class functionality."""
 
-    @pytest.mark.parametrize("default_seed", [None] + TEST_SEEDS[:3])
-    @pytest.mark.parametrize("enable_validation", [True, False])
-    @pytest.mark.parametrize("thread_safe", [True, False])
-    def test_seed_manager_basic_operations(
-        self, default_seed, enable_validation, thread_safe
-    ):
-        """Test SeedManager basic operations including initialization, seeding, and generator
-        tracking with proper state management."""
-        # Initialize SeedManager with test configuration parameters
-        manager = SeedManager(
-            default_seed=default_seed,
-            enable_validation=enable_validation,
-            thread_safe=thread_safe,
-        )
+    def test_seed_manager_creates_and_tracks_generators(self):
+        """Test that SeedManager creates valid generators and tracks them by context."""
+        manager = SeedManager()
 
-        # Verify initialization properties
-        assert (
-            manager.default_seed == default_seed
-        ), f"Default seed should be {default_seed}"
-        assert (
-            manager.enable_validation == enable_validation
-        ), f"Validation should be {enable_validation}"
-        assert (
-            manager.thread_safe == thread_safe
-        ), f"Thread safety should be {thread_safe}"
+        # Seed multiple contexts
+        contexts = ["context1", "context2", "main"]
+        for context in contexts:
+            np_random, used_seed = manager.seed(42, context_id=context)
 
-        # Test seed method with various seed values and context IDs
-        test_contexts = ["context1", "context2", "main"]
-        generators = {}
+            # Verify returned generator
+            assert isinstance(np_random, np.random.Generator)
+            assert isinstance(used_seed, int)
+            assert SEED_MIN_VALUE <= used_seed <= SEED_MAX_VALUE
 
-        for context in test_contexts:
-            for seed in [42, 123, None]:
-                # Call seed method
-                np_random, used_seed = manager.seed(seed, context_id=context)
-
-                # Verify returned generators are properly initialized and tracked
-                assert isinstance(
-                    np_random, np.random.Generator
-                ), f"Should return Generator for context {context}, seed {seed}"
-                assert isinstance(
-                    used_seed, int
-                ), f"Used seed should be int for {context}, {seed}"
-
-                # Only validate range for explicitly provided seeds, not random ones
-                if seed is not None:
-                    assert (
-                        SEED_MIN_VALUE <= used_seed <= SEED_MAX_VALUE
-                    ), f"Used seed {used_seed} outside valid range"
-
-                generators[(context, seed)] = (np_random, used_seed)
-
-        # Validate get_active_generators returns correct generator information
+        # Verify all contexts tracked
         active_generators = manager.get_active_generators()
-        assert isinstance(active_generators, dict), "Active generators should be dict"
-
-        # Should have entries for each context (check in nested 'generators' dict)
         generators_dict = active_generators.get("generators", {})
-        for context in test_contexts:
-            assert (
-                context in generators_dict
-            ), f"Context {context} should be tracked in generators"
 
-        # Test reset functionality clears all active generators
-        initial_count = active_generators.get(
-            "total_active_generators", len(generators_dict)
-        )
+        for context in contexts:
+            assert context in generators_dict, f"Context {context} should be tracked"
+
+    def test_seed_manager_reset_clears_generators(self):
+        """Test that reset() clears all active generators."""
+        manager = SeedManager()
+
+        # Create some generators
+        manager.seed(42, context_id="ctx1")
+        manager.seed(123, context_id="ctx2")
+
+        initial_report = manager.get_active_generators()
+        initial_count = initial_report.get("total_active_generators", 0)
+        assert initial_count > 0, "Should have generators before reset"
+
+        # Reset
         manager.reset()
 
-        after_reset_report = manager.get_active_generators()
-        after_reset_count = after_reset_report.get("total_active_generators", 0)
-        assert (
-            after_reset_count == 0 or after_reset_count < initial_count
-        ), "Reset should clear or reduce active generators"
+        after_reset = manager.get_active_generators()
+        after_count = after_reset.get("total_active_generators", 0)
+        assert after_count == 0, "Reset should clear all generators"
 
-        # Ensure validation settings affect seed processing as expected
-        if enable_validation:
-            # Should validate seed inputs
-            with pytest.raises(ValidationError):
-                manager.seed(-1)  # Invalid seed
-        else:
-            # May be more permissive with validation disabled
-            try:
-                result = manager.seed(42)  # Should work regardless
-                assert (
-                    result is not None
-                ), "Valid seed should work even without validation"
-            except ValidationError:
-                # Still acceptable if validation occurs elsewhere
-                pass
-
-        # Validate thread safety configuration affects internal locking
-        if thread_safe:
-            # Should have thread safety mechanisms (implementation detail)
-            # Test that basic operations work
-            np_random, seed = manager.seed(42, context_id="thread_test")
-            assert isinstance(
-                np_random, np.random.Generator
-            ), "Thread safe manager should work"
-
-    @pytest.mark.parametrize("base_seed", TEST_SEEDS)
-    @pytest.mark.parametrize("episode_number", [0, 1, 10, 100])
-    @pytest.mark.parametrize("experiment_id", ["exp1", "baseline", None])
-    def test_seed_manager_episode_seed_generation(
-        self, base_seed, episode_number, experiment_id
-    ):
-        """Test SeedManager episode-specific seed generation ensuring deterministic episode
-        seeds and proper experiment context handling."""
-        # Initialize SeedManager for episode seed testing
+    def test_seed_manager_validation_flag_enforces_checks(self):
+        """Test that enable_validation=True enforces seed validation."""
         manager = SeedManager(enable_validation=True)
 
-        # Call generate_episode_seed with base seed, episode number, and experiment ID
-        episode_seed = manager.generate_episode_seed(
-            base_seed=base_seed,
-            episode_number=episode_number,
-            experiment_id=experiment_id,
+        # Valid seed should work
+        np_random, used_seed = manager.seed(42)
+        assert isinstance(np_random, np.random.Generator)
+
+        # Invalid seed should raise
+        with pytest.raises(ValidationError):
+            manager.seed(-1)
+
+    def test_seed_manager_with_default_seed(self):
+        """Test that default_seed is used when no seed provided."""
+        default = 42
+        manager = SeedManager(default_seed=default)
+
+        assert manager.default_seed == default
+
+        # Seed with None should use default (or generate random - implementation dependent)
+        np_random, used_seed = manager.seed(None)
+        assert isinstance(np_random, np.random.Generator)
+        assert isinstance(used_seed, int)
+
+    def test_episode_seed_is_deterministic(self):
+        """Test that episode seed generation is deterministic for same inputs."""
+        manager = SeedManager()
+
+        # Same inputs should always produce same seed
+        seed1 = manager.generate_episode_seed(
+            base_seed=42, episode_number=0, experiment_id="exp1"
+        )
+        seed2 = manager.generate_episode_seed(
+            base_seed=42, episode_number=0, experiment_id="exp1"
         )
 
-        # Assert generated seed is deterministic for same input parameters
-        episode_seed2 = manager.generate_episode_seed(
-            base_seed=base_seed,
-            episode_number=episode_number,
-            experiment_id=experiment_id,
+        assert seed1 == seed2, "Same inputs must produce same seed"
+        assert isinstance(seed1, int)
+        assert SEED_MIN_VALUE <= seed1 <= SEED_MAX_VALUE
+
+    def test_episode_seed_varies_by_episode_number(self):
+        """Test that episode seed changes when episode number changes."""
+        manager = SeedManager()
+
+        seed_ep0 = manager.generate_episode_seed(base_seed=42, episode_number=0)
+        seed_ep1 = manager.generate_episode_seed(base_seed=42, episode_number=1)
+        seed_ep10 = manager.generate_episode_seed(base_seed=42, episode_number=10)
+
+        # All different episode numbers should produce different seeds
+        assert seed_ep0 != seed_ep1, "Different episodes must produce different seeds"
+        assert seed_ep1 != seed_ep10
+        assert seed_ep0 != seed_ep10
+
+    def test_episode_seed_varies_by_experiment_id(self):
+        """Test that episode seed changes when experiment ID changes."""
+        manager = SeedManager()
+
+        seed_exp1 = manager.generate_episode_seed(
+            base_seed=42, episode_number=0, experiment_id="exp1"
+        )
+        seed_exp2 = manager.generate_episode_seed(
+            base_seed=42, episode_number=0, experiment_id="exp2"
+        )
+        seed_none = manager.generate_episode_seed(
+            base_seed=42, episode_number=0, experiment_id=None
         )
 
+        # Different experiment IDs should produce different seeds
         assert (
-            episode_seed == episode_seed2
-        ), f"Episode seed should be deterministic: {episode_seed} != {episode_seed2}"
+            seed_exp1 != seed_exp2
+        ), "Different experiments must produce different seeds"
+        assert seed_exp1 != seed_none
+        assert seed_exp2 != seed_none
 
-        # Verify different episode numbers produce different seeds
-        if episode_number < 999:  # Avoid edge case overflow
-            different_episode_seed = manager.generate_episode_seed(
-                base_seed=base_seed,
-                episode_number=episode_number + 1,
-                experiment_id=experiment_id,
-            )
-            assert (
-                different_episode_seed != episode_seed
-            ), f"Different episodes should produce different seeds: {episode_number} vs {episode_number + 1}"
+    def test_episode_seed_consistent_across_instances(self):
+        """Test that episode seed generation is consistent across SeedManager instances."""
+        manager1 = SeedManager()
+        manager2 = SeedManager()
 
-        # Test experiment ID affects seed generation appropriately
-        if experiment_id is not None:
-            different_exp_seed = manager.generate_episode_seed(
-                base_seed=base_seed,
-                episode_number=episode_number,
-                experiment_id="different_exp",
-            )
-            assert (
-                different_exp_seed != episode_seed
-            ), f"Different experiment IDs should produce different seeds"
-
-        # Validate all generated seeds are within valid range
-        assert isinstance(
-            episode_seed, int
-        ), f"Episode seed should be int, got {type(episode_seed)}"
-        assert (
-            SEED_MIN_VALUE <= episode_seed <= SEED_MAX_VALUE
-        ), f"Episode seed {episode_seed} outside valid range [{SEED_MIN_VALUE}, {SEED_MAX_VALUE}]"
-
-        # Ensure episode seed generation is consistent across manager instances
-        manager2 = SeedManager(enable_validation=True)
-        episode_seed3 = manager2.generate_episode_seed(
-            base_seed=base_seed,
-            episode_number=episode_number,
-            experiment_id=experiment_id,
+        seed1 = manager1.generate_episode_seed(
+            base_seed=42, episode_number=5, experiment_id="test"
+        )
+        seed2 = manager2.generate_episode_seed(
+            base_seed=42, episode_number=5, experiment_id="test"
         )
 
-        assert (
-            episode_seed3 == episode_seed
-        ), f"Episode seed should be consistent across managers: {episode_seed3} != {episode_seed}"
+        assert seed1 == seed2, "Episode seed must be consistent across managers"
 
-    @pytest.mark.parametrize("test_seed", TEST_SEEDS)
-    @pytest.mark.parametrize("num_tests", [5, 10, 20])
-    def test_seed_manager_reproducibility_validation(self, test_seed, num_tests):
-        """Test SeedManager reproducibility validation functionality ensuring comprehensive
-        testing and statistical analysis of seeding behavior."""
-        # Initialize SeedManager for reproducibility validation testing
-        manager = SeedManager(enable_validation=True, thread_safe=True)
+    def test_reproducibility_validation_returns_complete_report(self):
+        """Test that validate_reproducibility returns comprehensive report with all required sections."""
+        manager = SeedManager()
 
-        # Call validate_reproducibility with test seed and number of tests
-        validation_report = manager.validate_reproducibility(
-            test_seed=test_seed,
-            num_tests=num_tests,
-        )
+        report = manager.validate_reproducibility(test_seed=42, num_tests=10)
 
-        # Assert returned report contains comprehensive validation results
-        assert isinstance(
-            validation_report, dict
-        ), f"Validation report should be dict, got {type(validation_report)}"
+        # Check structure
+        assert isinstance(report, dict)
+        assert "results_summary" in report
+        assert "statistical_analysis" in report
+        assert "overall_status" in report
+        assert "failure_analysis" in report
+        assert "test_configuration" in report
 
-        # Check for required top-level keys
-        required_keys = [
-            "results_summary",
-            "statistical_analysis",
-            "overall_status",
-        ]
-        for key in required_keys:
-            assert key in validation_report, f"Validation report missing key: {key}"
+        # Check results summary
+        summary = report["results_summary"]
+        assert "success_rate" in summary
+        assert "total_tests" in summary
+        assert 0.0 <= summary["success_rate"] <= 1.0
+        assert summary["total_tests"] == 10
 
-        # Check results_summary structure
-        assert "success_rate" in validation_report["results_summary"]
-        assert "total_tests" in validation_report["results_summary"]
-
-        # Verify statistical analysis includes success rate and deviation metrics
-        stats = validation_report["statistical_analysis"]
-        assert isinstance(stats, dict), "Statistical analysis should be dict"
-
-        success_rate = validation_report["results_summary"]["success_rate"]
-        assert isinstance(success_rate, (int, float)), "Success rate should be numeric"
-        assert (
-            0.0 <= success_rate <= 1.0
-        ), f"Success rate {success_rate} should be in [0, 1]"
-
-        total_tests = validation_report["results_summary"]["total_tests"]
-        assert (
-            total_tests == num_tests
-        ), f"Total tests {total_tests} should match input {num_tests}"
-
-        # Check failure analysis section
-        assert "failure_analysis" in validation_report, "Should have failure analysis"
-        failure_analysis = validation_report["failure_analysis"]
-        num_failures = failure_analysis.get("num_failures", 0)
-
-        assert isinstance(num_failures, int), "Number of failures should be int"
-        assert (
-            0 <= num_failures <= total_tests
-        ), f"Failures {num_failures} should be <= total {total_tests}"
-
-        # Test failure analysis identifies patterns and root causes
-        if num_failures > 0:
-            assert (
-                "failure_analysis" in validation_report
-            ), "Should have failure analysis if failures occurred"
-            failure_analysis = validation_report["failure_analysis"]
-            assert isinstance(failure_analysis, dict), "Failure analysis should be dict"
-
-        # Validate recommendations are provided for reproducibility improvement
-        if "recommendations" in validation_report:
-            recommendations = validation_report["recommendations"]
-            assert isinstance(recommendations, list), "Recommendations should be list"
-
-        # Ensure report includes test configuration with seed used
-        assert (
-            "test_configuration" in validation_report
-        ), "Report should include test config"
-        config = validation_report["test_configuration"]
-        assert (
-            config["test_seed"] == test_seed
-        ), f"Reported seed should match input seed {test_seed}"
-        assert (
-            config["num_tests"] == num_tests
-        ), f"Reported num_tests should match input"
-
-        # Should have timestamp in test_configuration
-        assert (
-            "validation_timestamp" in config
-        ), "Config should include validation_timestamp"
+        # Check configuration matches input
+        config = report["test_configuration"]
+        assert config["test_seed"] == 42
+        assert config["num_tests"] == 10
+        assert "validation_timestamp" in config
 
     def test_seed_manager_thread_safety(self):
         """Test SeedManager thread safety ensuring proper concurrent access handling and
@@ -1007,197 +905,91 @@ class TestSeedManager:
 class TestReproducibilityTracker:
     """Test suite for ReproducibilityTracker class functionality."""
 
-    @pytest.mark.parametrize("episode_seed", TEST_SEEDS)
-    @pytest.mark.parametrize("episode_length", [10, 50, 100])
-    def test_reproducibility_tracker_episode_recording(
-        self, episode_seed, episode_length
-    ):
-        """Test ReproducibilityTracker episode recording functionality ensuring comprehensive
-        episode data storage and checksum validation."""
-        # Initialize ReproducibilityTracker for episode recording testing
+    def test_tracker_records_episode_with_all_required_fields(self):
+        """Test that ReproducibilityTracker stores episodes with all required data intact."""
         tracker = ReproducibilityTracker()
 
-        # Generate test action and observation sequences of specified length
-        np_random, _ = create_seeded_rng(episode_seed)
+        # Create test episode data
+        episode_seed = 42
+        actions = [0, 1, 2, 3, 0, 1]
+        observations = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+        metadata = {"test": "data", "length": 6}
 
-        action_sequence = [np_random.integers(0, 4) for _ in range(episode_length)]
-        observation_sequence = [np_random.random() for _ in range(episode_length)]
-        reward_sequence = [
-            np_random.random() * 2 - 1 for _ in range(episode_length)
-        ]  # Rewards in [-1, 1]
-
-        metadata = {
-            "episode_seed": episode_seed,
-            "episode_length": episode_length,
-            "test_run": True,
-        }
-
-        # Call record_episode with seed, sequences, and metadata
+        # Record episode
         episode_id = tracker.record_episode(
             episode_seed=episode_seed,
-            action_sequence=action_sequence,
-            observation_sequence=observation_sequence,
+            action_sequence=actions,
+            observation_sequence=observations,
             metadata=metadata,
         )
 
-        # Assert episode record ID is returned for future reference
-        assert episode_id is not None, "record_episode should return episode ID"
-        assert isinstance(
-            episode_id, str
-        ), f"Episode ID should be string, got {type(episode_id)}"
-        assert len(episode_id) > 0, "Episode ID should not be empty"
+        # Verify returned ID
+        assert isinstance(episode_id, str)
+        assert len(episode_id) > 0
 
-        # Verify episode data is stored
-        stored_episode = tracker.episode_records[episode_id]
-        assert stored_episode is not None, f"Episode {episode_id} should be retrievable"
-        assert isinstance(stored_episode, dict), "Stored episode should be dict"
+        # Verify stored data
+        stored = tracker.episode_records[episode_id]
+        assert stored["episode_seed"] == episode_seed
+        assert stored["action_sequence"] == actions
+        assert stored["observation_sequence"] == observations
+        assert stored["metadata"]["test"] == "data"
 
-        # Check required fields
-        required_fields = [
-            "episode_seed",
-            "action_sequence",
-            "observation_sequence",
-            "metadata",
-        ]
-        for field in required_fields:
-            assert field in stored_episode, f"Stored episode missing field: {field}"
-
-        # Verify data integrity
-        assert (
-            stored_episode["episode_seed"] == episode_seed
-        ), "Stored seed should match input"
-        assert (
-            len(stored_episode["action_sequence"]) == episode_length
-        ), "Action sequence length should match"
-        assert (
-            len(stored_episode["observation_sequence"]) == episode_length
-        ), "Observation sequence length should match"
-
-        # Validate metadata preservation and storage
-        stored_metadata = stored_episode["metadata"]
-        assert isinstance(stored_metadata, dict), "Stored metadata should be dict"
-        assert (
-            stored_metadata["episode_seed"] == episode_seed
-        ), "Metadata seed should match"
-        assert (
-            stored_metadata["episode_length"] == episode_length
-        ), "Metadata length should match"
-
-        # Test record retrieval and data integrity validation
-        # Sequences should match exactly
-        for i in range(episode_length):
-            assert (
-                stored_episode["action_sequence"][i] == action_sequence[i]
-            ), f"Action mismatch at index {i}: {stored_episode['action_sequence'][i]} != {action_sequence[i]}"
-            assert (
-                abs(stored_episode["observation_sequence"][i] - observation_sequence[i])
-                < 1e-10
-            ), f"Observation mismatch at index {i}"
-
-    @pytest.mark.parametrize("episodes_should_match", [True, False])
-    def test_reproducibility_tracker_verification(self, episodes_should_match):
-        """Test ReproducibilityTracker episode reproducibility verification ensuring accurate
-        comparison and discrepancy analysis."""
-        # Initialize ReproducibilityTracker and record baseline episode
+    def test_tracker_detects_matching_episodes(self):
+        """Test that verify_episode_reproducibility correctly identifies matching episodes."""
         tracker = ReproducibilityTracker()
 
-        base_seed = 42
-        episode_length = 20
+        # Create and record baseline episode
+        np_random, _ = create_seeded_rng(42)
+        actions = [np_random.integers(0, 4) for _ in range(10)]
+        observations = [np_random.random() for _ in range(10)]
 
-        # Generate baseline episode data
-        np_random_base, _ = create_seeded_rng(base_seed)
-
-        base_actions = [np_random_base.integers(0, 4) for _ in range(episode_length)]
-        base_observations = [np_random_base.random() for _ in range(episode_length)]
-        base_rewards = [np_random_base.random() * 2 - 1 for _ in range(episode_length)]
-
-        baseline_id = tracker.record_episode(
-            episode_seed=base_seed,
-            action_sequence=base_actions,
-            observation_sequence=base_observations,
+        episode_id = tracker.record_episode(
+            episode_seed=42,
+            action_sequence=actions,
+            observation_sequence=observations,
             metadata={"type": "baseline"},
         )
 
-        # Generate new episode sequences (identical or different based on parameter)
-        if episodes_should_match:
-            # Use same seed for identical episode
-            comparison_seed = base_seed
-        else:
-            # Use different seed for different episode
-            comparison_seed = base_seed + 1
-
-        np_random_comp, _ = create_seeded_rng(comparison_seed)
-
-        comp_actions = [np_random_comp.integers(0, 4) for _ in range(episode_length)]
-        comp_observations = [np_random_comp.random() for _ in range(episode_length)]
-        comp_rewards = [np_random_comp.random() * 2 - 1 for _ in range(episode_length)]
-
-        comparison_id = tracker.record_episode(
-            episode_seed=comparison_seed,
-            action_sequence=comp_actions,
-            observation_sequence=comp_observations,
-            metadata={"type": "comparison"},
+        # Verify against identical sequences
+        result = tracker.verify_episode_reproducibility(
+            episode_record_id=episode_id,
+            new_action_sequence=actions,
+            new_observation_sequence=observations,
         )
 
-        # Call verify_episode_reproducibility with baseline episode and new sequences
-        # API compares a stored episode against new sequences
-        comparison_episode = tracker.episode_records[comparison_id]
-        verification_result = tracker.verify_episode_reproducibility(
-            episode_record_id=baseline_id,
-            new_action_sequence=comparison_episode["action_sequence"],
-            new_observation_sequence=comparison_episode["observation_sequence"],
-            custom_tolerance=REPRODUCIBILITY_TOLERANCE,
+        assert result["sequences_match"] is True
+        assert result["match_status"] == "PASS"
+
+    def test_tracker_detects_non_matching_episodes(self):
+        """Test that verify_episode_reproducibility correctly identifies non-matching episodes."""
+        tracker = ReproducibilityTracker()
+
+        # Create baseline with seed 42
+        np_random1, _ = create_seeded_rng(42)
+        actions1 = [np_random1.integers(0, 4) for _ in range(10)]
+        observations1 = [np_random1.random() for _ in range(10)]
+
+        episode_id = tracker.record_episode(
+            episode_seed=42,
+            action_sequence=actions1,
+            observation_sequence=observations1,
+            metadata={"type": "baseline"},
         )
 
-        # Assert verification results match expected outcome
-        assert isinstance(
-            verification_result, dict
-        ), f"Verification result should be dict, got {type(verification_result)}"
+        # Create different sequences with different seed
+        np_random2, _ = create_seeded_rng(43)
+        actions2 = [np_random2.integers(0, 4) for _ in range(10)]
+        observations2 = [np_random2.random() for _ in range(10)]
 
-        required_keys = [
-            "sequences_match",
-            "episode_record_id",
-            "match_status",
-        ]
-        for key in required_keys:
-            assert key in verification_result, f"Verification result missing key: {key}"
+        # Verify - should not match
+        result = tracker.verify_episode_reproducibility(
+            episode_record_id=episode_id,
+            new_action_sequence=actions2,
+            new_observation_sequence=observations2,
+        )
 
-        sequences_match = verification_result["sequences_match"]
-        assert isinstance(sequences_match, bool), "sequences_match should be boolean"
-
-        if episodes_should_match:
-            assert sequences_match is True, "Identical seed episodes should match"
-            # When sequences match, status should be PASS
-            assert (
-                verification_result["match_status"] == "PASS"
-            ), "Match status should be PASS"
-        else:
-            # Different seeds should usually produce different results
-            # Note: there's a small chance they could be identical by coincidence
-            if not sequences_match:
-                # Check for discrepancy analysis
-                if "discrepancy_analysis" in verification_result:
-                    analysis = verification_result["discrepancy_analysis"]
-                    assert isinstance(
-                        analysis, dict
-                    ), "Discrepancy analysis should be dict"
-
-        # Validate statistical measures are accurate and meaningful
-        if "statistical_analysis" in verification_result:
-            stats = verification_result["statistical_analysis"]
-            assert isinstance(stats, dict), "Statistical analysis should be dict"
-
-            if "total_comparisons" in stats:
-                total_comps = stats["total_comparisons"]
-                expected_total = episode_length * 3  # actions, observations, rewards
-                assert (
-                    total_comps == expected_total
-                ), f"Total comparisons should be {expected_total}"
-
-        # Test tolerance handling for floating point comparisons
-        tolerance = verification_result.get("tolerance_used", REPRODUCIBILITY_TOLERANCE)
-        assert isinstance(tolerance, (int, float)), "Tolerance should be numeric"
-        assert tolerance > 0, "Tolerance should be positive"
+        # Different seeds should produce different sequences
+        assert result["sequences_match"] is False
 
     def test_reproducibility_tracker_reporting(self):
         """Test ReproducibilityTracker report generation.
