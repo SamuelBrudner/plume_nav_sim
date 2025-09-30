@@ -1013,17 +1013,18 @@ class StaticGaussianPlume(BasePlumeModel):
         effective_sigma = sigma if sigma is not None else DEFAULT_PLUME_SIGMA
 
         # Call parent BasePlumeModel.__init__ with validated parameters
-        super().__init__(grid_obj, source_coords, effective_sigma)
+        super().__init__(grid_obj, source_coords, effective_sigma, model_options)
 
         # Set model_type to STATIC_GAUSSIAN_MODEL_TYPE for registry and validation consistency
         self.model_type = STATIC_GAUSSIAN_MODEL_TYPE
 
-        # Create PlumeParameters dataclass with source_location, sigma, and model_type for configuration management
-        self.plume_params = PlumeParameters(
-            source_location=source_coords,
-            sigma=effective_sigma,
-            model_type=STATIC_GAUSSIAN_MODEL_TYPE,
-        )
+        # Store plume parameters as a dict for configuration management
+        # Note: PlumeParameters is an alias for PlumeModel, so we can't instantiate it here
+        self.plume_params = {
+            "source_location": source_coords,
+            "sigma": effective_sigma,
+            "model_type": STATIC_GAUSSIAN_MODEL_TYPE,
+        }
 
         # Initialize ConcentrationField with proper configuration
         self.concentration_field: Optional[ConcentrationField] = None
