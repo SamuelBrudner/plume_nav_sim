@@ -1075,20 +1075,24 @@ class StaticGaussianPlume(BasePlumeModel):
             f"StaticGaussianPlume initialized: {self.gaussian_parameters}"
         )
 
-    def initialize_model(self, initialization_params: Dict[str, Any]) -> bool:
+    def initialize_model(
+        self, initialization_params: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Initialize static Gaussian plume model with parameter validation, ConcentrationField setup,
         mathematical consistency checking, and performance baseline establishment implementing
         BasePlumeModel abstract method.
 
         Args:
-            initialization_params: Configuration parameters for model initialization
+            initialization_params: Optional configuration parameters for model initialization
 
         Returns:
             True if initialization successful, False if failed with detailed error logging
         """
         try:
             # Merge initialization_params with existing configuration
+            if initialization_params is None:
+                initialization_params = {}
             validate_on_init = initialization_params.get("validate_on_init", True)
             enable_performance = initialization_params.get(
                 "enable_performance_monitoring", True

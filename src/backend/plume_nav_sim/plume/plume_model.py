@@ -302,7 +302,9 @@ class BasePlumeModel(abc.ABC):
         }
 
     @abc.abstractmethod
-    def initialize_model(self, initialization_params: Dict[str, Any]) -> bool:
+    def initialize_model(
+        self, initialization_params: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Abstract method for model-specific initialization with parameter validation,
         field setup, and performance monitoring that must be implemented by all
