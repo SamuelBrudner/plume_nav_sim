@@ -1150,7 +1150,7 @@ class EpisodeManager:
             )
 
             # Initialize RewardCalculator with derived RewardCalculatorConfig for goal-based rewards
-            # RewardCalculator expects the lightweight PerformanceMetrics from core.typing
+            # RewardCalculator expects the lightweight PerformanceMetrics from core.types
             self.reward_calculator = RewardCalculator(
                 config=component_configs["RewardCalculator"],
                 performance_metrics=(
