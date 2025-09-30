@@ -47,13 +47,6 @@ from .test_exceptions import (
 # Import all test classes from test_logging.py
 from .test_logging import TestComponentLogger, TestLoggingMixin
 
-# Import all test classes from test_seeding.py
-from .test_seeding import (
-    test_create_seeded_rng_reproducibility,
-    test_seeding_performance_benchmarks,
-    test_validate_seed_valid_inputs,
-)
-
 # Import relevant space validation tests
 from .test_spaces import TestSpaceConfig, TestSpaceValidator
 
@@ -63,6 +56,10 @@ from .test_validation import (
     TestParameterValidatorClass,
     TestValidationResultClass,
 )
+
+# Note: test_seeding.py consolidated to tests/test_seeding.py (flat structure)
+# Seeding tests are now in the main tests/ directory for better organization
+
 
 # Maintain backward-compatible aliases for aggregated exports
 TestParameterValidator = TestParameterValidatorClass
