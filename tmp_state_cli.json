@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "timestamp": 1758651641.070455,
+  "rng_state": {
+    "bit_generator": "PCG64",
+    "state": {
+      "state": 241841658494706541302970550169055938186,
+      "inc": 332724090758049132448979897138935081983
+    },
+    "has_uint32": 0,
+    "uinteger": 0
+  },
+  "state": {
+    "bit_generator": "PCG64",
+    "state": {
+      "state": 241841658494706541302970550169055938186,
+      "inc": 332724090758049132448979897138935081983
+    },
+    "has_uint32": 0,
+    "uinteger": 0
+  },
+  "generator_type": "PCG64",
+  "metadata": {
+    "t": 1
+  }
+}

@@ -1507,8 +1507,12 @@ def validate_base_environment_setup(
 
         # Validate performance feasibility if check_performance_feasibility enabled
         if check_performance_feasibility:
-            resource_estimate = config.estimate_resources()
-            memory_mb = resource_estimate.get("memory_mb", 0)
+            # Estimate resources from grid_size since EnvironmentConfig doesn't have estimate_resources()
+            memory_mb = (
+                config.grid_size.estimate_memory_mb()
+                if hasattr(config.grid_size, "estimate_memory_mb")
+                else 0
+            )
 
             if memory_mb > 1000:  # 1GB threshold
                 raise ValidationError(
