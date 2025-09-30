@@ -9,7 +9,6 @@ import traceback  # >=3.10 - Stack trace formatting for detailed error context a
 import uuid
 from typing import (  # >=3.10 - Type hints for exception parameters, error contexts, and recovery suggestion functions
     Any,
-    Callable,
     Dict,
     List,
     Optional,
@@ -338,8 +337,7 @@ class PlumeNavSimError(Exception):
         if logger is None:
             logger = logging.getLogger("plume_nav_sim.exceptions")
 
-        # Create comprehensive log message with error details
-        log_data = self.get_error_details()
+        # Create comprehensive log message with error details (details available via get_error_details())
 
         # Include sanitized context information for debugging
         context_str = ""

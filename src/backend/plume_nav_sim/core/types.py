@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,9 +22,6 @@ from .geometry import Coordinates, GridSize, calculate_euclidean_distance
 from .models import PlumeModel
 from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
-
-if TYPE_CHECKING:  # pragma: no cover - import cycle guard
-    from ..utils.exceptions import ValidationError as _ValidationError
 
 
 def _validation_error_class():
@@ -70,7 +67,7 @@ class PerformanceMetrics:
 
     def record_step(self, duration_ms: float) -> None:
         """Record a single step duration in milliseconds."""
-        self.step_durations_ms.append(float(duration_ms))
+        self.step_durations_ms.append(duration_ms)
         self.total_steps += 1
 
     def record_timing(self, name: str, value_ms: float) -> None:
@@ -78,7 +75,7 @@ class PerformanceMetrics:
         if name == "episode_step":
             self.record_step(value_ms)
             return
-        self.other_timings_ms.setdefault(name, []).append(float(value_ms))
+        self.other_timings_ms.setdefault(name, []).append(value_ms)
 
     def average_step_time_ms(self) -> float:
         """Return the rolling average step duration."""
@@ -383,7 +380,6 @@ __all__ = [
     "RenderMode",
     "RewardType",
     "StateSnapshot",
-    "ValidationError",
     "calculate_euclidean_distance",
     "create_agent_state",
     "create_coordinates",

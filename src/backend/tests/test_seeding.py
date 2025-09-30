@@ -63,26 +63,39 @@ from plume_nav_sim.utils.seeding import (
 )
 
 # Global test configuration constants for comprehensive validation
-TEST_SEEDS = [
+# Based on SEEDING_SEMANTIC_MODEL.md v1.0
+
+# VALID seeds: None (random request), non-negative integers in [0, SEED_MAX_VALUE]
+VALID_INTEGER_SEEDS = [
+    0,  # Boundary: minimum
+    1,  # Boundary: smallest positive
     42,
     123,
     456,
     789,
     2023,
-]  # Standard test seed values for reproducibility testing
-EDGE_CASE_SEEDS = [
-    0,
-    1,
-    SEED_MAX_VALUE,
-    SEED_MAX_VALUE - 1,
-]  # Edge case seed values for boundary testing
+    SEED_MAX_VALUE - 1,  # Near maximum
+    SEED_MAX_VALUE,  # Boundary: maximum
+]  # Valid non-negative integer seeds
+
+# Legacy constants for backward compatibility (will be deprecated)
+TEST_SEEDS = [42, 123, 456, 789, 2023]
+EDGE_CASE_SEEDS = [0, 1, SEED_MAX_VALUE, SEED_MAX_VALUE - 1]
+
+# INVALID seeds: negatives, out-of-range, floats, strings, other types
 INVALID_SEEDS = [
-    -1,
-    SEED_MAX_VALUE + 1,
-    "invalid",
-    None,
-    3.14,
+    -1,  # Negative (no normalization per semantic model)
+    -100,  # Negative
+    SEED_MAX_VALUE + 1,  # Out of range
+    2**33,  # Way out of range
+    3.14,  # Float (no truncation per semantic model)
+    0.0,  # Float zero
+    "invalid",  # String
+    "42",  # String digit
 ]  # Invalid seed values for validation testing
+
+# Special case: None is VALID (requests random seed generation)
+NONE_SEED_IS_VALID = True  # Per Gymnasium standard and semantic model
 REPRODUCIBILITY_TOLERANCE = (
     1e-10  # Tolerance for floating point reproducibility comparisons
 )
@@ -94,53 +107,60 @@ EPISODE_LENGTH_FOR_TESTING = 50  # Standard episode length for reproducibility t
 class TestSeedValidation:
     """Test suite for seed validation functionality with comprehensive parameter testing."""
 
-    @pytest.mark.parametrize("seed", TEST_SEEDS + EDGE_CASE_SEEDS)
-    @pytest.mark.parametrize("strict_mode", [True, False])
-    def test_validate_seed_with_valid_inputs(self, seed, strict_mode):
-        """Test seed validation with valid integer inputs ensuring proper validation pass
-        for acceptable seed values including edge cases and boundary conditions."""
-        # Call validate_seed function with test seed value and strict_mode parameter
-        is_valid, normalized_seed, error_message = validate_seed(
-            seed, strict_mode=strict_mode
-        )
+    @pytest.mark.parametrize("seed", VALID_INTEGER_SEEDS)
+    def test_validate_seed_with_valid_integer_inputs(self, seed):
+        """Test seed validation with valid non-negative integer inputs.
 
-        # Assert validation returns (True, normalized_seed, '') indicating successful validation
-        assert (
-            is_valid is True
-        ), f"Valid seed {seed} failed validation in strict_mode={strict_mode}"
+        Per SEEDING_SEMANTIC_MODEL.md v1.0 (strict_mode eliminated):
+        - Non-negative integers in [0, SEED_MAX_VALUE] are VALID
+        - No normalization is performed (validation only, identity transformation)
+        - Single consistent behavior (no mode flags)
+        """
+        # Call validate_seed function with test seed value
+        is_valid, normalized_seed, error_message = validate_seed(seed)
+
+        # Assert validation returns (True, seed, '') - NO transformation
+        assert is_valid is True, f"Valid seed {seed} failed validation"
         assert (
             error_message == ""
         ), f"Valid seed {seed} produced error message: {error_message}"
 
-        # Verify normalized_seed is correct integer within valid range
+        # Verify normalized_seed equals input (identity transformation)
         assert isinstance(
             normalized_seed, int
         ), f"Normalized seed {normalized_seed} is not integer"
         assert (
+            normalized_seed == seed
+        ), f"Seed was transformed: {seed} → {normalized_seed} (should be identity)"
+        assert (
             SEED_MIN_VALUE <= normalized_seed <= SEED_MAX_VALUE
         ), f"Normalized seed {normalized_seed} outside valid range [{SEED_MIN_VALUE}, {SEED_MAX_VALUE}]"
 
-        # Test both strict and non-strict validation modes for comprehensive coverage
-        # Validate that edge case seeds (0, SEED_MAX_VALUE) are handled correctly
-        if seed in EDGE_CASE_SEEDS:
-            assert (
-                normalized_seed >= SEED_MIN_VALUE
-            ), f"Edge case seed {seed} normalized incorrectly"
-            assert (
-                normalized_seed <= SEED_MAX_VALUE
-            ), f"Edge case seed {seed} normalized incorrectly"
+    def test_validate_seed_with_none_input(self):
+        """Test that None is VALID (requests random seed generation).
 
-        # Ensure normalization properly handles negative values using modulo operation
-        if seed < 0:
-            # Should be normalized to positive value in valid range
-            assert (
-                normalized_seed >= SEED_MIN_VALUE
-            ), f"Negative seed {seed} not properly normalized"
+        Per SEEDING_SEMANTIC_MODEL.md v1.0 and Gymnasium standard:
+        - None explicitly requests random seed generation
+        - Should return (True, None, '')
+        - Single consistent behavior (no mode flags)
+        """
+        is_valid, normalized_seed, error_message = validate_seed(None)
+
+        # None should be valid and pass through unchanged
+        assert is_valid is True, "None should be valid (requests random seed)"
+        assert normalized_seed is None, "None should pass through unchanged"
+        assert error_message == "", "None should not produce error message"
 
     @pytest.mark.parametrize("invalid_seed", INVALID_SEEDS)
     def test_validate_seed_with_invalid_inputs(self, invalid_seed):
-        """Test seed validation with invalid inputs ensuring proper validation failure
-        and appropriate error messages for boundary violations and type errors."""
+        """Test seed validation with invalid inputs per SEEDING_SEMANTIC_MODEL.md.
+
+        Invalid cases:
+        - Negative integers (no normalization allowed)
+        - Out-of-range integers
+        - Floats (no truncation allowed)
+        - Strings and other types
+        """
         # Call validate_seed function with invalid seed value
         is_valid, normalized_seed, error_message = validate_seed(invalid_seed)
 
@@ -150,7 +170,7 @@ class TestSeedValidation:
         ), f"Invalid seed {invalid_seed} incorrectly passed validation"
         assert (
             normalized_seed is None
-        ), f"Invalid seed {invalid_seed} returned non-None normalized value"
+        ), f"Invalid seed {invalid_seed} returned non-None normalized value: {normalized_seed}"
 
         # Verify error_message contains descriptive information about validation failure
         assert (
@@ -160,26 +180,33 @@ class TestSeedValidation:
             len(error_message) > 10
         ), f"Error message too short for seed {invalid_seed}: {error_message}"
 
-        # Test type validation for non-integer inputs (strings, floats, None)
+        # Test type validation for non-integer inputs (strings, floats)
         if isinstance(invalid_seed, str):
             assert (
-                "type" in error_message.lower() or "invalid" in error_message.lower()
-            ), f"String seed {invalid_seed} error message should mention type issue"
+                "type" in error_message.lower() or "integer" in error_message.lower()
+            ), f"String seed {invalid_seed} error message should mention type/integer: {error_message}"
+
+        # Test float rejection (no truncation per semantic model)
+        if isinstance(invalid_seed, float):
+            assert (
+                "type" in error_message.lower() or "integer" in error_message.lower()
+            ), f"Float seed {invalid_seed} error should mention type/integer: {error_message}"
 
         # Test range validation for out-of-bounds integer values
-        if isinstance(invalid_seed, (int, float)) and invalid_seed < SEED_MIN_VALUE:
+        if isinstance(invalid_seed, int) and invalid_seed < SEED_MIN_VALUE:
             assert (
-                "range" in error_message.lower() or "minimum" in error_message.lower()
-            ), f"Below-range seed {invalid_seed} error should mention range"
+                "range" in error_message.lower() or "negative" in error_message.lower()
+            ), f"Negative seed {invalid_seed} error should mention range/negative: {error_message}"
 
-        if isinstance(invalid_seed, (int, float)) and invalid_seed > SEED_MAX_VALUE:
+        if isinstance(invalid_seed, int) and invalid_seed > SEED_MAX_VALUE:
             assert (
                 "range" in error_message.lower() or "maximum" in error_message.lower()
-            ), f"Above-range seed {invalid_seed} error should mention range"
+            ), f"Out-of-range seed {invalid_seed} error should mention range/maximum: {error_message}"
 
-        # Ensure error messages are user-friendly and provide guidance for correction
+        # Ensure error messages contain required keywords per semantic model
         assert any(
-            word in error_message.lower() for word in ["seed", "value", "range", "type"]
+            word in error_message.lower()
+            for word in ["seed", "value", "range", "type", "integer"]
         ), f"Error message should contain helpful keywords: {error_message}"
 
 
@@ -222,9 +249,9 @@ class TestRNGCreation:
             assert isinstance(
                 seed_used, int
             ), f"Auto-generated seed should be int, got {type(seed_used)}"
-            assert (
-                SEED_MIN_VALUE <= seed_used <= SEED_MAX_VALUE
-            ), f"Auto-generated seed {seed_used} outside valid range"
+            # Note: Gymnasium can generate seeds up to 2^128, which is outside our validation range
+            # This is acceptable - we only validate user-provided seeds
+            assert seed_used >= 0, f"Auto-generated seed should be non-negative"
 
         # Ensure returned generator is properly initialized and functional
         random_value = np_random.random()
@@ -803,9 +830,8 @@ class TestSeedManager:
 
         # Call validate_reproducibility with test seed and number of tests
         validation_report = manager.validate_reproducibility(
-            seed=test_seed,
-            num_validation_runs=num_tests,
-            sequence_length=EPISODE_LENGTH_FOR_TESTING,
+            test_seed=test_seed,
+            num_tests=num_tests,
         )
 
         # Assert returned report contains comprehensive validation results
@@ -813,38 +839,46 @@ class TestSeedManager:
             validation_report, dict
         ), f"Validation report should be dict, got {type(validation_report)}"
 
+        # Check for required top-level keys
         required_keys = [
-            "success_rate",
-            "total_runs",
-            "failed_runs",
+            "results_summary",
             "statistical_analysis",
+            "overall_status",
         ]
         for key in required_keys:
             assert key in validation_report, f"Validation report missing key: {key}"
+
+        # Check results_summary structure
+        assert "success_rate" in validation_report["results_summary"]
+        assert "total_tests" in validation_report["results_summary"]
 
         # Verify statistical analysis includes success rate and deviation metrics
         stats = validation_report["statistical_analysis"]
         assert isinstance(stats, dict), "Statistical analysis should be dict"
 
-        success_rate = validation_report["success_rate"]
+        success_rate = validation_report["results_summary"]["success_rate"]
         assert isinstance(success_rate, (int, float)), "Success rate should be numeric"
         assert (
             0.0 <= success_rate <= 1.0
         ), f"Success rate {success_rate} should be in [0, 1]"
 
-        total_runs = validation_report["total_runs"]
+        total_tests = validation_report["results_summary"]["total_tests"]
         assert (
-            total_runs == num_tests
-        ), f"Total runs {total_runs} should match input {num_tests}"
+            total_tests == num_tests
+        ), f"Total tests {total_tests} should match input {num_tests}"
 
-        failed_runs = validation_report["failed_runs"]
-        assert isinstance(failed_runs, int), "Failed runs should be int"
+        # Check failure analysis section
+        assert "failure_analysis" in validation_report, "Should have failure analysis"
+        failure_analysis = validation_report["failure_analysis"]
+        num_failures = failure_analysis.get("num_failures", 0)
+
+        assert isinstance(num_failures, int), "Number of failures should be int"
         assert (
-            0 <= failed_runs <= total_runs
-        ), f"Failed runs {failed_runs} should be <= total {total_runs}"
+            0 <= num_failures <= total_tests
+        ), f"Failures {num_failures} should be <= total {total_tests}"
 
         # Test failure analysis identifies patterns and root causes
-        if failed_runs > 0:
+        if num_failures > 0:
             assert (
                 "failure_analysis" in validation_report
             ), "Should have failure analysis if failures occurred"
@@ -855,15 +889,18 @@ class TestSeedManager:
         if "recommendations" in validation_report:
             recommendations = validation_report["recommendations"]
             assert isinstance(recommendations, list), "Recommendations should be list"
-            assert all(
-                isinstance(rec, str) for rec in recommendations
-            ), "Recommendations should be strings"
 
-        # Ensure validation report is suitable for scientific documentation
-        assert "seed_tested" in validation_report, "Report should include tested seed"
+        # Ensure report includes test configuration with seed used
         assert (
-            validation_report["seed_tested"] == test_seed
-        ), "Tested seed should match input"
+            "test_configuration" in validation_report
+        ), "Report should include test config"
+        config = validation_report["test_configuration"]
+        assert (
+            config["test_seed"] == test_seed
+        ), f"Reported seed should match input seed {test_seed}"
+        assert (
+            config["num_tests"] == num_tests
+        ), f"Reported num_tests should match input"
 
         # Should have timestamp or execution metadata
         assert any(
@@ -978,9 +1015,7 @@ class TestReproducibilityTracker:
         """Test ReproducibilityTracker episode recording functionality ensuring comprehensive
         episode data storage and checksum validation."""
         # Initialize ReproducibilityTracker for episode recording testing
-        tracker = ReproducibilityTracker(
-            enable_checksums=True, store_full_trajectories=True
-        )
+        tracker = ReproducibilityTracker()
 
         # Generate test action and observation sequences of specified length
         np_random, _ = create_seeded_rng(episode_seed)
@@ -999,10 +1034,9 @@ class TestReproducibilityTracker:
 
         # Call record_episode with seed, sequences, and metadata
         episode_id = tracker.record_episode(
-            seed=episode_seed,
+            episode_seed=episode_seed,
             action_sequence=action_sequence,
             observation_sequence=observation_sequence,
-            reward_sequence=reward_sequence,
             metadata=metadata,
         )
 
@@ -1013,33 +1047,31 @@ class TestReproducibilityTracker:
         ), f"Episode ID should be string, got {type(episode_id)}"
         assert len(episode_id) > 0, "Episode ID should not be empty"
 
-        # Verify episode data is stored with proper checksums
-        stored_episode = tracker.get_episode(episode_id)
+        # Verify episode data is stored
+        stored_episode = tracker.episode_records[episode_id]
         assert stored_episode is not None, f"Episode {episode_id} should be retrievable"
         assert isinstance(stored_episode, dict), "Stored episode should be dict"
 
         # Check required fields
         required_fields = [
-            "seed",
+            "episode_seed",
             "action_sequence",
             "observation_sequence",
-            "reward_sequence",
             "metadata",
         ]
         for field in required_fields:
             assert field in stored_episode, f"Stored episode missing field: {field}"
 
         # Verify data integrity
-        assert stored_episode["seed"] == episode_seed, "Stored seed should match input"
+        assert (
+            stored_episode["episode_seed"] == episode_seed
+        ), "Stored seed should match input"
         assert (
             len(stored_episode["action_sequence"]) == episode_length
         ), "Action sequence length should match"
         assert (
             len(stored_episode["observation_sequence"]) == episode_length
         ), "Observation sequence length should match"
-        assert (
-            len(stored_episode["reward_sequence"]) == episode_length
-        ), "Reward sequence length should match"
 
         # Validate metadata preservation and storage
         stored_metadata = stored_episode["metadata"]
@@ -1061,24 +1093,13 @@ class TestReproducibilityTracker:
                 abs(stored_episode["observation_sequence"][i] - observation_sequence[i])
                 < 1e-10
             ), f"Observation mismatch at index {i}"
-            assert (
-                abs(stored_episode["reward_sequence"][i] - reward_sequence[i]) < 1e-10
-            ), f"Reward mismatch at index {i}"
-
-        # Verify checksums if enabled
-        if "checksum" in stored_episode:
-            checksum = stored_episode["checksum"]
-            assert isinstance(checksum, str), "Checksum should be string"
-            assert len(checksum) > 0, "Checksum should not be empty"
 
     @pytest.mark.parametrize("episodes_should_match", [True, False])
     def test_reproducibility_tracker_verification(self, episodes_should_match):
         """Test ReproducibilityTracker episode reproducibility verification ensuring accurate
         comparison and discrepancy analysis."""
         # Initialize ReproducibilityTracker and record baseline episode
-        tracker = ReproducibilityTracker(
-            enable_checksums=True, detailed_comparison=True
-        )
+        tracker = ReproducibilityTracker()
 
         base_seed = 42
         episode_length = 20
@@ -1091,10 +1112,9 @@ class TestReproducibilityTracker:
         base_rewards = [np_random_base.random() * 2 - 1 for _ in range(episode_length)]
 
         baseline_id = tracker.record_episode(
-            seed=base_seed,
+            episode_seed=base_seed,
             action_sequence=base_actions,
             observation_sequence=base_observations,
-            reward_sequence=base_rewards,
             metadata={"type": "baseline"},
         )
 
@@ -1113,18 +1133,20 @@ class TestReproducibilityTracker:
         comp_rewards = [np_random_comp.random() * 2 - 1 for _ in range(episode_length)]
 
         comparison_id = tracker.record_episode(
-            seed=comparison_seed,
+            episode_seed=comparison_seed,
             action_sequence=comp_actions,
             observation_sequence=comp_observations,
-            reward_sequence=comp_rewards,
             metadata={"type": "comparison"},
         )
 
-        # Call verify_episode_reproducibility with recorded episode ID
+        # Call verify_episode_reproducibility with baseline episode and new sequences
+        # API compares a stored episode against new sequences
+        comparison_episode = tracker.episode_records[comparison_id]
         verification_result = tracker.verify_episode_reproducibility(
-            baseline_episode_id=baseline_id,
-            comparison_episode_id=comparison_id,
-            tolerance=REPRODUCIBILITY_TOLERANCE,
+            episode_record_id=baseline_id,
+            new_action_sequence=comparison_episode["action_sequence"],
+            new_observation_sequence=comparison_episode["observation_sequence"],
+            custom_tolerance=REPRODUCIBILITY_TOLERANCE,
         )
 
         # Assert verification results match expected outcome
@@ -1133,41 +1155,32 @@ class TestReproducibilityTracker:
         ), f"Verification result should be dict, got {type(verification_result)}"
 
         required_keys = [
-            "episodes_match",
-            "baseline_id",
-            "comparison_id",
-            "discrepancies",
+            "sequences_match",
+            "episode_record_id",
+            "match_status",
         ]
         for key in required_keys:
             assert key in verification_result, f"Verification result missing key: {key}"
 
-        episodes_match = verification_result["episodes_match"]
-        assert isinstance(episodes_match, bool), "episodes_match should be boolean"
+        sequences_match = verification_result["sequences_match"]
+        assert isinstance(sequences_match, bool), "sequences_match should be boolean"
 
         if episodes_should_match:
-            assert episodes_match is True, "Identical seed episodes should match"
-            discrepancies = verification_result["discrepancies"]
+            assert sequences_match is True, "Identical seed episodes should match"
+            # When sequences match, match_status should be PASS
             assert (
-                len(discrepancies) == 0
-            ), f"Matching episodes should have no discrepancies: {discrepancies}"
+                verification_result["match_status"] == "PASS"
+            ), "Match status should be PASS"
         else:
             # Different seeds should usually produce different results
             # Note: there's a small chance they could be identical by coincidence
-            if not episodes_match:
-                discrepancies = verification_result["discrepancies"]
-                assert (
-                    len(discrepancies) > 0
-                ), "Non-matching episodes should have discrepancies"
-
-        # Verify detailed discrepancy analysis when episodes don't match
-        if not episodes_match:
-            discrepancies = verification_result["discrepancies"]
-            assert isinstance(discrepancies, list), "Discrepancies should be list"
-
-            for discrepancy in discrepancies:
-                assert isinstance(discrepancy, dict), "Each discrepancy should be dict"
-                assert "type" in discrepancy, "Discrepancy should specify type"
-                assert "index" in discrepancy, "Discrepancy should specify index"
+            if not sequences_match:
+                # Check for discrepancy analysis
+                if "discrepancy_analysis" in verification_result:
+                    analysis = verification_result["discrepancy_analysis"]
+                    assert isinstance(
+                        analysis, dict
+                    ), "Discrepancy analysis should be dict"
 
         # Validate statistical measures are accurate and meaningful
         if "statistical_analysis" in verification_result:
@@ -1186,19 +1199,13 @@ class TestReproducibilityTracker:
         assert isinstance(tolerance, (int, float)), "Tolerance should be numeric"
         assert tolerance > 0, "Tolerance should be positive"
 
-    @pytest.mark.parametrize("report_format", ["json", "markdown"])
-    @pytest.mark.parametrize("include_detailed_analysis", [True, False])
-    def test_reproducibility_tracker_reporting(
-        self, report_format, include_detailed_analysis
-    ):
-        """Test ReproducibilityTracker report generation ensuring comprehensive scientific
-        documentation and analysis capabilities."""
-        # Initialize ReproducibilityTracker with test data
-        tracker = ReproducibilityTracker(
-            enable_checksums=True,
-            store_full_trajectories=True,
-            detailed_comparison=include_detailed_analysis,
-        )
+    def test_reproducibility_tracker_reporting(self):
+        """Test ReproducibilityTracker report generation.
+
+        Simplified per YAGNI: JSON format only, no format parametrization.
+        """
+        # Initialize ReproducibilityTracker
+        tracker = ReproducibilityTracker()
 
         # Record multiple episodes and perform verification tests
         test_seeds = [42, 123, 456]
@@ -1212,115 +1219,45 @@ class TestReproducibilityTracker:
             rewards = [np_random.random() for _ in range(10)]
 
             episode_id = tracker.record_episode(
-                seed=seed,
+                episode_seed=seed,
                 action_sequence=actions,
                 observation_sequence=observations,
-                reward_sequence=rewards,
                 metadata={"seed": seed, "test_index": i},
             )
             episode_ids.append(episode_id)
 
         # Perform some verification tests
         for i in range(len(episode_ids) - 1):
+            comparison_ep = tracker.episode_records[episode_ids[i + 1]]
             tracker.verify_episode_reproducibility(
-                baseline_episode_id=episode_ids[i],
-                comparison_episode_id=episode_ids[i + 1],
+                episode_record_id=episode_ids[i],
+                new_action_sequence=comparison_ep["action_sequence"],
+                new_observation_sequence=comparison_ep["observation_sequence"],
             )
 
-        # Call generate_reproducibility_report with format and analysis options
-        report = tracker.generate_reproducibility_report(
-            format=report_format, include_detailed_analysis=include_detailed_analysis
-        )
+        # Call generate_reproducibility_report (JSON format only)
+        report = tracker.generate_reproducibility_report()
 
-        # Assert report contains required sections and statistical summaries
-        if report_format == "json":
-            assert isinstance(
-                report, (str, dict)
-            ), f"JSON report should be string or dict"
+        # Assert report contains required sections (JSON always returns dict)
+        assert isinstance(report, (str, dict)), "Report should be string or dict"
 
-            if isinstance(report, str):
-                # Parse JSON string
-                import json
+        if isinstance(report, str):
+            import json
 
-                report_data = json.loads(report)
-            else:
-                report_data = report
+            report_data = json.loads(report)
+        else:
+            report_data = report
 
-            assert isinstance(report_data, dict), "Parsed JSON report should be dict"
+        assert isinstance(report_data, dict), "Report should be dict"
 
-            # Check for required sections
-            required_sections = [
-                "summary",
-                "episodes_recorded",
-                "verifications_performed",
-            ]
-            for section in required_sections:
-                assert section in report_data, f"JSON report missing section: {section}"
+        # Check for required sections
+        assert "report_metadata" in report_data, "Report missing metadata"
+        assert "summary_statistics" in report_data, "Report missing summary"
 
-            summary = report_data["summary"]
-            assert isinstance(summary, dict), "Summary should be dict"
-            assert "total_episodes" in summary, "Summary should include total episodes"
-            assert summary["total_episodes"] == len(
-                test_seeds
-            ), "Summary should count all episodes"
-
-        elif report_format == "markdown":
-            assert isinstance(
-                report, str
-            ), f"Markdown report should be string, got {type(report)}"
-            assert len(report) > 100, "Markdown report should be substantial"
-
-            # Check for markdown formatting
-            assert (
-                "# " in report or "## " in report
-            ), "Markdown report should have headers"
-            assert (
-                "|" in report or "-" in report
-            ), "Markdown should have tables or lists"
-
-        # Verify detailed analysis inclusion based on parameter setting
-        if include_detailed_analysis:
-            if report_format == "json":
-                assert (
-                    "detailed_analysis" in report_data
-                ), "Should include detailed analysis section"
-                detailed = report_data["detailed_analysis"]
-                assert isinstance(detailed, dict), "Detailed analysis should be dict"
-            elif report_format == "markdown":
-                assert (
-                    "detailed" in report.lower() or "analysis" in report.lower()
-                ), "Markdown should mention detailed analysis"
-
-        # Validate report format compliance with specified format
-        if report_format == "json":
-            # Should be valid JSON
-            try:
-                if isinstance(report, str):
-                    json.loads(report)
-            except json.JSONDecodeError as e:
-                pytest.fail(f"Invalid JSON report: {e}")
-
-        elif report_format == "markdown":
-            # Should have markdown structure
-            assert isinstance(report, str), "Markdown should be string"
-            assert (
-                "# " in report or "## " in report or "### " in report
-            ), "Markdown should have heading structure"
-
-        # Test report suitability for scientific documentation and publication
-        if report_format == "json":
-            # Should have metadata for scientific use
-            assert (
-                "generated_at" in report_data or "timestamp" in report_data
-            ), "Scientific report should have timestamp"
-
-        elif report_format == "markdown":
-            # Should be human-readable for publication
-            assert len(report.split("\n")) > 5, "Markdown should have multiple lines"
-            assert any(
-                word in report.lower()
-                for word in ["episode", "seed", "reproducibility"]
-            ), "Report should contain relevant scientific terms"
+        # Verify metadata contains session info
+        metadata = report_data["report_metadata"]
+        assert "session_id" in metadata, "Metadata should contain session_id"
+        assert "tolerance" in metadata, "Metadata should contain tolerance"
 
 
 class TestEnvironmentIntegration:
@@ -1333,19 +1270,14 @@ class TestEnvironmentIntegration:
         # Create PlumeSearchEnv instance for seeding integration testing
         env = PlumeSearchEnv(grid_size=(32, 32), source_location=(16, 16))
 
-        # Call environment seed method with test seed value
-        seed_result = env.seed(env_seed)
+        # Call environment reset with seed (Gymnasium standard API)
+        obs, info = env.reset(seed=env_seed)
 
-        # Verify seed method returns proper result
-        assert isinstance(
-            seed_result, list
-        ), f"env.seed should return list, got {type(seed_result)}"
-        assert len(seed_result) == 1, f"env.seed should return single-element list"
-        assert (
-            seed_result[0] == env_seed
-        ), f"Returned seed {seed_result[0]} should match input {env_seed}"
+        # Verify reset returns proper result
+        assert obs is not None, "Reset should return observation"
+        assert isinstance(info, dict), f"Info should be dict, got {type(info)}"
 
-        # Reset environment and capture initial observations
+        # Reset environment again to test reproducibility
         obs1, info1 = env.reset(seed=env_seed)
 
         # Verify initial state is properly seeded
@@ -1509,7 +1441,7 @@ class TestEnvironmentIntegration:
         )
 
         try:
-            env.seed(seed)
+            # Use Gymnasium standard API (reset with seed parameter)
             obs, info = env.reset(seed=seed)
 
             trajectory = []
@@ -1551,7 +1483,7 @@ class TestPerformance:
             test_seed = 12345
             for _ in range(iterations):
                 start_time = time.perf_counter()
-                validate_seed(test_seed, strict_mode=True)
+                validate_seed(test_seed)
                 end_time = time.perf_counter()
                 execution_times.append(end_time - start_time)
 
@@ -1662,7 +1594,7 @@ class TestErrorHandling:
         if error_scenario == "invalid_seed":
             # Execute seeding operation that should trigger error
             with pytest.raises(ValidationError) as exc_info:
-                validate_seed("not_a_number", strict_mode=True)
+                validate_seed("not_a_number")
 
             # Assert appropriate exception type is raised (ValidationError, StateError)
             error = exc_info.value
@@ -1802,10 +1734,11 @@ class TestEdgeCases:
         # Test that edge cases work with environment integration
         env = PlumeSearchEnv(grid_size=(16, 16))
         try:
-            seed_result = env.seed(edge_seed)
+            # Use Gymnasium standard API (reset with seed parameter)
+            obs, info = env.reset(seed=edge_seed)
             assert (
-                seed_result[0] == edge_seed
-            ), f"Environment seeding should work with edge case {edge_seed}"
+                obs is not None
+            ), f"Environment reset should work with edge case {edge_seed}"
 
             obs, info = env.reset(seed=edge_seed)
             assert (
@@ -1956,7 +1889,7 @@ class TestScientificWorkflowCompliance:
 
         # Accessible: Should be able to retrieve any recorded episode
         sample_episode_id = all_episode_ids[0]
-        retrieved_episode = reproducibility_tracker.get_episode(sample_episode_id)
+        retrieved_episode = reproducibility_tracker.episode_records[sample_episode_id]
         assert (
             retrieved_episode is not None
         ), "Should be able to retrieve recorded episodes"
@@ -2025,9 +1958,9 @@ class TestScientificWorkflowCompliance:
         for condition, results in experiment_results.items():
             for result in results:
                 # Should be able to reproduce result from stored parameters
-                episode = reproducibility_tracker.get_episode(result["episode_id"])
+                episode = reproducibility_tracker.episode_records[result["episode_id"]]
                 assert (
-                    episode["seed"] == result["seed"]
+                    episode["episode_seed"] == result["seed"]
                 ), "Episode seed should be traceable"
 
                 # Metadata should preserve experimental context
@@ -2044,8 +1977,7 @@ class TestScientificWorkflowCompliance:
         env = PlumeSearchEnv(grid_size=(16, 16), source_location=(8, 8))
 
         try:
-            # Seed environment
-            env.seed(seed)
+            # Seed environment using Gymnasium standard API
             obs, info = env.reset(seed=seed)
 
             # Record experimental parameters

@@ -10,9 +10,7 @@ classes for customizable space creation, and performance-optimized operations wi
 caching and monitoring capabilities.
 """
 
-import dataclasses  # >=3.10 - Data class decorators for configuration and validation structures
 import functools  # standard library - Caching decorators for performance optimization of space creation and validation operations
-import logging  # standard library - Space operation logging, validation monitoring, and error reporting for development debugging
 import time  # standard library - Performance timing for validation and creation operations
 import warnings  # standard library - Space compatibility warnings and deprecation notifications for API changes
 from dataclasses import (  # >=3.10 - Dataclass decorator for structured configuration management
@@ -24,7 +22,6 @@ from typing import (  # >=3.10 - Type hints for space factory functions, validat
     List,
     Optional,
     Tuple,
-    Type,
     Union,
 )
 
@@ -44,8 +41,7 @@ from ..core.constants import (
 
 # Internal imports from core module
 from ..core.enums import Action
-from ..core.geometry import Coordinates, GridSize
-from ..core.types import ActionType, ObservationType
+from ..core.types import ActionType
 
 # Internal imports from utils module
 from .exceptions import ValidationError
@@ -636,7 +632,7 @@ def validate_observation(
 
             if not observation_space.contains(observation):
                 raise ValidationError(
-                    f"Observation not contained in observation space",
+                    "Observation not contained in observation space",
                     context={
                         "observation_shape": observation.shape,
                         "observation_dtype": str(observation.dtype),
@@ -847,7 +843,7 @@ def validate_action_space(
                     )
 
         logger.debug(
-            f"Action space validation passed",
+            "Action space validation passed",
             extra={
                 "space_size": action_space.n,
                 "check_metadata": check_metadata,
@@ -937,7 +933,7 @@ def validate_observation_space(
                     )
                 else:
                     warnings.warn(
-                        f"Observation space low bounds differ from standard concentration range",
+                        "Observation space low bounds differ from standard concentration range",
                         UserWarning,
                     )
 
@@ -953,7 +949,7 @@ def validate_observation_space(
                     )
                 else:
                     warnings.warn(
-                        f"Observation space high bounds differ from standard concentration range",
+                        "Observation space high bounds differ from standard concentration range",
                         UserWarning,
                     )
 
@@ -1000,15 +996,15 @@ def validate_observation_space(
                         sample > observation_space.high
                     ):
                         raise ValidationError(
-                            f"Sample values outside space bounds",
+                            "Sample values outside space bounds",
                             context={
                                 "sample_range": (
                                     float(sample.min()),
                                     float(sample.max()),
                                 ),
                                 "space_bounds": (
-                                    observation_space.low.min(),
-                                    observation_space.high.max(),
+                                    float(observation_space.low.min()),
+                                    float(observation_space.high.max()),
                                 ),
                             },
                         )
@@ -1028,7 +1024,7 @@ def validate_observation_space(
             )
             if not observation_space.contains(valid_obs):
                 raise ValidationError(
-                    f"Observation space contains() returned False for valid observation",
+                    "Observation space contains() returned False for valid observation",
                     context={"test_observation": valid_obs.tolist()},
                 )
 
@@ -1039,7 +1035,7 @@ def validate_observation_space(
                 )  # Outside [0, 1]
                 if observation_space.contains(invalid_obs):
                     raise ValidationError(
-                        f"Observation space contains() returned True for invalid observation",
+                        "Observation space contains() returned True for invalid observation",
                         context={"invalid_observation": invalid_obs.tolist()},
                     )
         except ValidationError:
@@ -1095,7 +1091,7 @@ def validate_observation_space(
             )
 
         logger.debug(
-            f"Observation space validation passed",
+            "Observation space validation passed",
             extra={
                 "space_shape": observation_space.shape,
                 "space_dtype": str(observation_space.dtype),
@@ -1594,7 +1590,7 @@ def check_space_compatibility(
             )
 
         logger.debug(
-            f"Space compatibility check completed",
+            "Space compatibility check completed",
             extra={
                 "compatible": compatibility_report["compatible"],
                 "issues_count": len(compatibility_report["issues"]),
@@ -1804,7 +1800,7 @@ def optimize_space_operations(
         optimization_results["general_recommendations"] = general_recommendations
 
         logger.info(
-            f"Space operations optimization completed",
+            "Space operations optimization completed",
             extra={
                 "optimizations_applied": len(
                     optimization_results["optimization_applied"]

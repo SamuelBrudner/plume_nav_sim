@@ -23,18 +23,14 @@ Architecture Integration:
 
 # Standard library imports - Python >=3.10
 import abc  # >=3.10 - Abstract base class decorators and interface definitions for renderer polymorphism
-import copy  # >=3.10 - Deep copying for immutable rendering context creation and state management
 import dataclasses  # >=3.10 - Data class decorators for rendering context and metrics with automatic validation
-import logging  # >=3.10 - Renderer operation logging, performance monitoring, and error reporting for debugging
 import time  # >=3.10 - High-precision timing for performance measurement and rendering latency tracking
 import uuid  # >=3.10 - Unique identifier generation for rendering context tracking and state management
 from typing import (  # >=3.10 - Type hints for abstract base class and generic type support
     Any,
     Dict,
     Optional,
-    Protocol,
     Tuple,
-    TypeVar,
     Union,
 )
 

@@ -63,6 +63,7 @@ from plume_nav_sim.utils.exceptions import (
     StateError,
     ValidationError,
 )
+from plume_nav_sim.utils.validation import validate_plume_parameters
 
 # Global constants for testing configuration and validation
 TEST_TIMEOUT_SECONDS = 30.0
@@ -192,40 +193,47 @@ def create_test_environment_config(
     test_goal_radius = goal_radius or 0.0
 
     # Create GridSize and Coordinates from provided tuples with validation
-    grid_size_obj = create_grid_size(
-        test_grid_size, validate_memory_limits=enable_validation
-    )
-    source_coords = create_coordinates(
-        test_source_location, grid_bounds=grid_size_obj if enable_validation else None
-    )
+    grid_size_obj = create_grid_size(test_grid_size)
+    source_coords = create_coordinates(test_source_location)
+
+    if enable_validation and not grid_size_obj.contains_coordinates(source_coords):
+        raise ValidationError(
+            "source_location must be within the provided grid_size bounds"
+        )
 
     # Create PlumeParameters with source location and default sigma value
-    plume_params = PlumeParameters(source_location=source_coords, sigma=12.0)
+    plume_sigma = 12.0
+    overrides = dict(additional_params) if additional_params else {}
+    if "plume_sigma" in overrides:
+        plume_sigma = float(overrides.pop("plume_sigma"))
+    plume_params = PlumeParameters(source_location=source_coords, sigma=plume_sigma)
 
     # Validate all parameters using appropriate validation functions
     if enable_validation:
         validate_action(0)  # Test action validation
-        plume_params.validate(grid_size=grid_size_obj)
+        validate_plume_parameters(plume_params, grid_size_obj)
 
     # Create EnvironmentConfig with validated parameters and resource checking
-    config = EnvironmentConfig(
-        grid_size=grid_size_obj,
-        plume_params=plume_params,
-        max_steps=test_max_steps,
-        goal_radius=test_goal_radius,
-        enable_validation=enable_validation,
-        enable_performance_monitoring=True,
-    )
+    config_data = {
+        "grid_size": grid_size_obj,
+        "source_location": source_coords,
+        "plume_params": plume_params,
+        "max_steps": test_max_steps,
+        "goal_radius": test_goal_radius,
+        "enable_rendering": True,
+    }
 
-    # Apply additional_params overrides if provided with consistency validation
-    if additional_params:
-        for param_name, param_value in additional_params.items():
-            if hasattr(config, param_name):
-                setattr(config, param_name, param_value)
+    # Apply remaining overrides compatible with EnvironmentConfig fields
+    for key, value in overrides.items():
+        if key in {"grid_size", "source_location"}:
+            continue  # Already handled via primary arguments
+        config_data[key] = value
+
+    config = create_environment_config(config_data)
 
     # Perform comprehensive configuration validation if enable_validation is True
     if enable_validation:
-        config.validate(strict_mode=False, check_resource_constraints=True)
+        config.validate()
 
     # Return complete test environment configuration ready for environment initialization
     return config
@@ -1991,6 +1999,15 @@ class TestBaseEnvironmentConfiguration:
                 assert isinstance(suggestion, str)
                 assert len(suggestion) > 10
 
+    def test_helper_respects_explicit_grid_and_source(self):
+        config = create_test_environment_config(
+            grid_size=(32, 32), source_location=(16, 16)
+        )
+
+        assert config.grid_size == GridSize(32, 32)
+        assert config.source_location == Coordinates(16, 16)
+        assert config.plume_params.source_location == Coordinates(16, 16)
+
     def test_resource_estimation(self):
         """Test resource estimation functionality including memory calculation, computational
         requirements, and performance projections."""
@@ -2018,15 +2035,34 @@ class TestBaseEnvironmentConfiguration:
         ]
 
         for config in configs_to_test:
-            resources = config.estimate_resources()
-
-            assert isinstance(resources, dict)
-            assert "memory_usage_mb" in resources
-            assert "computation_time_ms" in resources
-
-            # Verify resource estimates include realistic values
-            assert resources["memory_usage_mb"]["total_estimated"] > 0
-            assert resources["computation_time_ms"]["episode_estimated"] > 0
+            resource_estimates = env_manager.config.derive_component_configs()[
+                "StateManager"
+            ].estimate_resources()
+            assert isinstance(resource_estimates, dict)
+            assert set(resource_estimates.keys()) == {
+                "memory_usage_mb",
+                "memory_breakdown_mb",
+                "step_latency_target_ms",
+                "reset_latency_estimate_ms",
+                "optimization_notes",
+            }
+            assert isinstance(resource_estimates["memory_usage_mb"], (int, float))
+            assert resource_estimates["memory_usage_mb"] > 0
+            assert isinstance(resource_estimates["memory_breakdown_mb"], dict)
+            assert resource_estimates["reset_latency_estimate_ms"] > 0
+            breakdown = resource_estimates["memory_breakdown_mb"]
+            assert set(breakdown.keys()) == {
+                "base_state_manager",
+                "grid_storage",
+                "history_tracking",
+                "snapshot_cache",
+                "component_overhead",
+                "monitoring_overhead",
+            }
+            assert sum(breakdown.values()) > 0
+            assert breakdown["grid_storage"] >= 0
+            assert resource_estimates["step_latency_target_ms"] > 0
+            assert resource_estimates["optimization_notes"] is not None
 
         # Test resource constraint validation prevents over-allocation
         large_config = create_test_environment_config(grid_size=(256, 256))
@@ -2037,15 +2073,34 @@ class TestBaseEnvironmentConfiguration:
             > MEMORY_TEST_THRESHOLD_MB
         ):
             with pytest.raises((ConfigurationError, ValidationError)):
-                large_config.validate(check_resource_constraints=True)
+                validate_environment_config(
+                    {
+                        "grid_size": (2048, 2048),
+                        "source_location": (1024, 1024),
+                        "plume_parameters": {
+                            "source_location": (1024, 1024),
+                            "sigma": DEFAULT_PLUME_SIGMA,
+                            "model_type": STATIC_GAUSSIAN_MODEL_TYPE,
+                        },
+                        "max_steps": 5000,
+                        "goal_radius": 10.0,
+                    }
+                )
 
-        # Validate resource estimation includes all component requirements
+        # Comprehensive resource estimation should report all component requirements
         comprehensive_config = create_test_environment_config()
         comprehensive_resources = comprehensive_config.estimate_resources()
 
-        required_components = ["plume_field", "base_environment"]
+        required_components = [
+            "plume_field",
+            "base_environment",
+            "state_manager",
+            "render_pipeline",
+        ]
         for component in required_components:
-            assert component in comprehensive_resources["memory_usage_mb"]
+            assert (
+                component in comprehensive_resources["memory_usage_mb"]
+            ), f"Missing memory estimate for component '{component}'"
 
         # Test resource optimization recommendations for large configurations
         optimization_config = create_test_environment_config(grid_size=(128, 128))
@@ -2127,7 +2182,7 @@ class TestBaseEnvironmentConfiguration:
             )
 
             # Validate plume parameters are consistent with grid
-            config.plume_params.validate(config.grid_size)
+            validate_plume_parameters(config.plume_params, config.grid_size)
 
         # Test render mode and backend compatibility consistency
         # This would be tested if render modes were part of configuration
@@ -2154,15 +2209,18 @@ class TestBaseEnvironmentConfiguration:
         )
 
         # Verify consistency validation provides specific error details
-        inconsistent_config = create_test_environment_config(enable_validation=False)
-        # Manually create inconsistency
-        inconsistent_config.plume_params.source_location = Coordinates(1000, 1000)
-
+        # Test that source_location out of bounds triggers validation error in EnvironmentConfig.__post_init__
         with pytest.raises((ConfigurationError, ValidationError)) as exc_info:
-            inconsistent_config.validate()
+            EnvironmentConfig(
+                grid_size=GridSize(10, 10),
+                source_location=Coordinates(1000, 1000),  # Out of bounds
+                plume_params=None,
+                max_steps=100,
+                goal_radius=0.0,
+            )
 
         error = exc_info.value
-        assert "source" in str(error).lower() or "location" in str(error).lower()
+        assert "source" in str(error).lower() or "bounds" in str(error).lower()
 
 
 @pytest.mark.integration

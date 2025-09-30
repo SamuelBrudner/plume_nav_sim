@@ -16,7 +16,6 @@ Key Features:
 - Memory-efficient caching and resource management
 """
 
-import copy  # >=3.10 - Deep copying for RGB array manipulation and color scheme cloning
 import functools  # >=3.10 - Caching decorators for performance optimization of RGB array operations
 import time  # >=3.10 - High-precision timing for RGB array generation performance measurement
 from typing import (  # >=3.10 - Type hints for RGB array types and method annotations
@@ -32,7 +31,6 @@ import numpy as np  # >=2.1.0 - Core array operations, RGB array creation, vecto
 
 from ..core.constants import (
     AGENT_MARKER_SIZE,
-    FIELD_DTYPE,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PIXEL_VALUE_MAX,
     PIXEL_VALUE_MIN,
@@ -43,7 +41,7 @@ from ..core.types import Coordinates, GridSize, RenderMode
 from ..utils.exceptions import ComponentError, RenderingError, ValidationError
 
 # Internal imports from base renderer and supporting modules
-from .base_renderer import BaseRenderer, RenderContext, RenderingMetrics
+from .base_renderer import BaseRenderer, RenderContext
 from .color_schemes import (
     ColorSchemeManager,
     CustomColorScheme,
@@ -154,8 +152,6 @@ class NumpyRGBRenderer(BaseRenderer):
         Initialize RGB renderer-specific resources including color scheme optimization, array buffers,
         performance baselines, and validation implementing BaseRenderer abstract method.
         """
-        global _RGB_ARRAY_CACHE
-
         # Optimize color scheme for RGB_ARRAY mode using ColorSchemeManager optimization methods
         self.color_manager.optimize_scheme(
             self.current_color_scheme, RenderMode.RGB_ARRAY
@@ -173,8 +169,7 @@ class NumpyRGBRenderer(BaseRenderer):
         }
 
         # Initialize cache structures for RGB array storage and retrieval optimization
-        if self.caching_enabled and len(_RGB_ARRAY_CACHE) == 0:
-            _RGB_ARRAY_CACHE = {}
+        # Cache dictionary is defined at module scope; no re-assignment needed here.
 
         # Set up vectorized operation parameters for NumPy array manipulation efficiency
         np.seterr(
@@ -198,7 +193,6 @@ class NumpyRGBRenderer(BaseRenderer):
         """
         # Clear RGB array cache and performance statistics for memory cleanup
         if self.caching_enabled:
-            global _RGB_ARRAY_CACHE
             _RGB_ARRAY_CACHE.clear()
 
         # Release _array_buffer and associated memory allocations with garbage collection
@@ -468,7 +462,6 @@ class NumpyRGBRenderer(BaseRenderer):
 
         # Clear RGB array cache if clear_cache enabled to force regeneration with new colors
         if clear_cache and self.caching_enabled:
-            global _RGB_ARRAY_CACHE
             _RGB_ARRAY_CACHE.clear()
             self.generation_stats["cache_hits"] = 0
             self.generation_stats["cache_misses"] = 0
@@ -1211,7 +1204,6 @@ def clear_rgb_cache(
 
     # Clear RGB array cache from _RGB_ARRAY_CACHE if clear_array_cache enabled
     if clear_array_cache:
-        global _RGB_ARRAY_CACHE
         cache_size_before = len(_RGB_ARRAY_CACHE)
         _RGB_ARRAY_CACHE.clear()
         cleanup_report["cache_cleared"] = True
@@ -1223,7 +1215,6 @@ def clear_rgb_cache(
 
     # Clear performance statistics from _GENERATION_STATS if clear_performance_stats enabled
     if clear_performance_stats:
-        global _GENERATION_STATS
         _GENERATION_STATS.clear()
         cleanup_report["stats_cleared"] = True
 

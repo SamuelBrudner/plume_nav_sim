@@ -552,21 +552,28 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Environment constants dictionary should not be empty"
+        assert set(result.keys()) == {
+            "DEFAULT_GRID_SIZE",
+            "MIN_GRID_SIZE",
+            "MAX_GRID_SIZE",
+            "DEFAULT_SOURCE_LOCATION",
+            "DEFAULT_PLUME_SIGMA",
+            "DEFAULT_GOAL_RADIUS",
+            "DEFAULT_MAX_STEPS",
+        }, f"Unexpected environment keys: {sorted(result.keys())}"
 
-        # Assert returned dictionary contains expected keys
-        expected_keys = ["grid_size", "source_location"]
-        for key in expected_keys:
-            if key in result:
-                assert key in result, f"Expected key '{key}' in environment constants"
+        # Test that returned dictionary contains expected default values
+        assert result["DEFAULT_GRID_SIZE"] == DEFAULT_GRID_SIZE
+        assert result["DEFAULT_SOURCE_LOCATION"] == DEFAULT_SOURCE_LOCATION
+        assert result["DEFAULT_GOAL_RADIUS"] == DEFAULT_GOAL_RADIUS
+        assert result["DEFAULT_MAX_STEPS"] == DEFAULT_MAX_STEPS
 
         # Test that returned dictionary can be used for environment configuration
-        if "grid_size" in result:
-            grid_size = result["grid_size"]
-            assert isinstance(
-                grid_size, tuple
-            ), f"Grid size should be tuple, got {type(grid_size)}"
-            assert len(grid_size) == 2, "Grid size should have 2 dimensions"
+        grid_size = result["DEFAULT_GRID_SIZE"]
+        assert isinstance(
+            grid_size, tuple
+        ), f"Grid size should be tuple, got {type(grid_size)}"
+        assert len(grid_size) == 2, "Grid size should have 2 dimensions"
 
         # Verify factory function returns consistent results across multiple calls
         result2 = get_default_environment_constants()
@@ -579,17 +586,26 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Plume model constants dictionary should not be empty"
+        expected_keys = {
+            "CONCENTRATION_RANGE",
+            "GAUSSIAN_PRECISION",
+            "DISTANCE_PRECISION",
+            "MIN_PLUME_SIGMA",
+            "MAX_PLUME_SIGMA",
+            "STATIC_GAUSSIAN_MODEL_TYPE",
+            "DEFAULT_PLUME_MODEL_TYPE",
+            "PLUME_MODEL_TYPES",
+        }
+        assert (
+            set(result.keys()) == expected_keys
+        ), f"Unexpected plume model keys: {sorted(result.keys())}"
 
-        # Test mathematical consistency between returned parameters
-        if "default_sigma" in result and "sigma_range" in result:
-            default_sigma = result["default_sigma"]
-            sigma_range = result["sigma_range"]
-            if isinstance(sigma_range, tuple) and len(sigma_range) == 2:
-                min_sigma, max_sigma = sigma_range
-                assert (
-                    min_sigma <= default_sigma <= max_sigma
-                ), "Default sigma should be within sigma range"
+        # Test that returned dictionary contains expected plume model parameters
+        assert result["MIN_PLUME_SIGMA"] == MIN_PLUME_SIGMA
+        assert result["MAX_PLUME_SIGMA"] == MAX_PLUME_SIGMA
+        assert result["CONCENTRATION_RANGE"] == CONCENTRATION_RANGE
+        assert result["STATIC_GAUSSIAN_MODEL_TYPE"] == STATIC_GAUSSIAN_MODEL_TYPE
+        assert isinstance(result["PLUME_MODEL_TYPES"], list)
 
     def test_get_action_space_constants(self):
         """Test action space constants factory function returning action mappings, movement vectors, and discrete space configuration."""
@@ -598,23 +614,31 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Action space constants dictionary should not be empty"
+        expected_keys = {
+            "ACTION_UP",
+            "ACTION_RIGHT",
+            "ACTION_LEFT",
+            "ACTION_SPACE_SIZE",
+            "MOVEMENT_VECTORS",
+        }
+        assert (
+            set(result.keys()) == expected_keys
+        ), f"Unexpected action space keys: {sorted(result.keys())}"
 
-        # Test movement vectors maintain proper coordinate system consistency
-        if "movement_vectors" in result:
-            movement_vectors = result["movement_vectors"]
-            assert isinstance(
-                movement_vectors, dict
-            ), "Movement vectors should be dictionary"
+        # Test that returned dictionary contains expected action space components
+        assert result["ACTION_SPACE_SIZE"] == ACTION_SPACE_SIZE
+        assert result["ACTION_UP"] == ACTION_UP
+        assert isinstance(result["MOVEMENT_VECTORS"], dict)
+        assert len(result["MOVEMENT_VECTORS"]) > 0
 
-            # Verify movement vectors are unit vectors
-            for action, vector in movement_vectors.items():
-                if isinstance(vector, tuple) and len(vector) == 2:
-                    dx, dy = vector
-                    magnitude_squared = dx * dx + dy * dy
-                    assert (
-                        magnitude_squared <= 2
-                    ), f"Movement vector {vector} should be unit vector or stationary"
+        # Verify movement vectors are unit vectors
+        for action, vector in result["MOVEMENT_VECTORS"].items():
+            if isinstance(vector, tuple) and len(vector) == 2:
+                dx, dy = vector
+                magnitude_squared = dx * dx + dy * dy
+                assert (
+                    magnitude_squared <= 2
+                ), f"Movement vector {vector} should be unit vector or stationary"
 
     def test_get_rendering_constants(self):
         """Test rendering constants factory function returning supported modes, color schemes, marker specifications, and backend preferences."""
@@ -623,7 +647,16 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Rendering constants dictionary should not be empty"
+        assert set(result.keys()) == {
+            "supported_modes",
+            "agent_marker_color",
+            "source_marker_color",
+            "agent_marker_size",
+            "source_marker_size",
+            "pixel_value_min",
+            "pixel_value_max",
+            "rgb_dtype",
+        }, f"Unexpected rendering keys: {sorted(result.keys())}"
 
         # Assert rendering performance targets are included in factory output
         if "supported_modes" in result:
@@ -638,14 +671,18 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Performance constants dictionary should not be empty"
-
-        # Assert monitoring and warning thresholds are included for performance analysis
-        performance_keys = ["step_latency_target", "memory_limit_total"]
-        present_keys = [key for key in performance_keys if key in result]
-        assert (
-            len(present_keys) > 0
-        ), f"At least one performance key should be present: {performance_keys}"
+        assert set(result.keys()) == {
+            "tracking_enabled",
+            "step_latency_target_ms",
+            "rgb_render_target_ms",
+            "human_render_target_ms",
+            "plume_generation_target_ms",
+            "episode_reset_target_ms",
+            "boundary_enforcement_target_ms",
+            "memory_limits_mb",
+            "optimization_thresholds",
+            "benchmark_iterations",
+        }, f"Unexpected performance keys: {sorted(result.keys())}"
 
     def test_get_validation_constants(self):
         """Test validation constants factory function returning parameter limits, precision values, and error message templates."""
@@ -654,7 +691,17 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Validation constants dictionary should not be empty"
+        assert set(result.keys()) == {
+            "distance_precision",
+            "gaussian_precision",
+            "sigma_range",
+            "grid_size_limits",
+            "coordinate_bounds_checking",
+            "error_messages",
+            "seed_validation",
+            "memory_validation_mb",
+            "action_validation_range",
+        }, f"Unexpected validation keys: {sorted(result.keys())}"
 
         # Assert all validation parameters support comprehensive input checking
         if "error_messages" in result:
@@ -670,7 +717,15 @@ class TestFactoryFunctions:
         assert isinstance(
             result, dict
         ), f"Factory should return dict, got {type(result)}"
-        assert len(result) > 0, "Testing constants dictionary should not be empty"
+        assert set(result.keys()) == {
+            "test_grid_size",
+            "test_source_location",
+            "test_max_steps",
+            "test_tolerance",
+            "reproducibility_seeds",
+            "performance_test_iterations",
+            "expected_results",
+        }, f"Unexpected testing keys: {sorted(result.keys())}"
 
         # Assert reproducibility test parameters include seed values
         if "test_seeds" in result:

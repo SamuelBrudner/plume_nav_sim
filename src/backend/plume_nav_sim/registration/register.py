@@ -10,15 +10,14 @@ environment within the Gymnasium ecosystem, ensuring proper integration with gym
 providing comprehensive parameter validation, error handling, and configuration management.
 """
 
+import contextlib
 import copy
 import time
-import warnings  # >=3.10 - Warning system for registration conflicts, deprecation notices, and compatibility issues during environment registration
 from typing import (  # >=3.10 - Type hints for function parameters, return types, and optional parameter specifications ensuring type safety and documentation clarity
     Any,
     Dict,
     Optional,
     Tuple,
-    Union,
 )
 
 # External imports with version comments for dependency management and compatibility tracking
@@ -128,18 +127,18 @@ def register_env(
         force_flag = bool(compat_flags.get("force", False)) or force_reregister
 
         if is_registered(effective_env_id, use_cache=True):
-            if not force_flag:
-                _logger.warning(
-                    f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."
-                )
-                return effective_env_id
-            else:
+            if force_flag:
                 # Handle force_reregister flag by calling unregister_env() if environment exists and force requested
                 _logger.info(
                     f"Force re-registration requested for '{effective_env_id}', unregistering existing..."
                 )
                 unregister_env(effective_env_id, suppress_warnings=True)
 
+            else:
+                _logger.warning(
+                    f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."
+                )
+                return effective_env_id
         # Create complete kwargs dictionary using create_registration_kwargs() with parameter validation
         registration_kwargs = create_registration_kwargs(
             grid_size=effective_kwargs.get("grid_size"),
@@ -204,6 +203,123 @@ def register_env(
         raise
 
 
+def _validate_grid_size_value(
+    grid_size: Any, report: Dict[str, Any], strict_validation: bool
+) -> bool:
+    if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
+        report["errors"].append("grid_size must be a tuple/list of 2 elements")
+        return False
+    width, height = grid_size
+    if not isinstance(width, int) or not isinstance(height, int):
+        report["errors"].append("grid_size dimensions must be integers")
+        return False
+    if width <= 0 or height <= 0:
+        report["errors"].append("grid_size dimensions must be positive")
+        return False
+    if strict_validation and (width > 1024 or height > 1024):
+        report["warnings"].append("Large grid_size may impact performance")
+    if width < 16 or height < 16:
+        report["warnings"].append("Small grid_size may limit environment complexity")
+    return True
+
+
+def _validate_source_location_value(
+    source_location: Any, report: Dict[str, Any]
+) -> bool:
+    if not isinstance(source_location, (tuple, list)) or len(source_location) != 2:
+        report["errors"].append("source_location must be a tuple/list of 2 elements")
+        return False
+    source_x, source_y = source_location
+    if not isinstance(source_x, (int, float)) or not isinstance(source_y, (int, float)):
+        report["errors"].append("source_location coordinates must be numeric")
+        return False
+    return True
+
+
+def _validate_goal_radius_value(goal_radius: Any, report: Dict[str, Any]) -> bool:
+    if not isinstance(goal_radius, (int, float)):
+        report["errors"].append("goal_radius must be numeric")
+        return False
+    if goal_radius < 0:
+        report["errors"].append("goal_radius must be non-negative")
+        return False
+    return True
+
+
+def _validate_max_episode_steps(max_episode_steps: Any, report: Dict[str, Any]) -> bool:
+    valid = True
+    if max_episode_steps is None:
+        report["warnings"].append(
+            "max_episode_steps not set; TimeLimit wrapper will not be applied"
+        )
+    elif not isinstance(max_episode_steps, int):
+        report["errors"].append("max_episode_steps must be an integer")
+        valid = False
+    elif max_episode_steps <= 0:
+        report["errors"].append("max_episode_steps must be positive")
+        valid = False
+    elif max_episode_steps > 100000:
+        report["errors"].append(
+            "max_episode_steps exceeds recommended maximum (100000)"
+        )
+        valid = False
+    elif max_episode_steps < 100:
+        report["warnings"].append("max_episode_steps is quite low, may limit learning")
+    return valid
+
+
+def _add_final_recommendations(report: Dict[str, Any]) -> None:
+    if not report["errors"]:
+        report["recommendations"].append("Configuration appears valid for registration")
+    if report["warnings"]:
+        report["recommendations"].append("Review warnings for potential improvements")
+
+
+def _apply_strict_checks(
+    strict_validation: bool, env_id: str, kwargs: Dict[str, Any], report: Dict[str, Any]
+) -> None:
+    if strict_validation:
+        _strict_checks(env_id, kwargs, report)
+
+
+def _pop_env_from_registry(effective_env_id: str) -> bool:
+    """Attempt to remove env spec from Gymnasium registry across versions.
+
+    Returns True if a registry entry was removed, False otherwise.
+    """
+    try:
+        if hasattr(gymnasium.envs, "registry") and hasattr(
+            gymnasium.envs.registry, "env_specs"
+        ):
+            return (
+                gymnasium.envs.registry.env_specs.pop(effective_env_id, None)
+                is not None
+            )
+        if hasattr(gymnasium, "envs") and hasattr(gymnasium.envs, "registration"):
+            reg = gymnasium.envs.registration.registry
+            if effective_env_id in reg.env_specs:
+                del reg.env_specs[effective_env_id]
+                return True
+    except Exception as registry_error:
+        _logger.warning(
+            f"Error accessing Gymnasium registry during unregistration: {registry_error}"
+        )
+    return False
+
+
+def _clear_cache_entry(effective_env_id: str) -> None:
+    if effective_env_id in _registration_cache:
+        del _registration_cache[effective_env_id]
+        _logger.debug(f"Cleared cache entry for '{effective_env_id}'")
+
+
+def _verify_not_registered(effective_env_id: str) -> bool:
+    if is_registered(effective_env_id, use_cache=False):
+        _logger.error(f"Unregistration verification failed for '{effective_env_id}'")
+        return False
+    return True
+
+
 def unregister_env(
     env_id: Optional[str] = None, suppress_warnings: bool = False
 ) -> bool:
@@ -233,74 +349,31 @@ def unregister_env(
         success = unregister_env("CustomPlume-v0", suppress_warnings=True)
     """
     try:
-        # Apply default env_id using ENV_ID constant if parameter not provided
         effective_env_id = env_id or ENV_ID
-
         _logger.debug(f"Starting unregistration for environment: {effective_env_id}")
 
-        # Check current registration status using is_registered() with cache consultation
-        currently_registered = is_registered(effective_env_id, use_cache=True)
-
-        # Log unregistration attempt with environment ID and current registration status
-        if not currently_registered:
+        if not is_registered(effective_env_id, use_cache=True):
             if not suppress_warnings:
                 _logger.warning(
                     f"Environment '{effective_env_id}' is not currently registered"
                 )
             return True
 
-        # Remove environment from Gymnasium registry using gymnasium.envs.registry.env_specs.pop()
-        try:
-            if hasattr(gymnasium.envs, "registry") and hasattr(
-                gymnasium.envs.registry, "env_specs"
-            ):
-                removed_spec = gymnasium.envs.registry.env_specs.pop(
-                    effective_env_id, None
-                )
-                if removed_spec:
-                    _logger.debug(
-                        f"Removed environment spec for '{effective_env_id}' from Gymnasium registry"
-                    )
-            else:
-                # Fallback method for different Gymnasium versions
-                if hasattr(gymnasium, "envs") and hasattr(
-                    gymnasium.envs, "registration"
-                ):
-                    if (
-                        effective_env_id
-                        in gymnasium.envs.registration.registry.env_specs
-                    ):
-                        del gymnasium.envs.registration.registry.env_specs[
-                            effective_env_id
-                        ]
-
-        except Exception as registry_error:
-            _logger.warning(
-                f"Error accessing Gymnasium registry during unregistration: {registry_error}"
+        removed = _pop_env_from_registry(effective_env_id)
+        if removed:
+            _logger.debug(
+                f"Removed environment spec for '{effective_env_id}' from Gymnasium registry"
             )
-            # Continue with cache cleanup even if registry access fails
 
-        # Clear registration cache entry for the specified environment ID
-        if effective_env_id in _registration_cache:
-            del _registration_cache[effective_env_id]
-            _logger.debug(f"Cleared cache entry for '{effective_env_id}'")
+        _clear_cache_entry(effective_env_id)
 
-        # Issue warnings about unregistration unless suppress_warnings is True
         if not suppress_warnings:
             _logger.info(f"Environment '{effective_env_id}' has been unregistered")
 
-        # Verify successful unregistration by checking registry and cache consistency
-        still_registered = is_registered(effective_env_id, use_cache=False)
-        if still_registered:
-            _logger.error(
-                f"Unregistration verification failed for '{effective_env_id}'"
-            )
+        if not _verify_not_registered(effective_env_id):
             return False
 
-        # Log successful unregistration with cleanup confirmation and status update
         _logger.debug(f"Successfully unregistered environment '{effective_env_id}'")
-
-        # Return unregistration status with success/failure indication for caller feedback
         return True
 
     except Exception as e:
@@ -308,6 +381,67 @@ def unregister_env(
             f"Environment unregistration failed for '{env_id or ENV_ID}': {e}"
         )
         return False
+
+
+def _cache_has_registered(effective_env_id: str, use_cache: bool) -> bool:
+    if use_cache and effective_env_id in _registration_cache:
+        cached_info = _registration_cache[effective_env_id]
+        if cached_info.get("registered", False):
+            _logger.debug(f"Cache hit: '{effective_env_id}' is registered")
+            return True
+    return False
+
+
+def _query_registry_direct(effective_env_id: str) -> bool:
+    if hasattr(gymnasium.envs, "registry") and hasattr(
+        gymnasium.envs.registry, "env_specs"
+    ):
+        registry_entry = gymnasium.envs.registry.env_specs.get(effective_env_id)
+        return registry_entry is not None
+    return False
+
+
+def _query_registry_fallback(effective_env_id: str) -> bool:
+    with contextlib.suppress(Exception):
+        test_env = gymnasium.make(effective_env_id)
+        test_env.close()
+        return True
+    return False
+
+
+def _get_registry_status(effective_env_id: str) -> bool:
+    try:
+        if _query_registry_direct(effective_env_id):
+            return True
+        return _query_registry_fallback(effective_env_id)
+    except Exception as registry_error:
+        _logger.warning(f"Error querying Gymnasium registry: {registry_error}")
+        return False
+
+
+def _reconcile_cache_state(
+    effective_env_id: str, is_in_registry: bool, use_cache: bool
+) -> None:
+    if use_cache and effective_env_id in _registration_cache:
+        cached_status = _registration_cache[effective_env_id].get("registered", False)
+        if cached_status != is_in_registry:
+            _logger.debug(
+                f"Cache inconsistency detected for '{effective_env_id}', updating cache"
+            )
+            if is_in_registry:
+                _registration_cache[effective_env_id]["registered"] = True
+                _registration_cache[effective_env_id]["last_verified"] = time.time()
+            elif effective_env_id in _registration_cache:
+                del _registration_cache[effective_env_id]
+
+
+def _maybe_prime_cache(effective_env_id: str, is_in_registry: bool) -> None:
+    if is_in_registry and effective_env_id not in _registration_cache:
+        _registration_cache[effective_env_id] = {
+            "registered": True,
+            "last_verified": time.time(),
+            "cache_source": "registry_query",
+        }
 
 
 def is_registered(env_id: Optional[str] = None, use_cache: bool = True) -> bool:
@@ -335,68 +469,103 @@ def is_registered(env_id: Optional[str] = None, use_cache: bool = True) -> bool:
             print("Environment confirmed in registry")
     """
     try:
-        # Apply default env_id using ENV_ID constant if parameter not provided
         effective_env_id = env_id or ENV_ID
 
-        # Check registration cache if use_cache is True and cache entry exists with validation
-        if use_cache and effective_env_id in _registration_cache:
-            cached_info = _registration_cache[effective_env_id]
-            if cached_info.get("registered", False):
-                _logger.debug(f"Cache hit: '{effective_env_id}' is registered")
-                return True
+        if _cache_has_registered(effective_env_id, use_cache):
+            return True
 
-        # Query Gymnasium registry directly using gymnasium.envs.registry.env_specs.get() for authoritative status
-        try:
-            if hasattr(gymnasium.envs, "registry") and hasattr(
-                gymnasium.envs.registry, "env_specs"
-            ):
-                registry_entry = gymnasium.envs.registry.env_specs.get(effective_env_id)
-                is_in_registry = registry_entry is not None
-            else:
-                # Fallback method for different Gymnasium versions
-                try:
-                    test_env = gymnasium.make(effective_env_id)
-                    test_env.close()
-                    is_in_registry = True
-                except Exception:
-                    is_in_registry = False
-        except Exception as registry_error:
-            _logger.warning(f"Error querying Gymnasium registry: {registry_error}")
-            is_in_registry = False
+        is_in_registry = _get_registry_status(effective_env_id)
 
-        # Validate cache consistency with registry state and update cache if discrepancies found
-        if use_cache and effective_env_id in _registration_cache:
-            cached_status = _registration_cache[effective_env_id].get(
-                "registered", False
-            )
-            if cached_status != is_in_registry:
-                _logger.debug(
-                    f"Cache inconsistency detected for '{effective_env_id}', updating cache"
-                )
-                if is_in_registry:
-                    _registration_cache[effective_env_id]["registered"] = True
-                    _registration_cache[effective_env_id]["last_verified"] = time.time()
-                else:
-                    if effective_env_id in _registration_cache:
-                        del _registration_cache[effective_env_id]
+        _reconcile_cache_state(effective_env_id, is_in_registry, use_cache)
+        _maybe_prime_cache(effective_env_id, is_in_registry)
 
-        # Update registration cache with current registry state and timestamp for future queries
-        if is_in_registry and effective_env_id not in _registration_cache:
-            _registration_cache[effective_env_id] = {
-                "registered": True,
-                "last_verified": time.time(),
-                "cache_source": "registry_query",
-            }
-
-        # Log registration status check with environment ID and result for debugging support
         _logger.debug(f"Registration status for '{effective_env_id}': {is_in_registry}")
-
-        # Return accurate registration status based on authoritative registry consultation
         return is_in_registry
 
     except Exception as e:
         _logger.error(f"Registration status check failed for '{env_id or ENV_ID}': {e}")
         return False
+
+
+def _base_registration_info(effective_env_id: str) -> Dict[str, Any]:
+    return {
+        "env_id": effective_env_id,
+        "query_timestamp": time.time(),
+        "cache_available": effective_env_id in _registration_cache,
+    }
+
+
+def _env_spec_info(effective_env_id: str) -> Dict[str, Any]:
+    """Fetch spec fields from Gymnasium registry. Returns empty dict on miss.
+
+    If an exception occurs while retrieving spec, a 'spec_retrieval_error' message
+    is returned instead of raising, to preserve current behavior.
+    """
+    try:
+        if hasattr(gymnasium.envs, "registry") and hasattr(
+            gymnasium.envs.registry, "env_specs"
+        ):
+            env_spec = gymnasium.envs.registry.env_specs.get(effective_env_id)
+            if env_spec is not None:
+                return {
+                    "entry_point": getattr(env_spec, "entry_point", "unknown"),
+                    "max_episode_steps": getattr(env_spec, "max_episode_steps", None),
+                    "spec_kwargs": getattr(env_spec, "kwargs", {}),
+                    "reward_threshold": getattr(env_spec, "reward_threshold", None),
+                }
+    except Exception as spec_error:
+        return {"spec_retrieval_error": str(spec_error)}
+    return {}
+
+
+def _config_details_for_id(effective_env_id: str) -> Dict[str, Any]:
+    details: Dict[str, Any] = {
+        "default_parameters": {
+            "grid_size": DEFAULT_GRID_SIZE,
+            "source_location": DEFAULT_SOURCE_LOCATION,
+            "max_steps": DEFAULT_MAX_STEPS,
+            "goal_radius": DEFAULT_GOAL_RADIUS,
+        },
+        "entry_point_default": ENTRY_POINT,
+        "env_id_default": ENV_ID,
+    }
+    cached = _registration_cache.get(effective_env_id)
+    if cached and "validation_report" in cached:
+        details["last_validation"] = cached["validation_report"]
+    return details
+
+
+def _cache_info_for_id(effective_env_id: str) -> Optional[Dict[str, Any]]:
+    if effective_env_id not in _registration_cache:
+        return None
+    cache_info = _registration_cache[effective_env_id].copy()
+    return {
+        "registration_timestamp": cache_info.get("registration_timestamp"),
+        "last_verified": cache_info.get("last_verified"),
+        "cached_status": cache_info.get("registered", False),
+        "cache_source": cache_info.get("cache_source", "unknown"),
+    }
+
+
+def _gymnasium_version_info() -> Dict[str, Any]:
+    try:
+        return {
+            "gymnasium_version": gymnasium.__version__,
+            "registry_available": hasattr(gymnasium.envs, "registry"),
+        }
+    except Exception:
+        return {"gymnasium_info_error": "Failed to retrieve Gymnasium information"}
+
+
+def _system_info_for(info: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "total_cached_environments": len(_registration_cache),
+        "query_method": (
+            "cached_with_verification"
+            if info.get("cache_available")
+            else "authoritative_registry"
+        ),
+    }
 
 
 def get_registration_info(
@@ -427,105 +596,30 @@ def get_registration_info(
         print(f"Config: {detailed_info['config_details']}")
     """
     try:
-        # Apply default env_id using ENV_ID constant if parameter not provided
         effective_env_id = env_id or ENV_ID
 
-        # Initialize registration info dictionary with environment ID and timestamp
-        registration_info = {
-            "env_id": effective_env_id,
-            "query_timestamp": time.time(),
-            "cache_available": effective_env_id in _registration_cache,
-        }
+        info = _base_registration_info(effective_env_id)
 
-        # Check registration status using is_registered() and include in information dictionary
         is_currently_registered = is_registered(effective_env_id, use_cache=False)
-        registration_info["registered"] = is_currently_registered
+        info["registered"] = is_currently_registered
 
         if is_currently_registered:
-            # Retrieve environment specification from Gymnasium registry if registered
-            try:
-                if hasattr(gymnasium.envs, "registry") and hasattr(
-                    gymnasium.envs.registry, "env_specs"
-                ):
-                    env_spec = gymnasium.envs.registry.env_specs.get(effective_env_id)
-                    if env_spec:
-                        # Extract entry point, max_episode_steps, and kwargs from environment specification
-                        registration_info.update(
-                            {
-                                "entry_point": getattr(
-                                    env_spec, "entry_point", "unknown"
-                                ),
-                                "max_episode_steps": getattr(
-                                    env_spec, "max_episode_steps", None
-                                ),
-                                "spec_kwargs": getattr(env_spec, "kwargs", {}),
-                                "reward_threshold": getattr(
-                                    env_spec, "reward_threshold", None
-                                ),
-                            }
-                        )
-            except Exception as spec_error:
-                registration_info["spec_retrieval_error"] = str(spec_error)
+            info |= _env_spec_info(effective_env_id)
 
-        # Include configuration details if include_config_details enabled with parameter breakdown
         if include_config_details:
-            config_details = {
-                "default_parameters": {
-                    "grid_size": DEFAULT_GRID_SIZE,
-                    "source_location": DEFAULT_SOURCE_LOCATION,
-                    "max_steps": DEFAULT_MAX_STEPS,
-                    "goal_radius": DEFAULT_GOAL_RADIUS,
-                },
-                "entry_point_default": ENTRY_POINT,
-                "env_id_default": ENV_ID,
-            }
+            info["config_details"] = _config_details_for_id(effective_env_id)
 
-            # Include validation information if available
-            if effective_env_id in _registration_cache:
-                cached_info = _registration_cache[effective_env_id]
-                if "validation_report" in cached_info:
-                    config_details["last_validation"] = cached_info["validation_report"]
+        cache_info = _cache_info_for_id(effective_env_id)
+        if cache_info is not None:
+            info["cache_info"] = cache_info
 
-            registration_info["config_details"] = config_details
+        info |= _gymnasium_version_info()
+        info["system_info"] = _system_info_for(info)
 
-        # Add cache information including last check timestamp and cache validity status
-        if effective_env_id in _registration_cache:
-            cache_info = _registration_cache[effective_env_id].copy()
-            registration_info["cache_info"] = {
-                "registration_timestamp": cache_info.get("registration_timestamp"),
-                "last_verified": cache_info.get("last_verified"),
-                "cached_status": cache_info.get("registered", False),
-                "cache_source": cache_info.get("cache_source", "unknown"),
-            }
-
-        # Include Gymnasium version and compatibility information for debugging support
-        try:
-            registration_info["gymnasium_version"] = gymnasium.__version__
-            registration_info["registry_available"] = hasattr(
-                gymnasium.envs, "registry"
-            )
-        except Exception:
-            registration_info["gymnasium_info_error"] = (
-                "Failed to retrieve Gymnasium information"
-            )
-
-        # Compile comprehensive registration dictionary with metadata and operational details
-        registration_info["system_info"] = {
-            "total_cached_environments": len(_registration_cache),
-            "query_method": (
-                "authoritative_registry"
-                if not registration_info["cache_available"]
-                else "cached_with_verification"
-            ),
-        }
-
-        # Log information retrieval request with environment ID and detail level for monitoring
         _logger.debug(
             f"Retrieved registration info for '{effective_env_id}', detailed={include_config_details}"
         )
-
-        # Return complete registration information dictionary for debugging and administration
-        return registration_info
+        return info
 
     except Exception as e:
         _logger.error(
@@ -537,6 +631,146 @@ def get_registration_info(
             "query_timestamp": time.time(),
             "registered": False,
         }
+
+
+def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
+    """Validate grid_size and return (width, height) or raise ValidationError."""
+    if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
+        raise ValidationError(
+            "grid_size must be a tuple or list of exactly 2 elements",
+            parameter_name="grid_size",
+            invalid_value=grid_size,
+            expected_format="(width, height) tuple with positive integers",
+        )
+    width, height = grid_size
+    if not isinstance(width, int) or not isinstance(height, int):
+        raise ValidationError(
+            "grid_size dimensions must be integers",
+            parameter_name="grid_size",
+            invalid_value=grid_size,
+        )
+    if width <= 0 or height <= 0:
+        raise ValidationError(
+            "grid_size dimensions must be positive integers",
+            parameter_name="grid_size",
+            invalid_value=grid_size,
+        )
+    if width > 1024 or height > 1024:
+        raise ValidationError(
+            "grid_size dimensions exceed maximum allowed size (1024x1024)",
+            parameter_name="grid_size",
+            invalid_value=grid_size,
+        )
+    return width, height
+
+
+def _assert_source_location_or_raise(
+    source_location: Any, width: int, height: int
+) -> Tuple[float, float]:
+    """Validate source_location against grid bounds; return (x,y) or raise."""
+    if not isinstance(source_location, (tuple, list)) or len(source_location) != 2:
+        raise ValidationError(
+            "source_location must be a tuple or list of exactly 2 elements",
+            parameter_name="source_location",
+            invalid_value=source_location,
+            expected_format="(x, y) tuple with coordinates within grid bounds",
+        )
+    source_x, source_y = source_location
+    if not isinstance(source_x, (int, float)) or not isinstance(source_y, (int, float)):
+        raise ValidationError(
+            "source_location coordinates must be numeric",
+            parameter_name="source_location",
+            invalid_value=source_location,
+        )
+    if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
+        raise ValidationError(
+            f"source_location coordinates must be within grid bounds: (0,0) to ({width-1},{height-1})",
+            parameter_name="source_location",
+            invalid_value=source_location,
+        )
+    return float(source_x), float(source_y)
+
+
+def _assert_max_steps_or_raise(max_steps: Any) -> int:
+    if not isinstance(max_steps, int):
+        raise ValidationError(
+            "max_steps must be an integer",
+            parameter_name="max_steps",
+            invalid_value=max_steps,
+        )
+    if max_steps <= 0:
+        raise ValidationError(
+            "max_steps must be a positive integer",
+            parameter_name="max_steps",
+            invalid_value=max_steps,
+        )
+    if max_steps > 100000:
+        raise ValidationError(
+            "max_steps exceeds maximum allowed value (100000) for performance constraints",
+            parameter_name="max_steps",
+            invalid_value=max_steps,
+        )
+    return max_steps
+
+
+def _assert_goal_radius_or_raise(goal_radius: Any, width: int, height: int) -> float:
+    if not isinstance(goal_radius, (int, float)):
+        raise ValidationError(
+            "goal_radius must be numeric",
+            parameter_name="goal_radius",
+            invalid_value=goal_radius,
+        )
+    if goal_radius < 0:
+        raise ValidationError(
+            "goal_radius must be non-negative",
+            parameter_name="goal_radius",
+            invalid_value=goal_radius,
+        )
+    max_grid_dimension = max(width, height)
+    if goal_radius > max_grid_dimension:
+        raise ValidationError(
+            f"goal_radius ({goal_radius}) exceeds maximum grid dimension ({max_grid_dimension})",
+            parameter_name="goal_radius",
+            invalid_value=goal_radius,
+        )
+    return float(goal_radius)
+
+
+def _merge_and_clean_kwargs(
+    base_kwargs: Dict[str, Any], additional_kwargs: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Merge additional_kwargs into base, warn on conflicts, drop private keys."""
+    if not additional_kwargs:
+        return base_kwargs
+    if not isinstance(additional_kwargs, dict):
+        raise ValidationError(
+            "additional_kwargs must be a dictionary",
+            parameter_name="additional_kwargs",
+            invalid_value=additional_kwargs,
+        )
+    conflicts = set(base_kwargs.keys()) & set(additional_kwargs.keys())
+    if conflicts:
+        _logger.warning(
+            f"Parameter conflicts detected, additional_kwargs will override: {conflicts}"
+        )
+    merged = {**base_kwargs, **additional_kwargs}
+    for _k in list(merged.keys()):
+        if isinstance(_k, str) and _k.startswith("_"):
+            del merged[_k]
+    return merged
+
+
+def _warn_if_goal_radius_edges(
+    goal_radius: float, source_x: float, source_y: float, width: int, height: int
+) -> None:
+    if goal_radius > 0:
+        min_distance_to_edge = min(
+            source_x, source_y, width - source_x - 1, height - source_y - 1
+        )
+        if goal_radius > min_distance_to_edge:
+            _logger.warning(
+                f"Goal radius ({goal_radius}) extends beyond grid edges from source location"
+            )
 
 
 def create_registration_kwargs(
@@ -580,7 +814,7 @@ def create_registration_kwargs(
         )
     """
     try:
-        # Apply default values using DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION, DEFAULT_MAX_STEPS, DEFAULT_GOAL_RADIUS if not provided
+        # Apply defaults
         effective_grid_size = grid_size or DEFAULT_GRID_SIZE
         effective_source_location = source_location or DEFAULT_SOURCE_LOCATION
         effective_max_steps = max_steps or DEFAULT_MAX_STEPS
@@ -592,113 +826,13 @@ def create_registration_kwargs(
             f"Creating registration kwargs with parameters: grid_size={effective_grid_size}, source_location={effective_source_location}"
         )
 
-        # Validate grid_size parameter for positive integer tuple with reasonable dimensions
-        if (
-            not isinstance(effective_grid_size, (tuple, list))
-            or len(effective_grid_size) != 2
-        ):
-            raise ValidationError(
-                "grid_size must be a tuple or list of exactly 2 elements",
-                parameter_name="grid_size",
-                invalid_value=effective_grid_size,
-                expected_format="(width, height) tuple with positive integers",
-            )
-
-        width, height = effective_grid_size
-        if not isinstance(width, int) or not isinstance(height, int):
-            raise ValidationError(
-                "grid_size dimensions must be integers",
-                parameter_name="grid_size",
-                invalid_value=effective_grid_size,
-            )
-
-        if width <= 0 or height <= 0:
-            raise ValidationError(
-                "grid_size dimensions must be positive integers",
-                parameter_name="grid_size",
-                invalid_value=effective_grid_size,
-            )
-
-        if width > 1024 or height > 1024:
-            raise ValidationError(
-                "grid_size dimensions exceed maximum allowed size (1024x1024)",
-                parameter_name="grid_size",
-                invalid_value=effective_grid_size,
-            )
-
-        # Validate source_location coordinates within grid bounds with mathematical consistency
-        if (
-            not isinstance(effective_source_location, (tuple, list))
-            or len(effective_source_location) != 2
-        ):
-            raise ValidationError(
-                "source_location must be a tuple or list of exactly 2 elements",
-                parameter_name="source_location",
-                invalid_value=effective_source_location,
-                expected_format="(x, y) tuple with coordinates within grid bounds",
-            )
-
-        source_x, source_y = effective_source_location
-        if not isinstance(source_x, (int, float)) or not isinstance(
-            source_y, (int, float)
-        ):
-            raise ValidationError(
-                "source_location coordinates must be numeric",
-                parameter_name="source_location",
-                invalid_value=effective_source_location,
-            )
-
-        if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
-            raise ValidationError(
-                f"source_location coordinates must be within grid bounds: (0,0) to ({width-1},{height-1})",
-                parameter_name="source_location",
-                invalid_value=effective_source_location,
-            )
-
-        # Validate max_steps parameter for positive integer within performance and memory constraints
-        if not isinstance(effective_max_steps, int):
-            raise ValidationError(
-                "max_steps must be an integer",
-                parameter_name="max_steps",
-                invalid_value=effective_max_steps,
-            )
-
-        if effective_max_steps <= 0:
-            raise ValidationError(
-                "max_steps must be a positive integer",
-                parameter_name="max_steps",
-                invalid_value=effective_max_steps,
-            )
-
-        if effective_max_steps > 100000:
-            raise ValidationError(
-                "max_steps exceeds maximum allowed value (100000) for performance constraints",
-                parameter_name="max_steps",
-                invalid_value=effective_max_steps,
-            )
-
-        # Validate goal_radius parameter for non-negative float with mathematical feasibility
-        if not isinstance(effective_goal_radius, (int, float)):
-            raise ValidationError(
-                "goal_radius must be numeric",
-                parameter_name="goal_radius",
-                invalid_value=effective_goal_radius,
-            )
-
-        if effective_goal_radius < 0:
-            raise ValidationError(
-                "goal_radius must be non-negative",
-                parameter_name="goal_radius",
-                invalid_value=effective_goal_radius,
-            )
-
-        max_grid_dimension = max(width, height)
-        if effective_goal_radius > max_grid_dimension:
-            raise ValidationError(
-                f"goal_radius ({effective_goal_radius}) exceeds maximum grid dimension ({max_grid_dimension})",
-                parameter_name="goal_radius",
-                invalid_value=effective_goal_radius,
-            )
+        # Validate core parameters using assert-style helpers
+        width, height = _assert_grid_size_or_raise(effective_grid_size)
+        source_x, source_y = _assert_source_location_or_raise(
+            effective_source_location, width, height
+        )
+        _assert_max_steps_or_raise(effective_max_steps)
+        _assert_goal_radius_or_raise(effective_goal_radius, width, height)
 
         # Create base kwargs dictionary with validated parameters and proper parameter names
         base_kwargs = {
@@ -708,39 +842,13 @@ def create_registration_kwargs(
             "goal_radius": effective_goal_radius,
         }
 
-        # Merge additional_kwargs if provided with conflict detection and resolution
-        if additional_kwargs:
-            if not isinstance(additional_kwargs, dict):
-                raise ValidationError(
-                    "additional_kwargs must be a dictionary",
-                    parameter_name="additional_kwargs",
-                    invalid_value=additional_kwargs,
-                )
+        # Merge and clean additional kwargs
+        base_kwargs = _merge_and_clean_kwargs(base_kwargs, additional_kwargs)
 
-            # Check for parameter conflicts
-            conflicts = set(base_kwargs.keys()) & set(additional_kwargs.keys())
-            if conflicts:
-                _logger.warning(
-                    f"Parameter conflicts detected, additional_kwargs will override: {conflicts}"
-                )
-
-            base_kwargs.update(additional_kwargs)
-
-            # Drop testing/internal metadata keys that the environment constructor doesn't accept
-            for _k in list(base_kwargs.keys()):
-                if isinstance(_k, str) and _k.startswith("_"):
-                    del base_kwargs[_k]
-
-        # Validate complete kwargs dictionary for parameter consistency and constraint satisfaction
-        # Cross-validate source location with goal radius
-        if effective_goal_radius > 0:
-            min_distance_to_edge = min(
-                source_x, source_y, width - source_x - 1, height - source_y - 1
-            )
-            if effective_goal_radius > min_distance_to_edge:
-                _logger.warning(
-                    f"Goal radius ({effective_goal_radius}) extends beyond grid edges from source location"
-                )
+        # Warn if goal radius extends beyond edges
+        _warn_if_goal_radius_edges(
+            effective_goal_radius, source_x, source_y, width, height
+        )
 
         # Log kwargs creation with parameter summary and validation status for debugging
         _logger.debug(f"Successfully created registration kwargs: {base_kwargs}")
@@ -751,6 +859,174 @@ def create_registration_kwargs(
     except Exception as e:
         _logger.error(f"Failed to create registration kwargs: {e}")
         raise
+
+
+def _init_validation_report(strict_validation: bool) -> Dict[str, Any]:
+    """Create the base validation report structure."""
+    return {
+        "timestamp": time.time(),
+        "strict_validation": strict_validation,
+        "errors": [],
+        "warnings": [],
+        "recommendations": [],
+        "performance_analysis": {},
+        "compatibility_check": {},
+    }
+
+
+def _validate_env_id(env_id: str, report: Dict[str, Any]) -> bool:
+    valid = True
+    if not isinstance(env_id, str) or not env_id.strip():
+        report["errors"].append("Environment ID must be a non-empty string")
+        valid = False
+    elif not env_id.endswith("-v0"):
+        report["errors"].append(
+            "Environment ID must end with '-v0' suffix for Gymnasium versioning compliance"
+        )
+        valid = False
+    elif len(env_id) > 100:
+        report["warnings"].append(
+            "Environment ID is unusually long, consider shorter name"
+        )
+    return valid
+
+
+def _validate_entry_point(
+    entry_point: str, report: Dict[str, Any], strict_validation: bool
+) -> bool:
+    valid = True
+    if not isinstance(entry_point, str) or not entry_point.strip():
+        report["errors"].append("Entry point must be a non-empty string")
+        valid = False
+    elif ":" not in entry_point:
+        report["errors"].append(
+            "Entry point must contain ':' separator between module and class"
+        )
+        valid = False
+    else:
+        module_path, class_name = entry_point.rsplit(":", 1)
+        if not module_path or not class_name:
+            report["errors"].append(
+                "Entry point must specify both module path and class name"
+            )
+            valid = False
+        elif strict_validation:
+            if not all(
+                part.isidentifier() or part == "."
+                for part in module_path.replace(".", " ").split()
+            ):
+                report["warnings"].append(
+                    "Entry point module path may not be valid Python module"
+                )
+            if not class_name.isidentifier():
+                report["warnings"].append(
+                    "Entry point class name may not be valid Python identifier"
+                )
+    return valid
+
+
+def _validate_kwargs_structure(
+    kwargs: Dict[str, Any], report: Dict[str, Any], strict_validation: bool
+) -> bool:
+    valid = True
+    if not isinstance(kwargs, dict):
+        report["errors"].append("kwargs must be a dictionary")
+        return False
+
+    if "grid_size" in kwargs:
+        valid &= _validate_grid_size_value(
+            kwargs["grid_size"], report, strict_validation
+        )
+
+    if "source_location" in kwargs:
+        valid &= _validate_source_location_value(kwargs["source_location"], report)
+
+    if "goal_radius" in kwargs:
+        valid &= _validate_goal_radius_value(kwargs["goal_radius"], report)
+
+    return valid
+
+
+def _cross_validate_params(kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+    if "grid_size" in kwargs and "source_location" in kwargs:
+        try:
+            width, height = kwargs["grid_size"]
+            source_x, source_y = kwargs["source_location"]
+            if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
+                report["errors"].append(
+                    "source_location must be within grid_size bounds"
+                )
+        except (ValueError, TypeError):
+            report["warnings"].append(
+                "Could not cross-validate grid_size and source_location"
+            )
+
+
+def _analyze_performance(kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+    if "grid_size" not in kwargs:
+        return
+    try:
+        width, height = kwargs["grid_size"]
+        grid_cells = width * height
+        estimated_memory_mb = (grid_cells * 4) / (1024 * 1024)
+        report["performance_analysis"] = {
+            "grid_cells": grid_cells,
+            "estimated_memory_mb": round(estimated_memory_mb, 2),
+            "performance_tier": (
+                "high"
+                if grid_cells > 262144
+                else "medium" if grid_cells > 16384 else "low"
+            ),
+        }
+        if estimated_memory_mb > 100:
+            report["warnings"].append(
+                f"High memory usage estimated: {estimated_memory_mb:.1f}MB"
+            )
+    except Exception:
+        report["warnings"].append("Could not estimate performance characteristics")
+
+
+def _strict_checks(env_id: str, kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+    # Naming conflicts
+    if env_id.lower().startswith("gym"):
+        report["warnings"].append(
+            "Environment ID starting with 'gym' may conflict with official environments"
+        )
+
+    # Parameter completeness
+    expected_params = {"grid_size", "source_location", "goal_radius"}
+    missing_params = expected_params - set(kwargs.keys())
+    if missing_params:
+        report["recommendations"].append(
+            f"Consider specifying parameters: {missing_params}"
+        )
+
+    # Unusual parameter combinations
+    if (
+        "goal_radius" in kwargs
+        and kwargs["goal_radius"] > 0
+        and ("source_location" in kwargs and "grid_size" in kwargs)
+    ):
+        with contextlib.suppress(Exception):
+            width, height = kwargs["grid_size"]
+            source_x, source_y = kwargs["source_location"]
+            goal_radius = kwargs["goal_radius"]
+
+            min_distance_to_edge = min(
+                source_x, source_y, width - source_x - 1, height - source_y - 1
+            )
+            if goal_radius > min_distance_to_edge:
+                report["warnings"].append("Goal radius extends beyond grid boundaries")
+
+
+def _finalize_compatibility(
+    entry_point: str, param_types_valid: bool, report: Dict[str, Any]
+) -> None:
+    report["compatibility_check"] = {
+        "gymnasium_available": True,
+        "entry_point_format_valid": ":" in entry_point,
+        "parameter_types_valid": param_types_valid,
+    }
 
 
 def validate_registration_config(
@@ -790,259 +1066,28 @@ def validate_registration_config(
             print(f"Validation errors: {report['errors']}")
     """
     try:
-        # Initialize validation report dictionary with categories for different validation types
-        validation_report = {
-            "timestamp": time.time(),
-            "strict_validation": strict_validation,
-            "errors": [],
-            "warnings": [],
-            "recommendations": [],
-            "performance_analysis": {},
-            "compatibility_check": {},
-        }
-
+        report = _init_validation_report(strict_validation)
         is_valid = True
 
-        # Validate environment ID format following Gymnasium versioning conventions with '-v0' suffix
-        if not isinstance(env_id, str) or not env_id.strip():
-            validation_report["errors"].append(
-                "Environment ID must be a non-empty string"
-            )
+        is_valid &= _validate_env_id(env_id, report)
+        is_valid &= _validate_entry_point(entry_point, report, strict_validation)
+
+        is_valid &= _validate_max_episode_steps(max_episode_steps, report)
+
+        is_valid &= _validate_kwargs_structure(kwargs, report, strict_validation)
+        _cross_validate_params(kwargs, report)
+        _analyze_performance(kwargs, report)
+
+        _apply_strict_checks(strict_validation, env_id, kwargs, report)
+
+        _finalize_compatibility(entry_point, is_valid, report)
+
+        if report["errors"]:
             is_valid = False
-        elif not env_id.endswith("-v0"):
-            validation_report["errors"].append(
-                "Environment ID must end with '-v0' suffix for Gymnasium versioning compliance"
-            )
-            is_valid = False
-        elif len(env_id) > 100:
-            validation_report["warnings"].append(
-                "Environment ID is unusually long, consider shorter name"
-            )
 
-        # Validate entry point specification with module path verification and class accessibility
-        if not isinstance(entry_point, str) or not entry_point.strip():
-            validation_report["errors"].append("Entry point must be a non-empty string")
-            is_valid = False
-        elif ":" not in entry_point:
-            validation_report["errors"].append(
-                "Entry point must contain ':' separator between module and class"
-            )
-            is_valid = False
-        else:
-            module_path, class_name = entry_point.rsplit(":", 1)
-            if not module_path or not class_name:
-                validation_report["errors"].append(
-                    "Entry point must specify both module path and class name"
-                )
-                is_valid = False
-            elif strict_validation:
-                # Try to validate module path format
-                if not all(
-                    part.isidentifier() or part == "."
-                    for part in module_path.replace(".", " ").split()
-                ):
-                    validation_report["warnings"].append(
-                        "Entry point module path may not be valid Python module"
-                    )
-                if not class_name.isidentifier():
-                    validation_report["warnings"].append(
-                        "Entry point class name may not be valid Python identifier"
-                    )
+        _add_final_recommendations(report)
 
-        # Validate max_episode_steps parameter for positive integer within reasonable training limits
-        if max_episode_steps is None:
-            validation_report["warnings"].append(
-                "max_episode_steps not set; TimeLimit wrapper will not be applied"
-            )
-        elif not isinstance(max_episode_steps, int):
-            validation_report["errors"].append("max_episode_steps must be an integer")
-            is_valid = False
-        elif max_episode_steps <= 0:
-            validation_report["errors"].append("max_episode_steps must be positive")
-            is_valid = False
-        elif max_episode_steps > 100000:
-            validation_report["errors"].append(
-                "max_episode_steps exceeds recommended maximum (100000)"
-            )
-            is_valid = False
-        elif max_episode_steps < 100:
-            validation_report["warnings"].append(
-                "max_episode_steps is quite low, may limit learning"
-            )
-
-        # Validate kwargs dictionary structure and parameter types with comprehensive type checking
-        if not isinstance(kwargs, dict):
-            validation_report["errors"].append("kwargs must be a dictionary")
-            is_valid = False
-        else:
-            # Validate specific parameters if present
-            if "grid_size" in kwargs:
-                grid_size = kwargs["grid_size"]
-                if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
-                    validation_report["errors"].append(
-                        "grid_size must be a tuple/list of 2 elements"
-                    )
-                    is_valid = False
-                else:
-                    width, height = grid_size
-                    if not isinstance(width, int) or not isinstance(height, int):
-                        validation_report["errors"].append(
-                            "grid_size dimensions must be integers"
-                        )
-                        is_valid = False
-                    elif width <= 0 or height <= 0:
-                        validation_report["errors"].append(
-                            "grid_size dimensions must be positive"
-                        )
-                        is_valid = False
-                    elif strict_validation and (width > 1024 or height > 1024):
-                        validation_report["warnings"].append(
-                            "Large grid_size may impact performance"
-                        )
-                    elif width < 16 or height < 16:
-                        validation_report["warnings"].append(
-                            "Small grid_size may limit environment complexity"
-                        )
-
-            if "source_location" in kwargs:
-                source_location = kwargs["source_location"]
-                if (
-                    not isinstance(source_location, (tuple, list))
-                    or len(source_location) != 2
-                ):
-                    validation_report["errors"].append(
-                        "source_location must be a tuple/list of 2 elements"
-                    )
-                    is_valid = False
-                else:
-                    source_x, source_y = source_location
-                    if not isinstance(source_x, (int, float)) or not isinstance(
-                        source_y, (int, float)
-                    ):
-                        validation_report["errors"].append(
-                            "source_location coordinates must be numeric"
-                        )
-                        is_valid = False
-
-            if "goal_radius" in kwargs:
-                goal_radius = kwargs["goal_radius"]
-                if not isinstance(goal_radius, (int, float)):
-                    validation_report["errors"].append("goal_radius must be numeric")
-                    is_valid = False
-                elif goal_radius < 0:
-                    validation_report["errors"].append(
-                        "goal_radius must be non-negative"
-                    )
-                    is_valid = False
-
-        # Cross-validate parameters for mathematical consistency and constraint satisfaction
-        if "grid_size" in kwargs and "source_location" in kwargs:
-            try:
-                grid_size = kwargs["grid_size"]
-                source_location = kwargs["source_location"]
-                width, height = grid_size
-                source_x, source_y = source_location
-
-                if (
-                    source_x < 0
-                    or source_x >= width
-                    or source_y < 0
-                    or source_y >= height
-                ):
-                    validation_report["errors"].append(
-                        "source_location must be within grid_size bounds"
-                    )
-                    is_valid = False
-
-            except (ValueError, TypeError):
-                validation_report["warnings"].append(
-                    "Could not cross-validate grid_size and source_location"
-                )
-
-        # Check performance feasibility including memory usage estimation and computational requirements
-        if "grid_size" in kwargs:
-            try:
-                width, height = kwargs["grid_size"]
-                grid_cells = width * height
-                estimated_memory_mb = (grid_cells * 4) / (1024 * 1024)  # float32 array
-
-                validation_report["performance_analysis"] = {
-                    "grid_cells": grid_cells,
-                    "estimated_memory_mb": round(estimated_memory_mb, 2),
-                    "performance_tier": (
-                        "high"
-                        if grid_cells > 262144
-                        else "medium" if grid_cells > 16384 else "low"
-                    ),
-                }
-
-                if estimated_memory_mb > 100:
-                    validation_report["warnings"].append(
-                        f"High memory usage estimated: {estimated_memory_mb:.1f}MB"
-                    )
-
-            except Exception:
-                validation_report["warnings"].append(
-                    "Could not estimate performance characteristics"
-                )
-
-        # Apply strict validation rules if strict_validation enabled with enhanced precision checking
-        if strict_validation:
-            # Check for potential naming conflicts
-            if env_id.lower().startswith("gym"):
-                validation_report["warnings"].append(
-                    "Environment ID starting with 'gym' may conflict with official environments"
-                )
-
-            # Validate parameter completeness
-            expected_params = {"grid_size", "source_location", "goal_radius"}
-            missing_params = expected_params - set(kwargs.keys())
-            if missing_params:
-                validation_report["recommendations"].append(
-                    f"Consider specifying parameters: {missing_params}"
-                )
-
-            # Check for unusual parameter combinations
-            if "goal_radius" in kwargs and kwargs["goal_radius"] > 0:
-                if "source_location" in kwargs and "grid_size" in kwargs:
-                    try:
-                        width, height = kwargs["grid_size"]
-                        source_x, source_y = kwargs["source_location"]
-                        goal_radius = kwargs["goal_radius"]
-
-                        min_distance_to_edge = min(
-                            source_x,
-                            source_y,
-                            width - source_x - 1,
-                            height - source_y - 1,
-                        )
-                        if goal_radius > min_distance_to_edge:
-                            validation_report["warnings"].append(
-                                "Goal radius extends beyond grid boundaries"
-                            )
-                    except Exception:
-                        pass
-
-        # Test environment instantiation possibility without actual registration for validation
-        validation_report["compatibility_check"] = {
-            "gymnasium_available": True,
-            "entry_point_format_valid": ":" in entry_point,
-            "parameter_types_valid": is_valid,
-        }
-
-        # Compile comprehensive validation report with findings, warnings, and optimization recommendations
-        if not validation_report["errors"]:
-            validation_report["recommendations"].append(
-                "Configuration appears valid for registration"
-            )
-
-        if validation_report["warnings"]:
-            validation_report["recommendations"].append(
-                "Review warnings for potential improvements"
-            )
-
-        # Return validation status tuple with detailed analysis for configuration improvement and error resolution
-        return is_valid, validation_report
+        return is_valid, report
 
     except Exception as e:
         _logger.error(f"Configuration validation failed: {e}")
@@ -1106,7 +1151,7 @@ def register_with_custom_params(
         # Generate custom environment ID if custom_env_id provided with version suffix validation
         if custom_env_id:
             if not custom_env_id.endswith("-v0"):
-                custom_env_id = custom_env_id + "-v0"
+                custom_env_id = f"{custom_env_id}-v0"
                 _logger.info(
                     f"Added version suffix to custom environment ID: {custom_env_id}"
                 )

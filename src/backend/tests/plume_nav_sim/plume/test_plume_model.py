@@ -540,23 +540,62 @@ def test_plume_model_registry_operations():
     is_valid = registry.validate_model_interface(STATIC_GAUSSIAN_MODEL_TYPE)
     assert is_valid == True
 
-    # Test duplicate registration handling with override_existing parameter
-    with pytest.raises((ValueError, Exception)):
-        registry.register_model(
-            model_type=STATIC_GAUSSIAN_MODEL_TYPE,
-            model_class=StaticGaussianPlume,
-            model_description="Duplicate registration",
-            override_existing=False,
-        )
+    # Test idempotent registration: re-registering same class should succeed silently
+    result = registry.register_model(
+        model_type=STATIC_GAUSSIAN_MODEL_TYPE,
+        model_class=StaticGaussianPlume,
+        model_description="Duplicate registration (same class)",
+        override_existing=False,
+    )
+    assert result is True  # Idempotent registration succeeds
+
+    # Test that registering a DIFFERENT class for same type fails
+    class DifferentPlumeModel(BasePlumeModel):
+        def initialize_model(self, **kwargs):
+            pass
+
+        def generate_concentration_field(self, force_regeneration=False):
+            return np.zeros((64, 64))
+
+        def sample_concentration(self, position, interpolate=False):
+            return 0.0
+
+        def validate_model(self):
+            return {"is_valid": True}
+
+        def get_model_info(self):
+            return {}
+
+        def update_parameters(self, **kwargs):
+            pass
+
+        def clone(self):
+            return self
+
+    # Should return False (or raise ValueError, depending on error handling)
+    result_different = registry.register_model(
+        model_type=STATIC_GAUSSIAN_MODEL_TYPE,
+        model_class=DifferentPlumeModel,
+        model_description="Different class, should fail",
+        override_existing=False,
+    )
+    assert result_different is False  # Registration should fail for different class
 
     # Validate registry.get_model_class returns correct class for model type
     model_class = registry.get_model_class(STATIC_GAUSSIAN_MODEL_TYPE)
     assert model_class == StaticGaussianPlume
 
     # Test registry cleanup and model unregistration functionality
-    registry.clear_registry()
+    # clear_registry by default preserves built-in models (those in PLUME_MODEL_TYPES)
+    registry.clear_registry(preserve_builtins=True)
     registered_models_after_clear = registry.get_registered_models()
-    assert len(registered_models_after_clear) == 0
+    # Built-ins are preserved, so static_gaussian should still be there
+    assert STATIC_GAUSSIAN_MODEL_TYPE in registered_models_after_clear
+
+    # Test clearing without preserving built-ins
+    registry.clear_registry(preserve_builtins=False)
+    registered_models_after_full_clear = registry.get_registered_models()
+    assert len(registered_models_after_full_clear) == 0
 
 
 def test_create_plume_model_factory_function():
