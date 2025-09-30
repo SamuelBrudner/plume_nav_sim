@@ -1589,9 +1589,12 @@ def validate_plume_parameters(
                     parameter_constraints={"field_generation": "failed"},
                 )
 
-        # Apply PlumeParameters built-in validation method
+        # Apply PlumeParameters built-in validation method (if available)
         try:
-            plume_params.validate()
+            if hasattr(plume_params, "validate_model"):
+                plume_params.validate_model()
+            elif hasattr(plume_params, "validate"):
+                plume_params.validate()
         except Exception as e:
             raise ValidationError(
                 f"PlumeParameters validation failed: {str(e)}",
