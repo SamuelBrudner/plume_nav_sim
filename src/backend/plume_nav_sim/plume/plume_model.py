@@ -230,7 +230,8 @@ class BasePlumeModel(abc.ABC):
             raise ValidationError("Invalid grid_size type, must be GridSize or tuple")
 
         validate_grid_dimensions(
-            self.grid_size, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB
+            self.grid_size,
+            resource_constraints={"max_memory_mb": MEMORY_LIMIT_PLUME_FIELD_MB},
         )
 
         # Convert and validate source_location using validate_coordinates with grid bounds
@@ -413,7 +414,10 @@ class BasePlumeModel(abc.ABC):
                     # Basic parameter validation
                     validate_coordinates(self.source_location, self.grid_size)
                     validate_grid_dimensions(
-                        self.grid_size, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB
+                        self.grid_size,
+                        resource_constraints={
+                            "max_memory_mb": MEMORY_LIMIT_PLUME_FIELD_MB
+                        },
                     )
             except ValidationError as e:
                 is_valid = False
@@ -1237,7 +1241,8 @@ class PlumeModelRegistry:
             else:
                 grid_obj = grid_size
             validate_grid_dimensions(
-                grid_obj, max_memory_mb=MEMORY_LIMIT_PLUME_FIELD_MB
+                grid_obj,
+                resource_constraints={"max_memory_mb": MEMORY_LIMIT_PLUME_FIELD_MB},
             )
 
             # Source location validation
