@@ -41,7 +41,7 @@ from ..core.constants import (
 
 # Internal imports from core module
 from ..core.enums import Action
-from ..core.types import ActionType
+from ..core.types import ActionType, ObservationType
 
 # Internal imports from utils module
 from .exceptions import ValidationError
