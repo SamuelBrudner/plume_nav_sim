@@ -2801,3 +2801,24 @@ def validate_mathematical_consistency(
     # This is a placeholder for the full implementation
 
     return result
+
+
+# Backward-compatibility alias for older imports
+def validate_grid_dimensions(
+    grid_dimensions: Union[GridSize, tuple, list],
+    check_memory_limits: bool = True,
+    validate_performance: bool = False,
+    resource_constraints: Optional[dict] = None,
+    context: Optional[ValidationContext] = None,
+) -> GridSize:
+    """
+    Compatibility shim: forward to validate_grid_size. Accepts the same parameters but
+    retains the historical function name used by older modules/tests.
+    """
+    return validate_grid_size(
+        grid_dimensions,
+        check_memory_limits=check_memory_limits,
+        validate_performance=validate_performance,
+        resource_constraints=resource_constraints,
+        context=context,
+    )
