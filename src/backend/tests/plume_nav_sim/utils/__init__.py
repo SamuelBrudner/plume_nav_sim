@@ -1251,8 +1251,6 @@ __all__ = [
     "TestSpaceValidator",
     # Parameter validation test classes
     "TestEnvironmentConfigValidation",
-    "TestParameterValidator",
-    "TestValidationResult",
     # Exception testing utility functions
     "create_test_error_context",
     "create_mock_logger",
