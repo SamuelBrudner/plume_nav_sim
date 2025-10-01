@@ -137,10 +137,10 @@ class EpisodeManagerConfig:
 
     # Required configuration parameters
     env_config: EnvironmentConfig
-    enable_performance_monitoring: bool
-    enable_state_validation: bool
 
     # Optional configuration with defaults
+    enable_performance_monitoring: bool = True
+    enable_state_validation: bool = True
     enable_component_integration: bool = field(
         default=DEFAULT_ENABLE_COMPONENT_INTEGRATION
     )
@@ -162,7 +162,7 @@ class EpisodeManagerConfig:
             raise ValidationError(
                 message="env_config must be EnvironmentConfig instance",
                 parameter_name="env_config",
-                invalid_value=type(self.env_config).__name__,
+                parameter_value=type(self.env_config).__name__,
                 expected_format="EnvironmentConfig dataclass",
             )
 
@@ -213,7 +213,7 @@ class EpisodeManagerConfig:
             raise ValidationError(
                 message="component_coordination_timeout too high, may cause performance issues",
                 parameter_name="component_coordination_timeout",
-                invalid_value=str(self.component_coordination_timeout),
+                parameter_value=str(self.component_coordination_timeout),
                 expected_format="<=60.0 seconds",
             )
 
@@ -222,7 +222,7 @@ class EpisodeManagerConfig:
             raise ValidationError(
                 message="episode_cache_size too high, may cause memory issues",
                 parameter_name="episode_cache_size",
-                invalid_value=str(self.episode_cache_size),
+                parameter_value=str(self.episode_cache_size),
                 expected_format="<=1000 entries",
             )
 
@@ -246,7 +246,7 @@ class EpisodeManagerConfig:
                         raise ValidationError(
                             message=f"Component name must be string: {component_name}",
                             parameter_name="component_configs",
-                            invalid_value=str(type(component_name)),
+                            parameter_value=str(type(component_name)),
                             expected_format="string component names",
                         )
 
@@ -259,7 +259,7 @@ class EpisodeManagerConfig:
                     raise ValidationError(
                         message="reproducibility validation requires state validation",
                         parameter_name="validation_configuration",
-                        invalid_value="enable_state_validation=False with enable_reproducibility_validation=True",
+                        parameter_value="enable_state_validation=False with enable_reproducibility_validation=True",
                         expected_format="consistent validation settings",
                     )
 
@@ -268,7 +268,7 @@ class EpisodeManagerConfig:
                 raise ValidationError(
                     message="component integration requires state validation",
                     parameter_name="integration_configuration",
-                    invalid_value="enable_component_integration=True with enable_state_validation=False",
+                    parameter_value="enable_component_integration=True with enable_state_validation=False",
                     expected_format="consistent component settings",
                 )
 
@@ -279,7 +279,7 @@ class EpisodeManagerConfig:
                         raise ValidationError(
                             message=f"Custom parameter name must be string: {param_name}",
                             parameter_name="custom_parameters",
-                            invalid_value=str(type(param_name)),
+                            parameter_value=str(type(param_name)),
                             expected_format="string parameter names",
                         )
 
@@ -291,7 +291,7 @@ class EpisodeManagerConfig:
                     raise ValidationError(
                         message="max_steps too high for strict validation",
                         parameter_name="env_config.max_steps",
-                        invalid_value=str(max_steps),
+                        parameter_value=str(max_steps),
                         expected_format="<=50000 in strict mode",
                     )
 
@@ -312,7 +312,7 @@ class EpisodeManagerConfig:
             raise ValidationError(
                 message=f"Configuration validation failed: {str(e)}",
                 parameter_name="configuration",
-                invalid_value="various",
+                parameter_value="various",
                 expected_format="valid configuration parameters",
             ) from e
 
@@ -380,7 +380,7 @@ class EpisodeManagerConfig:
                     raise ValidationError(
                         message=f"Derived component configuration validation failed: {str(e)}",
                         parameter_name="derived_configs",
-                        invalid_value="component configurations",
+                        parameter_value="component configurations",
                         expected_format="valid component configurations",
                     ) from e
 
@@ -590,7 +590,7 @@ class EpisodeResult:
             raise ValidationError(
                 message="episode_id must be non-empty string",
                 parameter_name="episode_id",
-                invalid_value=str(self.episode_id),
+                parameter_value=str(self.episode_id),
                 expected_format="non-empty string identifier",
             )
 
@@ -709,7 +709,7 @@ class EpisodeResult:
                 raise ValidationError(
                     message="snapshot must be StateSnapshot instance",
                     parameter_name="snapshot",
-                    invalid_value=type(snapshot).__name__,
+                    parameter_value=type(snapshot).__name__,
                     expected_format="StateSnapshot dataclass",
                 )
 
@@ -868,7 +868,7 @@ class EpisodeStatistics:
                 raise ValidationError(
                     message="episode_result must be EpisodeResult instance",
                     parameter_name="episode_result",
-                    invalid_value=type(episode_result).__name__,
+                    parameter_value=type(episode_result).__name__,
                     expected_format="EpisodeResult dataclass",
                 )
 
@@ -1127,7 +1127,7 @@ class EpisodeManager:
                 raise ValidationError(
                     message="config must be EpisodeManagerConfig instance",
                     parameter_name="config",
-                    invalid_value=type(config).__name__,
+                    parameter_value=type(config).__name__,
                     expected_format="EpisodeManagerConfig dataclass",
                 )
 

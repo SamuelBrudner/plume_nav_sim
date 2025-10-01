@@ -36,21 +36,6 @@ from typing import (  # >=3.10 - Type hints for boundary enforcer methods and in
 
 import numpy as np  # >=2.1.0 - Array operations, coordinate calculations, and mathematical validation
 
-# Internal imports from core modules for coordinate and action type system integration
-from .enums import Action
-from .geometry import Coordinates, GridSize
-from .types import ActionType, CoordinateType
-
-
-def create_coordinates(coords: CoordinateType) -> Coordinates:
-    """Factory function to create a Coordinates object from various inputs."""
-    if isinstance(coords, Coordinates):
-        return coords
-    if isinstance(coords, (tuple, list)) and len(coords) == 2:
-        return Coordinates(x=coords[0], y=coords[1])
-    raise TypeError(f"Cannot create Coordinates from {type(coords)}")
-
-
 from ..utils.exceptions import StateError, ValidationError
 from ..utils.logging import ComponentType, get_component_logger, monitor_performance
 
@@ -64,6 +49,11 @@ from .constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     VALIDATION_ERROR_MESSAGES,
 )
+
+# Internal imports from core modules for coordinate and action type system integration
+from .enums import Action
+from .geometry import Coordinates, GridSize
+from .types import ActionType, CoordinateType, create_coordinates
 
 # Global constants for boundary enforcement configuration and performance optimization
 BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS = (
@@ -299,7 +289,7 @@ class MovementConstraint:
             raise ValidationError(
                 "Movement constraint tolerance must be non-negative",
                 parameter_name="tolerance",
-                invalid_value=self.tolerance,
+                parameter_value=self.tolerance,
                 expected_format="float >= 0",
             )
 
@@ -309,7 +299,7 @@ class MovementConstraint:
                 raise ValidationError(
                     "Custom boundaries must be a dictionary",
                     parameter_name="custom_boundaries",
-                    invalid_value=type(self.custom_boundaries).__name__,
+                    parameter_value=type(self.custom_boundaries).__name__,
                     expected_format="dict",
                 )
 
@@ -359,7 +349,7 @@ class MovementConstraint:
                     raise ValidationError(
                         f"Invalid override parameter: {key}",
                         parameter_name="overrides",
-                        invalid_value=key,
+                        parameter_value=key,
                     )
 
         # Validate new configuration if overrides were applied
@@ -407,7 +397,7 @@ class BoundaryEnforcer:
             raise ValidationError(
                 f"Invalid grid_size for boundary enforcer: {e}",
                 parameter_name="grid_size",
-                invalid_value=str(grid_size),
+                parameter_value=str(grid_size),
             ) from e
 
         # Set up constraint_config or create default MovementConstraint if None provided
@@ -526,7 +516,7 @@ class BoundaryEnforcer:
                 raise ValidationError(
                     error_msg,
                     parameter_name="position",
-                    invalid_value=(coords.x, coords.y),
+                    parameter_value=(coords.x, coords.y),
                     expected_format=f"coordinates within bounds (0, 0) to ({self.grid_size.width-1}, {self.grid_size.height-1})",
                 )
 
@@ -543,7 +533,7 @@ class BoundaryEnforcer:
                 raise ValidationError(
                     f"Position validation failed due to internal error: {e}",
                     parameter_name="position",
-                    invalid_value=str(position),
+                    parameter_value=str(position),
                 ) from e
             return False
 
@@ -737,7 +727,7 @@ class BoundaryEnforcer:
             raise ValidationError(
                 f"Invalid new grid_size: {e}",
                 parameter_name="new_grid_size",
-                invalid_value=str(new_grid_size),
+                parameter_value=str(new_grid_size),
             ) from e
 
         # Log grid size update with old and new dimensions for debugging
@@ -901,7 +891,7 @@ class BoundaryEnforcer:
                     raise ValidationError(
                         "Constraint tolerance too large relative to grid size",
                         parameter_name="tolerance",
-                        invalid_value=self.constraint_config.tolerance,
+                        parameter_value=self.constraint_config.tolerance,
                     )
                 else:
                     self.logger.warning(
@@ -920,7 +910,7 @@ class BoundaryEnforcer:
                             raise ValidationError(
                                 f"Invalid custom boundary configuration for {boundary_name}",
                                 parameter_name="custom_boundaries",
-                                invalid_value=type(boundary_config).__name__,
+                                parameter_value=type(boundary_config).__name__,
                             )
 
             # Log successful configuration validation

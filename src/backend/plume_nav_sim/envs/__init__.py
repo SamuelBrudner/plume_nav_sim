@@ -242,7 +242,7 @@ def create_environment(
             raise ValidationError(
                 f"Unsupported environment type: {effective_env_type}",
                 parameter_name="env_type",
-                invalid_value=effective_env_type,
+                parameter_value=effective_env_type,
                 expected_format=f"One of: {SUPPORTED_ENVIRONMENTS}",
             )
 
@@ -421,7 +421,7 @@ def make_environment(
             raise ValidationError(
                 f"Unsupported environment type: {effective_env_type}",
                 parameter_name="env_type",
-                invalid_value=effective_env_type,
+                parameter_value=effective_env_type,
             )
 
         # Check registration status using is_registered() for efficient registration handling

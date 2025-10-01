@@ -26,10 +26,8 @@ class Coordinates:
             raise ValidationError(
                 f"Coordinates must be integers, got x={type(self.x).__name__}, y={type(self.y).__name__}"
             )
-        if self.x < 0 or self.y < 0:
-            raise ValidationError(
-                f"Coordinates must be non-negative, got ({self.x}, {self.y})"
-            )
+        # Note: Negative coordinates are allowed per contract (core_types.md)
+        # They represent off-grid positions, useful for boundary logic
 
     def distance_to(self, other: "Coordinates", high_precision: bool = False) -> float:
         """Calculate Euclidean distance to another coordinate."""
@@ -113,8 +111,20 @@ class GridSize:
         return self.width * self.height
 
     def center(self) -> Coordinates:
-        """Calculate the center coordinates of the grid."""
+        """Calculate the center coordinates of the grid.
+
+        Contract: core_types.md - GridSize.center()
+        Returns: Coordinates at (width//2, height//2)
+        """
         return Coordinates(self.width // 2, self.height // 2)
+
+    def contains(self, coord: Coordinates) -> bool:
+        """Check if coordinate is within grid bounds.
+
+        Contract: core_types.md - GridSize.contains()
+        Returns: True if 0 <= coord.x < width AND 0 <= coord.y < height
+        """
+        return (0 <= coord.x < self.width) and (0 <= coord.y < self.height)
 
     def estimate_memory_mb(self, field_dtype: Optional[np.dtype] = None) -> float:
         """Estimate memory usage for the plume field."""

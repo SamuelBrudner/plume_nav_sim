@@ -163,15 +163,14 @@ class FieldGenerationError(ComponentError):
                 suggestions.append(f"Try reduced dimensions: {new_width}×{new_height}")
 
         # Check generation_params for parameter adjustment recommendations
-        if self.generation_params:
-            if "sigma" in self.generation_params:
-                sigma = self.generation_params["sigma"]
-                if sigma <= 0:
-                    suggestions.append(
-                        "Set sigma to positive value (recommended: 8.0-16.0)"
-                    )
-                elif sigma > 50:
-                    suggestions.append("Reduce sigma for better gradient definition")
+        if self.generation_params and "sigma" in self.generation_params:
+            sigma = self.generation_params["sigma"]
+            if sigma <= 0:
+                suggestions.append(
+                    "Set sigma to positive value (recommended: 8.0-16.0)"
+                )
+            elif sigma > 50:
+                suggestions.append("Reduce sigma for better gradient definition")
 
         # General recovery actions
         suggestions.extend(
@@ -254,12 +253,13 @@ class FieldSamplingError(ComponentError):
             # Check if position appears to be out of bounds
             if isinstance(self.position, (tuple, list)) and len(self.position) == 2:
                 x, y = self.position
-                if x < 0 or y < 0:
-                    return "Ensure position coordinates are non-negative"
-                elif x > 1000 or y > 1000:  # Reasonable upper bound check
+                # Note: Negative coordinates allowed per contract, but may indicate issues
+                if x > 1000 or y > 1000:  # Reasonable upper bound check
                     return (
                         "Check position coordinates are within reasonable grid bounds"
                     )
+                elif x < -100 or y < -100:  # Very negative might indicate error
+                    return "Position appears far outside typical grid bounds"
 
         # Check sampling method issues
         if self.sampling_method not in _INTERPOLATION_METHODS:
@@ -363,13 +363,14 @@ class ConcentrationField:
         # Store grid_size with validation using validate_grid_size function
         try:
             validate_grid_size(
-                grid_size, check_memory_limits=True, check_performance_feasibility=True
+                grid_size, check_memory_limits=True, validate_performance=True
             )
             self.grid_size = grid_size
         except ValidationError as e:
             raise FieldGenerationError(
-                f"Invalid grid size for concentration field: {e}", grid_size=grid_size
-            )
+                f"Invalid grid size for concentration field: {e}",
+                grid_size=grid_size,
+            ) from e
 
         # Initialize enable_caching flag for performance optimization control
         self.enable_caching = enable_caching
@@ -1368,7 +1369,7 @@ def create_concentration_field(
             validate_grid_size(
                 grid_size=grid_obj,
                 check_memory_limits=True,
-                check_performance_feasibility=True,
+                validate_performance=True,
             )
 
         # Set source_location to grid center if not provided using grid_size.center() method
@@ -1450,7 +1451,7 @@ def validate_field_parameters(
     source_location: CoordinateType,
     sigma: float,
     check_memory_limits: bool = True,
-    check_performance_feasibility: bool = True,
+    validate_performance: bool = True,
 ) -> Dict[str, Any]:
     """
     Comprehensive validation function for concentration field parameters including grid dimensions,
@@ -1462,7 +1463,7 @@ def validate_field_parameters(
         source_location: Source coordinates to validate using CoordinateType union
         sigma: Gaussian dispersion parameter to validate for mathematical stability
         check_memory_limits: Enable memory usage validation against system constraints
-        check_performance_feasibility: Enable performance feasibility analysis with timing estimates
+        validate_performance: Enable performance feasibility analysis with timing estimates
 
     Returns:
         Validation result dictionary with status, warnings, memory estimates, and parameter recommendations
@@ -1495,7 +1496,7 @@ def validate_field_parameters(
             validate_grid_size(
                 grid_size=grid_obj,
                 check_memory_limits=check_memory_limits,
-                check_performance_feasibility=check_performance_feasibility,
+                validate_performance=validate_performance,
             )
             validation_result["parameter_analysis"]["grid_size"] = "valid"
 
@@ -1581,8 +1582,8 @@ def validate_field_parameters(
                     "Reduce grid size or disable caching to lower memory usage"
                 )
 
-        # Check performance feasibility if check_performance_feasibility enabled with timing estimates
-        if check_performance_feasibility and grid_obj:
+        # Check performance feasibility if validate_performance enabled with timing estimates
+        if validate_performance and grid_obj:
             estimated_cells = grid_obj.total_cells()
             # Rough performance estimate based on grid size
             estimated_time_ms = estimated_cells / 100000  # Simplified model

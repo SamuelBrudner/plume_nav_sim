@@ -30,6 +30,17 @@ class AgentState:
                 f"Agent position must be Coordinates instance, got {type(self.position).__name__}"
             )
 
+        # Contract: core_types.md - Invariants I2, I3
+        if self.step_count < 0:
+            raise ValidationError(
+                f"step_count must be non-negative, got {self.step_count}"
+            )
+
+        if self.total_reward < 0:
+            raise ValidationError(
+                f"total_reward must be non-negative, got {self.total_reward}"
+            )
+
         if PERFORMANCE_TRACKING_ENABLED:
             self.performance_metrics.setdefault("state_updates", 0)
             self.performance_metrics.setdefault("position_changes", 0)
@@ -56,13 +67,20 @@ class AgentState:
             self.performance_metrics["state_updates"] += 1
 
     def add_reward(self, reward: float, validate_reward: bool = True) -> None:
-        """Add reward to the total."""
+        """Add reward to the total.
+
+        Contract: core_types.md - Precondition P1 for add_reward()
+        """
         from ..utils.exceptions import ValidationError
 
-        if validate_reward and not isinstance(reward, (int, float)):
-            raise ValidationError(
-                f"Reward must be numeric, got {type(reward).__name__}"
-            )
+        if validate_reward:
+            if not isinstance(reward, (int, float)):
+                raise ValidationError(
+                    f"Reward must be numeric, got {type(reward).__name__}"
+                )
+            # Contract: Cannot add negative reward
+            if reward < 0:
+                raise ValidationError(f"Cannot add negative reward, got {reward}")
 
         self.total_reward += float(reward)
 
@@ -84,6 +102,16 @@ class AgentState:
 
         if PERFORMANCE_TRACKING_ENABLED:
             self.performance_metrics["state_updates"] += 1
+
+    def mark_goal_reached(self) -> None:
+        """Mark goal as reached (idempotent).
+
+        Contract: core_types.md - AgentState.mark_goal_reached()
+        Postcondition: goal_reached = True
+        Idempotent: Safe to call multiple times
+        Constraint: Cannot un-reach goal (no method to set False)
+        """
+        self.goal_reached = True
 
     def reset(
         self,

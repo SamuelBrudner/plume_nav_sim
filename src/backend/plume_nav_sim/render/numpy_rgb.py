@@ -261,7 +261,7 @@ class NumpyRGBRenderer(BaseRenderer):
             raise ValidationError(
                 f"Concentration field shape {concentration_field.shape} doesn't match grid size {self.grid_size.to_tuple()}",
                 parameter_name="concentration_field",
-                invalid_value=concentration_field.shape,
+                parameter_value=concentration_field.shape,
                 expected_format=f"({self.grid_size.height}, {self.grid_size.width})",
             )
 
@@ -439,7 +439,7 @@ class NumpyRGBRenderer(BaseRenderer):
             raise ValidationError(
                 f"Color scheme must be string or CustomColorScheme, got {type(color_scheme)}",
                 parameter_name="color_scheme",
-                invalid_value=type(color_scheme).__name__,
+                parameter_value=type(color_scheme).__name__,
                 expected_format="string name or CustomColorScheme instance",
             )
 
@@ -450,7 +450,7 @@ class NumpyRGBRenderer(BaseRenderer):
             raise ValidationError(
                 f"Color scheme validation failed: {str(e)}",
                 parameter_name="color_scheme",
-                invalid_value=str(color_scheme),
+                parameter_value=str(color_scheme),
                 expected_format="valid color scheme configuration",
             )
 
@@ -914,7 +914,7 @@ def create_rgb_renderer(
         raise ValidationError(
             f"Grid size {grid_size.to_tuple()} may not meet performance requirements",
             parameter_name="grid_size",
-            invalid_value=grid_size.to_tuple(),
+            parameter_value=grid_size.to_tuple(),
             expected_format="grid size meeting performance constraints",
         )
 
@@ -979,7 +979,7 @@ def generate_rgb_array_fast(
             raise ValidationError(
                 f"concentration_field must be 2D numpy array, got {type(concentration_field)} with shape {getattr(concentration_field, 'shape', 'unknown')}",
                 parameter_name="concentration_field",
-                invalid_value=(
+                parameter_value=(
                     concentration_field.shape
                     if hasattr(concentration_field, "shape")
                     else None

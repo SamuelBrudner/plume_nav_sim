@@ -176,7 +176,7 @@ def quick_register(
             raise ConfigurationError(
                 f"Registration appeared successful but environment {ENV_ID} not found in registry",
                 config_parameter="registration_status",
-                invalid_value="inconsistent_state",
+                parameter_value="inconsistent_state",
             )
 
         # Test environment creation using gym.make() if validate_creation is True
@@ -196,7 +196,7 @@ def quick_register(
                 raise ConfigurationError(
                     f"Environment registered but creation test failed: {e}",
                     config_parameter="environment_creation",
-                    invalid_value=ENV_ID,
+                    parameter_value=ENV_ID,
                 ) from e
 
         # Update module registration cache with successful registration timestamp
@@ -256,7 +256,7 @@ def quick_register(
             raise ConfigurationError(
                 f"Quick registration failed: {e}",
                 config_parameter="quick_registration",
-                invalid_value=ENV_ID,
+                parameter_value=ENV_ID,
             ) from e
         raise
 
@@ -362,7 +362,7 @@ def ensure_registered(
                         raise ConfigurationError(
                             error_msg,
                             config_parameter="auto_registration",
-                            invalid_value="inconsistent_state",
+                            parameter_value="inconsistent_state",
                         )
                     return False
 
@@ -392,7 +392,7 @@ def ensure_registered(
                     raise ConfigurationError(
                         f"Auto-registration failed: {e}",
                         config_parameter="auto_registration",
-                        invalid_value=ENV_ID,
+                        parameter_value=ENV_ID,
                     ) from e
                 return False
 
@@ -422,7 +422,7 @@ def ensure_registered(
             raise ConfigurationError(
                 f"Environment {ENV_ID} not registered and auto_register disabled",
                 config_parameter="environment_availability",
-                invalid_value="not_registered",
+                parameter_value="not_registered",
             )
 
         # Return False if registration failed and raise_on_failure is False
@@ -452,7 +452,7 @@ def ensure_registered(
             raise ConfigurationError(
                 error_msg,
                 config_parameter="ensure_registered",
-                invalid_value="unexpected_failure",
+                parameter_value="unexpected_failure",
             ) from e
         return False
 
@@ -813,7 +813,7 @@ def _initialize_registration_module() -> bool:
             raise ConfigurationError(
                 f"Gymnasium framework not available: {e}",
                 config_parameter="gymnasium_dependency",
-                invalid_value="not_available",
+                parameter_value="not_available",
             ) from e
 
         # Initialize registration cache dictionary and consistency tracking mechanisms
@@ -822,7 +822,7 @@ def _initialize_registration_module() -> bool:
                 raise ConfigurationError(
                     "Registration cache not properly initialized",
                     config_parameter="cache_initialization",
-                    invalid_value="invalid_type",
+                    parameter_value="invalid_type",
                 )
 
             # Set up initial cache state with module initialization metadata
@@ -842,14 +842,14 @@ def _initialize_registration_module() -> bool:
                 raise ConfigurationError(
                     f"Invalid environment ID: {ENV_ID}",
                     config_parameter="environment_id",
-                    invalid_value=ENV_ID,
+                    parameter_value=ENV_ID,
                 )
 
             if not ENTRY_POINT or not isinstance(ENTRY_POINT, str):
                 raise ConfigurationError(
                     f"Invalid entry point: {ENTRY_POINT}",
                     config_parameter="entry_point",
-                    invalid_value=ENTRY_POINT,
+                    parameter_value=ENTRY_POINT,
                 )
 
             _module_logger.info(
@@ -863,7 +863,7 @@ def _initialize_registration_module() -> bool:
             raise ConfigurationError(
                 f"Entry point validation failed: {e}",
                 config_parameter="entry_point_validation",
-                invalid_value=ENTRY_POINT,
+                parameter_value=ENTRY_POINT,
             ) from e
 
         # Set up module logger with appropriate logging configuration and component identification
@@ -871,7 +871,7 @@ def _initialize_registration_module() -> bool:
             raise ConfigurationError(
                 "Module logger not properly configured",
                 config_parameter="logger_initialization",
-                invalid_value="logger_none",
+                parameter_value="logger_none",
             )
 
         # Perform initial registration system validation and compatibility checking
@@ -977,7 +977,7 @@ def _initialize_registration_module() -> bool:
         raise ConfigurationError(
             error_msg,
             config_parameter="module_initialization",
-            invalid_value="unexpected_failure",
+            parameter_value="unexpected_failure",
         ) from e
 
 

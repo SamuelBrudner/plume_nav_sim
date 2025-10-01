@@ -931,7 +931,7 @@ def validate_environment_config(
         raise ConfigurationError(
             "Environment configuration validation failed",
             config_parameter="environment_config",
-            invalid_value=result.errors,
+            parameter_value=result.errors,
         )
     return result
 
@@ -2437,7 +2437,7 @@ def validate_with_context(
         raise ConfigurationError(
             "Environment configuration validation failed",
             config_parameter="environment_config",
-            invalid_value=result.errors,
+            parameter_value=result.errors,
         )
     return result
 
@@ -2758,7 +2758,7 @@ def validate_component_state(
         raise ConfigurationError(
             "Environment configuration validation failed",
             config_parameter="environment_config",
-            invalid_value=result.errors,
+            parameter_value=result.errors,
         )
     return result
 
@@ -2784,7 +2784,7 @@ def validate_resource_constraints(
         raise ConfigurationError(
             "Environment configuration validation failed",
             config_parameter="environment_config",
-            invalid_value=result.errors,
+            parameter_value=result.errors,
         )
     return result
 

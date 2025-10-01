@@ -219,7 +219,17 @@ def _coerce_pair(value: Sequence[int], *, name: str) -> Tuple[int, int]:
 
 
 def create_coordinates(value: CoordinateType) -> Coordinates:
-    """Create a Coordinates object from diverse inputs."""
+    """Create a Coordinates object from tuple or Coordinates instance.
+
+    Args:
+        value: Either a Coordinates instance or a (x, y) tuple
+
+    Returns:
+        Coordinates instance
+
+    Raises:
+        ValidationError: If value is not valid
+    """
     if isinstance(value, Coordinates):
         return value
     if isinstance(value, Sequence):

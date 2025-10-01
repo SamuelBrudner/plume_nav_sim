@@ -92,7 +92,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="grid_size must be a GridSize instance",
                 parameter_name="grid_size",
-                invalid_value=type(self.grid_size).__name__,
+                parameter_value=type(self.grid_size).__name__,
                 expected_format="GridSize dataclass",
             )
 
@@ -100,7 +100,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="Grid dimensions must be positive integers",
                 parameter_name="grid_size",
-                invalid_value=f"({self.grid_size.width}, {self.grid_size.height})",
+                parameter_value=f"({self.grid_size.width}, {self.grid_size.height})",
                 expected_format="positive integers",
             )
 
@@ -109,7 +109,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="source_location must be a Coordinates instance",
                 parameter_name="source_location",
-                invalid_value=type(self.source_location).__name__,
+                parameter_value=type(self.source_location).__name__,
                 expected_format="Coordinates dataclass",
             )
 
@@ -117,7 +117,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="Source location must be within grid bounds",
                 parameter_name="source_location",
-                invalid_value=f"({self.source_location.x}, {self.source_location.y})",
+                parameter_value=f"({self.source_location.x}, {self.source_location.y})",
                 expected_format=f"coordinates within (0,0) to ({self.grid_size.width-1},{self.grid_size.height-1})",
             )
 
@@ -126,7 +126,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="max_steps must be a positive integer",
                 parameter_name="max_steps",
-                invalid_value=str(self.max_steps),
+                parameter_value=str(self.max_steps),
                 expected_format="positive integer",
             )
 
@@ -135,7 +135,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="goal_radius must be a non-negative number",
                 parameter_name="goal_radius",
-                invalid_value=str(self.goal_radius),
+                parameter_value=str(self.goal_radius),
                 expected_format="non-negative float",
             )
 
@@ -144,7 +144,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message="snapshot_cache_size must be between 0 and 1000",
                 parameter_name="snapshot_cache_size",
-                invalid_value=str(self.snapshot_cache_size),
+                parameter_value=str(self.snapshot_cache_size),
                 expected_format="integer between 0 and 1000",
             )
 
@@ -168,14 +168,14 @@ class StateManagerConfig:
                 raise ValidationError(
                     message=f"Grid size too large, estimated memory usage: {estimated_memory_mb:.1f}MB",
                     parameter_name="grid_size",
-                    invalid_value=f"{self.grid_size.width}x{self.grid_size.height}",
+                    parameter_value=f"{self.grid_size.width}x{self.grid_size.height}",
                     expected_format="dimensions resulting in <500MB memory usage",
                 )
 
             # Cross-validate all parameters for component integration requirements and dependency satisfaction
             max_distance = self.source_location.distance_to(
                 create_coordinates(
-                    self.grid_size.width - 1, self.grid_size.height - 1, self.grid_size
+                    (self.grid_size.width - 1, self.grid_size.height - 1)
                 )
             )
 
@@ -183,7 +183,7 @@ class StateManagerConfig:
                 raise ValidationError(
                     message="Goal radius larger than maximum possible distance in grid",
                     parameter_name="goal_radius",
-                    invalid_value=str(self.goal_radius),
+                    parameter_value=str(self.goal_radius),
                     expected_format=f"<={max_distance:.2f} (maximum grid distance)",
                 )
 
@@ -193,7 +193,7 @@ class StateManagerConfig:
                     raise ValidationError(
                         message="Maximum steps too high for strict validation",
                         parameter_name="max_steps",
-                        invalid_value=str(self.max_steps),
+                        parameter_value=str(self.max_steps),
                         expected_format="<=10000 in strict mode",
                     )
 
@@ -205,7 +205,7 @@ class StateManagerConfig:
             raise ValidationError(
                 message=f"Configuration validation failed: {str(e)}",
                 parameter_name="configuration",
-                invalid_value="various",
+                parameter_value="various",
                 expected_format="valid configuration parameters",
             ) from e
 
@@ -320,7 +320,7 @@ class StateManagerConfig:
                     raise ValidationError(
                         message=f"Invalid override parameter: {key}",
                         parameter_name="overrides",
-                        invalid_value=key,
+                        parameter_value=key,
                         expected_format="valid StateManagerConfig attribute",
                     )
 
@@ -403,7 +403,7 @@ class StateValidationResult:
             raise ValidationError(
                 message="Error message cannot be empty",
                 parameter_name="error_message",
-                invalid_value="empty string",
+                parameter_value="empty string",
                 expected_format="non-empty descriptive string",
             )
 
@@ -584,7 +584,7 @@ class StateSynchronizer:
             raise ValidationError(
                 message="Component name must be a non-empty string",
                 parameter_name="component_name",
-                invalid_value=str(component_name),
+                parameter_value=str(component_name),
                 expected_format="non-empty string",
             )
 
@@ -601,7 +601,7 @@ class StateSynchronizer:
                 raise ValidationError(
                     message=f"Component missing required method: {method_name}",
                     parameter_name="component_instance",
-                    invalid_value=f"missing {method_name}",
+                    parameter_value=f"missing {method_name}",
                     expected_format=f"object with methods: {sync_methods}",
                 )
 
@@ -792,7 +792,7 @@ class StateManager:
             raise ValidationError(
                 message="config must be a StateManagerConfig instance",
                 parameter_name="config",
-                invalid_value=type(config).__name__,
+                parameter_value=type(config).__name__,
                 expected_format="StateManagerConfig dataclass",
             )
 
@@ -878,14 +878,15 @@ class StateManager:
                     )
 
                     # Validate agent start position using boundary enforcer
-                    if self.boundary_enforcer.is_position_valid(start_position):
+                    if self.boundary_enforcer.validate_position(
+                        start_position, raise_on_invalid=False
+                    ):
                         break
                 else:
                     raise StateError(
-                        message="Could not generate valid start position after maximum attempts",
+                        message=f"Could not generate valid start position after {max_attempts} attempts",
                         current_state="episode_reset",
-                        attempted_transition="generate_start_position",
-                        additional_context={"max_attempts": max_attempts},
+                        expected_state="valid_start_position_generated",
                     )
 
                 # Create new AgentState using factory with initial position
@@ -955,11 +956,8 @@ class StateManager:
                 raise StateError(
                     message=f"Episode reset failed: {str(e)}",
                     current_state="episode_reset",
-                    attempted_transition="reset_initialization",
-                    additional_context={
-                        "seed": seed,
-                        "episode_count": self.episode_count,
-                    },
+                    expected_state="reset_complete",
+                    component_name="StateManager",
                 ) from e
 
     @monitor_performance("process_step", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
@@ -979,8 +977,8 @@ class StateManager:
                     raise StateError(
                         message="Cannot process step: episode is not active",
                         current_state="inactive",
-                        attempted_transition="process_step",
-                        additional_context={"episode_count": self.episode_count},
+                        expected_state="active",
+                        component_name="StateManager",
                     )
 
                 if (
@@ -990,7 +988,8 @@ class StateManager:
                     raise StateError(
                         message="Cannot process step: agent or episode state not initialized",
                         current_state="uninitialized",
-                        attempted_transition="process_step",
+                        expected_state="initialized",
+                        component_name="StateManager",
                     )
 
                 # Validate action parameter using action space compliance
@@ -1001,20 +1000,23 @@ class StateManager:
                     raise ValidationError(
                         message=f"Invalid action: {action}",
                         parameter_name="action",
-                        invalid_value=str(action),
+                        parameter_value=str(action),
                         expected_format="valid Action enum value",
                     )
 
                 movement_delta = MOVEMENT_VECTORS[action]
                 current_pos = self.current_agent_state.position
                 new_position = create_coordinates(
-                    current_pos.x + movement_delta[0],
-                    current_pos.y + movement_delta[1],
-                    self.config.grid_size,
+                    (
+                        current_pos.x + movement_delta[0],
+                        current_pos.y + movement_delta[1],
+                    )
                 )
 
                 # Validate new position using boundary enforcer
-                if self.boundary_enforcer.is_position_valid(new_position):
+                if self.boundary_enforcer.validate_position(
+                    new_position, raise_on_invalid=False
+                ):
                     # Update agent position with successful movement
                     self.current_agent_state.update_position(new_position)
                 else:
@@ -1057,8 +1059,8 @@ class StateManager:
                         self.current_agent_state.position.y,
                     ),
                     "action_processed": action,
-                    "boundary_valid": self.boundary_enforcer.is_position_valid(
-                        self.current_agent_state.position
+                    "boundary_valid": self.boundary_enforcer.validate_position(
+                        self.current_agent_state.position, raise_on_invalid=False
                     ),
                     "step_duration_ms": step_duration_ms,
                     "episode_active": self.episode_active,
@@ -1079,8 +1081,8 @@ class StateManager:
                 raise StateError(
                     message=f"Step processing failed: {str(e)}",
                     current_state="step_processing",
-                    attempted_transition="process_action",
-                    additional_context={"action": action},
+                    expected_state="step_complete",
+                    component_name="StateManager",
                 ) from e
 
     def check_episode_termination(
@@ -1239,8 +1241,8 @@ class StateManager:
                             self.boundary_enforcer.grid_size.width,
                             self.boundary_enforcer.grid_size.height,
                         ),
-                        "position_valid": self.boundary_enforcer.is_position_valid(
-                            self.current_agent_state.position
+                        "position_valid": self.boundary_enforcer.validate_position(
+                            self.current_agent_state.position, raise_on_invalid=False
                         ),
                     },
                     "seed_manager": {
@@ -1274,7 +1276,8 @@ class StateManager:
             raise StateError(
                 message="Cannot create snapshot: no active episode state",
                 current_state="no_active_episode",
-                attempted_transition="create_snapshot",
+                expected_state="active_episode",
+                component_name="StateManager",
             )
 
         # Create deep copies for immutability
@@ -1391,8 +1394,8 @@ class StateManager:
                     )
 
                 # Check boundary enforcer integration
-                boundary_valid = self.boundary_enforcer.is_position_valid(
-                    self.current_agent_state.position
+                boundary_valid = self.boundary_enforcer.validate_position(
+                    self.current_agent_state.position, raise_on_invalid=False
                 )
                 if not boundary_valid:
                     validation_result.add_error(
@@ -1625,11 +1628,7 @@ def create_state_manager(
             default_grid_size = GridSize(
                 width=DEFAULT_GRID_SIZE[0], height=DEFAULT_GRID_SIZE[1]
             )
-            default_source_location = create_coordinates(
-                DEFAULT_SOURCE_LOCATION[0],
-                DEFAULT_SOURCE_LOCATION[1],
-                default_grid_size,
-            )
+            default_source_location = create_coordinates(DEFAULT_SOURCE_LOCATION)
 
             config = StateManagerConfig(
                 grid_size=default_grid_size,

@@ -34,58 +34,14 @@ External Dependencies:
 import atexit
 import contextlib
 import gc
-import importlib
+import logging
 import signal
 import sys
+import warnings
 from pathlib import Path
 
 # Standard library imports for configuration and logging
 from typing import Any, Dict, List, Optional, Tuple
-
-
-def _import_stdlib_module(module_name: str):
-    """Import a standard library module even when repo-local packages shadow it."""
-
-    existing = sys.modules.get(module_name)
-    repo_root = Path(__file__).resolve().parents[4]
-    repo_root_str = str(repo_root)
-
-    if existing is not None:
-        module_file = getattr(existing, "__file__", None)
-        module_origin = getattr(getattr(existing, "__spec__", None), "origin", None)
-        if (
-            module_file
-            and not str(Path(module_file).resolve()).startswith(repo_root_str)
-        ) or module_origin in {"built-in", "frozen"}:
-            return existing
-
-        sys.modules.pop(module_name, None)
-
-    original_path = list(sys.path)
-    try:
-        sanitized_path: List[str] = []
-        for entry in original_path:
-            try:
-                resolved = str(Path(entry).resolve())
-            except (OSError, RuntimeError, ValueError):
-                sanitized_path.append(entry)
-                continue
-
-            if resolved.startswith(repo_root_str):
-                continue
-
-            sanitized_path.append(entry)
-
-        sys.path = sanitized_path
-        module = importlib.import_module(module_name)
-    finally:
-        sys.path = original_path
-
-    return module
-
-
-logging = _import_stdlib_module("logging")
-warnings = _import_stdlib_module("warnings")
 
 # Internal imports from core types module
 from ..core.types import GridSize  # noqa: E402
@@ -436,7 +392,7 @@ def _strict_validation_section(
         raise ValidationError(
             error_msg,
             parameter_name="renderer_config",
-            invalid_value=renderer_config,
+            parameter_value=renderer_config,
         )
     if grid_obj_local:
         try:
@@ -482,7 +438,7 @@ def _validate_grid_size_for_factory(grid_size: GridSize) -> None:
         raise ValidationError(
             "Invalid grid_size type",
             parameter_name="grid_size",
-            invalid_value=type(grid_size).__name__,
+            parameter_value=type(grid_size).__name__,
             expected_format="GridSize instance",
         )
     estimated_memory = grid_size.estimate_memory_mb()

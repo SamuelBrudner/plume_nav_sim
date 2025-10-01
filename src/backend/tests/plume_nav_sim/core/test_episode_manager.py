@@ -1470,9 +1470,8 @@ class TestEpisodeResultAndStatistics:
         assert hasattr(episode_result, "total_reward")
         assert hasattr(episode_result, "duration_ms")
 
-        # Verify empty performance_metrics initialization
-        performance_metrics = episode_result.get_performance_metrics()
-        assert isinstance(performance_metrics, dict)
+        # Verify empty performance_metrics initialization (direct access)
+        assert isinstance(episode_result.performance_metrics, dict)
 
     def test_episode_result_final_state(self):
         """Test setting final episode state with agent information, distance metrics, and termination analysis."""
@@ -1481,7 +1480,7 @@ class TestEpisodeResultAndStatistics:
             episode_id="test_episode", terminated=True, truncated=False, total_steps=15
         )
 
-        final_position = create_coordinates(x=10, y=8)
+        final_position = create_coordinates((10, 8))
         final_agent_state = AgentState(
             position=final_position, step_count=15, total_reward=1.0, goal_reached=True
         )
@@ -1549,9 +1548,7 @@ class TestEpisodeResultAndStatistics:
         )
 
         # Set final state
-        final_position = create_coordinates(
-            x=TEST_SOURCE_LOCATION[0], y=TEST_SOURCE_LOCATION[1]
-        )
+        final_position = create_coordinates(TEST_SOURCE_LOCATION)
         final_agent_state = AgentState(
             position=final_position, step_count=30, total_reward=1.0, goal_reached=True
         )

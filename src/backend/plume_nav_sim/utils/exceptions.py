@@ -417,7 +417,7 @@ class ValidationError(PlumeNavSimError, ValueError):
         self,
         message: str,
         parameter_name: Optional[str] = None,
-        invalid_value: Optional[Any] = None,
+        parameter_value: Optional[Any] = None,
         expected_format: Optional[str] = None,
         parameter_constraints: Optional[Dict[str, Any]] = None,
         context: Optional[Union[ErrorContext, Dict[str, Any]]] = None,
@@ -427,7 +427,7 @@ class ValidationError(PlumeNavSimError, ValueError):
         Args:
             message (str): Primary error description
             parameter_name (Optional[str]): Name of parameter that failed validation
-            invalid_value (Optional[Any]): The invalid value that caused validation failure
+            parameter_value (Optional[Any]): The value that was provided for the parameter
             expected_format (Optional[str]): Expected format or constraint description
         """
         # Call parent constructor with message, context, and MEDIUM severity
@@ -435,8 +435,8 @@ class ValidationError(PlumeNavSimError, ValueError):
 
         # Store parameter_name for parameter-specific error handling
         self.parameter_name = parameter_name
-        # Store sanitized invalid_value for debugging (remove sensitive data)
-        self.invalid_value = self._sanitize_value(invalid_value)
+        # Store sanitized parameter_value for debugging (remove sensitive data)
+        self.parameter_value = self._sanitize_value(parameter_value)
         # Store expected_format for user guidance
         self.expected_format = expected_format
         # Initialize empty validation_errors list
@@ -472,7 +472,7 @@ class ValidationError(PlumeNavSimError, ValueError):
         details.update(
             {
                 "parameter_name": self.parameter_name,
-                "invalid_value": self.invalid_value,
+                "parameter_value": self.parameter_value,
                 "expected_format": self.expected_format,
                 "validation_errors": self.validation_errors,
                 "parameter_constraints": self.parameter_constraints,
@@ -736,7 +736,7 @@ class ConfigurationError(PlumeNavSimError):
         self,
         message: str,
         config_parameter: Optional[str] = None,
-        invalid_value: Optional[Any] = None,
+        parameter_value: Optional[Any] = None,
         valid_options: Optional[Dict[str, Any]] = None,
     ):
         """Initialize configuration error with parameter details and valid options.
@@ -744,7 +744,7 @@ class ConfigurationError(PlumeNavSimError):
         Args:
             message (str): Primary error description
             config_parameter (Optional[str]): Configuration parameter that is invalid
-            invalid_value (Optional[Any]): Invalid configuration value
+            parameter_value (Optional[Any]): Value that was provided for the configuration parameter
             valid_options (Optional[dict]): Dictionary of valid configuration options
         """
         # Call parent constructor with message and HIGH severity
@@ -752,8 +752,8 @@ class ConfigurationError(PlumeNavSimError):
 
         # Store config_parameter for parameter-specific error handling
         self.config_parameter = config_parameter
-        # Store sanitized invalid_value for debugging
-        self.invalid_value = self._sanitize_config_value(invalid_value)
+        # Store sanitized parameter_value for debugging
+        self.parameter_value = self._sanitize_config_value(parameter_value)
         # Store valid_options for recovery guidance
         self.valid_options = valid_options or {}
         # Initialize empty configuration_context dictionary
@@ -1453,8 +1453,11 @@ def log_exception_with_recovery(
     # Validate exception and logger parameters
     if not isinstance(exception, Exception):
         raise TypeError("Exception parameter must be an Exception instance")
-    if not isinstance(logger, logging.Logger):
-        raise TypeError("Logger parameter must be a logging.Logger instance")
+    # Accept both logging.Logger and ComponentLogger (which has .logger attribute)
+    if not isinstance(logger, logging.Logger) and not hasattr(logger, "logger"):
+        raise TypeError(
+            "Logger parameter must be a logging.Logger instance or ComponentLogger"
+        )
 
     # Create comprehensive error context using create_error_context
     error_context = create_error_context(

@@ -105,6 +105,9 @@ MIN_PLUME_SIGMA = 0.1
 MAX_PLUME_SIGMA = 100.0
 STATIC_GAUSSIAN_MODEL_TYPE = "static_gaussian"
 
+# Boundary validation and caching
+BOUNDARY_VALIDATION_CACHE_SIZE = 1000
+
 # Plume model registry identifiers
 DEFAULT_PLUME_MODEL_TYPE = STATIC_GAUSSIAN_MODEL_TYPE
 PLUME_MODEL_TYPES = [STATIC_GAUSSIAN_MODEL_TYPE]
@@ -281,7 +284,12 @@ def get_testing_constants() -> Dict[str, Any]:
     }
 
 
-def validate_constant_consistency() -> None:
+def validate_constant_consistency(strict_mode: bool = False) -> None:
+    """Validate consistency of constants.
+
+    Args:
+        strict_mode: Enable strict validation checks (currently unused, for future expansion)
+    """
     if DEFAULT_PLUME_SIGMA < MIN_PLUME_SIGMA or DEFAULT_PLUME_SIGMA > MAX_PLUME_SIGMA:
         raise ValueError("DEFAULT_PLUME_SIGMA out of bounds")
     if len(DEFAULT_GRID_SIZE) != 2:

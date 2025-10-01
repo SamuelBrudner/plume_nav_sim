@@ -760,17 +760,16 @@ def test_gymnasium_api_compliance():
             assert len(rgb_result.shape) == 3, "RGB array must be 3D"
             assert rgb_result.dtype == np.uint8, "RGB array must be uint8"
 
-        # Test seed() method returns list containing seed value per Gymnasium specification
-        seed_result = test_env.seed(42)
-        assert isinstance(seed_result, list), "Seed must return list"
-        assert len(seed_result) == 1, "Seed must return list with one element"
-        assert isinstance(seed_result[0], int), "Seed value must be integer"
+        # Test seeding via reset() per modern Gymnasium API
+        obs, info = test_env.reset(seed=42)
+        assert "seed" in info, "Reset should include seed in info"
+        assert info["seed"] == 42, "Seed value should match requested"
 
         # Test close() method completes without errors and properly cleans up resources
         test_env.close()  # Should not raise exception
 
         # Verify all method signatures match Gymnasium environment interface specifications
-        required_methods = ["reset", "step", "render", "seed", "close"]
+        required_methods = ["reset", "step", "render", "close"]
         for method_name in required_methods:
             assert hasattr(
                 test_env, method_name
@@ -1242,17 +1241,17 @@ def test_seeding_and_reproducibility(seed):
         # We don't assert this as different seeds might occasionally produce same initial state
         # but it's statistically very unlikely for good random number generators
 
-        # Verify seed() method properly coordinates seeding across all environment components
-        seed_result1 = env1.seed(seed)
-        seed_result2 = env2.seed(seed)
+        # Verify seeding via reset() properly coordinates across all environment components
+        obs1_seeded, info1 = env1.reset(seed=seed)
+        obs2_seeded, info2 = env2.reset(seed=seed)
 
-        assert isinstance(seed_result1, list), "Seed method must return list"
-        assert isinstance(seed_result2, list), "Seed method must return list"
-        assert len(seed_result1) == 1, "Seed list must have one element"
-        assert len(seed_result2) == 1, "Seed list must have one element"
-        assert (
-            seed_result1[0] == seed_result2[0] == seed
-        ), "Seed values should match input"
+        assert info1["seed"] == seed, "Seed should match requested value"
+        assert info2["seed"] == seed, "Seed should match requested value"
+
+        # With same seed, initial observations should be identical
+        assert np.array_equal(
+            obs1_seeded, obs2_seeded
+        ), "Same seed should produce identical initial state"
 
         # Test cross-session reproducibility by creating new environment instances
         env3 = PlumeSearchEnv(
@@ -1281,12 +1280,12 @@ def test_seeding_and_reproducibility(seed):
         # Validate seeded random number generation maintains consistency throughout episodes
         # This is implicitly tested by the trajectory comparison above
 
-        # Test seed parameter validation and error handling for invalid seed values
+        # Test seed parameter validation via reset() - invalid seeds should raise
         with pytest.raises((ValueError, TypeError)):
-            env1.seed("invalid_seed")
+            env1.reset(seed="invalid_seed")  # type: ignore
 
         with pytest.raises((ValueError, TypeError)):
-            env1.seed(-1)  # Negative seed should be invalid
+            env1.reset(seed=-1)  # Negative seed should be invalid
 
     finally:
         env1.close()
@@ -1582,15 +1581,15 @@ def test_error_handling_robustness(invalid_action):
                 recovery_result = test_env.step(0)
                 assert len(recovery_result) == 5, "Environment should work after reset"
 
-        # Test invalid seed values raise appropriate TypeError with validation messages
+        # Test invalid seed values via reset() raise appropriate TypeError with validation messages
         with pytest.raises((ValueError, TypeError)):
-            test_env.seed("invalid_seed_string")
+            test_env.reset(seed="invalid_seed_string")  # type: ignore
 
         with pytest.raises((ValueError, TypeError)):
-            test_env.seed(-1)  # Negative seed
+            test_env.reset(seed=-1)  # Negative seed
 
         with pytest.raises((ValueError, TypeError)):
-            test_env.seed(1.5)  # Non-integer seed
+            test_env.reset(seed=1.5)  # type: ignore - Non-integer seed
 
         # Validate render mode errors are handled gracefully with fallback strategies
         test_env.render_mode = "invalid_mode"

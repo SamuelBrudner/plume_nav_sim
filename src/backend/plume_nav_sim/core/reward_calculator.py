@@ -98,6 +98,13 @@ class RewardCalculatorConfig:
                 parameter_value=self.goal_radius,
             )
 
+        if not math.isfinite(self.goal_radius):
+            raise ValidationError(
+                "goal_radius must be finite (not NaN or infinity)",
+                parameter_name="goal_radius",
+                parameter_value=self.goal_radius,
+            )
+
         # Store reward_goal_reached value for successful goal achievement signaling
         if not isinstance(self.reward_goal_reached, (int, float)):
             raise ValidationError(
@@ -106,10 +113,24 @@ class RewardCalculatorConfig:
                 parameter_value=self.reward_goal_reached,
             )
 
+        if not math.isfinite(self.reward_goal_reached):
+            raise ValidationError(
+                "reward_goal_reached must be finite (not NaN or infinity)",
+                parameter_name="reward_goal_reached",
+                parameter_value=self.reward_goal_reached,
+            )
+
         # Store reward_default value for standard sparse reward structure implementation
         if not isinstance(self.reward_default, (int, float)):
             raise ValidationError(
                 "reward_default must be numeric value",
+                parameter_name="reward_default",
+                parameter_value=self.reward_default,
+            )
+
+        if not math.isfinite(self.reward_default):
+            raise ValidationError(
+                "reward_default must be finite (not NaN or infinity)",
                 parameter_name="reward_default",
                 parameter_value=self.reward_default,
             )
@@ -689,19 +710,26 @@ class RewardCalculator:
             self._update_statistics(distance, goal_reached, calculation_time_ms)
 
             # Log reward calculation with context and performance metrics if debug enabled
-            if self.logger.isEnabledFor(logging.DEBUG):
-                self.logger.debug(
-                    f"Reward calculated: reward={reward}, goal_reached={goal_reached}, "
-                    f"distance={distance:.6f}, time={calculation_time_ms:.3f}ms"
-                )
+            self.logger.debug(
+                f"Reward calculated: reward={reward}, goal_reached={goal_reached}, "
+                f"distance={distance:.6f}, time={calculation_time_ms:.3f}ms"
+            )
 
             return result
 
+        except ValidationError:
+            # Re-raise validation errors directly without wrapping
+            raise
         except Exception as e:
             # Handle calculation errors and provide fallback result
             self.logger.error(f"Reward calculation failed: {e}")
             self.goal_achievement_stats["performance_violations"] += 1
-            raise ComponentError(f"Reward calculation failed: {e}") from e
+            raise ComponentError(
+                f"Reward calculation failed: {e}",
+                component_name="RewardCalculator",
+                operation_name="calculate_reward",
+                underlying_error=e,
+            ) from e
 
     def check_termination(
         self,
@@ -788,9 +816,17 @@ class RewardCalculator:
 
             return result
 
+        except ValidationError:
+            # Re-raise validation errors directly without wrapping
+            raise
         except Exception as e:
             self.logger.error(f"Termination check failed: {e}")
-            raise ComponentError(f"Termination check failed: {e}") from e
+            raise ComponentError(
+                f"Termination check failed: {e}",
+                component_name="RewardCalculator",
+                operation_name="check_termination",
+                underlying_error=e,
+            ) from e
 
     def update_agent_reward(
         self,
@@ -831,16 +867,23 @@ class RewardCalculator:
                 agent_state.goal_reached = reward_result.goal_reached
 
             # Log reward update with agent state and reward information if debug enabled
-            if self.logger.isEnabledFor(logging.DEBUG):
-                self.logger.debug(
-                    f"Agent reward updated: reward={reward_result.reward}, "
-                    f"total_reward={getattr(agent_state, 'total_reward', 'N/A')}, "
-                    f"goal_reached={reward_result.goal_reached}"
-                )
+            self.logger.debug(
+                f"Agent reward updated: reward={reward_result.reward}, "
+                f"total_reward={getattr(agent_state, 'total_reward', 'N/A')}, "
+                f"goal_reached={reward_result.goal_reached}"
+            )
 
+        except ValidationError:
+            # Re-raise validation errors directly without wrapping
+            raise
         except Exception as e:
             self.logger.error(f"Agent reward update failed: {e}")
-            raise ComponentError(f"Agent reward update failed: {e}") from e
+            raise ComponentError(
+                f"Agent reward update failed: {e}",
+                component_name="RewardCalculator",
+                operation_name="update_agent_reward",
+                underlying_error=e,
+            ) from e
 
     def get_distance_to_goal(
         self,

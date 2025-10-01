@@ -1656,8 +1656,12 @@ class PlumeModelError(ComponentError):
             operation_name: Name of operation that failed
             model_context: Additional context for diagnostics
         """
-        # Call parent ComponentError constructor with message and HIGH severity
-        super().__init__(message, severity="HIGH")
+        # Call parent ComponentError constructor with required parameters
+        super().__init__(
+            message,
+            component_name=f"PlumeModel_{model_type or 'Unknown'}",
+            operation_name=operation_name or "plume_operation",
+        )
 
         # Store model_type for model-specific error handling and recovery strategies
         self.model_type = model_type
@@ -1857,8 +1861,12 @@ class ModelRegistrationError(ConfigurationError):
             model_class: Class that failed registration
             validation_failure: Specific validation failure reason
         """
-        # Call parent ConfigurationError constructor with message and HIGH severity
-        super().__init__(message, severity="HIGH")
+        # Call parent ConfigurationError constructor with required parameters
+        super().__init__(
+            message,
+            config_parameter="model_registration",
+            parameter_value=model_type,
+        )
 
         # Store model_type for registration-specific error handling
         self.model_type = model_type
@@ -2059,8 +2067,12 @@ class InterfaceValidationError(ValidationError):
             interface_name: Name of interface that failed validation
             missing_methods: List of missing method implementations
         """
-        # Call parent ValidationError constructor with message and HIGH severity
-        super().__init__(message, severity="HIGH")
+        # Call parent ValidationError constructor with required parameters
+        super().__init__(
+            message,
+            parameter_name="model_interface",
+            parameter_value=model_class.__name__ if model_class else "Unknown",
+        )
 
         # Store model_class for class-specific validation analysis
         self.model_class = model_class

@@ -1,0 +1,7 @@
+{
+  "tests/plume_nav_sim/core/test_action_processor.py": true,
+  "tests/plume_nav_sim/core/test_boundary_enforcer.py": true,
+  "tests/plume_nav_sim/core/test_constants.py": true,
+  "tests/plume_nav_sim/core/test_episode_manager.py": true,
+  "tests/plume_nav_sim/core/test_reward_calculator.py": true
+}

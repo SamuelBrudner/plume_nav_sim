@@ -186,7 +186,7 @@ def create_seeded_rng(
                 raise ValidationError(
                     message=f"Invalid seed for RNG creation: {error_message}",
                     parameter_name="seed",
-                    invalid_value=seed,
+                    parameter_value=seed,
                     expected_format="integer or None",
                 )
 
@@ -262,7 +262,7 @@ def generate_deterministic_seed(
             raise ValidationError(
                 message="Seed string must be a non-empty string",
                 parameter_name="seed_string",
-                invalid_value=seed_string,
+                parameter_value=seed_string,
                 expected_format="non-empty string",
             )
 
@@ -274,7 +274,7 @@ def generate_deterministic_seed(
             raise ValidationError(
                 message=f"Hash algorithm '{hash_algorithm}' not available",
                 parameter_name="hash_algorithm",
-                invalid_value=hash_algorithm,
+                parameter_value=hash_algorithm,
                 expected_format=f"one of: {available_algorithms}...",
             )
 
@@ -288,7 +288,7 @@ def generate_deterministic_seed(
             raise ValidationError(
                 message=f"Failed to encode string with {encoding}: {str(e)}",
                 parameter_name="seed_string",
-                invalid_value=seed_string,
+                parameter_value=seed_string,
                 expected_format=f"string encodable with {encoding}",
             ) from e
 
@@ -354,7 +354,7 @@ def verify_reproducibility(
             raise ValidationError(
                 message="First RNG must be numpy.random.Generator instance",
                 parameter_name="rng1",
-                invalid_value=type(rng1).__name__,
+                parameter_value=type(rng1).__name__,
                 expected_format="numpy.random.Generator",
             )
 
@@ -362,7 +362,7 @@ def verify_reproducibility(
             raise ValidationError(
                 message="Second RNG must be numpy.random.Generator instance",
                 parameter_name="rng2",
-                invalid_value=type(rng2).__name__,
+                parameter_value=type(rng2).__name__,
                 expected_format="numpy.random.Generator",
             )
 
@@ -371,7 +371,7 @@ def verify_reproducibility(
             raise ValidationError(
                 message="Sequence length must be positive integer",
                 parameter_name="sequence_length",
-                invalid_value=sequence_length,
+                parameter_value=sequence_length,
                 expected_format="positive integer",
             )
 
@@ -380,7 +380,7 @@ def verify_reproducibility(
             raise ValidationError(
                 message="Tolerance must be positive number",
                 parameter_name="tolerance",
-                invalid_value=tolerance,
+                parameter_value=tolerance,
                 expected_format="positive float",
             )
 
@@ -608,7 +608,7 @@ def save_seed_state(
             raise ValidationError(
                 message="RNG must be numpy.random.Generator instance",
                 parameter_name="rng",
-                invalid_value=type(rng).__name__,
+                parameter_value=type(rng).__name__,
                 expected_format="numpy.random.Generator",
             )
 
@@ -619,7 +619,7 @@ def save_seed_state(
             raise ValidationError(
                 message="File path must be string or pathlib.Path",
                 parameter_name="file_path",
-                invalid_value=type(file_path).__name__,
+                parameter_value=type(file_path).__name__,
                 expected_format="str or pathlib.Path",
             )
 
@@ -779,7 +779,7 @@ def load_seed_state(
             raise ValidationError(
                 message="File path must be string or pathlib.Path",
                 parameter_name="file_path",
-                invalid_value=type(file_path).__name__,
+                parameter_value=type(file_path).__name__,
                 expected_format="str or pathlib.Path",
             )
 
@@ -798,7 +798,7 @@ def load_seed_state(
             raise ValidationError(
                 message=f"Path is not a file: {file_path}",
                 parameter_name="file_path",
-                invalid_value=str(file_path),
+                parameter_value=str(file_path),
                 expected_format="regular file",
             )
 
@@ -817,7 +817,7 @@ def load_seed_state(
             raise ValidationError(
                 message=f"Invalid JSON in seed state file: {str(e)}",
                 parameter_name="file_path",
-                invalid_value=str(file_path),
+                parameter_value=str(file_path),
                 expected_format="valid JSON file",
             ) from e
 
@@ -828,7 +828,7 @@ def load_seed_state(
                 raise ValidationError(
                     message=f"Missing required field '{field}' in seed state file",
                     parameter_name="state_data",
-                    invalid_value=list(state_data.keys()),
+                    parameter_value=list(state_data.keys()),
                     expected_format=f"dict with fields: {base_required_fields} + state",
                 )
 
@@ -838,7 +838,7 @@ def load_seed_state(
             raise ValidationError(
                 message=f"State version mismatch: file has {state_version}, expected {_SEED_STATE_VERSION}",
                 parameter_name="version",
-                invalid_value=state_version,
+                parameter_value=state_version,
                 expected_format=_SEED_STATE_VERSION,
             )
 
@@ -852,14 +852,14 @@ def load_seed_state(
             raise ValidationError(
                 message="Seed state missing RNG state (expected 'rng_state' or 'state')",
                 parameter_name="state_data",
-                invalid_value=list(state_data.keys()),
+                parameter_value=list(state_data.keys()),
                 expected_format="dict with rng_state/state",
             )
         if not isinstance(rng_state_data, dict):
             raise ValidationError(
                 message="RNG state data must be dictionary",
                 parameter_name="rng_state",
-                invalid_value=type(rng_state_data).__name__,
+                parameter_value=type(rng_state_data).__name__,
                 expected_format="dict",
             )
 
@@ -868,7 +868,7 @@ def load_seed_state(
             raise ValidationError(
                 message="RNG state missing required fields (bit_generator, state)",
                 parameter_name="rng_state",
-                invalid_value=list(rng_state_data.keys()),
+                parameter_value=list(rng_state_data.keys()),
                 expected_format="dict with bit_generator and state fields",
             )
 
@@ -1024,7 +1024,7 @@ class SeedManager:
                 raise ValidationError(
                     message=f"Invalid default seed: {error_message}",
                     parameter_name="default_seed",
-                    invalid_value=default_seed,
+                    parameter_value=default_seed,
                     expected_format="valid integer seed",
                 )
             self.default_seed = normalized_seed
@@ -1089,7 +1089,7 @@ class SeedManager:
                         raise ValidationError(
                             message=f"Seed validation failed: {error_message}",
                             parameter_name="seed",
-                            invalid_value=effective_seed,
+                            parameter_value=effective_seed,
                             expected_format="valid integer seed",
                         )
                     effective_seed = validated_seed
@@ -1180,7 +1180,7 @@ class SeedManager:
                 raise ValidationError(
                     message=f"Invalid base seed for episode generation: {error_message}",
                     parameter_name="base_seed",
-                    invalid_value=base_seed,
+                    parameter_value=base_seed,
                     expected_format="valid integer seed",
                 )
 
@@ -1189,7 +1189,7 @@ class SeedManager:
                 raise ValidationError(
                     message="Episode number must be non-negative integer",
                     parameter_name="episode_number",
-                    invalid_value=episode_number,
+                    parameter_value=episode_number,
                     expected_format="non-negative integer",
                 )
 
@@ -1232,6 +1232,70 @@ class SeedManager:
                 operation_name="generate_episode_seed",
             ) from e
 
+    def generate_random_position(
+        self,
+        grid_size: "GridSize",
+        exclude_position: Optional["Coordinates"] = None,
+        max_attempts: int = 100,
+    ) -> "Coordinates":
+        """Generate random position within grid bounds using current RNG.
+
+        Args:
+            grid_size: Grid dimensions for position bounds
+            exclude_position: Optional position to avoid (e.g., source location)
+            max_attempts: Maximum attempts to find non-excluded position
+
+        Returns:
+            Random Coordinates within grid bounds
+
+        Raises:
+            ComponentError: If cannot generate valid position after max_attempts
+        """
+        from ..core.geometry import Coordinates, GridSize
+
+        try:
+            # Validate grid_size
+            if not isinstance(grid_size, GridSize):
+                raise ValidationError(
+                    message="grid_size must be GridSize instance",
+                    parameter_name="grid_size",
+                    parameter_value=str(type(grid_size)),
+                )
+
+            # Get current RNG (use seed with default or create new)
+            rng, _ = self.seed(context_id="generate_position")
+
+            for attempt in range(max_attempts):
+                # Generate random position within bounds
+                x = int(rng.integers(0, grid_size.width))
+                y = int(rng.integers(0, grid_size.height))
+                position = Coordinates(x=x, y=y)
+
+                # Check if we need to exclude this position
+                if exclude_position is None:
+                    return position
+
+                # If position different from excluded, return it
+                if position.x != exclude_position.x or position.y != exclude_position.y:
+                    return position
+
+            # Failed to generate non-excluded position
+            raise ComponentError(
+                message=f"Could not generate random position after {max_attempts} attempts",
+                component_name="SeedManager",
+                operation_name="generate_random_position",
+            )
+
+        except (ValidationError, ComponentError):
+            raise
+        except Exception as e:
+            self.logger.error(f"Random position generation failed: {e}")
+            raise ComponentError(
+                message=f"Failed to generate random position: {str(e)}",
+                component_name="SeedManager",
+                operation_name="generate_random_position",
+            ) from e
+
     def validate_reproducibility(
         self,
         test_seed: int,
@@ -1260,7 +1324,7 @@ class SeedManager:
                 raise ValidationError(
                     message=f"Invalid test seed: {error_message}",
                     parameter_name="test_seed",
-                    invalid_value=test_seed,
+                    parameter_value=test_seed,
                     expected_format="valid integer seed",
                 )
 
@@ -1269,7 +1333,7 @@ class SeedManager:
                 raise ValidationError(
                     message="Number of tests must be positive integer",
                     parameter_name="num_tests",
-                    invalid_value=num_tests,
+                    parameter_value=num_tests,
                     expected_format="positive integer",
                 )
 
@@ -1601,7 +1665,7 @@ class ReproducibilityTracker:
             raise ValidationError(
                 message="Tolerance must be positive number",
                 parameter_name="tolerance",
-                invalid_value=tolerance,
+                parameter_value=tolerance,
                 expected_format="positive float",
             )
         self.tolerance = float(tolerance)
@@ -1614,7 +1678,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="Session ID must be non-empty string",
                     parameter_name="session_id",
-                    invalid_value=session_id,
+                    parameter_value=session_id,
                     expected_format="non-empty string",
                 )
             self.session_id = session_id.strip()
@@ -1667,7 +1731,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message=f"Invalid episode seed: {error_message}",
                     parameter_name="episode_seed",
-                    invalid_value=episode_seed,
+                    parameter_value=episode_seed,
                     expected_format="valid integer seed",
                 )
 
@@ -1676,7 +1740,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="Action sequence must be a list",
                     parameter_name="action_sequence",
-                    invalid_value=type(action_sequence).__name__,
+                    parameter_value=type(action_sequence).__name__,
                     expected_format="list of actions",
                 )
 
@@ -1684,7 +1748,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="Observation sequence must be a list",
                     parameter_name="observation_sequence",
-                    invalid_value=type(observation_sequence).__name__,
+                    parameter_value=type(observation_sequence).__name__,
                     expected_format="list of observations",
                 )
 
@@ -1692,7 +1756,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="Action sequence cannot be empty",
                     parameter_name="action_sequence",
-                    invalid_value=len(action_sequence),
+                    parameter_value=len(action_sequence),
                     expected_format="non-empty list",
                 )
 
@@ -1775,7 +1839,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message=f"Episode record not found: {episode_record_id}",
                     parameter_name="episode_record_id",
-                    invalid_value=episode_record_id,
+                    parameter_value=episode_record_id,
                     expected_format="valid episode record ID",
                 )
 
@@ -1790,7 +1854,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="New sequences must be lists",
                     parameter_name="new_sequences",
-                    invalid_value=f"actions: {type(new_action_sequence)}, obs: {type(new_observation_sequence)}",
+                    parameter_value=f"actions: {type(new_action_sequence)}, obs: {type(new_observation_sequence)}",
                     expected_format="lists",
                 )
 
@@ -2401,7 +2465,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message="Export path must be string or pathlib.Path",
                     parameter_name="export_path",
-                    invalid_value=type(export_path).__name__,
+                    parameter_value=type(export_path).__name__,
                     expected_format="str or pathlib.Path",
                 )
 
@@ -2414,7 +2478,7 @@ class ReproducibilityTracker:
                 raise ValidationError(
                     message=f"Unsupported export format: {export_format}",
                     parameter_name="export_format",
-                    invalid_value=export_format,
+                    parameter_value=export_format,
                     expected_format=f"one of: {supported_formats}",
                 )
 

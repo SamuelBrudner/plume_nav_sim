@@ -118,7 +118,7 @@ def register_env(
             raise ValidationError(
                 f"Environment ID '{effective_env_id}' must end with '-v0' suffix for Gymnasium versioning compliance",
                 parameter_name="env_id",
-                invalid_value=effective_env_id,
+                parameter_value=effective_env_id,
                 expected_format="environment_name-v0",
             )
 
@@ -162,7 +162,7 @@ def register_env(
             raise ConfigurationError(
                 f"Registration configuration validation failed: {error_details}",
                 config_parameter="registration_config",
-                invalid_value=validation_report,
+                parameter_value=validation_report,
             )
 
         # Call gymnasium.register() with validated env_id, entry_point, max_episode_steps, and kwargs
@@ -639,7 +639,7 @@ def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
         raise ValidationError(
             "grid_size must be a tuple or list of exactly 2 elements",
             parameter_name="grid_size",
-            invalid_value=grid_size,
+            parameter_value=grid_size,
             expected_format="(width, height) tuple with positive integers",
         )
     width, height = grid_size
@@ -647,19 +647,19 @@ def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
         raise ValidationError(
             "grid_size dimensions must be integers",
             parameter_name="grid_size",
-            invalid_value=grid_size,
+            parameter_value=grid_size,
         )
     if width <= 0 or height <= 0:
         raise ValidationError(
             "grid_size dimensions must be positive integers",
             parameter_name="grid_size",
-            invalid_value=grid_size,
+            parameter_value=grid_size,
         )
     if width > 1024 or height > 1024:
         raise ValidationError(
             "grid_size dimensions exceed maximum allowed size (1024x1024)",
             parameter_name="grid_size",
-            invalid_value=grid_size,
+            parameter_value=grid_size,
         )
     return width, height
 
@@ -672,7 +672,7 @@ def _assert_source_location_or_raise(
         raise ValidationError(
             "source_location must be a tuple or list of exactly 2 elements",
             parameter_name="source_location",
-            invalid_value=source_location,
+            parameter_value=source_location,
             expected_format="(x, y) tuple with coordinates within grid bounds",
         )
     source_x, source_y = source_location
@@ -680,13 +680,13 @@ def _assert_source_location_or_raise(
         raise ValidationError(
             "source_location coordinates must be numeric",
             parameter_name="source_location",
-            invalid_value=source_location,
+            parameter_value=source_location,
         )
     if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
         raise ValidationError(
             f"source_location coordinates must be within grid bounds: (0,0) to ({width-1},{height-1})",
             parameter_name="source_location",
-            invalid_value=source_location,
+            parameter_value=source_location,
         )
     return float(source_x), float(source_y)
 
@@ -696,19 +696,19 @@ def _assert_max_steps_or_raise(max_steps: Any) -> int:
         raise ValidationError(
             "max_steps must be an integer",
             parameter_name="max_steps",
-            invalid_value=max_steps,
+            parameter_value=max_steps,
         )
     if max_steps <= 0:
         raise ValidationError(
             "max_steps must be a positive integer",
             parameter_name="max_steps",
-            invalid_value=max_steps,
+            parameter_value=max_steps,
         )
     if max_steps > 100000:
         raise ValidationError(
             "max_steps exceeds maximum allowed value (100000) for performance constraints",
             parameter_name="max_steps",
-            invalid_value=max_steps,
+            parameter_value=max_steps,
         )
     return max_steps
 
@@ -718,20 +718,20 @@ def _assert_goal_radius_or_raise(goal_radius: Any, width: int, height: int) -> f
         raise ValidationError(
             "goal_radius must be numeric",
             parameter_name="goal_radius",
-            invalid_value=goal_radius,
+            parameter_value=goal_radius,
         )
     if goal_radius < 0:
         raise ValidationError(
             "goal_radius must be non-negative",
             parameter_name="goal_radius",
-            invalid_value=goal_radius,
+            parameter_value=goal_radius,
         )
     max_grid_dimension = max(width, height)
     if goal_radius > max_grid_dimension:
         raise ValidationError(
             f"goal_radius ({goal_radius}) exceeds maximum grid dimension ({max_grid_dimension})",
             parameter_name="goal_radius",
-            invalid_value=goal_radius,
+            parameter_value=goal_radius,
         )
     return float(goal_radius)
 
@@ -746,7 +746,7 @@ def _merge_and_clean_kwargs(
         raise ValidationError(
             "additional_kwargs must be a dictionary",
             parameter_name="additional_kwargs",
-            invalid_value=additional_kwargs,
+            parameter_value=additional_kwargs,
         )
     conflicts = set(base_kwargs.keys()) & set(additional_kwargs.keys())
     if conflicts:

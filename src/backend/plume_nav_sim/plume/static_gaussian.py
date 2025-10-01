@@ -94,8 +94,12 @@ class GaussianPlumeError(ComponentError):
             gaussian_params: Dictionary containing relevant Gaussian parameters for analysis
             calculation_context: Context information about the calculation that failed
         """
-        # Call parent ComponentError constructor with message and HIGH severity level
-        super().__init__(message, severity="HIGH")
+        # Call parent ComponentError constructor with required parameters
+        super().__init__(
+            message,
+            component_name="StaticGaussianPlume",
+            operation_name=calculation_context or "gaussian_calculation",
+        )
 
         # Store sanitized gaussian_params for mathematical analysis without sensitive information
         self.gaussian_params = (

@@ -25,6 +25,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
+import gymnasium as gym
 import numpy as np
 
 from ..core.constants import (
@@ -149,36 +150,16 @@ def _resolve_seed(seed: Optional[Any]) -> Optional[int]:
     return seed_value
 
 
-class _DiscreteActionSpace:
-    """Minimal discrete action space exposing the API the tests exercise."""
-
-    def __init__(self, rng: np.random.Generator) -> None:
-        self.n = ACTION_SPACE_SIZE
-        self._rng = rng
-
-    def sample(self) -> int:
-        value = int(self._rng.integers(0, self.n))
-        logger.debug("Sampled action value %s from discrete space", value)
-        return value
-
-    def contains(self, item: Any) -> bool:
-        try:
-            value = int(item)
-        except (TypeError, ValueError):
-            return False
-        return 0 <= value < self.n
+# Note: Custom space classes removed - using standard Gymnasium spaces
+# for full ecosystem compatibility (Stable-Baselines3, RLlib, etc.)
 
 
-@dataclass
-class _ObservationSpace:
-    """Very small observation-space stub used by the test-suite assertions."""
+class PlumeSearchEnv(gym.Env):
+    """Deterministic grid environment with Gaussian concentration field.
 
-    shape: Tuple[int, int, int]
-    dtype: Any = np.float32
-
-
-class PlumeSearchEnv:
-    """Deterministic grid environment with Gaussian concentration field."""
+    Follows Gymnasium API as specified in CONTRACTS.md and SEMANTIC_MODEL.md.
+    Provides reproducible plume navigation scenarios for reinforcement learning.
+    """
 
     metadata: Dict[str, Any] = {"render_modes": ["rgb_array", "human"]}
 
@@ -221,14 +202,36 @@ class PlumeSearchEnv:
 
         self._rng_seed: Optional[int] = None
         self._rng = np.random.default_rng()
-        self.action_space = _DiscreteActionSpace(self._rng)
-        self.observation_space = _ObservationSpace(
-            shape=(self.grid_size[0], self.grid_size[1], 1)
+
+        # Use standard Gymnasium spaces for ecosystem compatibility
+        self.action_space = gym.spaces.Discrete(ACTION_SPACE_SIZE, seed=None)
+        self.observation_space = gym.spaces.Dict(
+            {
+                "agent_position": gym.spaces.Box(
+                    low=0,
+                    high=max(self.grid_size[0], self.grid_size[1]) - 1,
+                    shape=(2,),
+                    dtype=np.int32,
+                ),
+                "concentration_field": gym.spaces.Box(
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.grid_size[1], self.grid_size[0]),
+                    dtype=np.float32,
+                ),
+                "source_location": gym.spaces.Box(
+                    low=0,
+                    high=max(self.grid_size[0], self.grid_size[1]) - 1,
+                    shape=(2,),
+                    dtype=np.int32,
+                ),
+            }
         )
 
+        # State machine tracking per contract (environment_state_machine.md)
+        self._state = "CREATED"  # CREATED, READY, TERMINATED, TRUNCATED, CLOSED
         self._step_count = 0
-        self._episode_active = False
-        self._closed = False
+        self._total_reward = 0.0
         self._agent_position = self.source_location
         self._lock = threading.RLock()
 
@@ -244,7 +247,11 @@ class PlumeSearchEnv:
     # ------------------------------------------------------------------
     # Internal helpers
     def _ensure_active(self) -> None:
-        if self._closed:
+        """Ensure environment is not closed.
+
+        Contract: environment_state_machine.md
+        """
+        if self._state == "CLOSED":
             raise StateError(
                 "Environment has been closed",
                 current_state="closed",
@@ -256,7 +263,8 @@ class PlumeSearchEnv:
             seed = int(time.time_ns() % (SEED_MAX_VALUE + 1))
         self._rng_seed = seed
         self._rng = np.random.default_rng(seed)
-        self.action_space = _DiscreteActionSpace(self._rng)
+        # Update action space seed for determinism
+        self.action_space.seed(seed)
         logger.debug("Reset RNG with seed %s", seed)
 
     def _random_agent_position(self) -> Tuple[int, int]:
@@ -276,48 +284,100 @@ class PlumeSearchEnv:
         value = math.exp(exponent)
         return max(0.0, min(1.0, value))
 
-    def _observation(self) -> np.ndarray:
-        concentration = self._compute_concentration(self._agent_position)
-        normalised_steps = self._step_count / max(1, self.max_steps)
+    def _is_goal_reached(self) -> bool:
+        """Check if agent is within goal radius of source.
+
+        Contract: reward_function.md - Sparse binary reward model
+        """
         distance = self._compute_distance(self._agent_position)
-        obs = np.array([concentration, normalised_steps, distance], dtype=np.float32)
+        return distance <= self.goal_radius
+
+    def _observation(self) -> Dict[str, np.ndarray]:
+        """Return observation as Dict per Gymnasium API contract.
+
+        Contract: gymnasium_api.md - ObservationType = Dict[str, np.ndarray]
+        """
+        # Build full concentration field
+        width, height = self.grid_size
+        field = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                field[y, x] = self._compute_concentration((x, y))
+
+        obs = {
+            "agent_position": np.array(self._agent_position, dtype=np.int32),
+            "concentration_field": field,
+            "source_location": np.array(self.source_location, dtype=np.int32),
+        }
         return obs
 
     def _info(self) -> Dict[str, Any]:
-        return {
+        """Return info dict per Gymnasium API contract.
+
+        Contract: gymnasium_api.md - Required keys after step():
+        step_count, total_reward, goal_reached
+        """
+        # Legacy keys for backward compatibility
+        info = {
             "agent_xy": self._agent_position,
             "plume_peak_xy": self.source_location,
             "distance_to_source": self._compute_distance(self._agent_position),
-            "step_count": self._step_count,
             "seed": self._rng_seed,
         }
+
+        # Contract-required keys
+        info["step_count"] = self._step_count
+        info["total_reward"] = getattr(self, "_total_reward", 0.0)
+        info["goal_reached"] = self._is_goal_reached()
+
+        return info
 
     # ------------------------------------------------------------------
     # Gymnasium-style API
     def reset(
         self, *, seed: Optional[Any] = None, options: Optional[Dict[str, Any]] = None
-    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+        """Reset environment to initial state.
+
+        Contract: environment_state_machine.md
+        Transition: CREATED/TERMINATED/TRUNCATED → READY
+        """
         with self._lock:
+            # Call parent reset for proper Gymnasium compliance
+            super().reset(seed=seed)
+
             self._ensure_active()
             resolved_seed = _resolve_seed(seed)
             self._update_rng(resolved_seed)
             self._step_count = 0
-            self._episode_active = True
+            self._total_reward = 0.0
+            self._state = "READY"  # State transition
             self._agent_position = self._random_agent_position()
             logger.debug(
-                "Environment reset with seed=%s position=%s",
+                "Environment reset with seed=%s position=%s state=%s",
                 resolved_seed,
                 self._agent_position,
+                self._state,
             )
             return self._observation(), self._info()
 
-    def step(self, action: Any) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+    def step(
+        self, action: Any
+    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
+        """Execute one timestep.
+
+        Contract: environment_state_machine.md
+        Precondition: state = READY
+        Postcondition: state ∈ {READY, TERMINATED, TRUNCATED}
+        """
         with self._lock:
             self._ensure_active()
-            if not self._episode_active:
+
+            # Enforce precondition: must be in READY state
+            if self._state != "READY":
                 raise StateError(
-                    "Environment must be reset before stepping",
-                    current_state="inactive",
+                    "Cannot step() before reset(). Environment must be in READY state.",
+                    current_state=self._state,
                     component_name="env",
                 )
 
@@ -336,23 +396,31 @@ class PlumeSearchEnv:
             self._agent_position = (new_x, new_y)
             self._step_count += 1
 
-            distance = self._compute_distance(self._agent_position)
-            reward = float(1.0 - min(distance, width + height) / (width + height))
+            # Sparse binary reward per contract (reward_function.md)
+            goal_reached = self._is_goal_reached()
+            reward = 1.0 if goal_reached else 0.0
+            self._total_reward += reward
 
-            terminated = distance <= self.goal_radius
+            terminated = goal_reached
             truncated = self._step_count >= self.max_steps
-            if terminated or truncated:
-                self._episode_active = False
+
+            # State transitions per contract (environment_state_machine.md)
+            if terminated:
+                self._state = "TERMINATED"
+            elif truncated:
+                self._state = "TRUNCATED"
+            # else: stays READY
 
             observation = self._observation()
             info = self._info()
             logger.debug(
-                "Step action=%s position=%s reward=%.3f terminated=%s truncated=%s",
+                "Step action=%s position=%s reward=%.3f terminated=%s truncated=%s state=%s",
                 action_enum.name,
                 self._agent_position,
                 reward,
                 terminated,
                 truncated,
+                self._state,
             )
             return observation, reward, terminated, truncated, info
 
@@ -392,9 +460,15 @@ class PlumeSearchEnv:
                     ) from exc
 
     def close(self) -> None:
+        """Release resources and close environment.
+
+        Contract: environment_state_machine.md
+        Transition: ANY → CLOSED (terminal state)
+        Idempotent: Can call multiple times safely
+        """
         with self._lock:
-            self._episode_active = False
-            self._closed = True
+            self._state = "CLOSED"
+            logger.debug("Environment closed")
             logger.info("Closed PlumeSearchEnv")
 
     # ------------------------------------------------------------------
