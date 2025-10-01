@@ -1,17 +1,17 @@
 # Reward Function Contract
 
 **Component:** Reward Calculation  
-**Version:** 1.1.0  
-**Date:** 2025-09-30  
+**Version:** 2.0.0  
+**Date:** 2025-10-01  
 **Status:** CANONICAL - All implementations MUST conform
 
 ---
 
 ## 🎯 Purpose
 
-Define reward function properties for reinforcement learning.
+Define reward computation contracts for reinforcement learning.
 
-**IMPORTANT:** Distinguish between universal properties and model-specific design choices!
+**IMPORTANT:** Distinguish between protocol-level guarantees (universal) and specific reward family design choices.
 
 ## 📊 Classification
 
@@ -20,123 +20,93 @@ Properties ALL reward functions should satisfy:
 - **Purity** - No side effects
 - **Determinism** - Reproducible
 
-### Sparse Binary Reward Model (Current Implementation)
-Design choice for exploration-focused RL:
+### Sparse Binary Reward (Library default implementation)
 - Binary output {0.0, 1.0}
 - Distance-based threshold
 - No intermediate rewards
 
-**Alternative Models:**
-- Dense rewards: `1.0 / (1 + distance)`
-- Potential shaping: `φ(s') - φ(s)`  
-- Distance-based: `max(0, 1 - distance/max_distance)`
-- Multi-objective: Vector rewards
+### Step Penalty Reward (Library default implementation)
+- Negative step penalty, positive terminal reward
+- Encourages efficient search
 
----
+**Other Models (not shipped):**
+- Dense distance shaping: `1 / (1 + d)`
+- Potential-based shaping: `φ(s') - φ(s)`
+```
+compute_reward: (AgentState, Action, AgentState, ConcentrationField) → float
+```
 
-## 📐 Mathematical Definition
+- `AgentState` includes position and orientation (see `core_types.md`)
+- `Action` is processor-defined (see `action_processor_interface.md`)
+- `ConcentrationField` context (see `concentration_field.md`)
 
-### Function Signature
+### Sparse Binary Reward Specification (library shipped)
+
+Let `d = distance(next_state.position, source_location)`
 
 ```
-reward: Coordinates × Coordinates × ℝ₊ → {0.0, 1.0}
-```
-Where:
-- **Domain:** All possible (agent_position, source_position, goal_radius)
-- **Codomain:** Exactly two values: {0.0, 1.0}
-- **ℝ₊** = positive real numbers
-
-### Sparse Binary Model Specification
-
-**Current Implementation:** Sparse binary reward for exploration-focused learning.
-
-**Design Rationale:** Forces exploration, simple goal detection, no shaping bias.
-
-Let d = distance(agent_pos, source_pos)
-where distance(p₁, p₂) = √((x₂-x₁)² + (y₂-y₁)²)
-
-reward(agent_pos, source_pos, goal_radius) = {
+compute_reward(prev, action, next, field) = {
   1.0  if d ≤ goal_radius
   0.0  otherwise
 }
+```
 
-### Boundary Condition
-**CRITICAL:** The boundary is **inclusive** (≤, not <)
+- Boundary is inclusive (`≤ goal_radius`)
+- No dependency on `action`
+- Ignores orientation (goal proximity only)
+
+### Step Penalty Reward Specification (library shipped)
 
 ```
-At exactly d = goal_radius:
-  reward = 1.0 ✓
-
-Just inside (d = goal_radius - ε):
-  reward = 1.0 ✓
-
-Just outside (d = goal_radius + ε):
-  reward = 0.0 ✓
+compute_reward(prev, action, next, field) = {
+  goal_reward        if distance(next.position, source) ≤ goal_radius
+  -step_penalty      otherwise
+}
 ```
+
+- `goal_reward` defaults to 1.0 (configurable)
+- `step_penalty` defaults to 0.01 (configurable, stored positive)
+- Negative rewards permitted (codomain `(-∞, goal_reward]`)
 
 ---
 
-## 💻 Implementation Contract
+## 💻 Implementation Requirements
+
+All reward implementations MUST:
+
+- Implement the `RewardFunction` protocol (`reward_function_interface.md`)
+- Provide a `get_metadata()` that returns JSON-serializable fields
+- Validate constructor parameters in `__post_init__`
+- Pass universal property tests (`test_reward_function_interface.py`)
+- Document codomain and edge cases
+
+### SparseGoalReward (library implementation)
 
 ```python
-def calculate_reward(
-    agent_position: Coordinates,
-    source_position: Coordinates,
+@dataclass
+class SparseGoalReward(RewardFunction):
     goal_radius: float
-) -> float:
-    """Calculate sparse binary reward based on distance to goal.
-    
-    Preconditions:
-      P1: agent_position is valid Coordinates
-      P2: source_position is valid Coordinates
-      P3: goal_radius > 0 (positive)
-      P4: goal_radius is finite (not NaN, not inf)
-    
-    Postconditions:
-      C1: result ∈ {0.0, 1.0} (exactly binary)
-      C2: result = 1.0 ⟺ distance(agent, source) ≤ goal_radius
-      C3: result = 0.0 ⟺ distance(agent, source) > goal_radius
-      C4: isinstance(result, float)
-    
-    Properties:
-      1. Purity: No side effects, no hidden state
-      2. Determinism: Same inputs → same output (always)
-      3. Binary: Output is exactly 0.0 or 1.0
-      4. Boundary: Inclusive at goal_radius
-      5. Symmetry: reward(a, b, r) = reward(b, a, r)
-      6. Monotonic: If d₁ < d₂, then reward(d₁) ≥ reward(d₂)
-    
-    Raises:
-      ValidationError: If goal_radius ≤ 0
-      TypeError: If positions not Coordinates
-    
-    Time Complexity:
-      O(1) - constant time
-    
-    Space Complexity:
-      O(1) - no allocation
-    
-    Examples:
-      # At source
-      calculate_reward((0,0), (0,0), 5.0) = 1.0
-      
-      # Within radius
-      calculate_reward((3,4), (0,0), 10.0) = 1.0  # d=5, r=10
-      
-      # At exact boundary
-      calculate_reward((3,4), (0,0), 5.0) = 1.0  # d=5, r=5 ✓
-      
-      # Outside radius
-      calculate_reward((10,0), (0,0), 5.0) = 0.0  # d=10, r=5
-      
-      # Just outside
-      calculate_reward((3,4), (0,0), 4.999) = 0.0  # d=5, r<5
-    """
+    source_location: Coordinates
 ```
 
----
+- Validate `goal_radius ≥ 0`
+- Return `1.0` within radius, `0.0` otherwise
+- `get_metadata()` includes `goal_radius` and `source_location`
 
----
+### StepPenaltyReward (library implementation)
+
+```python
+@dataclass
+class StepPenaltyReward(RewardFunction):
+    goal_radius: float
+    source_location: Coordinates
+    goal_reward: float = 1.0
+    step_penalty: float = 0.01
+```
+
+- Validate `goal_radius ≥ 0`, `step_penalty ≥ 0`, `goal_reward` finite
+- Return `goal_reward` at goal, `-step_penalty` otherwise
+- `get_metadata()` documents codomain and parameters
 
 ## 🌍 Universal Reward Properties
 
@@ -145,60 +115,59 @@ These apply to ALL reward function implementations:
 ### Property 1: Purity (UNIVERSAL)
 
 ```python
-∀ inputs: calculate_reward(inputs) has no side effects
+∀ prev, action, next, field:
+  reward_fn.compute_reward(prev, action, next, field)
+    has no side effects
 
 No modification of:
-  - Global variables
-  - Input arguments
-  - File system
-  - Network
-  - Randomness (no RNG calls)
+  - Input AgentState instances
+  - ConcentrationField
+  - Global state / RNG / I/O
 ```
 
-**Test:**
+**Test skeleton:**
 ```python
-def test_reward_is_pure_function():
-    """Reward has no side effects"""
-    pos_a = Coordinates(10, 10)
-    pos_b = Coordinates(15, 15)
+def test_reward_is_pure(reward_function):
+    prev = AgentState(position=Coordinates(10, 10))
+    next_state = AgentState(position=Coordinates(15, 15))
+    action = 0
+    field = create_test_field()
     
-    # Call multiple times
-    r1 = calculate_reward(pos_a, pos_b, 5.0)
-    r2 = calculate_reward(pos_a, pos_b, 5.0)
-    r3 = calculate_reward(pos_a, pos_b, 5.0)
+    prev_copy = copy.deepcopy(prev)
+    next_copy = copy.deepcopy(next_state)
+    field_copy = copy.deepcopy(field)
     
-    # All identical
-    assert r1 == r2 == r3
+    reward_function.compute_reward(prev, action, next_state, field)
     
-    # Inputs unchanged
-    assert pos_a == Coordinates(10, 10)
-    assert pos_b == Coordinates(15, 15)
+    assert prev == prev_copy
+    assert next_state == next_copy
+    assert np.array_equal(field.field, field_copy.field)
 ```
 
 ### Property 2: Determinism (UNIVERSAL)
 
 ```python
-∀ a, b, r: 
-  calculate_reward(a, b, r) = calculate_reward(a, b, r)
+∀ inputs:
+  reward_fn.compute_reward(inputs) = reward_fn.compute_reward(inputs)
 
 No dependency on:
   - Time
-  - Order of calls
-  - External state
-  - Random values
+  - Call order
+  - External mutable state
+  - Randomness
 ```
 
-**Test:**
+**Test skeleton:**
 ```python
 @given(
-    agent=coordinates_strategy(),
-    source=coordinates_strategy(),
-    radius=st.floats(0.1, 100.0)
+    prev=agent_state_strategy(),
+    action=action_strategy(),
+    next_state=agent_state_strategy(),
+    field=concentration_field_strategy()
 )
-def test_reward_deterministic(agent, source, radius):
-    """Same inputs always give same output"""
-    result1 = calculate_reward(agent, source, radius)
-    result2 = calculate_reward(agent, source, radius)
+def test_reward_deterministic(reward_function, prev, action, next_state, field):
+    result1 = reward_function.compute_reward(prev, action, next_state, field)
+    result2 = reward_function.compute_reward(prev, action, next_state, field)
     assert result1 == result2
 ```
 

@@ -253,14 +253,27 @@ def create_grid_size(value: GridDimensions) -> GridSize:
 def create_agent_state(
     position: Union[AgentState, CoordinateType],
     *,
+    orientation: Optional[float] = None,
     step_count: Optional[int] = None,
     total_reward: Optional[float] = None,
     goal_reached: Optional[bool] = None,
 ) -> AgentState:
-    """Create or clone an AgentState with optional overrides."""
+    """Create or clone an AgentState with optional overrides.
+
+    Args:
+        position: Either AgentState to clone or coordinates for new state
+        orientation: Heading in degrees (auto-normalized to [0, 360))
+        step_count: Override step count
+        total_reward: Override total reward
+        goal_reached: Override goal reached flag
+
+    Returns:
+        AgentState with specified values
+    """
     if isinstance(position, AgentState):
         base = AgentState(
             position=position.position.clone(),
+            orientation=position.orientation,
             step_count=position.step_count,
             total_reward=position.total_reward,
             movement_history=list(position.movement_history),
@@ -268,12 +281,18 @@ def create_agent_state(
             performance_metrics=position.performance_metrics.copy(),
         )
     else:
-        base = AgentState(position=create_coordinates(position))
+        base = AgentState(
+            position=create_coordinates(position),
+            orientation=orientation if orientation is not None else 0.0,
+        )
 
+    # Apply overrides
+    if orientation is not None and isinstance(position, AgentState):
+        base.orientation = float(orientation) % 360.0
     if step_count is not None:
         if step_count < 0:
             _raise_validation_error("step_count override must be non-negative")
-        base.step_count = int(step_count)
+        base.step_count = step_count
     if total_reward is not None:
         base.total_reward = float(total_reward)
     if goal_reached is not None:

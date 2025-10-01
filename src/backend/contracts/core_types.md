@@ -1,8 +1,9 @@
 # Core Data Types Contract
 
 **Components:** `Coordinates`, `GridSize`, `AgentState`  
-**Version:** 1.1.0  
-**Date:** 2025-09-30  
+**Version:** 2.0.0  
+**Date:** 2025-10-01  
+**Breaking Change:** Added `orientation` field to AgentState  
 **Status:** CANONICAL - All implementations MUST conform
 
 ---
@@ -380,11 +381,9 @@ def test_contains_boundary_conditions():
 
 ## 🤖 Type: AgentState
 
-### Mathematical Definition
-
-```
 AgentState = {
   position: Coordinates,
+  orientation: [0, 360),  # Heading in degrees
   step_count: ℕ,
   total_reward: ℝ₊,
   goal_reached: {True, False}
@@ -393,7 +392,6 @@ AgentState = {
 where:
   ℕ = {0, 1, 2, ...} (non-negative integers)
   ℝ₊ = {x ∈ ℝ | x ≥ 0} (non-negative reals)
-```
 
 ### Type Specification
 
@@ -404,24 +402,30 @@ class AgentState:
     
     Invariants:
       I1: position is Coordinates
-      I2: step_count ∈ ℕ (step_count ≥ 0)
-      I3: total_reward ∈ ℝ₊ (total_reward ≥ 0)
-      I4: goal_reached ∈ {True, False}
-      I5: step_count monotonically increases (never decreases)
-      I6: total_reward monotonically increases (never decreases)
-      I7: goal_reached is idempotent (once True, stays True)
+      I2: orientation ∈ [0, 360) (normalized heading in degrees)
+      I3: step_count ≥ 0 (non-negative)
+      I4: total_reward ≥ 0 (non-negative cumulative)
+      I5: goal_reached ∈ {True, False}
+      I6: step_count monotonic (never decreases within episode)
+      I7: total_reward monotonic (never decreases within episode)
+      I8: goal_reached can only transition False → True
+    
+    Orientation Convention:
+      - 0° = East (+x direction)
+      - 90° = North (+y direction)
+      - 180° = West (-x direction)
+      - 270° = South (-y direction)
+      - Automatically normalized to [0, 360) via __post_init__
     """
     position: Coordinates
+    orientation: float = 0.0  # Heading in degrees
     step_count: int = 0
     total_reward: float = 0.0
     goal_reached: bool = False
     
     def __post_init__(self):
-        """Validate initial state."""
-        if self.step_count < 0:
-            raise ValidationError("step_count must be non-negative")
-        if self.total_reward < 0:
-            raise ValidationError("total_reward must be non-negative")
+        """Normalize orientation to [0, 360)."""
+        self.orientation = self.orientation % 360.0
 ```
 
 ### Constructor Contract
@@ -429,6 +433,7 @@ class AgentState:
 ```python
 def create_agent_state(
     position: Coordinates,
+    orientation: float = 0.0,
     step_count: int = 0,
     total_reward: float = 0.0,
     goal_reached: bool = False
@@ -437,20 +442,24 @@ def create_agent_state(
     
     Preconditions:
       P1: position is Coordinates
-      P2: step_count ≥ 0
-      P3: total_reward ≥ 0
-      P4: goal_reached ∈ {True, False}
+      P2: orientation is finite float (will be normalized to [0, 360))
+      P3: step_count ≥ 0
+      P4: total_reward ≥ 0
+      P5: goal_reached ∈ {True, False}
     
     Postconditions:
       C1: returns AgentState with given values
-      C2: All invariants I1-I7 hold
+      C2: orientation normalized to [0, 360)
+      C3: All invariants I1-I8 hold
     
     Raises:
       ValidationError: If preconditions violated
     
     Examples:
       create_agent_state(Coordinates(0,0)) 
-        → AgentState(position=(0,0), step_count=0, ...)
+        → AgentState(position=(0,0), orientation=0.0, step_count=0, ...)
+      create_agent_state(Coordinates(10,10), orientation=450.0)
+        → AgentState(position=(10,10), orientation=90.0, ...)  # Normalized
     """
 ```
 

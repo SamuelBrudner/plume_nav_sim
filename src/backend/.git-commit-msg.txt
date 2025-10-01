@@ -1,0 +1,29 @@
+feat(observations): implement observation models with TDD (Phase 3)
+
+Implement two complete observation models using Test-Driven Development:
+- ConcentrationSensor: single-point odor sensor at agent position
+- AntennaeArraySensor: multi-sensor array with orientation-aware positioning
+
+Implementation:
+- Protocol-based design (no inheritance required)
+- Full contract compliance with ObservationModel interface
+- 40 tests passing (19 ConcentrationSensor + 21 AntennaeArraySensor)
+- Property-based testing with Hypothesis
+- Orientation-relative sensor positioning (math convention: 0°=East, 90°=North)
+
+Test Infrastructure:
+- Abstract test suite for universal properties (13 tests per model)
+- Hypothesis strategies for env_state generation
+- Fixed health check warnings (function_scoped_fixture, differing_executors)
+
+Documentation:
+- PHASE_3_COMPLETION_SUMMARY.md with TDD workflow and design decisions
+- Contract verification and usage examples
+- Updated REFACTORING_PROGRESS.md (Phase 3 complete)
+
+Related:
+- Phase 0: Contract fixes
+- Phase 1: Core types and protocols
+- Phase 2: Test infrastructure
+
+Next: Phase 4 - Implement reward functions using same TDD approach

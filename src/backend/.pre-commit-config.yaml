@@ -78,6 +78,7 @@ repos:
         name: Test File Naming
         description: Ensure test files follow naming conventions
         files: 'tests/.*\.py$'
+        exclude: 'tests/(strategies|conftest|__init__)\.py$'
         args: ['--django']
 
   # Black code formatter for consistent Python code style

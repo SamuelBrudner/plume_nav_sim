@@ -1,7 +1,7 @@
 # Gymnasium API Contract
 
 **Component:** Public Environment Interface  
-**Version:** 1.0.0  
+**Version:** 2.0.0  
 **Date:** 2025-10-01  
 **Status:** CANONICAL - All implementations MUST conform
 
@@ -41,108 +41,48 @@ class PlumeSearchEnv(gymnasium.Env):
 
 ## 🎮 Action Space
 
-### Current Implementation
+### Component-Derived Definition
 
 ```python
-action_space: Discrete(4)
+action_space = self.action_proc.action_space
+ActionType = type(self.action_proc.action_space.sample())
 ```
 
-**Actions:**
-```python
-0: UP     → (0, +1)
-1: RIGHT  → (+1, 0)
-2: DOWN   → (0, -1)
-3: LEFT   → (-1, 0)
-```
-
-### Type Definition
-
-```python
-ActionType = int  # ∈ [0, 3] for current implementation
-
-# Valid actions
-∀ action: ActionType:
-  action ∈ {0, 1, 2, 3}
-```
-
-### Movement Mapping
-
-```python
-MOVEMENT_VECTORS: Dict[int, Tuple[int, int]] = {
-    0: (0, 1),   # UP
-    1: (1, 0),   # RIGHT
-    2: (0, -1),  # DOWN
-    3: (-1, 0),  # LEFT
-}
-```
+- **Default (`DiscreteGridActions`)** – `Discrete(4)` with absolute cardinal moves.
+- **Orientation-aware (`OrientedGridActions`)** – `Discrete(3)` → {FORWARD, TURN_LEFT, TURN_RIGHT}.
+- **Custom processors** – Must satisfy the `ActionProcessor` protocol; Gym exposes whatever space the processor declares.
 
 ### Validation Contract
 
 ```python
-def step(action: int) -> tuple:
+def step(action: ActionType) -> tuple:
     """Execute one step.
     
     Preconditions:
-      P1: action ∈ [0, 3]
-      P2: action is integer
-      P3: Environment not closed
-      P4: reset() called at least once
+      P1: self.action_proc.validate_action(action)
+      P2: Environment not closed
+      P3: reset() called at least once
     
     Raises:
-      ValueError: If action out of bounds
+      ValidationError: If action invalid for processor
       StateError: If step() called before reset()
       StateError: If step() called after close()
     """
 ```
 
-### ⚠️ KNOWN ISSUE: Action Space Mismatch
-
-**Documentation says:** 9 actions (8 directions + stay)  
-**Implementation has:** 4 actions (cardinal directions only)
-
-**Resolution needed:** See `PHASE3_COMPLETE_SUMMARY.md` Finding #1.
-
 ---
 
 ## 👁️ Observation Space
 
-### Current Implementation
+### Component-Derived Definition
 
 ```python
-observation_space: Dict({
-    "agent_position": Box(
-        low=0, 
-        high=grid_size-1, 
-        shape=(2,), 
-        dtype=np.int32
-    ),
-    "concentration_field": Box(
-        low=0.0,
-        high=1.0,
-        shape=(height, width),
-        dtype=np.float32
-    ),
-    "source_location": Box(
-        low=0,
-        high=grid_size-1,
-        shape=(2,),
-        dtype=np.int32
-    )
-})
+observation_space = self.obs_model.observation_space
+ObservationType = type(self.obs_model.observation_space.sample())
 ```
 
-### Type Definition
-
-```python
-ObservationType = Dict[str, np.ndarray]
-
-# Structure guarantee
-observation: ObservationType = {
-    "agent_position": np.ndarray[shape=(2,), dtype=np.int32],
-    "concentration_field": np.ndarray[shape=(H, W), dtype=np.float32],
-    "source_location": np.ndarray[shape=(2,), dtype=np.int32]
-}
-```
+- **Default (`ConcentrationSensor`)** – `Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)`.
+- **Composite sensors** – Dict/Tuple spaces via injected observation models; Gym exposes them verbatim.
 
 ### Observation Contract
 
@@ -151,38 +91,32 @@ def reset(seed=None, options=None) -> Tuple[ObservationType, InfoType]:
     """Reset environment.
     
     Postconditions:
-      C1: observation ∈ observation_space
-      C2: observation["agent_position"] ∈ [0, grid_size)²
-      C3: observation["concentration_field"].shape = (height, width)
-      C4: observation["concentration_field"] ∈ [0, 1]
-      C5: observation["source_location"] ∈ [0, grid_size)²
-      C6: All arrays are valid numpy arrays
-      C7: No NaN or Inf values
+      C1: observation_space.contains(observation)
+      C2: Observation reflects initial agent state (position & orientation)
+      C3: No NaN / Inf values
     """
 
 def step(action) -> Tuple[ObservationType, float, bool, bool, InfoType]:
     """Take action.
     
     Postconditions:
-      C1: observation ∈ observation_space
-      C2: All observation invariants hold (same as reset)
-      C3: observation reflects post-action state
+      C1: observation_space.contains(observation)
+      C2: Observation reflects post-action agent state & plume
     """
 ```
 
-### Observation Invariants
+### Observation Invariants (Component-Specific)
 
 ```python
-# Universal invariants for all observations
-∀ obs: ObservationType:
-  I1: "agent_position" ∈ obs.keys()
-  I2: "concentration_field" ∈ obs.keys()
-  I3: "source_location" ∈ obs.keys()
-  I4: obs["agent_position"].dtype = np.int32
-  I5: obs["concentration_field"].dtype = np.float32
-  I6: obs["source_location"].dtype = np.int32
-  I7: ¬np.any(np.isnan(obs[k])) ∀ k
-  I8: ¬np.any(np.isinf(obs[k])) ∀ k
+# Observation structure depends on injected ObservationModel
+# Default (ConcentrationSensor): Box(low=0, high=1, shape=(1,), dtype=float32)
+
+# Universal postconditions for ANY observation model:
+∀ obs returned by reset() or step():
+  I1: observation_space.contains(obs) = True
+  I2: ¬np.any(np.isnan(obs)) if obs is ndarray
+  I3: ¬np.any(np.isinf(obs)) if obs is ndarray
+  I4: For Dict spaces: all values satisfy I2, I3
 ```
 
 ---

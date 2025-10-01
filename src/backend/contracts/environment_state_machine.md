@@ -1,8 +1,8 @@
 # Environment State Machine Contract
 
 **Component:** `PlumeSearchEnv`  
-**Version:** 1.0.0  
-**Date:** 2025-09-30  
+**Version:** 2.0.0  
+**Date:** 2025-10-01  
 **Status:** CANONICAL - All implementations MUST conform
 
 ---
@@ -15,6 +15,13 @@ Define the formal state machine for Environment lifecycle, including:
 - Preconditions & postconditions
 - Class invariants
 - Error conditions
+
+## 📦 Type & Component Dependencies
+
+- `AgentState` (see `core_types.md`) — includes `position` and `orientation`
+- `ActionProcessor`, `ObservationModel`, `RewardFunction` (see respective interface contracts)
+- `ConcentrationField` (see `concentration_field.md`)
+- `ObservationSpace`, `ActionSpace` derived from injected components
 
 ---
 
@@ -141,7 +148,8 @@ I1: Type Safety
     self._state ∈ {CREATED, READY, TERMINATED, TRUNCATED, CLOSED}
 
 I2: Agent State Consistency
-    self._state = READY ⇒ self._agent_state ≠ null
+    self._state = READY ⇒ (self._agent_state is AgentState
+                           ∧ 0 ≤ self._agent_state.orientation < 360)
 
 I3: Closed State is Terminal
     self._state = CLOSED ⇒ ∀ operations (except __del__) raise StateError
@@ -149,16 +157,19 @@ I3: Closed State is Terminal
 I4: Episode Count Non-Negative
     self._episode_count ≥ 0 ∧ monotonically increases
 
-I5: Step Count Non-Negative
+I5: Component Availability
+    self._action_proc, self._obs_model, self._reward_fn, self._plume ≠ null
+
+I6: Step Count Non-Negative
     self._step_count ≥ 0 ∧ resets with each episode
 
-I6: Step Count Bound
+I7: Step Count Bound
     self._state = READY ⇒ self._step_count ≤ self._max_steps
 
-I7: Episode Count Monotonic
+I8: Episode Count Monotonic
     episode_count' ≥ episode_count (never decreases)
 
-I8: Seed Validity
+I9: Seed Validity
     self._seed = null ∨ (0 ≤ self._seed < 2³¹)
 ```
 
@@ -172,6 +183,11 @@ I8: Seed Validity
 def __init__(
     self,
     *,
+    plume_model: Optional[BasePlumeModel] = None,
+    reward_fn: Optional[RewardFunction] = None,
+    observation_model: Optional[ObservationModel] = None,
+    action_processor: Optional[ActionProcessor] = None,
+    config: Optional[EnvironmentConfig] = None,
     grid_size: Optional[tuple[int, int]] = None,
     source_location: Optional[tuple[int, int]] = None,
     max_steps: Optional[int] = None,
@@ -181,20 +197,25 @@ def __init__(
     """Initialize environment in CREATED state.
     
     Preconditions:
-      P1: grid_size = null ∨ (width > 0 ∧ height > 0)
-      P2: max_steps = null ∨ max_steps > 0
-      P3: goal_radius = null ∨ goal_radius > 0
-      P4: render_mode ∈ {null, "rgb_array", "human"}
+      P1: If config provided ⇒ factories resolve successfully
+      P2: If components provided ⇒ satisfy respective protocols
+      P3: grid_size = null ∨ (width > 0 ∧ height > 0)
+      P4: max_steps = null ∨ max_steps > 0
+      P5: goal_radius = null ∨ goal_radius > 0
+      P6: render_mode ∈ {null, "rgb_array", "human"}
     
     Postconditions:
       C1: self._state = CREATED
       C2: self._episode_count = 0
       C3: self._step_count = 0
-      C4: Components allocated
-      C5: No episode active
+      C4: Components instantiated (directly or via config)
+      C5: self._action_proc.action_space assigned to self.action_space
+      C6: self._obs_model.observation_space assigned to self.observation_space
+      C7: No episode active (agent_state = None)
     
     Raises:
       ValidationError: If any precondition violated
+      ComponentError: If factories or injected components invalid
     
     Modifies:
       All instance attributes
@@ -221,7 +242,10 @@ def reset(
       C1: self._state = READY
       C2: self._step_count = 0
       C3: self._episode_count = old(self._episode_count) + 1
-      C4: self._agent_state initialized to start position
+      C4: self._agent_state = AgentState(position=start_pos,
+                                         orientation=start_orientation,
+                                         step_count=0,
+                                         total_reward=0.0)
       C5: self._seed = seed (if provided) or auto-generated
       C6: returns (obs, info) where:
           - obs ∈ ObservationSpace
@@ -247,36 +271,38 @@ def reset(
 ```python
 def step(
     self,
-    action: int
+    action: ActionType
 ) -> tuple[Observation, float, bool, bool, Info]:
     """Execute action, advance one timestep.
     
     Preconditions:
       P1: self._state ∈ {READY, TERMINATED, TRUNCATED}
           (note: can call step on terminal states, but should reset)
-      P2: action ∈ ℤ ∧ 0 ≤ action ≤ 8
-    
+      P2: self._action_proc.validate_action(action) = True
+
     Postconditions:
       C1: returns (obs, reward, terminated, truncated, info)
-      C2: obs ∈ ObservationSpace
-      C3: reward ∈ {0.0, 1.0}
+      C2: obs ∈ self._obs_model.observation_space
+      C3: reward = self._reward_fn(self._agent_state, action)
       C4: terminated ∈ {True, False}
       C5: truncated ∈ {True, False}
       C6: info ∈ InfoSchema
       C7: self._step_count = old(self._step_count) + 1
       C8: self._state ∈ {READY, TERMINATED, TRUNCATED}
-      C9: terminated ⇒ info['termination_reason'] ≠ ∅
-      C10: terminated ⇒ self._state = TERMINATED
-      C11: truncated ⇒ self._state = TRUNCATED
-      C12: ¬(terminated ∧ truncated) (usually, edge cases allowed)
     
     Raises:
       StateError: If state = CREATED or CLOSED
       ValidationError: If action invalid
     
     Modifies:
-      {_agent_state, _step_count, _state (possibly)}
-    
+      {
+        _agent_state,
+        _step_count,
+        _state (possibly),
+        _last_observation,
+        _last_reward
+      }
+
     Determinism:
       ∀ env₁, env₂, seed, actions:
         env₁.reset(seed) then apply actions →
@@ -284,7 +310,7 @@ def step(
         identical sequences of (obs, reward, terminated, truncated)
     
     Side Effects:
-      None (pure function of state)
+      None (pure function of state and injected components)
     """
 ```
 

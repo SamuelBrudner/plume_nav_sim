@@ -13,9 +13,29 @@ from .geometry import Coordinates
 
 @dataclass
 class AgentState:
-    """Mutable data class for tracking agent state."""
+    """Mutable data class for tracking agent state.
+
+    Contract: core_types.md - AgentState specification
+
+    Attributes:
+        position: Current grid position
+        orientation: Heading in degrees, [0, 360), 0°=East, 90°=North
+        step_count: Number of steps taken in current episode
+        total_reward: Cumulative reward for current episode
+        movement_history: List of previous positions
+        goal_reached: Whether goal has been reached
+        performance_metrics: Optional performance tracking data
+
+    Invariants:
+        I1: position is valid Coordinates
+        I2: orientation ∈ [0, 360) (auto-normalized)
+        I3: step_count ≥ 0
+        I4: total_reward ≥ 0
+        I5: goal_reached ∈ {True, False}
+    """
 
     position: Coordinates
+    orientation: float = 0.0  # Heading in degrees [0, 360)
     step_count: int = 0
     total_reward: float = 0.0
     movement_history: List[Coordinates] = field(default_factory=list)
@@ -30,7 +50,10 @@ class AgentState:
                 f"Agent position must be Coordinates instance, got {type(self.position).__name__}"
             )
 
-        # Contract: core_types.md - Invariants I2, I3
+        # Contract: core_types.md - Invariant I2: orientation normalization
+        self.orientation = self.orientation % 360.0
+
+        # Contract: core_types.md - Invariants I3, I4
         if self.step_count < 0:
             raise ValidationError(
                 f"step_count must be non-negative, got {self.step_count}"

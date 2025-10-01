@@ -249,17 +249,15 @@ class FieldSamplingError(ComponentError):
 
     def _generate_sampling_recovery_suggestion(self) -> str:
         """Generate recovery suggestion based on sampling error context."""
-        if self.position:
-            # Check if position appears to be out of bounds
-            if isinstance(self.position, (tuple, list)) and len(self.position) == 2:
-                x, y = self.position
-                # Note: Negative coordinates allowed per contract, but may indicate issues
-                if x > 1000 or y > 1000:  # Reasonable upper bound check
-                    return (
-                        "Check position coordinates are within reasonable grid bounds"
-                    )
-                elif x < -100 or y < -100:  # Very negative might indicate error
-                    return "Position appears far outside typical grid bounds"
+        if self.position and (
+            isinstance(self.position, (tuple, list)) and len(self.position) == 2
+        ):
+            x, y = self.position
+            # Note: Negative coordinates allowed per contract, but may indicate issues
+            if x > 1000 or y > 1000:  # Reasonable upper bound check
+                return "Check position coordinates are within reasonable grid bounds"
+            elif x < -100 or y < -100:  # Very negative might indicate error
+                return "Position appears far outside typical grid bounds"
 
         # Check sampling method issues
         if self.sampling_method not in _INTERPOLATION_METHODS:
@@ -461,8 +459,11 @@ class ConcentrationField:
             raise FieldGenerationError(
                 f"Field generation validation failed: {e}",
                 grid_size=self.grid_size,
-                generation_params={"source_location": source_location, "sigma": sigma},
-            )
+                generation_params={
+                    "source_location": source_location,
+                    "sigma": sigma,
+                },
+            ) from e
 
         # Start performance timing using PerformanceTimer for generation monitoring
         with PerformanceTimer(
@@ -540,7 +541,7 @@ class ConcentrationField:
                         "source_location": source_location,
                         "sigma": sigma,
                     },
-                )
+                ) from e
 
     def sample_at(
         self,
@@ -609,7 +610,7 @@ class ConcentrationField:
                     f"Failed to convert coordinates to array indices: {e}",
                     position=position,
                     sampling_method=self.interpolation_method,
-                )
+                ) from e
 
             # Sample concentration value from field_array using array indexing
             if interpolate and self.interpolation_method == "linear":
@@ -653,7 +654,7 @@ class ConcentrationField:
                 f"Sampling operation failed: {e}",
                 position=position,
                 sampling_method=self.interpolation_method,
-            )
+            ) from e
 
     def _interpolate_bilinear(self, x: float, y: float) -> float:
         """
@@ -773,83 +774,9 @@ class ConcentrationField:
             FieldGenerationError: If parameter validation or regeneration fails
         """
         try:
-            # Check if parameters actually changed to avoid unnecessary regeneration
-            current_params = self.generation_params
-            params_changed = False
-
-            if new_source_location is not None:
-                old_location = current_params.get("source_location")
-                if old_location is None or (
-                    old_location.x != new_source_location.x
-                    or old_location.y != new_source_location.y
-                ):
-                    params_changed = True
-
-            if new_sigma is not None:
-                old_sigma = current_params.get("sigma", DEFAULT_PLUME_SIGMA)
-                if abs(old_sigma - new_sigma) > GAUSSIAN_PRECISION:
-                    params_changed = True
-
-            if not params_changed:
-                self.logger.debug(
-                    "No field parameter changes detected, skipping update"
-                )
-                return True
-
-            # Validate new parameters using existing validation functions
-            if new_source_location is not None:
-                validate_coordinates(
-                    coordinates=new_source_location,
-                    grid_size=self.grid_size,
-                    allow_edge_coordinates=True,
-                    validate_array_indexing=True,
-                )
-
-            if new_sigma is not None and new_sigma <= 0:
-                raise ValidationError(f"New sigma must be positive, got {new_sigma}")
-
-            # Update generation_params with new values and modification timestamp
-            if new_source_location is not None:
-                current_params["source_location"] = new_source_location
-            if new_sigma is not None:
-                current_params["sigma"] = new_sigma
-            current_params["last_update"] = np.float64(0)  # Placeholder timestamp
-
-            # Clear sampling cache if clear_cache enabled or parameters changed significantly
-            if clear_cache and self.enable_caching:
-                cache_cleared = len(self.sampling_cache)
-                self.sampling_cache.clear()
-                self.logger.debug(f"Cleared {cache_cleared} cached sampling results")
-
-            # Regenerate field if auto_regenerate enabled using generate_field method
-            if auto_regenerate:
-                source_loc = new_source_location or current_params.get(
-                    "source_location"
-                )
-                sigma = new_sigma or current_params.get("sigma", DEFAULT_PLUME_SIGMA)
-
-                if source_loc is None:
-                    raise FieldGenerationError(
-                        "Cannot regenerate field: no source location available",
-                        grid_size=self.grid_size,
-                        generation_params=current_params,
-                    )
-
-                self.generate_field(
-                    source_location=source_loc,
-                    sigma=sigma,
-                    force_regeneration=True,
-                    normalize_field=True,
-                )
-
-                # Log parameter update with old and new values for monitoring
-                self.logger.info(
-                    f"Field updated - Source: {source_loc}, Sigma: {sigma}, "
-                    f"Generation time: {self.last_generation_time_ms:.2f}ms"
-                )
-
-            return True
-
+            return self._extracted_from_update_field_26(
+                new_source_location, new_sigma, clear_cache, auto_regenerate
+            )
         except (ValidationError, FieldGenerationError) as e:
             self.logger.error(f"Field update failed: {e}", exception=e)
             return False
@@ -858,7 +785,84 @@ class ConcentrationField:
                 f"Unexpected error during field update: {e}",
                 grid_size=self.grid_size,
                 generation_params=self.generation_params,
+            ) from e
+
+    # TODO Rename this here and in `update_field`
+    def _extracted_from_update_field_26(
+        self, new_source_location, new_sigma, clear_cache, auto_regenerate
+    ):
+        # Check if parameters actually changed to avoid unnecessary regeneration
+        current_params = self.generation_params
+        params_changed = False
+
+        if new_source_location is not None:
+            old_location = current_params.get("source_location")
+            if old_location is None or (
+                old_location.x != new_source_location.x
+                or old_location.y != new_source_location.y
+            ):
+                params_changed = True
+
+        if new_sigma is not None:
+            old_sigma = current_params.get("sigma", DEFAULT_PLUME_SIGMA)
+            if abs(old_sigma - new_sigma) > GAUSSIAN_PRECISION:
+                params_changed = True
+
+        if not params_changed:
+            self.logger.debug("No field parameter changes detected, skipping update")
+            return True
+
+        # Validate new parameters using existing validation functions
+        if new_source_location is not None:
+            validate_coordinates(
+                coordinates=new_source_location,
+                grid_size=self.grid_size,
+                allow_edge_coordinates=True,
+                validate_array_indexing=True,
             )
+
+        if new_sigma is not None and new_sigma <= 0:
+            raise ValidationError(f"New sigma must be positive, got {new_sigma}")
+
+        # Update generation_params with new values and modification timestamp
+        if new_source_location is not None:
+            current_params["source_location"] = new_source_location
+        if new_sigma is not None:
+            current_params["sigma"] = new_sigma
+        current_params["last_update"] = np.float64(0)  # Placeholder timestamp
+
+        # Clear sampling cache if clear_cache enabled or parameters changed significantly
+        if clear_cache and self.enable_caching:
+            cache_cleared = len(self.sampling_cache)
+            self.sampling_cache.clear()
+            self.logger.debug(f"Cleared {cache_cleared} cached sampling results")
+
+        # Regenerate field if auto_regenerate enabled using generate_field method
+        if auto_regenerate:
+            source_loc = new_source_location or current_params.get("source_location")
+            sigma = new_sigma or current_params.get("sigma", DEFAULT_PLUME_SIGMA)
+
+            if source_loc is None:
+                raise FieldGenerationError(
+                    "Cannot regenerate field: no source location available",
+                    grid_size=self.grid_size,
+                    generation_params=current_params,
+                )
+
+            self.generate_field(
+                source_location=source_loc,
+                sigma=sigma,
+                force_regeneration=True,
+                normalize_field=True,
+            )
+
+            # Log parameter update with old and new values for monitoring
+            self.logger.info(
+                f"Field updated - Source: {source_loc}, Sigma: {sigma}, "
+                f"Generation time: {self.last_generation_time_ms:.2f}ms"
+            )
+
+        return True
 
     def validate_field(
         self,
@@ -1324,7 +1328,7 @@ class ConcentrationField:
                     "copy_field_data": copy_field_data,
                     "preserve_cache": preserve_cache,
                 },
-            )
+            ) from e
 
 
 def create_concentration_field(
@@ -1443,7 +1447,7 @@ def create_concentration_field(
                 "sigma": sigma,
                 "enable_caching": enable_caching,
             },
-        )
+        ) from e
 
 
 def validate_field_parameters(
