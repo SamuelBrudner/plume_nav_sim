@@ -235,6 +235,7 @@ def get_action_space_constants() -> Dict[str, Any]:
 
 
 def get_plume_model_constants() -> Dict[str, Any]:
+    """Returns a dictionary of plume model constants."""
     return {
         "CONCENTRATION_RANGE": CONCENTRATION_RANGE,
         "GAUSSIAN_PRECISION": GAUSSIAN_PRECISION,
@@ -248,6 +249,7 @@ def get_plume_model_constants() -> Dict[str, Any]:
 
 
 def get_rendering_constants() -> Dict[str, Any]:
+    """Returns a dictionary of rendering constants."""
     return {
         "AGENT_MARKER_COLOR": AGENT_MARKER_COLOR,
         "SOURCE_MARKER_COLOR": SOURCE_MARKER_COLOR,
@@ -260,6 +262,7 @@ def get_rendering_constants() -> Dict[str, Any]:
 
 
 def get_performance_constants() -> Dict[str, Any]:
+    """Returns a dictionary of performance constants."""
     return {
         "PERFORMANCE_TRACKING_ENABLED": PERFORMANCE_TRACKING_ENABLED,
         "PERFORMANCE_TARGET_STEP_LATENCY_MS": PERFORMANCE_TARGET_STEP_LATENCY_MS,
@@ -272,6 +275,7 @@ def get_performance_constants() -> Dict[str, Any]:
 
 
 def get_validation_constants() -> Dict[str, Any]:
+    """Returns a dictionary of validation constants."""
     return {
         "VALIDATION_ERROR_MESSAGES": VALIDATION_ERROR_MESSAGES.copy(),
         "NUMERIC_PRECISION_TOLERANCE": NUMERIC_PRECISION_TOLERANCE,
@@ -279,6 +283,7 @@ def get_validation_constants() -> Dict[str, Any]:
 
 
 def get_testing_constants() -> Dict[str, Any]:
+    """Returns a dictionary of testing constants."""
     return {
         "DEFAULT_SEEDS": list(DEFAULT_TEST_SEEDS),
     }
