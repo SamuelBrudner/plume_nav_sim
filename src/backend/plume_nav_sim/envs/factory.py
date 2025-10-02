@@ -25,7 +25,7 @@ from ..actions import DiscreteGridActions, OrientedGridActions
 from ..core.geometry import Coordinates, GridSize
 from ..observations import AntennaeArraySensor, ConcentrationSensor
 from ..plume.concentration_field import ConcentrationField
-from ..rewards import DenseNavigationReward, SparseGoalReward
+from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_env import ComponentBasedEnvironment
 
 __all__ = ["create_component_environment"]
@@ -40,7 +40,7 @@ def create_component_environment(
     goal_radius: float = 5.0,
     action_type: Literal["discrete", "oriented"] = "discrete",
     observation_type: Literal["concentration", "antennae"] = "concentration",
-    reward_type: Literal["sparse", "dense"] = "sparse",
+    reward_type: Literal["sparse", "step_penalty"] = "sparse",
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
@@ -60,7 +60,7 @@ def create_component_environment(
         goal_radius: Success threshold distance
         action_type: Action processor type ('discrete' or 'oriented')
         observation_type: Observation model type ('concentration' or 'antennae')
-        reward_type: Reward function type ('sparse' or 'dense')
+        reward_type: Reward function type ('sparse' or 'step_penalty')
         plume_sigma: Gaussian plume dispersion parameter
         step_size: Movement step size in grid cells
         render_mode: Rendering mode ('rgb_array' or 'human')
@@ -123,14 +123,16 @@ def create_component_environment(
         reward_function = SparseGoalReward(
             goal_position=goal_location, goal_radius=goal_radius
         )
-    elif reward_type == "dense":
-        reward_function = DenseNavigationReward(
+    elif reward_type == "step_penalty":
+        reward_function = StepPenaltyReward(
             goal_position=goal_location,
-            max_distance=goal_radius * 2,
+            goal_radius=goal_radius,
+            goal_reward=1.0,
+            step_penalty=0.01,
         )
     else:
         raise ValueError(
-            f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'dense'."
+            f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
         )
 
     # Create concentration field

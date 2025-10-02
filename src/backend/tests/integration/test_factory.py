@@ -73,23 +73,22 @@ class TestComponentEnvironmentFactory:
         env = create_component_environment(reward_type="sparse")
 
         obs, _ = env.reset()
-        # Take action away from goal - should get 0 reward
-        action = 0  # UP
+        action = 0
         obs, reward, terminated, truncated, info = env.step(action)
 
         # Sparse reward is 0.0 or 1.0
         assert reward in [0.0, 1.0]
         env.close()
 
-    def test_dense_reward(self):
-        """Test: Factory creates dense reward function."""
-        env = create_component_environment(reward_type="dense")
+    def test_step_penalty_reward(self):
+        """Test: Factory creates step penalty reward function."""
+        env = create_component_environment(reward_type="step_penalty")
 
         obs, _ = env.reset()
         action = 0
         obs, reward, terminated, truncated, info = env.step(action)
 
-        # Dense reward is continuous
+        # Step penalty reward should be negative (penalty) or positive (goal)
         assert isinstance(reward, (int, float))
         env.close()
 
@@ -148,7 +147,7 @@ class TestComponentEnvironmentFactory:
     def test_invalid_reward_type_raises_error(self):
         """Test: Factory raises error for invalid reward_type."""
         with pytest.raises(ValueError, match="Invalid reward_type"):
-            create_component_environment(reward_type="invalid")
+            create_component_environment(reward_type="dense")  # 'dense' not supported
 
     def test_full_episode_execution(self):
         """Test: Factory environment can execute full episode."""

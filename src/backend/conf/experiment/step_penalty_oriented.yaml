@@ -1,0 +1,26 @@
+# @package _global_
+
+# Step penalty reward with oriented actions - encourages efficient navigation
+# Good for: Learning time-aware policies, minimizing episode length
+
+grid_size: [128, 128]
+goal_location: [100, 100]
+max_steps: 1500
+
+action:
+  type: oriented
+  step_size: 2
+
+observation:
+  type: concentration
+
+reward:
+  type: step_penalty
+  goal_radius: 10.0
+  parameters:
+    goal_reward: 10.0
+    step_penalty: 0.01
+
+plume:
+  sigma: 25.0
+  normalize: true
