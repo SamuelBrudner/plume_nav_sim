@@ -122,6 +122,13 @@ from .base_env import (
 from .base_env import (
     validate_base_environment_setup,  # Comprehensive validation function for environment setup feasibility
 )
+from .component_env import (
+    ComponentBasedEnvironment,  # New component-based environment with dependency injection
+)
+from .component_env import EnvironmentState  # Environment state machine enum
+from .factory import (
+    create_component_environment,  # Factory function for easy component assembly
+)
 
 # Internal imports - Main environment implementation and factory functions
 from .plume_search_env import (
@@ -142,15 +149,16 @@ SUPPORTED_ENVIRONMENTS = [
     "PlumeSearchEnv"
 ]  # List of supported environment types for factory function routing
 
-# Initialize module logger for comprehensive operation tracking and debugging
 _module_logger = get_component_logger(__name__)
 
 # Comprehensive module exports for external API access
 __all__ = [
     # Core environment classes with complete functionality
-    "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
     "BaseEnvironment",  # Abstract base environment class providing Gymnasium-compatible interface template
-    "AbstractEnvironmentError",  # Exception class for abstract method enforcement with implementation guidance
+    "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
+    "ComponentBasedEnvironment",  # Component-based environment with dependency injection
+    "EnvironmentState",  # Environment state machine enum
+    "create_component_environment",  # Factory for component-based environments
     # Factory functions for environment creation and configuration
     "create_plume_search_env",  # Factory function for PlumeSearchEnv with parameter validation and component initialization
     "create_base_environment_config",  # Factory function for validated base environment configuration
