@@ -40,6 +40,8 @@ class TestRewardFunctionInterface:
     Concrete test classes should inherit this and provide reward_function fixture.
     """
 
+    __test__ = False
+
     # ==============================================================================
     # Fixtures (Override in concrete test classes)
     # ==============================================================================
