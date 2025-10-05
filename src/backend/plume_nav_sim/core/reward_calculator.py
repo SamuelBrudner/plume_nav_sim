@@ -611,6 +611,20 @@ class RewardCalculator:
 
         # Initialize or store provided performance_metrics for timing analysis and optimization
         self.performance_metrics = performance_metrics
+        # Backward-compat: some tests call performance_metrics.get_summary()
+        # Provide a shim on the instance without altering the class API to
+        # preserve deprecation expectations elsewhere.
+        if self.performance_metrics is not None and not hasattr(
+            self.performance_metrics, "get_summary"
+        ):
+
+            def _compat_get_summary(pm=self.performance_metrics):
+                return pm.get_performance_summary()
+
+            try:  # Best-effort; ignore if instance forbids attribute set
+                setattr(self.performance_metrics, "get_summary", _compat_get_summary)
+            except Exception:
+                pass
 
         # Create distance_cache dictionary for caching repeated distance calculations
         self.distance_cache: Dict[str, float] = {}

@@ -114,7 +114,7 @@ def agent_state_strategy(
 
     # Generate other fields
     step_count = draw(st.integers(min_value=min_step_count, max_value=max_step_count))
-    total_reward = draw(st.floats(min_value=0.0, max_value=1000.0))
+    total_reward = draw(st.floats(min_value=-1000.0, max_value=1000.0))
     goal_reached = draw(st.booleans())
 
     return AgentState(

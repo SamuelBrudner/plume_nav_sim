@@ -145,9 +145,11 @@ from .plume_search_env import (
 ENVIRONMENT_VERSION = (
     "1.0.0"  # Module version for compatibility tracking and development phases
 )
-SUPPORTED_ENVIRONMENTS = [
-    "PlumeSearchEnv"
-]  # List of supported environment types for factory function routing
+# Supported environment selectors for unified factory
+# - 'plume_search': legacy monolithic environment
+# - 'component': component-based environment (dependency injection)
+# Also accept the class name for backward compatibility in some helpers.
+SUPPORTED_ENVIRONMENTS = ["plume_search", "component", "PlumeSearchEnv"]
 
 _module_logger = get_component_logger(__name__)
 
@@ -310,7 +312,7 @@ def create_environment(
             )
 
         # Route to create_plume_search_env for 'plume_search' type with parameter forwarding
-        if effective_env_type == "plume_search":
+        if effective_env_type in ("plume_search", "PlumeSearchEnv"):
             environment = create_plume_search_env(
                 grid_size=effective_grid_size,
                 source_location=effective_source_location,
@@ -318,6 +320,15 @@ def create_environment(
                 goal_radius=effective_goal_radius,
                 render_mode=effective_render_mode,
                 env_options=env_options,
+            )
+        elif effective_env_type == "component":
+            # Map legacy naming (source_location) to goal_location for the component environment
+            environment = create_component_environment(
+                grid_size=effective_grid_size,
+                goal_location=effective_source_location,
+                max_steps=effective_max_steps,
+                goal_radius=effective_goal_radius,
+                render_mode=effective_render_mode,
             )
         else:
             # Future environment types would be handled here

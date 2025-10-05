@@ -25,8 +25,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-import gymnasium as gym
 import numpy as np
+
+import gymnasium as gym
 
 from ..core.constants import (
     ACTION_SPACE_SIZE,
@@ -204,28 +205,15 @@ class PlumeSearchEnv(gym.Env):
         self._rng = np.random.default_rng()
 
         # Use standard Gymnasium spaces for ecosystem compatibility
-        self.action_space = gym.spaces.Discrete(ACTION_SPACE_SIZE, seed=None)
-        self.observation_space = gym.spaces.Dict(
-            {
-                "agent_position": gym.spaces.Box(
-                    low=0,
-                    high=max(self.grid_size[0], self.grid_size[1]) - 1,
-                    shape=(2,),
-                    dtype=np.int32,
-                ),
-                "concentration_field": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(self.grid_size[1], self.grid_size[0]),
-                    dtype=np.float32,
-                ),
-                "source_location": gym.spaces.Box(
-                    low=0,
-                    high=max(self.grid_size[0], self.grid_size[1]) - 1,
-                    shape=(2,),
-                    dtype=np.int32,
-                ),
-            }
+        # Note: our local Gymnasium shim spaces do not accept a seed kwarg on construction.
+        # Seeding is handled in _update_rng via action_space.seed(...).
+        self.action_space = gym.spaces.Discrete(ACTION_SPACE_SIZE)
+        # Observation is a 2D concentration field in [0,1]
+        self.observation_space = gym.spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(self.grid_size[1], self.grid_size[0]),
+            dtype=np.float32,
         )
 
         # State machine tracking per contract (environment_state_machine.md)
@@ -292,24 +280,15 @@ class PlumeSearchEnv(gym.Env):
         distance = self._compute_distance(self._agent_position)
         return distance <= self.goal_radius
 
-    def _observation(self) -> Dict[str, np.ndarray]:
-        """Return observation as Dict per Gymnasium API contract.
-
-        Contract: gymnasium_api.md - ObservationType = Dict[str, np.ndarray]
-        """
+    def _observation(self) -> np.ndarray:
+        """Return the concentration field as the observation (Box space)."""
         # Build full concentration field
         width, height = self.grid_size
         field = np.zeros((height, width), dtype=np.float32)
         for y in range(height):
             for x in range(width):
                 field[y, x] = self._compute_concentration((x, y))
-
-        obs = {
-            "agent_position": np.array(self._agent_position, dtype=np.int32),
-            "concentration_field": field,
-            "source_location": np.array(self.source_location, dtype=np.int32),
-        }
-        return obs
+        return field
 
     def _info(self) -> Dict[str, Any]:
         """Return info dict per Gymnasium API contract.
@@ -336,16 +315,13 @@ class PlumeSearchEnv(gym.Env):
     # Gymnasium-style API
     def reset(
         self, *, seed: Optional[Any] = None, options: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """Reset environment to initial state.
 
         Contract: environment_state_machine.md
         Transition: CREATED/TERMINATED/TRUNCATED → READY
         """
         with self._lock:
-            # Call parent reset for proper Gymnasium compliance
-            super().reset(seed=seed)
-
             self._ensure_active()
             resolved_seed = _resolve_seed(seed)
             self._update_rng(resolved_seed)
@@ -361,9 +337,7 @@ class PlumeSearchEnv(gym.Env):
             )
             return self._observation(), self._info()
 
-    def step(
-        self, action: Any
-    ) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
+    def step(self, action: Any) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         """Execute one timestep.
 
         Contract: environment_state_machine.md

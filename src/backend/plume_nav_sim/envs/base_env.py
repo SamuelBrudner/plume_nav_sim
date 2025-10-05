@@ -41,9 +41,10 @@ from typing import (  # >=3.10 - Type hints for abstract methods and generic typ
     Union,
 )
 
+import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and performance-optimized numerical computing
+
 # Third-party imports
 import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework with standard API methods
-import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and performance-optimized numerical computing
 
 # Internal imports - Core types and constants
 from ..core import RenderMode  # Core data types for environment state management

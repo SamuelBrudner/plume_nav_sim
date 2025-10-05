@@ -14,25 +14,12 @@ _src_path = os.path.join(os.path.dirname(__file__), "..")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
-# Internal imports - Test infrastructure and fixtures
-# Import fixtures lazily so the trimmed educational build can run a subset of tests
-# without pulling in optional dependencies.  When the import fails we expose lightweight
-# stubs that either no-op or trigger skips when exercised.
-try:  # pragma: no cover - import guard for optional fixtures
-    from .conftest import (  # Pytest fixtures for comprehensive test environment management; Context manager classes for resource management and performance tracking
-        PerformanceTracker,
-        TestEnvironmentManager,
-        integration_test_env,
-        performance_test_env,
-        reproducibility_test_env,
-        unit_test_env,
-    )
-except (
-    ModuleNotFoundError
-) as exc:  # pragma: no cover - exercised only in minimal kata builds
-    raise ImportError(
-        "Required test fixtures are missing; ensure src/backend/tests/conftest.py is available."
-    ) from exc
+# Internal imports - Pytest auto-loads conftest.py; avoid importing it here to
+# prevent circular import during package initialization (pytest imports
+# `tests/__init__.py` before `tests/conftest.py`).
+# The original eager import caused a ModuleNotFoundError under normal pytest
+# discovery order. Leaving fixture resolution to pytest avoids that issue.
+_PYTEST_AUTOCONFIG = True  # Marker for test tooling; no functional effect
 
 """
 Avoid importing individual test modules here. Pytest will discover tests on its

@@ -8,7 +8,6 @@ configuration, and hierarchical logger organization following Python logging bes
 for reinforcement learning environment development and research workflows.
 """
 
-import gc  # >=3.10 - Garbage collection for memory management
 import json  # >=3.10 - JSON serialization for configuration data
 
 # External imports with version comments
@@ -505,22 +504,27 @@ class ComponentLogger:
 
     def debug(self, msg: str, *args, **kwargs):
         """Log debug message with component context."""
+        kwargs.pop("exception", None)
         self.logger.debug(msg, *args, **kwargs)
 
     def info(self, msg: str, *args, **kwargs):
         """Log info message with component context."""
+        kwargs.pop("exception", None)
         self.logger.info(msg, *args, **kwargs)
 
     def warning(self, msg: str, *args, **kwargs):
         """Log warning message with component context."""
+        kwargs.pop("exception", None)
         self.logger.warning(msg, *args, **kwargs)
 
     def error(self, msg: str, *args, **kwargs):
         """Log error message with component context."""
+        kwargs.pop("exception", None)
         self.logger.error(msg, *args, **kwargs)
 
     def critical(self, msg: str, *args, **kwargs):
         """Log critical message with component context."""
+        kwargs.pop("exception", None)
         self.logger.critical(msg, *args, **kwargs)
 
     def performance(self, operation: str, duration_ms: float, **context):

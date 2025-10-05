@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from numpy.typing import NDArray
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    NDArray = None  # type: ignore[assignment]
 
 from .constants import (
     DEFAULT_GOAL_RADIUS,
@@ -48,7 +52,10 @@ ObservationType = np.ndarray
 RewardType = float
 InfoType = Dict[str, Any]
 
-RGBArray = NDArray[np.uint8]
+if NDArray is not None:
+    RGBArray = NDArray[np.uint8]
+else:  # pragma: no cover - numpy<1.20
+    RGBArray = np.ndarray  # type: ignore[assignment]
 
 PlumeParameters = PlumeModel
 

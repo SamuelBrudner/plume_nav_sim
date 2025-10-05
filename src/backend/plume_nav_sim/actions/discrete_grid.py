@@ -11,7 +11,6 @@ one step in the specified direction, with boundary clamping.
 from typing import Any, Dict
 
 import gymnasium as gym
-
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 

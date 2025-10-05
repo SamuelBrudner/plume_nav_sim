@@ -22,10 +22,10 @@ import time  # >=3.10 - Timing utilities for performance testing and registratio
 import unittest.mock as mock  # >=3.10 - Mock object creation for testing error conditions, external dependency mocking, and isolation testing
 import warnings  # >=3.10 - Warning system testing for registration conflicts, deprecation notices, and compatibility warning validation
 
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation, gym.make() testing, and registry management
-
 # External imports with version comments for testing framework and dependencies
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, and assertion handling with comprehensive test execution management
+
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation, gym.make() testing, and registry management
 
 # Internal imports for constants and configuration parameters
 from plume_nav_sim.core.constants import (

@@ -17,12 +17,12 @@ import time  # standard library - Timing utilities for performance edge case tes
 import unittest.mock  # standard library - Mocking utilities for simulating edge case scenarios
 import warnings  # standard library - Warning management for edge case testing
 
-import gymnasium  # >=0.29.0 - RL environment framework for API compliance under edge conditions
 import numpy as np  # >=2.1.0 - Array operations for mathematical edge cases and precision testing
 
 # External imports with version requirements
 import pytest  # >=8.0.0 - Testing framework for edge case test organization and parametrization
 
+import gymnasium  # >=0.29.0 - RL environment framework for API compliance under edge conditions
 from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
 from plume_nav_sim.core.types import Action, Coordinates
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env

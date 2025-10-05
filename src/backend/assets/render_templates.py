@@ -94,43 +94,28 @@ BACKEND_COMPATIBILITY_MATRIX = {
 
 
 class TemplateQuality(Enum):
-    """
-    Enumeration defining template quality levels with associated performance characteristics,
-    feature sets, and resource requirements for rendering optimization and user selection.
-    """
+    """Quality levels with predefined performance/feature profiles."""
 
-    # Sub-1ms rendering with minimal features for maximum performance
     ULTRA_FAST = "ultra_fast"
-    # Sub-3ms rendering with essential features and basic quality
     FAST = "fast"
-    # Sub-5ms rendering with full feature set and standard quality
     STANDARD = "standard"
-    # Sub-10ms rendering with enhanced quality and advanced features
     QUALITY = "quality"
-    # No time limit with maximum quality and all features enabled
     PREMIUM = "premium"
 
-    def __init__(self, value: str):
-        """Initialize template quality level with performance targets and feature configuration."""
-        self.value = value
-        self.performance_target_ms = self._get_performance_target()
-        self.feature_set = self._get_feature_set()
-        self.resource_priority = self._get_resource_priority()
-
-    def _get_performance_target(self) -> float:
-        """Get performance target timing for quality level."""
-        performance_targets = {
+    @property
+    def performance_target_ms(self) -> float:
+        mapping = {
             "ultra_fast": 1.0,
             "fast": 3.0,
             "standard": 5.0,
             "quality": 10.0,
             "premium": float("inf"),
         }
-        return performance_targets.get(self.value, 5.0)
+        return mapping[self.value]
 
-    def _get_feature_set(self) -> Dict[str, bool]:
-        """Get feature availability for quality level."""
-        feature_sets = {
+    @property
+    def feature_set(self) -> Dict[str, bool]:
+        mapping = {
             "ultra_fast": {
                 "anti_aliasing": False,
                 "smooth_markers": False,
@@ -165,18 +150,18 @@ class TemplateQuality(Enum):
                 "maximum_precision": True,
             },
         }
-        return feature_sets.get(self.value, feature_sets["standard"])
+        return mapping[self.value]
 
-    def _get_resource_priority(self) -> int:
-        """Get resource priority level for quality setting."""
+    @property
+    def resource_priority(self) -> int:
         priorities = {
-            "ultra_fast": 5,  # Highest priority (lowest resource usage)
+            "ultra_fast": 5,
             "fast": 4,
             "standard": 3,
             "quality": 2,
-            "premium": 1,  # Lowest priority (highest resource usage)
+            "premium": 1,
         }
-        return priorities.get(self.value, 3)
+        return priorities[self.value]
 
     def get_performance_config(self) -> Dict[str, Any]:
         """

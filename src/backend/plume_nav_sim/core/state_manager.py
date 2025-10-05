@@ -37,6 +37,7 @@ from .constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
     DEFAULT_MAX_STEPS,
+    DEFAULT_PLUME_SIGMA,
     DEFAULT_SOURCE_LOCATION,
     MOVEMENT_VECTORS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
@@ -45,6 +46,7 @@ from .constants import (
 # Internal imports - core types and data structures (single source of truth)
 from .enums import Action
 from .geometry import Coordinates, GridSize
+from .models import PlumeModel
 from .snapshots import StateSnapshot
 from .state import AgentState, EpisodeState
 from .types import (
@@ -833,6 +835,21 @@ class StateManager:
         # Initialize component cache for performance optimization
         self.component_cache: Dict[str, Any] = {}
 
+        # Create a minimal plume model for snapshots using current config
+        try:
+            self.plume_model = PlumeModel(
+                source_location=self.config.source_location,
+                sigma=DEFAULT_PLUME_SIGMA,
+                grid_compatibility=self.config.grid_size,
+            )
+        except Exception:
+            # Fallback: do not block initialization if plume model cannot be created
+            self.plume_model = PlumeModel(
+                source_location=self.config.source_location,
+                sigma=max(DEFAULT_PLUME_SIGMA, 1.0),
+                grid_compatibility=self.config.grid_size,
+            )
+
         # Log successful initialization
         self.logger.info(
             f"StateManager initialized with grid size {config.grid_size.width}x{config.grid_size.height}"
@@ -1292,6 +1309,7 @@ class StateManager:
             agent_state=agent_state_copy,
             episode_state=episode_state_copy,
             timestamp=snapshot_timestamp,
+            plume_model=self.plume_model,
         )
 
         # Validate snapshot consistency if requested

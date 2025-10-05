@@ -22,7 +22,9 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
     "package": {
         "name": "plume_nav_sim",
         "version": "0.0.0",
-        "environment_id": "PlumeNav-Sim-v1",
+        # Backward-compatible default ID expected by registration tests
+        # Registration suites enforce the '-v0' suffix convention.
+        "environment_id": "PlumeNav-Sim-v0",
     },
     "performance": {
         "tracking_enabled": True,

@@ -27,8 +27,9 @@ import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
-import gymnasium as gym
 import numpy as np
+
+import gymnasium as gym
 
 from ..core.geometry import Coordinates, GridSize
 from ..core.state import AgentState

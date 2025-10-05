@@ -33,11 +33,11 @@ import uuid  # >=3.10 - Unique identifier generation for session tracking
 from pathlib import Path  # >=3.10 - Path handling for report output
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-# External imports with version comments for dependency management
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 import matplotlib.pyplot as plt  # >=3.9.0 - Visualization for reproducibility analysis (optional)
 import numpy as np  # >=2.1.0 - Random number generation and statistical analysis
 
+# External imports with version comments for dependency management
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 from plume_nav_sim.core.constants import DEFAULT_MAX_STEPS
 from plume_nav_sim.core.types import Action
 

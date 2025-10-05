@@ -106,6 +106,8 @@ class TestEpisodeManagerConfig:
     def test_config_validation_failure(self):
         """Test configuration validation failure with invalid parameters and comprehensive error reporting validation."""
         # Create invalid environment configuration with negative max_steps
+        captured_error = None
+
         try:
             invalid_env_config = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
@@ -114,9 +116,9 @@ class TestEpisodeManagerConfig:
                 goal_radius=0.0,
             )
             pytest.fail("Should have raised ValidationError for negative max_steps")
-        except ValidationError as e:
+        except ValidationError as exc:
             # Assert ValidationError is raised with appropriate error message
-            assert "max_steps" in str(e.message).lower()
+            assert "max_steps" in str(exc.message).lower()
 
         # Test validation with invalid goal_radius (negative value)
         try:
@@ -127,12 +129,14 @@ class TestEpisodeManagerConfig:
                 goal_radius=-1.0,  # Invalid negative radius
             )
             pytest.fail("Should have raised ValidationError for negative goal_radius")
-        except ValidationError as e:
+        except ValidationError as exc:
             # Verify error message contains specific validation failure details
-            assert "goal_radius" in str(e.message).lower()
+            assert "goal_radius" in str(exc.message).lower()
+            captured_error = exc
 
         # Assert comprehensive error reporting with recovery suggestions
-        assert hasattr(e, "recovery_suggestion")
+        assert captured_error is not None
+        assert hasattr(captured_error, "recovery_suggestion")
 
     def test_derive_component_configs(self):
         """Test derivation of individual component configurations from episode manager configuration with consistency validation."""

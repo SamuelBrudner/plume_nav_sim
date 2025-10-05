@@ -7,7 +7,11 @@ Contract: reward_function_interface.md
 from typing import Any, Dict
 
 import numpy as np
-from numpy.typing import NDArray
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 from plume_nav_sim.core.geometry import Coordinates
 from plume_nav_sim.core.state import AgentState

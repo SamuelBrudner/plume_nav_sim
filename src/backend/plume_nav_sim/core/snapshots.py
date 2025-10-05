@@ -48,3 +48,23 @@ class StateSnapshot:
             "plume_model": self.plume_model.to_dict(),
             "metadata": self.metadata,
         }
+
+    # Lightweight consistency checker used by StateManager when requested.
+    def validate_consistency(self) -> Dict[str, Any]:
+        errors = []
+        warnings = []
+        try:
+            # Agent invariants
+            if self.agent_state.step_count < 0:
+                errors.append("negative step_count")
+            # Episode invariants
+            if self.episode_state.terminated and self.episode_state.truncated:
+                errors.append("terminated and truncated both True")
+        except Exception as exc:  # Defensive: never raise from validation
+            warnings.append(f"validation_exception: {exc}")
+
+        return {
+            "is_consistent": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+        }

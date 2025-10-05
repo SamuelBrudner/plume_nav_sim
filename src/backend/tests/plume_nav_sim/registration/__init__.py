@@ -36,10 +36,10 @@ from typing import (  # >=3.10 - Type hints for registration testing functions a
     Union,
 )
 
-import gymnasium  # >=0.29.0 - Environment framework for registration validation, gym.make() testing, registry management, and Gymnasium API compliance verification
-
 # External imports with version comments for testing framework and dependencies
 import pytest  # >=8.0.0 - Primary testing framework for registration test organization, fixtures, parameterized testing, and comprehensive test execution with quality metrics
+
+import gymnasium  # >=0.29.0 - Environment framework for registration validation, gym.make() testing, registry management, and Gymnasium API compliance verification
 
 # Internal imports for shared performance testing utilities from core and envs modules
 from ..core import (  # Performance testing utilities for registration module benchmarking and validation
