@@ -271,7 +271,7 @@ class ComponentBasedEnvironment(gym.Env):
             info: Step metadata
 
         Raises:
-            StateError: If state not in {READY, TERMINATED, TRUNCATED}
+            StateError: If state not READY
             ValidationError: If action invalid
 
         Postconditions:
@@ -283,6 +283,10 @@ class ComponentBasedEnvironment(gym.Env):
             raise StateError("Must call reset() before step()")
         if self._state == EnvironmentState.CLOSED:
             raise StateError("Cannot step closed environment")
+        if self._state != EnvironmentState.READY:
+            raise StateError(
+                "Environment must be in READY state to step; call reset()"
+            )
 
         # Validate action
         # Contract: environment_state_machine.md - P2
