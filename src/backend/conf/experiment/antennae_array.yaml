@@ -1,0 +1,26 @@
+# @package _global_
+
+# Multi-sensor observation with antennae array
+# Good for: Spatial gradient information, bilateral sensing
+
+grid_size: [128, 128]
+goal_location: [100, 100]
+max_steps: 1000
+
+action:
+  type: oriented  # Oriented actions work well with antennae
+  step_size: 1
+
+observation:
+  type: antennae
+  n_sensors: 4
+  sensor_distance: 2.0
+  sensor_angles: null  # Evenly distributed
+
+reward:
+  type: sparse
+  goal_radius: 5.0
+
+plume:
+  sigma: 20.0
+  normalize: true

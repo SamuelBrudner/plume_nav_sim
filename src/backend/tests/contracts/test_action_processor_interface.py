@@ -16,12 +16,12 @@ Usage:
 
 import copy
 
-import gymnasium as gym
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
+import gymnasium as gym
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 from plume_nav_sim.interfaces import ActionProcessor
@@ -78,7 +78,14 @@ class TestActionProcessorInterface:
             min_width=10, max_width=64, min_height=10, max_height=64
         ),
     )
-    @settings(deadline=None, max_examples=50)
+    @settings(
+        deadline=None,
+        max_examples=50,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
     def test_boundary_safety(self, action_processor, grid):
         """Property: Result position always within bounds.
 
@@ -116,7 +123,14 @@ class TestActionProcessorInterface:
             min_width=10, max_width=32, min_height=10, max_height=32
         ),
     )
-    @settings(deadline=None, max_examples=30)
+    @settings(
+        deadline=None,
+        max_examples=30,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
     def test_corner_positions_stay_in_bounds(self, action_processor, grid):
         """Property: Actions from corners stay in bounds.
 
@@ -154,7 +168,14 @@ class TestActionProcessorInterface:
             min_width=16, max_width=64, min_height=16, max_height=64
         ),
     )
-    @settings(deadline=None, max_examples=30)
+    @settings(
+        deadline=None,
+        max_examples=30,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
     def test_determinism(self, action_processor, grid):
         """Property: Same inputs produce same output.
 

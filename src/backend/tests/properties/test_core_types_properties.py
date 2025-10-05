@@ -387,10 +387,10 @@ class TestGridSizeImmutability:
 
 
 class TestAgentStateMonotonicity:
-    """Test AgentState monotonic invariants.
+    """Test AgentState progression properties.
 
-    Contract: core_types.md
-    Invariants I5, I6: step_count and total_reward monotonically increase.
+    Step count remains monotonic, total reward tracks cumulative sum
+    even when per-step rewards are negative.
     """
 
     def test_step_count_monotonic(self):
@@ -418,40 +418,30 @@ class TestAgentStateMonotonicity:
 
             prev_count = current_count
 
-    def test_total_reward_monotonic(self):
-        """total_reward never decreases.
-
-        Contract: core_types.md - Invariant I6
-        total_reward' >= total_reward
-        """
+    def test_total_reward_tracks_cumulative_sum(self):
+        """Total reward equals the cumulative sum of all rewards, including negatives."""
         from plume_nav_sim.core.state_manager import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
-        prev_reward = state.total_reward
+        rewards = [0.0, 0.5, -0.25, -1.0, 2.0]
+        expected_total = 0.0
 
-        # Add various rewards
-        for reward in [0.0, 0.5, 1.0, 0.0, 1.0]:
+        for reward in rewards:
             state.add_reward(reward)
-            current_reward = state.total_reward
+            expected_total += reward
+            assert state.total_reward == pytest.approx(
+                expected_total
+            ), f"Expected {expected_total}, got {state.total_reward}"
 
-            assert (
-                current_reward >= prev_reward
-            ), f"Reward decreased: {prev_reward} -> {current_reward}"
-
-            prev_reward = current_reward
-
-    def test_negative_reward_rejected(self):
-        """Cannot add negative reward.
-
-        Contract: core_types.md - Precondition P1 for add_reward()
-        """
+    def test_negative_reward_allowed(self):
+        """Negative rewards are accumulated without validation errors."""
         from plume_nav_sim.core.state_manager import AgentState
 
         state = AgentState(position=Coordinates(0, 0))
 
-        with pytest.raises(ValidationError):
-            state.add_reward(-1.0)
+        state.add_reward(-1.5)
+        assert state.total_reward == pytest.approx(-1.5)
 
 
 # ============================================================================
@@ -532,11 +522,8 @@ class TestAgentStateValidation:
         with pytest.raises((ValidationError, ValueError)):
             AgentState(position=Coordinates(0, 0), step_count=-1)
 
-    def test_initial_total_reward_non_negative(self):
-        """Initial total_reward must be non-negative.
-
-        Contract: core_types.md - Invariant I3
-        """
+    def test_initial_total_reward_allows_negative(self):
+        """Initial total_reward can be negative for debt-based reward schemes."""
         from plume_nav_sim.core.state_manager import AgentState
 
         # Valid
@@ -546,9 +533,12 @@ class TestAgentStateValidation:
         state2 = AgentState(position=Coordinates(0, 0), total_reward=5.0)
         assert state2.total_reward == 5.0
 
-        # Invalid
+        state3 = AgentState(position=Coordinates(0, 0), total_reward=-2.5)
+        assert state3.total_reward == -2.5
+
+        # Invalid input types still rejected
         with pytest.raises((ValidationError, ValueError)):
-            AgentState(position=Coordinates(0, 0), total_reward=-1.0)
+            AgentState(position=Coordinates(0, 0), total_reward="invalid")
 
 
 if __name__ == "__main__":

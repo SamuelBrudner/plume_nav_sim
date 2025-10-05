@@ -108,7 +108,7 @@ Environment.step(action):
      self.agent_state = new_state
   
   4. Assemble environment state dictionary
-     env_state = self._get_env_state()  # Contains agent_state, plume_field, etc.
+     env_state = self._get_env_state()  # Contains agent_state, plume_field, grid_size, time_step, etc.
   
   5. Get observation from sensor(s)
      observation = observation_model.get_observation(env_state)
@@ -122,6 +122,19 @@ Environment.step(action):
      → terminated, truncated
   
   8. Return (observation, reward, terminated, truncated, info)
+```
+
+### Environment State Dictionary (env_state)
+
+All ObservationModel implementations consume a dictionary `env_state` assembled by the environment. The canonical keys are:
+
+- `agent_state`: AgentState (position, orientation, counters)
+- `plume_field`: ConcentrationField or 2D ndarray (depending on sensor needs)
+- `grid_size`: GridSize (width, height) for bounds checks
+- `time_step`: int (optional) current step index
+- `goal_location`: Coordinates (optional) if relevant to sensors
+
+Implementations may ignore unused keys. Custom environments or wrappers may extend `env_state` by overriding `_get_env_state()` while preserving these core keys for compatibility.
 ```
 
 ---

@@ -122,6 +122,13 @@ from .base_env import (
 from .base_env import (
     validate_base_environment_setup,  # Comprehensive validation function for environment setup feasibility
 )
+from .component_env import (
+    ComponentBasedEnvironment,  # New component-based environment with dependency injection
+)
+from .component_env import EnvironmentState  # Environment state machine enum
+from .factory import (
+    create_component_environment,  # Factory function for easy component assembly
+)
 
 # Internal imports - Main environment implementation and factory functions
 from .plume_search_env import (
@@ -138,19 +145,22 @@ from .plume_search_env import (
 ENVIRONMENT_VERSION = (
     "1.0.0"  # Module version for compatibility tracking and development phases
 )
-SUPPORTED_ENVIRONMENTS = [
-    "PlumeSearchEnv"
-]  # List of supported environment types for factory function routing
+# Supported environment selectors for unified factory
+# - 'plume_search': legacy monolithic environment
+# - 'component': component-based environment (dependency injection)
+# Also accept the class name for backward compatibility in some helpers.
+SUPPORTED_ENVIRONMENTS = ["plume_search", "component", "PlumeSearchEnv"]
 
-# Initialize module logger for comprehensive operation tracking and debugging
 _module_logger = get_component_logger(__name__)
 
 # Comprehensive module exports for external API access
 __all__ = [
     # Core environment classes with complete functionality
-    "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
     "BaseEnvironment",  # Abstract base environment class providing Gymnasium-compatible interface template
-    "AbstractEnvironmentError",  # Exception class for abstract method enforcement with implementation guidance
+    "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
+    "ComponentBasedEnvironment",  # Component-based environment with dependency injection
+    "EnvironmentState",  # Environment state machine enum
+    "create_component_environment",  # Factory for component-based environments
     # Factory functions for environment creation and configuration
     "create_plume_search_env",  # Factory function for PlumeSearchEnv with parameter validation and component initialization
     "create_base_environment_config",  # Factory function for validated base environment configuration
@@ -302,7 +312,7 @@ def create_environment(
             )
 
         # Route to create_plume_search_env for 'plume_search' type with parameter forwarding
-        if effective_env_type == "plume_search":
+        if effective_env_type in ("plume_search", "PlumeSearchEnv"):
             environment = create_plume_search_env(
                 grid_size=effective_grid_size,
                 source_location=effective_source_location,
@@ -310,6 +320,15 @@ def create_environment(
                 goal_radius=effective_goal_radius,
                 render_mode=effective_render_mode,
                 env_options=env_options,
+            )
+        elif effective_env_type == "component":
+            # Map legacy naming (source_location) to goal_location for the component environment
+            environment = create_component_environment(
+                grid_size=effective_grid_size,
+                goal_location=effective_source_location,
+                max_steps=effective_max_steps,
+                goal_radius=effective_goal_radius,
+                render_mode=effective_render_mode,
             )
         else:
             # Future environment types would be handled here

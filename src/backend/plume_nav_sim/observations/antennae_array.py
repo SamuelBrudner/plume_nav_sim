@@ -9,9 +9,14 @@ angles and distances relative to the agent's heading, similar to insect antennae
 
 from typing import Any, Dict, List
 
-import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
+
+import gymnasium as gym
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 
 class AntennaeArraySensor:

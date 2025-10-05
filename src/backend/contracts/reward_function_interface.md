@@ -221,6 +221,7 @@ Different reward types have different properties (NOT universal):
 - Common in RL for time-limited tasks
 - See: Mnih et al. (2015) DQN; Sutton & Barto (2018) Ch. 3
 - **Demonstrates rewards need not be in [0,1]**
+ - Note: This reward is independent of step_count; it is computed per-step and does not require internal episode counters.
 
 ### Dense Distance Reward (ANOTHER implementation - documentation example)
 - Codomain: [0.0, 1.0] continuous

@@ -24,12 +24,12 @@ from unittest.mock import (  # standard library - Mock objects for testing error
     patch,
 )
 
-import gymnasium.spaces  # >=0.29.0 - Gymnasium space classes for testing compatibility and API compliance validation
 import numpy as np  # >=2.1.0 - Array operations and dtype testing for space validation and mathematical operations
 
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for comprehensive unit tests with fixtures, parameterization, and assertion validation
 
+import gymnasium.spaces  # >=0.29.0 - Gymnasium space classes for testing compatibility and API compliance validation
 from plume_nav_sim.core.constants import (
     ACTION_SPACE_SIZE,
     CONCENTRATION_RANGE,

@@ -1,0 +1,23 @@
+# @package _global_
+
+# Sparse reward with discrete actions - simplest baseline
+# Good for: Initial testing, sparse reward benchmarks
+
+grid_size: [128, 128]
+goal_location: [100, 100]
+max_steps: 1000
+
+action:
+  type: discrete
+  step_size: 1
+
+observation:
+  type: concentration
+
+reward:
+  type: sparse
+  goal_radius: 5.0
+
+plume:
+  sigma: 20.0
+  normalize: true

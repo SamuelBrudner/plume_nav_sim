@@ -2,6 +2,7 @@
 Core state management types for the plume navigation simulation.
 """
 
+import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ class AgentState:
         position: Current grid position
         orientation: Heading in degrees, [0, 360), 0°=East, 90°=North
         step_count: Number of steps taken in current episode
-        total_reward: Cumulative reward for current episode
+        total_reward: Cumulative reward for current episode (can be negative)
         movement_history: List of previous positions
         goal_reached: Whether goal has been reached
         performance_metrics: Optional performance tracking data
@@ -30,7 +31,7 @@ class AgentState:
         I1: position is valid Coordinates
         I2: orientation ∈ [0, 360) (auto-normalized)
         I3: step_count ≥ 0
-        I4: total_reward ≥ 0
+        I4: total_reward is finite float
         I5: goal_reached ∈ {True, False}
     """
 
@@ -59,9 +60,9 @@ class AgentState:
                 f"step_count must be non-negative, got {self.step_count}"
             )
 
-        if self.total_reward < 0:
+        if not math.isfinite(float(self.total_reward)):
             raise ValidationError(
-                f"total_reward must be non-negative, got {self.total_reward}"
+                f"total_reward must be finite, got {self.total_reward}"
             )
 
         if PERFORMANCE_TRACKING_ENABLED:
@@ -101,9 +102,8 @@ class AgentState:
                 raise ValidationError(
                     f"Reward must be numeric, got {type(reward).__name__}"
                 )
-            # Contract: Cannot add negative reward
-            if reward < 0:
-                raise ValidationError(f"Cannot add negative reward, got {reward}")
+            if not math.isfinite(reward):
+                raise ValidationError(f"Reward must be finite, got {reward}")
 
         self.total_reward += float(reward)
 

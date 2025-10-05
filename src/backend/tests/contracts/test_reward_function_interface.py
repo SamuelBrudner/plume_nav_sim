@@ -18,7 +18,7 @@ import copy
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
@@ -39,6 +39,8 @@ class TestRewardFunctionInterface:
     All implementations must pass these tests to be considered valid.
     Concrete test classes should inherit this and provide reward_function fixture.
     """
+
+    __test__ = False
 
     # ==============================================================================
     # Fixtures (Override in concrete test classes)
@@ -76,7 +78,14 @@ class TestRewardFunctionInterface:
         action=discrete_action_strategy(n_actions=4),
         next_state=agent_state_strategy(),
     )
-    @settings(deadline=None, max_examples=50)
+    @settings(
+        deadline=None,
+        max_examples=50,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
     def test_determinism(self, reward_function, prev_state, action, next_state):
         """Property: Same inputs always produce same reward.
 
@@ -151,7 +160,14 @@ class TestRewardFunctionInterface:
             min_width=16, max_width=64, min_height=16, max_height=64
         ),
     )
-    @settings(deadline=None, max_examples=50)
+    @settings(
+        deadline=None,
+        max_examples=50,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
     def test_finiteness(self, reward_function, prev_state, action, next_state, grid):
         """Property: Reward is always finite (not NaN, not inf).
 

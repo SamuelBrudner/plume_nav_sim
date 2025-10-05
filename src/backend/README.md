@@ -147,6 +147,46 @@ env_config = {
     'goal_radius': 0.0,               # Success radius around source
     'sigma': 12.0                     # Plume dispersion parameter
 }
+
+### Component-Based Environment (Dependency Injection)
+
+For advanced use, you can assemble an environment from swappable components (actions, observations, rewards, plume model). See `plume_nav_sim/envs/component_env.py`.
+
+Two ways to use components:
+
+- Direct factory assembly:
+  ```python
+  from plume_nav_sim.envs.factory import create_component_environment
+
+  env = create_component_environment(
+      grid_size=(128, 128),
+      goal_location=(64, 64),
+      action_type='oriented',           # 'discrete' or 'oriented'
+      observation_type='antennae',      # 'concentration' or 'antennae'
+      reward_type='step_penalty',       # 'sparse' or 'step_penalty'
+      goal_radius=2.0,
+  )
+  obs, info = env.reset(seed=42)
+  ```
+
+- Register a Gymnasium ID backed by the component-based env:
+  ```python
+  import gymnasium as gym
+  from plume_nav_sim.registration import register_env
+
+  # Register default env id but using components under the hood
+  env_id = register_env(
+      env_id='PlumeNav-StaticGaussian-v0',
+      kwargs={'use_components': True}
+  )
+  env = gym.make(env_id)
+  ```
+
+Components derive spaces:
+- `action_space` comes from the ActionProcessor
+- `observation_space` comes from the ObservationModel
+
+See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
 ```
 
 ### Registration System

@@ -10,9 +10,16 @@ diverse action spaces without environment modification.
 # Use forward references to avoid circular imports
 from typing import TYPE_CHECKING, Any, Dict, Protocol, Union, runtime_checkable
 
-import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
+
+import gymnasium as gym
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    import numpy as np
+
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from ..core.geometry import GridSize

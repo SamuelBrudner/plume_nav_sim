@@ -1,6 +1,6 @@
-import gymnasium
 import pytest
 
+import gymnasium
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 from plume_nav_sim.registration import ensure_registered
 from plume_nav_sim.registration.register import (

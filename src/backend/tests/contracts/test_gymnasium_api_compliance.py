@@ -7,12 +7,12 @@ This is the PUBLIC API that external RL libraries depend on.
 Reference: contracts/gymnasium_api.md
 """
 
-import gymnasium as gym
 import numpy as np
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
+import gymnasium as gym
 from plume_nav_sim import PlumeSearchEnv
 from plume_nav_sim.utils.exceptions import StateError, ValidationError
 
@@ -237,19 +237,19 @@ class TestInfoDictionary:
             if terminated or truncated:
                 break
 
-    def test_total_reward_non_negative(self):
-        """total_reward is non-negative.
-
-        Contract: Invariant I4
-        """
+    def test_total_reward_is_finite(self):
+        """total_reward is a finite numeric value after each step."""
         env = PlumeSearchEnv()
         env.reset(seed=42)
 
         for _ in range(20):
             obs, reward, terminated, truncated, info = env.step(0)
-            assert (
-                info["total_reward"] >= 0
-            ), f"Negative total_reward: {info['total_reward']}"
+            assert isinstance(
+                info.get("total_reward"), (int, float)
+            ), "total_reward must be numeric"
+            assert np.isfinite(
+                info["total_reward"]
+            ), f"total_reward must be finite, got {info['total_reward']}"
 
             if terminated or truncated:
                 break

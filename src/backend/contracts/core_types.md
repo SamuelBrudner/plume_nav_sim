@@ -385,13 +385,13 @@ AgentState = {
   position: Coordinates,
   orientation: [0, 360),  # Heading in degrees
   step_count: ℕ,
-  total_reward: ℝ₊,
+  total_reward: ℝ,
   goal_reached: {True, False}
 }
 
 where:
   ℕ = {0, 1, 2, ...} (non-negative integers)
-  ℝ₊ = {x ∈ ℝ | x ≥ 0} (non-negative reals)
+  ℝ = set of all real numbers (finite)
 
 ### Type Specification
 
@@ -404,11 +404,10 @@ class AgentState:
       I1: position is Coordinates
       I2: orientation ∈ [0, 360) (normalized heading in degrees)
       I3: step_count ≥ 0 (non-negative)
-      I4: total_reward ≥ 0 (non-negative cumulative)
+      I4: total_reward is finite (allows negative values)
       I5: goal_reached ∈ {True, False}
       I6: step_count monotonic (never decreases within episode)
-      I7: total_reward monotonic (never decreases within episode)
-      I8: goal_reached can only transition False → True
+      I7: goal_reached can only transition False → True
     
     Orientation Convention:
       - 0° = East (+x direction)
@@ -444,7 +443,7 @@ def create_agent_state(
       P1: position is Coordinates
       P2: orientation is finite float (will be normalized to [0, 360))
       P3: step_count ≥ 0
-      P4: total_reward ≥ 0
+      P4: total_reward is finite float (can be negative)
       P5: goal_reached ∈ {True, False}
     
     Postconditions:
@@ -532,34 +531,30 @@ def add_reward(self, reward: float) -> None:
     """Add reward to cumulative total.
     
     Preconditions:
-      P1: reward ≥ 0 (non-negative)
+      P1: reward is finite numeric value (allows negative)
     
     Postconditions:
       C1: total_reward' = total_reward + reward
-      C2: total_reward' ≥ total_reward (monotonic)
-      C3: All other fields unchanged
+      C2: All other fields unchanged
     
     Invariants Preserved:
-      I3: total_reward' ≥ 0 (still non-negative)
-      I6: total_reward' ≥ total_reward (monotonic)
+      I4: total_reward remains finite
     
     Modifies:
       total_reward
     
     Raises:
-      ValidationError: If reward < 0
+      ValidationError: If reward is NaN or infinite
     
     Examples:
       state.total_reward = 5.0
-      state.add_reward(1.0)
-      assert state.total_reward == 6.0
+      state.add_reward(-2.0)
+      assert state.total_reward == 3.0
     """
-    if reward < 0:
-        raise ValidationError(f"Reward must be non-negative, got {reward}")
+    if not math.isfinite(reward):
+        raise ValidationError(f"Reward must be finite, got {reward}")
     
-    old_reward = self.total_reward
     self.total_reward += reward
-    assert self.total_reward >= old_reward, "Monotonicity violated"
 ```
 
 #### `mark_goal_reached()`
@@ -626,7 +621,7 @@ def reset(self, position: Coordinates) -> None:
 ### Test Requirements
 
 ```python
-# Monotonicity tests
+# Progression tests
 def test_step_count_monotonic():
     """Step count never decreases"""
     state = create_agent_state(Coordinates(0, 0))
@@ -637,20 +632,21 @@ def test_step_count_monotonic():
         assert state.step_count > old_count
         assert state.step_count == old_count + 1
 
-def test_total_reward_monotonic():
-    """Total reward never decreases"""
+def test_total_reward_tracks_sum():
+    """Total reward equals cumulative sum, negatives included"""
     state = create_agent_state(Coordinates(0, 0))
     
-    for reward in [0.0, 0.5, 1.0, 0.0]:
-        old_reward = state.total_reward
+    expected = 0.0
+    for reward in [0.0, 0.5, -0.5, -1.0, 2.0]:
         state.add_reward(reward)
-        assert state.total_reward >= old_reward
+        expected += reward
+        assert state.total_reward == pytest.approx(expected)
 
-def test_negative_reward_rejected():
-    """Cannot add negative reward"""
+def test_negative_reward_allowed():
+    """Negative rewards are permitted and accumulated"""
     state = create_agent_state(Coordinates(0, 0))
-    with pytest.raises(ValidationError):
-        state.add_reward(-1.0)
+    state.add_reward(-1.0)
+    assert state.total_reward == pytest.approx(-1.0)
 
 # Idempotency tests
 def test_mark_goal_reached_idempotent():
@@ -675,13 +671,12 @@ def test_cannot_unreach_goal():
 @given(
     position=coordinates_strategy(),
     step_count=st.integers(0, 1000),
-    total_reward=st.floats(0, 1000)
+    total_reward=st.floats(-1000, 1000)
 )
 def test_agent_state_creation(position, step_count, total_reward):
-    """Can create with valid non-negative values"""
+    """Can create with signed reward totals"""
     state = create_agent_state(position, step_count, total_reward)
     assert state.step_count >= 0
-    assert state.total_reward >= 0
 ```
 
 ---
@@ -736,7 +731,7 @@ def coordinates_from_agent_state(state: AgentState) -> Coordinates:
 
 1. **Coordinates are primitive** - No validation (can be negative)
 2. **GridSize enforces physics** - Must be positive, bounded
-3. **AgentState tracks episode** - Mutable but monotonic
+3. **AgentState tracks episode** - Mutable with signed rewards
 4. **Separation of concerns** - Validation happens at boundaries
 5. **Fail fast** - Invalid construction raises immediately
 6. **Pure operations** - distance_to, contains, etc. have no side effects

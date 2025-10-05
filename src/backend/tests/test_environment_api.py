@@ -42,12 +42,12 @@ from typing import (  # >=3.10 - Type hints for test parameter specifications, r
     Union,
 )
 
-import gymnasium  # >=0.29.0 - RL environment framework for API compliance testing, space validation, gym.make() testing, and Gymnasium interface verification
 import numpy as np  # >=2.1.0 - Array operations for observation validation, mathematical testing, performance benchmarking, and numerical accuracy verification
 
 # External imports with version comments for comprehensive dependency management
 import pytest  # >=8.0.0 - Testing framework for test organization, fixtures, parametrization, and comprehensive test execution with assertion support
 
+import gymnasium  # >=0.29.0 - RL environment framework for API compliance testing, space validation, gym.make() testing, and Gymnasium interface verification
 from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # System constants for environment configuration and performance validation
 )

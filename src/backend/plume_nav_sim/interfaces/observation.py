@@ -9,9 +9,16 @@ diverse sensor configurations without environment modification.
 
 from typing import Any, Dict, Protocol, Union, runtime_checkable
 
-import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
+
+import gymnasium as gym
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    import numpy as np
+
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 # Type alias for observation outputs
 ObservationType = Union[NDArray[np.floating], Dict[str, Any], tuple[Any, ...]]

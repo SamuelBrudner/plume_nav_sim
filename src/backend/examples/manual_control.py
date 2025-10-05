@@ -15,10 +15,11 @@ import sys  # standard library - System interaction for exit code management and
 import threading  # standard library - Background input handling and non-blocking keyboard input processing for smooth manual control
 import time  # standard library - High-precision timing for manual control performance tracking and session duration analysis
 
-# External imports with version comments
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for manual control environment instantiation and step processing
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive visualization framework for real-time manual control display with keyboard event handling
 import numpy as np  # >=2.1.0 - Array operations for manual control statistics, position tracking, and performance analysis
+
+# External imports with version comments
+import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for manual control environment instantiation and step processing
 
 from ..plume_nav_sim.core.constants import (
     CONTROL_INSTRUCTIONS,

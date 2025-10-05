@@ -21,11 +21,10 @@ import time  # >=3.10 - High-precision timing utilities for performance testing
 import unittest.mock  # >=3.10 - Mock object creation for testing error conditions
 import warnings  # >=3.10 - Warning system testing for registration conflicts
 
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
-
 # External imports
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, assertion handling
 
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions
 )

@@ -476,7 +476,7 @@ class ActionProcessor:
             )
 
             # Log error with context
-            self.logger.error(f"Action processing failed: {e}", exception=e)
+            self.logger.error(f"Action processing failed: {e}")
 
             if isinstance(e, (ValidationError, StateError)):
                 raise
@@ -512,15 +512,10 @@ class ActionProcessor:
                 operation_name="validate_action", component_name="action_processor"
             )
 
-            # Perform comprehensive validation
-            if self.config.strict_validation:
-                # Strict mode: comprehensive type and bounds checking
-                is_valid = validate_action_parameter(
-                    action, context=context, strict_validation=True
-                )
-            else:
-                # Standard mode: basic bounds validation
-                is_valid = validate_action_bounds(action, strict_validation=False)
+            # Perform comprehensive validation using local bounds helper
+            is_valid = validate_action_bounds(
+                action, strict_validation=self.config.strict_validation
+            )
 
             if not is_valid and raise_on_invalid:
                 constraints = {
@@ -538,7 +533,7 @@ class ActionProcessor:
                 raise
             return False
         except Exception as e:
-            self.logger.error(f"Action validation failed: {e}", exception=e)
+            self.logger.error(f"Action validation failed: {e}")
             if raise_on_invalid:
                 raise ValidationError(f"Action validation error: {e}") from e
             return False
@@ -588,7 +583,7 @@ class ActionProcessor:
             return valid_actions
 
         except Exception as e:
-            self.logger.error(f"Failed to get valid actions: {e}", exception=e)
+            self.logger.error(f"Failed to get valid actions: {e}")
             # Return all actions as fallback
             return [Action.UP, Action.RIGHT, Action.DOWN, Action.LEFT]
 
@@ -643,7 +638,7 @@ class ActionProcessor:
             return final_position, movement_delta, boundary_hit, position_changed
 
         except Exception as e:
-            self.logger.error(f"Movement calculation failed: {e}", exception=e)
+            self.logger.error(f"Movement calculation failed: {e}")
             # Return safe defaults
             return current_position, (0, 0), True, False
 
@@ -717,7 +712,7 @@ class ActionProcessor:
             return statistics
 
         except Exception as e:
-            self.logger.error(f"Failed to generate statistics: {e}", exception=e)
+            self.logger.error(f"Failed to generate statistics: {e}")
             return {"error": str(e), "actions_processed": self.actions_processed}
 
     def clear_cache(self) -> Dict[str, Any]:
@@ -823,7 +818,7 @@ class ActionProcessor:
             )
 
         except Exception as e:
-            self.logger.error(f"Configuration update failed: {e}", exception=e)
+            self.logger.error(f"Configuration update failed: {e}")
             raise ValidationError(f"Failed to update configuration: {e}") from e
 
 

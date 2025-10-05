@@ -15,11 +15,11 @@ import statistics  # >=3.10 - Statistical analysis of random agent performance i
 import sys  # >=3.10 - System interface for exit handling and error status reporting
 import time  # >=3.10 - High-precision timing measurements for step latency analysis and performance monitoring
 
-# External imports with version comments
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for random agent interaction and standard RL API usage
 import matplotlib.pyplot as plt  # >=3.9.0 - Optional visualization and plotting capabilities for random agent trajectory analysis and performance graphs
 import numpy as np  # >=2.1.0 - Random number generation, statistical analysis, and array operations for random agent behavior and performance analysis
 
+# External imports with version comments
+import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for random agent interaction and standard RL API usage
 from plume_nav_sim.core.constants import (  # Default maximum episode steps for random agent episode configuration and performance target constant for step latency benchmarking and analysis
     DEFAULT_MAX_STEPS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,

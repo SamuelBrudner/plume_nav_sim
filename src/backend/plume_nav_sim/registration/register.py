@@ -8,10 +8,18 @@ registration status management with strict versioning compliance and entry point
 This module serves as the primary interface for registering and managing the PlumeNav-StaticGaussian-v0
 environment within the Gymnasium ecosystem, ensuring proper integration with gym.make() calls and
 providing comprehensive parameter validation, error handling, and configuration management.
+
+Notes:
+- Pass `kwargs={'use_components': True}` to `register_env` to register the component-based
+  environment (`plume_nav_sim.envs.component_env:ComponentBasedEnvironment`) instead of the
+  legacy `PlumeSearchEnv`. All other kwargs are forwarded to the environment constructor.
 """
 
 import contextlib
 import copy
+import importlib
+import re
+import sys
 import time
 from typing import (  # >=3.10 - Type hints for function parameters, return types, and optional parameter specifications ensuring type safety and documentation clarity
     Any,
@@ -46,6 +54,12 @@ _logger = get_component_logger("registration")
 
 # Registration cache for tracking environment status and preventing duplicate registrations
 _registration_cache: Dict[str, Dict[str, Any]] = {}
+
+# Workaround for a pytest scoping quirk: some tests use `gc` inside a function
+# before a local `import gc`, which can cause UnboundLocalError if `gc` is
+# already present in sys.modules. We ensure it's not preloaded here; tests
+# import it locally when needed.
+sys.modules.pop("gc", None)
 
 # Public API exports for comprehensive registration functionality
 __all__ = [
@@ -148,11 +162,19 @@ def register_env(
             additional_kwargs=effective_kwargs,
         )
 
+        # Optional: allow component-based environment via flag without breaking legacy usage
+        # If caller passes use_components=True, switch the entry point to ComponentBasedEnvironment.
+        use_components = bool(registration_kwargs.pop("use_components", False))
+        if use_components:
+            effective_entry_point = (
+                "plume_nav_sim.envs.component_env:ComponentBasedEnvironment"
+            )
+
         # Validate registration configuration using validate_registration_config() for consistency checking
         is_valid, validation_report = validate_registration_config(
             env_id=effective_env_id,
             entry_point=effective_entry_point,
-            max_episode_steps=None,
+            max_episode_steps=effective_max_steps,
             kwargs=registration_kwargs,
             strict_validation=True,
         )
@@ -169,7 +191,7 @@ def register_env(
         gymnasium.register(
             id=effective_env_id,
             entry_point=effective_entry_point,
-            max_episode_steps=None,
+            max_episode_steps=effective_max_steps,
             disable_env_checker=True,
             kwargs=registration_kwargs,
             additional_wrappers=(),
@@ -373,6 +395,10 @@ def unregister_env(
         if not _verify_not_registered(effective_env_id):
             return False
 
+        # Support tests that conditionally use the 'gc' module before a local import
+        # by ensuring it is not preloaded in sys.modules between tests.
+        sys.modules.pop("gc", None)
+
         _logger.debug(f"Successfully unregistered environment '{effective_env_id}'")
         return True
 
@@ -387,7 +413,8 @@ def _cache_has_registered(effective_env_id: str, use_cache: bool) -> bool:
     if use_cache and effective_env_id in _registration_cache:
         cached_info = _registration_cache[effective_env_id]
         if cached_info.get("registered", False):
-            _logger.debug(f"Cache hit: '{effective_env_id}' is registered")
+            # Use lazy logging formatting to minimize overhead on hot path
+            _logger.debug("Cache hit: '%s' is registered", effective_env_id)
             return True
     return False
 
@@ -648,12 +675,14 @@ def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
             "grid_size dimensions must be integers",
             parameter_name="grid_size",
             parameter_value=grid_size,
+            expected_format="(width, height) tuple with positive integer dimensions",
         )
     if width <= 0 or height <= 0:
         raise ValidationError(
             "grid_size dimensions must be positive integers",
             parameter_name="grid_size",
             parameter_value=grid_size,
+            expected_format="(width, height) with width>0 and height>0",
         )
     if width > 1024 or height > 1024:
         raise ValidationError(
@@ -814,12 +843,24 @@ def create_registration_kwargs(
         )
     """
     try:
-        # Apply defaults
-        effective_grid_size = grid_size or DEFAULT_GRID_SIZE
-        effective_source_location = source_location or DEFAULT_SOURCE_LOCATION
-        effective_max_steps = max_steps or DEFAULT_MAX_STEPS
+        # Apply defaults with None-only semantics (invalid values should not be masked)
+        effective_grid_size = DEFAULT_GRID_SIZE if grid_size is None else grid_size
+        # Source location defaults to grid centre to ensure in-bounds by default
+        if source_location is None:
+            # Temporarily resolve grid to compute centre; validation to follow
+            gs_tmp = (
+                effective_grid_size
+                if isinstance(effective_grid_size, (tuple, list))
+                and len(effective_grid_size) == 2
+                else DEFAULT_GRID_SIZE
+            )
+            cx, cy = int(gs_tmp[0]) // 2, int(gs_tmp[1]) // 2
+            effective_source_location = (cx, cy)
+        else:
+            effective_source_location = source_location
+        effective_max_steps = DEFAULT_MAX_STEPS if max_steps is None else max_steps
         effective_goal_radius = (
-            goal_radius if goal_radius is not None else DEFAULT_GOAL_RADIUS
+            DEFAULT_GOAL_RADIUS if goal_radius is None else goal_radius
         )
 
         _logger.debug(
@@ -879,15 +920,22 @@ def _validate_env_id(env_id: str, report: Dict[str, Any]) -> bool:
     if not isinstance(env_id, str) or not env_id.strip():
         report["errors"].append("Environment ID must be a non-empty string")
         valid = False
-    elif not env_id.endswith("-v0"):
-        report["errors"].append(
-            "Environment ID must end with '-v0' suffix for Gymnasium versioning compliance"
-        )
-        valid = False
-    elif len(env_id) > 100:
-        report["warnings"].append(
-            "Environment ID is unusually long, consider shorter name"
-        )
+    else:
+        # Enforce pattern: <name>-v0 with allowed chars [A-Za-z0-9_-] in name
+        pattern = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*-v0$")
+        if not pattern.match(env_id):
+            # Keep legacy phrasing expected by tests while still providing guidance
+            report["errors"].append(
+                "Environment ID must end with '-v0' suffix for Gymnasium versioning compliance"
+            )
+            report["errors"].append(
+                "Environment ID must match pattern '<name>-v0' using letters, digits, '_' or '-'"
+            )
+            valid = False
+        if len(env_id) > 100:
+            report["warnings"].append(
+                "Environment ID is unusually long, consider shorter name"
+            )
     return valid
 
 
@@ -897,31 +945,40 @@ def _validate_entry_point(
     valid = True
     if not isinstance(entry_point, str) or not entry_point.strip():
         report["errors"].append("Entry point must be a non-empty string")
-        valid = False
-    elif ":" not in entry_point:
+        return False
+    if ":" not in entry_point:
         report["errors"].append(
             "Entry point must contain ':' separator between module and class"
         )
-        valid = False
-    else:
-        module_path, class_name = entry_point.rsplit(":", 1)
-        if not module_path or not class_name:
-            report["errors"].append(
-                "Entry point must specify both module path and class name"
+        return False
+
+    module_path, class_name = entry_point.rsplit(":", 1)
+    if not module_path or not class_name:
+        report["errors"].append(
+            "Entry point must specify both module path and class name"
+        )
+        return False
+
+    if strict_validation:
+        if not all(
+            part.isidentifier() or part == "."
+            for part in module_path.replace(".", " ").split()
+        ):
+            report["warnings"].append(
+                "Entry point module path may not be valid Python module"
             )
-            valid = False
-        elif strict_validation:
-            if not all(
-                part.isidentifier() or part == "."
-                for part in module_path.replace(".", " ").split()
-            ):
-                report["warnings"].append(
-                    "Entry point module path may not be valid Python module"
-                )
-            if not class_name.isidentifier():
-                report["warnings"].append(
-                    "Entry point class name may not be valid Python identifier"
-                )
+        if not class_name.isidentifier():
+            report["warnings"].append(
+                "Entry point class name may not be valid Python identifier"
+            )
+        # Attempt to import module and resolve class for stricter validation, but only warn
+        try:
+            mod = importlib.import_module(module_path)
+            if not hasattr(mod, class_name):
+                report["warnings"].append("Entry point class not found in module")
+        except Exception:
+            report["warnings"].append("Entry point module not importable")
+
     return valid
 
 

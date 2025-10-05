@@ -9,9 +9,14 @@ providing a scalar observation in [0, 1].
 
 from typing import Any, Dict
 
-import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
+
+import gymnasium as gym
+
+try:  # pragma: no cover - numpy<1.20 compatibility
+    from numpy.typing import NDArray
+except ImportError:  # pragma: no cover
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 
 class ConcentrationSensor:

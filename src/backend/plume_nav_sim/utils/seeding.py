@@ -17,8 +17,9 @@ from typing import (  # >=3.10 - Type hints for comprehensive type safety
     Union,
 )
 
-import gymnasium.utils.seeding  # >=0.29.0 - Gymnasium-compatible random number generator creation using np_random function for RL environment integration
 import numpy  # >=2.1.0 - Random number generation, array operations, and mathematical functions for deterministic seeding
+
+import gymnasium.utils.seeding  # >=0.29.0 - Gymnasium-compatible random number generator creation using np_random function for RL environment integration
 
 # Internal imports from core constants and utility exceptions
 from ..core.constants import (
