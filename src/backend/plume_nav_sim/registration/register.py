@@ -10,9 +10,10 @@ environment within the Gymnasium ecosystem, ensuring proper integration with gym
 providing comprehensive parameter validation, error handling, and configuration management.
 
 Notes:
-- Pass `kwargs={'use_components': True}` to `register_env` to register the component-based
-  environment (`plume_nav_sim.envs.component_env:ComponentBasedEnvironment`) instead of the
-  legacy `PlumeSearchEnv`. All other kwargs are forwarded to the environment constructor.
+- Component-based environment is the default via factory callable
+  (`plume_nav_sim.envs.factory:create_component_environment`).
+- Pass `use_legacy=True` to `register_env` to select the legacy
+  `plume_nav_sim.envs.plume_search_env:PlumeSearchEnv` entry point.
 """
 
 import contextlib
@@ -46,7 +47,8 @@ from ..utils.logging import get_component_logger
 
 # Global constants for registration system configuration and environment identification
 ENV_ID = ENVIRONMENT_ID  # Primary environment identifier 'PlumeNav-StaticGaussian-v0' for Gymnasium registration compliance
-ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Entry point specification string for Gymnasium registration defining exact module path and class location
+# Default to component-based environment via factory for DI-first architecture
+ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"  # Entry point specification string for Gymnasium registration defining exact module path and callable location
 MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000) for registration parameter configuration
 
 # Component logger for registration system debugging and operation tracking
@@ -81,6 +83,7 @@ def register_env(
     max_episode_steps: Optional[int] = None,
     kwargs: Optional[Dict[str, Any]] = None,
     force_reregister: bool = False,
+    use_legacy: bool = False,
     **compat_flags: Any,
 ) -> str:
     """
@@ -140,6 +143,12 @@ def register_env(
         # Support 'force' alias used by some tests
         force_flag = bool(compat_flags.get("force", False)) or force_reregister
 
+        # Backward-compatibility knob: allow forcing legacy PlumeSearchEnv
+        # Accept aliases in compat flags
+        legacy_flag = use_legacy or bool(compat_flags.get("legacy", False))
+        if legacy_flag:
+            effective_entry_point = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"
+
         if is_registered(effective_env_id, use_cache=True):
             if force_flag:
                 # Handle force_reregister flag by calling unregister_env() if environment exists and force requested
@@ -162,13 +171,29 @@ def register_env(
             additional_kwargs=effective_kwargs,
         )
 
-        # Optional: allow component-based environment via flag without breaking legacy usage
-        # If caller passes use_components=True, switch the entry point to ComponentBasedEnvironment.
-        use_components = bool(registration_kwargs.pop("use_components", False))
-        if use_components:
-            effective_entry_point = (
-                "plume_nav_sim.envs.component_env:ComponentBasedEnvironment"
-            )
+        # Shape kwargs to match the chosen entry_point
+        # Factory callable expects goal_location (not source_location) and rejects unknown keys
+        if effective_entry_point.endswith("envs.factory:create_component_environment"):
+            # Map source_location -> goal_location and drop source_location
+            mapped_kwargs: Dict[str, Any] = {}
+            for k, v in registration_kwargs.items():
+                if k == "source_location":
+                    mapped_kwargs["goal_location"] = v
+                elif k in {
+                    "grid_size",
+                    "max_steps",
+                    "goal_radius",
+                    "start_location",
+                    "action_type",
+                    "observation_type",
+                    "reward_type",
+                    "plume_sigma",
+                    "step_size",
+                    "render_mode",
+                }:
+                    mapped_kwargs[k] = v
+                # drop any private/unknown keys silently
+            registration_kwargs = mapped_kwargs
 
         # Validate registration configuration using validate_registration_config() for consistency checking
         is_valid, validation_report = validate_registration_config(
