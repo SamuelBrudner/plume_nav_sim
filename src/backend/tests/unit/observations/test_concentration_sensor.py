@@ -21,6 +21,7 @@ from tests.contracts.test_observation_model_interface import (
 
 
 class TestConcentrationSensor(TestObservationModelInterface):
+    __test__ = True
     """Concrete tests for ConcentrationSensor.
 
     Inherits all 13 universal tests from TestObservationModelInterface.

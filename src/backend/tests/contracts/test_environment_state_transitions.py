@@ -98,8 +98,17 @@ class TestEnvironmentStateTransitions:
 
         # Reset with agent at source location
         obs, info = env.reset(seed=42)
-        agent_pos = obs["agent_position"]
-        source_pos = obs["source_location"]
+        # Support both dict-style and array observations
+        if isinstance(obs, dict):
+            agent_pos = tuple(obs.get("agent_position", info.get("agent_xy", (0, 0))))
+            source_pos = tuple(
+                obs.get(
+                    "source_location", info.get("plume_peak_xy", env.source_location)
+                )
+            )
+        else:
+            agent_pos = tuple(info.get("agent_xy", (0, 0)))
+            source_pos = tuple(info.get("plume_peak_xy", env.source_location))
 
         # Step towards goal
         for _ in range(100):
@@ -113,7 +122,12 @@ class TestEnvironmentStateTransitions:
                 action = 0 if dy > 0 else 2  # UP or DOWN
 
             obs, reward, terminated, truncated, info = env.step(action)
-            agent_pos = obs["agent_position"]
+            if isinstance(obs, dict):
+                agent_pos = tuple(
+                    obs.get("agent_position", info.get("agent_xy", agent_pos))
+                )
+            else:
+                agent_pos = tuple(info.get("agent_xy", agent_pos))
 
             if terminated:
                 # Verify postconditions

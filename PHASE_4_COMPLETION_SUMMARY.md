@@ -9,6 +9,7 @@
 ## 🎯 Objective
 
 Implement two reward functions following TDD methodology:
+
 1. **SparseGoalReward** - Binary reward at goal
 2. **DenseNavigationReward** - Distance-based continuous reward
 

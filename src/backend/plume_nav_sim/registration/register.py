@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import time
+import warnings
 from typing import (  # >=3.10 - Type hints for function parameters, return types, and optional parameter specifications ensuring type safety and documentation clarity
     Any,
     Dict,
@@ -227,6 +228,19 @@ def register_env(
                     "use env_id='%s' or set PLUMENAV_DEFAULT=components to opt into DI now.",
                     COMPONENT_ENV_ID,
                 )
+                # Emit a DeprecationWarning unless explicitly silenced
+                if os.getenv(
+                    "PLUMENAV_DEPRECATION_SILENCE", ""
+                ).strip().lower() not in {"1", "true", "yes"}:
+                    warnings.warn(
+                        (
+                            "Legacy PlumeSearchEnv entry point will be deprecated in a future release. "
+                            "Prefer registering the DI environment id (COMPONENT_ENV_ID) or set "
+                            "PLUMENAV_DEFAULT=components to route the default id to DI."
+                        ),
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
 
         # Validate registration configuration using validate_registration_config() for consistency checking
         is_valid, validation_report = validate_registration_config(

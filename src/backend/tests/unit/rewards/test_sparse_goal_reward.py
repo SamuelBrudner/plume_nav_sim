@@ -17,6 +17,7 @@ from tests.contracts.test_reward_function_interface import TestRewardFunctionInt
 
 
 class TestSparseGoalReward(TestRewardFunctionInterface):
+    __test__ = True
     """Concrete tests for SparseGoalReward.
 
     Inherits all universal tests from TestRewardFunctionInterface.
