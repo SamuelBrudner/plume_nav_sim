@@ -10,10 +10,10 @@ environment within the Gymnasium ecosystem, ensuring proper integration with gym
 providing comprehensive parameter validation, error handling, and configuration management.
 
 Notes:
-- Component-based environment is the default via factory callable
+- Legacy `PlumeSearchEnv` remains the default entry point.
+- A first-class component-based environment is also available via
+  `env_id='PlumeNav-Components-v0'` which uses the factory callable
   (`plume_nav_sim.envs.factory:create_component_environment`).
-- Pass `use_legacy=True` to `register_env` to select the legacy
-  `plume_nav_sim.envs.plume_search_env:PlumeSearchEnv` entry point.
 """
 
 import contextlib
@@ -47,8 +47,10 @@ from ..utils.logging import get_component_logger
 
 # Global constants for registration system configuration and environment identification
 ENV_ID = ENVIRONMENT_ID  # Primary environment identifier 'PlumeNav-StaticGaussian-v0' for Gymnasium registration compliance
-# Default to component-based environment via factory for DI-first architecture
-ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"  # Entry point specification string for Gymnasium registration defining exact module path and callable location
+# Legacy default entry point
+ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Entry point specification string for Gymnasium registration defining exact module path and class location
+COMPONENT_ENV_ID = "PlumeNav-Components-v0"
+COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
 MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000) for registration parameter configuration
 
 # Component logger for registration system debugging and operation tracking
@@ -74,6 +76,7 @@ __all__ = [
     "register_with_custom_params",
     "ENV_ID",
     "ENTRY_POINT",
+    "COMPONENT_ENV_ID",
 ]
 
 
@@ -124,7 +127,14 @@ def register_env(
     try:
         # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided
         effective_env_id = env_id or ENV_ID
-        effective_entry_point = entry_point or ENTRY_POINT
+        # Select entry point based on provided override or env_id
+        if entry_point is not None:
+            effective_entry_point = entry_point
+        else:
+            if effective_env_id == COMPONENT_ENV_ID:
+                effective_entry_point = COMPONENT_ENTRY_POINT
+            else:
+                effective_entry_point = ENTRY_POINT
         effective_max_steps = max_episode_steps or MAX_EPISODE_STEPS
         effective_kwargs = kwargs or {}
 
@@ -143,11 +153,7 @@ def register_env(
         # Support 'force' alias used by some tests
         force_flag = bool(compat_flags.get("force", False)) or force_reregister
 
-        # Backward-compatibility knob: allow forcing legacy PlumeSearchEnv
-        # Accept aliases in compat flags
-        legacy_flag = use_legacy or bool(compat_flags.get("legacy", False))
-        if legacy_flag:
-            effective_entry_point = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"
+        # No special toggles; env id determines default behavior, callers may still pass entry_point explicitly
 
         if is_registered(effective_env_id, use_cache=True):
             if force_flag:
