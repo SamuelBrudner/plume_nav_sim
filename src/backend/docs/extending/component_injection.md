@@ -66,11 +66,8 @@ You can register a Gymnasium ID that uses the component-based environment:
 import gymnasium as gym
 from plume_nav_sim.registration import register_env
 
-# Register env id backed by components
-env_id = register_env(
-    env_id='PlumeNav-StaticGaussian-v0',
-    kwargs={'use_components': True},
-)
+# Register DI-first environment id (components under the hood)
+env_id = register_env(env_id='PlumeNav-Components-v0')
 
 env = gym.make(env_id)
 obs, info = env.reset(seed=123)

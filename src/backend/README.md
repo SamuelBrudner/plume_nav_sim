@@ -169,16 +169,13 @@ Two ways to use components:
   obs, info = env.reset(seed=42)
   ```
 
-- Register a Gymnasium ID backed by the component-based env:
+- Register a dedicated Gymnasium ID backed by the component-based env:
   ```python
   import gymnasium as gym
   from plume_nav_sim.registration import register_env
 
-  # Register default env id but using components under the hood
-  env_id = register_env(
-      env_id='PlumeNav-StaticGaussian-v0',
-      kwargs={'use_components': True}
-  )
+  # Register DI-first environment id (recommended for new experiments)
+  env_id = register_env(env_id='PlumeNav-Components-v0')
   env = gym.make(env_id)
   ```
 

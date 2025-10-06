@@ -284,9 +284,7 @@ class ComponentBasedEnvironment(gym.Env):
         if self._state == EnvironmentState.CLOSED:
             raise StateError("Cannot step closed environment")
         if self._state != EnvironmentState.READY:
-            raise StateError(
-                "Environment must be in READY state to step; call reset()"
-            )
+            raise StateError("Environment must be in READY state to step; call reset()")
 
         # Validate action
         # Contract: environment_state_machine.md - P2
