@@ -23,19 +23,21 @@ def _get_entry_point_string(env_id: str) -> str:
     return str(ep)
 
 
-def test_register_component_entry_point_default():
+def test_register_legacy_entry_point_default():
     # Ensure clean state
     unregister_env(ENV_ID, suppress_warnings=True)
-    # Default registration uses component-based environment via factory
+    # Default registration uses legacy PlumeSearchEnv
     register_env(force_reregister=True)
     entry_point = _get_entry_point_string(ENV_ID)
-    assert "plume_nav_sim.envs.factory:create_component_environment" in entry_point
+    assert "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv" in entry_point
 
 
-def test_register_legacy_entry_point_flag():
+def test_register_component_env_id():
     # Ensure clean state
     unregister_env(ENV_ID, suppress_warnings=True)
-    # Register with explicit legacy toggle
-    register_env(use_legacy=True, force_reregister=True)
-    entry_point = _get_entry_point_string(ENV_ID)
-    assert "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv" in entry_point
+    # Register DI env id and verify factory entry point
+    di_env_id = "PlumeNav-Components-v0"
+    unregister_env(di_env_id, suppress_warnings=True)
+    register_env(env_id=di_env_id, force_reregister=True)
+    entry_point = _get_entry_point_string(di_env_id)
+    assert "plume_nav_sim.envs.factory:create_component_environment" in entry_point
