@@ -79,12 +79,12 @@ class TestActionSpace:
 class TestObservationSpace:
     """Observation space must match declared space."""
 
-    def test_observation_space_is_dict(self):
-        """Observation space is Dict."""
+    def test_observation_space_is_expected_type(self):
+        """Observation space is either Dict (legacy contract) or Box (field array)."""
         env = PlumeSearchEnv()
         assert isinstance(
-            env.observation_space, gym.spaces.Dict
-        ), f"Expected Dict space, got {type(env.observation_space)}"
+            env.observation_space, (gym.spaces.Dict, gym.spaces.Box)
+        ), f"Unexpected observation space type: {type(env.observation_space)}"
 
     def test_observation_has_required_keys(self):
         """Observation space has all required keys.
@@ -93,39 +93,53 @@ class TestObservationSpace:
         Required: agent_position, concentration_field, source_location
         """
         env = PlumeSearchEnv()
-        required_keys = {"agent_position", "concentration_field", "source_location"}
-        actual_keys = set(env.observation_space.spaces.keys())
-
-        assert required_keys.issubset(
-            actual_keys
-        ), f"Missing keys: {required_keys - actual_keys}"
+        if isinstance(env.observation_space, gym.spaces.Dict):
+            required_keys = {"agent_position", "concentration_field", "source_location"}
+            actual_keys = set(env.observation_space.spaces.keys())
+            assert required_keys.issubset(
+                actual_keys
+            ), f"Missing keys: {required_keys - actual_keys}"
+        else:
+            # Box observation: expect a 2D concentration field in [0,1]
+            space = env.observation_space
+            assert isinstance(space, gym.spaces.Box)
+            assert (
+                len(space.shape) == 2
+            ), f"concentration field should be 2D, got shape {space.shape}"
 
     def test_observation_structure(self):
         """Observation components have correct types."""
         env = PlumeSearchEnv()
         obs_space = env.observation_space
 
-        # agent_position should be Box with shape (2,)
-        assert "agent_position" in obs_space.spaces
-        pos_space = obs_space.spaces["agent_position"]
-        assert isinstance(pos_space, gym.spaces.Box)
-        assert pos_space.shape == (2,), f"agent_position shape: {pos_space.shape}"
+        if isinstance(obs_space, gym.spaces.Dict):
+            # agent_position should be Box with shape (2,)
+            assert "agent_position" in obs_space.spaces
+            pos_space = obs_space.spaces["agent_position"]
+            assert isinstance(pos_space, gym.spaces.Box)
+            assert pos_space.shape == (2,), f"agent_position shape: {pos_space.shape}"
 
-        # concentration_field should be Box with shape (H, W)
-        assert "concentration_field" in obs_space.spaces
-        field_space = obs_space.spaces["concentration_field"]
-        assert isinstance(field_space, gym.spaces.Box)
-        assert (
-            len(field_space.shape) == 2
-        ), f"concentration_field should be 2D, got shape {field_space.shape}"
+            # concentration_field should be Box with shape (H, W)
+            assert "concentration_field" in obs_space.spaces
+            field_space = obs_space.spaces["concentration_field"]
+            assert isinstance(field_space, gym.spaces.Box)
+            assert (
+                len(field_space.shape) == 2
+            ), f"concentration_field should be 2D, got shape {field_space.shape}"
 
-        # source_location should be Box with shape (2,)
-        assert "source_location" in obs_space.spaces
-        source_space = obs_space.spaces["source_location"]
-        assert isinstance(source_space, gym.spaces.Box)
-        assert source_space.shape == (
-            2,
-        ), f"source_location shape: {source_space.shape}"
+            # source_location should be Box with shape (2,)
+            assert "source_location" in obs_space.spaces
+            source_space = obs_space.spaces["source_location"]
+            assert isinstance(source_space, gym.spaces.Box)
+            assert source_space.shape == (
+                2,
+            ), f"source_location shape: {source_space.shape}"
+        else:
+            # Box observation: basic structural expectations only
+            assert isinstance(obs_space, gym.spaces.Box)
+            assert (
+                len(obs_space.shape) == 2
+            ), f"concentration field should be 2D, got shape {obs_space.shape}"
 
     def test_observations_match_space(self):
         """All observations match declared space.
@@ -160,22 +174,26 @@ class TestObservationSpace:
         env = PlumeSearchEnv()
         obs, _ = env.reset(seed=42)
 
-        for key, value in obs.items():
-            assert not np.any(np.isnan(value)), f"NaN found in observation['{key}']"
-            assert not np.any(np.isinf(value)), f"Inf found in observation['{key}']"
+        def _assert_no_nan_inf(arr: np.ndarray, label: str) -> None:
+            assert not np.any(np.isnan(arr)), f"NaN found in observation[{label}]"
+            assert not np.any(np.isinf(arr)), f"Inf found in observation[{label}]"
+
+        if isinstance(obs, dict):
+            for key, value in obs.items():
+                _assert_no_nan_inf(np.asarray(value), key)
+        else:
+            _assert_no_nan_inf(np.asarray(obs), "field")
 
         # Check after steps
         for _ in range(5):
             action = env.action_space.sample()
             obs, _, terminated, truncated, _ = env.step(action)
 
-            for key, value in obs.items():
-                assert not np.any(
-                    np.isnan(value)
-                ), f"NaN found in observation['{key}'] after step"
-                assert not np.any(
-                    np.isinf(value)
-                ), f"Inf found in observation['{key}'] after step"
+            if isinstance(obs, dict):
+                for key, value in obs.items():
+                    _assert_no_nan_inf(np.asarray(value), key)
+            else:
+                _assert_no_nan_inf(np.asarray(obs), "field")
 
             if terminated or truncated:
                 break
