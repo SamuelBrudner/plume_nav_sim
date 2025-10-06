@@ -42,6 +42,10 @@ class TestActionProcessorInterface:
     Concrete test classes should inherit this and provide action_processor fixture.
     """
 
+    # Prevent pytest from collecting this base class directly. Concrete subclasses
+    # should inherit from this and provide the fixtures.
+    __test__ = False
+
     # ==============================================================================
     # Fixtures (Override in concrete test classes)
     # ==============================================================================
