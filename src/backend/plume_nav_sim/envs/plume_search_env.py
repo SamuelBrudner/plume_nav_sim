@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -178,6 +180,21 @@ class PlumeSearchEnv(gym.Env):
             logger.debug(
                 "Ignoring unsupported configuration fields for PlumeSearchEnv: %s",
                 sorted(kwargs.keys()),
+            )
+        # Emit a deprecation warning for direct use of the legacy environment unless silenced
+        if os.getenv("PLUMENAV_DEPRECATION_SILENCE", "").strip().lower() not in {
+            "1",
+            "true",
+            "yes",
+        }:
+            warnings.warn(
+                (
+                    "PlumeSearchEnv (legacy) will be deprecated in a future release. "
+                    "Prefer the component-based environment via the DI factory or register the "
+                    "DI env id (COMPONENT_ENV_ID)."
+                ),
+                DeprecationWarning,
+                stacklevel=2,
             )
         self.grid_size = _validate_grid_size(grid_size)
         self.source_location = _validate_source_location(
