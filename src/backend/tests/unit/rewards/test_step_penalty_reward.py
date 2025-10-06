@@ -18,6 +18,7 @@ from tests.contracts.test_reward_function_interface import TestRewardFunctionInt
 
 
 class TestStepPenaltyReward(TestRewardFunctionInterface):
+    __test__ = True
     """Test suite for StepPenaltyReward.
 
     Inherits universal property tests from TestRewardFunctionInterface.
