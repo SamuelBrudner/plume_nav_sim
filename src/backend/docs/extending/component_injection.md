@@ -64,19 +64,23 @@ You can register a Gymnasium ID that uses the component-based environment:
 
 ```python
 import gymnasium as gym
-from plume_nav_sim.registration import register_env
+from plume_nav_sim.registration import register_env, COMPONENT_ENV_ID
 
-# Register env id backed by components
-env_id = register_env(
-    env_id='PlumeNav-StaticGaussian-v0',
-    kwargs={'use_components': True},
-)
+# Register first-class DI env id (factory-backed)
+env_id = register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
 
 env = gym.make(env_id)
 obs, info = env.reset(seed=123)
 ```
 
-This preserves the same env_id while swapping the implementation to components.
+Alternatively, to opt‑in globally without changing code, set an environment
+variable before calling `register_env()` with the default env id:
+
+```bash
+export PLUMENAV_DEFAULT=components
+```
+
+This preserves the same `ENV_ID` while swapping the implementation to components.
 
 ---
 
@@ -232,4 +236,5 @@ returning your implementation.
 ## Backward Compatibility
 
 The legacy `PlumeSearchEnv` remains supported. You can switch to components via
-factory/env injection or by registering with `kwargs={'use_components': True}`.
+factory/env injection, by registering `COMPONENT_ENV_ID`, or by setting the
+`PLUMENAV_DEFAULT=components` environment variable.

@@ -10,6 +10,7 @@ protocol-based components, dependency injection, and config-driven setup.
 - Component Injection (how to wire components into an env)
   - docs/extending/component_injection.md
   - Shows factory assembly, Gym registration with components, and manual wiring.
+  - See also runnable example: examples/component_di_usage.py
 
 - Create Custom Components
   - Rewards: docs/extending/custom_rewards.md

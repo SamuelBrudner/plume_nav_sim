@@ -19,6 +19,7 @@ Notes:
 import contextlib
 import copy
 import importlib
+import os
 import re
 import sys
 import time
@@ -131,7 +132,24 @@ def register_env(
         if entry_point is not None:
             effective_entry_point = entry_point
         else:
-            if effective_env_id == COMPONENT_ENV_ID:
+            # Optional feature flag to make DI the default for the legacy ENV_ID.
+            # Set PLUMENAV_DEFAULT=components or PLUMENAV_USE_COMPONENTS=1 to select
+            # the component factory for the default env id without changing tests.
+            use_components_flag = os.getenv("PLUMENAV_DEFAULT", "").strip().lower() in {
+                "components",
+                "component",
+                "di",
+                "1",
+                "true",
+            } or os.getenv("PLUMENAV_USE_COMPONENTS", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+
+            if effective_env_id == COMPONENT_ENV_ID or (
+                use_components_flag and effective_env_id == ENV_ID
+            ):
                 effective_entry_point = COMPONENT_ENTRY_POINT
             else:
                 effective_entry_point = ENTRY_POINT
@@ -200,6 +218,15 @@ def register_env(
                     mapped_kwargs[k] = v
                 # drop any private/unknown keys silently
             registration_kwargs = mapped_kwargs
+        else:
+            # Legacy path; provide a heads-up about future deprecation without
+            # impacting tests that inspect logging. Keep at INFO level.
+            if effective_env_id == ENV_ID:
+                _logger.info(
+                    "Using legacy PlumeSearchEnv for default env id. The legacy entry point will be deprecated; "
+                    "use env_id='%s' or set PLUMENAV_DEFAULT=components to opt into DI now.",
+                    COMPONENT_ENV_ID,
+                )
 
         # Validate registration configuration using validate_registration_config() for consistency checking
         is_valid, validation_report = validate_registration_config(

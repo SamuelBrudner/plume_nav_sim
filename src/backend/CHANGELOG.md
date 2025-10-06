@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- DI environment id `PlumeNav-Components-v0` with registration-time kwargs mapping (source_location→goal_location) and factory-backed entry point.
+- Env-var opt-in to make DI the default for the legacy env id: set `PLUMENAV_DEFAULT=components` (or `PLUMENAV_USE_COMPONENTS=1`).
+- Helper `ensure_component_env_registered()` to register the DI environment id programmatically.
+- Registration tests covering DI mappings, combinations, and gym.make() smoke checks.
+
+### Changed
+- Legacy `PlumeSearchEnv` remains the default, but registration now logs an INFO hint about upcoming deprecation and DI opt-in options.
+
 ### Todo
 - PyPI distribution and release automation
 - Performance optimization for larger grid sizes (>256×256)

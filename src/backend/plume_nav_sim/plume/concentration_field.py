@@ -108,7 +108,9 @@ class FieldGenerationError(ComponentError):
         # Initialize error_context with field generation specific information
         self.error_context = {
             "operation_type": "field_generation",
-            "grid_size": grid_size.to_dict() if grid_size else None,
+            # Represent grid size as a simple tuple to avoid relying on helper methods
+            # not guaranteed on the GridSize dataclass in this trimmed build.
+            "grid_size": (grid_size.width, grid_size.height) if grid_size else None,
             "generation_params": self.generation_params,
         }
 
