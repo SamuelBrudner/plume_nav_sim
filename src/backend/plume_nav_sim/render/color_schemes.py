@@ -41,7 +41,7 @@ from ..core.constants import (
 )
 
 # Internal imports - Project-specific modules and utilities
-from ..core.types import Coordinates, GridSize, RenderMode
+from ..core.types import Coordinates, RenderMode
 from ..utils.exceptions import RenderingError, ValidationError
 from ..utils.validation import sanitize_parameters, validate_render_mode
 

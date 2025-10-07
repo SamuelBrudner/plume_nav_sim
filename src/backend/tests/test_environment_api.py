@@ -27,10 +27,7 @@ Architecture Integration:
 - Tests complete episode lifecycle management
 """
 
-import contextlib  # >=3.10 - Context manager utilities for resource management, exception handling, and cleanup automation in test scenarios
-import copy  # >=3.10 - Deep copying utilities for state isolation testing and configuration management
 import gc  # >=3.10 - Garbage collection utilities for memory management testing, resource cleanup validation, and memory leak detection in environment testing
-import threading  # >=3.10 - Thread utilities for concurrency testing and thread-safety validation
 import time  # >=3.10 - High-precision timing utilities for performance measurement, latency testing, and benchmark validation against performance targets
 import warnings  # >=3.10 - Warning management for test execution, deprecation handling, and compatibility issue detection during environment testing
 from typing import (  # >=3.10 - Type hints for test parameter specifications, return type validation, and comprehensive type checking
@@ -38,8 +35,6 @@ from typing import (  # >=3.10 - Type hints for test parameter specifications, r
     Dict,
     List,
     Optional,
-    Tuple,
-    Union,
 )
 
 import numpy as np  # >=2.1.0 - Array operations for observation validation, mathematical testing, performance benchmarking, and numerical accuracy verification
@@ -52,10 +47,6 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # System constants for environment configuration and performance validation
 )
 from plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION
-from plume_nav_sim.core.types import (
-    Coordinates,  # Action enumeration and coordinate types for validation testing and data creation
-)
-from plume_nav_sim.core.types import Action
 from plume_nav_sim.envs.base_env import (  # Base environment class for inheritance testing and abstract method validation
     BaseEnvironment,
 )
@@ -783,7 +774,7 @@ def test_gymnasium_api_compliance():
         assert isinstance(test_env.metadata, dict), "Metadata must be dictionary"
         assert "render_modes" in test_env.metadata, "Metadata must contain render_modes"
 
-    except Exception as e:
+    except Exception:
         # Ensure cleanup even if test fails
         test_env.close()
         raise
@@ -1140,7 +1131,9 @@ def test_step_method_functionality():
 
         # Test episode termination when max steps reached
         test_env_short = PlumeSearchEnv(
-            grid_size=(16, 16), source_location=(8, 8), max_steps=5  # Short episode
+            grid_size=(16, 16),
+            source_location=(8, 8),
+            max_steps=5,  # Short episode
         )
 
         try:
@@ -1575,7 +1568,7 @@ def test_error_handling_robustness(invalid_action):
                 assert (
                     len(recovery_result) == 5
                 ), "Environment should recover from errors"
-            except Exception as recovery_error:
+            except Exception:
                 # Some implementations might require reset after error
                 test_env.reset()
                 recovery_result = test_env.step(0)
@@ -1729,7 +1722,7 @@ def test_performance_requirements():
         # This would require additional libraries in a full implementation
 
         # Print performance summary
-        print(f"\nPerformance Summary:")
+        print("\nPerformance Summary:")
         print(
             f"  Average step time: {avg_step_time:.3f}ms (target: <{PERFORMANCE_TARGET_STEP_LATENCY_MS}ms)"
         )
@@ -2003,7 +1996,9 @@ def test_component_integration():
         # Test with invalid configuration
         try:
             error_env = PlumeSearchEnv(
-                grid_size=(1, 1), source_location=(0, 0), max_steps=10  # Too small
+                grid_size=(1, 1),
+                source_location=(0, 0),
+                max_steps=10,  # Too small
             )
 
             error_env.reset()

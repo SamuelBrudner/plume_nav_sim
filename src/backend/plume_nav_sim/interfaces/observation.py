@@ -16,8 +16,6 @@ import gymnasium as gym
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
-    import numpy as np
-
     NDArray = np.ndarray  # type: ignore[assignment]
 
 # Type alias for observation outputs

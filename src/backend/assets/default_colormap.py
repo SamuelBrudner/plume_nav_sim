@@ -27,7 +27,6 @@ from enum import Enum  # >=3.10 - Color scheme enumeration with type safety
 from typing import (  # >=3.10 - Type hints and annotations
     Any,
     Dict,
-    List,
     Optional,
     Tuple,
     Union,

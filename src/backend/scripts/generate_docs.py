@@ -20,22 +20,11 @@ License: MIT
 import argparse  # >=3.10 - Command-line argument parsing for script configuration, output options, and documentation generation control
 import datetime  # >=3.10 - Timestamp generation for documentation metadata, version tracking, and build information
 import json  # >=3.10 - JSON serialization for configuration output, metadata generation, and structured documentation export
-import os  # >=3.10 - Environment variable access, system information gathering, and cross-platform compatibility checking
 import pathlib  # >=3.10 - Path operations for output directory management, file organization, and cross-platform compatibility
 import sys  # >=3.10 - System interface for exit codes, stdout/stderr handling, and script execution management
 
-# Internal imports for configuration management and system setup
-from ..config.default_config import CompleteConfig, get_complete_default_config
-
 # Internal imports for comprehensive documentation generation functionality
-from ..docs import (
-    DocumentationManager,
-    create_documentation_suite,
-    generate_complete_documentation,
-)
-
-# Internal imports for API reference documentation generation
-from ..docs.api_reference import APIDocumentationGenerator, generate_api_documentation
+from ..docs import DocumentationManager
 
 # Internal imports for package information and version management
 from ..plume_nav_sim import get_package_info, get_version
@@ -48,7 +37,13 @@ from ..plume_nav_sim.utils.logging import (
 )
 
 # Internal imports for validation utilities and parameter checking
-from ..plume_nav_sim.utils.validation import ValidationResult, validate_with_context
+from ..plume_nav_sim.utils.validation import ValidationResult
+
+# Internal imports for configuration management and system setup
+
+
+# Internal imports for API reference documentation generation
+
 
 # Script configuration constants and global settings for documentation generation
 SCRIPT_NAME = "generate_docs.py"
@@ -205,7 +200,7 @@ def main(argv: list = None) -> int:
 
         if logger:
             logger.error(error_msg)
-            logger.debug(f"Exception details:", exc_info=True)
+            logger.debug("Exception details:", exc_info=True)
         else:
             print(error_msg, file=sys.stderr)
 
@@ -455,7 +450,9 @@ def setup_logging(
 
             # Create rotating file handler with size-based rotation
             file_handler = logging.handlers.RotatingFileHandler(
-                log_file, maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
+                log_file,
+                maxBytes=10 * 1024 * 1024,
+                backupCount=5,  # 10MB
             )
 
             file_formatter = logging.Formatter(
@@ -666,7 +663,7 @@ def validate_parameters(
         for package in required_packages:
             try:
                 __import__(package)
-            except ImportError as e:
+            except ImportError:
                 result.add_error(
                     f"Required package missing: {package}",
                     recovery_suggestion=f"Install package: pip install {package}",
@@ -966,7 +963,6 @@ def generate_documentation(
 
         # Generate complete documentation using generate_complete_documentation() with comprehensive options
         with PerformanceTimer() as generation_timer:
-
             for component_index, component in enumerate(args.components):
                 component_start_time = datetime.datetime.now()
 

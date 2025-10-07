@@ -11,21 +11,16 @@ error handling coverage for the plume navigation simulation system.
 """
 
 import time  # >=3.10 - High-precision timing for performance benchmarks and latency validation testing
-import warnings  # >=3.10 - Warning management for test execution and performance threshold validation
 from contextlib import (  # >=3.10 - Context manager utilities for performance monitoring and resource cleanup testing
     contextmanager,
 )
 from typing import (  # >=3.10 - Type hints for test function parameters and return values
     Any,
     Dict,
-    List,
     Optional,
     Tuple,
 )
 from unittest.mock import (  # >=3.10 - Mocking utilities for testing error conditions, fallback scenarios, and edge cases
-    MagicMock,
-    Mock,
-    call,
     patch,
 )
 
@@ -1386,18 +1381,25 @@ class TestNumpyRGBRenderer:
             background_mask = np.ones((grid_size.height, grid_size.width), dtype=bool)
 
             # Exclude marker areas from background check
-            agent_area = slice(
-                max(0, agent_position.y - 1),
-                min(grid_size.height, agent_position.y + 2),
-            ), slice(
-                max(0, agent_position.x - 1), min(grid_size.width, agent_position.x + 2)
+            agent_area = (
+                slice(
+                    max(0, agent_position.y - 1),
+                    min(grid_size.height, agent_position.y + 2),
+                ),
+                slice(
+                    max(0, agent_position.x - 1),
+                    min(grid_size.width, agent_position.x + 2),
+                ),
             )
-            source_area = slice(
-                max(0, source_position.y - 2),
-                min(grid_size.height, source_position.y + 3),
-            ), slice(
-                max(0, source_position.x - 2),
-                min(grid_size.width, source_position.x + 3),
+            source_area = (
+                slice(
+                    max(0, source_position.y - 2),
+                    min(grid_size.height, source_position.y + 3),
+                ),
+                slice(
+                    max(0, source_position.x - 2),
+                    min(grid_size.width, source_position.x + 3),
+                ),
             )
 
             background_mask[agent_area] = False

@@ -1,7 +1,5 @@
 import warnings
 
-import pytest
-
 import plume_nav_sim.render as render
 
 

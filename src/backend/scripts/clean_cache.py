@@ -9,31 +9,23 @@ rollback support, safety validation, and detailed reporting for maintaining clea
 """
 
 import argparse  # >=3.10 - Command-line argument parsing for cache cleanup options and verbosity control
-import glob  # >=3.10 - Filename pattern matching for cache file identification and cleanup
 import json  # >=3.10 - JSON serialization for backup manifests and statistics reporting
 import os  # >=3.10 - Operating system interface for file system operations and environment variables
 
 # External imports with version comments
-import pathlib  # >=3.10 - Cross-platform path handling for cache directory traversal and file operations
 import shutil  # >=3.10 - High-level file operations for directory tree removal and cache cleanup
-import subprocess  # >=3.10 - Process execution for advanced cleanup operations
 import sys  # >=3.10 - System-specific parameters and functions for Python runtime cache management
 import tempfile  # >=3.10 - Temporary file and directory management for cleanup operations
-import threading  # >=3.10 - Thread synchronization for thread-safe operations
 import time  # >=3.10 - Timing operations for cleanup performance measurement and reporting
-import warnings  # >=3.10 - Warning management for cleanup operations and potential issues
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..plume_nav_sim.core.constants import (
     PACKAGE_NAME,  # Package identifier for cache directory identification and cleanup scope determination
 )
 from ..plume_nav_sim.logging.config import (
     DEFAULT_LOG_DIR,  # Default log directory path for log file cleanup and cache management
-)
-from ..plume_nav_sim.logging.config import (
-    LoggerFactory,  # Logger factory for clearing logging system cache and performance logger cleanup
 )
 
 # Internal imports for logging and system integration
@@ -195,7 +187,7 @@ def main() -> int:
                 f"Cleanup completed with {len(cleanup_stats['errors'])} errors"
             )
             if not args.quiet:
-                print(f"\nERRORS ENCOUNTERED:")
+                print("\nERRORS ENCOUNTERED:")
                 for error in cleanup_stats["errors"]:
                     print(f"  - {error}")
             return 1
@@ -1676,7 +1668,7 @@ def generate_cleanup_report(
         report_lines.append("")
         report_lines.append("=== DRY RUN NOTICE ===")
         report_lines.append("  This was a preview - no files were actually removed")
-        report_lines.append(f"  Run without --dry-run flag to perform actual cleanup")
+        report_lines.append("  Run without --dry-run flag to perform actual cleanup")
 
     # Generate summary section with overall cleanup effectiveness
     report_lines.append("")

@@ -162,6 +162,35 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 
+[tool.ruff]
+# Keep Ruff aligned with Black/Isort targets
+target-version = "py310"
+line-length = 88
+
+# Avoid linting documentation and demo code that embeds example snippets
+extend-exclude = [
+    "docs/",
+    "examples/",
+    "benchmarks/",
+    "tests/",
+    "src/backend/tests/",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E203", "F401"]
+
+[tool.ruff.lint.per-file-ignores]
+# The user guide intentionally embeds code snippets inside strings; avoid false positives
+"docs/user_guide.py" = ["F401", "F821", "F841"]
+"__init__.py" = ["F401", "F403", "F405"]
+"tests/*" = ["F401", "F811"]
+"src/backend/tests/*" = ["F401", "F811"]
+"examples/*" = ["F401", "E402"]
+"conftest.py" = ["F401"]
+"plume_nav_sim/plume/__init__.py" = ["E402"]
+"plume_nav_sim/core/episode_manager.py" = ["F811"]
+
 [tool.flake8]
 max-line-length = 88
 extend-ignore = ["E203", "W503", "E501", "F401"]

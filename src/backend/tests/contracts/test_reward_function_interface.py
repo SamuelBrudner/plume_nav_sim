@@ -18,14 +18,12 @@ import copy
 
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.interfaces import RewardFunction
 from tests.strategies import (
     agent_state_strategy,
-    concentration_field_strategy,
     discrete_action_strategy,
     grid_size_strategy,
 )

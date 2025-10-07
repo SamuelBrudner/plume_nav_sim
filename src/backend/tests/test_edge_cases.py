@@ -22,7 +22,6 @@ import numpy as np  # >=2.1.0 - Array operations for mathematical edge cases and
 # External imports with version requirements
 import pytest  # >=8.0.0 - Testing framework for edge case test organization and parametrization
 
-import gymnasium  # >=0.29.0 - RL environment framework for API compliance under edge conditions
 from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
 from plume_nav_sim.core.types import Action, Coordinates
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
@@ -33,23 +32,9 @@ from plume_nav_sim.utils.exceptions import (
     StateError,
     ValidationError,
 )
-from plume_nav_sim.utils.validation import (
-    ParameterValidator,
-    validate_action_parameter,
-    validate_coordinates,
-    validate_environment_config,
-)
+from plume_nav_sim.utils.validation import ParameterValidator
 
 # Internal imports - core environment and utilities
-from .conftest import (
-    cleanup_validator,
-    edge_case_test_env,
-    matplotlib_available,
-    memory_monitor,
-    performance_tracker,
-    single_threaded_only,
-    test_environment_manager,
-)
 
 # Global constants for edge case testing parameters
 EDGE_CASE_TIMEOUT_SECONDS = 30.0
@@ -203,7 +188,7 @@ class EdgeCaseTestFixture:
         # Create PlumeSearchEnv with extreme parameters and error handling
         try:
             env = create_plume_search_env(**base_config)
-        except Exception as e:
+        except Exception:
             # Handle configuration failures for edge case testing
             env = PlumeSearchEnv()  # Fall back to default configuration
 
@@ -1095,7 +1080,7 @@ def test_concurrent_operations_and_thread_safety(edge_case_test_env):
     for thread in threads:
         thread.join(timeout=EDGE_CASE_TIMEOUT_SECONDS)
         if thread.is_alive():
-            pytest.fail(f"Thread did not complete within timeout")
+            pytest.fail("Thread did not complete within timeout")
 
     # Verify no race conditions occurred in boundary enforcement operations
     while not errors_queue.empty():
@@ -1318,10 +1303,10 @@ def test_seeding_and_reproducibility_edge_cases(edge_case_test_env, invalid_seed
                 # Initial observations and info
                 obs1, info1 = step1
                 obs2, info2 = step2
-                assert np.allclose(obs1, obs2), f"Initial observations should match"
+                assert np.allclose(obs1, obs2), "Initial observations should match"
                 assert (
                     info1["agent_xy"] == info2["agent_xy"]
-                ), f"Initial positions should match"
+                ), "Initial positions should match"
             else:
                 # Step results
                 obs1, reward1, term1, trunc1, info1 = step1
@@ -1708,7 +1693,7 @@ def test_error_handling_and_recovery_mechanisms():
             error_message = str(e)
             assert (
                 test_message in error_message
-            ), f"Error message should contain original message"
+            ), "Error message should contain original message"
 
             # Test recovery suggestion generation for various error types
             if hasattr(e, "suggest_recovery_action"):

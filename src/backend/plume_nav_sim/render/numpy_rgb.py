@@ -819,15 +819,23 @@ class NumpyRGBRenderer(BaseRenderer):
             mask = np.ones((self.grid_size.height, self.grid_size.width), dtype=bool)
 
             # Exclude marker regions from validation
-            agent_region = slice(
-                max(0, agent_pos.y - 1), min(self.grid_size.height, agent_pos.y + 2)
-            ), slice(
-                max(0, agent_pos.x - 1), min(self.grid_size.width, agent_pos.x + 2)
+            agent_region = (
+                slice(
+                    max(0, agent_pos.y - 1), min(self.grid_size.height, agent_pos.y + 2)
+                ),
+                slice(
+                    max(0, agent_pos.x - 1), min(self.grid_size.width, agent_pos.x + 2)
+                ),
             )
-            source_region = slice(
-                max(0, source_pos.y - 2), min(self.grid_size.height, source_pos.y + 3)
-            ), slice(
-                max(0, source_pos.x - 2), min(self.grid_size.width, source_pos.x + 3)
+            source_region = (
+                slice(
+                    max(0, source_pos.y - 2),
+                    min(self.grid_size.height, source_pos.y + 3),
+                ),
+                slice(
+                    max(0, source_pos.x - 2),
+                    min(self.grid_size.width, source_pos.x + 3),
+                ),
             )
 
             mask[agent_region] = False
@@ -1111,7 +1119,6 @@ def validate_rgb_array_output(
         0 <= expected_agent_position.y < expected_grid_size.height
         and 0 <= expected_agent_position.x < expected_grid_size.width
     ):
-
         # Check center pixel of agent marker (should be red by default)
         center_pixel = rgb_array[expected_agent_position.y, expected_agent_position.x]
         if (
@@ -1132,7 +1139,6 @@ def validate_rgb_array_output(
         0 <= expected_source_position.y < expected_grid_size.height
         and 0 <= expected_source_position.x < expected_grid_size.width
     ):
-
         # Check center pixel of source marker (should be white by default)
         center_pixel = rgb_array[expected_source_position.y, expected_source_position.x]
         if np.all(center_pixel >= 200):  # High RGB values for white-ish color

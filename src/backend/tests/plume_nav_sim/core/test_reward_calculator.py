@@ -10,7 +10,6 @@ sub-millisecond performance validation, numerical precision testing, and compreh
 error condition coverage for production-ready reward calculation functionality.
 """
 
-import copy  # >=3.10 - Deep copying for immutable test data and state isolation
 import math  # >=3.10 - Mathematical functions for precision testing and distance calculation validation
 import time  # >=3.10 - Performance timing measurements for reward calculation latency validation
 import warnings  # >=3.10 - Warning management for deprecation and performance warnings in tests
@@ -468,7 +467,8 @@ def test_agent_reward_integration():
 
     # Validate agent state consistency after multiple reward updates
     second_reward_result = calculator.calculate_reward(
-        Coordinates(10, 10), source_pos  # Different position
+        Coordinates(10, 10),
+        source_pos,  # Different position
     )
     calculator.update_agent_reward(
         agent_state, second_reward_result, update_goal_status=False
@@ -831,7 +831,9 @@ def test_parameter_validation_comprehensive():
 
     # Test parameter validation with boundary values and edge cases
     boundary_config = RewardCalculatorConfig(
-        goal_radius=0.0, reward_goal_reached=1.0, reward_default=0.0  # Exact boundary
+        goal_radius=0.0,
+        reward_goal_reached=1.0,
+        reward_default=0.0,  # Exact boundary
     )
 
     boundary_calculator = RewardCalculator(boundary_config)
@@ -1167,7 +1169,9 @@ def test_reward_result_data_structure():
 
     with pytest.raises(ValidationError):
         RewardResult(
-            reward=1.0, goal_reached=True, distance_to_goal=-1.0  # Negative distance
+            reward=1.0,
+            goal_reached=True,
+            distance_to_goal=-1.0,  # Negative distance
         )
 
 
@@ -1280,7 +1284,9 @@ def test_termination_result_analysis():
 
     with pytest.raises(ValidationError):
         TerminationResult(
-            terminated=True, truncated=False, termination_reason=""  # Empty reason
+            terminated=True,
+            truncated=False,
+            termination_reason="",  # Empty reason
         )
 
     # Test set_final_state with invalid parameters
@@ -1341,7 +1347,9 @@ def test_factory_function_comprehensive():
     # Test factory function enables validation when requested
     # Validation happens during creation, so invalid config should raise error
     invalid_config = RewardCalculatorConfig(
-        goal_radius=-1.0, reward_goal_reached=1.0, reward_default=0.0  # Invalid
+        goal_radius=-1.0,
+        reward_goal_reached=1.0,
+        reward_default=0.0,  # Invalid
     )
 
     # Validate factory function handles invalid configuration by raising appropriate exceptions
@@ -1465,7 +1473,9 @@ def test_configuration_validation_function():
 
     # Test validation context parameter influences validation behavior
     context_config = RewardCalculatorConfig(
-        goal_radius=50.0, reward_goal_reached=1.0, reward_default=0.0  # Large but valid
+        goal_radius=50.0,
+        reward_goal_reached=1.0,
+        reward_default=0.0,  # Large but valid
     )
 
     no_context_valid, no_context_report = validate_reward_config(context_config)
@@ -1894,7 +1904,8 @@ def test_mathematical_edge_cases():
 
     # Coordinates with tiny difference might or might not achieve goal depending on precision
     tiny_diff_result = epsilon_calculator.calculate_reward(
-        Coordinates(5, 5), Coordinates(5, 5)  # Identical - should achieve
+        Coordinates(5, 5),
+        Coordinates(5, 5),  # Identical - should achieve
     )
     assert tiny_diff_result.goal_reached is True
 

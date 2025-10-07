@@ -24,7 +24,6 @@ import os
 import threading
 import time
 import warnings
-from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -38,11 +37,9 @@ from ..core.constants import (
     DEFAULT_GRID_SIZE,
     DEFAULT_MAX_STEPS,
     DEFAULT_PLUME_SIGMA,
-    DEFAULT_SOURCE_LOCATION,
     MAX_PLUME_SIGMA,
     MIN_PLUME_SIGMA,
     PIXEL_VALUE_MAX,
-    PIXEL_VALUE_MIN,
     RGB_DTYPE,
     SEED_MAX_VALUE,
     SEED_MIN_VALUE,

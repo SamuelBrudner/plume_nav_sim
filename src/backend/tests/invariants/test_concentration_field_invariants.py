@@ -25,7 +25,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from plume_nav_sim.core.types import Coordinates, GridSize
+from plume_nav_sim.core.types import Coordinates
 from plume_nav_sim.utils.exceptions import ValidationError
 
 # ============================================================================

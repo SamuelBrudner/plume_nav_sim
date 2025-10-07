@@ -7,17 +7,10 @@ recovery strategies, and cross-component integration patterns for systematic bas
 environment testing.
 """
 
-import abc  # >=3.10 - Abstract base class testing utilities for validating abstract method enforcement and implementation requirement testing
-import threading  # >=3.10 - Thread safety testing for concurrent environment usage and multi-threaded error handling validation
 import time  # >=3.10 - Timing utilities for performance testing, benchmark validation, and timeout testing in environment operations
 import warnings  # >=3.10 - Warning testing for development feedback, deprecation warning validation, and performance warning testing
-from contextlib import (  # >=3.10 - Context manager testing for resource management validation, cleanup testing, and exception handling context testing
-    contextmanager,
-)
 from unittest.mock import (  # >=3.10 - Mock object creation for testing abstract methods, component isolation, rendering backend mocking, and dependency injection testing
-    MagicMock,
     Mock,
-    call,
     patch,
 )
 
@@ -30,16 +23,10 @@ import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framewo
 
 # Core types and data structures for testing
 from plume_nav_sim.core.types import (
-    Action,
-    AgentState,
     Coordinates,
     EnvironmentConfig,
-    EpisodeState,
     GridSize,
     PlumeParameters,
-    RenderMode,
-    calculate_euclidean_distance,
-    create_agent_state,
     create_coordinates,
     create_environment_config,
     create_grid_size,
@@ -58,8 +45,6 @@ from plume_nav_sim.envs.base_env import (
 from plume_nav_sim.utils.exceptions import (
     ComponentError,
     ConfigurationError,
-    ErrorContext,
-    ErrorSeverity,
     RenderingError,
     StateError,
     ValidationError,
@@ -1862,7 +1847,8 @@ class TestBaseEnvironmentConfiguration:
         # Check invalid parameter combinations raise ConfigurationError
         with pytest.raises((ConfigurationError, ValidationError)):
             create_base_environment_config(
-                grid_size=(0, 0), max_steps=100  # Invalid grid size
+                grid_size=(0, 0),
+                max_steps=100,  # Invalid grid size
             )
 
         with pytest.raises((ConfigurationError, ValidationError)):
@@ -1894,7 +1880,8 @@ class TestBaseEnvironmentConfiguration:
         # Validate cross-parameter consistency checking identifies conflicts
         with pytest.raises((ConfigurationError, ValidationError)):
             create_base_environment_config(
-                grid_size=(10, 10), source_location=(20, 20)  # Outside grid bounds
+                grid_size=(10, 10),
+                source_location=(20, 20),  # Outside grid bounds
             )
 
         # Test resource constraint validation prevents invalid configurations
@@ -1970,7 +1957,8 @@ class TestBaseEnvironmentConfiguration:
         inconsistent_config = EnvironmentConfig(
             grid_size=GridSize(10, 10),
             plume_params=PlumeParameters(
-                source_location=Coordinates(50, 50), sigma=12.0  # Outside grid
+                source_location=Coordinates(50, 50),
+                sigma=12.0,  # Outside grid
             ),
             max_steps=100,
             goal_radius=0.0,
@@ -2194,7 +2182,9 @@ class TestBaseEnvironmentConfiguration:
 
         # Validate mathematical consistency between related parameters
         math_consistency_config = create_test_environment_config(
-            grid_size=(64, 64), source_location=(32, 32), goal_radius=5.0  # Grid center
+            grid_size=(64, 64),
+            source_location=(32, 32),
+            goal_radius=5.0,  # Grid center
         )
 
         # Goal radius should be reasonable for grid size
@@ -2451,7 +2441,6 @@ class TestBaseEnvironmentIntegration:
         with patch.object(
             mock_env, "_validate_component_states", return_value=False
         ) as mock_validate:
-
             # Validation failure should be handled consistently
             try:
                 result = mock_env.get_environment_status()
@@ -2470,7 +2459,6 @@ class TestBaseEnvironmentIntegration:
             "_get_observation",
             return_value=np.ones((100, 100), dtype=np.float32),
         ):  # Wrong size
-
             inconsistent_env.reset()
 
             # Cross-component validation should catch size mismatch

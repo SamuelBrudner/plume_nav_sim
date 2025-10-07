@@ -110,7 +110,7 @@ def assert_gymnasium_api_compliance(environment: PlumeSearchEnv) -> None:
 
 
 def assert_step_response_format(
-    step_result: Tuple[Any, float, bool, bool, Dict[str, Any]]
+    step_result: Tuple[Any, float, bool, bool, Dict[str, Any]],
 ) -> None:
     """Validate the tuple returned from :meth:`PlumeSearchEnv.step`."""
 

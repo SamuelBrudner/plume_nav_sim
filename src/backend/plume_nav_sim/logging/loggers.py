@@ -18,17 +18,10 @@ import threading  # >=3.10
 import time  # >=3.10
 import weakref  # >=3.10
 from dataclasses import dataclass, field  # >=3.10
-from enum import Enum  # >=3.10
-from functools import lru_cache, wraps  # >=3.10
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union  # >=3.10
-from weakref import WeakSet
+from typing import Any, Dict, List, Optional  # >=3.10
 
 # Internal imports - system constants
-from ..core.constants import (
-    COMPONENT_NAMES,
-    LOG_LEVEL_DEFAULT,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
-)
+from ..core.constants import COMPONENT_NAMES, PERFORMANCE_TARGET_STEP_LATENCY_MS
 
 # Internal imports - configuration and enumeration infrastructure
 from .config import ComponentType, LoggingConfig, LogLevel
@@ -1379,7 +1372,7 @@ def get_logger(
     with automatic configuration, caching, and performance tracking capabilities.
     Provides the main interface for logger access throughout the plume_nav_sim system.
     """
-    global _logger_manager, _active_logger_count, _logger_creation_stats
+    global _active_logger_count
 
     # Initialize logging system if not already configured using ensure_logging_initialized
     ensure_logging_initialized()
@@ -1439,8 +1432,7 @@ def get_component_logger(
     if not isinstance(component_type, ComponentType):
         raise ValueError(f"Invalid component_type: {component_type}")
 
-    # Create component-specific logger name combining component type and component name
-    logger_name = f"{component_type.name.lower()}_{component_name}"
+    # Component-specific logger name not required here; use component_name directly
 
     # Determine default log level using ComponentType.get_default_log_level() method
     default_log_level = component_type.get_default_log_level()
@@ -1483,7 +1475,7 @@ def get_performance_logger(
     with high-resolution timing, memory tracking, and threshold-based alerting
     for system optimization and development debugging.
     """
-    global _performance_loggers, _logger_creation_stats
+    # No global declarations needed; only reading module-level state and mutating dicts
 
     # Create performance logger name using PERFORMANCE_LOGGER_FORMAT with operation name
     logger_name = PERFORMANCE_LOGGER_FORMAT.format(operation_name=operation_name)
@@ -1666,8 +1658,7 @@ def shutdown_logging_system(
     handler management, and registry clearing for clean application termination
     and resource release.
     """
-    global _logging_initialized, _logger_manager, _component_loggers, _performance_loggers
-    global _active_logger_count, _logger_creation_stats
+    global _logging_initialized, _logger_manager, _active_logger_count
 
     shutdown_start = time.time()
     shutdown_results = {
@@ -1767,8 +1758,7 @@ def get_logging_statistics(
     performance metrics, registry status, and resource utilization for
     monitoring and debugging purposes.
     """
-    global _logger_creation_stats, _active_logger_count, _logging_initialized
-    global _component_loggers, _performance_loggers, _logger_manager
+    # Reading module-level state only; no global declarations required
 
     with _registry_lock:
         # Collect basic logging system statistics from global counters and registries

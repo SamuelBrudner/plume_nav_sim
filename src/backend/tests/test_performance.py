@@ -19,7 +19,6 @@ failure analysis including component-specific recommendations for development op
 """
 
 # External imports with version requirements for comprehensive testing framework
-import contextlib  # >=3.10 - Context managers for resource isolation and performance measurement
 import gc  # >=3.10 - Garbage collection control for memory leak detection and baseline measurement
 import logging  # >=3.10 - Structured logging for fail-fast diagnostics during performance test import
 import statistics  # >=3.10 - Statistical functions for performance metric calculation and confidence intervals
@@ -31,7 +30,7 @@ import numpy as np  # >=2.1.0 - Statistical analysis and performance data proces
 import pytest  # >=8.0.0 - Testing framework with fixtures, parametrization, and comprehensive execution support
 
 # Internal imports for environment benchmarking and comprehensive performance analysis
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 
 LOGGER = logging.getLogger(__name__)
 
@@ -64,12 +63,9 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_PLUME_GENERATION_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    get_performance_constants,
-    get_testing_constants,
 )
 
 # Internal imports for environment benchmarking and comprehensive performance analysis
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 
 # Global configuration constants for systematic performance testing and analysis
 PERFORMANCE_TEST_ITERATIONS = 1000
@@ -176,7 +172,6 @@ def memory_monitor():
     Returns:
         object: Memory monitoring infrastructure with continuous tracking capabilities
     """
-    import threading
     import time
 
     class MemoryMonitor:
@@ -1528,7 +1523,6 @@ def test_concurrent_performance(performance_tracker):
         Performance degradation under concurrent load acceptable for multi-agent training
     """
     import concurrent.futures
-    import threading
 
     # Configure concurrent execution parameters for systematic testing
     num_concurrent_environments = min(

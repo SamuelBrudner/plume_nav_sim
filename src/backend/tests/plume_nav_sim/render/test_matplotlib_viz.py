@@ -18,20 +18,9 @@ import os  # >=3.10 - Environment variable testing for headless detection and pl
 import sys  # >=3.10 - Platform detection testing for cross-platform compatibility validation
 import tempfile  # >=3.10 - Temporary file testing for figure saving functionality and cleanup verification
 import time  # >=3.10 - Timing utilities for performance testing and rendering latency measurement
-import unittest.mock  # >=3.10 - Mocking utilities for backend availability simulation and error condition testing
 import warnings  # >=3.10 - Warning capture and validation for backend compatibility warnings
-from typing import (  # >=3.10 - Type hints for test functions and fixtures
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
 from unittest.mock import (  # >=3.10 - Mock objects for comprehensive testing scenarios
-    MagicMock,
     Mock,
-    call,
     patch,
 )
 
@@ -45,18 +34,12 @@ import numpy as np  # >=2.1.0 - Array operations for test data generation and nu
 import pytest  # >=8.0.0 - Testing framework for comprehensive test execution, fixtures, and parameterized testing
 
 from plume_nav_sim.core.constants import (
-    BACKEND_PRIORITY_LIST,
     MATPLOTLIB_DEFAULT_FIGSIZE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
 )
 from plume_nav_sim.core.types import Coordinates, GridSize, RenderMode
-from plume_nav_sim.render.base_renderer import (
-    BaseRenderer,
-    RenderContext,
-    create_render_context,
-)
+from plume_nav_sim.render.base_renderer import BaseRenderer, create_render_context
 from plume_nav_sim.render.color_schemes import (
-    CustomColorScheme,
     create_accessibility_scheme,
     get_default_scheme,
 )
@@ -66,7 +49,6 @@ from plume_nav_sim.render.matplotlib_viz import (
     InteractiveUpdateManager,
     MatplotlibBackendManager,
     MatplotlibRenderer,
-    configure_matplotlib_backend,
     create_matplotlib_renderer,
     detect_matplotlib_capabilities,
     validate_matplotlib_integration,

@@ -975,7 +975,7 @@ def _validate_environment_parameters(
                 render_issues.append("Must be string")
             elif render_mode not in ["rgb_array", "human"]:
                 render_valid = False
-                render_issues.append(f"Must be one of: rgb_array, human")
+                render_issues.append("Must be one of: rgb_array, human")
 
             validation_report["parameter_results"]["render_mode"] = {
                 "valid": render_valid,
@@ -988,7 +988,6 @@ def _validate_environment_parameters(
                 validation_report["errors"].extend(render_issues)
 
         # Apply cross-parameter consistency checking for mathematical relationships
-        cross_check_valid = True
 
         if (
             grid_size is not None

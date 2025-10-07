@@ -1,20 +1,8 @@
 # External imports with version comments
-import contextlib  # >=3.10 - Context manager utilities for testing resource cleanup and exception handling
 import threading  # >=3.10 - Thread safety testing for concurrent rendering operations
 import time  # >=3.10 - Timing utilities for performance testing and timeout validation
-import uuid  # >=3.10 - Unique identifier generation for test context tracking and validation
 import warnings  # >=3.10 - Warning management for testing performance warnings and deprecation handling
-from abc import (  # >=3.10 - Abstract base class decorators for creating concrete test implementations of BaseRenderer
-    ABC,
-    abstractmethod,
-)
-from typing import Any, Dict, List, Optional, Union
-from unittest.mock import (  # >=3.10 - Mocking framework for creating test implementations, patching dependencies, and simulating error conditions
-    MagicMock,
-    Mock,
-    call,
-    patch,
-)
+from typing import Any, Dict, Optional, Union
 
 import numpy as np  # >=2.1.0 - Array operations for creating test concentration fields and validating rendering outputs
 import pytest  # >=8.0.0 - Testing framework for fixture usage, parametrization, exception testing, and test organization
@@ -30,7 +18,6 @@ from plume_nav_sim.core.types import (
     GridSize,
     RenderMode,
     RGBArray,
-    calculate_euclidean_distance,
     create_coordinates,
     create_grid_size,
 )
@@ -39,10 +26,7 @@ from plume_nav_sim.core.types import (
 from plume_nav_sim.render.base_renderer import (
     BaseRenderer,
     RenderContext,
-    RenderingMetrics,
     create_render_context,
-    create_rendering_metrics,
-    validate_rendering_parameters,
 )
 from plume_nav_sim.utils.exceptions import (
     ComponentError,

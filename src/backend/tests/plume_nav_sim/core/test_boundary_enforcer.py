@@ -21,11 +21,7 @@ The test suite follows enterprise-grade testing practices with comprehensive fix
 parametrized testing, performance monitoring, and detailed assertion validation.
 """
 
-import copy  # Standard library - Deep copying for boundary enforcement result validation and state preservation testing
-import itertools  # Standard library - Test parameter generation for comprehensive boundary condition testing
-import random  # Standard library - Random test data generation for edge case boundary validation and stress testing
 import time  # Standard library - High-precision timing for boundary enforcement performance benchmark validation
-import unittest.mock  # Standard library - Component mocking for isolated boundary enforcement testing
 from typing import (  # >=3.10 - Type hints for structured analysis helpers
     Any,
     Dict,
@@ -52,27 +48,14 @@ from plume_nav_sim.core.boundary_enforcer import (
 # Internal imports from constants for system defaults and performance targets
 from plume_nav_sim.core.constants import (
     BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
-    DEFAULT_GRID_SIZE,
     MOVEMENT_VECTORS,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    TESTING_CONSTANTS,
 )
 
 # Internal imports from core types for coordinate and action system integration
-from plume_nav_sim.core.types import (
-    Action,
-    Coordinates,
-    GridSize,
-    create_coordinates,
-    create_grid_size,
-)
+from plume_nav_sim.core.types import Action, Coordinates, GridSize
 
 # Internal imports from exceptions for comprehensive error handling validation
-from plume_nav_sim.utils.exceptions import (
-    ConfigurationError,
-    StateError,
-    ValidationError,
-)
+from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Test configuration constants for comprehensive boundary enforcement testing
 TEST_GRID_SIZE = GridSize(32, 32)
@@ -1568,7 +1551,7 @@ class TestErrorHandling:
             # Try to update with invalid grid size
             with pytest.raises((ValidationError, ValueError)):
                 enforcer.update_grid_size(GridSize(-1, -1))
-        except Exception as e:
+        except Exception:
             # Verify error handling maintains enforcer stability
             assert enforcer.grid_size == TEST_GRID_SIZE  # Should remain unchanged
 

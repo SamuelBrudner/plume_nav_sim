@@ -18,17 +18,12 @@ import copy
 
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings
 
 import gymnasium as gym
 from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.interfaces import ObservationModel
-from tests.strategies import (
-    agent_state_strategy,
-    env_state_strategy,
-    grid_size_strategy,
-)
+from tests.strategies import env_state_strategy
 
 
 class TestObservationModelInterface:

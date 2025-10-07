@@ -5,18 +5,14 @@ comprehensive formatting classes with sensitive information filtering, timing me
 display, and development-friendly console output for the proof-of-life logging infrastructure.
 """
 
-import datetime  # >=3.10 - Date and time handling for advanced timestamp formatting and timezone support
-import functools  # >=3.10 - Function utilities for caching, memoization, and decorator support in formatters
-
 # Standard library imports with version comments
 import logging  # >=3.10 - Standard Python logging module for Formatter base class and LogRecord processing
 import os  # >=3.10 - Operating system interface for environment variable access and terminal capability detection
 import re  # >=3.10 - Regular expression support for sensitive information detection and pattern-based filtering
 import sys  # >=3.10 - System interface for terminal detection, stdout/stderr access, and platform identification
-import threading  # >=3.10 - Thread synchronization for thread-safe formatting operations and shared formatter state
 import time  # >=3.10 - Time utilities for timestamp formatting and performance timing calculations
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
 # Console color codes for enhanced readability
 CONSOLE_COLOR_CODES = {
@@ -1037,8 +1033,7 @@ class PerformanceFormatter(LogFormatter):
             use_unicode_symbols=True,
         )
 
-        # Compare performance against thresholds and determine status indicators
-        status = self._determine_performance_status(operation_name, duration_ms)
+        # Compare against thresholds if needed (status included in timing_info)
 
         # Add baseline comparison information if baseline_comparison_enabled
         baseline_info = ""
@@ -1528,6 +1523,10 @@ class SecurityFilter(logging.Filter):
 
             # Pattern should not match safe content
             if compiled_pattern.search(test_safe):
+                return False
+
+            # Pattern should match representative sensitive content
+            if not compiled_pattern.search(test_sensitive):
                 return False
 
             # Add compiled pattern to regex_patterns list for filtering

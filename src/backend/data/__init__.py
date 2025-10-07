@@ -827,7 +827,6 @@ def validate_data_integrity(
                 "example_configurations" in data_suite
                 and "test_scenarios" in data_suite
             ):
-
                 # Verify that test scenarios can use example configurations
                 example_configs = data_suite["example_configurations"]
                 test_scenarios = data_suite["test_scenarios"]

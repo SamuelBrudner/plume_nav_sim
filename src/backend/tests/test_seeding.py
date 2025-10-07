@@ -13,7 +13,6 @@ of SeedManager, ReproducibilityTracker, and core seeding functions.
 """
 
 # hashlib>=3.10 for hash verification and deterministic seed generation testing
-import hashlib
 
 # json>=3.10 for JSON serialization testing and reproducibility data export validation
 import json
@@ -385,13 +384,13 @@ class TestSeedStatePersistence:
             # Assert save operation returns True indicating successful persistence
             assert (
                 save_result is True
-            ), f"save_seed_state should return True for successful save"
+            ), "save_seed_state should return True for successful save"
 
             # Verify file was created and contains data
             assert (
                 temp_file_path.exists()
             ), f"State file should exist after save: {temp_file_path}"
-            assert temp_file_path.stat().st_size > 0, f"State file should not be empty"
+            assert temp_file_path.stat().st_size > 0, "State file should not be empty"
 
             # Generate some more values to change the state
             post_save_sequence = [np_random.random() for _ in range(5)]
@@ -1310,11 +1309,11 @@ class TestEdgeCases:
         if edge_seed == SEED_MIN_VALUE:
             assert (
                 normalized_seed == SEED_MIN_VALUE
-            ), f"Minimum seed should normalize to itself"
+            ), "Minimum seed should normalize to itself"
         elif edge_seed == SEED_MAX_VALUE:
             assert (
                 normalized_seed == SEED_MAX_VALUE
-            ), f"Maximum seed should normalize to itself"
+            ), "Maximum seed should normalize to itself"
 
         # Verify mathematical operations handle edge cases correctly
         np_random, used_seed = create_seeded_rng(edge_seed)
@@ -1353,7 +1352,7 @@ class TestEdgeCases:
             normalized_large = large_operation_result % (SEED_MAX_VALUE + 1)
             assert (
                 SEED_MIN_VALUE <= normalized_large <= SEED_MAX_VALUE
-            ), f"Overflow handling should keep result in valid range"
+            ), "Overflow handling should keep result in valid range"
 
         # Ensure edge cases don't compromise reproducibility
         # Test that same edge case produces same results
@@ -1377,7 +1376,7 @@ class TestEdgeCases:
         assert isinstance(
             np_random_mgr, np.random.Generator
         ), f"SeedManager should handle edge case {edge_seed}"
-        assert used_seed_mgr == edge_seed, f"SeedManager should preserve edge case seed"
+        assert used_seed_mgr == edge_seed, "SeedManager should preserve edge case seed"
 
 
 class TestScientificWorkflowCompliance:

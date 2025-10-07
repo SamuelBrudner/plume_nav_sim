@@ -9,6 +9,7 @@ providing factory functions, metadata classes, and intelligent configuration sel
 """
 
 import copy  # >=3.10 - Deep copying of test configurations for parameter modification and isolation
+import time  # >=3.10 - Time utilities for validation timestamps and test timing measurements
 
 # External imports with version comments
 from dataclasses import (  # >=3.10 - Data class decorators for test configuration structures and metadata classes
@@ -21,15 +22,11 @@ from typing import (  # >=3.10 - Type hints for test configuration management an
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 # Internal imports from plume_nav_sim core modules
 from plume_nav_sim.core.constants import (
-    DEFAULT_GOAL_RADIUS,
-    DEFAULT_GRID_SIZE,
     DEFAULT_PLUME_SIGMA,
-    DEFAULT_SOURCE_LOCATION,
     MEMORY_LIMIT_TOTAL_MB,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
@@ -1020,7 +1017,7 @@ def validate_test_configuration(
         if "max_execution_time_s" in system_constraints:
             estimated_time = test_config.max_steps * 0.001  # Rough estimate
             if estimated_time > system_constraints["max_execution_time_s"]:
-                constraint_issues.append(f"Estimated execution time exceeds limit")
+                constraint_issues.append("Estimated execution time exceeds limit")
                 recovery_suggestions.append("Reduce max_steps or increase timeout")
 
         validation_report["compatibility_check"] = {
@@ -2112,7 +2109,7 @@ class TestConfigFactory:
         # Validate optimized configuration maintains test validity
         try:
             optimized_config.validate_all(strict_mode=False)
-        except Exception as e:
+        except Exception:
             # If optimization breaks configuration, return original with minimal optimizations
             minimal_optimizations = {"render_mode": "rgb_array"}
             optimized_config = base_config.clone_with_overrides(minimal_optimizations)

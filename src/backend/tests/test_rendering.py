@@ -18,10 +18,8 @@ Test Categories:
 - Environment Integration: PlumeSearchEnv lifecycle, state synchronization, API compliance
 """
 
-import contextlib  # >=3.10 - Context manager utilities for resource management testing, cleanup validation, and error handling in rendering operations
 import os  # >=3.10 - Environment variable detection for headless testing, display availability, and platform-specific rendering validation
 import sys  # >=3.10 - Platform detection for cross-platform testing, system capability assessment, and platform-specific rendering behavior validation
-import tempfile  # >=3.10 - Temporary file management for testing figure saving, image output validation, and rendering artifact management
 import time  # >=3.10 - High-precision timing for performance benchmarking across both rendering modes and integration latency measurement
 import warnings  # >=3.10 - Warning management for backend compatibility testing, performance threshold validation, and cross-platform compatibility issues
 from typing import (  # >=3.10 - Type annotations for comprehensive test validation and parameter specification
@@ -30,7 +28,6 @@ from typing import (  # >=3.10 - Type annotations for comprehensive test validat
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 import matplotlib.pyplot as plt  # >=3.9.0 - Matplotlib interface testing for human mode rendering, backend compatibility validation, and cross-platform visualization support
@@ -51,9 +48,6 @@ from plume_nav_sim.core.constants import (
 from plume_nav_sim.core.constants import (
     SOURCE_MARKER_COLOR,  # Source marker color constant for testing visual specification compliance across both render modes
 )
-from plume_nav_sim.core.constants import (
-    SUPPORTED_RENDER_MODES,  # Supported render mode list for testing mode validation and compatibility
-)
 
 # Internal imports - Core types and constants
 from plume_nav_sim.core.types import Coordinates, GridSize, RenderMode
@@ -63,7 +57,6 @@ from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_sea
 from plume_nav_sim.render.base_renderer import (
     BaseRenderer,
     RenderContext,
-    RenderingMetrics,
     create_render_context,
 )
 from plume_nav_sim.render.matplotlib_viz import (

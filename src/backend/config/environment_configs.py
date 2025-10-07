@@ -11,7 +11,7 @@ import copy  # >=3.10
 
 # External imports
 from dataclasses import dataclass, field  # >=3.10
-from typing import Any, Dict, List, Optional, Tuple, Union  # >=3.10
+from typing import Any, Dict, List, Optional, Tuple  # >=3.10
 
 # Internal imports from plume_nav_sim core
 from plume_nav_sim.core.constants import (
@@ -21,8 +21,7 @@ from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,
     TESTING_CONSTANTS,
 )
-from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import PlumeParameters
+from plume_nav_sim.core.geometry import GridSize
 
 # Try to import from default_config - may not exist in early development phases
 try:

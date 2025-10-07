@@ -15,12 +15,10 @@ seamless integration with the broader plume_nav_sim ecosystem.
 # Standard library imports
 import abc
 import copy
-import functools
 import inspect
 import threading
 import time
-import weakref
-from typing import Any, Dict, List, Optional, Protocol, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 # Third-party imports
 import numpy as np  # >=2.1.0 - Array operations and mathematical computing
@@ -49,7 +47,7 @@ from ..core.types import (
 from ..utils.exceptions import ComponentError, ConfigurationError, ValidationError
 
 # Internal imports - Logging and performance monitoring
-from ..utils.logging import ComponentLogger, get_component_logger, monitor_performance
+from ..utils.logging import get_component_logger, monitor_performance
 
 # Internal imports - Validation framework
 from ..utils.validation import (

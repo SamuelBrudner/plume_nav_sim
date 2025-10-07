@@ -48,20 +48,11 @@ from plume_nav_sim.core.constants import (
 # Internal imports for core types and functionality
 from plume_nav_sim.core.enums import RenderMode
 from plume_nav_sim.core.geometry import GridSize
+from plume_nav_sim.core.types import create_grid_size
 
 # Import color scheme and template systems
-from ..assets.default_colormap import (
-    ColorScheme,
-    PredefinedScheme,
-    create_default_scheme,
-)
-from ..assets.render_templates import (
-    TemplateConfig,
-    TemplateQuality,
-    create_matplotlib_template,
-    create_rgb_template,
-    validate_template_performance,
-)
+from ..assets.default_colormap import PredefinedScheme
+from ..assets.render_templates import TemplateQuality
 
 # Initialize module logger
 logger = logging.getLogger("plume_nav_sim.config.render_configs")

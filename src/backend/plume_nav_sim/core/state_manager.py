@@ -9,11 +9,10 @@ integration, and state validation with performance optimization targeting <1ms s
 """
 
 import copy
-import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -22,12 +21,7 @@ from ..utils.logging import get_component_logger, monitor_performance
 
 # Internal imports - utilities and infrastructure
 from ..utils.seeding import SeedManager
-from ..utils.validation import (
-    ValidationContext,
-    ValidationResult,
-    validate_action_input,
-    validate_coordinates,
-)
+from ..utils.validation import validate_action_input
 
 # Internal imports - component coordination
 from .boundary_enforcer import BoundaryEnforcer

@@ -12,7 +12,6 @@ environment and config system.
 from typing import TYPE_CHECKING, Any, Dict, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from ..core.geometry import Coordinates
     from ..core.state import AgentState
     from ..plume.concentration_field import ConcentrationField
 

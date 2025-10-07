@@ -37,6 +37,7 @@ Architecture Integration:
 """
 
 import inspect  # >=3.10 - Code introspection utilities for automatic user documentation generation and interactive tutorial features
+import pathlib  # >=3.10 - Object-oriented filesystem paths for cross-platform path handling and file operations
 import textwrap  # >=3.10 - Text formatting utilities for generating well-formatted user documentation strings and tutorial content
 from typing import (  # >=3.10 - Type annotations for clear user documentation and tutorial parameter specifications with educational clarity
     Any,

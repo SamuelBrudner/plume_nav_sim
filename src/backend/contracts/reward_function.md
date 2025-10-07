@@ -16,23 +16,29 @@ Define reward computation contracts for reinforcement learning.
 ## 📊 Classification
 
 ### Universal Reward Properties
+
 Properties ALL reward functions should satisfy:
+
 - **Purity** - No side effects
 - **Determinism** - Reproducible
 
 ### Sparse Binary Reward (Library default implementation)
+
 - Binary output {0.0, 1.0}
 - Distance-based threshold
 - No intermediate rewards
 
 ### Step Penalty Reward (Library default implementation)
+
 - Negative step penalty, positive terminal reward
 - Encourages efficient search
 
 **Other Models (not shipped):**
+
 - Dense distance shaping: `1 / (1 + d)`
 - Potential-based shaping: `φ(s') - φ(s)`
-```
+
+```python
 compute_reward: (AgentState, Action, AgentState, ConcentrationField) → float
 ```
 
@@ -44,7 +50,7 @@ compute_reward: (AgentState, Action, AgentState, ConcentrationField) → float
 
 Let `d = distance(next_state.position, source_location)`
 
-```
+```python
 compute_reward(prev, action, next, field) = {
   1.0  if d ≤ goal_radius
   0.0  otherwise
@@ -57,7 +63,7 @@ compute_reward(prev, action, next, field) = {
 
 ### Step Penalty Reward Specification (library shipped)
 
-```
+```python
 compute_reward(prev, action, next, field) = {
   goal_reward        if distance(next.position, source) ≤ goal_radius
   -step_penalty      otherwise
@@ -126,6 +132,7 @@ No modification of:
 ```
 
 **Test skeleton:**
+
 ```python
 def test_reward_is_pure(reward_function):
     prev = AgentState(position=Coordinates(10, 10))
@@ -158,6 +165,7 @@ No dependency on:
 ```
 
 **Test skeleton:**
+
 ```python
 @given(
     prev=agent_state_strategy(),
@@ -190,6 +198,7 @@ No other values possible:
 ```
 
 **Test:**
+
 ```python
 @given(
     agent=coordinates_strategy(),
@@ -218,6 +227,7 @@ This IS:
 ```
 
 **Test:**
+
 ```python
 def test_boundary_is_inclusive():
     """At exactly goal_radius distance, reward is 1.0"""
@@ -250,6 +260,7 @@ Distance is symmetric, so reward is too.
 ```
 
 **Test:**
+
 ```python
 @given(
     pos_a=coordinates_strategy(),
@@ -275,6 +286,7 @@ Closer or same distance → same or better reward
 ```
 
 **Test:**
+
 ```python
 def test_reward_monotonic_with_distance():
     """Closer positions get at least as much reward"""
@@ -488,15 +500,18 @@ test_reward_matches_termination()
 ## 🔗 Related Components
 
 **Uses:**
+
 - `Coordinates.distance_to()` for distance calculation
 - Must satisfy distance metric properties
 
 **Used By:**
+
 - `RewardCalculator.calculate_reward_step()`
 - `EpisodeManager` for termination checking
 - `Environment.step()` for return value
 
 **Affects:**
+
 - Agent learning (RL signal)
 - Episode termination (goal detection)
 - Performance metrics
@@ -508,6 +523,7 @@ test_reward_matches_termination()
 ### Why Sparse Binary Reward? (Current Choice)
 
 **Pros:**
+
 - ✅ Clear goal definition
 - ✅ Forces exploration (no gradient)
 - ✅ Simple to understand
@@ -515,12 +531,14 @@ test_reward_matches_termination()
 - ✅ Easy to test (only 2 values)
 
 **Cons:**
+
 - ❌ Harder for RL agents to learn (no gradient)
 - ❌ No partial credit for getting close
 
 ### Alternative Reward Models
 
 **Dense Distance-Based:**
+
 ```python
 reward = 1.0 / (1 + distance)
 # Pros: Smooth gradient, easier to learn
@@ -528,6 +546,7 @@ reward = 1.0 / (1 + distance)
 ```
 
 **Potential-Based Shaping:**
+
 ```python
 reward = φ(s') - φ(s)  # where φ = -distance to goal
 # Pros: Provably optimal policy-invariant
@@ -535,6 +554,7 @@ reward = φ(s') - φ(s)  # where φ = -distance to goal
 ```
 
 **Linear Shaping:**
+
 ```python
 reward = max(0, 1 - distance/max_distance)
 # Pros: Interpretable, bounded
@@ -542,6 +562,7 @@ reward = max(0, 1 - distance/max_distance)
 ```
 
 **Multi-Objective:**
+
 ```python
 reward = [goal_reward, concentration_reward, efficiency_penalty]
 # Pros: Rich feedback
@@ -553,6 +574,7 @@ reward = [goal_reward, concentration_reward, efficiency_penalty]
 ### Why Inclusive Boundary?
 
 The boundary is inclusive (≤) rather than exclusive (<) because:
+
 1. **Mathematical consistency:** Circle definition includes boundary
 2. **Physical intuition:** "Within radius" means "up to and including"
 3. **Numerical stability:** Avoids floating-point edge cases at boundary

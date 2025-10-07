@@ -22,8 +22,6 @@ from typing import (  # >=3.10 - Type hints for method parameters, return types,
     Dict,
     List,
     Optional,
-    Tuple,
-    Union,
 )
 
 # External imports with version comments
@@ -41,7 +39,7 @@ from ..core.constants import (
 
 # Internal imports from core types and constants modules
 from ..core.types import Coordinates, CoordinateType, GridDimensions, GridSize
-from ..utils.exceptions import ComponentError, PlumeNavSimError, ResourceError
+from ..utils.exceptions import ComponentError, ResourceError
 
 # Internal imports from logging utilities for component-specific monitoring
 from ..utils.logging import ComponentLogger, PerformanceTimer, get_component_logger

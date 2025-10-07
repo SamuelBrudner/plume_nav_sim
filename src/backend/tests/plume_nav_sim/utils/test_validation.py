@@ -1,11 +1,4 @@
 # External imports with version comments
-import copy  # >=3.10 - Deep copying operations for testing parameter sanitization and validation result isolation
-import gc  # >=3.10 - Garbage collection control for memory usage testing and resource constraint validation
-import sys  # >=3.10 - System information access for platform-specific validation testing and memory limit validation
-import threading  # >=3.10 - Thread safety testing for validation operations including concurrent validation and thread-safe caching validation
-import time  # >=3.10 - Performance timing measurements, validation latency testing, and benchmark validation for performance requirements
-import unittest.mock as mock  # >=3.10 - Mocking capabilities for testing validation system behavior including dependency isolation and error scenario simulation
-import warnings  # >=3.10 - Warning capture and validation for testing validation system warnings and deprecation handling
 
 import numpy as np  # >=2.1.0 - Array operations, random number generation testing, dtype validation, and mathematical validation test scenarios
 import pytest  # >=8.0.0 - Primary testing framework for test organization, fixtures, parametrized testing, and comprehensive test execution with advanced assertion capabilities
@@ -14,10 +7,8 @@ import pytest  # >=8.0.0 - Primary testing framework for test organization, fixt
 from plume_nav_sim.core.constants import (
     ACTION_SPACE_SIZE,
     CONCENTRATION_RANGE,
-    DEFAULT_GRID_SIZE,
     MAX_GRID_SIZE,
     MAX_PLUME_SIGMA,
-    MEMORY_LIMIT_TOTAL_MB,
     MIN_GRID_SIZE,
     MIN_PLUME_SIGMA,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
@@ -30,7 +21,6 @@ from plume_nav_sim.core.constants import (
 from plume_nav_sim.core.types import (
     Action,
     Coordinates,
-    EnvironmentConfig,
     GridSize,
     PlumeParameters,
     RenderMode,
@@ -41,18 +31,12 @@ from plume_nav_sim.utils.exceptions import (
     ConfigurationError,
     ResourceError,
     ValidationError,
-    sanitize_error_context,
 )
 
 # Internal imports - validation utilities module for comprehensive testing
 from plume_nav_sim.utils.validation import (
-    ParameterValidator,
     ValidationContext,
-    ValidationResult,
-    check_parameter_consistency,
     create_validation_context,
-    get_validation_summary,
-    optimize_validation_performance,
     sanitize_parameters,
     validate_action_parameter,
     validate_coordinates,
@@ -63,7 +47,6 @@ from plume_nav_sim.utils.validation import (
     validate_plume_parameters,
     validate_render_mode,
     validate_seed_value,
-    validate_with_context,
 )
 
 # Global test constants for comprehensive validation testing

@@ -38,26 +38,19 @@ from ..core.constants import (
 )
 
 # Core data types and coordinate handling
-from ..core.types import (
-    Coordinates,
-    CoordinateType,
-    GridDimensions,
-    GridSize,
-    PlumeParameters,
-)
+from ..core.types import Coordinates, CoordinateType, GridDimensions, GridSize
 
 # Exception handling for validation and component errors
 from ..utils.exceptions import ComponentError, ValidationError
 
 # Logging system for performance monitoring and debugging
-from ..utils.logging import ComponentLogger, PerformanceTimer, get_component_logger
+from ..utils.logging import PerformanceTimer, get_component_logger
 
 # Validation utilities for parameter checking and consistency
-from ..utils.validation import validate_coordinates, validate_plume_parameters
 from .concentration_field import ConcentrationField, create_concentration_field
 
 # Internal imports from base classes and data structures
-from .plume_model import BasePlumeModel, PlumeModelInterface
+from .plume_model import BasePlumeModel
 
 # Global caching and performance tracking variables
 _FIELD_CACHE: Dict[str, np.ndarray] = {}

@@ -10,19 +10,14 @@ import contextlib  # >=3.10 - Context manager utilities for testing logging cont
 import io  # >=3.10 - String I/O utilities for capturing log output and validating log messages in tests
 import logging  # >=3.10 - Standard Python logging module for logger testing, handler validation, and log record inspection
 import os  # >=3.10 - Operating system interface for environment variable testing and file system operations
-import sys  # >=3.10 - System interface for testing error handling and platform-specific behavior
 import tempfile  # >=3.10 - Temporary file utilities for testing file-based logging and log file validation
 import threading  # >=3.10 - Thread utilities for testing thread-safe logging operations and concurrent logger access
 import time  # >=3.10 - Time utilities for performance testing, timing validation, and timestamp verification
-import unittest.mock as mock  # >=3.10 - Mocking utilities for logging handlers, external dependencies, and controlled test scenarios
 
 # Standard library imports with version comments
 import pytest  # >=8.0.0 - Testing framework for test structure, fixtures, parameterization, and assertion validation
 
-from plume_nav_sim.core.constants import (
-    COMPONENT_NAMES,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
-)
+from plume_nav_sim.core.constants import PERFORMANCE_TARGET_STEP_LATENCY_MS
 from plume_nav_sim.utils.exceptions import (
     PlumeNavSimError,
     ValidationError,
@@ -464,7 +459,8 @@ class TestComponentLoggerFactory:
 
         # Confirm graceful degradation for edge cases
         logger_edge = get_component_logger(
-            component_name="a", component_type=ComponentType.UTILS  # Minimal valid name
+            component_name="a",
+            component_type=ComponentType.UTILS,  # Minimal valid name
         )
         assert isinstance(logger_edge, ComponentLogger)
 
@@ -1432,7 +1428,7 @@ class TestLoggingIntegration:
             # Check concurrent error logging without conflicts
             try:
                 raise ValueError(f"Test concurrent error from {component_name}")
-            except ValueError as e:
+            except ValueError:
                 logger.error(f"Concurrent error in {component_name}", exc_info=True)
 
             return results

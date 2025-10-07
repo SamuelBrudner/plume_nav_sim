@@ -9,6 +9,7 @@ import time  # >=3.10 - Timestamp generation for seed tracking, performance meas
 import uuid  # >=3.10 - Unique identifier generation for seed tracking, session management, and reproducibility validation
 import warnings  # >=3.10 - Warning management for deprecated seeding patterns and performance notifications
 from typing import (  # >=3.10 - Type hints for comprehensive type safety
+    TYPE_CHECKING,
     Any,
     Dict,
     List,
@@ -30,9 +31,6 @@ from ..core.constants import (
 )
 from ..core.constants import (
     VALID_SEED_TYPES,  # List of valid seed data types [int, numpy.integer] for type validation
-)
-from ..core.constants import (
-    VALIDATION_ERROR_MESSAGES,  # Template error messages for seed validation including 'invalid_seed' message template
 )
 from .exceptions import (
     ComponentError,  # Exception for general seeding component failures and RNG management issues
@@ -57,6 +55,10 @@ _DEFAULT_ENCODING = "utf-8"  # Default string encoding for consistent hash gener
 _REPRODUCIBILITY_TOLERANCE = (
     1e-10  # Default floating-point tolerance for reproducibility validation
 )
+
+# Type checking imports to satisfy linters without runtime overhead
+if TYPE_CHECKING:  # pragma: no cover
+    from ..core.geometry import Coordinates, GridSize
 
 # Module exports - comprehensive seeding and reproducibility interface
 __all__ = [
@@ -702,7 +704,7 @@ def save_seed_state(
             # Atomic move to final location
             temp_path.replace(file_path)
 
-        except (OSError, PermissionError) as e:
+        except (OSError, PermissionError):
             # Clean up temporary file if write fails
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)

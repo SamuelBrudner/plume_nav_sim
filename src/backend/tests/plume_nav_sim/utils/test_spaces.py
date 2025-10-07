@@ -11,17 +11,8 @@ handling for production-ready reinforcement learning environment development.
 
 import time  # standard library - Performance timing measurements for validation speed testing and benchmarking
 import warnings  # standard library - Warning suppression and testing for deprecation warnings and compatibility
-from typing import (  # >=3.10 - Type hints for test function parameters and return values
-    Any,
-    Dict,
-    List,
-    Tuple,
-    Union,
-)
 from unittest.mock import (  # standard library - Mock objects for testing error conditions and external dependencies
-    MagicMock,
     Mock,
-    patch,
 )
 
 import numpy as np  # >=2.1.0 - Array operations and dtype testing for space validation and mathematical operations
@@ -37,7 +28,7 @@ from plume_nav_sim.core.constants import (
 )
 
 # Internal imports from core modules
-from plume_nav_sim.core.types import Action, Coordinates, GridSize
+from plume_nav_sim.core.types import Action
 from plume_nav_sim.utils.exceptions import ValidationError
 
 # Internal imports from spaces utility module under test
@@ -230,10 +221,10 @@ def test_create_observation_space_default():
         ), f"Sample {sample} should be contained in observation space"
         assert (
             CONCENTRATION_RANGE[0] <= sample.min() <= CONCENTRATION_RANGE[1]
-        ), f"Sample values should be in concentration range"
+        ), "Sample values should be in concentration range"
         assert (
             CONCENTRATION_RANGE[0] <= sample.max() <= CONCENTRATION_RANGE[1]
-        ), f"Sample values should be in concentration range"
+        ), "Sample values should be in concentration range"
 
 
 def test_create_observation_space_with_parameters():
@@ -1475,7 +1466,7 @@ def test_sample_valid_action():
         assert (
             action not in excluded
         ), f"Sample {action} should not be in excluded list {excluded}"
-        assert action in [2, 3], f"With exclusions, sample should be in [2, 3]"
+        assert action in [2, 3], "With exclusions, sample should be in [2, 3]"
 
     # Test validate_sample=True validates sampled actions
     validated_action = sample_valid_action(validate_sample=True)
@@ -1568,7 +1559,7 @@ def test_sample_valid_observation():
     for sample in samples:
         assert obs_space.contains(
             sample
-        ), f"Sample should be valid for observation space"
+        ), "Sample should be valid for observation space"
 
     # Test sampling performance and memory efficiency
     start_time = time.time()

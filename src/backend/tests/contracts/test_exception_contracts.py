@@ -7,7 +7,6 @@ Reference: ../../CONTRACTS.md Section "Exception Hierarchy"
 """
 
 import inspect
-from typing import get_type_hints
 
 import pytest
 
@@ -139,7 +138,9 @@ class TestComponentErrorContract:
         with pytest.raises(TypeError, match="severity"):
             # Old API used severity= but it's been removed
             ComponentError(
-                "test", component_name="Test", severity="HIGH"  # type: ignore
+                "test",
+                component_name="Test",
+                severity="HIGH",  # type: ignore
             )
 
     def test_stores_all_parameters(self):

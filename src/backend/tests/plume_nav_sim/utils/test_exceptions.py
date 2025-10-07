@@ -14,16 +14,11 @@ Test data is generated programmatically using controlled parameters and mock obj
 across different execution environments and maintain test isolation.
 """
 
-import inspect  # >=3.10 - Inspect module for testing frame inspection and error context extraction
 import json  # >=3.10 - JSON operations for testing error context serialization
 import logging  # >=3.10 - Logging module for testing exception logging integration
-import re  # >=3.10 - Regular expressions for validating error message formats and security filtering
-import tempfile  # >=3.10 - Temporary file operations for testing file-related error scenarios
-import threading  # >=3.10 - Threading utilities for testing thread-safe error handling
 import time  # >=3.10 - Time utilities for testing timestamp generation and performance context
-import traceback  # >=3.10 - Traceback utilities for testing stack trace formatting
 import unittest.mock  # >=3.10 - Mocking utilities for isolating exception components
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 
 # External imports with version comments
 import pytest  # >=8.0.0 - Primary testing framework for comprehensive exception testing
@@ -2673,7 +2668,9 @@ class TestErrorPerformance:
                 pass  # Expected in performance test
 
         log_results = measure_exception_performance(
-            log_test, [], 100  # Fewer iterations for logging test
+            log_test,
+            [],
+            100,  # Fewer iterations for logging test
         )
 
         assert (

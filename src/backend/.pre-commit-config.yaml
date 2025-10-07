@@ -24,6 +24,17 @@ ci:
   skip: []
 
 repos:
+  # Ruff: fast linter and formatter (complements/optionally replaces flake8 + black)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.3
+    hooks:
+      - id: ruff
+        name: Ruff Lint (auto-fix)
+        description: Lint with Ruff and auto-apply safe fixes
+        types: [python]
+        args: ["--fix"]
+        files: '^src/backend/plume_nav_sim/'
+
   # Official pre-commit hooks repository for basic file validation and quality checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -80,6 +91,17 @@ repos:
         files: 'tests/.*\.py$'
         exclude: 'tests/(strategies|conftest|__init__)\.py$'
         args: ['--django']
+
+  # Markdownlint for consistent markdown documentation style
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: 'v0.41.0'
+    hooks:
+      - id: markdownlint
+        name: Markdown Linting
+        description: Enforce consistent markdown style and best practices
+        types: [markdown]
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
+        exclude: '^(CHANGELOG\.md|\.github/)'
 
   # Black code formatter for consistent Python code style
   - repo: https://github.com/psf/black

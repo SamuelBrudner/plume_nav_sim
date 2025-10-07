@@ -9,12 +9,12 @@ Reference: contracts/gymnasium_api.md
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import gymnasium as gym
 from plume_nav_sim import PlumeSearchEnv
-from plume_nav_sim.utils.exceptions import StateError, ValidationError
+from plume_nav_sim.utils.exceptions import StateError
 
 # ============================================================================
 # Test Categories
@@ -507,8 +507,8 @@ class TestDeterminism:
             assert r1 == r2, f"Rewards differ: {r1} != {r2}"
 
             # Same termination
-            assert t1 == t2, f"Terminated flags differ"
-            assert tr1 == tr2, f"Truncated flags differ"
+            assert t1 == t2, "Terminated flags differ"
+            assert tr1 == tr2, "Truncated flags differ"
 
     @given(seed=st.integers(0, 1000))
     @settings(max_examples=20)

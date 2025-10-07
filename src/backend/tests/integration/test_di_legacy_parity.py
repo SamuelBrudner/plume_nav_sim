@@ -18,7 +18,7 @@ Notes:
 from __future__ import annotations
 
 import warnings
-from typing import List, Tuple
+from typing import List
 
 import gymnasium as gym
 from plume_nav_sim.core.constants import DEFAULT_PLUME_SIGMA

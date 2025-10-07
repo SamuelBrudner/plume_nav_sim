@@ -8,17 +8,13 @@ configuration, and hierarchical logger organization following Python logging bes
 for reinforcement learning environment development and research workflows.
 """
 
-import json  # >=3.10 - JSON serialization for configuration data
-
 # External imports with version comments
 import logging  # >=3.10 - Standard Python logging module for logger creation and configuration
 import logging.config  # >=3.10 - Advanced logging configuration management and dictConfig setup
-import os  # >=3.10 - Environment variable access for development/production configuration
 import re  # >=3.10 - Regular expressions for sensitive information filtering
 import sys  # >=3.10 - System parameters for stdout/stderr configuration and platform detection
 import threading  # >=3.10 - Thread synchronization for thread-safe logger configuration
 import time  # >=3.10 - Timing measurements for performance logging
-import warnings  # >=3.10 - Warning management for logging configuration issues
 from dataclasses import (  # >=3.10 - Data classes for configuration structures
     dataclass,
     field,
@@ -40,9 +36,6 @@ from typing import (  # >=3.10 - Type hints for configuration parameters
 )
 
 # Internal imports
-from ..core.constants import (
-    PACKAGE_NAME,  # System package identifier for logger hierarchy
-)
 from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # Performance target for timing threshold configuration
 )
@@ -250,21 +243,31 @@ class LoggingConfig:
         if not isinstance(self.log_level, LogLevel):
             validation_errors.append("log_level must be LogLevel enumeration instance")
 
-        # Validate log directory
-        if self.file_logging_enabled:
-            try:
-                self.log_directory_path.mkdir(parents=True, exist_ok=True)
-                if check_permissions:
-                    # Test write permissions
-                    test_file = self.log_directory_path / ".test_write"
-                    test_file.touch()
-                    test_file.unlink()
-            except (OSError, PermissionError) as e:
-                validation_errors.append(
-                    f"Cannot create or write to log directory: {e}"
-                )
+        # Sub-validations extracted to helpers
+        self._validate_log_directory(check_permissions, validation_errors)
+        self._validate_format_string(validation_errors)
+        self._validate_sensitive_patterns(validation_errors)
+        self._validate_component_levels(validation_errors)
+        self._validate_file_params(validation_errors)
 
-        # Validate log format string
+        return len(validation_errors) == 0, validation_errors
+
+    # Helper validations to reduce complexity
+    def _validate_log_directory(
+        self, check_permissions: bool, errors: List[str]
+    ) -> None:
+        if not self.file_logging_enabled:
+            return
+        try:
+            self.log_directory_path.mkdir(parents=True, exist_ok=True)
+            if check_permissions:
+                test_file = self.log_directory_path / ".test_write"
+                test_file.touch()
+                test_file.unlink()
+        except (OSError, PermissionError) as e:
+            errors.append(f"Cannot create or write to log directory: {e}")
+
+    def _validate_format_string(self, errors: List[str]) -> None:
         try:
             test_record = logging.LogRecord(
                 name="test",
@@ -277,29 +280,27 @@ class LoggingConfig:
             )
             logging.Formatter(self.log_format_string).format(test_record)
         except (ValueError, TypeError) as e:
-            validation_errors.append(f"Invalid log format string: {e}")
+            errors.append(f"Invalid log format string: {e}")
 
-        # Validate sensitive patterns
+    def _validate_sensitive_patterns(self, errors: List[str]) -> None:
         for pattern in self.sensitive_information_patterns:
             try:
                 re.compile(pattern, re.IGNORECASE)
             except re.error as e:
-                validation_errors.append(f"Invalid regex pattern '{pattern}': {e}")
+                errors.append(f"Invalid regex pattern '{pattern}': {e}")
 
-        # Validate component levels
+    def _validate_component_levels(self, errors: List[str]) -> None:
         for component, level in self.component_specific_levels.items():
             if not isinstance(component, ComponentType):
-                validation_errors.append(f"Invalid component type: {component}")
+                errors.append(f"Invalid component type: {component}")
             if not isinstance(level, LogLevel):
-                validation_errors.append(f"Invalid log level for {component}: {level}")
+                errors.append(f"Invalid log level for {component}: {level}")
 
-        # Validate file size and backup parameters
+    def _validate_file_params(self, errors: List[str]) -> None:
         if self.max_log_file_size <= 0:
-            validation_errors.append("max_log_file_size must be positive")
+            errors.append("max_log_file_size must be positive")
         if self.log_backup_count < 0:
-            validation_errors.append("log_backup_count must be non-negative")
-
-        return len(validation_errors) == 0, validation_errors
+            errors.append("log_backup_count must be non-negative")
 
     def to_dict_config(self) -> Dict[str, Any]:
         """
@@ -1051,14 +1052,13 @@ def create_component_logger(
     """
     # Validate component type
     if not isinstance(component_type, ComponentType):
-        raise ValueError(f"Invalid component_type. Must be ComponentType enum value.")
+        raise ValueError("Invalid component_type. Must be ComponentType enum value.")
 
     # Ensure logging is initialized
     if not _logging_initialized:
         configure_logging()
 
-    # Get effective log level
-    effective_level = log_level or component_type.get_default_log_level()
+    # Determine effective level (applied after creation if provided)
 
     # Create logger through factory
     logger = get_logger(
@@ -1066,6 +1066,14 @@ def create_component_logger(
         component_type=component_type,
         enable_performance_tracking=enable_timing_logs,
     )
+
+    # Apply explicit log level override if provided
+    if log_level is not None:
+        try:
+            logger.logger.setLevel(log_level.get_numeric_level())
+        except Exception:
+            # Fall back silently if logger implementation differs
+            pass
 
     # Apply additional configuration if provided
     if additional_config:
@@ -1151,7 +1159,7 @@ def reset_logging_config(
     Returns:
         bool: True if logging reset completed successfully, False otherwise
     """
-    global _logging_initialized, _global_factory, _logger_cache
+    global _logging_initialized, _global_factory
 
     with _config_lock:
         try:
@@ -1208,7 +1216,7 @@ def get_logging_status(
     Returns:
         Dict[str, Any]: Dictionary containing comprehensive logging system status
     """
-    global _global_factory, _logging_initialized
+    # No global declarations needed; reading module-level state only
 
     status = {
         "system_initialized": _logging_initialized,

@@ -177,7 +177,7 @@ def quick_register(
         )
 
         # Call register_env() with default parameters and force_reregister flag
-        registration_result = register_env(force_reregister=force_reregister)
+        register_env(force_reregister=force_reregister)
 
         # Validate successful registration by checking registry status and consistency
         if not is_registered():
@@ -611,7 +611,7 @@ def get_registration_status(
                 )
 
                 _module_logger.debug(
-                    f"Environment creation test successful for status check"
+                    "Environment creation test successful for status check"
                 )
 
             except Exception as e:
@@ -772,7 +772,7 @@ def clear_registration_cache(reset_module_state: bool = False) -> None:
 
         # Update module logger with cache clearing event and timestamp
         _module_logger.debug(
-            f"Cache clearing completed successfully",
+            "Cache clearing completed successfully",
             extra={
                 "operation": "clear_registration_cache",
                 "reset_level": "full" if reset_module_state else "cache_only",
@@ -800,7 +800,7 @@ def clear_registration_cache(reset_module_state: bool = False) -> None:
                     "error": str(e),
                     "partial_cleanup_attempted": True,
                 }
-        except:
+        except Exception:
             # Ultimate fallback - log that even partial cleanup failed
             _module_logger.critical(
                 "Complete cache clearing failure - unable to log error state"
@@ -956,7 +956,7 @@ def _initialize_registration_module() -> bool:
 
         # Log successful module initialization with configuration summary and available functionality
         _module_logger.info(
-            f"Registration module initialized successfully",
+            "Registration module initialized successfully",
             extra={
                 "environment_id": ENV_ID,
                 "entry_point": ENTRY_POINT,
@@ -999,7 +999,7 @@ def _initialize_registration_module() -> bool:
                         "error_type": type(e).__name__,
                     }
                 )
-        except:
+        except Exception:
             # If even cache update fails, continue with error raising
             pass
 

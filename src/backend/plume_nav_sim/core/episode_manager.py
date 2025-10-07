@@ -10,7 +10,6 @@ handling for production-ready reinforcement learning environments.
 """
 
 import copy  # >=3.10 - Deep copying for state snapshots and configuration cloning with immutability preservation
-import logging  # >=3.10 - Episode management operation logging, performance monitoring, and error reporting
 import time  # >=3.10 - High-precision timing for episode performance measurement and state timestamping
 import uuid  # >=3.10 - Unique episode identifier generation for tracking and reproducibility
 from dataclasses import (  # >=3.10 - Data class utilities for episode configuration and result data structures
@@ -23,7 +22,6 @@ from typing import (  # >=3.10 - Type hints for episode manager methods, compone
     List,
     Optional,
     Tuple,
-    Union,
     cast,
 )
 
@@ -33,8 +31,6 @@ import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
-    import numpy as np
-
     NDArray = np.ndarray  # type: ignore[assignment]
 from typing_extensions import NotRequired, TypedDict
 
@@ -48,10 +44,9 @@ from .constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
     DEFAULT_MAX_STEPS,
-    DEFAULT_SOURCE_LOCATION,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
-from .reward_calculator import RewardCalculator, RewardResult, TerminationResult
+from .reward_calculator import RewardCalculator, RewardResult
 from .snapshots import StateSnapshot
 
 # Internal core imports - component coordination
@@ -715,7 +710,7 @@ class EpisodeResult:
                         "Step latency exceeded target"
                     )
 
-        except Exception as e:
+        except Exception:
             # Log error but don't raise to avoid disrupting episode completion
             pass
 
@@ -779,7 +774,7 @@ class EpisodeResult:
                     -500:
                 ]  # Keep most recent 500
 
-        except Exception as e:
+        except Exception:
             # Log error but don't raise to avoid disrupting episode execution
             pass
 
@@ -866,7 +861,7 @@ class EpisodeResult:
             else:
                 # Episode failed or truncated
                 return 0.0
-        except:
+        except Exception:
             return 0.0
 
 
@@ -1001,7 +996,7 @@ class EpisodeStatistics:
             for key in ["step_times", "episode_durations"]:
                 if len(self.performance_trends[key]) > 100:
                     self.performance_trends[key] = self.performance_trends[key][-50:]
-        except:
+        except Exception:
             pass  # Don't fail statistics on performance trend errors
 
     def _update_component_efficiency(self, episode_result: EpisodeResult) -> None:
@@ -1022,7 +1017,7 @@ class EpisodeStatistics:
                         self.component_efficiency[component]["total_time"] += stats.get(
                             "time", 0.0
                         )
-        except:
+        except Exception:
             pass  # Don't fail statistics on component efficiency errors
 
     def calculate_success_rate(self) -> float:
@@ -1599,7 +1594,7 @@ class EpisodeManager:
                 )
 
             # Get final state from state_manager with complete agent and episode information
-            final_state = self.state_manager.get_current_state(
+            self.state_manager.get_current_state(
                 include_performance_data=True,
                 include_component_details=collect_detailed_statistics,
             )

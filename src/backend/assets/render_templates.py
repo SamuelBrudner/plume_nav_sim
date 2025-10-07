@@ -24,9 +24,6 @@ from typing import (  # >=3.10 - Type hints for template methods, configuration 
     Union,
 )
 
-import matplotlib.axes  # >=3.9.0 - Axes object management for plot configuration, marker updates, and coordinate system handling in matplotlib templates
-import matplotlib.colors  # >=3.9.0 - Colormap integration, normalization utilities, and color space management for matplotlib template visualization
-import matplotlib.figure  # >=3.9.0 - Advanced figure object management for matplotlib template configuration and resource optimization
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive plotting interface for matplotlib template creation, figure management, and real-time visualization updates
 import numpy as np  # >=2.1.0 - Array operations, RGB array generation, mathematical transformations, and performance-optimized template operations for concentration field rendering
 
@@ -46,14 +43,7 @@ from ..plume_nav_sim.core.constants import (
 )
 
 # Internal imports for color scheme integration and dual-mode optimization
-from .default_colormap import (
-    ColorScheme,
-    PredefinedScheme,
-    apply_agent_marker,
-    apply_source_marker,
-    create_default_scheme,
-    normalize_concentration_to_rgb,
-)
+from .default_colormap import ColorScheme, create_default_scheme
 
 # Global configuration dictionaries for template defaults
 DEFAULT_RGB_TEMPLATE_CONFIG = {
