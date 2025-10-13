@@ -297,7 +297,7 @@ def ensure_component_env_registered(
     return env_id
 
 
-def ensure_registered(
+def ensure_registered(  # noqa: C901
     auto_register: bool = True, raise_on_failure: bool = True
 ) -> bool:
     """
@@ -493,7 +493,7 @@ def ensure_registered(
         return False
 
 
-def get_registration_status(
+def get_registration_status(  # noqa: C901
     include_cache_info: bool = False, validate_creation: bool = False
 ) -> Dict[str, Any]:
     """
@@ -807,7 +807,7 @@ def clear_registration_cache(reset_module_state: bool = False) -> None:
             )
 
 
-def _initialize_registration_module() -> bool:
+def _initialize_registration_module() -> bool:  # noqa: C901
     """
     Internal module initialization function performing registration system setup,
     dependency validation, cache initialization, and module state configuration

@@ -82,7 +82,7 @@ __all__ = [
 ]
 
 
-def register_env(
+def register_env(  # noqa: C901
     env_id: Optional[str] = None,
     entry_point: Optional[str] = None,
     max_episode_steps: Optional[int] = None,

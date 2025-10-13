@@ -467,7 +467,7 @@ class UnifiedRenderer:
             operation_id="unified_renderer",
         )
 
-    def render(self, context: RenderContext, mode: RenderMode = None):
+    def render(self, context: RenderContext, mode: RenderMode = None):  # noqa: C901
         """Render with automatic fallback and performance tracking."""
         if mode is None:
             mode = self.config["primary_mode"]
@@ -1091,7 +1091,7 @@ def _extracted_from_detect_rendering_capabilities_65(np, capabilities):
     )
 
 
-def _register_cleanup_handlers(
+def _register_cleanup_handlers(  # noqa: C901
     renderer_registry: Dict[str, Any], enable_automatic_cleanup: bool = True
 ) -> None:
     """

@@ -424,7 +424,7 @@ def get_plume_module_info(
     return module_info
 
 
-def clear_plume_caches(
+def clear_plume_caches(  # noqa: C901
     clear_field_cache: bool = True,
     clear_model_cache: bool = True,
     force_gc: bool = False,
