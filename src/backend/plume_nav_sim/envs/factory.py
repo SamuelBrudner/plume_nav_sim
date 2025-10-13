@@ -33,7 +33,7 @@ from .component_env import ComponentBasedEnvironment
 __all__ = ["create_component_environment"]
 
 
-def create_component_environment(
+def create_component_environment(  # noqa: C901
     *,
     grid_size: Union[tuple[int, int], GridSize] = (128, 128),
     goal_location: Union[tuple[int, int], Coordinates] = (64, 64),

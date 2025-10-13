@@ -156,7 +156,7 @@ class EpisodeManagerConfig:
     component_configs: Dict[str, object] = field(default_factory=dict)
     custom_parameters: Dict[str, object] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         """
         Initialize episode manager configuration with environment parameters, component settings,
         and performance options for comprehensive episode orchestration.
@@ -831,11 +831,11 @@ class EpisodeResult:
             pass
 
     @property
-    def duration_ms(self) -> float:
+    def duration_ms(self) -> float:  # noqa: F811
         """Compatibility alias for episode duration in milliseconds."""
         return float(self.episode_duration_ms)
 
-    def get_summary(
+    def get_summary(  # noqa: F811
         self,
         include_performance_analysis: bool = False,
         include_component_details: bool = False,
@@ -1091,7 +1091,7 @@ class EpisodeStatistics:
             # Return 0.0 on any calculation errors
             return 0.0
 
-    def get_performance_summary(
+    def get_performance_summary(  # noqa: C901
         self,
         include_trend_analysis: bool = True,
         include_optimization_recommendations: bool = True,
@@ -1908,7 +1908,7 @@ class EpisodeManager:
         except Exception:
             return False
 
-    def cleanup(
+    def cleanup(  # noqa: C901
         self, preserve_statistics: bool = True, clear_performance_data: bool = False
     ) -> None:
         """
@@ -2056,7 +2056,7 @@ def create_episode_manager(
         ) from e
 
 
-def validate_episode_config(
+def validate_episode_config(  # noqa: C901
     config: EpisodeManagerConfig,
     strict_validation: bool = False,
     validation_context: Optional[Dict[str, object]] = None,

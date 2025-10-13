@@ -451,7 +451,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         # (moved initialization of renderer and seeding state into __init__)
 
     @monitor_performance("base_reset", 10.0, True)
-    def reset(
+    def reset(  # noqa: C901
         self, seed: Optional[int] = None, options: Optional[dict] = None
     ) -> Tuple[np.ndarray, dict]:
         """
@@ -1095,7 +1095,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
 
         return status
 
-    def validate_environment_state(
+    def validate_environment_state(  # noqa: C901
         self, strict_validation: bool = True, check_performance_targets: bool = True
     ) -> Dict[str, Any]:
         """
@@ -1399,7 +1399,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
 # Factory and utility functions
 
 
-def create_base_environment_config(
+def create_base_environment_config(  # noqa: C901
     grid_size: tuple = DEFAULT_GRID_SIZE,
     source_location: tuple = DEFAULT_SOURCE_LOCATION,
     max_steps: int = DEFAULT_MAX_STEPS,

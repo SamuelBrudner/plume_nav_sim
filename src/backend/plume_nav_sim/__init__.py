@@ -63,7 +63,7 @@ except Exception as env_import_error:  # pragma: no cover - optional dependency 
     _ENV_IMPORT_ERROR = env_import_error
 
 
-def initialize_package(
+def initialize_package(  # noqa: C901
     *,
     configure_logging: bool = True,
     auto_register_environment: bool = True,

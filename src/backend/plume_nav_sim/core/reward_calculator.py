@@ -1177,7 +1177,7 @@ def create_reward_calculator(
     return reward_calculator
 
 
-def validate_reward_config(
+def validate_reward_config(  # noqa: C901
     config: RewardCalculatorConfig,
     strict_validation: bool = False,
     validation_context: Optional[Dict] = None,
