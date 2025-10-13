@@ -62,7 +62,7 @@ import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework
 
 # Internal imports - Core constants and configuration management
 from ..core.constants import (
-    DEFAULT_GOAL_RADIUS,  # Default goal radius (0) requiring exact source location for termination
+    DEFAULT_GOAL_RADIUS,  # Default goal radius (float32 epsilon) enabling near-exact goal detection
 )
 from ..core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions (128, 128) for consistent initialization
@@ -175,7 +175,7 @@ __all__ = [
     "DEFAULT_GRID_SIZE",  # Default environment grid dimensions for consistent initialization
     "DEFAULT_SOURCE_LOCATION",  # Default plume source location for balanced navigation challenges
     "DEFAULT_MAX_STEPS",  # Default maximum episode steps for training efficiency and truncation handling
-    "DEFAULT_GOAL_RADIUS",  # Default goal radius requiring exact source location for episode termination
+    "DEFAULT_GOAL_RADIUS",  # Default goal radius (float32 epsilon) for near-exact episode termination
     # Advanced factory functions and convenience interfaces
     "create_environment",  # Unified factory function for creating any plume navigation environment
     "make_environment",  # Convenience function for creating and registering environment with gym.make() compatibility
