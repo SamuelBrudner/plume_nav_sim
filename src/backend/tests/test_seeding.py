@@ -1130,9 +1130,13 @@ class TestPerformance:
                     action = env.action_space.sample()
 
                     start_time = time.perf_counter()
-                    env.step(action)
+                    obs, reward, terminated, truncated, info = env.step(action)
                     end_time = time.perf_counter()
                     env_step_times.append(end_time - start_time)
+
+                    # Reset if episode ends to continue testing
+                    if terminated or truncated:
+                        obs, info = env.reset(seed=42)
 
                 avg_step_time = np.mean(env_step_times)
                 target_step_time = (

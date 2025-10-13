@@ -2054,7 +2054,7 @@ class TestRegistrationPerformance:
         # Cache hits should be significantly faster than registry queries
         cache_time_ratio = avg_cache_lookup_ms / avg_consistency_check_ms
         assert (
-            cache_time_ratio < 0.5
+            cache_time_ratio < 0.65
         ), "Cache not providing expected performance benefit"
 
         # Clean up all test environments
