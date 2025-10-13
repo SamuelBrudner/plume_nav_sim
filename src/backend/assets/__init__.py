@@ -121,105 +121,101 @@ def get_default_assets(
         )
 
     try:
-        # Create default color scheme using create_default_scheme with render mode optimization
-        _logger.debug(f"Creating default color scheme for render mode: {render_mode}")
-        color_scheme = create_default_scheme(
-            scheme_type=PredefinedScheme.STANDARD, optimize_for_mode=render_mode
+        return _extracted_from_get_default_assets_(
+            render_mode, enable_optimization, supported_modes
         )
-
-        # Create RGB template using create_rgb_template with default configuration and performance tuning
-        rgb_template_config = TemplateConfig(
-            quality_level=(
-                TemplateQuality.STANDARD
-                if not enable_optimization
-                else TemplateQuality.FAST
-            ),
-            enable_caching=enable_optimization,
-            target_fps=None,  # No FPS limit for RGB mode
-            memory_limit_mb=40,  # Conservative memory limit for plume field
-            enable_validation=True,
-        )
-        rgb_template = create_rgb_template(config=rgb_template_config)
-
-        # Create matplotlib template using create_matplotlib_template with backend compatibility
-        matplotlib_template_config = TemplateConfig(
-            quality_level=TemplateQuality.STANDARD,
-            enable_caching=enable_optimization,
-            target_fps=30 if render_mode == "human" else None,
-            memory_limit_mb=10,  # Matplotlib figure memory limit
-            enable_validation=True,
-        )
-        matplotlib_template = create_matplotlib_template(
-            config=matplotlib_template_config
-        )
-
-        # Apply performance optimization if enable_optimization is True
-        optimization_settings = {}
-        if enable_optimization:
-            # Configure performance optimization based on render mode
-            if render_mode == "rgb_array":
-                optimization_settings = {
-                    "prioritize_speed": True,
-                    "cache_plume_field": True,
-                    "use_fast_rendering": True,
-                    "target_latency_ms": 5.0,
-                }
-            else:  # human mode
-                optimization_settings = {
-                    "prioritize_quality": True,
-                    "enable_interactive_features": True,
-                    "use_figure_caching": True,
-                    "target_latency_ms": 50.0,
-                }
-
-        # Package all assets into comprehensive configuration dictionary
-        default_assets = {
-            # Core asset components
-            "color_scheme": color_scheme,
-            "rgb_template": rgb_template,
-            "matplotlib_template": matplotlib_template,
-            # Template configurations for reference
-            "rgb_config": rgb_template_config,
-            "matplotlib_config": matplotlib_template_config,
-            # Optimization and performance settings
-            "optimization_settings": optimization_settings,
-            "enable_optimization": enable_optimization,
-            "target_render_mode": render_mode,
-            # Default constants and compatibility information
-            "default_colormap": DEFAULT_COLORMAP,
-            "supported_modes": supported_modes,
-            # Performance monitoring and validation
-            "performance_targets": {
-                "rgb_render_ms": 5.0,
-                "human_render_ms": 50.0,
-                "memory_limit_mb": 50.0,
-            },
-        }
-
-        # Include version information and compatibility metadata
-        default_assets.update(
-            {
-                "assets_version": ASSETS_VERSION,
-                "package_version": __version__,
-                "creation_timestamp": time.time(),
-                "compatibility_info": {
-                    "dual_mode_rendering": True,
-                    "accessibility_features": True,
-                    "cross_platform": True,
-                    "performance_optimized": enable_optimization,
-                },
-            }
-        )
-
-        # Return complete default asset configuration ready for environment setup
-        _logger.info(
-            f"Successfully created default assets for {render_mode} mode with optimization: {enable_optimization}"
-        )
-        return default_assets
-
     except Exception as e:
         _logger.error(f"Failed to create default assets for {render_mode} mode: {e}")
         raise RuntimeError(f"Asset creation failed: {e}") from e
+
+
+# TODO Rename this here and in `get_default_assets`
+def _extracted_from_get_default_assets_(
+    render_mode, enable_optimization, supported_modes
+):
+    # Create default color scheme using create_default_scheme with render mode optimization
+    _logger.debug(f"Creating default color scheme for render mode: {render_mode}")
+    color_scheme = create_default_scheme(
+        scheme_type=PredefinedScheme.STANDARD, optimize_for_mode=render_mode
+    )
+
+    # Create RGB template using create_rgb_template with default configuration and performance tuning
+    rgb_template_config = TemplateConfig(
+        quality_level=(
+            TemplateQuality.FAST if enable_optimization else TemplateQuality.STANDARD
+        ),
+        enable_caching=enable_optimization,
+        target_fps=None,  # No FPS limit for RGB mode
+        memory_limit_mb=40,  # Conservative memory limit for plume field
+        enable_validation=True,
+    )
+    rgb_template = create_rgb_template(config=rgb_template_config)
+
+    # Create matplotlib template using create_matplotlib_template with backend compatibility
+    matplotlib_template_config = TemplateConfig(
+        quality_level=TemplateQuality.STANDARD,
+        enable_caching=enable_optimization,
+        target_fps=30 if render_mode == "human" else None,
+        memory_limit_mb=10,  # Matplotlib figure memory limit
+        enable_validation=True,
+    )
+    matplotlib_template = create_matplotlib_template(config=matplotlib_template_config)
+
+    if enable_optimization:
+        optimization_settings = (
+            {
+                "prioritize_speed": True,
+                "cache_plume_field": True,
+                "use_fast_rendering": True,
+                "target_latency_ms": 5.0,
+            }
+            if render_mode == "rgb_array"
+            else {
+                "prioritize_quality": True,
+                "enable_interactive_features": True,
+                "use_figure_caching": True,
+                "target_latency_ms": 50.0,
+            }
+        )
+    else:
+        optimization_settings = {}
+    default_assets = {
+        # Core asset components
+        "color_scheme": color_scheme,
+        "rgb_template": rgb_template,
+        "matplotlib_template": matplotlib_template,
+        # Template configurations for reference
+        "rgb_config": rgb_template_config,
+        "matplotlib_config": matplotlib_template_config,
+        # Optimization and performance settings
+        "optimization_settings": optimization_settings,
+        "enable_optimization": enable_optimization,
+        "target_render_mode": render_mode,
+        # Default constants and compatibility information
+        "default_colormap": DEFAULT_COLORMAP,
+        "supported_modes": supported_modes,
+        # Performance monitoring and validation
+        "performance_targets": {
+            "rgb_render_ms": 5.0,
+            "human_render_ms": 50.0,
+            "memory_limit_mb": 50.0,
+        },
+    } | {
+        "assets_version": ASSETS_VERSION,
+        "package_version": __version__,
+        "creation_timestamp": time.time(),
+        "compatibility_info": {
+            "dual_mode_rendering": True,
+            "accessibility_features": True,
+            "cross_platform": True,
+            "performance_optimized": enable_optimization,
+        },
+    }
+    # Return complete default asset configuration ready for environment setup
+    _logger.info(
+        f"Successfully created default assets for {render_mode} mode with optimization: {enable_optimization}"
+    )
+    return default_assets
 
 
 def validate_asset_compatibility(

@@ -268,8 +268,8 @@ class ColorScheme:
 
         # Verify matplotlib colormap availability
         try:
-            matplotlib.cm.get_cmap(self.concentration_colormap)
-        except ValueError:
+            matplotlib.colormaps[self.concentration_colormap]
+        except (ValueError, KeyError):
             warnings.warn(
                 f"Colormap '{self.concentration_colormap}' not found, falling back to 'gray'"
             )
@@ -370,12 +370,12 @@ class ColorScheme:
             return self._cached_colormap
 
         try:
-            colormap = matplotlib.cm.get_cmap(self.concentration_colormap)
-        except ValueError:
+            colormap = matplotlib.colormaps[self.concentration_colormap]
+        except (ValueError, KeyError):
             warnings.warn(
                 f"Colormap '{self.concentration_colormap}' not available, using 'gray'"
             )
-            colormap = matplotlib.cm.get_cmap("gray")
+            colormap = matplotlib.colormaps["gray"]
 
         # Configure normalization range
         if normalization_range is None:
@@ -552,8 +552,8 @@ class ColorScheme:
 
         # Validate matplotlib colormap availability
         try:
-            matplotlib.cm.get_cmap(self.concentration_colormap)
-        except ValueError:
+            matplotlib.colormaps[self.concentration_colormap]
+        except (ValueError, KeyError):
             validation_errors.append(
                 f"Colormap '{self.concentration_colormap}' is not available"
             )
@@ -739,8 +739,7 @@ def create_color_scheme(
         "background_color",
         "concentration_colormap",
     }
-    missing_keys = required_keys - set(color_config.keys())
-    if missing_keys:
+    if missing_keys := required_keys - set(color_config.keys()):
         raise ValueError(f"Missing required color configuration keys: {missing_keys}")
 
     # Apply scheme_type configuration if specified
@@ -824,7 +823,7 @@ def validate_color_scheme(
     # Additional validation checks
     try:
         # Test matplotlib colormap functionality
-        colormap = color_scheme.get_concentration_colormap()
+        color_scheme.get_concentration_colormap()
         validation_report["performance_metrics"]["colormap_load_time"] = "success"
     except Exception as e:
         validation_report["warnings"].append(f"Colormap loading issue: {e}")
@@ -835,17 +834,9 @@ def validate_color_scheme(
 
         # Test RGB array generation performance
         try:
-            test_field = np.random.rand(32, 32)
-            start_time = time.perf_counter()
-            rgb_array = color_scheme.apply_to_rgb_array(test_field, (16, 16), (20, 20))
-            rgb_time = (time.perf_counter() - start_time) * 1000  # Convert to ms
-
-            validation_report["performance_metrics"]["rgb_generation_ms"] = rgb_time
-
-            if rgb_time > PERFORMANCE_TARGET_RGB_MS:
-                validation_report["warnings"].append(
-                    f"RGB generation time {rgb_time:.2f}ms exceeds target {PERFORMANCE_TARGET_RGB_MS}ms"
-                )
+            _extracted_from_validate_color_scheme_54(
+                time, color_scheme, validation_report
+            )
         except Exception as e:
             validation_report["errors"].append(f"RGB performance test failed: {e}")
 
@@ -859,6 +850,21 @@ def validate_color_scheme(
         validation_report["recommendations"].append("Accessibility features enabled")
 
     return validation_report["is_valid"], validation_report
+
+
+# TODO Rename this here and in `validate_color_scheme`
+def _extracted_from_validate_color_scheme_54(time, color_scheme, validation_report):
+    test_field = np.random.rand(32, 32)
+    start_time = time.perf_counter()
+    color_scheme.apply_to_rgb_array(test_field, (16, 16), (20, 20))
+    rgb_time = (time.perf_counter() - start_time) * 1000  # Convert to ms
+
+    validation_report["performance_metrics"]["rgb_generation_ms"] = rgb_time
+
+    if rgb_time > PERFORMANCE_TARGET_RGB_MS:
+        validation_report["warnings"].append(
+            f"RGB generation time {rgb_time:.2f}ms exceeds target {PERFORMANCE_TARGET_RGB_MS}ms"
+        )
 
 
 # =============================================================================
@@ -907,10 +913,7 @@ def normalize_concentration_to_rgb(
     )
     rgb_values = colormap(normalized_field)
 
-    # Convert to uint8 RGB array (H,W,3) for rendering compatibility
-    rgb_array = (rgb_values[:, :, :3] * 255).astype(np.uint8)
-
-    return rgb_array
+    return (rgb_values[:, :, :3] * 255).astype(np.uint8)
 
 
 def apply_agent_marker(
@@ -1073,10 +1076,10 @@ def get_matplotlib_colormap(
 
     # Retrieve colormap from matplotlib registry with fallback
     try:
-        colormap = matplotlib.cm.get_cmap(colormap_name)
-    except ValueError:
+        colormap = matplotlib.colormaps[colormap_name]
+    except (ValueError, KeyError):
         warnings.warn(f"Colormap '{colormap_name}' not found, falling back to 'gray'")
-        colormap = matplotlib.cm.get_cmap("gray")
+        colormap = matplotlib.colormaps["gray"]
 
     return colormap
 

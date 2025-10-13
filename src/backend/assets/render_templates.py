@@ -694,7 +694,7 @@ class BaseRenderTemplate(ABC):
             # Measure performance
             start_time = time.perf_counter()
             try:
-                result = self.render(test_field, test_agent, test_source)
+                self.render(test_field, test_agent, test_source)
                 render_time = time.perf_counter() - start_time
 
                 test_results.append(
@@ -1104,7 +1104,7 @@ class RGBTemplate(BaseRenderTemplate):
                 "overall_max_ms": np.max(all_times),
                 "success_rate": len(successful_tests) / len(test_results),
                 "target_compliance_rate": sum(
-                    1 for r in successful_tests if r["meets_target"]
+                    bool(r["meets_target"]) for r in successful_tests
                 )
                 / len(successful_tests),
             }
@@ -2314,7 +2314,7 @@ def optimize_template(
     # Identify optimization opportunities from targets
     target_render_time_ms = optimization_targets.get("target_render_time_ms", 5.0)
     target_memory_mb = optimization_targets.get("target_memory_mb", 50.0)
-    target_cache_hit_rate = optimization_targets.get("target_cache_hit_rate", 0.8)
+    optimization_targets.get("target_cache_hit_rate", 0.8)
 
     current_render_time = (
         current_metrics.get("average_render_time", 0.0) * 1000

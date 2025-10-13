@@ -826,13 +826,15 @@ def _test_color_scheme_support_section(capabilities: Dict[str, Any]) -> None:
     """Test a few common colormaps if matplotlib is available and record support."""
     try:
         if capabilities.get("matplotlib_available"):
+            import matplotlib
             import matplotlib.pyplot as plt
 
             colormaps = ["viridis", "plasma", "inferno", "magma", "gray"]
             available_colormaps = []
             for cmap in colormaps:
                 with contextlib.suppress(Exception):
-                    plt.get_cmap(cmap)
+                    # Use modern colormaps API to avoid deprecation warnings
+                    _ = matplotlib.colormaps[cmap]
                     available_colormaps.append(cmap)
             capabilities["color_scheme_support"] = {
                 "available_colormaps": available_colormaps,
@@ -1046,6 +1048,7 @@ def _extracted_from_detect_rendering_capabilities_99(
         test_backends=True,
         check_display_availability=True,
         assess_performance=test_performance_characteristics,
+        use_cache=False,  # Don't use cache during module init to allow tests to have clean cache state
     )
 
     capabilities["matplotlib_available"] = capabilities_result.get(
@@ -1149,10 +1152,17 @@ def _register_cleanup_handlers(
 
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully."""
-        _logger.info(f"Received signal {signum}, cleaning up renderers")
+        """Handle shutdown signals gracefully without terminating the process.
+
+        Avoid calling sys.exit() to prevent interfering with test runners or
+        embedding hosts that manage their own shutdown sequence.
+        """
+        try:
+            _logger.info(f"Received signal {signum}, cleaning up renderers")
+        except Exception:
+            pass
         cleanup_all_renderers()
-        sys.exit(0)
+        # Do not exit; allow caller/process manager to decide termination
 
     with contextlib.suppress(AttributeError, OSError):
         signal.signal(signal.SIGINT, signal_handler)
