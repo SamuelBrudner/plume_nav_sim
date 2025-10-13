@@ -1522,7 +1522,7 @@ def get_performance_logger(
         return performance_logger
 
 
-def configure_logging_system(
+def configure_logging_system(  # noqa: C901
     config: LoggingConfig,
     force_reconfiguration: bool = False,
     validate_config: bool = True,
@@ -1667,7 +1667,7 @@ def register_cleanup_handlers(force_registration: bool = False) -> bool:
         return False
 
 
-def shutdown_logging_system(
+def shutdown_logging_system(  # noqa: C901
     shutdown_timeout: float = 30.0, force_cleanup: bool = False
 ) -> Dict[str, Any]:
     """
@@ -1767,7 +1767,7 @@ def shutdown_logging_system(
         return shutdown_results
 
 
-def get_logging_statistics(
+def get_logging_statistics(  # noqa: C901
     include_performance_data: bool = False, include_registry_details: bool = False
 ) -> Dict[str, Any]:
     """

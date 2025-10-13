@@ -72,7 +72,7 @@ from ..core.types import (
 from ..core.types import (
     GridDimensions,  # Type alias for grid size parameters in factory functions
 )
-from ..core.types import (  # noqa: E402; noqa: E402; Core data structures for coordinate and grid management; Grid dimension representation for type annotations and factory functions
+from ..core.types import (  # noqa: E402; noqa: E402; noqa: E402; Core data structures for coordinate and grid management; Grid dimension representation for type annotations and factory functions
     GridSize,
 )
 
@@ -89,7 +89,7 @@ from .concentration_field import (
 from .concentration_field import (
     create_concentration_field,  # Factory function for creating validated concentration field instances
 )
-from .concentration_field import (  # noqa: E402; noqa: E402; Core concentration field class for efficient 2D field management; Factory and utility functions for concentration field operations; Specialized exceptions for concentration field operations; Comprehensive parameter validation for concentration field initialization
+from .concentration_field import (  # noqa: E402; noqa: E402; noqa: E402; Core concentration field class for efficient 2D field management; Factory and utility functions for concentration field operations; Specialized exceptions for concentration field operations; Comprehensive parameter validation for concentration field initialization
     validate_field_parameters,
 )
 
@@ -115,7 +115,7 @@ from .plume_model import (
 from .plume_model import (
     get_supported_plume_types,  # Utility function returning comprehensive information about supported plume types
 )
-from .plume_model import (  # noqa: E402; noqa: E402; Abstract base classes and interfaces for plume model implementations; Registry system for plume model management and extensibility; Factory and utility functions for plume model operations; Specialized exceptions for plume model operations; Register custom plume model class with global registry
+from .plume_model import (  # noqa: E402; noqa: E402; noqa: E402; Abstract base classes and interfaces for plume model implementations; Registry system for plume model management and extensibility; Factory and utility functions for plume model operations; Specialized exceptions for plume model operations; Register custom plume model class with global registry
     register_plume_model,
 )
 
@@ -132,7 +132,7 @@ from .static_gaussian import (
 from .static_gaussian import (
     create_static_gaussian_plume,  # Factory function for creating validated StaticGaussianPlume instances
 )
-from .static_gaussian import (  # noqa: E402; noqa: E402; Main static Gaussian plume model class with mathematical implementation; Factory and utility functions for Gaussian plume operations; Specialized exception for StaticGaussianPlume-specific errors; Comprehensive parameter validation for static Gaussian plume model
+from .static_gaussian import (  # noqa: E402; noqa: E402; noqa: E402; Main static Gaussian plume model class with mathematical implementation; Factory and utility functions for Gaussian plume operations; Specialized exception for StaticGaussianPlume-specific errors; Comprehensive parameter validation for static Gaussian plume model
     validate_gaussian_parameters,
 )
 
@@ -156,7 +156,7 @@ _model_cache: Dict[str, object] = {}
 _logger = logging.getLogger(__name__)
 
 
-def initialize_plume_module(
+def initialize_plume_module(  # noqa: C901
     register_builtin_models: bool = True, validate_dependencies: bool = True
 ) -> bool:
     """Initialize plume module with registry setup, built-in model registration, and validation
@@ -278,7 +278,7 @@ def initialize_plume_module(
             return False
 
 
-def get_plume_module_info(
+def get_plume_module_info(  # noqa: C901
     include_model_details: bool = True, include_performance_data: bool = False
 ) -> Dict[str, object]:
     """Get comprehensive information about plume module including registered models, capabilities,

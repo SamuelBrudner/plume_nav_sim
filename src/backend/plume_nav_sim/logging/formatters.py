@@ -163,7 +163,7 @@ FALLBACK_ASCII_SYMBOLS = {
 }
 
 
-def detect_color_support(
+def detect_color_support(  # noqa: C901
     force_detection: bool = False, cache_result: bool = True
 ) -> Dict[str, Any]:
     """
@@ -359,7 +359,7 @@ def sanitize_message(  # noqa: C901
     return sanitized
 
 
-def format_performance_metrics(
+def format_performance_metrics(  # noqa: C901
     duration_ms: float,
     metrics_data: Dict[str, Any] = None,
     include_threshold_status: bool = True,
