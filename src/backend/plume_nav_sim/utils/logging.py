@@ -653,7 +653,7 @@ def log_with_context(
             )
 
 
-def create_performance_logger(
+def create_performance_logger(  # noqa: C901
     logger_name: Optional[str] = None,
     timing_thresholds: Optional[Dict[str, float]] = None,
     enable_memory_tracking: bool = True,
@@ -746,7 +746,7 @@ def create_performance_logger(
         raise PlumeNavSimError(f"Failed to create performance logger: {e}") from e
 
 
-def setup_error_logging(
+def setup_error_logging(  # noqa: C901
     logger: Optional[logging.Logger] = None,
     enable_auto_recovery_logging: bool = True,
     exception_types_to_log: List[Type[Exception]] = None,

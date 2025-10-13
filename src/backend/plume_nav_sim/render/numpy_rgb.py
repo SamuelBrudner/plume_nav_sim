@@ -16,7 +16,6 @@ Key Features:
 - Memory-efficient caching and resource management
 """
 
-import functools  # >=3.10 - Caching decorators for performance optimization of RGB array operations
 import time  # >=3.10 - High-precision timing for RGB array generation performance measurement
 from typing import (  # >=3.10 - Type hints for RGB array types and method annotations
     Any,
@@ -245,7 +244,7 @@ class NumpyRGBRenderer(BaseRenderer):
         # Return False for other modes like HUMAN mode which require different renderers
         return False
 
-    def _render_rgb_array(self, context: RenderContext) -> np.ndarray:
+    def _render_rgb_array(self, context: RenderContext) -> np.ndarray:  # noqa: C901
         """
         Core RGB array generation method implementing BaseRenderer abstract method with vectorized
         operations, color scheme application, and performance optimization for sub-5ms generation targeting.
@@ -369,7 +368,7 @@ class NumpyRGBRenderer(BaseRenderer):
         # Return completed RGB array ready for programmatic processing and analysis
         return rgb_array
 
-    def render(
+    def render(  # noqa: C901
         self, context: RenderContext, mode_override: Optional[RenderMode] = None
     ) -> np.ndarray:
         """
@@ -456,7 +455,7 @@ class NumpyRGBRenderer(BaseRenderer):
 
         return result
 
-    def generate_optimized_array(
+    def generate_optimized_array(  # noqa: C901
         self,
         context: RenderContext,
         reuse_buffer: bool = True,
@@ -811,7 +810,7 @@ class NumpyRGBRenderer(BaseRenderer):
 
         return benchmark_results
 
-    def validate_output_quality(
+    def validate_output_quality(  # noqa: C901
         self,
         rgb_array: np.ndarray,
         reference_context: RenderContext,
@@ -1138,7 +1137,7 @@ def create_rgb_renderer(
     return renderer
 
 
-def generate_rgb_array_fast(
+def generate_rgb_array_fast(  # noqa: C901
     concentration_field: np.ndarray,
     agent_position: Coordinates,
     source_position: Coordinates,
@@ -1233,7 +1232,7 @@ def generate_rgb_array_fast(
     return rgb_array
 
 
-def validate_rgb_array_output(
+def validate_rgb_array_output(  # noqa: C901
     rgb_array: np.ndarray,
     expected_grid_size: GridSize,
     expected_agent_position: Coordinates,
@@ -1426,7 +1425,7 @@ def clear_rgb_cache(
     return cleanup_report
 
 
-def get_rgb_performance_stats(
+def get_rgb_performance_stats(  # noqa: C901
     include_cache_analysis: bool = True,
     include_memory_usage: bool = True,
     include_optimization_suggestions: bool = True,

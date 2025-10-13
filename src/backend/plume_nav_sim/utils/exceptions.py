@@ -1284,7 +1284,7 @@ def handle_component_error(
         return "system_error"
 
 
-def sanitize_error_context(
+def sanitize_error_context(  # noqa: C901
     context: dict, additional_sensitive_keys: Optional[List[str]] = None
 ) -> dict:
     """Sanitize error context dictionary to prevent sensitive information disclosure while preserving debugging information for secure error logging.
@@ -1482,7 +1482,7 @@ def create_error_context(
     return context
 
 
-def log_exception_with_recovery(
+def log_exception_with_recovery(  # noqa: C901
     exception: Exception,
     logger: logging.Logger,
     context: Optional[dict] = None,

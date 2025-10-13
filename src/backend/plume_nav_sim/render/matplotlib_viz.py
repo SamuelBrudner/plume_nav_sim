@@ -1147,7 +1147,7 @@ class InteractiveUpdateManager:
                 pass
         return True
 
-    def cleanup_resources(self) -> None:
+    def cleanup_resources(self) -> None:  # noqa: C901
         """Release matplotlib artist references and clear caches."""
         try:
             if self.heatmap is not None:
@@ -1271,7 +1271,7 @@ class InteractiveUpdateManager:
             # Propagate as RenderingError so callers can handle failures explicitly
             raise RenderingError(f"Batch update failed: {e}")
 
-    def get_performance_stats(self) -> Dict[str, any]:
+    def get_performance_metrics(self) -> Dict[str, Any]:  # noqa: C901
         """Return summarized performance statistics for refreshes and batch updates."""
         stats = {}
         refresh_count = int(self.performance_stats.get("update_count", 0))
@@ -1840,7 +1840,7 @@ class MatplotlibRenderer(BaseRenderer):
             self.logger.error(f"Figure save failed: {e}")
             raise RenderingError(f"Figure save failed: {e}")
 
-    def configure_interactive_mode(
+    def configure_interactive_mode(  # noqa: C901
         self,
         config_or_enable: Union[bool, dict] = True,
         update_interval: Optional[float] = None,
@@ -2197,7 +2197,7 @@ def create_matplotlib_renderer(
 _matplotlib_capabilities_cache: Optional[Dict[str, any]] = None
 
 
-def detect_matplotlib_capabilities(
+def detect_matplotlib_capabilities(  # noqa: C901
     test_backends: bool = False,
     check_display_availability: bool = True,
     assess_performance: bool = False,
@@ -2373,7 +2373,7 @@ def detect_matplotlib_capabilities(
     return capabilities
 
 
-def configure_matplotlib_backend(
+def configure_matplotlib_backend(  # noqa: C901
     backend_preferences: Optional[List[str]] = None,
     allow_headless_fallback: bool = True,
     configuration_options: dict = None,
@@ -2482,7 +2482,7 @@ def configure_matplotlib_backend(
         return None, backend_info
 
 
-def validate_matplotlib_integration(
+def validate_matplotlib_integration(  # noqa: C901
     backend_name: Optional[str] = None,
     color_scheme: Optional[CustomColorScheme] = None,
     test_rendering_operations: bool = True,

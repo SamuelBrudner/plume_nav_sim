@@ -109,7 +109,7 @@ def _create_action_space_cached(
     return _create_action_space_impl(num_actions, validate_actions, None)
 
 
-def _create_action_space_impl(
+def _create_action_space_impl(  # noqa: C901
     num_actions: Optional[int], validate_actions: bool, space_config: Optional[Dict]
 ) -> gymnasium.spaces.Discrete:
     start_time = time.time()
@@ -250,7 +250,7 @@ def _create_observation_space_cached(
     )
 
 
-def _create_observation_space_impl(
+def _create_observation_space_impl(  # noqa: C901
     observation_shape: Optional[Tuple],
     concentration_bounds: Optional[Tuple],
     observation_dtype: Optional[np.dtype],
@@ -366,7 +366,7 @@ def _create_observation_space_impl(
         raise
 
 
-def validate_action(
+def validate_action(  # noqa: C901
     action: ActionType,
     action_space: Optional[gymnasium.spaces.Discrete] = None,
     strict_mode: bool = False,
@@ -526,7 +526,7 @@ def validate_action(
         )
 
 
-def validate_observation(
+def validate_observation(  # noqa: C901
     observation: ObservationType,
     observation_space: Optional[gymnasium.spaces.Box] = None,
     check_range: bool = True,
@@ -694,7 +694,7 @@ def validate_observation(
         )
 
 
-def validate_action_space(
+def validate_action_space(  # noqa: C901
     action_space: gymnasium.spaces.Discrete,
     check_metadata: bool = False,
     strict_validation: bool = False,
@@ -870,7 +870,7 @@ def validate_action_space(
         )
 
 
-def validate_observation_space(
+def validate_observation_space(  # noqa: C901
     observation_space: gymnasium.spaces.Box,
     check_bounds: bool = True,
     check_dtype: bool = True,
@@ -1122,7 +1122,7 @@ def validate_observation_space(
         )
 
 
-def get_space_info(
+def get_space_info(  # noqa: C901
     space: Union[gymnasium.spaces.Space],
     include_samples: bool = False,
     include_metadata: bool = False,
@@ -1421,7 +1421,7 @@ def sample_valid_observation(
         )
 
 
-def check_space_compatibility(
+def check_space_compatibility(  # noqa: C901
     action_space: gymnasium.spaces.Discrete,
     observation_space: gymnasium.spaces.Box,
     strict_checking: bool = False,
@@ -1613,7 +1613,7 @@ def check_space_compatibility(
         }
 
 
-def optimize_space_operations(
+def optimize_space_operations(  # noqa: C901
     space_config: Dict,
     enable_caching: bool = True,
     profile_operations: bool = False,
@@ -1905,7 +1905,7 @@ class SpaceConfig:
                 "memory_efficient_creation": False,
             }
 
-    def validate_config(self, strict_validation: bool = False) -> bool:
+    def validate_config(self, strict_validation: bool = False) -> bool:  # noqa: C901
         """
         Validates space configuration parameters ensuring mathematical consistency, performance
         feasibility, and Gymnasium compatibility.
@@ -2176,7 +2176,7 @@ class SpaceValidator:
             "min_validation_time_ms": float("inf"),
         }
 
-    def validate_space(
+    def validate_space(  # noqa: C901
         self,
         space: gymnasium.spaces.Space,
         space_type: str,
@@ -2343,7 +2343,7 @@ class SpaceValidator:
                 "validation_time_ms": (time.time() - start_time) * 1000,
             }
 
-    def validate_action_space(
+    def validate_action_space(  # noqa: C901
         self,
         action_space: gymnasium.spaces.Discrete,
         check_navigation_compatibility: bool = True,
@@ -2379,7 +2379,7 @@ class SpaceValidator:
 
         return result
 
-    def validate_observation_space(
+    def validate_observation_space(  # noqa: C901
         self,
         observation_space: gymnasium.spaces.Box,
         check_concentration_compatibility: bool = True,

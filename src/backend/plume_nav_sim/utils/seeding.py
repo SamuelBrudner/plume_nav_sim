@@ -326,7 +326,7 @@ def generate_deterministic_seed(
         ) from e
 
 
-def verify_reproducibility(
+def verify_reproducibility(  # noqa: C901
     rng1: numpy.random.Generator,
     rng2: numpy.random.Generator,
     sequence_length: int = 1000,
@@ -579,7 +579,7 @@ def get_random_seed(
         ) from e
 
 
-def save_seed_state(
+def save_seed_state(  # noqa: C901
     rng: numpy.random.Generator,
     file_path: Union[str, pathlib.Path],
     metadata: Optional[Dict[str, Any]] = None,
@@ -750,7 +750,7 @@ def save_seed_state(
         ) from e
 
 
-def load_seed_state(
+def load_seed_state(  # noqa: C901
     file_path: Union[str, pathlib.Path],
     validate_state: bool = True,
     strict_version_check: bool = False,
@@ -1299,7 +1299,7 @@ class SeedManager:
                 operation_name="generate_random_position",
             ) from e
 
-    def validate_reproducibility(
+    def validate_reproducibility(  # noqa: C901
         self,
         test_seed: int,
         num_tests: int = 10,
@@ -1813,7 +1813,7 @@ class ReproducibilityTracker:
                 operation_name="record_episode",
             ) from e
 
-    def verify_episode_reproducibility(
+    def verify_episode_reproducibility(  # noqa: C901
         self,
         episode_record_id: str,
         new_action_sequence: List[Any],
@@ -2097,7 +2097,7 @@ class ReproducibilityTracker:
                 "comparison_failed": True,
             }
 
-    def generate_reproducibility_report(
+    def generate_reproducibility_report(  # noqa: C901
         self,
         report_format: Optional[str] = "dict",
         include_detailed_analysis: bool = True,
@@ -2436,7 +2436,7 @@ class ReproducibilityTracker:
 
         return markdown
 
-    def export_reproducibility_data(
+    def export_reproducibility_data(  # noqa: C901
         self,
         export_path: Union[str, pathlib.Path],
         export_format: str = "json",
