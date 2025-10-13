@@ -10,6 +10,7 @@
 ## 📦 Type Dependencies
 
 This contract references types defined in other contracts:
+
 - `AgentState`: See `core_types.md` - Contains position and orientation
 - `Action`: See `core_types.md` - Enum or integer representing agent actions
 - `ConcentrationField`: See `concentration_field.md` - Plume sampling interface
@@ -20,12 +21,14 @@ This contract references types defined in other contracts:
 ## 🎯 Purpose
 
 Define the **universal interface** for all reward function implementations, separating reward calculation logic from environment implementation to enable:
+
 - Pluggable reward functions (sparse, dense, shaped, multi-objective)
 - Research flexibility without environment modification
 - Config-as-code for reproducible experiments
 - Clean separation of concerns
 
 **CRITICAL DISTINCTION:**
+
 - **This contract:** Universal interface ALL reward functions must implement
 - **reward_function.md:** Specification of ONE implementation (sparse binary reward)
 
@@ -122,6 +125,7 @@ No dependency on:
 ```
 
 **Test:**
+
 ```python
 @given(
     prev_state=agent_state_strategy(),
@@ -152,6 +156,7 @@ No modification of:
 ```
 
 **Test:**
+
 ```python
 def test_reward_is_pure():
     """Reward computation has no side effects."""
@@ -185,6 +190,7 @@ def test_reward_is_pure():
 ```
 
 **Test:**
+
 ```python
 @given(
     prev_state=agent_state_strategy(),
@@ -210,11 +216,13 @@ def test_reward_is_finite(prev_state, action, next_state, plume_field):
 Different reward types have different properties (NOT universal):
 
 ### Sparse Binary Reward (ONE implementation)
+
 - Codomain: {0.0, 1.0} exactly
 - Distance-based threshold
 - See reward_function.md for full specification
 
 ### Step Penalty Reward (ANOTHER implementation - WILL IMPLEMENT)
+
 - Codomain: (-∞, goal_reward] (can be negative!)
 - Constant penalty per time step to encourage efficiency
 - Formula: reward = goal_reward if at goal, else -step_penalty
@@ -224,11 +232,13 @@ Different reward types have different properties (NOT universal):
  - Note: This reward is independent of step_count; it is computed per-step and does not require internal episode counters.
 
 ### Dense Distance Reward (ANOTHER implementation - documentation example)
+
 - Codomain: [0.0, 1.0] continuous
 - Monotonic with distance
 - Smooth gradient
 
 ### Shaped Reward (ANOTHER implementation - documentation example)
+
 - Potential-based: reward = φ(s') - φ(s)
 - Policy-invariant (Ng et al. 1999)
 
@@ -505,6 +515,7 @@ def create_reward_function(config: RewardConfig) -> RewardFunction:
 4. **Documentation**: Config self-documents experimental setup
 
 **Design Rule**: All reward parameters that affect behavior MUST be:
+
 - Accepted as constructor arguments
 - Included in `get_metadata()` output
 - Exposed in config schemas
@@ -593,6 +604,7 @@ Implementation MUST satisfy:
 
 **Last Updated:** 2025-10-01  
 **Related Contracts:**
+
 - `reward_function.md` - Sparse binary reward specification
 - `core_types.md` - AgentState, Action definitions
 - `concentration_field.md` - ConcentrationField specification

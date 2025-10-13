@@ -90,9 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Environment Defaults
 - **DEFAULT_GRID_SIZE**: [128, 128]
+- **MIN_GRID_SIZE**: [1, 1]
 - **DEFAULT_SOURCE_LOCATION**: [64, 64]
 - **DEFAULT_PLUME_SIGMA**: 12.0
-- **DEFAULT_GOAL_RADIUS**: 0
+- **DEFAULT_GOAL_RADIUS**: 1.1920929e-07 (float32 epsilon)
 - **DEFAULT_MAX_STEPS**: 1000
 
 ### Performance Targets
@@ -185,3 +186,9 @@ For questions, bug reports, or feature requests, please visit the GitHub Issues 
 ---
 
 *This changelog is automatically updated with each release and follows the principles of keeping a changelog for better project transparency and user communication.*
+### Breaking Changes (planned v2.0.0)
+- Observation structure (public wrapper): now a Dict with keys `agent_position`, `sensor_reading`, `source_location` (was Box(shape=(1,))).
+- Info dictionary: exposes `seed` on reset; step info requires `step_count`, `total_reward`, `goal_reached`; optional `episode_count` may be present.
+- Goal radius: `DEFAULT_GOAL_RADIUS` changed to float32 epsilon; `goal_radius=0` normalized to epsilon automatically.
+- Grid minimum: `MIN_GRID_SIZE` relaxed to `[1, 1]` for testing flexibility.
+- Seeding: `env.seed(seed)` is deprecated; wrapper provides a compatibility shim that calls `reset(seed=...)`.

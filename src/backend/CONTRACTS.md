@@ -548,9 +548,13 @@ class PerformanceMetrics:
 DEFAULT_GRID_WIDTH = 100
 DEFAULT_GRID_HEIGHT = 100
 DEFAULT_GRID_SIZE = GridDimensions(DEFAULT_GRID_WIDTH, DEFAULT_GRID_HEIGHT)
+MIN_GRID_SIZE = (1, 1)
 
 # Rewards
-DEFAULT_GOAL_RADIUS = 5.0
+# Use a tiny positive radius to avoid zero-radius edge cases while
+# preserving the semantics of "exact/near-exact" goal detection.
+import numpy as np
+DEFAULT_GOAL_RADIUS = float(np.finfo(np.float32).eps)
 REWARD_GOAL_REACHED = 1.0
 REWARD_DEFAULT = 0.0
 
@@ -698,9 +702,11 @@ for _ in range(max_steps):
 env.close()
 ```
 
-**Deprecated APIs NOT supported:**
-- ❌ `env.seed(seed)` - Use `env.reset(seed=seed)` instead
-- ❌ `done` flag - Use `terminated` and `truncated` instead
+**Deprecated APIs:**
+- ⚠️ `env.seed(seed)` — Deprecated. Accepted for backward compatibility in
+  the public wrapper (calls `reset(seed=...)` under the hood). Prefer
+  `env.reset(seed=seed)`.
+- ❌ `done` flag — Use `terminated` and `truncated` instead
 
 ---
 

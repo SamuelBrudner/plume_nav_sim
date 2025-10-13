@@ -11,6 +11,7 @@
 ## 🎯 Purpose
 
 Define formal contracts for core data types used throughout the system:
+
 - **Coordinates:** Grid position representation
 - **GridSize:** Grid dimensions with validation
 - **AgentState:** Complete agent state tracking

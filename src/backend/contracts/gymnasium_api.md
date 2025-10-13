@@ -81,7 +81,12 @@ observation_space = self.obs_model.observation_space
 ObservationType = type(self.obs_model.observation_space.sample())
 ```
 
-- **Default (`ConcentrationSensor`)** – `Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)`.
+- **Wrapper default (`PlumeSearchEnv`)** – `Dict` with keys:
+  - `agent_position`: `Box(shape=(2,), dtype=float32)`
+  - `sensor_reading`: `Box(low=0.0, high=1.0, shape=(1,), dtype=float32)`
+  - `source_location`: `Box(shape=(2,), dtype=float32)`
+  (Underlying observation model may be a `Box`; the public wrapper enriches
+  observations into a structured `Dict`.)
 - **Composite sensors** – Dict/Tuple spaces via injected observation models; Gym exposes them verbatim.
 
 ### Observation Contract
@@ -108,8 +113,8 @@ def step(action) -> Tuple[ObservationType, float, bool, bool, InfoType]:
 ### Observation Invariants (Component-Specific)
 
 ```python
-# Observation structure depends on injected ObservationModel
-# Default (ConcentrationSensor): Box(low=0, high=1, shape=(1,), dtype=float32)
+# Observation structure depends on injected ObservationModel and wrapper.
+# Public wrapper default is a Dict with three keys listed above.
 
 # Universal postconditions for ANY observation model:
 ∀ obs returned by reset() or step():
@@ -128,7 +133,7 @@ def step(action) -> Tuple[ObservationType, float, bool, bool, InfoType]:
 ```python
 InfoType = Dict[str, Any]
 
-# Required keys (always present)
+# Required keys (after step())
 info: InfoType = {
     "seed": Optional[int],           # Set after reset()
     "step_count": int,               # Current step in episode
@@ -147,7 +152,8 @@ def reset(seed=None, options=None) -> Tuple[ObservationType, InfoType]:
     Postconditions:
       C1: "seed" in info
       C2: info["seed"] = seed (or None if not provided)
-      C3: No other required keys in reset info
+      C3: Implementation may include step keys with defaults:
+          step_count = 0, total_reward = 0.0, goal_reached = False
     """
 
 def step(action) -> Tuple[ObservationType, float, bool, bool, InfoType]:
@@ -190,6 +196,7 @@ optional_keys = {
     "concentration_at_agent": float,  # Local concentration
     "episode_time_ms": float,         # Episode duration
     "performance_metrics": dict,      # Timing info
+    "episode_count": int,             # Episode index (0-based)
 }
 ```
 
@@ -506,6 +513,7 @@ Changes that break this contract require major version bump:
 5. **Type changes** (e.g., obs from dict to array)
 
 **Non-breaking changes:**
+
 - Add optional info keys
 - Extend metadata
 - Add render modes
@@ -518,11 +526,12 @@ Changes that break this contract require major version bump:
 **Commitment:** This API is **stable** within major versions.
 
 **Semantic Versioning:**
+
 - `MAJOR`: Breaking API changes
 - `MINOR`: Backward-compatible additions
 - `PATCH`: Bug fixes
 
-**Current:** v1.0.0 (Gymnasium v0.29+ compatible)
+**Current:** v2.0.0 (Gymnasium v0.29+ compatible)
 
 ---
 

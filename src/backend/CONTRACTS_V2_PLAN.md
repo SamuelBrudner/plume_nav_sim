@@ -9,6 +9,7 @@
 ## 🎯 Current Status
 
 **Completed:**
+
 - ✅ SEMANTIC_MODEL.md exists (defines abstractions)
 - ✅ CONTRACTS.md exists (basic API signatures)
 - ✅ SEMANTIC_AUDIT.md created (identified gaps)
@@ -387,6 +388,7 @@ def sample(position: Coordinates) -> float:
 **Enhancements needed:**
 
 1. **Add Invariant Section**
+
    ```markdown
    ## 🔒 System Invariants
    
@@ -400,6 +402,7 @@ def sample(position: Coordinates) -> float:
    ```
 
 2. **Add State Machine References**
+
    ```markdown
    ## 🔄 State Machines
    
@@ -409,6 +412,7 @@ def sample(position: Coordinates) -> float:
    ```
 
 3. **Add Mathematical Properties**
+
    ```markdown
    ## 📐 Mathematical Properties
    
@@ -480,6 +484,7 @@ def sample(position: Coordinates) -> float:
 - [ ] Peer review complete
 
 **Success Metrics:**
+
 - Can generate test cases mechanically from contracts
 - Every contract has corresponding guard test (Phase 3)
 - Zero ambiguity in expected behavior
@@ -490,12 +495,14 @@ def sample(position: Coordinates) -> float:
 ## 🚀 After Phase 2
 
 **Phase 3 Begins:**
+
 - Write guard tests for each contract
 - One test file per contract document
 - 100% coverage of state transitions
 - Property tests for mathematical properties
 
 **Expected Timeline:**
+
 - Phase 2: 6-8 hours (spread over 3 days)
 - Phase 3: 8-10 hours (guard test writing)
 - Phase 4: 4-6 hours (align existing tests)
@@ -506,6 +513,7 @@ def sample(position: Coordinates) -> float:
 ---
 
 **REMEMBER:**
+
 - Contracts first, tests second, code last
 - Be mathematically precise
 - Every statement must be testable

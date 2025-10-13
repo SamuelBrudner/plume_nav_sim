@@ -10,6 +10,7 @@
 ## 🎯 Purpose
 
 Define the formal state machine for Environment lifecycle, including:
+
 - Valid states
 - Transition rules
 - Preconditions & postconditions
@@ -553,7 +554,7 @@ if env._state != EnvironmentState.CLOSED:
 
 ## 📚 References
 
-- Gymnasium API: https://gymnasium.farama.org/api/env/
+- Gymnasium API: <https://gymnasium.farama.org/api/env/>
 - SEMANTIC_MODEL.md: Environment lifecycle section
 - CONTRACTS.md: Public API signatures
 

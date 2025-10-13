@@ -11,6 +11,7 @@
 > **"Tests should verify mathematical properties, not implementation details."**
 
 Each test category serves a specific purpose in proving correctness:
+
 - **Property Tests** → Universal quantifiers (∀)
 - **Contract Guards** → Precondition/postcondition enforcement
 - **Semantic Invariants** → "Always true" statements
@@ -55,6 +56,7 @@ def test_determinism_property(seed, actions):
 ```
 
 **Key Properties to Test:**
+
 - **Algebraic:** commutativity, associativity, identity, inverses
 - **Order:** reflexivity, transitivity, antisymmetry
 - **Bounds:** min/max values, ranges
@@ -98,6 +100,7 @@ def test_reward_calculator_invariant_binary_output():
 ```
 
 **Contract Elements:**
+
 - **Preconditions:** What caller must guarantee
 - **Postconditions:** What function guarantees to return
 - **Invariants:** Properties that hold before AND after
@@ -168,6 +171,7 @@ def test_concentration_maximum_at_source_invariant():
 ```
 
 **Invariant Categories:**
+
 - **Physical Laws:** concentration decay, distance properties
 - **State Consistency:** step count, reward accumulation
 - **Safety Properties:** bounds, type safety, resource limits
@@ -230,6 +234,7 @@ def test_coordinates_type_safety():
 ```
 
 **Schema Types:**
+
 - **Input Validation:** Arguments to public methods
 - **Output Validation:** Return types and structures
 - **Intermediate Validation:** Internal data structures
@@ -281,6 +286,7 @@ def test_field_generation_idempotent():
 ```
 
 **Idempotent Operations:**
+
 - Resource cleanup (close, release)
 - State flags (goal_reached, initialized)
 - Deterministic computations (field generation)
@@ -366,6 +372,7 @@ def test_no_global_state_pollution():
 ```
 
 **Determinism Levels:**
+
 - **Strong:** Bit-for-bit identical outputs
 - **Weak:** Numerically close (for floating point)
 - **Statistical:** Same distribution (for randomness)
@@ -412,6 +419,7 @@ def test_set_operations_commutative():
 ```
 
 **Non-Commutative Operations (should test they're NOT):**
+
 ```python
 def test_step_sequence_not_commutative():
     """Action order matters: [a, b] ≠ [b, a]"""
@@ -484,6 +492,7 @@ def test_addition_associative(x, y, z):
 ```
 
 **Non-Associative (test they're NOT):**
+
 ```python
 def test_matrix_multiplication_may_not_be_associative():
     """Demonstrate non-associativity where relevant"""
@@ -530,6 +539,7 @@ tests/
 ### Environment (PlumeSearchEnv)
 
 **Contract Guards:**
+
 - [ ] Cannot step before reset (precondition)
 - [ ] Cannot use after close (state machine)
 - [ ] reset() returns valid (obs, info) (postcondition)
@@ -537,22 +547,26 @@ tests/
 - [ ] Invalid seed raises ValidationError
 
 **Property Tests:**
+
 - [ ] Determinism: same seed → same trajectory
 - [ ] No global state pollution
 - [ ] Episode reproducibility
 
 **Semantic Invariants:**
+
 - [ ] State transitions follow state machine
 - [ ] Step count monotonically increases
 - [ ] Position always valid after step
 - [ ] Terminated/truncated mutually exclusive (mostly)
 
 **Schema Compliance:**
+
 - [ ] Observation structure matches spec
 - [ ] Info dict has required keys
 - [ ] Action space validation
 
 **Idempotency:**
+
 - [ ] close() is idempotent
 - [ ] Multiple resets allowed
 
@@ -561,19 +575,23 @@ tests/
 ### Reward Calculator
 
 **Contract Guards:**
+
 - [ ] Returns only {0.0, 1.0}
 - [ ] Requires valid positions (precondition)
 - [ ] goal_radius > 0 (precondition)
 
 **Property Tests:**
+
 - [ ] Pure function (deterministic)
 - [ ] Binary output for all inputs
 - [ ] Boundary: d = goal_radius → 1.0
 
 **Commutativity:**
+
 - [ ] distance(a, b) = distance(b, a)
 
 **Determinism:**
+
 - [ ] No side effects
 - [ ] Same inputs → same output
 
@@ -582,21 +600,25 @@ tests/
 ### Concentration Field
 
 **Contract Guards:**
+
 - [ ] field.shape matches grid_size
 - [ ] All values in [0, 1] (postcondition)
 - [ ] sigma > 0 (precondition)
 
 **Property Tests:**
+
 - [ ] Maximum at source (∀ other positions)
 - [ ] Decay with distance (monotonic)
 - [ ] Symmetry around source
 - [ ] Non-negativity (∀ positions)
 
 **Semantic Invariants:**
+
 - [ ] Physical laws (Gaussian shape)
 - [ ] Smoothness (no discontinuities)
 
 **Determinism:**
+
 - [ ] Same params → identical field
 
 ---
@@ -604,18 +626,22 @@ tests/
 ### AgentState
 
 **Contract Guards:**
+
 - [ ] step_count >= 0 always
 - [ ] position valid after update
 - [ ] goal_reached write-once
 
 **Property Tests:**
+
 - [ ] Step count monotonic (never decreases)
 - [ ] Total reward monotonic (never decreases)
 
 **Idempotency:**
+
 - [ ] mark_goal_reached() idempotent
 
 **Schema Compliance:**
+
 - [ ] position is Coordinates type
 - [ ] step_count is int
 - [ ] goal_reached is bool
@@ -640,16 +666,19 @@ tests/
 ## 🚀 Implementation Order
 
 ### Phase 1: Safety & Correctness (Week 1)
+
 1. Contract guards (state machines, pre/post conditions)
 2. Determinism tests (reproducibility)
 3. Semantic invariants (bounds, monotonicity)
 
 ### Phase 2: Mathematical Properties (Week 2)
+
 4. Property tests (Hypothesis for universal properties)
 5. Schema compliance (type safety)
 6. Boundary conditions
 
 ### Phase 3: Robustness (Week 3)
+
 7. Idempotency tests
 8. Commutativity (where applicable)
 9. Edge cases and error paths
@@ -669,6 +698,7 @@ tests/
 ## ✅ Success Criteria
 
 **Tests are successful when:**
+
 - All guard tests passing (contracts enforced)
 - Property tests find no counterexamples (after 1000+ examples)
 - Semantic invariants hold across all scenarios
@@ -677,6 +707,7 @@ tests/
 - Mathematical properties proven via property tests
 
 **System is correct when:**
+
 - All contracts satisfied
 - All invariants hold
 - All properties verified

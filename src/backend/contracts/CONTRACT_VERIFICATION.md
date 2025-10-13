@@ -8,6 +8,7 @@
 ## ✅ Signature Consistency
 
 ### RewardFunction.compute_reward()
+
 - [x] Protocol: `(AgentState, Action, AgentState, ConcentrationField) → float`
 - [x] SparseGoalReward: ✓ Matches
 - [x] StepPenaltyReward: ✓ Matches
@@ -15,6 +16,7 @@
 - [x] Integration example: ✓ Matches
 
 ### ObservationModel.get_observation()
+
 - [x] Protocol: `(env_state: Dict[str, Any]) → ObservationType`
 - [x] ConcentrationSensor: ✓ Matches
 - [x] AntennaeArraySensor: ✓ Matches
@@ -23,6 +25,7 @@
 - [x] Test suite: ✓ Uses env_state
 
 ### ActionProcessor.process_action()
+
 - [x] Protocol: `(ActionType, AgentState, GridSize) → AgentState`
 - [x] DiscreteGridActions: ✓ Matches (updated)
 - [x] ContinuousActions: ✓ Matches (updated)
@@ -39,11 +42,13 @@
 ## ✅ Type Dependencies
 
 ### All Contracts Have Type Dependency Tables
+
 - [x] reward_function_interface.md
 - [x] observation_model_interface.md
 - [x] action_processor_interface.md
 
 ### Cross-References
+
 - [x] All reference `core_types.md` for: AgentState, Coordinates, GridSize
 - [x] All reference `concentration_field.md` for: ConcentrationField
 - [x] ObservationType defined in observation_model_interface.md
@@ -54,6 +59,7 @@
 ## ✅ Public API Documentation
 
 ### component_interfaces.md
+
 - [x] Documents PlumeSearchEnv public attributes
 - [x] Documents agent_state (AgentState)
 - [x] Documents plume_field (ConcentrationField)
@@ -69,26 +75,31 @@
 ## ✅ Universal Properties
 
 ### All Three Protocols Define
+
 - [x] Determinism property
 - [x] Purity property
 - [x] Property-based test specifications
 - [x] Edge case test requirements
 
 ---
+
 ## ✅ Implementation Examples
 
 ### reward_function_interface.md
+
 - [x] SparseGoalReward (reference implementation)
 - [x] StepPenaltyReward (demonstrates negative rewards)
 - [x] reward_function.md lists implementation requirements for shipped rewards
 
 ### observation_model_interface.md
+
 - [x] ConcentrationSensor (default, simple)
 - [x] AntennaeArraySensor (demonstrates complexity)
 - [x] WindSensor (documentation example - non-olfactory)
 - [x] FlattenedMultiSensor (documentation example - RL-friendly)
 
 ### action_processor_interface.md
+
 - [x] DiscreteGridActions (default, orientation-free)
 - [x] ContinuousActions (documentation example)
 - [x] EightDirectionActions (documentation example)
@@ -98,8 +109,9 @@
 ## ✅ Configuration Integration
 
 ### All Implementations Show
+
 - [x] Dataclass parameters
-- [x] __post_init__ validation
+- [x] **post_init** validation
 - [x] get_metadata() for logging
 - [x] Config YAML examples
 
@@ -108,7 +120,8 @@
 ## ✅ Data Flow Consistency
 
 ### component_interfaces.md Data Flow
-```
+
+```text
 1. action_processor.process_action(action, current_state, grid) → new_state ✓
 2. Update agent_state ✓
 3. env_state = _get_env_state() ✓
@@ -120,6 +133,7 @@
 All steps match protocol signatures: ✓
 
 ### Additional Checks
+
 - `environment_state_machine.md` invariants updated for orientation & components
 - `gymnasium_api.md` reflects injected spaces and validation rules
 - `reward_function.md` reconciled with protocol (no legacy signature references)

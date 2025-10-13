@@ -56,22 +56,26 @@ Since C(source) = exp(0) = 1.0, the field is naturally normalized.
 ### Universal Physical Laws (I1-I2)
 
 These apply to **all** concentration field models:
+
 - **I1: Non-negativity** - Concentration cannot be negative
 - **I2: Bounded** - Normalized concentration ≤ 1.0 (after normalization)
 
 ### Quasi-Universal Laws (I3)
 
 Usually true but has exceptions:
+
 - **I3: Maximum at source** - Source has highest concentration (usually)
 
 ### Gaussian Model Properties (I4-I7)
 
 These apply **only** to static Gaussian fields:
+
 - **I4: Monotonic radial decay** - Closer → higher concentration
 - **I5: Radial symmetry** - Symmetric around source
 - **I7: Gaussian formula** - Follows exp(-d²/(2σ²))
 
 ⚠️ **NOT universal physical laws!**
+
 - Real plumes with turbulence violate monotonic decay
 - Wind breaks radial symmetry
 - Other models (advection-diffusion, turbulent) use different equations
@@ -89,6 +93,7 @@ Concentration cannot be negative.
 ```
 
 **Test:**
+
 ```python
 @given(grid=grid_size_strategy(), source=coordinates_strategy(), sigma=st.floats(0.1, 5.0))
 def test_field_non_negative(grid, source, sigma):
@@ -106,6 +111,7 @@ Applies after normalization.
 ```
 
 **Test:**
+
 ```python
 @given(grid=grid_size_strategy(), source=coordinates_strategy(), sigma=st.floats(0.1, 5.0))
 def test_field_bounded(grid, source, sigma):
@@ -123,12 +129,14 @@ The concentration is highest at the source location.
 ```
 
 **Assumptions:**
+
 - Passive tracer (no reactions)
 - Continuous emission
 - Steady-state (no transients)
 - Time-averaged (for stochastic models)
 
 ⚠️ **Can be violated by:**
+
 - Turbulent accumulation zones (eddies, recirculation)
 - Reactive chemistry (products form downstream)
 - Stochastic particle models (instantaneous snapshots)
@@ -139,6 +147,7 @@ The concentration is highest at the source location.
 **Holds for:** Most passive tracer plume models in steady-state
 
 **Test:**
+
 ```python
 @given(
     grid_size=st.integers(10, 50),
@@ -181,6 +190,7 @@ Only holds for radially symmetric models.
 ```
 
 **Test:**
+
 ```python
 @given(
     grid=grid_size_strategy(),
@@ -221,6 +231,7 @@ Only holds for isotropic models (no wind, uniform diffusion).
 ```
 
 **Test:**
+
 ```python
 def test_radial_symmetry():
     """Concentration symmetric around source"""
@@ -252,6 +263,7 @@ Array dimensions match grid dimensions.
 ```
 
 **Test:**
+
 ```python
 @given(
     width=st.integers(1, 100),
@@ -277,6 +289,7 @@ Other plume models (advection-diffusion, turbulent, etc.) use different equation
 ```
 
 **Test:**
+
 ```python
 def test_gaussian_form():
     """Field values match Gaussian formula"""
@@ -601,7 +614,7 @@ class TestConcentrationFieldEdgeCases:
 
 ### Time Complexity
 
-```
+```text
 Field Generation: O(width × height)
   - Single pass through grid
   - Vectorized numpy operations
@@ -614,7 +627,7 @@ Sampling: O(1)
 
 ### Space Complexity
 
-```
+```text
 Field Storage: O(width × height)
   - Single float64 array
   - Memory = width × height × 8 bytes

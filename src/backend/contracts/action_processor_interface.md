@@ -10,6 +10,7 @@
 ## 📦 Type Dependencies
 
 This contract references types defined in other contracts:
+
 - `AgentState`: See `core_types.md` - Contains position and orientation
 - `Coordinates`: See `core_types.md` - 2D integer grid position
 - `GridSize`: See `core_types.md` - Grid dimensions
@@ -20,6 +21,7 @@ This contract references types defined in other contracts:
 ## 🎯 Purpose
 
 Define the **universal interface** for action processing, enabling:
+
 - Diverse action spaces (discrete, continuous, hybrid, multi-agent)
 - Pluggable movement models without environment modification
 - Research flexibility for different control paradigms
@@ -138,6 +140,7 @@ Agent NEVER leaves grid bounds.
 ```
 
 **Test:**
+
 ```python
 @given(
     action=action_strategy(),
@@ -164,6 +167,7 @@ def test_boundary_safety(action_proc, action, state, grid_size):
 ```
 
 **Test:**
+
 ```python
 @given(action=action_strategy(), state=agent_state_strategy(), grid=grid_size_strategy())
 def test_determinism(action_proc, action, state, grid):
@@ -190,6 +194,7 @@ No modification of:
 ```
 
 **Test:**
+
 ```python
 def test_purity(action_proc):
     """Action processing has no side effects."""
@@ -643,5 +648,6 @@ Implementation MUST satisfy:
 
 **Last Updated:** 2025-10-01  
 **Related Contracts:**
+
 - `core_types.md` - Coordinates, GridSize definitions
 - `environment_state_machine.md` - Environment step() integration
