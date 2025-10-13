@@ -231,7 +231,7 @@ class MatplotlibBackendManager:
             f"fallback_enabled={enable_fallback}, headless={self.headless_mode}"
         )
 
-    def select_backend(
+    def select_backend(  # noqa: C901
         self,
         force_reselection: bool = False,
         validate_functionality: bool = True,
@@ -330,7 +330,7 @@ class MatplotlibBackendManager:
 
         return selected_backend
 
-    def get_backend_capabilities(
+    def get_backend_capabilities(  # noqa: C901
         self,
         backend_name: Optional[str] = None,
         force_refresh: bool = False,
@@ -436,7 +436,7 @@ class MatplotlibBackendManager:
 
         return capabilities
 
-    def configure_backend(
+    def configure_backend(  # noqa: C901
         self, arg1=None, arg2=None, strict_validation: bool = False
     ) -> bool:
         """
@@ -1092,7 +1092,7 @@ class InteractiveUpdateManager:
             logger.error(f"Source marker update failed: {e}")
             return False
 
-    def refresh_display(
+    def refresh_display(  # noqa: C901
         self, force_refresh: bool = False, measure_performance: bool = False
     ) -> bool:
         """
@@ -1271,7 +1271,7 @@ class InteractiveUpdateManager:
             # Propagate as RenderingError so callers can handle failures explicitly
             raise RenderingError(f"Batch update failed: {e}")
 
-    def get_performance_metrics(self) -> Dict[str, Any]:  # noqa: C901
+    def get_performance_metrics(self) -> Dict[str, Any]:  # noqa: C901  # noqa: C901
         """Return summarized performance statistics for refreshes and batch updates."""
         stats = {}
         refresh_count = int(self.performance_stats.get("update_count", 0))

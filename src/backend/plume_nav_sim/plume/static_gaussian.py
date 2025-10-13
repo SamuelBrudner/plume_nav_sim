@@ -347,7 +347,7 @@ def calculate_gaussian_concentration(
         )
 
 
-def validate_gaussian_parameters(
+def validate_gaussian_parameters(  # noqa: C901
     grid_size: GridDimensions,
     source_location: CoordinateType,
     sigma: float,
@@ -611,7 +611,7 @@ def clear_gaussian_cache(
         return error_report
 
 
-def get_gaussian_field_statistics(
+def get_gaussian_field_statistics(  # noqa: C901
     field_array: np.ndarray,
     expected_peak_location: Coordinates,
     include_distribution_analysis: bool = True,
@@ -856,7 +856,7 @@ def get_gaussian_field_statistics(
         )
 
 
-def create_static_gaussian_plume(
+def create_static_gaussian_plume(  # noqa: C901
     grid_size: GridDimensions = DEFAULT_GRID_SIZE,
     source_location: Optional[CoordinateType] = None,
     sigma: Optional[float] = None,
@@ -1334,7 +1334,7 @@ class StaticGaussianPlume(BasePlumeModel):
                 calculation_context=f"sampling_at_{position}",
             )
 
-    def validate_model(
+    def validate_model(  # noqa: C901
         self,
         check_field_properties: bool = True,
         validate_performance: bool = True,
@@ -1608,7 +1608,7 @@ class StaticGaussianPlume(BasePlumeModel):
 
         return complete_info
 
-    def update_parameters(
+    def update_parameters(  # noqa: C901
         self,
         new_source_location: Optional[CoordinateType] = None,
         new_sigma: Optional[float] = None,

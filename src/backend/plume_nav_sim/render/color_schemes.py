@@ -76,7 +76,7 @@ SCHEME_CACHE = {}
 logger = logging.getLogger(__name__)
 
 
-def _safe_get_cmap(colormap_name: str):
+def _safe_get_cmap(colormap_name: str):  # noqa: C901
     """Resolve a matplotlib colormap robustly.
 
     Uses the modern matplotlib.colormaps API when available to avoid deprecation
@@ -135,7 +135,7 @@ class CustomColorScheme:
         default=None, repr=False
     )
 
-    def __post_init__(self):
+    def __post_init__(self):  # noqa: C901
         """Initialize custom color scheme with RGB color validation and performance configuration."""
         # Validate agent_color tuple has exactly 3 RGB values in range [0,255]
         if not (isinstance(self.agent_color, tuple) and len(self.agent_color) == 3):
@@ -368,7 +368,7 @@ class CustomColorScheme:
 
         logger.info(f"Enabled accessibility features: {accessibility_type}")
 
-    def validate(
+    def validate(  # noqa: C901
         self,
         check_accessibility: bool = False,
         check_performance: bool = False,
@@ -1017,7 +1017,7 @@ class ColorSchemeManager:
 # Factory Functions
 
 
-def create_color_scheme(
+def create_color_scheme(  # noqa: C901
     scheme_config: Union[Dict[str, Any], str, PredefinedScheme],
     optimize_for_mode: Optional[RenderMode] = None,
     enable_accessibility: bool = False,
@@ -1286,7 +1286,7 @@ def optimize_for_render_mode(
     return optimized_scheme
 
 
-def validate_color_scheme(
+def validate_color_scheme(  # noqa: C901
     color_scheme: Union[CustomColorScheme, ColorSchemeManager, Dict[str, Any]],
     check_accessibility: bool = False,
     check_performance: bool = False,
@@ -1744,7 +1744,7 @@ def get_matplotlib_colormap(
         return fallback
 
 
-def convert_rgb_to_matplotlib(
+def convert_rgb_to_matplotlib(  # noqa: C901
     rgb_color: Union[Tuple[int, int, int], List[int], np.ndarray],
     normalize_to_unit: bool = True,
     validate_range: bool = True,

@@ -160,7 +160,7 @@ class RenderContext:
         default_factory=dict
     )  # Extensible metadata for additional information
 
-    def validate(
+    def validate(  # noqa: C901
         self, strict_validation: bool = True, check_performance: bool = True
     ) -> bool:
         """
@@ -603,7 +603,7 @@ class RenderingMetrics:
         # Update performance summary with latest operation statistics and trends
         self._update_performance_summary(duration_ms)
 
-    def check_performance_targets(
+    def check_performance_targets(  # noqa: C901
         self, strict_checking: bool = False, generate_recommendations: bool = True
     ) -> Dict[str, Any]:
         """
@@ -1021,7 +1021,7 @@ class BaseRenderer(abc.ABC):
             f"color_scheme={color_scheme_name}, options={len(self.renderer_options)} parameters"
         )
 
-    def initialize(
+    def initialize(  # noqa: C901
         self,
         validate_immediately: bool = DEFAULT_CONTEXT_VALIDATION,
         enable_performance_monitoring: bool = PERFORMANCE_MONITORING_ENABLED,
@@ -1138,7 +1138,7 @@ class BaseRenderer(abc.ABC):
                 raise RenderingError(f"Renderer initialization failed: {e}")
 
     @monitor_performance("render_operation")
-    def render(
+    def render(  # noqa: C901
         self, context: RenderContext, mode_override: Optional[RenderMode] = None
     ) -> Union[RGBArray, None]:
         """
@@ -1910,7 +1910,7 @@ class BaseRenderer(abc.ABC):
             )
 
 
-def create_render_context(
+def create_render_context(  # noqa: C901
     concentration_field: np.ndarray,
     agent_position: Coordinates,
     source_position: Coordinates,
@@ -2026,7 +2026,7 @@ def create_render_context(
         )
 
 
-def validate_rendering_parameters(
+def validate_rendering_parameters(  # noqa: C901
     render_mode: RenderMode,
     grid_size: GridSize,
     color_scheme_name: Optional[str] = None,

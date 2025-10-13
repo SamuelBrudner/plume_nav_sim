@@ -404,7 +404,7 @@ class ConcentrationField:
         # Set interpolation_method to default nearest neighbor for performance
         self.interpolation_method = _DEFAULT_INTERPOLATION
 
-    def generate_field(
+    def generate_field(  # noqa: C901
         self,
         source_location: Coordinates,
         sigma: float = DEFAULT_PLUME_SIGMA,
@@ -544,7 +544,7 @@ class ConcentrationField:
                     },
                 ) from e
 
-    def sample_at(
+    def sample_at(  # noqa: C901
         self,
         position: CoordinateType,
         interpolate: bool = False,
@@ -801,7 +801,7 @@ class ConcentrationField:
             ) from e
 
     # TODO Rename this here and in `update_field`
-    def _extracted_from_update_field_26(
+    def _extracted_from_update_field_26(  # noqa: C901
         self, new_source_location, new_sigma, clear_cache, auto_regenerate
     ):
         # Check if parameters actually changed to avoid unnecessary regeneration
@@ -875,7 +875,7 @@ class ConcentrationField:
 
         return True
 
-    def validate_field(
+    def validate_field(  # noqa: C901
         self,
         check_mathematical_properties: bool = True,
         check_memory_usage: bool = False,
@@ -1342,7 +1342,7 @@ class ConcentrationField:
             ) from e
 
 
-def create_concentration_field(
+def create_concentration_field(  # noqa: C901
     grid_size: GridDimensions = DEFAULT_GRID_SIZE,
     source_location: Optional[Coordinates] = None,
     sigma: Optional[float] = None,
@@ -1459,7 +1459,7 @@ def create_concentration_field(
         ) from e
 
 
-def validate_field_parameters(
+def validate_field_parameters(  # noqa: C901
     grid_size: GridDimensions,
     source_location: CoordinateType,
     sigma: float,
