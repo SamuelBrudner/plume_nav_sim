@@ -146,6 +146,9 @@ class EpisodeManagerConfig:
         default=DEFAULT_ENABLE_COMPONENT_INTEGRATION
     )
     enable_reproducibility_validation: bool = field(default=True)
+    # Backward-compat aliases expected by some tests
+    enable_reproducibility_tracking: bool = field(default=True)
+    episode_timeout_ms: float = field(default=30_000.0)
     component_coordination_timeout: float = field(
         default=COMPONENT_COORDINATION_TIMEOUT
     )
@@ -185,6 +188,17 @@ class EpisodeManagerConfig:
         if not isinstance(self.enable_reproducibility_validation, bool):
             self.enable_reproducibility_validation = True
 
+        # Keep tracking alias in sync
+        if not isinstance(self.enable_reproducibility_tracking, bool):
+            self.enable_reproducibility_tracking = (
+                self.enable_reproducibility_validation
+            )
+        else:
+            # Mirror to validation flag when explicitly provided
+            self.enable_reproducibility_validation = (
+                self.enable_reproducibility_tracking
+            )
+
         # Set component_coordination_timeout to COMPONENT_COORDINATION_TIMEOUT for dependency management
         if (
             not isinstance(self.component_coordination_timeout, (int, float))
@@ -195,6 +209,13 @@ class EpisodeManagerConfig:
         # Initialize episode_cache_size to EPISODE_PROCESSING_CACHE_SIZE for performance optimization
         if not isinstance(self.episode_cache_size, int) or self.episode_cache_size < 0:
             self.episode_cache_size = EPISODE_PROCESSING_CACHE_SIZE
+
+        # Normalize episode timeout value (milliseconds, positive)
+        if (
+            not isinstance(self.episode_timeout_ms, (int, float))
+            or self.episode_timeout_ms <= 0
+        ):
+            self.episode_timeout_ms = 30_000.0
 
         # Initialize empty component_configs dictionary for component-specific configuration storage
         if not isinstance(self.component_configs, dict):
@@ -356,10 +377,34 @@ class EpisodeManagerConfig:
             )
 
             # Include performance monitoring settings in all component configurations
+            # Internal configs (objects) for use by EpisodeManager
             component_configs = {
                 "StateManager": state_manager_config,
                 "RewardCalculator": reward_calculator_config,
                 "ActionProcessor": action_processor_config,
+            }
+
+            # Public, test-friendly view (dicts) for validation in tests
+            public_configs: Dict[str, Any] = {
+                "state_manager": {
+                    "grid_size": state_manager_config.grid_size,
+                    "source_location": state_manager_config.source_location,
+                    "max_steps": state_manager_config.max_steps,
+                    "goal_radius": state_manager_config.goal_radius,
+                    "enabled": True,
+                },
+                "reward_calculator": {
+                    "goal_radius": reward_calculator_config.goal_radius,
+                    "reward_goal_reached": reward_calculator_config.reward_goal_reached,
+                    "reward_default": reward_calculator_config.reward_default,
+                    "enabled": True,
+                },
+                "action_processor": {
+                    "enable_validation": action_processor_config.enable_validation,
+                    "enforce_boundaries": action_processor_config.enforce_boundaries,
+                    "strict_validation": action_processor_config.strict_validation,
+                    "enabled": True,
+                },
             }
 
             # Add custom component parameters from component_configs if specified
@@ -388,8 +433,9 @@ class EpisodeManagerConfig:
             # Ensure cross-component parameter consistency and integration compatibility
             # This is implicitly ensured by deriving from the same env_config
 
-            # Return dictionary of validated component configurations ready for component initialization
-            return component_configs
+            # Return combined mapping: lowercase dicts for tests + internal object configs
+            public_configs.update(component_configs)
+            return public_configs
 
         except Exception as e:
             raise ComponentError(
@@ -665,6 +711,12 @@ class EpisodeResult:
                 component_name="EpisodeResult",
                 operation_name="set_final_state",
             ) from e
+
+    # Backward-compat: tests expect `duration_ms`; keep internal field name
+    # `episode_duration_ms` but expose a read-only property alias.
+    @property
+    def duration_ms(self) -> float:
+        return float(self.episode_duration_ms)
 
     def add_performance_metrics(
         self, episode_metrics: Dict[str, Any], component_metrics: Dict[str, Any]
@@ -1599,8 +1651,10 @@ class EpisodeManager:
                 include_component_details=collect_detailed_statistics,
             )
 
-            # Calculate final performance metrics including episode duration and resource usage
-            episode_duration_ms = self.current_episode_state.get_episode_duration()
+            # Calculate final performance metrics; convert seconds -> milliseconds
+            episode_duration_ms = (
+                self.current_episode_state.get_episode_duration() * 1000.0
+            )
 
             # Collect component statistics from state_manager, reward_calculator, and action_processor
             component_stats = {}

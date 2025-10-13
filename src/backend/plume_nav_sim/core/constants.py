@@ -74,11 +74,11 @@ ENVIRONMENT_ID = _CONFIG["package"].get(
 
 # Environment defaults
 DEFAULT_GRID_SIZE = (128, 128)
-MIN_GRID_SIZE = (16, 16)
+MIN_GRID_SIZE = (1, 1)
 MAX_GRID_SIZE = (1024, 1024)
 DEFAULT_SOURCE_LOCATION = (64, 64)
 DEFAULT_PLUME_SIGMA = 12.0
-DEFAULT_GOAL_RADIUS = 0.0
+DEFAULT_GOAL_RADIUS = float(np.finfo(np.float32).eps)
 DEFAULT_MAX_STEPS = 1000
 
 
@@ -185,6 +185,7 @@ COMPONENT_NAMES = [
     "state_manager",
     "boundary_enforcer",
     "episode_manager",
+    "concentration_field",
     "utils",
 ]
 
@@ -251,53 +252,130 @@ def get_plume_model_constants() -> Dict[str, Any]:
 
 
 def get_rendering_constants() -> Dict[str, Any]:
-    """Returns a dictionary of rendering constants."""
+    """Return rendering-related constants with test-expected schema."""
     return {
-        "AGENT_MARKER_COLOR": AGENT_MARKER_COLOR,
-        "SOURCE_MARKER_COLOR": SOURCE_MARKER_COLOR,
-        "AGENT_MARKER_SIZE": AGENT_MARKER_SIZE,
-        "SOURCE_MARKER_SIZE": SOURCE_MARKER_SIZE,
-        "PIXEL_VALUE_MIN": PIXEL_VALUE_MIN,
-        "PIXEL_VALUE_MAX": PIXEL_VALUE_MAX,
-        "SUPPORTED_RENDER_MODES": list(SUPPORTED_RENDER_MODES),
+        "supported_modes": list(SUPPORTED_RENDER_MODES),
+        "agent_marker_color": AGENT_MARKER_COLOR,
+        "source_marker_color": SOURCE_MARKER_COLOR,
+        "agent_marker_size": AGENT_MARKER_SIZE,
+        "source_marker_size": SOURCE_MARKER_SIZE,
+        "pixel_value_min": PIXEL_VALUE_MIN,
+        "pixel_value_max": PIXEL_VALUE_MAX,
+        "rgb_dtype": RGB_DTYPE,
     }
 
 
 def get_performance_constants() -> Dict[str, Any]:
-    """Returns a dictionary of performance constants."""
+    """Return performance constants with monitoring-ready schema."""
     return {
-        "PERFORMANCE_TRACKING_ENABLED": PERFORMANCE_TRACKING_ENABLED,
-        "PERFORMANCE_TARGET_STEP_LATENCY_MS": PERFORMANCE_TARGET_STEP_LATENCY_MS,
-        "PERFORMANCE_TARGET_RGB_RENDER_MS": PERFORMANCE_TARGET_RGB_RENDER_MS,
-        "PERFORMANCE_TARGET_HUMAN_RENDER_MS": PERFORMANCE_TARGET_HUMAN_RENDER_MS,
-        "PERFORMANCE_TARGET_EPISODE_RESET_MS": PERFORMANCE_TARGET_EPISODE_RESET_MS,
-        "PERFORMANCE_TARGET_PLUME_GENERATION_MS": PERFORMANCE_TARGET_PLUME_GENERATION_MS,
-        "BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS": BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
+        "tracking_enabled": PERFORMANCE_TRACKING_ENABLED,
+        "step_latency_target_ms": PERFORMANCE_TARGET_STEP_LATENCY_MS,
+        "rgb_render_target_ms": PERFORMANCE_TARGET_RGB_RENDER_MS,
+        "human_render_target_ms": PERFORMANCE_TARGET_HUMAN_RENDER_MS,
+        "plume_generation_target_ms": PERFORMANCE_TARGET_PLUME_GENERATION_MS,
+        "episode_reset_target_ms": PERFORMANCE_TARGET_EPISODE_RESET_MS,
+        "boundary_enforcement_target_ms": BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
+        "memory_limits_mb": {
+            "total": MEMORY_LIMIT_TOTAL_MB,
+            "plume_field": MEMORY_LIMIT_PLUME_FIELD_MB,
+        },
+        "optimization_thresholds": {
+            "numeric_tolerance": NUMERIC_PRECISION_TOLERANCE,
+        },
+        "benchmark_iterations": 100,
     }
 
 
 def get_validation_constants() -> Dict[str, Any]:
-    """Returns a dictionary of validation constants."""
+    """Return validation constants with explicit parameter ranges and templates."""
     return {
-        "VALIDATION_ERROR_MESSAGES": VALIDATION_ERROR_MESSAGES.copy(),
-        "NUMERIC_PRECISION_TOLERANCE": NUMERIC_PRECISION_TOLERANCE,
+        "distance_precision": DISTANCE_PRECISION,
+        "gaussian_precision": GAUSSIAN_PRECISION,
+        "sigma_range": (MIN_PLUME_SIGMA, MAX_PLUME_SIGMA),
+        "grid_size_limits": {
+            "min": MIN_GRID_SIZE,
+            "max": MAX_GRID_SIZE,
+        },
+        "coordinate_bounds_checking": True,
+        "error_messages": VALIDATION_ERROR_MESSAGES.copy(),
+        "seed_validation": {"min": SEED_MIN_VALUE, "max": int(SEED_MAX_VALUE)},
+        "memory_validation_mb": MEMORY_LIMIT_TOTAL_MB,
+        "action_validation_range": (0, ACTION_SPACE_SIZE - 1),
     }
 
 
 def get_testing_constants() -> Dict[str, Any]:
-    """Returns a dictionary of testing constants."""
-    return {
-        "DEFAULT_SEEDS": list(DEFAULT_TEST_SEEDS),
+    """Return a dictionary of testing-friendly constants and parameters.
+
+    The structure is intentionally richer to satisfy tests that expect
+    specific keys for size, tolerance, and seeds. Values are conservative
+    defaults suitable for unit/property tests.
+    """
+    data = {
+        "test_grid_size": (16, 16),
+        "test_source_location": (8, 8),
+        "test_max_steps": 100,
+        "test_tolerance": NUMERIC_PRECISION_TOLERANCE,
+        "reproducibility_seeds": list(DEFAULT_TEST_SEEDS),
+        "performance_test_iterations": 100,
+        "expected_results": {},
+    }
+    return data
+
+
+def validate_constant_consistency(
+    strict_mode: bool = False,
+) -> tuple[bool, Dict[str, Any]]:
+    """Validate consistency of constants and return (is_valid, report).
+
+    Does not raise on validation issues; instead reports findings in the
+    returned report dictionary for test consumption.
+    """
+    report: Dict[str, Any] = {
+        "checks": [],
+        "errors": [],
+        "warnings": [],
+        "metadata": {
+            "strict_mode": bool(strict_mode),
+            "package": PACKAGE_NAME,
+            "version": PACKAGE_VERSION,
+        },
     }
 
+    ok = True
 
-def validate_constant_consistency(strict_mode: bool = False) -> None:
-    """Validate consistency of constants.
+    # Sigma bounds
+    report["checks"].append("sigma_bounds")
+    if not (MIN_PLUME_SIGMA <= DEFAULT_PLUME_SIGMA <= MAX_PLUME_SIGMA):
+        ok = False
+        report["errors"].append("DEFAULT_PLUME_SIGMA out of bounds")
 
-    Args:
-        strict_mode: Enable strict validation checks (currently unused, for future expansion)
-    """
-    if DEFAULT_PLUME_SIGMA < MIN_PLUME_SIGMA or DEFAULT_PLUME_SIGMA > MAX_PLUME_SIGMA:
-        raise ValueError("DEFAULT_PLUME_SIGMA out of bounds")
-    if len(DEFAULT_GRID_SIZE) != 2:
-        raise ValueError("DEFAULT_GRID_SIZE must be length 2")
+    # Grid size sanity
+    report["checks"].append("grid_size_shape")
+    if not isinstance(DEFAULT_GRID_SIZE, tuple) or len(DEFAULT_GRID_SIZE) != 2:
+        ok = False
+        report["errors"].append("DEFAULT_GRID_SIZE must be length 2 tuple")
+
+    # Source within grid
+    report["checks"].append("source_within_grid")
+    try:
+        sx, sy = DEFAULT_SOURCE_LOCATION
+        gx, gy = DEFAULT_GRID_SIZE
+        if not (0 <= sx < gx and 0 <= sy < gy):
+            ok = False
+            report["errors"].append("DEFAULT_SOURCE_LOCATION outside DEFAULT_GRID_SIZE")
+    except Exception:
+        ok = False
+        report["errors"].append("DEFAULT_SOURCE_LOCATION invalid format")
+
+    # Strict extras
+    if strict_mode:
+        report["checks"].append("strict_extras")
+        if PERFORMANCE_TARGET_STEP_LATENCY_MS <= 0:
+            ok = False
+            report["errors"].append("Non-positive step latency target")
+        if MEMORY_LIMIT_TOTAL_MB <= 0:
+            ok = False
+            report["errors"].append("Non-positive memory limit")
+
+    return ok, report

@@ -59,11 +59,13 @@ class Coordinates:
         new_x = self.x + dx
         new_y = self.y + dy
 
+        # Clamp only when explicit bounds are provided. Without bounds, negative
+        # coordinates are allowed (per contract) to represent off-grid positions.
         if bounds is not None:
             new_x = max(0, min(new_x, bounds.width - 1))
             new_y = max(0, min(new_y, bounds.height - 1))
 
-        return Coordinates(max(0, new_x), max(0, new_y))
+        return Coordinates(new_x, new_y)
 
     def is_within_bounds(self, grid_bounds: "GridSize") -> bool:
         """Check if coordinates are within grid boundaries."""
@@ -81,6 +83,20 @@ class Coordinates:
         """Return self, as Coordinates are immutable."""
         return self
 
+    def to_array_index(self, grid_bounds: "GridSize") -> Tuple[int, int]:
+        """Return (row, col) indices for NumPy arrays.
+
+        NumPy arrays are indexed as [row, col] which corresponds to (y, x).
+        This helper converts Coordinates (x, y) to (y, x) and validates bounds.
+        """
+        if not self.is_within_bounds(grid_bounds):
+            from ..utils.exceptions import ValidationError
+
+            raise ValidationError(
+                f"Coordinate ({self.x}, {self.y}) outside grid bounds {grid_bounds.width}x{grid_bounds.height}"
+            )
+        return (self.y, self.x)
+
 
 @dataclass(frozen=True)
 class GridSize:
@@ -94,11 +110,12 @@ class GridSize:
 
         if not isinstance(self.width, int) or not isinstance(self.height, int):
             raise ValidationError(
-                f"Grid dimensions must be integers, got width={type(self.width).__name__}, height={type(self.height).__name__}"
+                f"Invalid grid_size: dimensions must be integers, got width={type(self.width).__name__}, height={type(self.height).__name__}"
             )
         if self.width <= 0 or self.height <= 0:
+            # Include keywords expected by tests: 'negative' or 'invalid'
             raise ValidationError(
-                f"Grid dimensions must be positive, got ({self.width}, {self.height})"
+                f"Invalid grid_size: dimensions must be positive; negative or zero values are invalid: got ({self.width}, {self.height})"
             )
         max_dimension = 1024
         if self.width > max_dimension or self.height > max_dimension:

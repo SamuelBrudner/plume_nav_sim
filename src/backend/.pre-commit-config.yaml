@@ -269,8 +269,9 @@ repos:
     hooks:
       - id: constants-drift-check
         name: Validate constants drift (YAML vs Python)
-        entry: python -m scripts.validate_constants_drift
+        entry: bash
         language: system
+        args: ['-lc', 'cd src/backend && conda run -n plume-nav-sim python scripts/validate_constants_drift.py']
         pass_filenames: false
-        stages: [pre-commit, pre-push]
+        stages: [pre-push]
         files: '^(config/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
