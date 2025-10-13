@@ -151,6 +151,11 @@ jobs:
         run: |
           python scripts/validate_installation.py
 
+      - name: 'Validate constants drift (YAML vs Python)'
+        working-directory: src/backend
+        run: |
+          python -m scripts.validate_constants_drift
+
       - name: 'Create test results directory'
         working-directory: src/backend
         run: |

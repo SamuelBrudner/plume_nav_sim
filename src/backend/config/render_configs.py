@@ -298,58 +298,64 @@ class RenderConfigPreset:
             ValidationError: If any validation fails with detailed context
         """
         try:
-            logger.debug(
-                f"Validating preset {self.name} with strict_mode={strict_mode}"
+            return self._extracted_from_validate_23(
+                strict_mode, check_system_compatibility, validate_performance
             )
-
-            # Basic configuration validation
-            if not self.name or not self.name.strip():
-                raise ValueError("Preset name cannot be empty")
-
-            if not isinstance(self.category, RenderPresetCategory):
-                raise ValueError(f"Invalid category type: {type(self.category)}")
-
-            if not self.render_config:
-                raise ValueError("Render configuration cannot be empty")
-
-            # Validate render_config structure (placeholder validation)
-            required_keys = (
-                ["render_mode", "template_quality"]
-                if self.category != RenderPresetCategory.CUSTOM
-                else []
-            )
-            for key in required_keys:
-                if key not in self.render_config:
-                    raise ValueError(f"Missing required configuration key: {key}")
-
-            # System compatibility validation
-            if check_system_compatibility:
-                self._validate_system_compatibility()
-
-            # Performance validation
-            if validate_performance:
-                self._validate_performance_targets()
-
-            # Strict mode additional validations
-            if strict_mode:
-                self._validate_strict_requirements()
-
-            self.validated = True
-            logger.info(f"Preset {self.name} validation successful")
-            return True
-
         except Exception as e:
             logger.error(f"Preset {self.name} validation failed: {e}")
             self.validated = False
             raise
 
+    # TODO Rename this here and in `validate`
+    def _extracted_from_validate_23(
+        self, strict_mode, check_system_compatibility, validate_performance
+    ):
+        logger.debug(f"Validating preset {self.name} with strict_mode={strict_mode}")
+
+        # Basic configuration validation
+        if not self.name or not self.name.strip():
+            raise ValueError("Preset name cannot be empty")
+
+        if not isinstance(self.category, RenderPresetCategory):
+            raise ValueError(f"Invalid category type: {type(self.category)}")
+
+        if not self.render_config:
+            raise ValueError("Render configuration cannot be empty")
+
+        # Validate render_config structure (placeholder validation)
+        required_keys = (
+            ["render_mode", "template_quality"]
+            if self.category != RenderPresetCategory.CUSTOM
+            else []
+        )
+        for key in required_keys:
+            if key not in self.render_config:
+                raise ValueError(f"Missing required configuration key: {key}")
+
+        # System compatibility validation
+        if check_system_compatibility:
+            self._validate_system_compatibility()
+
+        # Performance validation
+        if validate_performance:
+            self._validate_performance_targets()
+
+        # Strict mode additional validations
+        if strict_mode:
+            self._validate_strict_requirements()
+
+        self.validated = True
+        logger.info(f"Preset {self.name} validation successful")
+        return True
+
     def _validate_system_compatibility(self):
         """Validate system compatibility requirements."""
         # Check display requirements for matplotlib presets
-        if self.category == RenderPresetCategory.MATPLOTLIB:
-            if self.system_requirements.get("display_required", False):
-                # In a real implementation, we would check for display availability
-                logger.debug("Display compatibility check passed")
+        if (
+            self.category == RenderPresetCategory.MATPLOTLIB
+            and self.system_requirements.get("display_required", False)
+        ):
+            logger.debug("Display compatibility check passed")
 
         # Check package availability (placeholder)
         required_packages = self.system_requirements.get("required_packages", [])
@@ -930,11 +936,9 @@ class RenderPresetRegistry:
                 "Registry is empty - no presets registered"
             )
 
-        # Check for category balance
-        empty_categories = [
+        if empty_categories := [
             cat for cat in RenderPresetCategory if len(self._category_index[cat]) == 0
-        ]
-        if empty_categories:
+        ]:
             validation_report["warnings"].append(
                 f"Empty categories: {[cat.value for cat in empty_categories]}"
             )
@@ -1211,7 +1215,7 @@ def create_research_preset(
     if quality_level is None:
         quality_level = (
             TemplateQuality.QUALITY
-            if research_scenario in ["publication"]
+            if research_scenario in {"publication"}
             else TemplateQuality.STANDARD
         )
 
@@ -1262,15 +1266,12 @@ def create_research_preset(
         ),
         **base_config,
         **research_options,
+        "render_mode": (
+            RenderMode.RGB_ARRAY
+            if "rgb" in output_format.lower() or "array" in output_format.lower()
+            else RenderMode.HUMAN
+        ),
     }
-
-    # Set appropriate render mode based on output format
-    if "rgb" in output_format.lower() or "array" in output_format.lower():
-        research_config["render_mode"] = RenderMode.RGB_ARRAY
-        category = RenderPresetCategory.RGB_ARRAY
-    else:
-        research_config["render_mode"] = RenderMode.HUMAN
-        category = RenderPresetCategory.MATPLOTLIB
 
     # Performance characteristics vary by scenario
     if research_scenario == "benchmark":
