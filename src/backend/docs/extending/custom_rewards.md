@@ -37,6 +37,7 @@ class MyReward:
 ```
 
 **Use it:**
+
 ```python
 from plume_nav_sim.envs import ComponentBasedEnvironment
 
@@ -97,6 +98,7 @@ Your reward function **must** satisfy:
 ### Pattern 1: Goal-Based Rewards
 
 **Sparse (binary):**
+
 ```python
 class SparseGoal:
     def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -104,6 +106,7 @@ class SparseGoal:
 ```
 
 **Dense (distance-based):**
+
 ```python
 class DenseGoal:
     def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -115,6 +118,7 @@ class DenseGoal:
 ### Pattern 2: Concentration-Based Rewards
 
 **Following gradient:**
+
 ```python
 class ConcentrationGradient:
     def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -126,6 +130,7 @@ class ConcentrationGradient:
 ### Pattern 3: Composite Rewards
 
 **Multiple terms:**
+
 ```python
 class CompositeReward:
     def __init__(self, goal_position, distance_weight=0.5, conc_weight=0.5):
@@ -148,6 +153,7 @@ class CompositeReward:
 ### Pattern 4: Infotaxis-Style
 
 **Information gain:**
+
 ```python
 class InfotaxisReward:
     def __init__(self, goal_position):
@@ -336,6 +342,7 @@ class TestTimePenaltyRewardBehavior:
 ## Common Pitfalls
 
 ### ❌ Mutating State
+
 ```python
 # BAD: Mutates input
 def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -346,6 +353,7 @@ def compute_reward(self, prev_state, action, next_state, plume_field):
 ✅ **Fix:** Don't modify inputs—they're read-only.
 
 ### ❌ Non-Determinism
+
 ```python
 # BAD: Random reward
 def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -355,6 +363,7 @@ def compute_reward(self, prev_state, action, next_state, plume_field):
 ✅ **Fix:** Same inputs must give same output.
 
 ### ❌ Returning Non-Finite
+
 ```python
 # BAD: Can return infinity
 def compute_reward(self, prev_state, action, next_state, plume_field):
@@ -363,12 +372,14 @@ def compute_reward(self, prev_state, action, next_state, plume_field):
 ```
 
 ✅ **Fix:** Clamp or handle edge cases:
+
 ```python
 distance = max(distance, 1e-6)  # Avoid division by zero
 return 1.0 / distance
 ```
 
 ### ❌ Hidden State
+
 ```python
 # BAD: Depends on instance state
 def __init__(self):
@@ -386,6 +397,7 @@ def compute_reward(self, prev_state, action, next_state, plume_field):
 ## Best Practices
 
 ### ✅ Normalize Rewards
+
 ```python
 # Scale to consistent range
 def compute_reward(self, ...):
@@ -394,6 +406,7 @@ def compute_reward(self, ...):
 ```
 
 ### ✅ Document Reward Range
+
 ```python
 def get_metadata(self):
     return {
@@ -404,6 +417,7 @@ def get_metadata(self):
 ```
 
 ### ✅ Make Configurable
+
 ```python
 @dataclass
 class MyRewardConfig:
@@ -416,6 +430,7 @@ class MyReward:
 ```
 
 ### ✅ Log Reward Components
+
 ```python
 def compute_reward(self, ...):
     distance_term = ...
@@ -435,6 +450,7 @@ def compute_reward(self, ...):
 ## Integration with Configs
 
 ### Pydantic Config
+
 ```python
 from plume_nav_sim.config import RewardConfig
 
@@ -446,6 +462,7 @@ config = RewardConfig(
 ```
 
 ### YAML Config
+
 ```yaml
 # conf/experiment/my_experiment.yaml
 reward:
@@ -456,6 +473,7 @@ reward:
 ```
 
 ### Factory Extension
+
 ```python
 # plume_nav_sim/config/factories.py
 def create_reward_function(config, goal_location):

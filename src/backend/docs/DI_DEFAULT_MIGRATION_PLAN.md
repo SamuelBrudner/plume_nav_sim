@@ -34,20 +34,24 @@ This document outlines the plan to make the component-based (DI) environment the
 ## Timeline
 
 ### Phase 0 (Done)
+
 - Land DI env id + mapping, helper, docs, and DI mapping/permutation tests.
 - Add parity test and deprecation warnings.
 
 ### Phase 1 (Next minor)
+
 - Keep legacy as default; introduce DeprecationWarning on legacy implicit usage.
 - Update examples/docs to recommend DI; provide env-var opt‑in.
 - Relax dict-only assumptions where they cause failures.
 
 ### Phase 2 (Major)
+
 - Flip default: `ENV_ID` routes to DI entry point by default.
 - (Optional) Add short-lived opt‑back: `PLUMENAV_DEFAULT=legacy` for one transitional release.
 - Provide a minimal compatibility shim for import stability (or remove entirely; see “Removal”).
 
 ### Phase 3 (Following minor/major)
+
 - Remove legacy defaults and toggles; remove shim if added.
 - Clean docs/examples accordingly.
 

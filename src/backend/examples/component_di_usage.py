@@ -30,9 +30,14 @@ def main() -> None:
         env = gym.make(di_env_id)
     try:
         obs, info = env.reset(seed=123)
-        print(
-            f"Reset OK, obs shape={getattr(env.observation_space, 'shape', None)} info={info}"
-        )
+        # Observation is a Dict in the public wrapper; show keys and sensor value
+        if isinstance(obs, dict):
+            sensor = float(obs.get("sensor_reading", [0.0])[0])
+            print(
+                f"Reset OK, obs keys={list(obs.keys())}, sensor={sensor:.3f}, info={info}"
+            )
+        else:
+            print(f"Reset OK, obs shape={getattr(obs, 'shape', None)} info={info}")
         a = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(a)
         print(f"Step OK: reward={reward} terminated={terminated} truncated={truncated}")

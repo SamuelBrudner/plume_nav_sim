@@ -81,6 +81,50 @@ __all__ = [
 ]
 
 
+# --- Observation helpers for Dict-or-ndarray compatibility ---
+def _copy_observation(obs: Any) -> Any:
+    """Deep-ish copy for observations that may be ndarray or dict of ndarrays."""
+    if isinstance(obs, dict):
+        return {k: (v.copy() if hasattr(v, "copy") else v) for k, v in obs.items()}
+    return obs.copy() if hasattr(obs, "copy") else obs
+
+
+def _serialize_observation(obs: Any) -> Any:
+    """Convert observation into JSON-serializable form (lists for arrays)."""
+    if isinstance(obs, dict):
+        return {k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in obs.items()}
+    return obs.tolist() if hasattr(obs, "tolist") else obs
+
+
+def _observations_allclose(o1: Any, o2: Any, atol: float = 1e-9) -> bool:
+    """All-close comparison supporting dict-of-arrays or arrays."""
+    if isinstance(o1, dict) and isinstance(o2, dict):
+        if o1.keys() != o2.keys():
+            return False
+        for k in o1:
+            v1, v2 = np.asarray(o1[k]), np.asarray(o2[k])
+            if not np.allclose(v1, v2, atol=atol):
+                return False
+        return True
+    try:
+        return np.allclose(np.asarray(o1), np.asarray(o2), atol=atol)
+    except Exception:
+        return o1 == o2
+
+
+def _max_abs_observation_diff(o1: Any, o2: Any) -> float:
+    """Compute maximum absolute difference across observation fields."""
+    if isinstance(o1, dict) and isinstance(o2, dict):
+        if o1.keys() != o2.keys():
+            return float("inf")
+        diffs = []
+        for k in o1:
+            v1, v2 = np.asarray(o1[k]), np.asarray(o2[k])
+            diffs.append(float(np.max(np.abs(v1 - v2))))
+        return max(diffs) if diffs else 0.0
+    return float(np.max(np.abs(np.asarray(o1) - np.asarray(o2))))
+
+
 def setup_reproducibility_logging(
     log_level: Optional[str] = None,
     log_file: Optional[str] = None,
@@ -185,7 +229,7 @@ def create_deterministic_policy(
     # Initialize policy state for stateful policies
     policy_state = {"step_count": 0, "action_sequence": []}
 
-    def policy_function(observation: np.ndarray) -> int:
+    def policy_function(observation: Any) -> int:
         """
         Deterministic policy function generating predictable action sequences.
 
@@ -289,11 +333,13 @@ def execute_reproducibility_episode(
         initial_observation, initial_info = env.reset(seed=episode_seed)
 
         # Record initial state
-        episode_data["initial_observation"] = initial_observation.copy()
+        episode_data["initial_observation"] = _copy_observation(initial_observation)
         episode_data["initial_info"] = initial_info.copy()
 
         if track_all_states:
-            episode_data["observation_sequence"].append(initial_observation.copy())
+            episode_data["observation_sequence"].append(
+                _copy_observation(initial_observation)
+            )
             episode_data["info_sequence"].append(initial_info.copy())
 
         _logger.debug(f"Episode initialized with seed {episode_seed}")
@@ -318,7 +364,9 @@ def execute_reproducibility_episode(
             total_reward += reward
 
             if track_all_states:
-                episode_data["observation_sequence"].append(next_observation.copy())
+                episode_data["observation_sequence"].append(
+                    _copy_observation(next_observation)
+                )
                 episode_data["info_sequence"].append(info.copy())
 
                 # Track complete state transitions for detailed analysis
@@ -326,8 +374,8 @@ def execute_reproducibility_episode(
                     {
                         "step": step_count,
                         "action": action,
-                        "observation": observation.copy(),
-                        "next_observation": next_observation.copy(),
+                        "observation": _copy_observation(observation),
+                        "next_observation": _copy_observation(next_observation),
                         "reward": reward,
                         "terminated": terminated,
                         "truncated": truncated,
@@ -346,7 +394,7 @@ def execute_reproducibility_episode(
                 "total_reward": total_reward,
                 "terminated": terminated,
                 "truncated": truncated,
-                "final_observation": observation.copy(),
+                "final_observation": _copy_observation(observation),
                 "end_time": time.time(),
             }
         )
@@ -366,12 +414,13 @@ def execute_reproducibility_episode(
             }
 
             if track_all_states:
-                # Create checksum for observation sequence (convert to list for JSON serialization)
+                # Create checksum for observation sequence (JSON-serializable conversion)
                 obs_list = [
-                    obs.tolist() for obs in episode_data["observation_sequence"]
+                    _serialize_observation(obs)
+                    for obs in episode_data["observation_sequence"]
                 ]
                 episode_data["checksums"]["observation_sequence"] = hashlib.md5(
-                    json.dumps(obs_list).encode()
+                    json.dumps(obs_list, sort_keys=True).encode()
                 ).hexdigest()
 
         _logger.debug(
@@ -534,13 +583,13 @@ def compare_episodes(
                 observations_match = False
             else:
                 for i, (obs1, obs2) in enumerate(zip(obs_seq1, obs_seq2)):
-                    if not np.allclose(obs1, obs2, atol=effective_tolerance):
+                    if not _observations_allclose(obs1, obs2, atol=effective_tolerance):
                         observations_match = False
                         comparison_results["discrepancies"].append(
                             {
                                 "type": "observation_mismatch",
                                 "step": i,
-                                "max_difference": np.max(np.abs(obs1 - obs2)),
+                                "max_difference": _max_abs_observation_diff(obs1, obs2),
                             }
                         )
                         break
@@ -1509,16 +1558,19 @@ def validate_cross_session_reproducibility(
                 # Convert numpy arrays to lists for JSON serialization
                 episode_for_json = episode.copy()
 
-                # Convert observation sequences
+                # Convert observation sequences (arrays or dicts) for JSON
                 if "observation_sequence" in episode_for_json:
                     episode_for_json["observation_sequence"] = [
-                        obs.tolist() for obs in episode_for_json["observation_sequence"]
+                        _serialize_observation(obs)
+                        for obs in episode_for_json["observation_sequence"]
                     ]
 
-                # Convert single observations
+                # Convert single observations (arrays or dicts)
                 for obs_key in ["initial_observation", "final_observation"]:
                     if obs_key in episode_for_json:
-                        episode_for_json[obs_key] = episode_for_json[obs_key].tolist()
+                        episode_for_json[obs_key] = _serialize_observation(
+                            episode_for_json[obs_key]
+                        )
 
                 # Remove state transitions (too large for JSON)
                 episode_for_json.pop("state_transitions", None)

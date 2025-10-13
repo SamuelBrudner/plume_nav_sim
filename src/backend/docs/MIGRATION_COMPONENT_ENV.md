@@ -13,6 +13,7 @@ This guide explains how to migrate from the legacy `BaseEnvironment` / `PlumeSea
 ### **Why Migrate?**
 
 The new architecture provides:
+
 - ✅ **Dependency Injection** - Swap components without modifying environment code
 - ✅ **Protocol-Based** - No inheritance required, just implement the interface
 - ✅ **Testable** - Components can be unit-tested independently
@@ -24,6 +25,7 @@ The new architecture provides:
 ## 🚀 **Quick Start: Using the Factory**
 
 ### **Before (Legacy)**
+
 ```python
 from plume_nav_sim.envs import PlumeSearchEnv
 
@@ -35,6 +37,7 @@ env = PlumeSearchEnv(
 ```
 
 ### **After (Component-Based with Factory)**
+
 ```python
 from plume_nav_sim.envs import create_component_environment
 
@@ -98,6 +101,7 @@ env = ComponentBasedEnvironment(
 ## 📦 **Component Options**
 
 ### **Action Processors**
+
 | Class | Actions | Description |
 |-------|---------|-------------|
 | `DiscreteGridActions` | 4 (UP, RIGHT, DOWN, LEFT) | Cardinal movement |
@@ -106,6 +110,7 @@ env = ComponentBasedEnvironment(
 **Contract:** `contracts/action_processor_interface.md`
 
 ### **Observation Models**
+
 | Class | Output Shape | Description |
 |-------|--------------|-------------|
 | `ConcentrationSensor` | `(1,)` | Single odor concentration |
@@ -114,6 +119,7 @@ env = ComponentBasedEnvironment(
 **Contract:** `contracts/observation_model_interface.md`
 
 ### **Reward Functions**
+
 | Class | Type | Description |
 |-------|------|-------------|
 | `SparseGoalReward` | Binary | 1.0 at goal, 0.0 otherwise |
@@ -126,18 +132,21 @@ env = ComponentBasedEnvironment(
 ## 🔄 **Migration Checklist**
 
 ### **For Research Code**
+
 - [x] Replace `PlumeSearchEnv(...)` with `create_component_environment(...)`
 - [x] Add `action_type`, `observation_type`, `reward_type` parameters
 - [x] Test that results match (set seed for reproducibility)
 - [x] Update experiment configs
 
 ### **For Custom Environments**
+
 - [x] Implement new components using protocols (not inheritance)
 - [x] Test components individually with contract tests
 - [x] Wire components via `ComponentBasedEnvironment`
 - [x] Remove subclassing of `BaseEnvironment`
 
 ### **For Tests**
+
 - [x] Update fixtures to use factory or direct injection
 - [x] Test component composition independently
 - [x] Verify Gymnasium API compliance
@@ -249,6 +258,7 @@ class TestDiagonalActions(TestActionProcessorInterface):
 ```
 
 Run with:
+
 ```bash
 pytest tests/contracts/ -v
 ```
@@ -258,6 +268,7 @@ pytest tests/contracts/ -v
 ## 📊 **Performance Comparison**
 
 Component-based environments have **identical performance** to legacy environments:
+
 - ✅ Step time: ~0.5 ms (same)
 - ✅ Reset time: ~2 ms (same)
 - ✅ Memory: Same footprint
@@ -269,14 +280,17 @@ The abstraction is zero-cost at runtime!
 ## 🆘 **Troubleshooting**
 
 ### **"TypeError: validate_coordinates() got an unexpected keyword argument 'grid_size'"**
+
 **Cause:** Old `ConcentrationField.generate_field()` signature.  
 **Fix:** Use manual field creation (see factory.py example).
 
 ### **"TypeError: AntennaeArraySensor.__init__() got unexpected keyword..."**
+
 **Cause:** Parameter name mismatch.  
 **Fix:** Use `sensor_distance`, not `sensor_offset`.
 
 ### **"Invalid action: 2, must be in {0, 1, 2}"**
+
 **Cause:** `numpy.int64` vs `int` type checking.  
 **Fix:** Already fixed in `validate_action` - check for `isinstance(action, (int, np.integer))`.
 

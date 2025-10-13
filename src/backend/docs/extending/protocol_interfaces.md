@@ -31,6 +31,7 @@ greet_user(FriendlyGreeter(), "Alice")  # ✅ Works!
 ## Why Protocols for Components?
 
 ### Traditional Approach (Inheritance)
+
 ```python
 from abc import ABC, abstractmethod
 
@@ -45,12 +46,14 @@ class MyReward(RewardFunction):
 ```
 
 **Problems:**
+
 - ❌ Tight coupling to base class
 - ❌ Hard to extend from external packages
 - ❌ Can't retroactively make existing classes conform
 - ❌ Forces inheritance hierarchy
 
 ### Protocol Approach (Structural)
+
 ```python
 from typing import Protocol, runtime_checkable
 
@@ -68,6 +71,7 @@ isinstance(MyReward(), RewardFunction)  # True
 ```
 
 **Benefits:**
+
 - ✅ No coupling to base class
 - ✅ External packages can extend easily
 - ✅ Existing classes can satisfy protocols
@@ -80,11 +84,13 @@ isinstance(MyReward(), RewardFunction)  # True
 We define three core protocols:
 
 ### 1. **ActionProcessor**
+
 Processes actions and computes new agent states.
 
 **Contract:** `contracts/action_processor_interface.md`
 
 **Required Methods:**
+
 ```python
 @property
 def action_space(self) -> gym.Space: ...
@@ -99,11 +105,13 @@ def get_metadata(self) -> Dict[str, Any]: ...
 ```
 
 ### 2. **ObservationModel**
+
 Generates observations from environment state.
 
 **Contract:** `contracts/observation_model_interface.md`
 
 **Required Methods:**
+
 ```python
 @property
 def observation_space(self) -> gym.Space: ...
@@ -114,11 +122,13 @@ def get_metadata(self) -> Dict[str, Any]: ...
 ```
 
 ### 3. **RewardFunction**
+
 Computes rewards for state transitions.
 
 **Contract:** `contracts/reward_function_interface.md`
 
 **Required Methods:**
+
 ```python
 def compute_reward(
     self, 
@@ -136,11 +146,13 @@ def get_metadata(self) -> Dict[str, Any]: ...
 ## Implementing a Protocol
 
 ### Step 1: Import the Protocol
+
 ```python
 from plume_nav_sim.interfaces import RewardFunction
 ```
 
 ### Step 2: Implement Required Methods
+
 ```python
 class CustomReward:  # No inheritance!
     def __init__(self, goal_position, penalty=-0.01):
@@ -165,6 +177,7 @@ class CustomReward:  # No inheritance!
 ```
 
 ### Step 3: Verify Protocol Conformance
+
 ```python
 # Type checking (mypy/IDE)
 reward: RewardFunction = CustomReward(...)  # ✅ Type checks
@@ -175,6 +188,7 @@ assert isinstance(CustomReward(...), RewardFunction)  # ✅ True
 ```
 
 ### Step 4: Use in Environment
+
 ```python
 from plume_nav_sim.envs import ComponentBasedEnvironment
 
@@ -209,6 +223,7 @@ class TestCustomReward(TestRewardFunctionInterface):
 ```
 
 Run with:
+
 ```bash
 pytest tests/contracts/ -v -k CustomReward
 ```
@@ -220,6 +235,7 @@ pytest tests/contracts/ -v -k CustomReward
 All protocol implementations must satisfy:
 
 ### Universal Properties
+
 1. **Determinism**: Same inputs → same outputs
 2. **Purity**: No side effects, no hidden state
 3. **Type Safety**: Return correct types
@@ -227,14 +243,17 @@ All protocol implementations must satisfy:
 ### Component-Specific Properties
 
 **ActionProcessor:**
+
 - Boundary safety (stays in grid)
 - Returns new AgentState (no mutation)
 
 **ObservationModel:**
+
 - Space containment (observation ∈ observation_space)
 - Shape consistency
 
 **RewardFunction:**
+
 - Finiteness (no NaN, no inf)
 - Returns scalar (not array)
 
@@ -243,6 +262,7 @@ All protocol implementations must satisfy:
 ## Best Practices
 
 ### ✅ DO
+
 - Implement all required methods
 - Follow method signatures exactly
 - Return correct types
@@ -250,6 +270,7 @@ All protocol implementations must satisfy:
 - Document your implementation
 
 ### ❌ DON'T
+
 - Mutate input parameters
 - Have side effects
 - Return None where value expected
@@ -275,6 +296,7 @@ def use_processor(proc: ActionProcessor):
 ```
 
 Enable strict checking:
+
 ```bash
 mypy --strict plume_nav_sim/
 ```
@@ -319,6 +341,7 @@ env = ComponentBasedEnvironment(
 **Cause:** Missing or incorrectly typed method.
 
 **Fix:**
+
 ```python
 # Check signature matches exactly
 from plume_nav_sim.interfaces import RewardFunction
