@@ -434,7 +434,7 @@ class BoundaryEnforcer:
         )
 
     @monitor_performance("position_validation", 0.1, False)
-    def validate_position(
+    def validate_position(  # noqa: C901
         self,
         position: CoordinateType,
         raise_on_invalid: bool = True,

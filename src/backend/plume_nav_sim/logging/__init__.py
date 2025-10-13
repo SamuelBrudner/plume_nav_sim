@@ -10,13 +10,13 @@ factory functions, configuration management, and resource cleanup capabilities f
 robust production-ready logging throughout the plume_nav_sim system.
 """
 
-import atexit  # >=3.10 - Cleanup registration for graceful shutdown
+import atexit  # >=3.10 - Cleanup registration for graceful shutdown  # noqa: F401
 import datetime  # >=3.10 - Timestamp management for package lifecycle tracking
 
 # Standard library imports with version comments
 import logging  # >=3.10 - Base logging functionality and system integration
 import threading  # >=3.10 - Thread synchronization for concurrent operations
-from typing import (  # >=3.10 - Type hints for package interface functions and logger factory methods
+from typing import (  # >=3.10 - Type hints for package interface functions and logger factory methods  # noqa: F401
     Any,
     Dict,
     Optional,
@@ -25,7 +25,7 @@ from typing import (  # >=3.10 - Type hints for package interface functions and 
 
 # Internal imports - System constants for performance and configuration
 from ..core.constants import COMPONENT_NAMES as CORE_COMPONENT_NAMES
-from ..core.constants import LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT
+from ..core.constants import LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT  # noqa: F401
 from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS as CORE_PERFORMANCE_TARGET,
 )
@@ -36,18 +36,19 @@ from .config import SensitiveInfoFilter  # noqa: F401
 from .config import create_component_logger  # noqa: F401
 from .config import get_logging_status  # noqa: F401
 from .config import reset_logging_config  # noqa: F401
+from .config import setup_performance_logging  # noqa: F401
 from .config import validate_logging_config  # noqa: F401
-from .config import (
+from .config import (  # noqa: F401
     COMPONENT_NAMES,
     DEFAULT_LOGGING_CONFIG,
     LOG_LEVEL_DEFAULT,
     LOGGER_NAME_PREFIX,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
-from .config import (
-    ComponentLogger as ConfigComponentLogger,  # Core configuration classes and enums; Configuration and setup functions; Logger factory and management functions; Security and filtering infrastructure; Factory functions and utilities; Validation and configuration management; Configuration constants and defaults
+from .config import (  # noqa: F401; Core configuration classes and enums; Configuration and setup functions; Logger factory and management functions; Security and filtering infrastructure; Factory functions and utilities; Validation and configuration management; Configuration constants and defaults
+    ComponentLogger as ConfigComponentLogger,
 )
-from .config import (
+from .config import (  # noqa: F401
     ComponentType,
     LoggingConfig,
     LogLevel,
@@ -55,7 +56,6 @@ from .config import (
     configure_logging,
 )
 from .config import get_logger as config_get_logger  # noqa: F401
-from .config import setup_performance_logging
 
 # Internal imports - Formatting infrastructure with security filtering
 from .formatters import CONSOLE_COLOR_CODES  # noqa: F401

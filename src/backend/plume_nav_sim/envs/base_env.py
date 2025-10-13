@@ -673,7 +673,9 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 raise StateError(f"Environment step failed: {e}")
 
     @monitor_performance("base_render", 50.0, False)
-    def render(self, mode: Optional[str] = None) -> Union[np.ndarray, None]:
+    def render(
+        self, mode: Optional[str] = None
+    ) -> Union[np.ndarray, None]:  # noqa: C901
         """
         Render environment visualization in specified mode with lazy renderer initialization, performance
         monitoring, error handling, and fallback strategies following Gymnasium render specification.

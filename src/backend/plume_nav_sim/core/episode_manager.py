@@ -248,7 +248,7 @@ class EpisodeManagerConfig:
                 expected_format="<=1000 entries",
             )
 
-    def validate(
+    def validate(  # noqa: C901
         self,
         strict_mode: bool = False,
         validation_context: Optional[Dict[str, Any]] = None,
@@ -338,7 +338,7 @@ class EpisodeManagerConfig:
                 expected_format="valid configuration parameters",
             ) from e
 
-    def derive_component_configs(
+    def derive_component_configs(  # noqa: C901
         self, validate_derived_configs: bool = True
     ) -> Dict[str, Any]:
         """
@@ -1827,7 +1827,9 @@ class EpisodeManager:
                 "timestamp": time.time(),
             }
 
-    def validate_episode_consistency(self, strict_validation: bool = False) -> bool:
+    def validate_episode_consistency(
+        self, strict_validation: bool = False
+    ) -> bool:  # noqa: C901
         """
         Perform comprehensive episode consistency validation across all components with detailed
         error analysis and recovery recommendations.
