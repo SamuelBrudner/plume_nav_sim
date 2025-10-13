@@ -251,10 +251,26 @@ class PlumeSearchEnv(gym.Env):
 
 
 def create_plume_search_env(**kwargs: Any) -> PlumeSearchEnv:
+    """Factory function to create a PlumeSearchEnv instance.
+
+    Args:
+        **kwargs: Configuration parameters passed to PlumeSearchEnv constructor.
+
+    Returns:
+        PlumeSearchEnv: Configured environment instance.
+    """
     return PlumeSearchEnv(**kwargs)
 
 
 def validate_plume_search_config(**kwargs: Any) -> Dict[str, Any]:
+    """Validate and normalize PlumeSearchEnv configuration parameters.
+
+    Args:
+        **kwargs: Raw configuration parameters to validate.
+
+    Returns:
+        Dict[str, Any]: Validated and normalized configuration.
+    """
     grid = _normalize_grid_size(kwargs.get("grid_size"))
     source = _normalize_goal(kwargs.get("source_location"), grid)
     max_steps = _normalize_max_steps(kwargs.get("max_steps"))
