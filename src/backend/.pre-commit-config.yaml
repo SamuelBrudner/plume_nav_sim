@@ -103,6 +103,21 @@ repos:
         args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
         exclude: '^(CHANGELOG\.md|\.github/)'
 
+  # Sourcery AI-powered refactoring (auto-fix mode - applies safe refactorings)
+  - repo: https://github.com/sourcery-ai/sourcery
+    rev: v1.16.0
+    hooks:
+      - id: sourcery
+        name: Sourcery Code Quality (Auto-fix)
+        description: AI-powered code refactoring with automatic fixes
+        types: [python]
+        args: ['--fix', '--no-summary']
+        stages: [manual]  # Only when explicitly invoked
+        verbose: true
+        # Note: Requires SOURCERY_TOKEN environment variable for full functionality
+        # Run manually with: pre-commit run sourcery --all-files --hook-stage manual
+        # WARNING: This will modify files in-place! Review changes before committing.
+
   # Black code formatter for consistent Python code style
   - repo: https://github.com/psf/black
     rev: '24.2.0'
@@ -249,3 +264,13 @@ repos:
         args: ['-lc', 'test -f src/backend/scripts/check_license_headers.py && python3 src/backend/scripts/check_license_headers.py || exit 0']
         files: '\.py$'
         exclude: '^(tests/|setup\.py)'
+  # Local hooks
+  - repo: local
+    hooks:
+      - id: constants-drift-check
+        name: Validate constants drift (YAML vs Python)
+        entry: python -m scripts.validate_constants_drift
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+        files: '^(config/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
