@@ -920,7 +920,7 @@ class PerformanceLogger:
 
         return analysis_results
 
-    def get_performance_report(
+    def get_performance_report(  # noqa: C901
         self, report_format: str = "detailed", include_recommendations: bool = True
     ) -> Dict[str, Any]:
         """

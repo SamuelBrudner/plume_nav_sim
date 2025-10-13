@@ -51,7 +51,7 @@ from .config import (
     configure_logging,
     create_component_logger,
 )
-from .config import get_logger as config_get_logger
+from .config import get_logger as config_get_logger  # noqa: F401
 from .config import (
     get_logging_status,
     reset_logging_config,

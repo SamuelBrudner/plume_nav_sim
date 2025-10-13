@@ -297,7 +297,7 @@ def get_terminal_width(default_width: int = 80, cache_result: bool = True) -> in
     return width
 
 
-def sanitize_message(
+def sanitize_message(  # noqa: C901
     message: str,
     additional_patterns: List[str] = None,
     redaction_placeholder: str = REDACTION_PLACEHOLDER,
@@ -1337,7 +1337,7 @@ class SecurityFilter(logging.Filter):
     information protection.
     """
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         sensitive_patterns: List[str] = None,
         redaction_policy: str = "replace",
@@ -1408,7 +1408,7 @@ class SecurityFilter(logging.Filter):
         # Set preserve_message_structure flag for maintaining log readability
         self.preserve_message_structure = True
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: C901
         """
         Main filtering method that analyzes log records for sensitive information and applies
         redaction while preserving log structure and readability.
@@ -1614,7 +1614,9 @@ class SecurityFilter(logging.Filter):
         except re.error:
             return False
 
-    def analyze_message_security(self, message_text: str) -> Dict[str, Any]:
+    def analyze_message_security(
+        self, message_text: str
+    ) -> Dict[str, Any]:  # noqa: C901
         """
         Analyzes message for security risks, sensitive content density, and redaction
         recommendations with detailed security assessment.

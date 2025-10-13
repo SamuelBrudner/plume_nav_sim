@@ -1271,7 +1271,9 @@ class InteractiveUpdateManager:
             # Propagate as RenderingError so callers can handle failures explicitly
             raise RenderingError(f"Batch update failed: {e}")
 
-    def get_performance_metrics(self) -> Dict[str, Any]:  # noqa: C901  # noqa: C901
+    def get_performance_metrics(
+        self,
+    ) -> Dict[str, Any]:  # noqa: C901  # noqa: C901  # noqa: C901
         """Return summarized performance statistics for refreshes and batch updates."""
         stats = {}
         refresh_count = int(self.performance_stats.get("update_count", 0))
