@@ -1408,7 +1408,7 @@ class SecurityFilter(logging.Filter):
         # Set preserve_message_structure flag for maintaining log readability
         self.preserve_message_structure = True
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: C901
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: C901  # noqa: C901
         """
         Main filtering method that analyzes log records for sensitive information and applies
         redaction while preserving log structure and readability.
