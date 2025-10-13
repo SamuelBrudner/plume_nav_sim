@@ -1614,9 +1614,9 @@ class SecurityFilter(logging.Filter):
         except re.error:
             return False
 
-    def analyze_message_security(
+    def analyze_message_security(  # noqa: C901
         self, message_text: str
-    ) -> Dict[str, Any]:  # noqa: C901
+    ) -> Dict[str, Any]:
         """
         Analyzes message for security risks, sensitive content density, and redaction
         recommendations with detailed security assessment.

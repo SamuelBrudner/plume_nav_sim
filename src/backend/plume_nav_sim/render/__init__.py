@@ -38,10 +38,9 @@ import logging
 import signal
 import sys
 import warnings
-from pathlib import Path
 
 # Standard library imports for configuration and logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 # Internal imports from core types module
 from ..core.types import GridSize  # noqa: E402
@@ -827,7 +826,7 @@ def _test_color_scheme_support_section(capabilities: Dict[str, Any]) -> None:
     try:
         if capabilities.get("matplotlib_available"):
             import matplotlib
-            import matplotlib.pyplot as plt
+            import matplotlib.pyplot
 
             colormaps = ["viridis", "plasma", "inferno", "magma", "gray"]
             available_colormaps = []

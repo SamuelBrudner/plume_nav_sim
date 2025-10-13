@@ -1975,14 +1975,14 @@ class MatplotlibRenderer(BaseRenderer):
         except Exception:
             pass
 
-    def get_performance_metrics(
+    def get_performance_metrics(  # noqa: C901
         self,
         include_backend_info: bool = True,
         include_update_stats: bool = True,
         include_timing: bool = False,
-        include_resource_usage: bool = False,
-        include_optimization_analysis: bool = False,
-    ) -> Dict[str, any]:
+        include_resource_usage: bool = True,
+        include_optimization_analysis: bool = True,
+    ) -> Dict[str, Any]:
         """
         Retrieve comprehensive matplotlib renderer performance metrics including timing analysis,
         resource usage, and optimization recommendations.

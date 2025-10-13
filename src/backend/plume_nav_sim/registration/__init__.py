@@ -23,10 +23,11 @@ import time  # >=3.10 - Timestamp generation for cache management and registrati
 import warnings  # >=3.10 - Module initialization warnings and registration compatibility notifications for development environments
 from typing import (  # >=3.10 - Type hints for registration functions, cache management, and error handling
     Any,
+    Callable,
     Dict,
-    List,
     Optional,
-    Union,
+    Tuple,
+    Type,
 )
 
 # External imports with version comments

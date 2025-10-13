@@ -953,7 +953,14 @@ class ColorSchemeManager:
 
         # Reset performance_metrics if reset_metrics is True
         if reset_metrics:
-            self.performance_metrics = {key: 0 for key in self.performance_metrics}
+            keys_to_clear = [
+                "cache_hits",
+                "cache_misses",
+                "optimization_count",
+                "validation_count",
+            ]
+            normalization_cache_dict = dict.fromkeys(keys_to_clear)
+            self.performance_metrics = normalization_cache_dict
 
         # Estimate memory freed (rough calculation)
         clearing_report["memory_freed_estimate_mb"] = (
