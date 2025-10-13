@@ -16,7 +16,9 @@ from typing import Any, Dict
 import numpy as np
 import yaml
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "constants.yaml"
+CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "constants.yaml"
+)
 
 _DEFAULT_CONFIG: Dict[str, Any] = {
     "package": {
