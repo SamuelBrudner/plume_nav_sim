@@ -40,7 +40,7 @@ import sys
 import warnings
 
 # Standard library imports for configuration and logging
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple
 
 # Internal imports from core types module
 from ..core.types import GridSize  # noqa: E402
