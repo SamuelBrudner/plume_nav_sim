@@ -275,3 +275,15 @@ repos:
         pass_filenames: false
         stages: [pre-push]
         files: '^(config/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
+
+  # Commitizen-based release reminder (warn-only by default)
+  - repo: local
+    hooks:
+      - id: cz-release-reminder
+        name: Release reminder (Commitizen)
+        description: Warn if feat/fix or BREAKING CHANGE commits exist since last tag and version not bumped
+        stages: [pre-push]
+        entry: bash
+        language: system
+        args: ['-lc', 'python3 src/backend/scripts/check_release_bump_needed.py']
+        pass_filenames: false
