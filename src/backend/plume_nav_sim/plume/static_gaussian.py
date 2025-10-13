@@ -516,7 +516,7 @@ def clear_gaussian_cache(
         Dictionary containing cache clearing report with memory freed, performance impact, and
         cleanup statistics
     """
-    global _FIELD_CACHE, _GAUSSIAN_CALCULATION_CACHE, _PERFORMANCE_STATS
+    global _FIELD_CACHE, _GAUSSIAN_CALCULATION_CACHE, _PERFORMANCE_STATS  # noqa: F824
     global _MODEL_INSTANCES_CREATED, _CACHE_HIT_RATIO
 
     cleanup_report = {

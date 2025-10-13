@@ -510,11 +510,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 @overload
-def monitor_performance(func: F) -> F: ...
+def monitor_performance(func: F) -> F:  # noqa: E704
+    ...
 
 
 @overload
-def monitor_performance(
+def monitor_performance(  # noqa: E704
     operation_name: Optional[str] = ...,
     performance_threshold_ms: Optional[float] = ...,
     compare_to_baseline: bool = ...,
