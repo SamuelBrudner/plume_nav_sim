@@ -36,6 +36,7 @@ from typing import (  # >=3.10 - Type hints for configuration parameters
 )
 
 # Internal imports
+from ..core.constants import COMPONENT_NAMES as CORE_COMPONENT_NAMES
 from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # Performance target for timing threshold configuration
 )
@@ -73,17 +74,8 @@ LOG_BACKUP_COUNT = 5
 DEFAULT_LOG_DIR = Path("./logs")
 
 # Component names derived from system architecture
-COMPONENT_NAMES = [
-    "ENVIRONMENT",  # PlumeSearchEnv and environment management
-    "PLUME_MODEL",  # Static Gaussian plume and concentration field
-    "RENDERING",  # RGB array and matplotlib visualization
-    "ACTION_PROCESSOR",  # Agent action processing and validation
-    "REWARD_CALCULATOR",  # Goal detection and reward computation
-    "STATE_MANAGER",  # Episode and agent state coordination
-    "BOUNDARY_ENFORCER",  # Grid boundary validation and constraints
-    "EPISODE_MANAGER",  # Episode lifecycle and termination management
-    "UTILS",  # Utility components including seeding and validation
-]
+# Derive component names from core constants to avoid duplication/drift
+COMPONENT_NAMES = [name.upper() for name in CORE_COMPONENT_NAMES]
 
 # LOG_LEVEL_DEFAULT derived from environment configuration
 LOG_LEVEL_DEFAULT = "INFO"
@@ -506,27 +498,43 @@ class ComponentLogger:
     def debug(self, msg: str, *args, **kwargs):
         """Log debug message with component context."""
         kwargs.pop("exception", None)
-        self.logger.debug(msg, *args, **kwargs)
+        try:
+            self.logger.debug(msg, *args, **kwargs)
+        except Exception:
+            # Swallow logging I/O errors during shutdown
+            pass
 
     def info(self, msg: str, *args, **kwargs):
         """Log info message with component context."""
         kwargs.pop("exception", None)
-        self.logger.info(msg, *args, **kwargs)
+        try:
+            self.logger.info(msg, *args, **kwargs)
+        except Exception:
+            pass
 
     def warning(self, msg: str, *args, **kwargs):
         """Log warning message with component context."""
         kwargs.pop("exception", None)
-        self.logger.warning(msg, *args, **kwargs)
+        try:
+            self.logger.warning(msg, *args, **kwargs)
+        except Exception:
+            pass
 
     def error(self, msg: str, *args, **kwargs):
         """Log error message with component context."""
         kwargs.pop("exception", None)
-        self.logger.error(msg, *args, **kwargs)
+        try:
+            self.logger.error(msg, *args, **kwargs)
+        except Exception:
+            pass
 
     def critical(self, msg: str, *args, **kwargs):
         """Log critical message with component context."""
         kwargs.pop("exception", None)
-        self.logger.critical(msg, *args, **kwargs)
+        try:
+            self.logger.critical(msg, *args, **kwargs)
+        except Exception:
+            pass
 
     def performance(self, operation: str, duration_ms: float, **context):
         """
