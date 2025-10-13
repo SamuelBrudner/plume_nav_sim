@@ -282,8 +282,8 @@ repos:
       - id: cz-release-reminder
         name: Release reminder (Commitizen)
         description: Warn if feat/fix or BREAKING CHANGE commits exist since last tag and version not bumped
-        stages: [pre-push]
-        entry: bash
+        stages: [push]
+        entry: bash -c 'if [ -f src/backend/scripts/check_release_bump_needed.py ]; then python3 src/backend/scripts/check_release_bump_needed.py; else exit 0; fi'
         language: system
-        args: ['-lc', 'python3 src/backend/scripts/check_release_bump_needed.py']
         pass_filenames: false
+        always_run: true
