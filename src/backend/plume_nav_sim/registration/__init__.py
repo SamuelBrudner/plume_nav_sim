@@ -21,11 +21,7 @@ import sys  # Ensure ability to tweak module registry for test stability
 import threading  # >=3.10 - Thread-safe registration operations and cache consistency management
 import time  # >=3.10 - Timestamp generation for cache management and registration state tracking
 import warnings  # >=3.10 - Module initialization warnings and registration compatibility notifications for development environments
-from typing import (  # >=3.10 - Type hints for registration functions, cache management, and error handling
-    Any,
-    Dict,
-    Optional,
-)
+from typing import Dict, Optional, cast
 
 # External imports with version comments
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registry access and environment creation validation in module initialization
@@ -44,7 +40,7 @@ try:
             def __init__(self, mapping):
                 self.env_specs = mapping
 
-        gymnasium.envs.registry = _RegistryAdapter(reg)
+        gymnasium.envs.registry = _RegistryAdapter(reg)  # type: ignore[assignment]
 except Exception:
     warnings.warn(
         "Gymnasium registry may not be fully compatible - some features may be limited"
@@ -57,7 +53,7 @@ try:
 
     if not hasattr(OrderEnforcing, "__getattr__"):
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> object:
             if name == "env":
                 raise AttributeError(name)
             try:
@@ -92,7 +88,7 @@ from .register import (
 # Global module state for initialization tracking and cache management
 _module_logger = get_component_logger("registration")
 _module_initialized = False
-_registration_cache: Dict[str, Any] = {}
+_registration_cache: Dict[str, object] = {}
 _cache_lock = threading.Lock()
 _initialization_timestamp: Optional[float] = None
 
@@ -162,7 +158,7 @@ def quick_register(
                     _registration_cache.get("quick_register_count", 0) + 1
                 )
 
-            return ENV_ID
+            return cast(str, ENV_ID)
 
         # Log registration attempt with default parameters and force_reregister flag status
         _module_logger.info(
@@ -231,7 +227,7 @@ def quick_register(
         )
 
         # Return registered environment ID with confirmation of immediate availability
-        return ENV_ID
+        return cast(str, ENV_ID)
 
     except Exception as e:
         # Enhanced error logging with context and recovery suggestions
@@ -283,7 +279,7 @@ def ensure_component_env_registered(
     Returns:
         The DI environment id (COMPONENT_ENV_ID)
     """
-    env_id = COMPONENT_ENV_ID
+    env_id = cast(str, COMPONENT_ENV_ID)
     if is_registered(env_id):
         return env_id
     register_env(env_id=env_id, force_reregister=force_reregister)
@@ -493,7 +489,7 @@ def ensure_registered(  # noqa: C901
 
 def get_registration_status(  # noqa: C901
     include_cache_info: bool = False, validate_creation: bool = False
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """
     Get comprehensive registration status information including registry state,
     cache consistency, environment availability, and detailed metadata for
