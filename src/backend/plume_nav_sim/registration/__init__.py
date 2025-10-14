@@ -20,11 +20,15 @@ Key Features:
 import sys  # Ensure ability to tweak module registry for test stability
 import threading  # >=3.10 - Thread-safe registration operations and cache consistency management
 import time  # >=3.10 - Timestamp generation for cache management and registration state tracking
-import warnings  # >=3.10 - Module initialization warnings and registration compatibility notifications for development environments
+import warnings  # >=3.10 - Module initialization warnings and registration
+
+# compatibility notifications for development environments
 from typing import Dict, Optional, cast
 
 # External imports with version comments
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registry access and environment creation validation in module initialization
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
+
+# for registry access and environment creation validation in module initialization
 
 # Compatibility shim: older tests expect registry.env_specs; gymnasium>=1.x uses a dict
 try:
@@ -43,7 +47,8 @@ try:
         gymnasium.envs.registry = _RegistryAdapter(reg)  # type: ignore[assignment]
 except Exception:
     warnings.warn(
-        "Gymnasium registry may not be fully compatible - some features may be limited"
+        "Gymnasium registry may not be fully compatible - some features may be limited",
+        stacklevel=2,
     )
 
 
@@ -906,7 +911,7 @@ def _initialize_registration_module() -> bool:  # noqa: C901
         try:
             # Test basic gymnasium registry access
             registry = gymnasium.envs.registry
-            if not hasattr(registry, "all") or not callable(getattr(registry, "all")):
+            if not hasattr(registry, "all") or not callable(registry.all):
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
@@ -946,7 +951,7 @@ def _initialize_registration_module() -> bool:  # noqa: C901
         # Set _module_initialized flag to True indicating successful initialization
         _module_initialized = True
 
-        # Log successful module initialization with configuration summary and available functionality
+        # Log successful module initialization with configuration summary and available functionality  # noqa: E501
         _module_logger.info(
             "Registration module initialized successfully",
             extra={
@@ -961,7 +966,8 @@ def _initialize_registration_module() -> bool:  # noqa: C901
             },
         )
 
-        # Return True indicating module ready for registration operations with full functionality
+        # Return True indicating module ready for registration operations with
+        # full functionality
         return True
 
     except ConfigurationError:

@@ -5,7 +5,7 @@ management, version control, and error handling. Provides primary registration f
 Gymnasium compatibility including register_env(), unregister_env(), is_registered(), and
 registration status management with strict versioning compliance and entry point specification.
 
-This module serves as the primary interface for registering and managing the PlumeNav-StaticGaussian-v0
+This module serves as the primary interface for registering and managing the PlumeNav-StaticGaussian-v0  # noqa: E501
 environment within the Gymnasium ecosystem, ensuring proper integration with gym.make() calls and
 providing comprehensive parameter validation, error handling, and configuration management.
 
@@ -24,10 +24,12 @@ import re
 import sys
 import time
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
+
+from typing_extensions import TypedDict
 
 # External imports with version comments for dependency management and compatibility tracking
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework providing register() function, environment registry, and gym.make() compatibility for standard RL environment registration
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 
 # Internal imports for configuration constants and system integration
 from ..core.constants import (
@@ -42,13 +44,21 @@ from ..core.constants import (
 from ..utils.exceptions import ConfigurationError, ValidationError
 from ..utils.logging import get_component_logger
 
+# providing register() function, environment registry, and gym.make() compatibility for
+# standard RL environment registration
+
+
 # Global constants for registration system configuration and environment identification
-ENV_ID = ENVIRONMENT_ID  # Primary environment identifier 'PlumeNav-StaticGaussian-v0' for Gymnasium registration compliance
+ENV_ID = ENVIRONMENT_ID  # Primary environment identifier
+# 'PlumeNav-StaticGaussian-v0' for Gymnasium registration compliance
 # Legacy default entry point
-ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Entry point specification string for Gymnasium registration defining exact module path and class location
+ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"
+# Entry point specification string for Gymnasium registration defining exact module path
+# and class location
 COMPONENT_ENV_ID = "PlumeNav-Components-v0"
 COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
-MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000) for registration parameter configuration
+MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps
+# (1000) for registration parameter configuration
 
 # Component logger for registration system debugging and operation tracking
 _logger = get_component_logger("registration")
@@ -77,6 +87,23 @@ __all__ = [
 ]
 
 
+class RegistrationValidationReport(TypedDict):
+    """Structured validation report for registration checks.
+
+    Using a TypedDict makes mypy aware of the concrete types stored under
+    keys such as "errors" and "warnings", avoiding "object has no attribute
+    'append'" errors when appending messages during validation.
+    """
+
+    timestamp: float
+    strict_validation: bool
+    errors: List[str]
+    warnings: List[str]
+    recommendations: List[str]
+    performance_analysis: Dict[str, object]
+    compatibility_check: Dict[str, object]
+
+
 def register_env(  # noqa: C901
     env_id: Optional[str] = None,
     entry_point: Optional[str] = None,
@@ -98,7 +125,7 @@ def register_env(  # noqa: C901
 
     Args:
         env_id: Environment identifier string, defaults to ENV_ID constant if not provided
-        entry_point: Module path string for environment class, defaults to ENTRY_POINT if not provided
+        entry_point: Module path string for environment class, defaults to ENTRY_POINT if not provided  # noqa: E501
         max_episode_steps: Maximum steps per episode, defaults to MAX_EPISODE_STEPS if not provided
         kwargs: Additional environment parameters dictionary for customization
         force_reregister: Whether to force re-registration if environment already exists
@@ -122,7 +149,7 @@ def register_env(  # noqa: C901
         )
     """
     try:
-        # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided
+        # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided  # noqa: E501
         effective_env_id = env_id or ENV_ID
         # Select entry point based on provided override or env_id
         if entry_point is not None:
@@ -157,7 +184,7 @@ def register_env(  # noqa: C901
         # Validate environment ID follows Gymnasium versioning conventions with '-v0' suffix pattern
         if not effective_env_id.endswith("-v0"):
             raise ValidationError(
-                f"Environment ID '{effective_env_id}' must end with '-v0' suffix for Gymnasium versioning compliance",
+                f"Environment ID '{effective_env_id}' must end with '-v0' suffix for Gymnasium versioning compliance",  # noqa: E501
                 parameter_name="env_id",
                 parameter_value=effective_env_id,
                 expected_format="environment_name-v0",
@@ -167,27 +194,36 @@ def register_env(  # noqa: C901
         # Support 'force' alias used by some tests
         force_flag = bool(compat_flags.get("force", False)) or force_reregister
 
-        # No special toggles; env id determines default behavior, callers may still pass entry_point explicitly
+        # No special toggles; env id determines default behavior, callers may still pass entry_point explicitly  # noqa: E501
 
         if is_registered(effective_env_id, use_cache=True):
             if force_flag:
-                # Handle force_reregister flag by calling unregister_env() if environment exists and force requested
+                # Handle force_reregister flag by calling unregister_env() if environment exists and force requested  # noqa: E501
                 _logger.info(
-                    f"Force re-registration requested for '{effective_env_id}', unregistering existing..."
+                    f"Force re-registration requested for '{effective_env_id}', unregistering existing..."  # noqa: E501
                 )
                 unregister_env(effective_env_id, suppress_warnings=True)
 
             else:
                 _logger.warning(
-                    f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."
+                    f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."  # noqa: E501
                 )
                 return effective_env_id
-        # Create complete kwargs dictionary using create_registration_kwargs() with parameter validation
+        # Create complete kwargs dictionary using create_registration_kwargs() with parameter validation  # noqa: E501
+        grid_size_arg = cast(
+            Optional[Tuple[int, int]], effective_kwargs.get("grid_size")
+        )
+        source_location_arg = cast(
+            Optional[Tuple[int, int]], effective_kwargs.get("source_location")
+        )
+        max_steps_arg = cast(Optional[int], effective_kwargs.get("max_steps"))
+        goal_radius_arg = cast(Optional[float], effective_kwargs.get("goal_radius"))
+
         registration_kwargs = create_registration_kwargs(
-            grid_size=effective_kwargs.get("grid_size"),
-            source_location=effective_kwargs.get("source_location"),
-            max_steps=effective_kwargs.get("max_steps"),
-            goal_radius=effective_kwargs.get("goal_radius"),
+            grid_size=grid_size_arg,
+            source_location=source_location_arg,
+            max_steps=max_steps_arg,
+            goal_radius=goal_radius_arg,
             additional_kwargs=effective_kwargs,
         )
 
@@ -219,17 +255,21 @@ def register_env(  # noqa: C901
             # impacting tests that inspect logging. Keep at INFO level.
             if effective_env_id == ENV_ID:
                 _logger.info(
-                    "Using legacy PlumeSearchEnv for default env id. The legacy entry point will be deprecated; "
+                    "Using legacy PlumeSearchEnv for default env id. The legacy entry point will be deprecated; "  # noqa: E501
                     "use env_id='%s' or set PLUMENAV_DEFAULT=components to opt into DI now.",
                     COMPONENT_ENV_ID,
                 )
                 # Emit a DeprecationWarning unless explicitly silenced
                 if os.getenv(
                     "PLUMENAV_DEPRECATION_SILENCE", ""
-                ).strip().lower() not in {"1", "true", "yes"}:
+                ).strip().lower() not in {
+                    "1",
+                    "true",
+                    "yes",
+                }:
                     warnings.warn(
                         (
-                            "Legacy PlumeSearchEnv entry point will be deprecated in a future release. "
+                            "Legacy PlumeSearchEnv entry point will be deprecated in a future release. "  # noqa: E501
                             "Prefer registering the DI environment id (COMPONENT_ENV_ID) or set "
                             "PLUMENAV_DEFAULT=components to route the default id to DI."
                         ),
@@ -237,7 +277,7 @@ def register_env(  # noqa: C901
                         stacklevel=2,
                     )
 
-        # Validate registration configuration using validate_registration_config() for consistency checking
+        # Validate registration configuration using validate_registration_config() for consistency checking  # noqa: E501
         is_valid, validation_report = validate_registration_config(
             env_id=effective_env_id,
             entry_point=effective_entry_point,
@@ -254,7 +294,7 @@ def register_env(  # noqa: C901
                 parameter_value=validation_report,
             )
 
-        # Call gymnasium.register() with validated env_id, entry_point, max_episode_steps, and kwargs
+        # Call gymnasium.register() with validated env_id, entry_point, max_episode_steps, and kwargs  # noqa: E501
         gymnasium.register(
             id=effective_env_id,
             entry_point=effective_entry_point,
@@ -276,10 +316,10 @@ def register_env(  # noqa: C901
 
         # Log successful environment registration with configuration details and usage instructions
         _logger.info(
-            f"Successfully registered environment '{effective_env_id}' with entry_point '{effective_entry_point}'"
+            f"Successfully registered environment '{effective_env_id}' with entry_point '{effective_entry_point}'"  # noqa: E501
         )
         _logger.debug(
-            f"Registration parameters: max_steps={effective_max_steps}, kwargs={registration_kwargs}"
+            f"Registration parameters: max_steps={effective_max_steps}, kwargs={registration_kwargs}"  # noqa: E501
         )
 
         # Skip internal make() verification; integration tests will validate gym.make() externally
@@ -293,15 +333,16 @@ def register_env(  # noqa: C901
 
 
 def _validate_grid_size_value(
-    grid_size: object, report: Dict[str, object], strict_validation: bool
+    grid_size: object, report: RegistrationValidationReport, strict_validation: bool
 ) -> bool:
     if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
         report["errors"].append("grid_size must be a tuple/list of 2 elements")
         return False
-    width, height = grid_size
-    if not isinstance(width, int) or not isinstance(height, int):
+    width_obj, height_obj = cast(Tuple[object, object], tuple(grid_size))
+    if not isinstance(width_obj, int) or not isinstance(height_obj, int):
         report["errors"].append("grid_size dimensions must be integers")
         return False
+    width, height = width_obj, height_obj
     if width <= 0 or height <= 0:
         report["errors"].append("grid_size dimensions must be positive")
         return False
@@ -313,19 +354,23 @@ def _validate_grid_size_value(
 
 
 def _validate_source_location_value(
-    source_location: object, report: Dict[str, object]
+    source_location: object, report: RegistrationValidationReport
 ) -> bool:
     if not isinstance(source_location, (tuple, list)) or len(source_location) != 2:
         report["errors"].append("source_location must be a tuple/list of 2 elements")
         return False
-    source_x, source_y = source_location
-    if not isinstance(source_x, (int, float)) or not isinstance(source_y, (int, float)):
+    source_x_obj, source_y_obj = cast(Tuple[object, object], tuple(source_location))
+    if not isinstance(source_x_obj, (int, float)) or not isinstance(
+        source_y_obj, (int, float)
+    ):
         report["errors"].append("source_location coordinates must be numeric")
         return False
     return True
 
 
-def _validate_goal_radius_value(goal_radius: object, report: Dict[str, object]) -> bool:
+def _validate_goal_radius_value(
+    goal_radius: object, report: RegistrationValidationReport
+) -> bool:
     if not isinstance(goal_radius, (int, float)):
         report["errors"].append("goal_radius must be numeric")
         return False
@@ -336,7 +381,7 @@ def _validate_goal_radius_value(goal_radius: object, report: Dict[str, object]) 
 
 
 def _validate_max_episode_steps(
-    max_episode_steps: object, report: Dict[str, object]
+    max_episode_steps: object, report: RegistrationValidationReport
 ) -> bool:
     valid = True
     if max_episode_steps is None:
@@ -359,7 +404,7 @@ def _validate_max_episode_steps(
     return valid
 
 
-def _add_final_recommendations(report: Dict[str, object]) -> None:
+def _add_final_recommendations(report: RegistrationValidationReport) -> None:
     if not report["errors"]:
         report["recommendations"].append("Configuration appears valid for registration")
     if report["warnings"]:
@@ -370,7 +415,7 @@ def _apply_strict_checks(
     strict_validation: bool,
     env_id: str,
     kwargs: Dict[str, object],
-    report: Dict[str, object],
+    report: RegistrationValidationReport,
 ) -> None:
     if strict_validation:
         _strict_checks(env_id, kwargs, report)
@@ -385,14 +430,15 @@ def _pop_env_from_registry(effective_env_id: str) -> bool:
         if hasattr(gymnasium.envs, "registry") and hasattr(
             gymnasium.envs.registry, "env_specs"
         ):
-            return (
-                gymnasium.envs.registry.env_specs.pop(effective_env_id, None)
-                is not None
-            )
+            # Older Gymnasium versions expose a Registry object with env_specs dict
+            env_specs_any = cast(Any, gymnasium.envs.registry).env_specs
+            if isinstance(env_specs_any, dict):
+                return env_specs_any.pop(effective_env_id, None) is not None
         if hasattr(gymnasium, "envs") and hasattr(gymnasium.envs, "registration"):
-            reg = gymnasium.envs.registration.registry
-            if effective_env_id in reg.env_specs:
-                del reg.env_specs[effective_env_id]
+            # Newer Gymnasium may expose the registry mapping directly as a dict
+            reg_any = cast(Any, gymnasium.envs.registration).registry
+            if isinstance(reg_any, dict) and effective_env_id in reg_any:
+                del reg_any[effective_env_id]
                 return True
     except Exception as registry_error:
         _logger.warning(
@@ -430,7 +476,7 @@ def unregister_env(
         suppress_warnings: Whether to suppress warnings about unregistration operations
 
     Returns:
-        True if environment was successfully unregistered or was not registered, False if unregistration failed
+        True if environment was successfully unregistered or was not registered, False if unregistration failed  # noqa: E501
 
     Raises:
         ValidationError: If environment ID format is invalid
@@ -502,8 +548,8 @@ def _query_registry_direct(effective_env_id: str) -> bool:
 
 def _query_registry_fallback(effective_env_id: str) -> bool:
     with contextlib.suppress(Exception):
-        test_env = gymnasium.make(effective_env_id)
-        test_env.close()
+        test_env_any = cast(Any, gymnasium.make(effective_env_id))
+        test_env_any.close()
         return True
     return False
 
@@ -549,7 +595,7 @@ def is_registered(env_id: Optional[str] = None, use_cache: bool = True) -> bool:
     checking, and error handling providing accurate environment availability information.
 
     This function provides reliable status checking for environment registration, supporting both
-    cached and authoritative registry queries with comprehensive validation and consistency checking.
+    cached and authoritative registry queries with comprehensive validation and consistency checking.  # noqa: E501
 
     Args:
         env_id: Environment identifier to check, defaults to ENV_ID if not provided
@@ -683,7 +729,7 @@ def get_registration_info(
         include_config_details: Whether to include detailed configuration parameter breakdown
 
     Returns:
-        Complete registration information dictionary including status, configuration, metadata, and debugging details
+        Complete registration information dictionary including status, configuration, metadata, and debugging details  # noqa: E501
 
     Example:
         # Basic registration info
@@ -716,7 +762,7 @@ def get_registration_info(
         info["system_info"] = _system_info_for(info)
 
         _logger.debug(
-            f"Retrieved registration info for '{effective_env_id}', detailed={include_config_details}"
+            f"Retrieved registration info for '{effective_env_id}', detailed={include_config_details}"  # noqa: E501
         )
         return info
 
@@ -741,14 +787,15 @@ def _assert_grid_size_or_raise(grid_size: object) -> Tuple[int, int]:
             parameter_value=grid_size,
             expected_format="(width, height) tuple with positive integers",
         )
-    width, height = grid_size
-    if not isinstance(width, int) or not isinstance(height, int):
+    width_obj, height_obj = cast(Tuple[object, object], tuple(grid_size))
+    if not isinstance(width_obj, int) or not isinstance(height_obj, int):
         raise ValidationError(
             "grid_size dimensions must be integers",
             parameter_name="grid_size",
             parameter_value=grid_size,
             expected_format="(width, height) tuple with positive integer dimensions",
         )
+    width, height = width_obj, height_obj
     if width <= 0 or height <= 0:
         raise ValidationError(
             "grid_size dimensions must be positive integers",
@@ -776,16 +823,20 @@ def _assert_source_location_or_raise(
             parameter_value=source_location,
             expected_format="(x, y) tuple with coordinates within grid bounds",
         )
-    source_x, source_y = source_location
-    if not isinstance(source_x, (int, float)) or not isinstance(source_y, (int, float)):
+    source_x_obj, source_y_obj = cast(Tuple[object, object], tuple(source_location))
+    if not isinstance(source_x_obj, (int, float)) or not isinstance(
+        source_y_obj, (int, float)
+    ):
         raise ValidationError(
             "source_location coordinates must be numeric",
             parameter_name="source_location",
             parameter_value=source_location,
         )
+    source_x = float(source_x_obj)
+    source_y = float(source_y_obj)
     if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
         raise ValidationError(
-            f"source_location coordinates must be within grid bounds: (0,0) to ({width-1},{height-1})",
+            f"source_location coordinates must be within grid bounds: (0,0) to ({width-1},{height-1})",  # noqa: E501
             parameter_name="source_location",
             parameter_value=source_location,
         )
@@ -892,7 +943,7 @@ def create_registration_kwargs(
 
     Args:
         grid_size: Grid dimensions as (width, height) tuple, defaults to DEFAULT_GRID_SIZE
-        source_location: Plume source coordinates as (x, y) tuple, defaults to DEFAULT_SOURCE_LOCATION
+        source_location: Plume source coordinates as (x, y) tuple, defaults to DEFAULT_SOURCE_LOCATION  # noqa: E501
         max_steps: Maximum episode steps, defaults to DEFAULT_MAX_STEPS
         goal_radius: Goal detection radius, defaults to DEFAULT_GOAL_RADIUS
         additional_kwargs: Additional parameters dictionary for custom configuration
@@ -936,7 +987,7 @@ def create_registration_kwargs(
         )
 
         _logger.debug(
-            f"Creating registration kwargs with parameters: grid_size={effective_grid_size}, source_location={effective_source_location}"
+            f"Creating registration kwargs with parameters: grid_size={effective_grid_size}, source_location={effective_source_location}"  # noqa: E501
         )
 
         # Validate core parameters using assert-style helpers
@@ -966,7 +1017,7 @@ def create_registration_kwargs(
         # Log kwargs creation with parameter summary and validation status for debugging
         _logger.debug(f"Successfully created registration kwargs: {base_kwargs}")
 
-        # Return complete kwargs dictionary ready for Gymnasium registration with comprehensive validation
+        # Return complete kwargs dictionary ready for Gymnasium registration with comprehensive validation  # noqa: E501
         return base_kwargs
 
     except Exception as e:
@@ -974,7 +1025,7 @@ def create_registration_kwargs(
         raise
 
 
-def _init_validation_report(strict_validation: bool) -> Dict[str, object]:
+def _init_validation_report(strict_validation: bool) -> RegistrationValidationReport:
     """Create the base validation report structure."""
     return {
         "timestamp": time.time(),
@@ -987,7 +1038,7 @@ def _init_validation_report(strict_validation: bool) -> Dict[str, object]:
     }
 
 
-def _validate_env_id(env_id: str, report: Dict[str, object]) -> bool:
+def _validate_env_id(env_id: str, report: RegistrationValidationReport) -> bool:
     valid = True
     if not isinstance(env_id, str) or not env_id.strip():
         report["errors"].append("Environment ID must be a non-empty string")
@@ -1012,7 +1063,7 @@ def _validate_env_id(env_id: str, report: Dict[str, object]) -> bool:
 
 
 def _validate_entry_point(
-    entry_point: str, report: Dict[str, object], strict_validation: bool
+    entry_point: str, report: RegistrationValidationReport, strict_validation: bool
 ) -> bool:
     valid = True
     if not isinstance(entry_point, str) or not entry_point.strip():
@@ -1055,7 +1106,9 @@ def _validate_entry_point(
 
 
 def _validate_kwargs_structure(
-    kwargs: Dict[str, object], report: Dict[str, object], strict_validation: bool
+    kwargs: Dict[str, object],
+    report: RegistrationValidationReport,
+    strict_validation: bool,
 ) -> bool:
     valid = True
 
@@ -1074,48 +1127,64 @@ def _validate_kwargs_structure(
 
 
 def _cross_validate_params(
-    kwargs: Dict[str, object], report: Dict[str, object]
+    kwargs: Dict[str, object], report: RegistrationValidationReport
 ) -> None:
-    if "grid_size" in kwargs and "source_location" in kwargs:
-        try:
-            width, height = kwargs["grid_size"]
-            source_x, source_y = kwargs["source_location"]
+    grid = kwargs.get("grid_size")
+    src = kwargs.get("source_location")
+    if (
+        isinstance(grid, (tuple, list))
+        and len(grid) == 2
+        and isinstance(src, (tuple, list))
+        and len(src) == 2
+    ):
+        width_obj, height_obj = cast(Tuple[object, object], tuple(grid))
+        src_x_obj, src_y_obj = cast(Tuple[object, object], tuple(src))
+        if (
+            isinstance(width_obj, int)
+            and isinstance(height_obj, int)
+            and isinstance(src_x_obj, (int, float))
+            and isinstance(src_y_obj, (int, float))
+        ):
+            width, height = width_obj, height_obj
+            source_x, source_y = float(src_x_obj), float(src_y_obj)
             if source_x < 0 or source_x >= width or source_y < 0 or source_y >= height:
                 report["errors"].append(
                     "source_location must be within grid_size bounds"
                 )
-        except (ValueError, TypeError):
+        else:
             report["warnings"].append(
                 "Could not cross-validate grid_size and source_location"
             )
 
 
-def _analyze_performance(kwargs: Dict[str, object], report: Dict[str, object]) -> None:
-    if "grid_size" not in kwargs:
+def _analyze_performance(
+    kwargs: Dict[str, object], report: RegistrationValidationReport
+) -> None:
+    grid = kwargs.get("grid_size")
+    if not (isinstance(grid, (tuple, list)) and len(grid) == 2):
         return
-    try:
-        width, height = kwargs["grid_size"]
-        grid_cells = width * height
-        estimated_memory_mb = (grid_cells * 4) / (1024 * 1024)
-        report["performance_analysis"] = {
-            "grid_cells": grid_cells,
-            "estimated_memory_mb": round(estimated_memory_mb, 2),
-            "performance_tier": (
-                "high"
-                if grid_cells > 262144
-                else "medium" if grid_cells > 16384 else "low"
-            ),
-        }
-        if estimated_memory_mb > 100:
-            report["warnings"].append(
-                f"High memory usage estimated: {estimated_memory_mb:.1f}MB"
-            )
-    except Exception:
+    width_obj, height_obj = cast(Tuple[object, object], tuple(grid))
+    if not (isinstance(width_obj, int) and isinstance(height_obj, int)):
         report["warnings"].append("Could not estimate performance characteristics")
+        return
+    width, height = width_obj, height_obj
+    grid_cells = width * height
+    estimated_memory_mb = (grid_cells * 4) / (1024 * 1024)
+    report["performance_analysis"] = {
+        "grid_cells": grid_cells,
+        "estimated_memory_mb": round(estimated_memory_mb, 2),
+        "performance_tier": (
+            "high" if grid_cells > 262144 else "medium" if grid_cells > 16384 else "low"
+        ),
+    }
+    if estimated_memory_mb > 100:
+        report["warnings"].append(
+            f"High memory usage estimated: {estimated_memory_mb:.1f}MB"
+        )
 
 
 def _strict_checks(
-    env_id: str, kwargs: Dict[str, object], report: Dict[str, object]
+    env_id: str, kwargs: Dict[str, object], report: RegistrationValidationReport
 ) -> None:
     # Naming conflicts
     if env_id.lower().startswith("gym"):
@@ -1132,16 +1201,28 @@ def _strict_checks(
         )
 
     # Unusual parameter combinations
+    goal_obj = kwargs.get("goal_radius")
+    grid = kwargs.get("grid_size")
+    src = kwargs.get("source_location")
     if (
-        "goal_radius" in kwargs
-        and kwargs["goal_radius"] > 0
-        and ("source_location" in kwargs and "grid_size" in kwargs)
+        isinstance(goal_obj, (int, float))
+        and goal_obj > 0
+        and isinstance(grid, (tuple, list))
+        and len(grid) == 2
+        and isinstance(src, (tuple, list))
+        and len(src) == 2
     ):
-        with contextlib.suppress(Exception):
-            width, height = kwargs["grid_size"]
-            source_x, source_y = kwargs["source_location"]
-            goal_radius = kwargs["goal_radius"]
-
+        width_obj, height_obj = cast(Tuple[object, object], tuple(grid))
+        src_x_obj, src_y_obj = cast(Tuple[object, object], tuple(src))
+        if (
+            isinstance(width_obj, int)
+            and isinstance(height_obj, int)
+            and isinstance(src_x_obj, (int, float))
+            and isinstance(src_y_obj, (int, float))
+        ):
+            width, height = width_obj, height_obj
+            source_x, source_y = float(src_x_obj), float(src_y_obj)
+            goal_radius = float(goal_obj)
             min_distance_to_edge = min(
                 source_x, source_y, width - source_x - 1, height - source_y - 1
             )
@@ -1150,7 +1231,7 @@ def _strict_checks(
 
 
 def _finalize_compatibility(
-    entry_point: str, param_types_valid: bool, report: Dict[str, object]
+    entry_point: str, param_types_valid: bool, report: RegistrationValidationReport
 ) -> None:
     report["compatibility_check"] = {
         "gymnasium_available": True,
@@ -1165,13 +1246,13 @@ def validate_registration_config(
     max_episode_steps: int,
     kwargs: Dict[str, object],
     strict_validation: bool = True,
-) -> Tuple[bool, Dict[str, object]]:
+) -> Tuple[bool, RegistrationValidationReport]:
     """
     Configuration validation function ensuring parameter consistency, Gymnasium compliance,
     mathematical feasibility, and performance requirements for robust environment registration.
 
     This function provides comprehensive validation of all registration parameters, ensuring
-    compatibility with Gymnasium requirements, mathematical feasibility, and performance constraints.
+    compatibility with Gymnasium requirements, mathematical feasibility, and performance constraints.  # noqa: E501
 
     Args:
         env_id: Environment identifier string to validate
@@ -1181,7 +1262,7 @@ def validate_registration_config(
         strict_validation: Whether to apply enhanced validation rules and constraints
 
     Returns:
-        Tuple of (is_valid: bool, validation_report: dict) with detailed configuration analysis and recommendations
+        Tuple of (is_valid: bool, validation_report: dict) with detailed configuration analysis and recommendations  # noqa: E501
 
     Example:
         # Validate registration configuration
@@ -1223,9 +1304,12 @@ def validate_registration_config(
         _logger.error(f"Configuration validation failed: {e}")
         return False, {
             "timestamp": time.time(),
+            "strict_validation": strict_validation,
             "errors": [f"Validation process failed: {str(e)}"],
             "warnings": [],
             "recommendations": ["Check validation parameters and try again"],
+            "performance_analysis": {},
+            "compatibility_check": {},
         }
 
 
@@ -1313,8 +1397,8 @@ def register_with_custom_params(
 
         # Validate successful registration with immediate gym.make() test
         try:
-            test_env = gymnasium.make(registered_env_id)
-            test_env.close()
+            test_env_any = cast(Any, gymnasium.make(registered_env_id))
+            test_env_any.close()
             _logger.debug(f"Custom registration verified for '{registered_env_id}'")
         except Exception as test_error:
             _logger.error(f"Custom registration verification failed: {test_error}")
@@ -1333,7 +1417,7 @@ def register_with_custom_params(
             ),
         }
         _logger.info(
-            f"Successfully registered custom environment '{registered_env_id}' with parameters: {param_summary}"
+            f"Successfully registered custom environment '{registered_env_id}' with parameters: {param_summary}"  # noqa: E501
         )
 
         # Return registered environment ID for immediate use with success confirmation
