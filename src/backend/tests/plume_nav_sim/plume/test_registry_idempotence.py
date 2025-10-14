@@ -1,7 +1,5 @@
 """Regression test for plume model registry idempotent registration."""
 
-import pytest
-
 from plume_nav_sim.core.constants import STATIC_GAUSSIAN_MODEL_TYPE
 from plume_nav_sim.core.types import Coordinates, GridSize
 from plume_nav_sim.plume.plume_model import PlumeModelRegistry

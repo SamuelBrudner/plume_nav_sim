@@ -46,10 +46,10 @@ Usage Examples:
     info = get_environment_info(include_examples=True)
 """
 
-import logging  # >=3.10 - Module initialization logging, environment creation tracking, and registration status reporting
+import logging  # noqa: F401  # >=3.10 - Module initialization logging, environment creation tracking, and registration status reporting
 import time  # >=3.10 - Performance monitoring and timing measurements for factory function optimization
-import warnings  # >=3.10 - Performance warnings and configuration recommendations for optimization guidance
-from typing import (  # >=3.10 - Advanced type hints for factory functions, optional parameters, and return type specifications
+import warnings  # noqa: F401  # >=3.10 - Performance warnings and configuration recommendations for optimization guidance
+from typing import (  # noqa: F401  # >=3.10 - Advanced type hints for factory functions, optional parameters, and return type specifications
     Any,
     Dict,
     Optional,
@@ -62,7 +62,7 @@ import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework
 
 # Internal imports - Core constants and configuration management
 from ..core.constants import (
-    DEFAULT_GOAL_RADIUS,  # Default goal radius (0) requiring exact source location for termination
+    DEFAULT_GOAL_RADIUS,  # Default goal radius (float32 epsilon) enabling near-exact goal detection
 )
 from ..core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions (128, 128) for consistent initialization
@@ -73,8 +73,8 @@ from ..core.constants import (
 from ..core.constants import (
     DEFAULT_SOURCE_LOCATION,  # Default plume source location (64, 64) at grid center for balanced navigation
 )
-from ..core.constants import (
-    get_default_environment_constants,  # Factory function returning dictionary of environment configuration constants
+from ..core.constants import (  # noqa: F401  # Factory function returning dictionary of environment configuration constants
+    get_default_environment_constants,
 )
 
 # Internal imports - Registration system integration
@@ -93,15 +93,15 @@ from ..registration.register import (
 from ..registration.register import (
     unregister_env,  # Environment unregistration function for cleanup and testing workflows
 )
+from ..utils.exceptions import StateError  # noqa: F401
 from ..utils.exceptions import (  # Exception handling framework
     ComponentError,
-    StateError,
     ValidationError,
 )
 
 # Internal imports - Utility framework integration
+from ..utils.logging import PerformanceTimer  # noqa: F401
 from ..utils.logging import (  # Component logging and performance monitoring
-    PerformanceTimer,
     get_component_logger,
 )
 from ..utils.validation import (  # Parameter validation utilities
@@ -111,16 +111,14 @@ from ..utils.validation import (  # Parameter validation utilities
 
 # Internal imports - Core environment classes and abstract base
 from .base_env import (
-    AbstractEnvironmentError,  # Exception class for abstract method enforcement with implementation guidance
-)
-from .base_env import (
     BaseEnvironment,  # Abstract base environment class providing Gymnasium-compatible interface template
 )
 from .base_env import (
     create_base_environment_config,  # Factory function for creating validated base environment configuration
 )
-from .base_env import (
-    validate_base_environment_setup,  # Comprehensive validation function for environment setup feasibility
+from .base_env import (  # noqa: F401  # Exception class for abstract method enforcement with implementation guidance; noqa: F401  # Comprehensive validation function for environment setup feasibility
+    AbstractEnvironmentError,
+    validate_base_environment_setup,
 )
 from .component_env import (
     ComponentBasedEnvironment,  # New component-based environment with dependency injection
@@ -175,7 +173,7 @@ __all__ = [
     "DEFAULT_GRID_SIZE",  # Default environment grid dimensions for consistent initialization
     "DEFAULT_SOURCE_LOCATION",  # Default plume source location for balanced navigation challenges
     "DEFAULT_MAX_STEPS",  # Default maximum episode steps for training efficiency and truncation handling
-    "DEFAULT_GOAL_RADIUS",  # Default goal radius requiring exact source location for episode termination
+    "DEFAULT_GOAL_RADIUS",  # Default goal radius (float32 epsilon) for near-exact episode termination
     # Advanced factory functions and convenience interfaces
     "create_environment",  # Unified factory function for creating any plume navigation environment
     "make_environment",  # Convenience function for creating and registering environment with gym.make() compatibility
@@ -183,7 +181,7 @@ __all__ = [
 ]
 
 
-def create_environment(
+def create_environment(  # noqa: C901
     env_type: Optional[str] = None,
     grid_size: Optional[Tuple[int, int]] = None,
     source_location: Optional[Tuple[int, int]] = None,
@@ -376,7 +374,7 @@ def create_environment(
         ) from e
 
 
-def make_environment(
+def make_environment(  # noqa: C901
     env_type: Optional[str] = None,
     env_config: Optional[Dict[str, Any]] = None,
     auto_register: bool = True,
@@ -789,7 +787,7 @@ def get_environment_info(
         }
 
 
-def _validate_environment_parameters(
+def _validate_environment_parameters(  # noqa: C901
     grid_size: Optional[Tuple[int, int]] = None,
     source_location: Optional[Tuple[int, int]] = None,
     max_steps: Optional[int] = None,
@@ -975,7 +973,7 @@ def _validate_environment_parameters(
                 render_issues.append("Must be string")
             elif render_mode not in ["rgb_array", "human"]:
                 render_valid = False
-                render_issues.append(f"Must be one of: rgb_array, human")
+                render_issues.append("Must be one of: rgb_array, human")
 
             validation_report["parameter_results"]["render_mode"] = {
                 "valid": render_valid,
@@ -988,7 +986,6 @@ def _validate_environment_parameters(
                 validation_report["errors"].extend(render_issues)
 
         # Apply cross-parameter consistency checking for mathematical relationships
-        cross_check_valid = True
 
         if (
             grid_size is not None

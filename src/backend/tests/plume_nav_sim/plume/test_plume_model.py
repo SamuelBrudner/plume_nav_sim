@@ -15,15 +15,9 @@ This test module provides comprehensive coverage for:
 - Integration testing across plume model components and data structures
 """
 
-import copy  # >=3.10 - Deep copying operations for model cloning tests and state isolation validation
 import math  # >=3.10 - Mathematical functions for Gaussian formula validation, distance calculations, and numerical testing
 import time  # >=3.10 - Performance timing measurements for generation speed validation and benchmark testing
 import warnings  # >=3.10 - Warning capture and validation for testing performance warnings and deprecation handling
-from unittest.mock import (  # >=3.10 - Mock objects and patching for testing error conditions, performance monitoring, and component isolation
-    MagicMock,
-    Mock,
-    patch,
-)
 
 import numpy as np  # >=2.1.0 - Mathematical operations, array assertions, concentration field validation, and numerical precision testing
 
@@ -60,15 +54,12 @@ from plume_nav_sim.plume.plume_model import (
     PlumeModelInterface,
     PlumeModelRegistry,
     create_plume_model,
-    get_supported_plume_types,
-    validate_plume_model_interface,
 )
 
 # Internal imports from static Gaussian plume implementation
 from plume_nav_sim.plume.static_gaussian import (
     StaticGaussianPlume,
     calculate_gaussian_concentration,
-    create_static_gaussian_plume,
     validate_gaussian_parameters,
 )
 
@@ -128,8 +119,6 @@ def test_plume_model_interface_protocol_compliance():
     duck typing works correctly with proper method signatures and return types.
     """
     # Test that PlumeModelInterface is properly defined as typing_extensions.Protocol
-    import inspect
-    from typing import get_args, get_origin
 
     # Validate all required method signatures are correctly specified with type hints
     required_methods = [
@@ -266,7 +255,7 @@ def test_static_gaussian_plume_field_generation(source_location):
         # Allow for some noise but expect general decrease
         assert (
             curr_conc <= prev_conc + 0.1
-        ), f"Concentration should decrease with distance"
+        ), "Concentration should decrease with distance"
 
     # Test field regeneration with force_regeneration=True and compare with cached results
     field_array_2 = plume_model.generate_concentration_field(force_regeneration=True)
@@ -777,12 +766,7 @@ def test_plume_model_error_handling():
     Test comprehensive error handling including custom exceptions, recovery strategies, error
     context preservation, and graceful degradation with proper error reporting.
     """
-    from plume_nav_sim.utils.exceptions import (
-        InterfaceValidationError,
-        ModelRegistrationError,
-        PlumeModelError,
-        ValidationError,
-    )
+    from plume_nav_sim.utils.exceptions import PlumeModelError, ValidationError
 
     # Test PlumeModelError exception with model-specific context and recovery suggestions
     try:

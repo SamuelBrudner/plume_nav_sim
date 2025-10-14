@@ -203,7 +203,8 @@ class PlumeNavSimError(Exception):
         self,
         message: str,
         context: Optional[Union[ErrorContext, Dict[str, Any]]] = None,
-        severity: ErrorSeverity = ErrorSeverity.MEDIUM,
+        severity: Union[ErrorSeverity, str] = ErrorSeverity.MEDIUM,
+        **kwargs: Any,
     ):
         """Initialize base exception with message, context, severity level, and error tracking.
 
@@ -220,8 +221,14 @@ class PlumeNavSimError(Exception):
         self._context_obj: Optional[ErrorContext] = None
         self._context_dict: Optional[Dict[str, Any]] = None
         self.context = context
-        # Set severity level for error classification and handling priority
-        self.severity = severity
+        # Normalize severity level for error classification and handling priority
+        if isinstance(severity, str):
+            try:
+                self.severity = ErrorSeverity[severity.upper()]
+            except Exception:
+                self.severity = ErrorSeverity.MEDIUM
+        else:
+            self.severity = severity
         # Generate timestamp using time.time() for error tracking
         self.timestamp = time.time()
         # Create unique error_id for tracking and correlation
@@ -230,6 +237,12 @@ class PlumeNavSimError(Exception):
         self.recovery_suggestion: Optional[str] = None
         # Initialize empty error_details dictionary
         self.error_details: Dict[str, Any] = {}
+        # Capture optional, forward-compatible kwargs into error_details to avoid constructor failures
+        # Common extras used by tests: component, suggestions
+        for k, v in kwargs.items():
+            # Avoid overriding core fields
+            if k not in {"message", "context", "severity"}:
+                self.error_details[k] = v
         # Set logged to False initially
         self.logged = False
 
@@ -421,6 +434,8 @@ class ValidationError(PlumeNavSimError, ValueError):
         expected_format: Optional[str] = None,
         parameter_constraints: Optional[Dict[str, Any]] = None,
         context: Optional[Union[ErrorContext, Dict[str, Any]]] = None,
+        *,
+        invalid_value: Optional[Any] = None,
     ):
         """Initialize validation error with parameter details and validation context.
 
@@ -435,8 +450,14 @@ class ValidationError(PlumeNavSimError, ValueError):
 
         # Store parameter_name for parameter-specific error handling
         self.parameter_name = parameter_name
-        # Store sanitized parameter_value for debugging (remove sensitive data)
-        self.parameter_value = self._sanitize_value(parameter_value)
+        # Choose invalid value from explicit invalid_value or parameter_value, sanitize for safety
+        if invalid_value is not None:
+            self.invalid_value = self._sanitize_value(invalid_value)
+            # Maintain backward-compat alias
+            self.parameter_value = self.invalid_value
+        else:
+            self.parameter_value = self._sanitize_value(parameter_value)
+            self.invalid_value = self.parameter_value
         # Store expected_format for user guidance
         self.expected_format = expected_format
         # Initialize empty validation_errors list
@@ -472,7 +493,7 @@ class ValidationError(PlumeNavSimError, ValueError):
         details.update(
             {
                 "parameter_name": self.parameter_name,
-                "parameter_value": self.parameter_value,
+                "invalid_value": self.invalid_value,
                 "expected_format": self.expected_format,
                 "validation_errors": self.validation_errors,
                 "parameter_constraints": self.parameter_constraints,
@@ -738,6 +759,8 @@ class ConfigurationError(PlumeNavSimError):
         config_parameter: Optional[str] = None,
         parameter_value: Optional[Any] = None,
         valid_options: Optional[Dict[str, Any]] = None,
+        *,
+        invalid_value: Optional[Any] = None,
     ):
         """Initialize configuration error with parameter details and valid options.
 
@@ -752,8 +775,13 @@ class ConfigurationError(PlumeNavSimError):
 
         # Store config_parameter for parameter-specific error handling
         self.config_parameter = config_parameter
-        # Store sanitized parameter_value for debugging
-        self.parameter_value = self._sanitize_config_value(parameter_value)
+        # Store sanitized invalid value, allow keyword 'invalid_value' for compatibility
+        if invalid_value is not None:
+            self.invalid_value = self._sanitize_config_value(invalid_value)
+            self.parameter_value = self.invalid_value
+        else:
+            self.parameter_value = self._sanitize_config_value(parameter_value)
+            self.invalid_value = self.parameter_value
         # Store valid_options for recovery guidance
         self.valid_options = valid_options or {}
         # Initialize empty configuration_context dictionary
@@ -1081,7 +1109,7 @@ class IntegrationError(PlumeNavSimError):
             )
         else:
             self.set_recovery_suggestion(
-                f"Check {dependency_name} installation and compatibility"
+                f"Verify {dependency_name} installation and configuration"
             )
 
     def _check_version_mismatch(self) -> bool:
@@ -1141,6 +1169,18 @@ class IntegrationError(PlumeNavSimError):
         # Return comprehensive compatibility analysis dictionary
         self.compatibility_info = compatibility_report
         return compatibility_report
+
+
+class PlumeModelError(ComponentError):
+    """Model-specific error with recovery suggestion helpers used by plume model tests."""
+
+    def get_recovery_suggestions(self) -> List[str]:
+        suggestions = [
+            "Reinitialize plume model with valid parameters",
+            "Check grid_size and source_location bounds",
+            "Validate sigma is within acceptable range",
+        ]
+        return suggestions
 
     def set_compatibility_info(self, info: Dict[str, Any]) -> None:
         """Set detailed compatibility information for comprehensive error analysis.
@@ -1244,7 +1284,7 @@ def handle_component_error(
         return "system_error"
 
 
-def sanitize_error_context(
+def sanitize_error_context(  # noqa: C901
     context: dict, additional_sensitive_keys: Optional[List[str]] = None
 ) -> dict:
     """Sanitize error context dictionary to prevent sensitive information disclosure while preserving debugging information for secure error logging.
@@ -1270,6 +1310,10 @@ def sanitize_error_context(
     # Iterate through all context keys and nested dictionary values
     for key, value in list(sanitized.items()):
         key_lower = str(key).lower()
+        # Remove null bytes from keys
+        if isinstance(key, str) and "\x00" in key:
+            del sanitized[key]
+            continue
 
         # Replace sensitive values with SANITIZATION_PLACEHOLDER
         if any(sensitive in key_lower for sensitive in sensitive_keys):
@@ -1281,14 +1325,18 @@ def sanitize_error_context(
             sanitized[key] = sanitize_error_context(value, additional_sensitive_keys)
             continue
 
-        # Truncate large string values to ERROR_CONTEXT_MAX_LENGTH
+        # Truncate large string values to ERROR_CONTEXT_MAX_LENGTH and remove nulls
         if isinstance(value, str):
+            if "\x00" in value:
+                value = value.replace("\x00", "")
             if len(value) > ERROR_CONTEXT_MAX_LENGTH:
                 sanitized[key] = value[: ERROR_CONTEXT_MAX_LENGTH - 3] + "..."
             # Check string content for sensitive information
             value_lower = value.lower()
             if any(sensitive in value_lower for sensitive in sensitive_keys):
                 sanitized[key] = SANITIZATION_PLACEHOLDER
+            else:
+                sanitized[key] = value
 
         # Remove private attributes (starting with underscore) from context
         if isinstance(key, str) and key.startswith("_"):
@@ -1370,7 +1418,7 @@ def format_error_details(
 def create_error_context(
     operation_name: Optional[str] = None,
     additional_context: Optional[dict] = None,
-    include_caller_info: bool = True,
+    include_caller_info: bool = False,
     include_system_info: bool = False,
 ) -> ErrorContext:
     """Create standardized error context dictionary with caller information, timestamp, and environment details for consistent error reporting.
@@ -1434,7 +1482,7 @@ def create_error_context(
     return context
 
 
-def log_exception_with_recovery(
+def log_exception_with_recovery(  # noqa: C901
     exception: Exception,
     logger: logging.Logger,
     context: Optional[dict] = None,

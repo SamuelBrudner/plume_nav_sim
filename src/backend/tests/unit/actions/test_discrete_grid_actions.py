@@ -16,6 +16,7 @@ from tests.contracts.test_action_processor_interface import TestActionProcessorI
 
 
 class TestDiscreteGridActions(TestActionProcessorInterface):
+    __test__ = True
     """Test suite for DiscreteGridActions.
 
     Inherits universal property tests from TestActionProcessorInterface.

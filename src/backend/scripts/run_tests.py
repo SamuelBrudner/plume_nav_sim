@@ -24,22 +24,15 @@ import shutil  # >=3.10 - High-level file operations for test artifact cleanup
 import subprocess  # >=3.10 - Subprocess execution for pytest command invocation
 import sys  # >=3.10 - System interface for exit codes and platform information
 import time  # >=3.10 - Time utilities for performance measurement and timing
-import warnings  # >=3.10 - Warning management for test execution warnings
 from dataclasses import dataclass  # >=3.10 - Data classes for configuration structures
 from typing import (  # >=3.10 - Type hints for comprehensive annotation
     Any,
     Dict,
     List,
     Optional,
-    Tuple,
-    Union,
 )
 
-# External imports with version comments
-import pytest  # >=8.0.0 - Primary testing framework for test execution and management
-
 from config.test_configs import (
-    REPRODUCIBILITY_SEEDS,
     TestConfigFactory,
     create_edge_case_test_config,
     create_integration_test_config,
@@ -57,11 +50,10 @@ from plume_nav_sim.utils.logging import (
     configure_logging_for_development,
     get_component_logger,
 )
-from plume_nav_sim.utils.validation import (
-    ValidationResult,
-    create_validation_context,
-    validate_environment_config,
-)
+from plume_nav_sim.utils.validation import ValidationResult, create_validation_context
+
+# External imports with version comments
+
 
 # Global constants for script configuration
 SCRIPT_NAME = "run_tests.py"
@@ -2403,7 +2395,7 @@ def main(args: Optional[List[str]] = None) -> int:
 
     except Exception as e:
         logger.error(f"Unexpected error during test execution: {e}")
-        logger.debug(f"Error details:", exc_info=True)
+        logger.debug("Error details:", exc_info=True)
         return EXIT_CODE_ERROR
 
 

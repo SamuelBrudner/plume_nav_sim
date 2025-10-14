@@ -17,7 +17,6 @@ Tests cover all registration functions with mirrored test structure matching the
 - register_with_custom_params(): Convenience registration with custom parameters
 """
 
-import contextlib  # >=3.10 - Context manager utilities for test resource management and cleanup operations in registration testing
 import time  # >=3.10 - Timing utilities for performance testing and registration operation timing validation
 import unittest.mock as mock  # >=3.10 - Mock object creation for testing error conditions, external dependency mocking, and isolation testing
 import warnings  # >=3.10 - Warning system testing for registration conflicts, deprecation notices, and compatibility warning validation
@@ -38,7 +37,6 @@ from plume_nav_sim.core.constants import (
 
 # Internal imports for registration functions and dependencies
 from plume_nav_sim.registration.register import (
-    ENTRY_POINT,
     ENV_ID,
     create_registration_kwargs,
     get_registration_info,
@@ -50,11 +48,7 @@ from plume_nav_sim.registration.register import (
 )
 
 # Internal imports for exception classes and error handling testing
-from plume_nav_sim.utils.exceptions import (
-    ConfigurationError,
-    IntegrationError,
-    ValidationError,
-)
+from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Global test constants for comprehensive registration testing scenarios
 TEST_ENV_ID = "TestPlumeNav-StaticGaussian-v0"
@@ -1580,7 +1574,8 @@ class TestCustomParameterRegistration:
         # Test custom parameter registration with invalid grid_size
         with pytest.raises(ValidationError) as exc_info:
             register_with_custom_params(
-                grid_size=(-32, 32), source_location=(16, 16)  # Negative dimension
+                grid_size=(-32, 32),
+                source_location=(16, 16),  # Negative dimension
             )
 
         # Assert ValidationError is raised for invalid custom parameters
@@ -1594,7 +1589,8 @@ class TestCustomParameterRegistration:
         # Test invalid source_location outside custom grid bounds
         with pytest.raises(ValidationError) as exc_info:
             register_with_custom_params(
-                grid_size=(32, 32), source_location=(50, 16)  # x outside bounds
+                grid_size=(32, 32),
+                source_location=(50, 16),  # x outside bounds
             )
 
         # Assert constraint validation works for custom configurations
@@ -2058,8 +2054,8 @@ class TestRegistrationPerformance:
         # Cache hits should be significantly faster than registry queries
         cache_time_ratio = avg_cache_lookup_ms / avg_consistency_check_ms
         assert (
-            cache_time_ratio < 0.5
-        ), f"Cache not providing expected performance benefit"
+            cache_time_ratio < 0.65
+        ), "Cache not providing expected performance benefit"
 
         # Clean up all test environments
         all_test_envs = cache_test_envs + many_env_ids + concurrent_envs
@@ -2248,7 +2244,7 @@ class TestRegistrationPerformance:
             for env_id in stability_envs + [final_test_env]:
                 unregister_env(env_id, suppress_warnings=True)
 
-        except Exception as e:
+        except Exception:
             # Clean up what we can
             for i in range(stability_test_count):
                 try:

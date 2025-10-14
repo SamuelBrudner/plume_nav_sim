@@ -24,6 +24,17 @@ ci:
   skip: []
 
 repos:
+  # Ruff: fast linter and formatter (complements/optionally replaces flake8 + black)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.3
+    hooks:
+      - id: ruff
+        name: Ruff Lint (auto-fix)
+        description: Lint with Ruff and auto-apply safe fixes
+        types: [python]
+        args: ["--fix"]
+        files: '^src/backend/plume_nav_sim/'
+
   # Official pre-commit hooks repository for basic file validation and quality checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -80,6 +91,32 @@ repos:
         files: 'tests/.*\.py$'
         exclude: 'tests/(strategies|conftest|__init__)\.py$'
         args: ['--django']
+
+  # Markdownlint for consistent markdown documentation style
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: 'v0.41.0'
+    hooks:
+      - id: markdownlint
+        name: Markdown Linting
+        description: Enforce consistent markdown style and best practices
+        types: [markdown]
+        args: ['--fix', '--disable', 'MD013', 'MD033', 'MD041']
+        exclude: '^(CHANGELOG\.md|\.github/)'
+
+  # Sourcery AI-powered refactoring (auto-fix mode - applies safe refactorings)
+  - repo: https://github.com/sourcery-ai/sourcery
+    rev: v1.16.0
+    hooks:
+      - id: sourcery
+        name: Sourcery Code Quality (Auto-fix)
+        description: AI-powered code refactoring with automatic fixes
+        types: [python]
+        args: ['--fix', '--no-summary']
+        stages: [manual]  # Only when explicitly invoked
+        verbose: true
+        # Note: Requires SOURCERY_TOKEN environment variable for full functionality
+        # Run manually with: pre-commit run sourcery --all-files --hook-stage manual
+        # WARNING: This will modify files in-place! Review changes before committing.
 
   # Black code formatter for consistent Python code style
   - repo: https://github.com/psf/black
@@ -227,3 +264,27 @@ repos:
         args: ['-lc', 'test -f src/backend/scripts/check_license_headers.py && python3 src/backend/scripts/check_license_headers.py || exit 0']
         files: '\.py$'
         exclude: '^(tests/|setup\.py)'
+  # Local hooks
+  - repo: local
+    hooks:
+      - id: constants-drift-check
+        name: Validate constants drift (YAML vs Python)
+        entry: bash
+        language: system
+        args: ['-lc', 'cd src/backend && conda run -n plume-nav-sim python scripts/validate_constants_drift.py']
+        pass_filenames: false
+        stages: [pre-push]
+        files: '^(config/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
+
+  # Commitizen-based release reminder (warn-only by default)
+  - repo: local
+    hooks:
+      - id: cz-release-reminder
+        name: Release reminder (Commitizen)
+        description: Warn if feat/fix or BREAKING CHANGE commits exist since last tag and version not bumped
+        stages: [pre-push]
+        entry: bash
+        args: ['-lc', 'test -f src/backend/scripts/check_release_bump_needed.py && python3 src/backend/scripts/check_release_bump_needed.py || exit 0']
+        language: system
+        pass_filenames: false
+        always_run: true

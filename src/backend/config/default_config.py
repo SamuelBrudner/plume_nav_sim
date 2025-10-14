@@ -10,7 +10,7 @@ import copy
 
 # External imports
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple
 
 # Internal imports from plume_nav_sim core modules
 from plume_nav_sim.core.constants import (
@@ -22,8 +22,7 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 from plume_nav_sim.core.types import EnvironmentConfig as CoreEnvironmentConfig
-from plume_nav_sim.core.types import create_environment_config
-from plume_nav_sim.utils.exceptions import ConfigurationError, ResourceError
+from plume_nav_sim.utils.exceptions import ConfigurationError
 
 __all__ = [
     "CompleteConfig",

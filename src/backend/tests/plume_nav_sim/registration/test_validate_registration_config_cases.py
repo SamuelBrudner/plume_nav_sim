@@ -1,5 +1,3 @@
-import pytest
-
 from plume_nav_sim.registration import register as reg
 
 

@@ -20,17 +20,15 @@ Key Features:
 import sys  # Ensure ability to tweak module registry for test stability
 import threading  # >=3.10 - Thread-safe registration operations and cache consistency management
 import time  # >=3.10 - Timestamp generation for cache management and registration state tracking
-import warnings  # >=3.10 - Module initialization warnings and registration compatibility notifications for development environments
-from typing import (  # >=3.10 - Type hints for registration functions, cache management, and error handling
-    Any,
-    Dict,
-    List,
-    Optional,
-    Union,
-)
+import warnings  # >=3.10 - Module initialization warnings and registration
+
+# compatibility notifications for development environments
+from typing import Dict, Optional, cast
 
 # External imports with version comments
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registry access and environment creation validation in module initialization
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
+
+# for registry access and environment creation validation in module initialization
 
 # Compatibility shim: older tests expect registry.env_specs; gymnasium>=1.x uses a dict
 try:
@@ -43,13 +41,14 @@ try:
     if isinstance(reg, dict) and not hasattr(reg, "env_specs"):
 
         class _RegistryAdapter:
-            def __init__(self, mapping):
-                self.env_specs = mapping
+            def __init__(self, mapping: dict[str, object]) -> None:
+                self.env_specs: dict[str, object] = mapping
 
-        gymnasium.envs.registry = _RegistryAdapter(reg)
+        gymnasium.envs.registry = _RegistryAdapter(reg)  # type: ignore[assignment]
 except Exception:
     warnings.warn(
-        "Gymnasium registry may not be fully compatible - some features may be limited"
+        "Gymnasium registry may not be fully compatible - some features may be limited",
+        stacklevel=2,
     )
 
 
@@ -59,7 +58,7 @@ try:
 
     if not hasattr(OrderEnforcing, "__getattr__"):
 
-        def __getattr__(self, name):
+        def __getattr__(self, name):  # type: ignore[no-untyped-def, misc]
             if name == "env":
                 raise AttributeError(name)
             try:
@@ -94,7 +93,7 @@ from .register import (
 # Global module state for initialization tracking and cache management
 _module_logger = get_component_logger("registration")
 _module_initialized = False
-_registration_cache: Dict[str, Any] = {}
+_registration_cache: Dict[str, object] = {}
 _cache_lock = threading.Lock()
 _initialization_timestamp: Optional[float] = None
 
@@ -160,11 +159,11 @@ def quick_register(
             # Update cache with quick registration timestamp for tracking
             with _cache_lock:
                 _registration_cache["last_quick_register"] = time.time()
-                _registration_cache["quick_register_count"] = (
-                    _registration_cache.get("quick_register_count", 0) + 1
-                )
+                _qr_count_obj = _registration_cache.get("quick_register_count", 0)
+                _qr_count = _qr_count_obj if isinstance(_qr_count_obj, int) else 0
+                _registration_cache["quick_register_count"] = _qr_count + 1
 
-            return ENV_ID
+            return cast(str, ENV_ID)
 
         # Log registration attempt with default parameters and force_reregister flag status
         _module_logger.info(
@@ -177,7 +176,7 @@ def quick_register(
         )
 
         # Call register_env() with default parameters and force_reregister flag
-        registration_result = register_env(force_reregister=force_reregister)
+        register_env(force_reregister=force_reregister)
 
         # Validate successful registration by checking registry status and consistency
         if not is_registered():
@@ -209,15 +208,14 @@ def quick_register(
 
         # Update module registration cache with successful registration timestamp
         with _cache_lock:
+            _qr_count_obj2 = _registration_cache.get("quick_register_count", 0)
+            _qr_count2 = _qr_count_obj2 if isinstance(_qr_count_obj2, int) else 0
             _registration_cache.update(
                 {
                     "last_quick_register": time.time(),
                     "quick_register_successful": True,
                     "validation_completed": validate_creation,
-                    "quick_register_count": _registration_cache.get(
-                        "quick_register_count", 0
-                    )
-                    + 1,
+                    "quick_register_count": _qr_count2 + 1,
                     "registration_method": "quick_register",
                 }
             )
@@ -233,7 +231,7 @@ def quick_register(
         )
 
         # Return registered environment ID with confirmation of immediate availability
-        return ENV_ID
+        return cast(str, ENV_ID)
 
     except Exception as e:
         # Enhanced error logging with context and recovery suggestions
@@ -248,14 +246,13 @@ def quick_register(
 
         # Update cache with failure information for debugging
         with _cache_lock:
+            _qrf_count_obj = _registration_cache.get("quick_register_failures", 0)
+            _qrf_count = _qrf_count_obj if isinstance(_qrf_count_obj, int) else 0
             _registration_cache.update(
                 {
                     "last_quick_register_error": time.time(),
                     "last_error": str(e),
-                    "quick_register_failures": _registration_cache.get(
-                        "quick_register_failures", 0
-                    )
-                    + 1,
+                    "quick_register_failures": _qrf_count + 1,
                 }
             )
 
@@ -285,7 +282,7 @@ def ensure_component_env_registered(
     Returns:
         The DI environment id (COMPONENT_ENV_ID)
     """
-    env_id = COMPONENT_ENV_ID
+    env_id = COMPONENT_ENV_ID  # already a str
     if is_registered(env_id):
         return env_id
     register_env(env_id=env_id, force_reregister=force_reregister)
@@ -297,7 +294,7 @@ def ensure_component_env_registered(
     return env_id
 
 
-def ensure_registered(
+def ensure_registered(  # noqa: C901
     auto_register: bool = True, raise_on_failure: bool = True
 ) -> bool:
     """
@@ -493,9 +490,9 @@ def ensure_registered(
         return False
 
 
-def get_registration_status(
+def get_registration_status(  # noqa: C901
     include_cache_info: bool = False, validate_creation: bool = False
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """
     Get comprehensive registration status information including registry state,
     cache consistency, environment availability, and detailed metadata for
@@ -611,7 +608,7 @@ def get_registration_status(
                 )
 
                 _module_logger.debug(
-                    f"Environment creation test successful for status check"
+                    "Environment creation test successful for status check"
                 )
 
             except Exception as e:
@@ -772,7 +769,7 @@ def clear_registration_cache(reset_module_state: bool = False) -> None:
 
         # Update module logger with cache clearing event and timestamp
         _module_logger.debug(
-            f"Cache clearing completed successfully",
+            "Cache clearing completed successfully",
             extra={
                 "operation": "clear_registration_cache",
                 "reset_level": "full" if reset_module_state else "cache_only",
@@ -800,14 +797,14 @@ def clear_registration_cache(reset_module_state: bool = False) -> None:
                     "error": str(e),
                     "partial_cleanup_attempted": True,
                 }
-        except:
+        except Exception:
             # Ultimate fallback - log that even partial cleanup failed
             _module_logger.critical(
                 "Complete cache clearing failure - unable to log error state"
             )
 
 
-def _initialize_registration_module() -> bool:
+def _initialize_registration_module() -> bool:  # noqa: C901
     """
     Internal module initialization function performing registration system setup,
     dependency validation, cache initialization, and module state configuration
@@ -914,7 +911,7 @@ def _initialize_registration_module() -> bool:
         try:
             # Test basic gymnasium registry access
             registry = gymnasium.envs.registry
-            if not hasattr(registry, "all") or not callable(getattr(registry, "all")):
+            if not hasattr(registry, "all") or not callable(registry.all):
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
@@ -954,9 +951,9 @@ def _initialize_registration_module() -> bool:
         # Set _module_initialized flag to True indicating successful initialization
         _module_initialized = True
 
-        # Log successful module initialization with configuration summary and available functionality
+        # Log successful module initialization with configuration summary and available functionality  # noqa: E501
         _module_logger.info(
-            f"Registration module initialized successfully",
+            "Registration module initialized successfully",
             extra={
                 "environment_id": ENV_ID,
                 "entry_point": ENTRY_POINT,
@@ -969,7 +966,8 @@ def _initialize_registration_module() -> bool:
             },
         )
 
-        # Return True indicating module ready for registration operations with full functionality
+        # Return True indicating module ready for registration operations with
+        # full functionality
         return True
 
     except ConfigurationError:
@@ -999,7 +997,7 @@ def _initialize_registration_module() -> bool:
                         "error_type": type(e).__name__,
                     }
                 )
-        except:
+        except Exception:
             # If even cache update fails, continue with error raising
             pass
 

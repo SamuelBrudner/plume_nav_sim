@@ -38,10 +38,9 @@ import logging
 import signal
 import sys
 import warnings
-from pathlib import Path
 
 # Standard library imports for configuration and logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # Internal imports from core types module
 from ..core.types import GridSize  # noqa: E402
@@ -467,7 +466,7 @@ class UnifiedRenderer:
             operation_id="unified_renderer",
         )
 
-    def render(self, context: RenderContext, mode: RenderMode = None):
+    def render(self, context: RenderContext, mode: RenderMode = None):  # noqa: C901
         """Render with automatic fallback and performance tracking."""
         if mode is None:
             mode = self.config["primary_mode"]
@@ -826,13 +825,15 @@ def _test_color_scheme_support_section(capabilities: Dict[str, Any]) -> None:
     """Test a few common colormaps if matplotlib is available and record support."""
     try:
         if capabilities.get("matplotlib_available"):
-            import matplotlib.pyplot as plt
+            import matplotlib
+            import matplotlib.pyplot
 
             colormaps = ["viridis", "plasma", "inferno", "magma", "gray"]
             available_colormaps = []
             for cmap in colormaps:
                 with contextlib.suppress(Exception):
-                    plt.get_cmap(cmap)
+                    # Use modern colormaps API to avoid deprecation warnings
+                    _ = matplotlib.colormaps[cmap]
                     available_colormaps.append(cmap)
             capabilities["color_scheme_support"] = {
                 "available_colormaps": available_colormaps,
@@ -1046,6 +1047,7 @@ def _extracted_from_detect_rendering_capabilities_99(
         test_backends=True,
         check_display_availability=True,
         assess_performance=test_performance_characteristics,
+        use_cache=False,  # Don't use cache during module init to allow tests to have clean cache state
     )
 
     capabilities["matplotlib_available"] = capabilities_result.get(
@@ -1088,7 +1090,7 @@ def _extracted_from_detect_rendering_capabilities_65(np, capabilities):
     )
 
 
-def _register_cleanup_handlers(
+def _register_cleanup_handlers(  # noqa: C901
     renderer_registry: Dict[str, Any], enable_automatic_cleanup: bool = True
 ) -> None:
     """
@@ -1149,10 +1151,17 @@ def _register_cleanup_handlers(
 
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
-        """Handle shutdown signals gracefully."""
-        _logger.info(f"Received signal {signum}, cleaning up renderers")
+        """Handle shutdown signals gracefully without terminating the process.
+
+        Avoid calling sys.exit() to prevent interfering with test runners or
+        embedding hosts that manage their own shutdown sequence.
+        """
+        try:
+            _logger.info(f"Received signal {signum}, cleaning up renderers")
+        except Exception:
+            pass
         cleanup_all_renderers()
-        sys.exit(0)
+        # Do not exit; allow caller/process manager to decide termination
 
     with contextlib.suppress(AttributeError, OSError):
         signal.signal(signal.SIGINT, signal_handler)

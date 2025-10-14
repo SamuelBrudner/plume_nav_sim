@@ -140,7 +140,6 @@ class TestStateManagerConfigContract:
 
     def test_optional_parameters_have_defaults(self):
         """Optional params have defaults."""
-        from plume_nav_sim.core.geometry import GridSize
 
         config_fields = {f.name: f for f in fields(StateManagerConfig)}
 
@@ -246,7 +245,6 @@ class TestConfigImmutability:
 
     def test_environment_config_is_frozen(self):
         """EnvironmentConfig should be frozen (immutable)."""
-        from dataclasses import fields as get_fields
 
         # Check if frozen
         env_config = EnvironmentConfig()

@@ -44,9 +44,6 @@ from .test_exceptions import (
     validate_error_message_security,
 )
 
-# Import all test classes from test_logging.py
-from .test_logging import TestComponentLogger, TestLoggingMixin
-
 # Import relevant space validation tests
 from .test_spaces import TestSpaceConfig, TestSpaceValidator
 
@@ -58,6 +55,10 @@ from .test_validation import (
     TestUtilityFunctions,
     TestValidationFunctions,
 )
+
+# Note: test_logging.py was archived as implementation detail tests
+# from .test_logging import TestComponentLogger, TestLoggingMixin
+
 
 # Note: test_seeding.py consolidated to tests/test_seeding.py (flat structure)
 # Seeding tests are now in the main tests/ directory for better organization
@@ -1243,9 +1244,7 @@ __all__ = [
     "TestRenderingError",
     "TestConfigurationError",
     "TestErrorSecurity",
-    # Logging test classes
-    "TestComponentLogger",
-    "TestLoggingMixin",
+    # Note: Logging test classes archived (TestComponentLogger, TestLoggingMixin)
     # Spaces validation test classes
     "TestSpaceConfig",
     "TestSpaceValidator",

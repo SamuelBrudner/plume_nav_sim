@@ -97,6 +97,7 @@ benchmark = [
 [project.scripts]
 plume-nav-validate = "plume_nav_sim.scripts:validate_installation"
 plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
+plume-nav-constants-check = "scripts.validate_constants_drift:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -162,6 +163,35 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 
+[tool.ruff]
+# Keep Ruff aligned with Black/Isort targets
+target-version = "py310"
+line-length = 88
+
+# Avoid linting documentation and demo code that embeds example snippets
+extend-exclude = [
+    "docs/",
+    "examples/",
+    "benchmarks/",
+    "tests/",
+    "src/backend/tests/",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501", "E203", "F401"]
+
+[tool.ruff.lint.per-file-ignores]
+# The user guide intentionally embeds code snippets inside strings; avoid false positives
+"docs/user_guide.py" = ["F401", "F821", "F841"]
+"__init__.py" = ["F401", "F403", "F405"]
+"tests/*" = ["F401", "F811"]
+"src/backend/tests/*" = ["F401", "F811"]
+"examples/*" = ["F401", "E402"]
+"conftest.py" = ["F401"]
+"plume_nav_sim/plume/__init__.py" = ["E402"]
+"plume_nav_sim/core/episode_manager.py" = ["F811"]
+
 [tool.flake8]
 max-line-length = 88
 extend-ignore = ["E203", "W503", "E501", "F401"]
@@ -184,3 +214,29 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 no_implicit_optional = true
+
+[tool.commitizen]
+# Conventional Commits adapter and release configuration
+name = "cz_conventional_commits"
+
+# Keep this in sync with [project].version; Commitizen updates both via version_files
+version = "0.0.1"
+
+# Git tag configuration
+tag_format = "v$version"
+annotated_tag = true
+tag_message = "chore(release): $version"
+
+# Changelog generation
+update_changelog_on_bump = true
+changelog_file = "src/backend/CHANGELOG.md"
+
+# Files whose version strings are updated during `cz bump`
+# Using file paths allows Commitizen to locate and update standard version keys
+version_files = [
+  "src/backend/pyproject.toml",
+  "src/backend/config/constants.yaml",
+]
+
+# Commit message used for version bumps
+bump_message = "chore(release): bump version $current_version → $new_version"

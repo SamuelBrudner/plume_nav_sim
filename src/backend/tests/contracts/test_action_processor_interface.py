@@ -18,19 +18,13 @@ import copy
 
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings
 
 import gymnasium as gym
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 from plume_nav_sim.interfaces import ActionProcessor
-from tests.strategies import (
-    agent_state_strategy,
-    discrete_action_strategy,
-    grid_size_strategy,
-    valid_position_for_grid_strategy,
-)
+from tests.strategies import grid_size_strategy
 
 
 class TestActionProcessorInterface:
@@ -41,6 +35,10 @@ class TestActionProcessorInterface:
     All implementations must pass these tests to be considered valid.
     Concrete test classes should inherit this and provide action_processor fixture.
     """
+
+    # Prevent pytest from collecting this base class directly. Concrete subclasses
+    # should inherit from this and provide the fixtures.
+    __test__ = False
 
     # ==============================================================================
     # Fixtures (Override in concrete test classes)

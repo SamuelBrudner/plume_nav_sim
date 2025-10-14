@@ -15,14 +15,6 @@ Test data is generated programmatically to ensure consistency across different e
 """
 
 import re  # >=3.10 - Regular expression validation for string constant format validation
-import warnings  # >=3.10 - Warning management for deprecation testing and validation warnings
-from typing import (  # >=3.10 - Type validation and type hint verification for constant types
-    Any,
-    Dict,
-    List,
-    Tuple,
-    Union,
-)
 
 import numpy as np  # >=2.1.0 - Array operations, dtype validation, and mathematical constant verification
 import pytest  # >=8.0.0 - Testing framework for constant validation, parameterized tests, and fixture management
@@ -32,8 +24,12 @@ from plume_nav_sim.core.constants import (  # Package metadata constants; Enviro
     ACTION_DOWN,
     ACTION_LEFT,
     ACTION_RIGHT,
+    ACTION_SPACE_SIZE,
     ACTION_UP,
+    CONCENTRATION_RANGE,
+    DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
+    DEFAULT_MAX_STEPS,
     DEFAULT_PLUME_SIGMA,
     DEFAULT_SOURCE_LOCATION,
     ENVIRONMENT_ID,
@@ -48,6 +44,7 @@ from plume_nav_sim.core.constants import (  # Package metadata constants; Enviro
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
     REWARD_DEFAULT,
     REWARD_GOAL_REACHED,
+    STATIC_GAUSSIAN_MODEL_TYPE,
     SUPPORTED_RENDER_MODES,
     VALIDATION_ERROR_MESSAGES,
     get_action_space_constants,
@@ -64,7 +61,6 @@ from plume_nav_sim.core.constants import (  # Package metadata constants; Enviro
 from plume_nav_sim.core.types import Action, RenderMode
 
 # Import exception classes for testing validation error handling
-from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Test constants for validation
 EXPECTED_PACKAGE_NAME = "plume_nav_sim"
@@ -263,16 +259,16 @@ class TestActionSpaceConstants:
         ), f"LEFT movement should be (-1,0), got {MOVEMENT_VECTORS[ACTION_LEFT]}"
 
         # Verify action constants match Action enumeration values from types module
-        assert ACTION_UP == Action.UP.value, f"ACTION_UP should match Action.UP.value"
+        assert ACTION_UP == Action.UP.value, "ACTION_UP should match Action.UP.value"
         assert (
             ACTION_RIGHT == Action.RIGHT.value
-        ), f"ACTION_RIGHT should match Action.RIGHT.value"
+        ), "ACTION_RIGHT should match Action.RIGHT.value"
         assert (
             ACTION_DOWN == Action.DOWN.value
-        ), f"ACTION_DOWN should match Action.DOWN.value"
+        ), "ACTION_DOWN should match Action.DOWN.value"
         assert (
             ACTION_LEFT == Action.LEFT.value
-        ), f"ACTION_LEFT should match Action.LEFT.value"
+        ), "ACTION_LEFT should match Action.LEFT.value"
 
 
 class TestRewardSystemConstants:
@@ -994,10 +990,10 @@ class TestConstantsIntegrationWithTypes:
         # Assert render mode constants match RenderMode enumeration values
         assert (
             "rgb_array" == RenderMode.RGB_ARRAY.value
-        ), f"'rgb_array' should match RenderMode.RGB_ARRAY.value"
+        ), "'rgb_array' should match RenderMode.RGB_ARRAY.value"
         assert (
             "human" == RenderMode.HUMAN.value
-        ), f"'human' should match RenderMode.HUMAN.value"
+        ), "'human' should match RenderMode.HUMAN.value"
 
         # Verify all supported render modes match enumeration
         for mode in SUPPORTED_RENDER_MODES:
@@ -1088,7 +1084,7 @@ class TestConstantEdgeCases:
 
         assert expected_directions.issubset(
             actual_directions
-        ), f"Movement vectors should include all cardinal directions"
+        ), "Movement vectors should include all cardinal directions"
 
         # Test that movement vectors are orthogonal (perpendicular to each other)
         vectors = list(MOVEMENT_VECTORS.values())
@@ -1101,7 +1097,7 @@ class TestConstantEdgeCases:
                     assert dot_product in [
                         -1,
                         0,
-                    ], f"Movement vectors should be orthogonal or opposite"
+                    ], "Movement vectors should be orthogonal or opposite"
 
     def test_dtype_numpy_compatibility(self):
         """Test that data type constants are compatible with NumPy operations."""

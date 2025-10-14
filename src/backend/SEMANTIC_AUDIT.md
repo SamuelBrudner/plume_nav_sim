@@ -9,12 +9,14 @@
 ## 🎯 Executive Summary
 
 ### Current State
+
 - ✅ **SEMANTIC_MODEL.md**: Well-defined core abstractions
 - ✅ **CONTRACTS.md**: API signatures documented
 - ⚠️ **Implementation**: Partial alignment with model
 - ❌ **Tests**: Mix of correct contracts & outdated assumptions
 
 ### Critical Gaps Found
+
 1. **Missing Invariant Enforcement**: Many invariants documented but not enforced
 2. **Incomplete State Machines**: State transitions not formally validated
 3. **Test Misalignment**: ~161 failing tests, many due to API mismatches
@@ -27,6 +29,7 @@
 ### 1. Environment (PlumeSearchEnv)
 
 #### ✅ What's Correct
+
 - Inherits from `gym.Env` (fixed today)
 - Gymnasium API compliance (reset/step/render/close)
 - Deterministic behavior with seeding
@@ -34,6 +37,7 @@
 #### ❌ Gaps Found
 
 **Missing State Machine Validation:**
+
 ```python
 # SEMANTIC_MODEL.md says:
 # - Can only step() after reset()
@@ -54,11 +58,13 @@ def step(self):
 ```
 
 **Missing Invariant Checks:**
+
 - ❌ No validation that observations match stated structure
 - ❌ No check that reward is in valid range [0, 1]
 - ❌ No verification that info dict contains required keys
 
 **Action Items:**
+
 - [ ] Add `_state: EnvironmentState` attribute
 - [ ] Validate state transitions in reset/step/close
 - [ ] Add post-condition checks on return values
@@ -69,12 +75,14 @@ def step(self):
 ### 2. AgentState
 
 #### ✅ What's Correct
+
 - Position tracked correctly
 - Step count increments
 
 #### ❌ Gaps Found
 
 **Invariant:** "Position always within grid bounds"
+
 ```python
 # Currently: BoundaryEnforcer validates, but AgentState can hold invalid positions
 # Should: AgentState constructor validates or enforces bounds
@@ -90,6 +98,7 @@ class AgentState:
 ```
 
 **Invariant:** "Step count monotonically increases"
+
 ```python
 # Currently: increment_step() doesn't check
 # Should:
@@ -100,6 +109,7 @@ def increment_step(self):
 ```
 
 **Invariant:** "Goal status is idempotent"
+
 ```python
 # Currently: No enforcement
 # Should track state transitions:
@@ -110,6 +120,7 @@ def update_goal_status(self, reached: bool):
 ```
 
 **Action Items:**
+
 - [ ] Add grid_size to AgentState (or validate externally)
 - [ ] Enforce monotonic step count
 - [ ] Make goal_reached idempotent (write-once)
@@ -120,12 +131,14 @@ def update_goal_status(self, reached: bool):
 ### 3. Plume / ConcentrationField
 
 #### ✅ What's Correct
+
 - Gaussian field generation
 - Source location handling
 
 #### ❌ Gaps Found
 
 **Invariant:** "Concentration highest at source, decays with distance"
+
 ```python
 # Currently: Assumed true, not tested
 # Should: Property test
@@ -141,6 +154,7 @@ def test_concentration_decays_with_distance(source, other_pos):
 ```
 
 **Invariant:** "Values in [0.0, 1.0]"
+
 ```python
 # Currently: Checked in some places, not everywhere
 # Should: Always validate after generation
@@ -152,6 +166,7 @@ def _generate_field(self):
 ```
 
 **Action Items:**
+
 - [ ] Add post-condition checks on field generation
 - [ ] Property test: concentration decreases with distance from source
 - [ ] Property test: all values in [0, 1]
@@ -162,12 +177,14 @@ def _generate_field(self):
 ### 4. Reward Calculation
 
 #### ✅ What's Correct
+
 - Sparse reward structure (0 or 1)
 - Goal detection via distance
 
 #### ❌ Gaps Found
 
 **Invariant:** "Reward determined solely by distance to goal"
+
 ```python
 # Currently: Correct, but not formally tested
 # Should: Property test
@@ -192,6 +209,7 @@ def test_reward_pure_function_of_distance(agent_pos, source_pos, goal_radius):
 ```
 
 **Invariant:** "Goal detection is deterministic and consistent"
+
 ```python
 # Edge case: What happens at exactly distance == goal_radius?
 # SEMANTIC_MODEL.md says: "≤, not <"
@@ -205,6 +223,7 @@ def test_goal_boundary_condition():
 ```
 
 **Action Items:**
+
 - [ ] Property test: reward is pure function
 - [ ] Edge case test: boundary at goal_radius
 - [ ] Property test: reward always in {0.0, 1.0}
@@ -214,12 +233,14 @@ def test_goal_boundary_condition():
 ### 5. Episode Management
 
 #### ✅ What's Correct
+
 - Episode lifecycle tracking
 - Statistics collection
 
 #### ❌ Gaps Found
 
 **Invariant:** "Each episode has unique seed"
+
 ```python
 # Currently: Not enforced
 # Should: Track used seeds
@@ -235,6 +256,7 @@ class EpisodeManager:
 ```
 
 **Invariant:** "Trajectory length ≤ max_steps"
+
 ```python
 # Should: Enforce during stepping
 def step(self):
@@ -243,6 +265,7 @@ def step(self):
 ```
 
 **Invariant:** "Reproducible: same seed → same episode"
+
 ```python
 # This is CRITICAL but only tested manually
 # Should: Property test
@@ -262,6 +285,7 @@ def test_episode_reproducibility():
 ```
 
 **Action Items:**
+
 - [ ] Add seed uniqueness tracking (or document why not needed)
 - [ ] Enforce trajectory length limit
 - [ ] Property test: determinism/reproducibility
@@ -316,6 +340,7 @@ def test_episode_reproducibility():
 For each component, we need:
 
 #### A. **Preconditions** (what caller must guarantee)
+
 ```python
 def step(self, action: int) -> Tuple[...]:
     """
@@ -328,6 +353,7 @@ def step(self, action: int) -> Tuple[...]:
 ```
 
 #### B. **Postconditions** (what function guarantees)
+
 ```python
 def step(self, action: int) -> Tuple[Obs, float, bool, bool, dict]:
     """
@@ -341,6 +367,7 @@ def step(self, action: int) -> Tuple[Obs, float, bool, bool, dict]:
 ```
 
 #### C. **Invariants** (always true before & after)
+
 ```python
 class Environment:
     """
@@ -352,6 +379,7 @@ class Environment:
 ```
 
 #### D. **State Transitions** (valid state changes)
+
 ```
 CREATED --reset()--> READY
 READY --step()--> READY | TERMINATED | TRUNCATED
@@ -368,6 +396,7 @@ CLOSED --X--> (cannot leave)
 ### Phase 3: Tests We Need to Write
 
 #### 1. **Contract Enforcement Tests** (per component)
+
 ```python
 # tests/contracts/test_environment_contracts.py
 
@@ -385,6 +414,7 @@ class TestEnvironmentStateTransitions:
 ```
 
 #### 2. **Invariant Property Tests** (using Hypothesis)
+
 ```python
 @given(
     seed=st.integers(0, 2**31-1),
@@ -405,6 +435,7 @@ def test_determinism_invariant(seed, actions):
 ```
 
 #### 3. **Boundary Condition Tests**
+
 ```python
 def test_goal_radius_boundary():
     """Test exact boundary: distance == goal_radius."""
@@ -414,6 +445,7 @@ def test_goal_radius_boundary():
 ```
 
 #### 4. **Metamorphic Tests**
+
 ```python
 def test_reward_scaling_invariant():
     """Scaling grid shouldn't change reward structure."""
@@ -429,24 +461,28 @@ def test_reward_scaling_invariant():
 ### Phase Completion Checklist
 
 **Phase 2 Complete When:**
+
 - [ ] All components have documented pre/post conditions
 - [ ] All invariants explicitly listed in CONTRACTS.md
 - [ ] State machines formalized with transition tables
 - [ ] Mathematical properties documented (distance, reward, etc.)
 
 **Phase 3 Complete When:**
+
 - [ ] Contract guard tests for all state transitions
 - [ ] Property tests for all critical invariants
 - [ ] Boundary tests for all edge cases
 - [ ] All guard tests passing (100% green)
 
 **Phase 4 Complete When:**
+
 - [ ] All unit tests align with contracts
 - [ ] No tests expect deprecated APIs
 - [ ] Test names clearly state what contract they verify
 - [ ] Remove/fix tests that contradict semantic model
 
 **Phase 5 Complete When:**
+
 - [ ] All contract guard tests passing
 - [ ] All aligned unit tests passing
 - [ ] Performance benchmarks separated from correctness tests

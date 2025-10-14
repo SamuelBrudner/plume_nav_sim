@@ -21,6 +21,7 @@ from tests.contracts.test_observation_model_interface import (
 
 
 class TestAntennaeArraySensor(TestObservationModelInterface):
+    __test__ = True
     """Concrete tests for AntennaeArraySensor.
 
     Inherits all 13 universal tests from TestObservationModelInterface.

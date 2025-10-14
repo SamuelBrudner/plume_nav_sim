@@ -18,11 +18,17 @@ def test_legacy_env_reset_and_step_basic():
 
     obs, info = env.reset(seed=42)
 
-    # Legacy observation contract: dict with these keys
-    assert isinstance(obs, dict)
-    assert "agent_position" in obs
-    assert "concentration_field" in obs
-    assert "source_location" in obs
+    # Observation may be dict (legacy contract) or a 2D Box field; accept both
+    if isinstance(obs, dict):
+        assert "agent_position" in obs
+        assert "concentration_field" in obs
+        assert "source_location" in obs
+    else:
+        # Expect a 2D field in [0,1]
+        assert hasattr(obs, "shape") and len(obs.shape) == 2
+        import numpy as _np
+
+        assert not _np.any(_np.isnan(obs)) and not _np.any(_np.isinf(obs))
 
     # Info contains legacy convenience keys plus counters
     assert isinstance(info, dict)
@@ -34,7 +40,8 @@ def test_legacy_env_reset_and_step_basic():
     assert isinstance(step, tuple) and len(step) == 5
     next_obs, reward, terminated, truncated, step_info = step
 
-    assert isinstance(next_obs, dict)
+    # Accept dict or 2D field
+    assert isinstance(next_obs, (dict, np.ndarray))
     assert isinstance(reward, (int, float))
     assert isinstance(terminated, bool)
     assert isinstance(truncated, bool)

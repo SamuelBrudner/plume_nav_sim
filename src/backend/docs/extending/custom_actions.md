@@ -1,6 +1,6 @@
 # Creating Custom Action Processors
 
-**Implementing custom movement patterns for plume_nav_sim**
+## Implementing custom movement patterns for plume_nav_sim
 
 ---
 
@@ -78,6 +78,7 @@ def get_metadata(self) -> Dict[str, Any]: ...
 ```
 
 **Key Properties:**
+
 - **Purity**: Never mutate `current_state` or `grid_size`
 - **Boundary Safety**: Always return position within grid
 - **Determinism**: Same inputs → same output

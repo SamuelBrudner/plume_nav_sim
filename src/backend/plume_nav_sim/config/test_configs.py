@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable
+from typing import Dict, Iterable, Optional, cast
 
 REPRODUCIBILITY_SEEDS: Iterable[int] = (0, 1, 2, 3)
 
 
-def _base_config(**overrides: Any) -> Dict[str, Any]:
+def _base_config(**overrides: object) -> Dict[str, object]:
     config = {
         "grid_size": (16, 16),
         "source_location": (8, 8),
@@ -20,26 +20,26 @@ def _base_config(**overrides: Any) -> Dict[str, Any]:
     return config
 
 
-def create_unit_test_config(**overrides: Any) -> Dict[str, Any]:
+def create_unit_test_config(**overrides: object) -> Dict[str, object]:
     return _base_config(test_profile="unit", **overrides)
 
 
-def create_integration_test_config(**overrides: Any) -> Dict[str, Any]:
+def create_integration_test_config(**overrides: object) -> Dict[str, object]:
     return _base_config(test_profile="integration", **overrides)
 
 
-def create_performance_test_config(**overrides: Any) -> Dict[str, Any]:
+def create_performance_test_config(**overrides: object) -> Dict[str, object]:
     return _base_config(test_profile="performance", **overrides)
 
 
-def create_reproducibility_test_config(**overrides: Any) -> Dict[str, Any]:
-    seeds = tuple(overrides.pop("seeds", REPRODUCIBILITY_SEEDS))
+def create_reproducibility_test_config(**overrides: object) -> Dict[str, object]:
+    seeds = tuple(cast(Iterable[int], overrides.pop("seeds", REPRODUCIBILITY_SEEDS)))
     config = _base_config(test_profile="reproducibility", **overrides)
     config["seeds"] = seeds
     return config
 
 
-def create_edge_case_test_config(**overrides: Any) -> Dict[str, Any]:
+def create_edge_case_test_config(**overrides: object) -> Dict[str, object]:
     return _base_config(test_profile="edge_case", **overrides)
 
 
@@ -48,9 +48,9 @@ class TestConfigFactory:
     """Simplified stand-in for the production configuration factory."""
 
     auto_optimize: bool = False
-    _system_capabilities: Dict[str, Any] = None
+    _system_capabilities: Optional[Dict[str, object]] = None
     _auto_optimize: bool = False
-    _configuration_cache: Dict[str, Any] = None
+    _configuration_cache: Optional[Dict[str, object]] = None
 
     def __post_init__(self) -> None:
         if self._system_capabilities is None:
@@ -59,12 +59,15 @@ class TestConfigFactory:
             self._configuration_cache = {}
         self._auto_optimize = self.auto_optimize
 
-    def detect_system_capabilities(self, force_refresh: bool = False) -> Dict[str, Any]:
+    def detect_system_capabilities(
+        self, force_refresh: bool = False
+    ) -> Dict[str, object]:
         if force_refresh or not self._system_capabilities:
             self._system_capabilities = {"memory_gb": 4, "cpu_count": 2}
-        return self._system_capabilities
+        # mypy: _system_capabilities is Optional; ensured above
+        return cast(Dict[str, object], self._system_capabilities)
 
-    def create_config(self, profile: str, **overrides: Any) -> Dict[str, Any]:
+    def create_config(self, profile: str, **overrides: object) -> Dict[str, object]:
         factory_map = {
             "unit": create_unit_test_config,
             "integration": create_integration_test_config,

@@ -18,17 +18,12 @@ import copy
 
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings
 
 import gymnasium as gym
 from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.interfaces import ObservationModel
-from tests.strategies import (
-    agent_state_strategy,
-    env_state_strategy,
-    grid_size_strategy,
-)
+from tests.strategies import env_state_strategy
 
 
 class TestObservationModelInterface:
@@ -39,6 +34,10 @@ class TestObservationModelInterface:
     All implementations must pass these tests to be considered valid.
     Concrete test classes should inherit this and provide observation_model fixture.
     """
+
+    # Prevent pytest from collecting this base class directly. Concrete subclasses
+    # should inherit from this and provide the fixtures.
+    __test__ = False
 
     # ==============================================================================
     # Fixtures (Override in concrete test classes)

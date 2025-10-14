@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import AgentState, EnvironmentConfig
+from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 from plume_nav_sim.utils.seeding import create_seeded_rng
 

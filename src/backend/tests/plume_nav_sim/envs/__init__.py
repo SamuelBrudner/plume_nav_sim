@@ -31,13 +31,12 @@ from plume_nav_sim.utils.exceptions import ValidationError
 from plume_nav_sim.utils.seeding import create_seeded_rng, verify_reproducibility
 from plume_nav_sim.utils.validation import validate_environment_config
 
-# Internal imports from test modules that provide reusable helpers
-from .test_base_env import (
-    assert_gymnasium_compliance,
-    create_mock_concrete_environment,
-    create_test_environment_config,
-    measure_performance,
-)
+# Note: test_base_env.py was simplified to contract tests only
+# The following helpers are now defined inline or removed:
+# - assert_gymnasium_compliance (removed - use assert_gymnasium_api_compliance)
+# - create_mock_concrete_environment (removed - not needed for contract tests)
+# - create_test_environment_config (removed - use setup_test_environment)
+# - measure_performance (removed - use measure_operation_performance)
 
 # Version identifier for environment testing utilities
 ENV_TEST_UTILITIES_VERSION = "1.0.0"
@@ -51,10 +50,6 @@ __all__ = [
     "assert_performance_targets_met",
     "assert_reproducibility_identical",
     "measure_operation_performance",
-    "create_mock_concrete_environment",
-    "create_test_environment_config",
-    "assert_gymnasium_compliance",
-    "measure_performance",
     "create_environment_test_suite",
     "validate_test_environment_state",
     "generate_test_report",
@@ -110,7 +105,7 @@ def assert_gymnasium_api_compliance(environment: PlumeSearchEnv) -> None:
 
 
 def assert_step_response_format(
-    step_result: Tuple[Any, float, bool, bool, Dict[str, Any]]
+    step_result: Tuple[Any, float, bool, bool, Dict[str, Any]],
 ) -> None:
     """Validate the tuple returned from :meth:`PlumeSearchEnv.step`."""
 
@@ -225,15 +220,12 @@ def create_environment_test_suite(
     # Initialize environment test fixtures with appropriate configurations for test suite type
     test_fixtures = {
         "environment_factory": setup_test_environment,
-        "mock_environment_factory": create_mock_concrete_environment,
-        "test_config_factory": create_test_environment_config,
         "base_config": base_config,
     }
 
     # Configure validation functions and assertion utilities for comprehensive testing
     validation_utilities = {
         "api_compliance": assert_gymnasium_api_compliance,
-        "base_compliance": assert_gymnasium_compliance,
         "step_format": assert_step_response_format,
         "rendering_validation": assert_rendering_output_valid,
     }
@@ -242,7 +234,7 @@ def create_environment_test_suite(
     performance_utilities = {}
     if include_performance_tests:
         performance_utilities = {
-            "performance_measurement": measure_performance,
+            "performance_measurement": measure_operation_performance,
             "performance_targets": assert_performance_targets_met,
             "latency_benchmarks": {
                 "step_latency_ms": 1.0,

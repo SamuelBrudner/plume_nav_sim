@@ -1,11 +1,6 @@
 # External imports with version comments
-import copy  # >=3.10 - Deep copying for test data isolation and state preservation in reproducibility testing
 import gc  # >=3.10 - Garbage collection control for memory testing
-import pathlib  # >=3.10 - Path handling for file operations in testing
-import tempfile  # >=3.10 - Temporary file handling for state persistence testing
-import threading  # >=3.10 - Threading utilities for concurrent testing scenarios
 import time  # >=3.10 - Timing utilities for performance testing and benchmark validation in episode manager testing
-import unittest.mock  # >=3.10 - Mocking framework for component isolation testing and dependency injection validation
 import uuid  # >=3.10 - Unique identifier generation for test isolation and episode tracking validation
 
 import numpy as np  # >=2.1.0 - Array operations and mathematical testing utilities for numerical validation and performance testing
@@ -20,11 +15,9 @@ from plume_nav_sim.core.episode_manager import (
     create_episode_manager,
     validate_episode_config,
 )
-from plume_nav_sim.core.state_manager import StateManager
 from plume_nav_sim.core.types import (
     Action,
     AgentState,
-    Coordinates,
     EnvironmentConfig,
     EpisodeState,
     create_coordinates,

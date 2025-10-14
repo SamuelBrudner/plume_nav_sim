@@ -112,6 +112,8 @@ dmypy.json
 
 # Linting cache
 .flake8_cache/
+.flake8-report.txt
+flake8_results_tmp.txt
 
 # Pre-commit hooks cache
 .pre-commit-cache/

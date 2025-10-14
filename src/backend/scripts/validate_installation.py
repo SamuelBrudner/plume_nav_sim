@@ -30,7 +30,6 @@ Exit Codes:
 
 import argparse  # >=3.10 - Command-line argument parsing for validation configuration and execution parameters
 import importlib  # >=3.10 - Dynamic module importing for dependency availability checking and version detection
-import json  # >=3.10 - JSON output formatting for structured validation reports and external analysis
 import os  # >=3.10 - Environment variable access, path checking, and system resource detection for installation validation
 import platform  # >=3.10 - System platform detection for cross-platform compatibility validation and system information reporting
 
@@ -38,7 +37,6 @@ import platform  # >=3.10 - System platform detection for cross-platform compati
 import sys  # >=3.10 - Python version checking, exit codes, and system information access for compatibility validation
 import time  # >=3.10 - Performance timing measurements for basic latency validation and benchmarking operations
 import traceback  # >=3.10 - Error traceback capture for comprehensive debugging and error reporting
-import warnings  # >=3.10 - Warning system management for non-critical issues and compatibility concerns
 from typing import (  # >=3.10 - Type hints for function parameters, return types, and comprehensive validation result structures
     Any,
     Dict,
@@ -892,7 +890,7 @@ def check_package_installation(
                         print(f"❌ Missing required constants: {missing_constants}")
                     return False
                 elif VERBOSE_OUTPUT:
-                    print(f"   ✅ All required constants available")
+                    print("   ✅ All required constants available")
 
         except Exception as e:
             if not QUIET_MODE:
@@ -944,7 +942,6 @@ def check_dependencies(
 
                 # Test basic gymnasium functionality
                 from gymnasium import spaces
-                from gymnasium.envs.registration import EnvSpec
 
                 # Test basic space creation
                 test_space = spaces.Discrete(4)
@@ -967,7 +964,6 @@ def check_dependencies(
         # Validate gymnasium.Env class availability and basic functionality for environment inheritance
         if dependency_status["gymnasium"]:
             try:
-                from gymnasium import Env
                 from gymnasium.spaces import Box, Discrete
 
                 # Test space creation that the package uses
@@ -1093,7 +1089,6 @@ def check_dependencies(
         ):
             try:
                 # Test gymnasium + numpy integration
-                import gymnasium as gym
                 from gymnasium.spaces import Box
 
                 # Create observation space that uses numpy
@@ -1537,7 +1532,7 @@ def validate_registration_system(
             if not hasattr(env, "reset") or not hasattr(env, "step"):
                 if not QUIET_MODE:
                     print(
-                        f"❌ gym.make() created invalid environment: missing reset/step methods"
+                        "❌ gym.make() created invalid environment: missing reset/step methods"
                     )
                 return False
 
@@ -2001,7 +1996,7 @@ def generate_validation_report(
             status_text = f"UNKNOWN STATUS - {overall_status}"
 
         if report_format.lower() == "markdown":
-            report_lines.append(f"## Overall Status")
+            report_lines.append("## Overall Status")
             report_lines.append(f"{status_icon} **{status_text}**")
         else:
             report_lines.append(f"Overall Status: {status_icon} {status_text}")
@@ -2513,7 +2508,7 @@ Examples:
             if e.code == 0:  # --help was called
                 sys.exit(0)
             else:  # parsing error
-                print(f"❌ Invalid command line arguments")
+                print("❌ Invalid command line arguments")
                 sys.exit(VALIDATION_FAILURE_EXIT_CODE)
 
         # Convert to dictionary for easier access

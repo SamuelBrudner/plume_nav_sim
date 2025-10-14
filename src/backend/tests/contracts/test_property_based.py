@@ -8,7 +8,7 @@ Reference: ../../CONTRACTS.md and ../../SEMANTIC_MODEL.md
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from plume_nav_sim.core.geometry import (

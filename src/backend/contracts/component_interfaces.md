@@ -31,6 +31,7 @@ class PlumeSearchEnv(gym.Env):
 ### Extension Points
 
 **Gymnasium Wrapper Pattern:**
+
 ```python
 class MyWrapper(gym.Wrapper):
     def step(self, action):
@@ -41,6 +42,7 @@ class MyWrapper(gym.Wrapper):
 ```
 
 **Subclass Pattern:**
+
 ```python
 class MyEnv(PlumeSearchEnv):
     def _get_env_state(self):
@@ -54,12 +56,14 @@ class MyEnv(PlumeSearchEnv):
 ## 🎯 Purpose
 
 Define the **complete component interface architecture** enabling:
+
 - Pluggable components via dependency injection
 - Config-as-code for reproducible research
 - Research flexibility without environment modification
 - Clean separation of concerns
 
 This document provides the **high-level architecture** tying together:
+
 - `reward_function_interface.md` - Reward computation
 - `observation_model_interface.md` - Sensor models
 - `action_processor_interface.md` - Movement models
@@ -135,6 +139,7 @@ All ObservationModel implementations consume a dictionary `env_state` assembled 
 - `goal_location`: Coordinates (optional) if relevant to sensors
 
 Implementations may ignore unused keys. Custom environments or wrappers may extend `env_state` by overriding `_get_env_state()` while preserving these core keys for compatibility.
+
 ```
 
 ---
@@ -437,6 +442,7 @@ class PlumeSearchEnv:
 Component architecture MUST satisfy:
 
 ### Structural Requirements
+
 - [ ] All four component interfaces defined
 - [ ] Environment accepts component injection
 - [ ] Config object can instantiate all components
@@ -444,6 +450,7 @@ Component architecture MUST satisfy:
 - [ ] Factory functions for all component types
 
 ### Behavioral Requirements
+
 - [ ] Components are truly swappable
 - [ ] Action/observation spaces from components
 - [ ] No hardcoded component logic in environment
@@ -451,6 +458,7 @@ Component architecture MUST satisfy:
 - [ ] All property tests pass
 
 ### Integration Requirements
+
 - [ ] Three initialization patterns work
 - [ ] Components interact correctly during step()
 - [ ] Reset behavior handles stateful components
@@ -471,6 +479,7 @@ Component architecture MUST satisfy:
 
 **Last Updated:** 2025-10-01  
 **Implementation Order:**
+
 1. Create protocol definitions
 2. Extract existing logic to concrete classes
 3. Update environment constructor

@@ -16,14 +16,13 @@ version synchronization and leverages comprehensive dependency specifications fo
 development environment support.
 """
 
-import os  # >=3.10 - Operating system interface for environment variable access and cross-platform compatibility
 import pathlib  # >=3.10 - Modern path manipulation for reading README content and managing file system operations
 
 # External imports with version comments for dependency management and compatibility tracking
 import setuptools  # >=61.0.0 - Legacy Python packaging library providing setup() function and build system compatibility
 
 # Internal imports for package metadata synchronization and configuration management
-from plume_nav_sim import __version__, get_package_info
+from plume_nav_sim import __version__
 
 # Global path constants for consistent file location management across build operations
 HERE = pathlib.Path(__file__).parent

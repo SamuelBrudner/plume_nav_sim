@@ -10,6 +10,7 @@
 ## 📦 Type Dependencies
 
 This contract references types defined in other contracts:
+
 - `AgentState`: See `core_types.md` - Contains position and orientation
 - `ConcentrationField`: See `concentration_field.md` - Plume sampling interface
 - `Coordinates`: See `core_types.md` - 2D integer grid position
@@ -21,6 +22,7 @@ This contract references types defined in other contracts:
 ## 🎯 Purpose
 
 Define the **universal interface** for observation models, enabling:
+
 - Diverse sensor configurations (single sensor, antenna arrays, temporal buffers)
 - Pluggable observation spaces without environment modification
 - Research flexibility for different sensing modalities
@@ -142,6 +144,7 @@ class ObservationModel(Protocol):
 ```
 
 **Test:**
+
 ```python
 @given(env_state=env_state_strategy())
 def test_observation_in_space(obs_model, env_state):
@@ -160,6 +163,7 @@ def test_observation_in_space(obs_model, env_state):
 ```
 
 **Test:**
+
 ```python
 @given(env_state=env_state_strategy())
 def test_observation_deterministic(obs_model, env_state):
@@ -191,6 +195,7 @@ No modification of:
 ```
 
 **Test:**
+
 ```python
 def test_observation_purity(obs_model):
     """Observation computation has no side effects."""
@@ -218,6 +223,7 @@ def test_observation_purity(obs_model):
 ```
 
 **Test:**
+
 ```python
 def test_observation_shape(obs_model):
     """Observation shape matches space specification."""
@@ -706,5 +712,6 @@ Implementation MUST satisfy:
 
 **Last Updated:** 2025-10-01  
 **Related Contracts:**
+
 - `core_types.md` - AgentState definition
 - `concentration_field.md` - ConcentrationField specification

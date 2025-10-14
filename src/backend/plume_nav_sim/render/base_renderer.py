@@ -160,7 +160,7 @@ class RenderContext:
         default_factory=dict
     )  # Extensible metadata for additional information
 
-    def validate(
+    def validate(  # noqa: C901
         self, strict_validation: bool = True, check_performance: bool = True
     ) -> bool:
         """
@@ -374,6 +374,9 @@ class RenderContext:
 
     def clone_with_overrides(
         self,
+        agent_position: Optional[Coordinates] = None,
+        source_position: Optional[Coordinates] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         new_agent_position: Optional[Coordinates] = None,
         new_source_position: Optional[Coordinates] = None,
         new_metadata: Optional[Dict[str, Any]] = None,
@@ -386,9 +389,12 @@ class RenderContext:
         controlled updates during rendering operations or state transitions.
 
         Args:
-            new_agent_position: Updated agent coordinates (optional)
-            new_source_position: Updated source coordinates (optional)
-            new_metadata: Additional or replacement metadata (optional)
+            agent_position: Updated agent coordinates (optional, preferred)
+            source_position: Updated source coordinates (optional, preferred)
+            metadata: Additional or replacement metadata (optional, preferred)
+            new_agent_position: Deprecated alias for agent_position
+            new_source_position: Deprecated alias for source_position
+            new_metadata: Deprecated alias for metadata
 
         Returns:
             New validated RenderContext instance with applied overrides
@@ -402,21 +408,27 @@ class RenderContext:
             - Deep copy operations: Minimal due to immutable design
         """
         # Use provided values or keep current values for selective updates
+        # Resolve preferred parameters first; fall back to deprecated aliases
+        resolved_agent = (
+            agent_position if agent_position is not None else new_agent_position
+        )
+        resolved_source = (
+            source_position if source_position is not None else new_source_position
+        )
+
         agent_pos = (
-            new_agent_position
-            if new_agent_position is not None
-            else self.agent_position
+            resolved_agent if resolved_agent is not None else self.agent_position
         )
         source_pos = (
-            new_source_position
-            if new_source_position is not None
-            else self.source_position
+            resolved_source if resolved_source is not None else self.source_position
         )
 
         # Merge new_metadata with existing metadata if provided
         updated_metadata = dict(self.metadata)  # Start with current metadata
-        if new_metadata is not None:
-            updated_metadata.update(new_metadata)
+        # Prefer new metadata if provided via preferred name, else use deprecated alias
+        meta_override = metadata if metadata is not None else new_metadata
+        if meta_override is not None:
+            updated_metadata.update(meta_override)
 
         # Create new RenderContext with updated parameters using dataclass replacement
         new_context = RenderContext(
@@ -438,14 +450,26 @@ class RenderContext:
                 context={
                     "original_context_id": self.context_id,
                     "clone_parameters": {
-                        "new_agent_position": (
-                            str(new_agent_position) if new_agent_position else None
+                        "agent_position": (
+                            str(agent_position)
+                            if agent_position is not None
+                            else (
+                                str(new_agent_position) if new_agent_position else None
+                            )
                         ),
-                        "new_source_position": (
-                            str(new_source_position) if new_source_position else None
+                        "source_position": (
+                            str(source_position)
+                            if source_position is not None
+                            else (
+                                str(new_source_position)
+                                if new_source_position
+                                else None
+                            )
                         ),
                         "metadata_keys": (
-                            list(new_metadata.keys()) if new_metadata else None
+                            list((metadata or new_metadata or {}).keys())
+                            if (metadata is not None or new_metadata is not None)
+                            else None
                         ),
                     },
                 },
@@ -579,7 +603,7 @@ class RenderingMetrics:
         # Update performance summary with latest operation statistics and trends
         self._update_performance_summary(duration_ms)
 
-    def check_performance_targets(
+    def check_performance_targets(  # noqa: C901
         self, strict_checking: bool = False, generate_recommendations: bool = True
     ) -> Dict[str, Any]:
         """
@@ -947,6 +971,15 @@ class BaseRenderer(abc.ABC):
                 "Grid size must be GridSize instance",
                 context={"provided_type": type(grid_size).__name__},
             )
+        # Validate grid dimensions are positive to catch invalid configurations early
+        if grid_size.width <= 0 or grid_size.height <= 0:
+            raise ValidationError(
+                "Grid dimensions must be positive (no negative or zero values)",
+                context={
+                    "width": grid_size.width,
+                    "height": grid_size.height,
+                },
+            )
         self.grid_size = grid_size
 
         # Store color_scheme_name for color management integration and validation
@@ -969,13 +1002,26 @@ class BaseRenderer(abc.ABC):
         # Initialize _resource_cache dictionary for efficient resource management
         self._resource_cache: Dict[str, Any] = {}
 
+        # Initialize warning throttling to prevent spam in tight loops (CI-friendly)
+        self._last_warning_time: Dict[str, float] = {}
+        self._warning_throttle_seconds = (
+            renderer_options.get("warning_throttle_seconds", 10.0)
+            if renderer_options
+            else 10.0
+        )
+        self._mute_perf_warnings = (
+            renderer_options.get("mute_performance_warnings", False)
+            if renderer_options
+            else False
+        )
+
         # Log initialization with configuration details for debugging and monitoring
         self.logger.info(
             f"BaseRenderer initialized with grid_size={grid_size.width}x{grid_size.height}, "
             f"color_scheme={color_scheme_name}, options={len(self.renderer_options)} parameters"
         )
 
-    def initialize(
+    def initialize(  # noqa: C901
         self,
         validate_immediately: bool = DEFAULT_CONTEXT_VALIDATION,
         enable_performance_monitoring: bool = PERFORMANCE_MONITORING_ENABLED,
@@ -1005,6 +1051,16 @@ class BaseRenderer(abc.ABC):
             5. Mark renderer as initialized and ready for operations
         """
         try:
+            # Validate color scheme name if provided
+            if (
+                self.color_scheme_name is not None
+                and not str(self.color_scheme_name).strip()
+            ):
+                raise ValidationError(
+                    "Invalid color_scheme_name: cannot be empty",
+                    context={"color_scheme_name": self.color_scheme_name},
+                )
+
             # Validate grid_size and renderer_options for compatibility and feasibility
             if self.grid_size.width <= 0 or self.grid_size.height <= 0:
                 raise ValidationError(
@@ -1033,6 +1089,11 @@ class BaseRenderer(abc.ABC):
                 )
                 # Performance monitoring will be activated on first render call
 
+            # Mark as initialized prior to immediate validation to avoid recursion:
+            # validate_context checks initialization state. If validation fails,
+            # we will reset _initialized and cleanup in the exception handler below.
+            self._initialized = True
+
             # Perform immediate validation if validate_immediately is True
             if validate_immediately:
                 # Create test context for validation
@@ -1048,9 +1109,6 @@ class BaseRenderer(abc.ABC):
                     grid_size=self.grid_size,
                 )
                 self.validate_context(test_context, strict_validation=False)
-
-            # Set _initialized to True after successful initialization
-            self._initialized = True
 
             # Log initialization success with configuration details and performance setup
             self.logger.info(
@@ -1073,13 +1131,14 @@ class BaseRenderer(abc.ABC):
                 )
 
             # Raise appropriate error based on exception type
-            if isinstance(e, (ValidationError, ComponentError)):
+            if isinstance(e, (ValidationError, ComponentError, RenderingError)):
                 raise
             else:
-                raise ComponentError(f"Renderer initialization failed: {e}")
+                # Wrap generic exceptions as RenderingError for initialization failures
+                raise RenderingError(f"Renderer initialization failed: {e}")
 
     @monitor_performance("render_operation")
-    def render(
+    def render(  # noqa: C901
         self, context: RenderContext, mode_override: Optional[RenderMode] = None
     ) -> Union[RGBArray, None]:
         """
@@ -1099,8 +1158,8 @@ class BaseRenderer(abc.ABC):
             RGBArray for rgb_array mode rendering, None for human mode interactive display
 
         Raises:
-            ComponentError: If renderer not initialized or context validation fails
-            RenderingError: If rendering operation fails with details and recovery suggestions
+            ComponentError: If renderer is not initialized or requested mode is unsupported
+            RenderingError: If context validation fails or a rendering operation fails
 
         Operation Flow:
             1. Validate renderer initialization and context data
@@ -1109,16 +1168,27 @@ class BaseRenderer(abc.ABC):
             4. Delegate to appropriate abstract render method
             5. Record performance metrics and handle errors gracefully
         """
+        # Ensure renderer is initialized; attempt lazy initialization if needed
+        if not self._initialized:
+            try:
+                self.initialize(validate_immediately=False)
+            except Exception:
+                pass
+
         # Validate renderer is initialized using _check_initialization() with error handling
         self._check_initialization()
 
-        # Validate context using comprehensive validation with error context
+        # Validate context using comprehensive validation; wrap failures as RenderingError
         try:
             self.validate_context(context, strict_validation=False)
-        except ValidationError as e:
+        except ValidationError as ve:
+            # Align with API contract: render() surfaces validation failures as RenderingError
             raise RenderingError(
-                f"Context validation failed: {e}",
-                context={"context_id": context.context_id},
+                f"Rendering operation failed: {ve}",
+                context={
+                    "reason": "context_validation_failed",
+                    "renderer": self.__class__.__name__,
+                },
             )
 
         # Determine render mode from mode_override or renderer default configuration
@@ -1135,24 +1205,26 @@ class BaseRenderer(abc.ABC):
 
         # Verify renderer supports the effective mode
         if not self.supports_render_mode(effective_mode):
-            raise RenderingError(
-                f"Renderer does not support mode: {effective_mode}",
-                context={
-                    "supported_modes": [
-                        str(mode)
-                        for mode in [RenderMode.RGB_ARRAY, RenderMode.HUMAN]
-                        if self.supports_render_mode(mode)
-                    ]
-                },
+            raise ComponentError(
+                f"Render mode not supported: {effective_mode}",
+                component_name=self.__class__.__name__,
+                operation_name="render",
             )
 
-        # Start performance tracking using _start_performance_tracking() for timing analysis
-        operation_context = {
-            "render_mode": str(effective_mode),
-            "grid_size": f"{self.grid_size.width}x{self.grid_size.height}",
-            "context_id": context.context_id,
-        }
-        self._start_performance_tracking("render", operation_context)
+        # Start performance tracking (can be disabled via performance_config)
+        track_perf = True
+        if hasattr(self, "performance_config") and isinstance(
+            getattr(self, "performance_config", None), dict
+        ):
+            track_perf = self.performance_config.get("track_render_performance", True)
+
+        if track_perf:
+            operation_context = {
+                "render_mode": str(effective_mode),
+                "grid_size": f"{self.grid_size.width}x{self.grid_size.height}",
+                "context_id": context.context_id,
+            }
+            self._start_performance_tracking("render", operation_context)
 
         try:
             start_time = time.time()
@@ -1181,7 +1253,8 @@ class BaseRenderer(abc.ABC):
 
             # Record performance metrics using _record_performance() with timing validation
             duration_ms = (time.time() - start_time) * 1000
-            self._record_performance("render", duration_ms, check_targets=True)
+            if track_perf:
+                self._record_performance("render", duration_ms, check_targets=True)
 
             return result
 
@@ -1221,6 +1294,8 @@ class BaseRenderer(abc.ABC):
 
     def cleanup_resources(
         self,
+        timeout: Optional[float] = None,
+        force: Optional[bool] = None,
         timeout_sec: float = RESOURCE_CLEANUP_TIMEOUT_SEC,
         force_cleanup: bool = False,
     ) -> bool:
@@ -1233,8 +1308,10 @@ class BaseRenderer(abc.ABC):
         cleanup capabilities for robust resource management in production environments.
 
         Args:
-            timeout_sec: Maximum time allowed for cleanup operations
-            force_cleanup: Bypass normal cleanup procedures and force resource release
+            timeout: Optional short alias for timeout in seconds (preferred by tests)
+            force: Optional short alias to force cleanup
+            timeout_sec: Maximum time allowed for cleanup operations (backward-compatible)
+            force_cleanup: Bypass normal cleanup procedures and force resource release (backward-compatible)
 
         Returns:
             True if cleanup completed successfully, False if issues encountered
@@ -1250,13 +1327,16 @@ class BaseRenderer(abc.ABC):
         cleanup_successful = True
 
         try:
-            # Use provided timeout or default RESOURCE_CLEANUP_TIMEOUT_SEC
+            # Resolve effective parameters from aliases/back-compat args
             effective_timeout = (
-                timeout_sec if timeout_sec > 0 else RESOURCE_CLEANUP_TIMEOUT_SEC
+                timeout
+                if (timeout is not None and timeout > 0)
+                else (timeout_sec if timeout_sec > 0 else RESOURCE_CLEANUP_TIMEOUT_SEC)
             )
+            effective_force = force if (force is not None) else force_cleanup
 
             self.logger.info(
-                f"Starting resource cleanup with timeout={effective_timeout}s, force={force_cleanup}"
+                f"Starting resource cleanup with timeout={effective_timeout}s, force={effective_force}"
             )
 
             # Call abstract _cleanup_renderer_resources() method for concrete implementation cleanup
@@ -1264,7 +1344,7 @@ class BaseRenderer(abc.ABC):
                 self._cleanup_renderer_resources()
             except Exception as e:
                 cleanup_successful = False
-                if force_cleanup:
+                if effective_force:
                     self.logger.warning(
                         f"Forced cleanup ignoring implementation error: {e}"
                     )
@@ -1292,7 +1372,7 @@ class BaseRenderer(abc.ABC):
             # Log cleanup completion with resource statistics and timing information
             self.logger.info(
                 f"Resource cleanup completed: success={cleanup_successful}, "
-                f"duration={cleanup_duration:.3f}s, forced={force_cleanup}"
+                f"duration={cleanup_duration:.3f}s, forced={effective_force}"
             )
 
             # Check if cleanup exceeded timeout (warning only)
@@ -1382,6 +1462,10 @@ class BaseRenderer(abc.ABC):
             )
             metrics_data["performance_data"] = performance_summary
 
+            # Expose commonly-consumed top-level summaries for tests and dashboards
+            metrics_data["render_operations"] = self._current_metrics.operation_count
+            metrics_data["resource_usage"] = dict(self._current_metrics.resource_usage)
+
             # Add performance target analysis
             target_analysis = self._current_metrics.check_performance_targets(
                 strict_checking=False, generate_recommendations=True
@@ -1390,6 +1474,8 @@ class BaseRenderer(abc.ABC):
 
         else:
             metrics_data["performance_data"] = {"status": "no_metrics_available"}
+            metrics_data["render_operations"] = 0
+            metrics_data["resource_usage"] = {}
 
         # Include system-level metrics if include_system_metrics is True
         if include_system_metrics:
@@ -1747,25 +1833,46 @@ class BaseRenderer(abc.ABC):
             target_ms = self._current_metrics._get_performance_target()
 
             if duration_ms > target_ms:
-                # Log performance warnings for optimization guidance
-                performance_ratio = duration_ms / target_ms
-                self.logger.warning(
-                    f"Operation exceeded performance target: {duration_ms:.2f}ms > {target_ms}ms "
-                    f"({performance_ratio:.1f}x slower), operation={operation_type}"
-                )
-
-                # Add optimization suggestions based on performance ratio
-                if performance_ratio > 5.0:
+                # Log performance warnings for optimization guidance (throttled to avoid spam in CI)
+                if self._should_emit_warning(f"perf_target_{operation_type}"):
+                    performance_ratio = duration_ms / target_ms
                     self.logger.warning(
-                        "Severe performance issue detected - investigate optimization opportunities"
+                        f"Operation exceeded performance target: {duration_ms:.2f}ms > {target_ms}ms "
+                        f"({performance_ratio:.1f}x slower), operation={operation_type}"
                     )
-                elif performance_ratio > 2.0:
-                    self.logger.info(
-                        "Moderate performance issue - consider optimization"
-                    )
+
+                    # Add optimization suggestions based on performance ratio
+                    if performance_ratio > 5.0:
+                        self.logger.warning(
+                            "Severe performance issue detected - investigate optimization opportunities"
+                        )
+                    elif performance_ratio > 2.0:
+                        self.logger.info(
+                            "Moderate performance issue - consider optimization"
+                        )
 
         # Update performance statistics and trend analysis
         # Statistical updates are handled automatically by RenderingMetrics.record_rendering()
+
+    def _should_emit_warning(self, warning_key: str) -> bool:
+        """Check if a throttled warning should be emitted based on time since last emission.
+
+        Args:
+            warning_key: Unique identifier for the warning type
+
+        Returns:
+            True if warning should be emitted, False if throttled
+        """
+        if self._mute_perf_warnings:
+            return False
+
+        current_time = time.time()
+        last_time = self._last_warning_time.get(warning_key, 0.0)
+
+        if current_time - last_time >= self._warning_throttle_seconds:
+            self._last_warning_time[warning_key] = current_time
+            return True
+        return False
 
     def _check_initialization(self) -> None:
         """
@@ -1798,21 +1905,19 @@ class BaseRenderer(abc.ABC):
             # Raise ComponentError with initialization guidance
             raise ComponentError(
                 error_message,
-                context={
-                    "renderer_type": self.__class__.__name__,
-                    "initialization_status": "not_initialized",
-                    "required_action": "call_initialize_method",
-                },
+                component_name=self.__class__.__name__,
+                operation_name="render",
             )
 
 
-def create_render_context(
+def create_render_context(  # noqa: C901
     concentration_field: np.ndarray,
     agent_position: Coordinates,
     source_position: Coordinates,
     grid_size: GridSize,
     context_id: Optional[str] = None,
-    validate_immediately: bool = DEFAULT_CONTEXT_VALIDATION,
+    # Be lenient by default; downstream renderer.validate_context() performs strict checks
+    validate_immediately: bool = False,
 ) -> RenderContext:
     """
     Factory function to create validated rendering context with environment state, visual
@@ -1845,7 +1950,7 @@ def create_render_context(
         6. Return fully validated and ready-to-use RenderContext instance
     """
     try:
-        # Validate concentration_field is numpy array with FIELD_DTYPE and proper shape matching grid_size
+        # Validate concentration_field is numpy array and coerce dtype if needed
         if not isinstance(concentration_field, np.ndarray):
             raise ValidationError(
                 "Concentration field must be NumPy array",
@@ -1853,47 +1958,20 @@ def create_render_context(
             )
 
         if concentration_field.dtype != FIELD_DTYPE:
-            raise ValidationError(
-                f"Concentration field must use {FIELD_DTYPE} dtype",
-                context={
-                    "expected_dtype": str(FIELD_DTYPE),
-                    "actual_dtype": str(concentration_field.dtype),
-                    "conversion_suggestion": f"Use concentration_field.astype({FIELD_DTYPE})",
-                },
-            )
+            try:
+                concentration_field = concentration_field.astype(
+                    FIELD_DTYPE, copy=False
+                )
+            except Exception as e:
+                raise ValidationError(
+                    f"Failed to convert concentration field to {FIELD_DTYPE}: {e}",
+                    context={
+                        "expected_dtype": str(FIELD_DTYPE),
+                        "actual_dtype": str(concentration_field.dtype),
+                    },
+                )
 
-        expected_shape = (grid_size.height, grid_size.width)
-        if concentration_field.shape != expected_shape:
-            raise ValidationError(
-                "Concentration field shape must match grid dimensions",
-                context={
-                    "expected_shape": expected_shape,
-                    "actual_shape": concentration_field.shape,
-                    "grid_size": f"{grid_size.width}x{grid_size.height}",
-                },
-            )
-
-        # Validate agent_position coordinates using validate_coordinates with grid bounds checking
-        if not validate_coordinates(agent_position, grid_size):
-            raise ValidationError(
-                "Agent position coordinates are outside grid boundaries",
-                context={
-                    "agent_position": f"({agent_position.x}, {agent_position.y})",
-                    "grid_bounds": f"0 <= x < {grid_size.width}, 0 <= y < {grid_size.height}",
-                    "validation_function": "validate_coordinates",
-                },
-            )
-
-        # Validate source_position coordinates using validate_coordinates with grid bounds checking
-        if not validate_coordinates(source_position, grid_size):
-            raise ValidationError(
-                "Source position coordinates are outside grid boundaries",
-                context={
-                    "source_position": f"({source_position.x}, {source_position.y})",
-                    "grid_bounds": f"0 <= x < {grid_size.width}, 0 <= y < {grid_size.height}",
-                    "validation_function": "validate_coordinates",
-                },
-            )
+        # Defer shape and coordinate bounds validation to RenderContext.validate()
 
         # Generate unique context_id if not provided using UUID for tracking and debugging
         if context_id is None:
@@ -1916,7 +1994,7 @@ def create_render_context(
             metadata={},  # Empty metadata dictionary for extensibility
         )
 
-        # Perform immediate validation if validate_immediately is True using RenderContext.validate()
+        # Perform immediate validation if requested
         if validate_immediately:
             context.validate(strict_validation=True, check_performance=True)
 
@@ -1948,7 +2026,7 @@ def create_render_context(
         )
 
 
-def validate_rendering_parameters(
+def validate_rendering_parameters(  # noqa: C901
     render_mode: RenderMode,
     grid_size: GridSize,
     color_scheme_name: Optional[str] = None,

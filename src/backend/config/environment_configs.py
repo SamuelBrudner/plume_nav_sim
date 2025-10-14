@@ -11,7 +11,7 @@ import copy  # >=3.10
 
 # External imports
 from dataclasses import dataclass, field  # >=3.10
-from typing import Any, Dict, List, Optional, Tuple, Union  # >=3.10
+from typing import Any, Dict, List, Optional, Tuple  # >=3.10
 
 # Internal imports from plume_nav_sim core
 from plume_nav_sim.core.constants import (
@@ -21,8 +21,8 @@ from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,
     TESTING_CONSTANTS,
 )
-from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import PlumeParameters
+from plume_nav_sim.core.enums import RenderMode
+from plume_nav_sim.core.geometry import GridSize
 
 # Try to import from default_config - may not exist in early development phases
 try:
@@ -981,14 +981,14 @@ def validate_preset_name(
         available_presets = ENVIRONMENT_REGISTRY.list_presets()
 
         # Simple similarity based on common substrings
-        for available_preset in available_presets:
-            # Check for partial matches
+        suggestions.extend(
+            available_preset
+            for available_preset in available_presets
             if (
                 preset_name.lower() in available_preset.lower()
                 or available_preset.lower() in preset_name.lower()
-            ):
-                suggestions.append(available_preset)
-
+            )
+        )
         # If no partial matches, suggest by category similarity
         if not suggestions:
             # Try to infer category from preset name
@@ -1055,16 +1055,15 @@ def create_custom_scenario(
         # Validate grid size
         if "grid_size" in environment_params:
             grid_size = environment_params["grid_size"]
-            if isinstance(grid_size, (list, tuple)) and len(grid_size) == 2:
-                if grid_size[0] > 0 and grid_size[1] > 0:
-                    custom_params["grid_size"] = tuple(grid_size)
-                else:
-                    raise ValueError("Grid dimensions must be positive integers")
-            else:
+            if not isinstance(grid_size, (list, tuple)) or len(grid_size) != 2:
                 raise ValueError(
                     "Grid size must be a tuple or list of two positive integers"
                 )
 
+            if grid_size[0] > 0 and grid_size[1] > 0:
+                custom_params["grid_size"] = tuple(grid_size)
+            else:
+                raise ValueError("Grid dimensions must be positive integers")
         # Validate source location
         if "source_location" in environment_params:
             source_loc = environment_params["source_location"]
@@ -1096,11 +1095,11 @@ def create_custom_scenario(
 
     # Apply render parameters
     if render_params:
-        custom_params.update(render_params)
+        custom_params |= render_params
 
     # Apply performance parameters
     if performance_params:
-        custom_params.update(performance_params)
+        custom_params |= performance_params
 
     # Create custom configuration
     custom_config = base_config.clone_with_overrides(**custom_params)

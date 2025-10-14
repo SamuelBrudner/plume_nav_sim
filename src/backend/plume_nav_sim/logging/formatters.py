@@ -5,18 +5,14 @@ comprehensive formatting classes with sensitive information filtering, timing me
 display, and development-friendly console output for the proof-of-life logging infrastructure.
 """
 
-import datetime  # >=3.10 - Date and time handling for advanced timestamp formatting and timezone support
-import functools  # >=3.10 - Function utilities for caching, memoization, and decorator support in formatters
-
 # Standard library imports with version comments
 import logging  # >=3.10 - Standard Python logging module for Formatter base class and LogRecord processing
 import os  # >=3.10 - Operating system interface for environment variable access and terminal capability detection
 import re  # >=3.10 - Regular expression support for sensitive information detection and pattern-based filtering
 import sys  # >=3.10 - System interface for terminal detection, stdout/stderr access, and platform identification
-import threading  # >=3.10 - Thread synchronization for thread-safe formatting operations and shared formatter state
 import time  # >=3.10 - Time utilities for timestamp formatting and performance timing calculations
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
 # Console color codes for enhanced readability
 CONSOLE_COLOR_CODES = {
@@ -167,7 +163,7 @@ FALLBACK_ASCII_SYMBOLS = {
 }
 
 
-def detect_color_support(
+def detect_color_support(  # noqa: C901
     force_detection: bool = False, cache_result: bool = True
 ) -> Dict[str, Any]:
     """
@@ -301,7 +297,7 @@ def get_terminal_width(default_width: int = 80, cache_result: bool = True) -> in
     return width
 
 
-def sanitize_message(
+def sanitize_message(  # noqa: C901
     message: str,
     additional_patterns: List[str] = None,
     redaction_placeholder: str = REDACTION_PLACEHOLDER,
@@ -363,7 +359,7 @@ def sanitize_message(
     return sanitized
 
 
-def format_performance_metrics(
+def format_performance_metrics(  # noqa: C901
     duration_ms: float,
     metrics_data: Dict[str, Any] = None,
     include_threshold_status: bool = True,
@@ -1037,8 +1033,7 @@ class PerformanceFormatter(LogFormatter):
             use_unicode_symbols=True,
         )
 
-        # Compare performance against thresholds and determine status indicators
-        status = self._determine_performance_status(operation_name, duration_ms)
+        # Compare against thresholds if needed (status included in timing_info)
 
         # Add baseline comparison information if baseline_comparison_enabled
         baseline_info = ""
@@ -1342,7 +1337,7 @@ class SecurityFilter(logging.Filter):
     information protection.
     """
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         sensitive_patterns: List[str] = None,
         redaction_policy: str = "replace",
@@ -1413,7 +1408,7 @@ class SecurityFilter(logging.Filter):
         # Set preserve_message_structure flag for maintaining log readability
         self.preserve_message_structure = True
 
-    def filter(self, record: logging.LogRecord) -> bool:
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: C901  # noqa: C901
         """
         Main filtering method that analyzes log records for sensitive information and applies
         redaction while preserving log structure and readability.
@@ -1530,6 +1525,10 @@ class SecurityFilter(logging.Filter):
             if compiled_pattern.search(test_safe):
                 return False
 
+            # Pattern should match representative sensitive content
+            if not compiled_pattern.search(test_sensitive):
+                return False
+
             # Add compiled pattern to regex_patterns list for filtering
             self.regex_patterns.append(compiled_pattern)
 
@@ -1615,7 +1614,9 @@ class SecurityFilter(logging.Filter):
         except re.error:
             return False
 
-    def analyze_message_security(self, message_text: str) -> Dict[str, Any]:
+    def analyze_message_security(  # noqa: C901
+        self, message_text: str
+    ) -> Dict[str, Any]:
         """
         Analyzes message for security risks, sensitive content density, and redaction
         recommendations with detailed security assessment.

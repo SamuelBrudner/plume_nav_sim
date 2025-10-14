@@ -22,8 +22,6 @@ from typing import (  # >=3.10 - Type hints for method parameters, return types,
     Dict,
     List,
     Optional,
-    Tuple,
-    Union,
 )
 
 # External imports with version comments
@@ -41,7 +39,7 @@ from ..core.constants import (
 
 # Internal imports from core types and constants modules
 from ..core.types import Coordinates, CoordinateType, GridDimensions, GridSize
-from ..utils.exceptions import ComponentError, PlumeNavSimError, ResourceError
+from ..utils.exceptions import ComponentError, ResourceError
 
 # Internal imports from logging utilities for component-specific monitoring
 from ..utils.logging import ComponentLogger, PerformanceTimer, get_component_logger
@@ -406,7 +404,7 @@ class ConcentrationField:
         # Set interpolation_method to default nearest neighbor for performance
         self.interpolation_method = _DEFAULT_INTERPOLATION
 
-    def generate_field(
+    def generate_field(  # noqa: C901
         self,
         source_location: Coordinates,
         sigma: float = DEFAULT_PLUME_SIGMA,
@@ -441,11 +439,9 @@ class ConcentrationField:
 
         try:
             # Validate source_location is within grid bounds using validate_coordinates
-            validate_coordinates(
+            source_location = validate_coordinates(
                 coordinates=source_location,
-                grid_size=self.grid_size,
-                allow_edge_coordinates=True,
-                validate_array_indexing=True,
+                grid_bounds=self.grid_size,
             )
 
             # Validate sigma parameter range for mathematical stability and numerical precision
@@ -489,8 +485,9 @@ class ConcentrationField:
                 timer.add_metric("memory_mb", array_memory_mb)
 
                 # Apply Gaussian formula: exp(-distance²/(2*σ²)) using NumPy vectorized operations
-                sigma_squared_2 = 2.0 * sigma * sigma
-                field = np.exp(-distance_squared / sigma_squared_2, dtype=FIELD_DTYPE)
+                sigma_squared_2 = 2.0 * float(sigma) * float(sigma)
+                # Compute in default numpy precision then cast to FIELD_DTYPE
+                field = np.exp(-distance_squared / sigma_squared_2).astype(FIELD_DTYPE)
 
                 # Normalize field to [0,1] range if normalize_field enabled with peak at source
                 if normalize_field:
@@ -503,8 +500,10 @@ class ConcentrationField:
                         )
                         field[source_idx_y, source_idx_x] = 1.0
 
-                # Convert array to FIELD_DTYPE for consistent memory usage and precision
-                self.field_array = field.astype(FIELD_DTYPE)
+                # Ensure array dtype is FIELD_DTYPE for consistent memory usage and precision
+                self.field_array = (
+                    field if field.dtype == FIELD_DTYPE else field.astype(FIELD_DTYPE)
+                )
 
                 # Store field_array and set is_generated to True with generation parameter tracking
                 self.is_generated = True
@@ -545,7 +544,7 @@ class ConcentrationField:
                     },
                 ) from e
 
-    def sample_at(
+    def sample_at(  # noqa: C901
         self,
         position: CoordinateType,
         interpolate: bool = False,
@@ -696,6 +695,18 @@ class ConcentrationField:
 
         return float(concentration)
 
+    # Compatibility layer expected by tests: expose `.field` ndarray and `.sample()` API
+    @property
+    def field(self) -> np.ndarray:
+        """Return the underlying field array (reference) for analysis/tests."""
+        return self.get_field_array(copy_array=False, ensure_generated=True)
+
+    def sample(self, position: CoordinateType) -> float:
+        """Compatibility wrapper for sample_at(position)."""
+        return self.sample_at(
+            position, interpolate=False, validate_bounds=True, use_cache=True
+        )
+
     def get_field_array(
         self,
         copy_array: bool = True,
@@ -790,7 +801,7 @@ class ConcentrationField:
             ) from e
 
     # TODO Rename this here and in `update_field`
-    def _extracted_from_update_field_26(
+    def _extracted_from_update_field_26(  # noqa: C901
         self, new_source_location, new_sigma, clear_cache, auto_regenerate
     ):
         # Check if parameters actually changed to avoid unnecessary regeneration
@@ -816,11 +827,9 @@ class ConcentrationField:
 
         # Validate new parameters using existing validation functions
         if new_source_location is not None:
-            validate_coordinates(
+            new_source_location = validate_coordinates(
                 coordinates=new_source_location,
-                grid_size=self.grid_size,
-                allow_edge_coordinates=True,
-                validate_array_indexing=True,
+                grid_bounds=self.grid_size,
             )
 
         if new_sigma is not None and new_sigma <= 0:
@@ -866,7 +875,7 @@ class ConcentrationField:
 
         return True
 
-    def validate_field(
+    def validate_field(  # noqa: C901
         self,
         check_mathematical_properties: bool = True,
         check_memory_usage: bool = False,
@@ -1333,7 +1342,7 @@ class ConcentrationField:
             ) from e
 
 
-def create_concentration_field(
+def create_concentration_field(  # noqa: C901
     grid_size: GridDimensions = DEFAULT_GRID_SIZE,
     source_location: Optional[Coordinates] = None,
     sigma: Optional[float] = None,
@@ -1385,11 +1394,9 @@ def create_concentration_field(
             source_location = Coordinates(x=center_x, y=center_y)
         elif validate_parameters:
             # Validate source_location coordinates within grid bounds using validate_coordinates
-            validate_coordinates(
+            source_location = validate_coordinates(
                 coordinates=source_location,
-                grid_size=grid_obj,
-                allow_edge_coordinates=True,
-                validate_array_indexing=True,
+                grid_bounds=grid_obj,
             )
 
         # Set sigma to DEFAULT_PLUME_SIGMA if not provided with range validation
@@ -1452,7 +1459,7 @@ def create_concentration_field(
         ) from e
 
 
-def validate_field_parameters(
+def validate_field_parameters(  # noqa: C901
     grid_size: GridDimensions,
     source_location: CoordinateType,
     sigma: float,
@@ -1530,11 +1537,9 @@ def validate_field_parameters(
                 )
 
             if grid_obj:
-                validate_coordinates(
+                source_coords = validate_coordinates(
                     coordinates=source_coords,
-                    grid_size=grid_obj,
-                    allow_edge_coordinates=True,
-                    validate_array_indexing=True,
+                    grid_bounds=grid_obj,
                 )
 
             validation_result["parameter_analysis"]["source_location"] = "valid"

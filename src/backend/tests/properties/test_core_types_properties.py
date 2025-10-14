@@ -7,12 +7,11 @@ Tests properties defined in contracts/core_types.md
 Reference: CONTRACTS.md v1.1.0, TEST_TAXONOMY.md
 """
 
-import numpy as np
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from plume_nav_sim.core.types import Coordinates, GridSize, create_coordinates
+from plume_nav_sim.core.types import Coordinates, GridSize
 from plume_nav_sim.utils.exceptions import ValidationError
 
 # ============================================================================

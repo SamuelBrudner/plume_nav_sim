@@ -4,7 +4,7 @@ This directory contains YAML configuration files for creating environments using
 
 ## Structure
 
-```
+```text
 conf/
 ├── config.yaml              # Base config with defaults
 └── experiment/              # Experiment-specific configs
@@ -55,6 +55,7 @@ if __name__ == "__main__":
 ```
 
 Run with:
+
 ```bash
 python train.py experiment=sparse_simple
 python train.py experiment=dense_oriented grid_size=[256,256]
@@ -80,6 +81,7 @@ with initialize(version_base=None, config_path="conf"):
 ## Configuration Options
 
 ### Environment Settings
+
 - `grid_size`: `[width, height]` - Environment dimensions
 - `goal_location`: `[x, y]` - Target position
 - `start_location`: `[x, y]` or `null` - Initial position (null = center)
@@ -87,22 +89,26 @@ with initialize(version_base=None, config_path="conf"):
 - `render_mode`: `"rgb_array"`, `"human"`, or `null`
 
 ### Action Processor (`action`)
+
 - `type`: `"discrete"` (4-dir) or `"oriented"` (3-action)
 - `step_size`: int - Movement distance per step
 
 ### Observation Model (`observation`)
+
 - `type`: `"concentration"` (single) or `"antennae"` (array)
 - `n_sensors`: int - Number of sensors (antennae only)
 - `sensor_distance`: float - Distance from agent (antennae only)
 - `sensor_angles`: list[float] or null - Custom angles (antennae only)
 
 ### Reward Function (`reward`)
+
 - `type`: `"sparse"` (binary) or `"dense"` (shaped)
 - `goal_radius`: float - Success threshold distance
 - `distance_weight`: float - Weight for distance term (dense only)
 - `concentration_weight`: float - Weight for concentration term (dense only)
 
 ### Plume Field (`plume`)
+
 - `sigma`: float - Gaussian dispersion parameter
 - `normalize`: bool - Normalize to [0, 1]
 - `enable_caching`: bool - Cache concentration lookups

@@ -225,11 +225,12 @@ def _coerce_pair(value: Sequence[int], *, name: str) -> Tuple[int, int]:
     return first, second
 
 
-def create_coordinates(value: CoordinateType) -> Coordinates:
+def create_coordinates(value: CoordinateType, y: Optional[int] = None) -> Coordinates:
     """Create a Coordinates object from tuple or Coordinates instance.
 
     Args:
-        value: Either a Coordinates instance or a (x, y) tuple
+        value: Either a Coordinates instance, a (x, y) tuple, or x when y is provided
+        y: Optional y coordinate when providing x as a separate positional argument
 
     Returns:
         Coordinates instance
@@ -237,24 +238,52 @@ def create_coordinates(value: CoordinateType) -> Coordinates:
     Raises:
         ValidationError: If value is not valid
     """
+    # Two-argument form: create_coordinates(x, y)
+    if y is not None:
+        try:
+            x_int = int(value)  # type: ignore[arg-type]
+            y_int = int(y)
+        except (TypeError, ValueError):
+            _raise_validation_error("Coordinates x and y must be integers")
+        return Coordinates(x=x_int, y=y_int)
+
+    # Single-argument forms
     if isinstance(value, Coordinates):
         return value
     if isinstance(value, Sequence):
-        x, y = _coerce_pair(value, name="Coordinates")
-        return Coordinates(x=x, y=y)
+        x1, y1 = _coerce_pair(value, name="Coordinates")
+        return Coordinates(x=x1, y=y1)
     _raise_validation_error(
-        "Coordinates must be a Coordinates instance or length-2 sequence"
+        "Coordinates must be a Coordinates instance, length-2 sequence, or provided as x,y"
     )
 
 
-def create_grid_size(value: GridDimensions) -> GridSize:
-    """Create a GridSize object from diverse inputs."""
+def create_grid_size(value: GridDimensions, height: Optional[int] = None) -> GridSize:
+    """Create a GridSize object from diverse inputs.
+
+    Supports the following call patterns:
+    - create_grid_size(GridSize)
+    - create_grid_size((width, height)) or create_grid_size([width, height])
+    - create_grid_size(width, height)
+    """
+    # Two-argument form: (width, height)
+    if height is not None:
+        try:
+            width_int = int(value)  # type: ignore[arg-type]
+            height_int = int(height)
+        except (TypeError, ValueError):
+            _raise_validation_error("GridSize width/height must be integers")
+        return GridSize(width=width_int, height=height_int)
+
+    # Single-argument forms
     if isinstance(value, GridSize):
         return value
     if isinstance(value, Sequence):
-        width, height = _coerce_pair(value, name="GridSize")
-        return GridSize(width=width, height=height)
-    _raise_validation_error("GridSize must be a GridSize instance or length-2 sequence")
+        width, h = _coerce_pair(value, name="GridSize")
+        return GridSize(width=width, height=h)
+    _raise_validation_error(
+        "GridSize must be (GridSize) or length-2 sequence, or be provided as width,height"
+    )
 
 
 def create_agent_state(

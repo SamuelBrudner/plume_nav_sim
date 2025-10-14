@@ -9,7 +9,6 @@ performance optimization, caching strategies, and comprehensive validation for p
 reinforcement learning environments with sub-millisecond computation targets.
 """
 
-import logging  # >=3.10 - Reward calculation operation logging, performance monitoring, and error reporting for debugging
 import math  # >=3.10 - Mathematical functions for distance calculations, precision handling, and numerical operations
 import time  # >=3.10 - High-precision timing for reward calculation performance measurement and optimization analysis
 from dataclasses import (  # >=3.10 - Data class utilities for reward calculation configuration and result data structures
@@ -19,10 +18,8 @@ from dataclasses import (  # >=3.10 - Data class utilities for reward calculatio
 from typing import (  # >=3.10 - Type hints for reward calculation methods, parameter specifications, and return value annotations
     Any,
     Dict,
-    List,
     Optional,
     Tuple,
-    Union,
 )
 
 # Standard library imports with version comments
@@ -43,7 +40,7 @@ from .constants import (
     REWARD_GOAL_REACHED,
 )
 from .geometry import Coordinates, calculate_euclidean_distance
-from .state import AgentState, EpisodeState
+from .state import AgentState
 from .types import PerformanceMetrics
 
 # Module version and metadata
@@ -1180,7 +1177,7 @@ def create_reward_calculator(
     return reward_calculator
 
 
-def validate_reward_config(
+def validate_reward_config(  # noqa: C901
     config: RewardCalculatorConfig,
     strict_validation: bool = False,
     validation_context: Optional[Dict] = None,

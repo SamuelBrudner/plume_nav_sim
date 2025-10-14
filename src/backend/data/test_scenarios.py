@@ -1,6 +1,5 @@
 # External imports with version comments
 import copy  # >=3.10 - Deep copying of test scenarios for modification and parallel execution isolation
-import itertools  # >=3.10 - Iterator tools for test scenario generation, combination, and execution coordination
 import uuid  # >=3.10 - Unique identifier generation for test scenario tracking and execution correlation
 from dataclasses import (  # >=3.10 - Data class decorators for test scenario data structures and metadata containers
     dataclass,
@@ -22,7 +21,6 @@ from typing import (  # >=3.10 - Type hints for test scenario management, valida
 # Internal imports
 from config.test_configs import (
     REPRODUCIBILITY_SEEDS,
-    TestConfigFactory,
     create_edge_case_test_config,
     create_integration_test_config,
     create_performance_test_config,
@@ -35,17 +33,8 @@ from plume_nav_sim.core.constants import (
     MEMORY_LIMIT_TOTAL_MB,
     MIN_GRID_SIZE,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    TESTING_CONSTANTS,
-    VALIDATION_ERROR_MESSAGES,
 )
-from plume_nav_sim.core.types import RenderMode, create_coordinates, create_grid_size
-
-from . import ExampleConfigCollection, get_quick_start_config
-from .benchmark_data import (
-    PerformanceBaseline,
-    create_benchmark_scenario,
-    get_scalability_test_data,
-)
+from plume_nav_sim.core.types import RenderMode
 
 # Module version and configuration constants
 SCENARIO_VERSION = "1.0.0"

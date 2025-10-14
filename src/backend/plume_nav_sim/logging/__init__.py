@@ -10,13 +10,13 @@ factory functions, configuration management, and resource cleanup capabilities f
 robust production-ready logging throughout the plume_nav_sim system.
 """
 
-import atexit  # >=3.10 - Cleanup registration for graceful shutdown
+import atexit  # >=3.10 - Cleanup registration for graceful shutdown  # noqa: F401
 import datetime  # >=3.10 - Timestamp management for package lifecycle tracking
 
 # Standard library imports with version comments
 import logging  # >=3.10 - Base logging functionality and system integration
 import threading  # >=3.10 - Thread synchronization for concurrent operations
-from typing import (  # >=3.10 - Type hints for package interface functions and logger factory methods
+from typing import (  # >=3.10 - Type hints for package interface functions and logger factory methods  # noqa: F401
     Any,
     Dict,
     Optional,
@@ -25,65 +25,62 @@ from typing import (  # >=3.10 - Type hints for package interface functions and 
 
 # Internal imports - System constants for performance and configuration
 from ..core.constants import COMPONENT_NAMES as CORE_COMPONENT_NAMES
-from ..core.constants import LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT
+from ..core.constants import LOG_LEVEL_DEFAULT as CORE_LOG_LEVEL_DEFAULT  # noqa: F401
 from ..core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS as CORE_PERFORMANCE_TARGET,
 )
 
 # Internal imports - Configuration and enumeration infrastructure
-from .config import (
+from .config import LoggerFactory  # noqa: F401
+from .config import SensitiveInfoFilter  # noqa: F401
+from .config import create_component_logger  # noqa: F401
+from .config import get_logging_status  # noqa: F401
+from .config import reset_logging_config  # noqa: F401
+from .config import setup_performance_logging  # noqa: F401
+from .config import validate_logging_config  # noqa: F401
+from .config import (  # noqa: F401
     COMPONENT_NAMES,
     DEFAULT_LOGGING_CONFIG,
     LOG_LEVEL_DEFAULT,
     LOGGER_NAME_PREFIX,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
-from .config import (
-    ComponentLogger as ConfigComponentLogger,  # Core configuration classes and enums; Configuration and setup functions; Logger factory and management functions; Security and filtering infrastructure; Factory functions and utilities; Validation and configuration management; Configuration constants and defaults
+from .config import (  # noqa: F401; Core configuration classes and enums; Configuration and setup functions; Logger factory and management functions; Security and filtering infrastructure; Factory functions and utilities; Validation and configuration management; Configuration constants and defaults
+    ComponentLogger as ConfigComponentLogger,
 )
-from .config import (
+from .config import (  # noqa: F401
     ComponentType,
-    LoggerFactory,
     LoggingConfig,
     LogLevel,
-    SensitiveInfoFilter,
     configure_development_logging,
     configure_logging,
-    create_component_logger,
 )
-from .config import get_logger as config_get_logger
-from .config import (
-    get_logging_status,
-    reset_logging_config,
-    setup_performance_logging,
-    validate_logging_config,
-)
+from .config import get_logger as config_get_logger  # noqa: F401
 
 # Internal imports - Formatting infrastructure with security filtering
+from .formatters import CONSOLE_COLOR_CODES  # noqa: F401
+from .formatters import PERFORMANCE_LOG_FORMAT  # noqa: F401
+from .formatters import ColorScheme  # noqa: F401
+from .formatters import sanitize_message  # noqa: F401
 from .formatters import (  # Core formatter classes; Security filtering and sanitization; Color support and scheme management; Utility functions for formatter configuration; Formatting constants and color specifications
-    CONSOLE_COLOR_CODES,
     DEFAULT_LOG_FORMAT,
-    PERFORMANCE_LOG_FORMAT,
     SENSITIVE_REGEX_PATTERNS,
-    ColorScheme,
     ConsoleFormatter,
     LogFormatter,
     PerformanceFormatter,
     SecurityFilter,
     detect_color_support,
-    sanitize_message,
 )
 
 # Internal imports - Logger classes and management system (no __all__ in loggers.py)
+from .loggers import LoggerManager  # noqa: F401
+from .loggers import ensure_logging_initialized  # noqa: F401
 from .loggers import (  # Core logger classes for component and performance monitoring; Primary logger factory functions; System configuration and lifecycle management; Handler creation factory functions; Cleanup and resource management functions
     ComponentLogger,
-    LoggerManager,
     PerformanceLogger,
     configure_logging_system,
     create_console_handler,
     create_file_handler,
-    create_performance_handler,
-    ensure_logging_initialized,
     get_component_logger,
     get_logger,
     get_logging_statistics,
@@ -94,7 +91,6 @@ from .loggers import (  # Core logger classes for component and performance moni
 
 # Package version and identification constants
 PACKAGE_VERSION = "0.0.1"
-LOGGER_NAME_PREFIX = "plume_nav_sim"
 DEFAULT_LOG_LEVEL = LogLevel.INFO
 DEVELOPMENT_LOG_LEVEL = LogLevel.DEBUG
 
@@ -118,6 +114,189 @@ _package_stats = {
 }
 
 
+# Internal helper functions to reduce complexity of public APIs
+def _flush_component_handlers() -> int:
+    flushed_handlers = 0
+    for logger in _component_loggers_registry.values():
+        if hasattr(logger, "base_logger"):
+            for handler in logger.base_logger.handlers:
+                try:
+                    handler.flush()
+                    flushed_handlers += 1
+                except Exception as e:
+                    logging.warning(f"Error flushing handler: {e}")
+    return flushed_handlers
+
+
+def _close_root_handlers() -> int:
+    closed_handlers = 0
+    for handler in logging.root.handlers[:]:
+        try:
+            handler.close()
+            logging.root.removeHandler(handler)
+            closed_handlers += 1
+        except Exception as e:
+            logging.warning(f"Error closing handler: {e}")
+    return closed_handlers
+
+
+def _collect_performance_reports() -> Dict[str, Any]:
+    performance_reports: Dict[str, Any] = {}
+    for name, perf_logger in _performance_loggers_registry.items():
+        try:
+            performance_reports[name] = perf_logger.get_performance_report(
+                "summary", False
+            )
+        except Exception as e:
+            logging.warning(f"Error getting performance report for {name}: {e}")
+    return performance_reports
+
+
+def _build_logger_breakdown() -> Dict[str, Any]:
+    component_types: Dict[str, int] = {}
+    for key in _component_loggers_registry.keys():
+        comp_type = key.split(":")[0] if ":" in key else "unknown"
+        component_types[comp_type] = component_types.get(comp_type, 0) + 1
+    return {
+        "by_component_type": component_types,
+        "performance_operations": list(_performance_loggers_registry.keys()),
+    }
+
+
+def _build_configuration_summary() -> Dict[str, Any]:
+    return {
+        "log_level": _default_logging_config.log_level.name,
+        "console_output": getattr(
+            _default_logging_config, "enable_console_output", True
+        ),
+        "file_output": getattr(_default_logging_config, "enable_file_output", False),
+        "color_output": getattr(_default_logging_config, "enable_color_output", False),
+        "security_filtering": getattr(
+            _default_logging_config, "security_filtering_enabled", True
+        ),
+    }
+
+
+def _collect_logger_details() -> Dict[str, Any]:
+    details: Dict[str, Any] = {}
+    for key, logger in _component_loggers_registry.items():
+        try:
+            details[key] = {
+                "component_name": getattr(logger, "component_name", "unknown"),
+                "log_level": (
+                    logger.configured_log_level.name
+                    if hasattr(logger, "configured_log_level")
+                    else "unknown"
+                ),
+                "creation_time": (
+                    logger.creation_time.isoformat()
+                    if hasattr(logger, "creation_time")
+                    else "unknown"
+                ),
+                "message_count": getattr(logger, "message_count", 0),
+                "performance_tracking": getattr(
+                    logger, "performance_tracking_enabled", False
+                ),
+            }
+        except Exception as e:
+            details[key] = {"error": str(e)}
+    return details
+
+
+def _collect_performance_statistics() -> Dict[str, Any]:
+    stats: Dict[str, Any] = {}
+    for name, perf_logger in _performance_loggers_registry.items():
+        try:
+            stats[name] = {
+                "measurement_count": getattr(perf_logger, "measurement_count", 0),
+                "average_timing_ms": getattr(perf_logger, "average_timing", 0.0),
+                "threshold_ms": getattr(perf_logger, "timing_threshold_ms", 0.0),
+                "memory_tracking": getattr(
+                    perf_logger, "memory_tracking_enabled", False
+                ),
+            }
+        except Exception as e:
+            stats[name] = {"error": str(e)}
+    return stats
+
+
+def _fetch_system_health(
+    include_performance_stats: bool, include_logger_details: bool
+) -> Dict[str, Any]:
+    try:
+        system_stats = get_logging_statistics(
+            include_performance_data=include_performance_stats,
+            include_registry_details=include_logger_details,
+        )
+        return {
+            "logging_system_active": system_stats.get("system_status", {}).get(
+                "logging_initialized", False
+            ),
+            "resource_utilization": system_stats.get("resource_utilization", {}),
+            "health_status": "healthy" if _package_initialized else "uninitialized",
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _create_base_config(use_development_config: bool) -> LoggingConfig:
+    if use_development_config:
+        return LoggingConfig(
+            log_level=DEVELOPMENT_LOG_LEVEL,
+            enable_console_output=True,
+            enable_file_output=False,
+            enable_color_output=True,
+            log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
+    else:
+        return LoggingConfig(
+            log_level=DEFAULT_LOG_LEVEL,
+            enable_console_output=True,
+            enable_file_output=True,
+            enable_color_output=False,
+            log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
+
+
+def _determine_component_type(component_name: str) -> ComponentType:
+    component_type = ComponentType.ENVIRONMENT
+    for comp_type in ComponentType:
+        if comp_type.name.lower() in component_name.lower():
+            component_type = comp_type
+            break
+    return component_type
+
+
+def _register_component_loggers() -> None:
+    for component_name in CORE_COMPONENT_NAMES:
+        try:
+            component_type = _determine_component_type(component_name)
+            logger = get_component_logger(component_type, component_name)
+            registry_key = f"{component_type.name}:{component_name}"
+            _component_loggers_registry[registry_key] = logger
+            _package_stats["component_loggers_created"] += 1
+        except Exception as e:
+            logging.warning(
+                f"Failed to create component logger for {component_name}: {e}"
+            )
+
+
+def _register_performance_loggers() -> None:
+    for operation_name in ["step_execution", "rendering", "plume_calculation"]:
+        try:
+            perf_logger = get_performance_logger(
+                operation_name=operation_name,
+                timing_threshold_ms=CORE_PERFORMANCE_TARGET,
+                enable_memory_tracking=True,
+            )
+            _performance_loggers_registry[operation_name] = perf_logger
+            _package_stats["performance_loggers_created"] += 1
+        except Exception as e:
+            logging.warning(
+                f"Failed to create performance logger for {operation_name}: {e}"
+            )
+
+
 def init_logging_package(
     use_development_config: bool = True,
     enable_performance_monitoring: bool = True,
@@ -137,7 +316,6 @@ def init_logging_package(
         bool: True if package initialized successfully, False if initialization failed
     """
     global _package_initialized, _default_logging_config, _package_init_time
-    global _package_stats
 
     with _initialization_lock:
         try:
@@ -147,22 +325,7 @@ def init_logging_package(
                 return True
 
             # Create default LoggingConfig with development or production settings based on parameters
-            if use_development_config:
-                base_config = LoggingConfig(
-                    log_level=DEVELOPMENT_LOG_LEVEL,
-                    enable_console_output=True,
-                    enable_file_output=False,
-                    enable_color_output=True,
-                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                )
-            else:
-                base_config = LoggingConfig(
-                    log_level=DEFAULT_LOG_LEVEL,
-                    enable_console_output=True,
-                    enable_file_output=True,
-                    enable_color_output=False,
-                    log_format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                )
+            base_config = _create_base_config(use_development_config)
 
             # Apply custom configuration overrides if provided in custom_config_overrides
             if custom_config_overrides:
@@ -179,47 +342,11 @@ def init_logging_package(
                 return False
 
             # Set up component loggers registry for centralized logger management
-            for component_name in CORE_COMPONENT_NAMES:
-                try:
-                    # Determine component type from name
-                    component_type = ComponentType.ENVIRONMENT
-                    for comp_type in ComponentType:
-                        if comp_type.name.lower() in component_name.lower():
-                            component_type = comp_type
-                            break
-
-                    # Create component logger with appropriate configuration
-                    logger = get_component_logger(component_type, component_name)
-                    registry_key = f"{component_type.name}:{component_name}"
-                    _component_loggers_registry[registry_key] = logger
-                    _package_stats["component_loggers_created"] += 1
-
-                except Exception as e:
-                    # Log warning but continue initialization
-                    logging.warning(
-                        f"Failed to create component logger for {component_name}: {e}"
-                    )
+            _register_component_loggers()
 
             # Initialize performance monitoring infrastructure if enable_performance_monitoring enabled
             if enable_performance_monitoring:
-                for operation_name in [
-                    "step_execution",
-                    "rendering",
-                    "plume_calculation",
-                ]:
-                    try:
-                        perf_logger = get_performance_logger(
-                            operation_name=operation_name,
-                            timing_threshold_ms=CORE_PERFORMANCE_TARGET,
-                            enable_memory_tracking=True,
-                        )
-                        _performance_loggers_registry[operation_name] = perf_logger
-                        _package_stats["performance_loggers_created"] += 1
-
-                    except Exception as e:
-                        logging.warning(
-                            f"Failed to create performance logger for {operation_name}: {e}"
-                        )
+                _register_performance_loggers()
 
             # Configure security filtering and sensitive information protection
             # This is handled automatically by the formatters with SecurityFilter
@@ -297,7 +424,7 @@ def get_default_config(
             )
 
     # Add security filtering patterns for sensitive information protection
-    config.security_patterns = SECURITY_REDACTION_PATTERNS.copy()
+    config.security_patterns = SENSITIVE_REGEX_PATTERNS.copy()
 
     # Set up performance logging configuration with appropriate thresholds
     if development_mode:
@@ -397,40 +524,20 @@ def cleanup_logging_package(
     Returns:
         Dict[str, Any]: Dictionary containing cleanup results including resources freed and handlers closed
     """
-    global _package_initialized, _component_loggers_registry, _performance_loggers_registry
-    global _default_logging_config, _package_stats
+    global _package_initialized, _default_logging_config
 
     cleanup_start_time = datetime.datetime.now()
 
     try:
         with _initialization_lock:
             # Flush all active loggers and handlers to ensure data integrity
-            flushed_handlers = 0
-            for logger in _component_loggers_registry.values():
-                if hasattr(logger, "base_logger"):
-                    for handler in logger.base_logger.handlers:
-                        handler.flush()
-                        flushed_handlers += 1
+            flushed_handlers = _flush_component_handlers()
 
             # Close file handlers and release file system resources
-            closed_handlers = 0
-            for handler in logging.root.handlers[:]:
-                try:
-                    handler.close()
-                    logging.root.removeHandler(handler)
-                    closed_handlers += 1
-                except Exception as e:
-                    logging.warning(f"Error closing handler: {e}")
+            closed_handlers = _close_root_handlers()
 
             # Shutdown performance monitoring and export remaining performance data
-            performance_reports = {}
-            for name, perf_logger in _performance_loggers_registry.items():
-                try:
-                    performance_reports[name] = perf_logger.get_performance_report(
-                        "summary", False
-                    )
-                except Exception as e:
-                    logging.warning(f"Error getting performance report for {name}: {e}")
+            performance_reports = _collect_performance_reports()
 
             # Clear component and performance logger registries
             initial_component_count = len(_component_loggers_registry)
@@ -504,8 +611,7 @@ def get_package_info(
     Returns:
         Dict[str, Any]: Dictionary containing package information, configuration status, and system statistics
     """
-    global _package_initialized, _package_init_time, _default_logging_config
-    global _component_loggers_registry, _performance_loggers_registry, _package_stats
+    # Globals not required here since we only read module-level state
 
     # Collect package version and initialization status information
     package_info = {
@@ -532,93 +638,24 @@ def get_package_info(
 
     # Include active logger counts and registry status
     if _component_loggers_registry:
-        component_types = {}
-        for key in _component_loggers_registry.keys():
-            comp_type = key.split(":")[0] if ":" in key else "unknown"
-            component_types[comp_type] = component_types.get(comp_type, 0) + 1
-        package_info["logger_breakdown"] = {
-            "by_component_type": component_types,
-            "performance_operations": list(_performance_loggers_registry.keys()),
-        }
+        package_info["logger_breakdown"] = _build_logger_breakdown()
 
     # Add configuration details and handler status information
     if _default_logging_config:
-        package_info["configuration_summary"] = {
-            "log_level": _default_logging_config.log_level.name,
-            "console_output": getattr(
-                _default_logging_config, "enable_console_output", True
-            ),
-            "file_output": getattr(
-                _default_logging_config, "enable_file_output", False
-            ),
-            "color_output": getattr(
-                _default_logging_config, "enable_color_output", False
-            ),
-            "security_filtering": getattr(
-                _default_logging_config, "security_filtering_enabled", True
-            ),
-        }
+        package_info["configuration_summary"] = _build_configuration_summary()
 
     # Include logger details with component types and levels if requested
     if include_logger_details:
-        logger_details = {}
-        for key, logger in _component_loggers_registry.items():
-            try:
-                logger_details[key] = {
-                    "component_name": getattr(logger, "component_name", "unknown"),
-                    "log_level": (
-                        logger.configured_log_level.name
-                        if hasattr(logger, "configured_log_level")
-                        else "unknown"
-                    ),
-                    "creation_time": (
-                        logger.creation_time.isoformat()
-                        if hasattr(logger, "creation_time")
-                        else "unknown"
-                    ),
-                    "message_count": getattr(logger, "message_count", 0),
-                    "performance_tracking": getattr(
-                        logger, "performance_tracking_enabled", False
-                    ),
-                }
-            except Exception as e:
-                logger_details[key] = {"error": str(e)}
-
-        package_info["logger_details"] = logger_details
+        package_info["logger_details"] = _collect_logger_details()
 
     # Add performance statistics from performance loggers if requested
     if include_performance_stats:
-        performance_stats = {}
-        for name, perf_logger in _performance_loggers_registry.items():
-            try:
-                performance_stats[name] = {
-                    "measurement_count": getattr(perf_logger, "measurement_count", 0),
-                    "average_timing_ms": getattr(perf_logger, "average_timing", 0.0),
-                    "threshold_ms": getattr(perf_logger, "timing_threshold_ms", 0.0),
-                    "memory_tracking": getattr(
-                        perf_logger, "memory_tracking_enabled", False
-                    ),
-                }
-            except Exception as e:
-                performance_stats[name] = {"error": str(e)}
-
-        package_info["performance_statistics"] = performance_stats
+        package_info["performance_statistics"] = _collect_performance_statistics()
 
     # Include system health indicators and resource utilization
-    try:
-        system_stats = get_logging_statistics(
-            include_performance_data=include_performance_stats,
-            include_registry_details=include_logger_details,
-        )
-        package_info["system_health"] = {
-            "logging_system_active": system_stats.get("system_status", {}).get(
-                "logging_initialized", False
-            ),
-            "resource_utilization": system_stats.get("resource_utilization", {}),
-            "health_status": "healthy" if _package_initialized else "uninitialized",
-        }
-    except Exception as e:
-        package_info["system_health"] = {"error": str(e)}
+    package_info["system_health"] = _fetch_system_health(
+        include_performance_stats, include_logger_details
+    )
 
     # Format comprehensive package information report
     package_info["report_generated"] = datetime.datetime.now().isoformat()

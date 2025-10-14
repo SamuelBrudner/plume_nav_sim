@@ -25,7 +25,6 @@ from typing import (  # >=3.10 - Type hints for benchmark data structures, analy
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 # External imports with version comments
@@ -37,15 +36,11 @@ from config.default_config import get_complete_default_config
 # Internal imports from plume_nav_sim core modules
 from plume_nav_sim.core.constants import (  # PERFORMANCE_TARGET_EPISODE_RESET_MS,  # Not available in constants; omit/reset metric
     DEFAULT_GRID_SIZE,
-    MAX_GRID_SIZE,
     MEMORY_LIMIT_TOTAL_MB,
-    MIN_GRID_SIZE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    TESTING_CONSTANTS,
 )
-from plume_nav_sim.core.types import EnvironmentConfig, GridSize, create_grid_size
 
 # Global benchmark data constants and configuration
 BENCHMARK_DATA_VERSION = "1.0.0"
@@ -925,7 +920,7 @@ class ScalabilityTestData:
 
             if max_memory > MEMORY_LIMIT_TOTAL_MB:
                 recommendations.append(
-                    f"Memory usage exceeds limits for large grids - consider memory optimization"
+                    "Memory usage exceeds limits for large grids - consider memory optimization"
                 )
 
         # Analyze performance scaling

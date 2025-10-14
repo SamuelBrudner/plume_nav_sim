@@ -38,6 +38,7 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
 ### Installation Steps
 
 1. **Create Virtual Environment** (Recommended):
+
    ```bash
    python -m venv plume-nav-env
    source plume-nav-env/bin/activate  # Linux/macOS
@@ -45,6 +46,7 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
    ```
 
 2. **Install Package**:
+
    ```bash
    # Development installation (recommended for research)
    pip install -e .
@@ -54,6 +56,7 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
    ```
 
 3. **Verify Installation**:
+
    ```bash
    python -c "import plume_nav_sim; print(f'Version: {plume_nav_sim.get_version()}')"
    ```
@@ -109,14 +112,16 @@ env.close()
 The core Gymnasium environment for plume navigation simulation.
 
 #### Action Space
+
 - **Type**: `Discrete(4)`
-- **Actions**: 
+- **Actions**:
   - `0`: Move Up
   - `1`: Move Right  
   - `2`: Move Down
   - `3`: Move Left
 
 #### Observation Space
+
 - **Type**: `Box(low=0.0, high=1.0, shape=(1,), dtype=float32)`
 - **Description**: Concentration value at agent's current position
 
@@ -170,6 +175,7 @@ Two ways to use components:
   ```
 
 - Register the component-based environment id (first‑class DI env):
+
   ```python
   import gymnasium as gym
   from plume_nav_sim.registration import register_env, COMPONENT_ENV_ID
@@ -185,16 +191,19 @@ Two ways to use components:
   # Use DI behind the default env id for this process
   export PLUMENAV_DEFAULT=components
   ```
+
   ```python
   from plume_nav_sim.registration import register_env, ENV_ID
   env_id = register_env()  # Will use the DI entry point when PLUMENAV_DEFAULT is set
   ```
 
 Components derive spaces:
+
 - `action_space` comes from the ActionProcessor
 - `observation_space` comes from the ObservationModel
 
 See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
+
 ```
 
 ### Registration System
@@ -455,18 +464,21 @@ env = create_custom_environment('hard')
 ### Common Installation Issues
 
 **Problem: ImportError for gymnasium**
+
 ```bash
 # Solution: Install compatible version
 pip install gymnasium>=0.29.0
 ```
 
 **Problem: NumPy version conflicts**
+
 ```bash
 # Solution: Upgrade to compatible version
 pip install numpy>=2.1.0
 ```
 
 **Problem: Python version compatibility**
+
 ```bash
 # Check Python version
 python --version
@@ -478,6 +490,7 @@ python --version
 ### Matplotlib Backend Issues
 
 **Problem: No display available (headless systems)**
+
 ```python
 import matplotlib
 matplotlib.use('Agg')  # Set backend before importing plume_nav_sim
@@ -487,6 +500,7 @@ env = plume_nav_sim.quick_start()
 ```
 
 **Problem: Interactive rendering not working**
+
 ```python
 # Check available backends
 import matplotlib
@@ -499,6 +513,7 @@ matplotlib.use('TkAgg')  # or 'Qt5Agg'
 ### Performance Optimization
 
 **Problem: Slow step execution**
+
 ```python
 # Use smaller grid sizes for faster performance
 config = {
@@ -509,6 +524,7 @@ env = plume_nav_sim.quick_start(env_config=config)
 ```
 
 **Problem: Memory usage too high**
+
 ```python
 # Monitor memory usage
 import psutil
@@ -527,6 +543,7 @@ config = {
 ### Common Runtime Errors
 
 **Problem: Environment not registered**
+
 ```python
 # Ensure registration before gym.make()
 import plume_nav_sim
@@ -537,6 +554,7 @@ env = gym.make('PlumeNav-StaticGaussian-v0')
 ```
 
 **Problem: Inconsistent reproducibility**
+
 ```python
 # Proper seeding approach
 env = plume_nav_sim.quick_start()
@@ -552,23 +570,27 @@ obs, info = env.reset(seed=42)
 ### Development Setup
 
 1. **Clone Repository**:
+
    ```bash
    git clone <repository-url>
    cd plume-nav-sim
    ```
 
 2. **Create Development Environment**:
+
    ```bash
    python -m venv dev-env
    source dev-env/bin/activate
    ```
 
 3. **Install in Development Mode**:
+
    ```bash
    pip install -e .[dev]
    ```
 
 4. **Verify Development Setup**:
+
    ```bash
    python -c "import plume_nav_sim; print('Development setup successful')"
    ```
@@ -680,7 +702,7 @@ This project builds upon the excellent work of the scientific Python ecosystem:
 - **Documentation**: [Link to full documentation]
 - **Issues**: [GitHub Issues](https://github.com/your-org/plume-nav-sim/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-org/plume-nav-sim/discussions)
-- **Email**: plume-nav-sim@example.com
+- **Email**: <plume-nav-sim@example.com>
 
 ---
 

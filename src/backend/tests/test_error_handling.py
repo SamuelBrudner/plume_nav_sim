@@ -18,9 +18,8 @@ import gc  # >=3.10
 import logging  # >=3.10
 import threading  # >=3.10
 import time  # >=3.10
-import warnings  # >=3.10
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from unittest.mock import MagicMock, Mock, create_autospec, patch  # >=3.10
+from typing import Any, Callable, Dict, List, Optional
+from unittest.mock import Mock, patch  # >=3.10
 
 import numpy as np  # >=2.1.0
 import pytest  # >=8.0.0
@@ -31,7 +30,6 @@ from plume_nav_sim.core.types import Action
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 from plume_nav_sim.utils.exceptions import (
     ComponentError,
-    ConfigurationError,
     ErrorContext,
     ErrorSeverity,
     IntegrationError,
@@ -46,10 +44,7 @@ from plume_nav_sim.utils.exceptions import (
 from plume_nav_sim.utils.validation import (
     ParameterValidator,
     ValidationContext,
-    ValidationResult,
     validate_action_parameter,
-    validate_environment_config,
-    validate_with_context,
 )
 
 # Global test data constants for comprehensive error scenario testing
@@ -860,7 +855,6 @@ class TestErrorHandling:
             with simulate_component_failure(
                 "renderer", "backend_failure", {"raise_exception": True}
             ) as mock_failure:
-
                 with pytest.raises(RenderingError) as exc_info:
                     test_env.render()
 
@@ -992,7 +986,6 @@ class TestErrorHandling:
                 {"raise_exception": True},
                 enable_recovery_testing=True,
             ) as mock_failure:
-
                 with pytest.raises(ComponentError) as exc_info:
                     if component_failure == "plume_model":
                         # Trigger plume model error
@@ -2042,7 +2035,6 @@ class TestErrorScenarios:
                 with simulate_component_failure(
                     primary_component, "calculation_error", {"raise_exception": True}
                 ) as primary_failure:
-
                     try:
                         # Test that secondary component can handle primary failure gracefully
                         if primary_component == "plume_model":
@@ -2101,7 +2093,6 @@ class TestErrorScenarios:
                 with simulate_component_failure(
                     "renderer", "backend_failure", {"raise_exception": True}
                 ):
-
                     system_failure_start = time.perf_counter()
 
                     try:

@@ -133,8 +133,10 @@ class ComponentBasedEnvironment(gym.Env):
         # Contract: environment_state_machine.md - P1, P2, P3
         if max_steps <= 0:
             raise ValidationError(f"max_steps must be positive, got {max_steps}")
-        if goal_radius <= 0:
-            raise ValidationError(f"goal_radius must be positive, got {goal_radius}")
+        if goal_radius < 0:
+            raise ValidationError(
+                f"goal_radius must be non-negative, got {goal_radius}"
+            )
         if render_mode and render_mode not in self.metadata["render_modes"]:
             raise ValidationError(
                 f"render_mode must be in {self.metadata['render_modes']}, got {render_mode}"

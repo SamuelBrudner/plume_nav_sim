@@ -21,6 +21,8 @@ Example:
 
 from typing import Literal, Optional, Union
 
+import numpy as np
+
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..core.geometry import Coordinates, GridSize
 from ..observations import AntennaeArraySensor, ConcentrationSensor
@@ -31,7 +33,7 @@ from .component_env import ComponentBasedEnvironment
 __all__ = ["create_component_environment"]
 
 
-def create_component_environment(
+def create_component_environment(  # noqa: C901
     *,
     grid_size: Union[tuple[int, int], GridSize] = (128, 128),
     goal_location: Union[tuple[int, int], Coordinates] = (64, 64),
@@ -97,6 +99,11 @@ def create_component_environment(
     if start_location and isinstance(start_location, tuple):
         start_location = Coordinates(x=start_location[0], y=start_location[1])
 
+    if goal_radius < 0:
+        raise ValueError("goal_radius must be non-negative")
+    if goal_radius == 0:
+        goal_radius = float(np.finfo(np.float32).eps)
+
     # Create action processor
     if action_type == "discrete":
         action_processor = DiscreteGridActions(step_size=step_size)
@@ -138,7 +145,6 @@ def create_component_environment(
     # Create concentration field
     concentration_field = ConcentrationField(grid_size=grid_size, enable_caching=True)
     # Manually create Gaussian field (generate_field has signature issues)
-    import numpy as np
 
     x = np.arange(grid_size.width)
     y = np.arange(grid_size.height)

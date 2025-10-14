@@ -15,12 +15,10 @@ seamless integration with the broader plume_nav_sim ecosystem.
 # Standard library imports
 import abc
 import copy
-import functools
 import inspect
 import threading
 import time
-import weakref
-from typing import Any, Dict, List, Optional, Protocol, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 # Third-party imports
 import numpy as np  # >=2.1.0 - Array operations and mathematical computing
@@ -49,7 +47,7 @@ from ..core.types import (
 from ..utils.exceptions import ComponentError, ConfigurationError, ValidationError
 
 # Internal imports - Logging and performance monitoring
-from ..utils.logging import ComponentLogger, get_component_logger, monitor_performance
+from ..utils.logging import get_component_logger, monitor_performance
 
 # Internal imports - Validation framework
 from ..utils.validation import (
@@ -373,7 +371,7 @@ class BasePlumeModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def validate_model(
+    def validate_model(  # noqa: C901
         self,
         check_field_properties: bool = False,
         validate_performance: bool = False,
@@ -634,7 +632,7 @@ class BasePlumeModel(abc.ABC):
 
     @abc.abstractmethod
     @monitor_performance
-    def update_parameters(
+    def update_parameters(  # noqa: C901
         self,
         new_source_location: Optional[CoordinateType] = None,
         new_sigma: Optional[float] = None,
@@ -737,7 +735,7 @@ class BasePlumeModel(abc.ABC):
             return False
 
     @abc.abstractmethod
-    def clone(
+    def clone(  # noqa: C901
         self,
         parameter_overrides: Optional[Dict] = None,
         preserve_performance_stats: bool = False,
@@ -872,7 +870,7 @@ class BasePlumeModel(abc.ABC):
         except Exception as e:
             self.logger.error(f"Model cleanup failed: {e}")
 
-    def get_performance_summary(
+    def get_performance_summary(  # noqa: C901
         self,
         include_detailed_timing: bool = False,
         include_memory_analysis: bool = False,
@@ -1070,7 +1068,7 @@ class PlumeModelRegistry:
             f"thread_safe: {thread_safe}, built-in models: {len(self.registered_models)}"
         )
 
-    def register_model(
+    def register_model(  # noqa: C901
         self,
         model_type: str,
         model_class: Type,
@@ -1196,7 +1194,7 @@ class PlumeModelRegistry:
             self.logger.error(f"Model registration failed: {e}")
             return False
 
-    def create_model(
+    def create_model(  # noqa: C901
         self,
         model_type: str,
         grid_size: GridDimensions,
@@ -2503,7 +2501,7 @@ def register_plume_model(
         return False
 
 
-def validate_plume_model_interface(
+def validate_plume_model_interface(  # noqa: C901
     model_class: Type,
     strict_validation: bool = False,
     test_instantiation: bool = False,

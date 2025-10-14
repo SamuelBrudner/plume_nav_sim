@@ -31,24 +31,18 @@ from typing import (  # >=3.10 - Type hints for boundary enforcer methods and in
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 import numpy as np  # >=2.1.0 - Array operations, coordinate calculations, and mathematical validation
 
-from ..utils.exceptions import StateError, ValidationError
+from ..utils.exceptions import ValidationError
 from ..utils.logging import ComponentType, get_component_logger, monitor_performance
 
 # Internal imports from utils for validation, error handling, and logging integration
 from ..utils.validation import validate_action_parameter, validate_coordinates
 
 # Internal imports for system-wide constants and configuration values
-from .constants import (
-    DEFAULT_GRID_SIZE,
-    MOVEMENT_VECTORS,
-    PERFORMANCE_TARGET_STEP_LATENCY_MS,
-    VALIDATION_ERROR_MESSAGES,
-)
+from .constants import MOVEMENT_VECTORS
 
 # Internal imports from core modules for coordinate and action type system integration
 from .enums import Action
@@ -440,7 +434,7 @@ class BoundaryEnforcer:
         )
 
     @monitor_performance("position_validation", 0.1, False)
-    def validate_position(
+    def validate_position(  # noqa: C901
         self,
         position: CoordinateType,
         raise_on_invalid: bool = True,
@@ -489,7 +483,6 @@ class BoundaryEnforcer:
                     or coords.y < tolerance
                     or coords.y >= self.grid_size.height - tolerance
                 ):
-
                     if tolerance > 0:
                         is_valid = False
 

@@ -38,26 +38,19 @@ from ..core.constants import (
 )
 
 # Core data types and coordinate handling
-from ..core.types import (
-    Coordinates,
-    CoordinateType,
-    GridDimensions,
-    GridSize,
-    PlumeParameters,
-)
+from ..core.types import Coordinates, CoordinateType, GridDimensions, GridSize
 
 # Exception handling for validation and component errors
 from ..utils.exceptions import ComponentError, ValidationError
 
 # Logging system for performance monitoring and debugging
-from ..utils.logging import ComponentLogger, PerformanceTimer, get_component_logger
+from ..utils.logging import PerformanceTimer, get_component_logger
 
 # Validation utilities for parameter checking and consistency
-from ..utils.validation import validate_coordinates, validate_plume_parameters
 from .concentration_field import ConcentrationField, create_concentration_field
 
 # Internal imports from base classes and data structures
-from .plume_model import BasePlumeModel, PlumeModelInterface
+from .plume_model import BasePlumeModel
 
 # Global caching and performance tracking variables
 _FIELD_CACHE: Dict[str, np.ndarray] = {}
@@ -354,7 +347,7 @@ def calculate_gaussian_concentration(
         )
 
 
-def validate_gaussian_parameters(
+def validate_gaussian_parameters(  # noqa: C901
     grid_size: GridDimensions,
     source_location: CoordinateType,
     sigma: float,
@@ -523,7 +516,7 @@ def clear_gaussian_cache(
         Dictionary containing cache clearing report with memory freed, performance impact, and
         cleanup statistics
     """
-    global _FIELD_CACHE, _GAUSSIAN_CALCULATION_CACHE, _PERFORMANCE_STATS
+    global _FIELD_CACHE, _GAUSSIAN_CALCULATION_CACHE, _PERFORMANCE_STATS  # noqa: F824
     global _MODEL_INSTANCES_CREATED, _CACHE_HIT_RATIO
 
     cleanup_report = {
@@ -618,7 +611,7 @@ def clear_gaussian_cache(
         return error_report
 
 
-def get_gaussian_field_statistics(
+def get_gaussian_field_statistics(  # noqa: C901
     field_array: np.ndarray,
     expected_peak_location: Coordinates,
     include_distribution_analysis: bool = True,
@@ -863,7 +856,7 @@ def get_gaussian_field_statistics(
         )
 
 
-def create_static_gaussian_plume(
+def create_static_gaussian_plume(  # noqa: C901
     grid_size: GridDimensions = DEFAULT_GRID_SIZE,
     source_location: Optional[CoordinateType] = None,
     sigma: Optional[float] = None,
@@ -1341,7 +1334,7 @@ class StaticGaussianPlume(BasePlumeModel):
                 calculation_context=f"sampling_at_{position}",
             )
 
-    def validate_model(
+    def validate_model(  # noqa: C901
         self,
         check_field_properties: bool = True,
         validate_performance: bool = True,
@@ -1615,7 +1608,7 @@ class StaticGaussianPlume(BasePlumeModel):
 
         return complete_info
 
-    def update_parameters(
+    def update_parameters(  # noqa: C901
         self,
         new_source_location: Optional[CoordinateType] = None,
         new_sigma: Optional[float] = None,

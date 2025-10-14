@@ -26,9 +26,6 @@ from ..utils.exceptions import ComponentError, StateError, ValidationError
 # Logging and performance monitoring utilities
 from ..utils.logging import ComponentType, get_component_logger, monitor_performance
 
-# Validation utilities for comprehensive parameter checking
-from ..utils.validation import create_validation_context, validate_action_parameter
-
 # Boundary enforcement integration for movement validation
 from .boundary_enforcer import BoundaryEnforcer
 
@@ -39,6 +36,9 @@ from .constants import ACTION_SPACE_SIZE, MOVEMENT_VECTORS
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .types import ActionType, MovementVector
+
+# Validation utilities for comprehensive parameter checking
+
 
 # Global configuration constants for action processing optimization
 ACTION_PROCESSING_PERFORMANCE_TARGET_MS = 0.1
@@ -507,10 +507,7 @@ class ActionProcessor:
             ValidationError: If action is invalid and raise_on_invalid=True
         """
         try:
-            # Use validate_action_parameter with validation context
-            context = create_validation_context(
-                operation_name="validate_action", component_name="action_processor"
-            )
+            # Use validate_action_parameter (context not needed here)
 
             # Perform comprehensive validation using local bounds helper
             is_valid = validate_action_bounds(

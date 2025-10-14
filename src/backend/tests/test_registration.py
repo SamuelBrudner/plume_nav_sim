@@ -16,9 +16,7 @@ error handling integration, performance benchmarks, and reproducibility verifica
 across registration operations with comprehensive scenario coverage.
 """
 
-import contextlib  # >=3.10 - Context manager utilities for test resource management
 import time  # >=3.10 - High-precision timing utilities for performance testing
-import unittest.mock  # >=3.10 - Mock object creation for testing error conditions
 import warnings  # >=3.10 - Warning system testing for registration conflicts
 
 # External imports
@@ -31,21 +29,9 @@ from plume_nav_sim.core.constants import (
 from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,  # Default plume source location
 )
-from plume_nav_sim.core.constants import (
-    ENVIRONMENT_ID,  # System environment ID constant
-)
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv  # Main environment class
-from plume_nav_sim.registration import (
-    ensure_registered,  # Registration assurance function
-)
-from plume_nav_sim.registration import (
-    quick_register,  # Convenience registration function
-)
 
 # Internal imports
-from plume_nav_sim.registration.register import (
-    ENTRY_POINT,  # Entry point specification string
-)
 from plume_nav_sim.registration.register import (
     ENV_ID,  # Environment identifier constant
 )
@@ -1015,7 +1001,7 @@ class TestRegistrationIntegration:
             1 for _, result in performance_results if result.get("meets_target", False)
         )
 
-        print(f"\nPerformance Integration Results:")
+        print("\nPerformance Integration Results:")
         print(f"Tests passed: {successful_tests}/{total_tests}")
         for test_name, result in performance_results:
             mean_time = result.get("mean_time_ms", "N/A")
@@ -1771,7 +1757,7 @@ class TestRegistrationPerformance:
         # Performance analysis and reporting
         self.benchmark_results["timing"] = timing_results
 
-        print(f"\nRegistration Timing Performance Results:")
+        print("\nRegistration Timing Performance Results:")
         print(f"Target: <{REGISTRATION_PERFORMANCE_TARGET_MS}ms")
         for test_name, stats in timing_results:
             mean_time = stats["mean_ms"]
@@ -2028,7 +2014,7 @@ class TestRegistrationPerformance:
 
         self.benchmark_results["cache"] = cache_performance_results
 
-        print(f"\nRegistration Cache Performance Results:")
+        print("\nRegistration Cache Performance Results:")
         print(f"  Average registration: {avg_reg_time:.3f}ms")
         print(f"  Average lookup: {avg_lookup_time:.4f}ms")
         print(f"  Average info retrieval: {avg_info_time:.3f}ms")
@@ -2132,7 +2118,7 @@ class TestRegistrationPerformance:
         # Analyze scalability patterns
         self.benchmark_results["scalability"] = scalability_results
 
-        print(f"\nRegistration Scalability Performance Results:")
+        print("\nRegistration Scalability Performance Results:")
         print(
             f"{'Scale':<6} {'Reg/env':<8} {'Lookup/env':<10} {'Unreg/env':<10} {'Total':<8}"
         )

@@ -1,5 +1,3 @@
-import pytest
-
 from benchmarks.environment_performance import (
     EnvironmentBenchmarkConfig,
     PerformanceAnalysis,

@@ -9,11 +9,10 @@ integration, and state validation with performance optimization targeting <1ms s
 """
 
 import copy
-import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -22,12 +21,7 @@ from ..utils.logging import get_component_logger, monitor_performance
 
 # Internal imports - utilities and infrastructure
 from ..utils.seeding import SeedManager
-from ..utils.validation import (
-    ValidationContext,
-    ValidationResult,
-    validate_action_input,
-    validate_coordinates,
-)
+from ..utils.validation import validate_action_input
 
 # Internal imports - component coordination
 from .boundary_enforcer import BoundaryEnforcer
@@ -625,7 +619,7 @@ class StateSynchronizer:
             f"Registered component '{component_name}' with sync methods: {sync_methods}"
         )
 
-    def synchronize_state(
+    def synchronize_state(  # noqa: C901
         self,
         strict_synchronization: bool = False,
         component_subset: Optional[List[str]] = None,
@@ -1342,7 +1336,7 @@ class StateManager:
 
         return snapshot
 
-    def validate_state_consistency(
+    def validate_state_consistency(  # noqa: C901
         self, strict_validation: bool = False, validate_component_sync: bool = False
     ) -> StateValidationResult:
         """
@@ -1704,7 +1698,7 @@ def create_state_manager(
         ) from e
 
 
-def validate_state_manager_config(
+def validate_state_manager_config(  # noqa: C901
     config: StateManagerConfig,
     strict_validation: bool = False,
     validation_context: Optional[Dict[str, Any]] = None,
