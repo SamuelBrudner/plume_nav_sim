@@ -24,7 +24,7 @@ import re
 import sys
 import time
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 from typing_extensions import TypedDict
 
@@ -431,12 +431,12 @@ def _pop_env_from_registry(effective_env_id: str) -> bool:
             gymnasium.envs.registry, "env_specs"
         ):
             # Older Gymnasium versions expose a Registry object with env_specs dict
-            env_specs_any = cast(Any, gymnasium.envs.registry).env_specs
+            env_specs_any = gymnasium.envs.registry.env_specs
             if isinstance(env_specs_any, dict):
                 return env_specs_any.pop(effective_env_id, None) is not None
         if hasattr(gymnasium, "envs") and hasattr(gymnasium.envs, "registration"):
             # Newer Gymnasium may expose the registry mapping directly as a dict
-            reg_any = cast(Any, gymnasium.envs.registration).registry
+            reg_any = gymnasium.envs.registration.registry
             if isinstance(reg_any, dict) and effective_env_id in reg_any:
                 del reg_any[effective_env_id]
                 return True
@@ -548,8 +548,8 @@ def _query_registry_direct(effective_env_id: str) -> bool:
 
 def _query_registry_fallback(effective_env_id: str) -> bool:
     with contextlib.suppress(Exception):
-        test_env_any = cast(Any, gymnasium.make(effective_env_id))
-        test_env_any.close()
+        test_env = gymnasium.make(effective_env_id)
+        test_env.close()
         return True
     return False
 
@@ -1397,8 +1397,8 @@ def register_with_custom_params(
 
         # Validate successful registration with immediate gym.make() test
         try:
-            test_env_any = cast(Any, gymnasium.make(registered_env_id))
-            test_env_any.close()
+            test_env = gymnasium.make(registered_env_id)
+            test_env.close()
             _logger.debug(f"Custom registration verified for '{registered_env_id}'")
         except Exception as test_error:
             _logger.error(f"Custom registration verification failed: {test_error}")
