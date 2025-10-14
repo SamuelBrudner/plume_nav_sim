@@ -37,8 +37,8 @@ try:
     if isinstance(reg, dict) and not hasattr(reg, "env_specs"):
 
         class _RegistryAdapter:
-            def __init__(self, mapping):
-                self.env_specs = mapping
+            def __init__(self, mapping: dict[str, object]) -> None:
+                self.env_specs: dict[str, object] = mapping
 
         gymnasium.envs.registry = _RegistryAdapter(reg)  # type: ignore[assignment]
 except Exception:
@@ -53,7 +53,7 @@ try:
 
     if not hasattr(OrderEnforcing, "__getattr__"):
 
-        def __getattr__(self, name: str) -> object:
+        def __getattr__(self, name):  # type: ignore[no-untyped-def, misc]
             if name == "env":
                 raise AttributeError(name)
             try:
@@ -154,9 +154,9 @@ def quick_register(
             # Update cache with quick registration timestamp for tracking
             with _cache_lock:
                 _registration_cache["last_quick_register"] = time.time()
-                _registration_cache["quick_register_count"] = (
-                    _registration_cache.get("quick_register_count", 0) + 1
-                )
+                _qr_count_obj = _registration_cache.get("quick_register_count", 0)
+                _qr_count = int(_qr_count_obj or 0)
+                _registration_cache["quick_register_count"] = _qr_count + 1
 
             return cast(str, ENV_ID)
 
@@ -203,15 +203,14 @@ def quick_register(
 
         # Update module registration cache with successful registration timestamp
         with _cache_lock:
+            _qr_count_obj2 = _registration_cache.get("quick_register_count", 0)
+            _qr_count2 = int(_qr_count_obj2 or 0)
             _registration_cache.update(
                 {
                     "last_quick_register": time.time(),
                     "quick_register_successful": True,
                     "validation_completed": validate_creation,
-                    "quick_register_count": _registration_cache.get(
-                        "quick_register_count", 0
-                    )
-                    + 1,
+                    "quick_register_count": _qr_count2 + 1,
                     "registration_method": "quick_register",
                 }
             )
@@ -242,14 +241,13 @@ def quick_register(
 
         # Update cache with failure information for debugging
         with _cache_lock:
+            _qrf_count_obj = _registration_cache.get("quick_register_failures", 0)
+            _qrf_count = int(_qrf_count_obj or 0)
             _registration_cache.update(
                 {
                     "last_quick_register_error": time.time(),
                     "last_error": str(e),
-                    "quick_register_failures": _registration_cache.get(
-                        "quick_register_failures", 0
-                    )
-                    + 1,
+                    "quick_register_failures": _qrf_count + 1,
                 }
             )
 
@@ -279,7 +277,7 @@ def ensure_component_env_registered(
     Returns:
         The DI environment id (COMPONENT_ENV_ID)
     """
-    env_id = cast(str, COMPONENT_ENV_ID)
+    env_id = COMPONENT_ENV_ID  # already a str
     if is_registered(env_id):
         return env_id
     register_env(env_id=env_id, force_reregister=force_reregister)
