@@ -2544,9 +2544,12 @@ class TestRegistrationIntegration:
                 # All environments should respond quickly
                 performance_start = time.time()
                 for env in env_instances:
+                    env.reset(seed=99)  # Reset before performance test
                     for _ in range(3):  # Few steps per environment
                         action = env.action_space.sample()
-                        env.step(action)
+                        obs, reward, terminated, truncated, info = env.step(action)
+                        if terminated or truncated:
+                            env.reset()  # Reset if episode ends
                 performance_end = time.time()
 
                 multi_env_time_ms = (performance_end - performance_start) * 1000
