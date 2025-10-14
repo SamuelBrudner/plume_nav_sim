@@ -115,17 +115,16 @@ def list_available_examples(
         # Filter examples by category_filter if provided using EXAMPLE_CATEGORIES mapping
         filtered_examples = {}
 
-        if category_filter is not None:
-            if category_filter not in EXAMPLE_CATEGORIES:
-                _logger.warning(
-                    f"Unknown category filter '{category_filter}', showing all examples"
-                )
-                examples_to_include = list(AVAILABLE_EXAMPLES.keys())
-            else:
-                examples_to_include = EXAMPLE_CATEGORIES[category_filter]
-        else:
+        if category_filter is None:
             examples_to_include = list(AVAILABLE_EXAMPLES.keys())
 
+        elif category_filter not in EXAMPLE_CATEGORIES:
+            _logger.warning(
+                f"Unknown category filter '{category_filter}', showing all examples"
+            )
+            examples_to_include = list(AVAILABLE_EXAMPLES.keys())
+        else:
+            examples_to_include = EXAMPLE_CATEGORIES[category_filter]
         # Iterate through AVAILABLE_EXAMPLES dictionary extracting example metadata
         for example_name, example_info in AVAILABLE_EXAMPLES.items():
             if example_name in examples_to_include or category_filter is None:
@@ -231,11 +230,7 @@ def run_example(
             execution_duration = time.time() - execution_start_time
 
             # Handle different return types from example functions
-            if isinstance(result, int):
-                exit_status = result
-            else:
-                exit_status = 0  # Assume success if no explicit status returned
-
+            exit_status = result if isinstance(result, int) else 0
             # Log example completion with status and duration information
             _logger.info(
                 f"Example '{example_name}' completed in {execution_duration:.2f}s with exit status {exit_status}"
@@ -370,23 +365,21 @@ def discover_examples(
                 module_functions = []
                 for name, obj in inspect.getmembers(module, inspect.isfunction):
                     # Filter functions based on naming patterns and export conventions
-                    if (
-                        obj.__module__ == module_path
-                    ):  # Only functions defined in this module
-                        if include_internal_functions or not name.startswith("_"):
-                            if name.startswith(
-                                ("run_", "demonstrate_", "execute_", "benchmark_")
-                            ):
-                                module_functions.append(
-                                    {
-                                        "name": name,
-                                        "function": obj,
-                                        "module": module_name,
-                                        "docstring": inspect.getdoc(obj)
-                                        or "No documentation",
-                                    }
-                                )
-                                discovered_count += 1
+                    if (obj.__module__ == module_path) and (
+                        (include_internal_functions or not name.startswith("_"))
+                        and name.startswith(
+                            ("run_", "demonstrate_", "execute_", "benchmark_")
+                        )
+                    ):
+                        module_functions.append(
+                            {
+                                "name": name,
+                                "function": obj,
+                                "module": module_name,
+                                "docstring": inspect.getdoc(obj) or "No documentation",
+                            }
+                        )
+                        discovered_count += 1
 
                 discovery_results["discovered_examples"][module_name] = module_functions
 
@@ -450,9 +443,8 @@ def discover_examples(
         discovery_results["discovery_summary"] = {
             "total_modules_scanned": len(example_modules),
             "successful_imports": sum(
-                1
+                status == "success"
                 for status in discovery_results["import_status"].values()
-                if status == "success"
             ),
             "total_functions_discovered": discovered_count,
             "validation_enabled": validate_signatures,

@@ -176,17 +176,16 @@ class MatplotlibBackendManager:
         if backend_preferences is MatplotlibBackendManager._PREFS_UNSET:
             # Use system defaults when argument omitted
             self.backend_preferences = list(BACKEND_PRIORITY_LIST)
+        elif (
+            backend_preferences is None
+            or not isinstance(backend_preferences, list)
+            or len(backend_preferences) == 0
+        ):
+            raise ValidationError(
+                "backend_preferences must be a non-empty list",
+                parameter_name="backend_preferences",
+            )
         else:
-            # Explicit argument provided: require a non-empty list
-            if (
-                backend_preferences is None
-                or not isinstance(backend_preferences, list)
-                or len(backend_preferences) == 0
-            ):
-                raise ValidationError(
-                    "backend_preferences must be a non-empty list",
-                    parameter_name="backend_preferences",
-                )
             self.backend_preferences = backend_preferences
 
         # Validate and store fallback backend name
@@ -199,7 +198,7 @@ class MatplotlibBackendManager:
 
         # Configure fallback behavior for headless operation and error recovery
         self.enable_fallback = enable_fallback
-        self.caching_enabled = bool(enable_caching)
+        self.caching_enabled = enable_caching
 
         # Store backend configuration options for matplotlib customization
         self.backend_options = backend_options or {}
@@ -273,14 +272,17 @@ class MatplotlibBackendManager:
         for backend_name in self.backend_preferences:
             try:
                 # Skip interactive backends in headless environment unless explicitly configured
-                if headless and backend_name not in ["Agg"]:
-                    if not self.backend_options.get(
+                if (
+                    headless
+                    and backend_name not in ["Agg"]
+                    and not self.backend_options.get(
                         "force_interactive_in_headless", False
-                    ):
-                        self.logger.debug(
-                            f"Skipping interactive backend {backend_name} in headless mode"
-                        )
-                        continue
+                    )
+                ):
+                    self.logger.debug(
+                        f"Skipping interactive backend {backend_name} in headless mode"
+                    )
+                    continue
 
                 # Try switching directly (aligns with test mocks)
                 try:
@@ -348,9 +350,9 @@ class MatplotlibBackendManager:
             Dictionary with backend capabilities and performance characteristics
         """
         # Use current backend if backend_name not provided
-        effective_backend = backend_name or self.current_backend
-        if not effective_backend:
-            effective_backend = self.select_backend()
+        effective_backend = (
+            backend_name or self.current_backend or self.select_backend()
+        )
 
         # Allow alternate cache control via use_cache flag
         if use_cache is not None:
@@ -493,30 +495,7 @@ class MatplotlibBackendManager:
                 )
 
         try:
-            if backend_name:
-                plt.switch_backend(backend_name)
-                self.current_backend = backend_name
-            elif not self.current_backend:
-                self.select_backend()
-
-            if "figure_size" in mapped:
-                plt.rcParams["figure.figsize"] = mapped["figure_size"]
-            if "dpi" in mapped:
-                plt.rcParams["figure.dpi"] = mapped["dpi"]
-                # Keep savefig in sync with figure DPI unless explicitly set
-                plt.rcParams.setdefault("savefig.dpi", mapped["dpi"])
-            if "savefig_dpi" in mapped:
-                plt.rcParams["savefig.dpi"] = mapped["savefig_dpi"]
-            if "font_family" in mapped:
-                plt.rcParams["font.family"] = [mapped["font_family"]]
-            if "interactive" in mapped:
-                plt.ion() if mapped["interactive"] else plt.ioff()
-
-            self.configuration_cache["status"] = {
-                "backend_configured": True,
-                "configuration_valid": True,
-            }
-            return True
+            return self._extracted_from_configure_backend_58(backend_name, mapped)
         except Exception as e:
             self.logger.error(f"Backend configuration failed: {e}")
             self.configuration_cache["status"] = {
@@ -527,6 +506,33 @@ class MatplotlibBackendManager:
             if strict_validation:
                 raise
             return False
+
+    # TODO Rename this here and in `configure_backend`
+    def _extracted_from_configure_backend_58(self, backend_name, mapped):
+        if backend_name:
+            plt.switch_backend(backend_name)
+            self.current_backend = backend_name
+        elif not self.current_backend:
+            self.select_backend()
+
+        if "figure_size" in mapped:
+            plt.rcParams["figure.figsize"] = mapped["figure_size"]
+        if "dpi" in mapped:
+            plt.rcParams["figure.dpi"] = mapped["dpi"]
+            # Keep savefig in sync with figure DPI unless explicitly set
+            plt.rcParams.setdefault("savefig.dpi", mapped["dpi"])
+        if "savefig_dpi" in mapped:
+            plt.rcParams["savefig.dpi"] = mapped["savefig_dpi"]
+        if "font_family" in mapped:
+            plt.rcParams["font.family"] = [mapped["font_family"]]
+        if "interactive" in mapped:
+            plt.ion() if mapped["interactive"] else plt.ioff()
+
+        self.configuration_cache["status"] = {
+            "backend_configured": True,
+            "configuration_valid": True,
+        }
+        return True
 
     def get_configuration_status(self) -> Dict[str, any]:
         """Return the last configuration status."""
