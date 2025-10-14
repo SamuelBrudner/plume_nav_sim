@@ -49,16 +49,9 @@ from ..utils.logging import get_component_logger
 
 
 # Global constants for registration system configuration and environment identification
-ENV_ID = ENVIRONMENT_ID  # Primary environment identifier
-# 'PlumeNav-StaticGaussian-v0' for Gymnasium registration compliance
-# Legacy default entry point
-ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"
-# Entry point specification string for Gymnasium registration defining exact module path
-# and class location
-COMPONENT_ENV_ID = "PlumeNav-Components-v0"
-COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
-MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps
-# (1000) for registration parameter configuration
+ENV_ID = ENVIRONMENT_ID  # Primary environment identifier: 'PlumeNav-StaticGaussian-v0'
+ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Entry point (delegates to DI factory)
+MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000)
 
 # Component logger for registration system debugging and operation tracking
 _logger = get_component_logger("registration")
@@ -83,7 +76,6 @@ __all__ = [
     "register_with_custom_params",
     "ENV_ID",
     "ENTRY_POINT",
-    "COMPONENT_ENV_ID",
 ]
 
 
@@ -151,31 +143,8 @@ def register_env(  # noqa: C901
     try:
         # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided  # noqa: E501
         effective_env_id = env_id or ENV_ID
-        # Select entry point based on provided override or env_id
-        if entry_point is not None:
-            effective_entry_point = entry_point
-        else:
-            # Optional feature flag to make DI the default for the legacy ENV_ID.
-            # Set PLUMENAV_DEFAULT=components or PLUMENAV_USE_COMPONENTS=1 to select
-            # the component factory for the default env id without changing tests.
-            use_components_flag = os.getenv("PLUMENAV_DEFAULT", "").strip().lower() in {
-                "components",
-                "component",
-                "di",
-                "1",
-                "true",
-            } or os.getenv("PLUMENAV_USE_COMPONENTS", "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-            }
-
-            if effective_env_id == COMPONENT_ENV_ID or (
-                use_components_flag and effective_env_id == ENV_ID
-            ):
-                effective_entry_point = COMPONENT_ENTRY_POINT
-            else:
-                effective_entry_point = ENTRY_POINT
+        # Use provided entry point or default (PlumeSearchEnv, which delegates to DI factory)
+        effective_entry_point = entry_point or ENTRY_POINT
         effective_max_steps = max_episode_steps or MAX_EPISODE_STEPS
         effective_kwargs = kwargs or {}
 
@@ -227,55 +196,7 @@ def register_env(  # noqa: C901
             additional_kwargs=effective_kwargs,
         )
 
-        # Shape kwargs to match the chosen entry_point
-        # Factory callable expects goal_location (not source_location) and rejects unknown keys
-        if effective_entry_point.endswith("envs.factory:create_component_environment"):
-            # Map source_location -> goal_location and drop source_location
-            mapped_kwargs: Dict[str, object] = {}
-            for k, v in registration_kwargs.items():
-                if k == "source_location":
-                    mapped_kwargs["goal_location"] = v
-                elif k in {
-                    "grid_size",
-                    "max_steps",
-                    "goal_radius",
-                    "start_location",
-                    "action_type",
-                    "observation_type",
-                    "reward_type",
-                    "plume_sigma",
-                    "step_size",
-                    "render_mode",
-                }:
-                    mapped_kwargs[k] = v
-                # drop any private/unknown keys silently
-            registration_kwargs = mapped_kwargs
-        else:
-            # Legacy path; provide a heads-up about future deprecation without
-            # impacting tests that inspect logging. Keep at INFO level.
-            if effective_env_id == ENV_ID:
-                _logger.info(
-                    "Using legacy PlumeSearchEnv for default env id. The legacy entry point will be deprecated; "  # noqa: E501
-                    "use env_id='%s' or set PLUMENAV_DEFAULT=components to opt into DI now.",
-                    COMPONENT_ENV_ID,
-                )
-                # Emit a DeprecationWarning unless explicitly silenced
-                if os.getenv(
-                    "PLUMENAV_DEPRECATION_SILENCE", ""
-                ).strip().lower() not in {
-                    "1",
-                    "true",
-                    "yes",
-                }:
-                    warnings.warn(
-                        (
-                            "Legacy PlumeSearchEnv entry point will be deprecated in a future release. "  # noqa: E501
-                            "Prefer registering the DI environment id (COMPONENT_ENV_ID) or set "
-                            "PLUMENAV_DEFAULT=components to route the default id to DI."
-                        ),
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
+        # PlumeSearchEnv already delegates to DI factory internally - no parameter mapping needed
 
         # Validate registration configuration using validate_registration_config() for consistency checking  # noqa: E501
         is_valid, validation_report = validate_registration_config(

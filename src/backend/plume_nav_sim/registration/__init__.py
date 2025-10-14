@@ -78,7 +78,6 @@ from ..utils.logging import get_component_logger
 
 # Internal imports for core registration functionality
 from .register import (
-    COMPONENT_ENV_ID,
     ENTRY_POINT,
     ENV_ID,
     create_registration_kwargs,
@@ -107,7 +106,6 @@ __all__ = [
     "validate_registration_config",
     "register_with_custom_params",
     "quick_register",
-    "ensure_component_env_registered",
     "ensure_registered",
     "get_registration_status",
     "ENV_ID",
@@ -266,32 +264,7 @@ def quick_register(
         raise
 
 
-def ensure_component_env_registered(
-    *, force_reregister: bool = False, validate_creation: bool = False
-) -> str:
-    """
-    Ensure the component-based environment id is registered.
-
-    This helper avoids flipping the default immediately while making it easy
-    to opt into DI in external code or examples.
-
-    Args:
-        force_reregister: Re-register if already present
-        validate_creation: If True, attempt gym.make() to validate
-
-    Returns:
-        The DI environment id (COMPONENT_ENV_ID)
-    """
-    env_id = COMPONENT_ENV_ID  # already a str
-    if is_registered(env_id):
-        return env_id
-    register_env(env_id=env_id, force_reregister=force_reregister)
-    if validate_creation:
-        import gymnasium as _gym
-
-        env = _gym.make(env_id)
-        env.close()
-    return env_id
+# Removed: ensure_component_env_registered() - no longer needed with single env_id
 
 
 def ensure_registered(  # noqa: C901

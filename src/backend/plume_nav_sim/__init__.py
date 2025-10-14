@@ -204,10 +204,60 @@ def get_package_info(
     return info
 
 
+def make_env(**kwargs):
+    """Create a plume navigation environment with optional customization.
+
+    This is the recommended way to create environments. It provides a simple,
+    consistent interface while hiding implementation details.
+
+    Args:
+        **kwargs: Environment configuration parameters:
+            - grid_size: tuple[int, int] = (128, 128)
+            - source_location: tuple[int, int] = grid center
+            - max_steps: int = 1000
+            - goal_radius: float = 5.0
+            - action_type: str = 'discrete'  # or 'oriented'
+            - observation_type: str = 'concentration'  # or 'antennae'
+            - reward_type: str = 'sparse'  # or 'step_penalty'
+            - plume_sigma: float = 20.0
+            - render_mode: str = None  # or 'human', 'rgb_array'
+
+    Returns:
+        PlumeSearchEnv: Configured environment ready to use
+
+    Examples:
+        >>> # Simple - use defaults
+        >>> env = make_env()
+
+        >>> # Customize with built-in options
+        >>> env = make_env(
+        ...     action_type='oriented',
+        ...     observation_type='antennae',
+        ...     reward_type='step_penalty'
+        ... )
+
+        >>> # Custom grid and parameters
+        >>> env = make_env(
+        ...     grid_size=(256, 256),
+        ...     max_steps=2000,
+        ...     goal_radius=10.0
+        ... )
+    """
+    if PlumeSearchEnv is None:
+        raise RuntimeError(
+            "PlumeSearchEnv not available. Ensure gymnasium and dependencies are installed."
+        )
+    return create_plume_search_env(**kwargs)
+
+
 __all__ = [
+    # Recommended entry point
+    "make_env",
+    # Metadata
     "PACKAGE_NAME",
     "PACKAGE_VERSION",
     "ENVIRONMENT_ID",
+    # Default constants
     "DEFAULT_GRID_SIZE",
     "DEFAULT_SOURCE_LOCATION",
     "DEFAULT_MAX_STEPS",
@@ -215,6 +265,7 @@ __all__ = [
     "DEFAULT_PLUME_SIGMA",
     "PERFORMANCE_TARGET_STEP_LATENCY_MS",
     "PERFORMANCE_TARGET_RGB_RENDER_MS",
+    # Core types
     "Action",
     "RenderMode",
     "Coordinates",
@@ -225,6 +276,7 @@ __all__ = [
     "EnvironmentConfig",
     "StateSnapshot",
     "PerformanceMetrics",
+    # Type aliases
     "ActionType",
     "CoordinateType",
     "GridDimensions",
@@ -232,6 +284,7 @@ __all__ = [
     "ObservationType",
     "RewardType",
     "InfoType",
+    # Utility functions
     "calculate_euclidean_distance",
     "create_coordinates",
     "create_grid_size",
@@ -241,6 +294,7 @@ __all__ = [
     "create_step_info",
     "validate_action",
     "get_movement_vector",
+    # Legacy/advanced
     "PlumeSearchEnv",
     "create_plume_search_env",
     "initialize_package",

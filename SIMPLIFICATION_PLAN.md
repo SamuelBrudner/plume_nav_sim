@@ -32,27 +32,18 @@ src/backend/plume_nav_sim/registration/register.py     # Single env_id, single e
 src/backend/plume_nav_sim/registration/__init__.py     # Remove dual-ID exports
 ```
 
-#### 1.2 Enhance Factory for Progressive Disclosure
-- [ ] Accept both string shortcuts AND custom component instances
+#### 1.2 Keep Factory String-Only (Opinionated Design)
+- [x] **Decision**: Factory accepts ONLY string shortcuts, NOT component instances
 - [ ] Add better error messages for invalid `action_type`, `observation_type`, etc.
-- [ ] Keep existing signature (already excellent)
+- [ ] Keep existing signature (already excellent with Literal types)
 
-**Example enhancement:**
-```python
-def create_component_environment(
-    *,
-    action_type: Union[str, ActionProcessor] = "discrete",  # Accept both!
-    observation_type: Union[str, ObservationModel] = "concentration",
-    reward_type: Union[str, RewardFunction] = "sparse",
-    # ... rest unchanged
-) -> ComponentBasedEnvironment:
-    # Handle string → component mapping
-    if isinstance(action_type, str):
-        action_processor = _resolve_action_type(action_type, step_size, grid_size)
-    else:
-        action_processor = action_type  # Custom instance
-    # ... same for others
-```
+**Rationale:**
+- Clear separation: Factory = convenience, ComponentBasedEnvironment = power
+- Simpler mental model: strings for built-ins, direct instantiation for custom
+- Better error messages: "Unknown action_type" vs "Expected str or ActionProcessor"
+- Explicit progression: `make_env()` → `make_env(action_type='oriented')` → `ComponentBasedEnvironment(...)`
+
+**No changes needed to factory signature** - it already uses `Literal` types!
 
 ---
 
