@@ -145,22 +145,86 @@ Episode = {
 
 ---
 
+## 🏗️ Architecture Decisions
+
+### Component-Based Design (Dependency Injection)
+
+**Decision Date:** 2025-10-14  
+**Status:** CANONICAL  
+
+**Core Principle:** Environment is assembled from swappable components via dependency injection (DI).
+
+**Rationale:**
+- **Research tool extensibility**: Users need to inject novel algorithms without forking
+- **Testing**: Easy to inject mocks and test components in isolation
+- **Zero coupling**: Components communicate via Protocol interfaces only
+- **Progressive disclosure**: Simple by default, powerful when needed
+
+**Architecture:**
+```text
+                    Factory
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+    ActionProcessor  ObservationModel  RewardFunction
+          │           │           │
+          └───────────┴───────────┘
+                      │
+              ComponentBasedEnvironment
+```
+
+**Component Interfaces (Protocols):**
+- `ActionProcessor`: Defines action space and action→movement mapping
+- `ObservationModel`: Defines observation space and state→observation computation
+- `RewardFunction`: Defines reward computation and goal detection
+- `PlumeModel`: Defines concentration field dynamics
+
+**Assembly Patterns:**
+
+1. **Simple (Default):** Factory with defaults
+   ```python
+   env = make_env()  # Uses DiscreteGridActions, ConcentrationSensor, SparseGoalReward
+   ```
+
+2. **Customized (String-based):** Factory with built-in options
+   ```python
+   env = make_env(action_type='oriented', observation_type='antennae')
+   ```
+
+3. **Extended (Instance-based):** Factory with custom implementations
+   ```python
+   env = make_env(action_type=MyNovelActions(), observation_type=MyNovelSensor())
+   ```
+
+**Semantic Invariants:**
+- Components MUST implement their Protocol completely
+- Components MUST NOT directly access other components' internal state
+- Factory MUST validate component compatibility before assembly
+- Environment MUST work with any valid component combination
+
+---
+
 ## 🔗 Relationships & Dependencies
 
 ### Dependency Graph
 
 ```text
-Environment
+Environment (ComponentBasedEnvironment)
+    ├── ActionProcessor (injected)
+    │   └── Defines: action_space, process_action()
+    │
+    ├── ObservationModel (injected)
+    │   └── Defines: observation_space, compute_observation()
+    │
+    ├── RewardFunction (injected)
+    │   └── Defines: compute_reward(), check_termination()
+    │
+    ├── PlumeModel (injected)
+    │   └── ConcentrationField
+    │
     ├── StateManager
     │   ├── AgentState
     │   └── BoundaryEnforcer
-    │
-    ├── EpisodeManager
-    │   ├── RewardCalculator
-    │   └── TerminationChecker
-    │
-    ├── PlumeModel
-    │   └── ConcentrationField
     │
     └── Renderer (optional)
         ├── ColorScheme
@@ -470,6 +534,83 @@ original_radius = config.goal_radius
 # ... use config ...
 assert config.goal_radius == original_radius  # unchanged
 ```
+
+---
+
+## 🎨 User-Facing API Design
+
+### Progressive Disclosure Pattern
+
+**Decision Date:** 2025-10-14  
+**Status:** CANONICAL
+
+**Principle:** Complexity should be opt-in, not opt-out.
+
+**Three Levels of Interface:**
+
+#### Level 1: Simple (Default)
+**Target Users:** Students, quick experiments, tutorials  
+**Complexity:** Minimal - just works
+
+```python
+import plume_nav_sim
+env = plume_nav_sim.make_env()  # Uses sensible defaults
+```
+
+**Semantic Guarantee:** Returns a fully-functional environment with default configuration.
+
+---
+
+#### Level 2: Customized (String-based)
+**Target Users:** Researchers comparing approaches, RL practitioners  
+**Complexity:** Medium - choose from built-in options
+
+```python
+env = plume_nav_sim.make_env(
+    action_type='oriented',       # Choose from: 'discrete', 'oriented'
+    observation_type='antennae',  # Choose from: 'concentration', 'antennae'
+    reward_type='step_penalty'    # Choose from: 'sparse', 'step_penalty'
+)
+```
+
+**Semantic Guarantee:** String shortcuts map to validated built-in components.
+
+---
+
+#### Level 3: Extended (Instance-based)
+**Target Users:** Novel algorithm developers, framework builders  
+**Complexity:** Full - inject custom implementations
+
+```python
+from plume_nav_sim.interfaces import ActionProcessor
+
+class MyNovelActions(ActionProcessor):
+    # Custom implementation
+    pass
+
+env = plume_nav_sim.make_env(
+    action_type=MyNovelActions()  # Inject custom component
+)
+```
+
+**Semantic Guarantee:** Custom components must implement Protocol interface completely.
+
+---
+
+### API Design Invariants
+
+**Must Hold:**
+- Level 1 MUST work with zero configuration
+- Level 2 MUST accept all Level 1 parameters
+- Level 3 MUST accept all Level 2 parameters
+- Each level MUST be independently documented
+- Implementation details MUST NOT leak into simple levels
+
+**Forbidden:**
+- Requiring users to understand DI to use defaults
+- Exposing internal caching/registration complexity
+- Multiple ways to do the same simple thing
+- Deprecation warnings for normal usage
 
 ---
 
