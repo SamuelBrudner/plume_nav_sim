@@ -155,7 +155,7 @@ def quick_register(
             with _cache_lock:
                 _registration_cache["last_quick_register"] = time.time()
                 _qr_count_obj = _registration_cache.get("quick_register_count", 0)
-                _qr_count = int(_qr_count_obj or 0)
+                _qr_count = _qr_count_obj if isinstance(_qr_count_obj, int) else 0
                 _registration_cache["quick_register_count"] = _qr_count + 1
 
             return cast(str, ENV_ID)
@@ -204,7 +204,7 @@ def quick_register(
         # Update module registration cache with successful registration timestamp
         with _cache_lock:
             _qr_count_obj2 = _registration_cache.get("quick_register_count", 0)
-            _qr_count2 = int(_qr_count_obj2 or 0)
+            _qr_count2 = _qr_count_obj2 if isinstance(_qr_count_obj2, int) else 0
             _registration_cache.update(
                 {
                     "last_quick_register": time.time(),
@@ -242,7 +242,7 @@ def quick_register(
         # Update cache with failure information for debugging
         with _cache_lock:
             _qrf_count_obj = _registration_cache.get("quick_register_failures", 0)
-            _qrf_count = int(_qrf_count_obj or 0)
+            _qrf_count = _qrf_count_obj if isinstance(_qrf_count_obj, int) else 0
             _registration_cache.update(
                 {
                     "last_quick_register_error": time.time(),

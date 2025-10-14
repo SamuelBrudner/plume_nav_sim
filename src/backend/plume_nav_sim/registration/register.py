@@ -24,12 +24,7 @@ import re
 import sys
 import time
 import warnings
-from typing import (  # >=3.10 - Type hints for function parameters, return types, and optional parameter specifications ensuring type safety and documentation clarity
-    Any,
-    Dict,
-    Optional,
-    Tuple,
-)
+from typing import Dict, Optional, Tuple
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework providing register() function, environment registry, and gym.make() compatibility for standard RL environment registration
@@ -59,7 +54,7 @@ MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000) fo
 _logger = get_component_logger("registration")
 
 # Registration cache for tracking environment status and preventing duplicate registrations
-_registration_cache: Dict[str, Dict[str, Any]] = {}
+_registration_cache: Dict[str, Dict[str, object]] = {}
 
 # Workaround for a pytest scoping quirk: some tests use `gc` inside a function
 # before a local `import gc`, which can cause UnboundLocalError if `gc` is
@@ -86,10 +81,10 @@ def register_env(  # noqa: C901
     env_id: Optional[str] = None,
     entry_point: Optional[str] = None,
     max_episode_steps: Optional[int] = None,
-    kwargs: Optional[Dict[str, Any]] = None,
+    kwargs: Optional[Dict[str, object]] = None,
     force_reregister: bool = False,
     use_legacy: bool = False,
-    **compat_flags: Any,
+    **compat_flags: object,
 ) -> str:
     """
     Main environment registration function for Gymnasium compatibility with comprehensive parameter
@@ -200,7 +195,7 @@ def register_env(  # noqa: C901
         # Factory callable expects goal_location (not source_location) and rejects unknown keys
         if effective_entry_point.endswith("envs.factory:create_component_environment"):
             # Map source_location -> goal_location and drop source_location
-            mapped_kwargs: Dict[str, Any] = {}
+            mapped_kwargs: Dict[str, object] = {}
             for k, v in registration_kwargs.items():
                 if k == "source_location":
                     mapped_kwargs["goal_location"] = v
@@ -298,7 +293,7 @@ def register_env(  # noqa: C901
 
 
 def _validate_grid_size_value(
-    grid_size: Any, report: Dict[str, Any], strict_validation: bool
+    grid_size: object, report: Dict[str, object], strict_validation: bool
 ) -> bool:
     if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
         report["errors"].append("grid_size must be a tuple/list of 2 elements")
@@ -318,7 +313,7 @@ def _validate_grid_size_value(
 
 
 def _validate_source_location_value(
-    source_location: Any, report: Dict[str, Any]
+    source_location: object, report: Dict[str, object]
 ) -> bool:
     if not isinstance(source_location, (tuple, list)) or len(source_location) != 2:
         report["errors"].append("source_location must be a tuple/list of 2 elements")
@@ -330,7 +325,7 @@ def _validate_source_location_value(
     return True
 
 
-def _validate_goal_radius_value(goal_radius: Any, report: Dict[str, Any]) -> bool:
+def _validate_goal_radius_value(goal_radius: object, report: Dict[str, object]) -> bool:
     if not isinstance(goal_radius, (int, float)):
         report["errors"].append("goal_radius must be numeric")
         return False
@@ -340,7 +335,9 @@ def _validate_goal_radius_value(goal_radius: Any, report: Dict[str, Any]) -> boo
     return True
 
 
-def _validate_max_episode_steps(max_episode_steps: Any, report: Dict[str, Any]) -> bool:
+def _validate_max_episode_steps(
+    max_episode_steps: object, report: Dict[str, object]
+) -> bool:
     valid = True
     if max_episode_steps is None:
         report["warnings"].append(
@@ -362,7 +359,7 @@ def _validate_max_episode_steps(max_episode_steps: Any, report: Dict[str, Any]) 
     return valid
 
 
-def _add_final_recommendations(report: Dict[str, Any]) -> None:
+def _add_final_recommendations(report: Dict[str, object]) -> None:
     if not report["errors"]:
         report["recommendations"].append("Configuration appears valid for registration")
     if report["warnings"]:
@@ -370,7 +367,10 @@ def _add_final_recommendations(report: Dict[str, Any]) -> None:
 
 
 def _apply_strict_checks(
-    strict_validation: bool, env_id: str, kwargs: Dict[str, Any], report: Dict[str, Any]
+    strict_validation: bool,
+    env_id: str,
+    kwargs: Dict[str, object],
+    report: Dict[str, object],
 ) -> None:
     if strict_validation:
         _strict_checks(env_id, kwargs, report)
@@ -586,7 +586,7 @@ def is_registered(env_id: Optional[str] = None, use_cache: bool = True) -> bool:
         return False
 
 
-def _base_registration_info(effective_env_id: str) -> Dict[str, Any]:
+def _base_registration_info(effective_env_id: str) -> Dict[str, object]:
     return {
         "env_id": effective_env_id,
         "query_timestamp": time.time(),
@@ -594,7 +594,7 @@ def _base_registration_info(effective_env_id: str) -> Dict[str, Any]:
     }
 
 
-def _env_spec_info(effective_env_id: str) -> Dict[str, Any]:
+def _env_spec_info(effective_env_id: str) -> Dict[str, object]:
     """Fetch spec fields from Gymnasium registry. Returns empty dict on miss.
 
     If an exception occurs while retrieving spec, a 'spec_retrieval_error' message
@@ -617,8 +617,8 @@ def _env_spec_info(effective_env_id: str) -> Dict[str, Any]:
     return {}
 
 
-def _config_details_for_id(effective_env_id: str) -> Dict[str, Any]:
-    details: Dict[str, Any] = {
+def _config_details_for_id(effective_env_id: str) -> Dict[str, object]:
+    details: Dict[str, object] = {
         "default_parameters": {
             "grid_size": DEFAULT_GRID_SIZE,
             "source_location": DEFAULT_SOURCE_LOCATION,
@@ -634,7 +634,7 @@ def _config_details_for_id(effective_env_id: str) -> Dict[str, Any]:
     return details
 
 
-def _cache_info_for_id(effective_env_id: str) -> Optional[Dict[str, Any]]:
+def _cache_info_for_id(effective_env_id: str) -> Optional[Dict[str, object]]:
     if effective_env_id not in _registration_cache:
         return None
     cache_info = _registration_cache[effective_env_id].copy()
@@ -646,7 +646,7 @@ def _cache_info_for_id(effective_env_id: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _gymnasium_version_info() -> Dict[str, Any]:
+def _gymnasium_version_info() -> Dict[str, object]:
     try:
         return {
             "gymnasium_version": gymnasium.__version__,
@@ -656,7 +656,7 @@ def _gymnasium_version_info() -> Dict[str, Any]:
         return {"gymnasium_info_error": "Failed to retrieve Gymnasium information"}
 
 
-def _system_info_for(info: Dict[str, Any]) -> Dict[str, Any]:
+def _system_info_for(info: Dict[str, object]) -> Dict[str, object]:
     return {
         "total_cached_environments": len(_registration_cache),
         "query_method": (
@@ -669,7 +669,7 @@ def _system_info_for(info: Dict[str, Any]) -> Dict[str, Any]:
 
 def get_registration_info(
     env_id: Optional[str] = None, include_config_details: bool = True
-) -> Dict[str, Any]:
+) -> Dict[str, object]:
     """
     Comprehensive registration information retrieval function providing detailed environment
     metadata, configuration parameters, registration status, and debugging information for
@@ -732,7 +732,7 @@ def get_registration_info(
         }
 
 
-def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
+def _assert_grid_size_or_raise(grid_size: object) -> Tuple[int, int]:
     """Validate grid_size and return (width, height) or raise ValidationError."""
     if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
         raise ValidationError(
@@ -766,7 +766,7 @@ def _assert_grid_size_or_raise(grid_size: Any) -> Tuple[int, int]:
 
 
 def _assert_source_location_or_raise(
-    source_location: Any, width: int, height: int
+    source_location: object, width: int, height: int
 ) -> Tuple[float, float]:
     """Validate source_location against grid bounds; return (x,y) or raise."""
     if not isinstance(source_location, (tuple, list)) or len(source_location) != 2:
@@ -792,7 +792,7 @@ def _assert_source_location_or_raise(
     return float(source_x), float(source_y)
 
 
-def _assert_max_steps_or_raise(max_steps: Any) -> int:
+def _assert_max_steps_or_raise(max_steps: object) -> int:
     if not isinstance(max_steps, int):
         raise ValidationError(
             "max_steps must be an integer",
@@ -814,7 +814,7 @@ def _assert_max_steps_or_raise(max_steps: Any) -> int:
     return max_steps
 
 
-def _assert_goal_radius_or_raise(goal_radius: Any, width: int, height: int) -> float:
+def _assert_goal_radius_or_raise(goal_radius: object, width: int, height: int) -> float:
     if not isinstance(goal_radius, (int, float)):
         raise ValidationError(
             "goal_radius must be numeric",
@@ -838,8 +838,8 @@ def _assert_goal_radius_or_raise(goal_radius: Any, width: int, height: int) -> f
 
 
 def _merge_and_clean_kwargs(
-    base_kwargs: Dict[str, Any], additional_kwargs: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+    base_kwargs: Dict[str, object], additional_kwargs: Optional[Dict[str, object]]
+) -> Dict[str, object]:
     """Merge additional_kwargs into base, warn on conflicts, drop private keys."""
     if not additional_kwargs:
         return base_kwargs
@@ -879,8 +879,8 @@ def create_registration_kwargs(
     source_location: Optional[Tuple[int, int]] = None,
     max_steps: Optional[int] = None,
     goal_radius: Optional[float] = None,
-    additional_kwargs: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    additional_kwargs: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     """
     Registration kwargs factory function for Gymnasium register() calls with comprehensive
     parameter validation, default value application, and configuration consistency ensuring
@@ -974,7 +974,7 @@ def create_registration_kwargs(
         raise
 
 
-def _init_validation_report(strict_validation: bool) -> Dict[str, Any]:
+def _init_validation_report(strict_validation: bool) -> Dict[str, object]:
     """Create the base validation report structure."""
     return {
         "timestamp": time.time(),
@@ -987,7 +987,7 @@ def _init_validation_report(strict_validation: bool) -> Dict[str, Any]:
     }
 
 
-def _validate_env_id(env_id: str, report: Dict[str, Any]) -> bool:
+def _validate_env_id(env_id: str, report: Dict[str, object]) -> bool:
     valid = True
     if not isinstance(env_id, str) or not env_id.strip():
         report["errors"].append("Environment ID must be a non-empty string")
@@ -1012,7 +1012,7 @@ def _validate_env_id(env_id: str, report: Dict[str, Any]) -> bool:
 
 
 def _validate_entry_point(
-    entry_point: str, report: Dict[str, Any], strict_validation: bool
+    entry_point: str, report: Dict[str, object], strict_validation: bool
 ) -> bool:
     valid = True
     if not isinstance(entry_point, str) or not entry_point.strip():
@@ -1055,12 +1055,9 @@ def _validate_entry_point(
 
 
 def _validate_kwargs_structure(
-    kwargs: Dict[str, Any], report: Dict[str, Any], strict_validation: bool
+    kwargs: Dict[str, object], report: Dict[str, object], strict_validation: bool
 ) -> bool:
     valid = True
-    if not isinstance(kwargs, dict):
-        report["errors"].append("kwargs must be a dictionary")
-        return False
 
     if "grid_size" in kwargs:
         valid &= _validate_grid_size_value(
@@ -1076,7 +1073,9 @@ def _validate_kwargs_structure(
     return valid
 
 
-def _cross_validate_params(kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+def _cross_validate_params(
+    kwargs: Dict[str, object], report: Dict[str, object]
+) -> None:
     if "grid_size" in kwargs and "source_location" in kwargs:
         try:
             width, height = kwargs["grid_size"]
@@ -1091,7 +1090,7 @@ def _cross_validate_params(kwargs: Dict[str, Any], report: Dict[str, Any]) -> No
             )
 
 
-def _analyze_performance(kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+def _analyze_performance(kwargs: Dict[str, object], report: Dict[str, object]) -> None:
     if "grid_size" not in kwargs:
         return
     try:
@@ -1115,7 +1114,9 @@ def _analyze_performance(kwargs: Dict[str, Any], report: Dict[str, Any]) -> None
         report["warnings"].append("Could not estimate performance characteristics")
 
 
-def _strict_checks(env_id: str, kwargs: Dict[str, Any], report: Dict[str, Any]) -> None:
+def _strict_checks(
+    env_id: str, kwargs: Dict[str, object], report: Dict[str, object]
+) -> None:
     # Naming conflicts
     if env_id.lower().startswith("gym"):
         report["warnings"].append(
@@ -1149,7 +1150,7 @@ def _strict_checks(env_id: str, kwargs: Dict[str, Any], report: Dict[str, Any]) 
 
 
 def _finalize_compatibility(
-    entry_point: str, param_types_valid: bool, report: Dict[str, Any]
+    entry_point: str, param_types_valid: bool, report: Dict[str, object]
 ) -> None:
     report["compatibility_check"] = {
         "gymnasium_available": True,
@@ -1162,9 +1163,9 @@ def validate_registration_config(
     env_id: str,
     entry_point: str,
     max_episode_steps: int,
-    kwargs: Dict[str, Any],
+    kwargs: Dict[str, object],
     strict_validation: bool = True,
-) -> Tuple[bool, Dict[str, Any]]:
+) -> Tuple[bool, Dict[str, object]]:
     """
     Configuration validation function ensuring parameter consistency, Gymnasium compliance,
     mathematical feasibility, and performance requirements for robust environment registration.
