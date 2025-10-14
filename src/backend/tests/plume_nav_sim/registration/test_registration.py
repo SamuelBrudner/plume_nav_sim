@@ -111,15 +111,12 @@ class TestEnvironmentRegistration:
             try:
                 env = gymnasium.make(ENV_ID)
 
-                # Validate environment instance creation and basic properties
-                assert env is not None
-                assert hasattr(env, "action_space")
+                # Verify environment has expected attributes
                 assert hasattr(env, "observation_space")
-
-                # Assert environment has correct action_space and observation_space
+                assert hasattr(env, "action_space")
+                # PlumeSearchEnv returns Dict observation space (agent_position, sensor_reading, source_location)
+                assert isinstance(env.observation_space, gymnasium.spaces.Dict)
                 assert hasattr(env.action_space, "n")  # Discrete action space
-                assert env.action_space.n == 4  # Cardinal directions
-                assert hasattr(env.observation_space, "shape")  # Box observation space
 
                 # Clean up environment instance
                 env.close()
@@ -2335,8 +2332,8 @@ class TestRegistrationIntegration:
                 assert isinstance(env.action_space, Discrete)
                 assert env.action_space.n == 4  # Cardinal directions
 
-                assert isinstance(env.observation_space, Box)
-                assert len(env.observation_space.shape) > 0  # Should have shape
+                # PlumeSearchEnv returns Dict observation space
+                assert isinstance(env.observation_space, gymnasium.spaces.Dict)
 
                 # Validate environment parameters match registration configuration
                 # This is validated through successful instantiation with expected spaces
@@ -2540,8 +2537,8 @@ class TestRegistrationIntegration:
 
                 # Test environment-specific parameter application
                 # Different grid sizes should result in different observation spaces
-                obs_shapes = [obs.shape for obs in env_observations]
-                # Note: Exact shape validation depends on observation space design
+                # Note: PlumeSearchEnv returns Dict observations - skip shape comparison
+                # Observations are validated above via space containment checks
 
                 # Validate performance with multiple active environments
                 # All environments should respond quickly
