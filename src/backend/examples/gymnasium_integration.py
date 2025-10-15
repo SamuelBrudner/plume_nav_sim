@@ -105,55 +105,61 @@ def setup_advanced_logging(
     )
 
     try:
-        # Configure development logging using configure_logging_for_development with enhanced parameters
-        logging_config = configure_logging_for_development(
-            log_level=log_level or "INFO",
-            enable_performance_monitoring=enable_performance_logging,
-            enable_file_logging=enable_file_output,
-            component_name="gymnasium_integration",
+        return _extracted_from_setup_advanced_logging_25(
+            log_level, enable_performance_logging, enable_file_output, _logger
         )
-
-        # Set up component-specific loggers for environment, registration, and performance monitoring
-        registration_logger = get_component_logger("registration", "CORE")
-        environment_logger = get_component_logger("environment", "CORE")
-        performance_logger = get_component_logger("performance", "UTILS")
-
-        # Configure matplotlib backend for cross-platform compatibility and headless operation
-        if not hasattr(matplotlib.get_backend(), "show"):
-            matplotlib.use(
-                "Agg"
-            )  # Use non-interactive backend for headless environments
-
-        # Enable performance logging integration with PerformanceTimer and ComponentLogger
-        performance_config = {
-            "timing_enabled": enable_performance_logging,
-            "memory_tracking": enable_performance_logging,
-            "operation_profiling": enable_performance_logging,
-        }
-
-        # Initialize performance logging baselines and threshold monitoring
-        global _performance_results
-        _performance_results = {
-            "logging_setup_time": time.time(),
-            "configuration": logging_config,
-            "performance_monitoring": performance_config,
-        }
-
-        _logger.info("Advanced logging configuration completed successfully")
-
-        # Return comprehensive logging configuration status for validation and monitoring
-        return {
-            "status": "success",
-            "logging_config": logging_config,
-            "performance_config": performance_config,
-            "loggers_configured": ["registration", "environment", "performance"],
-            "file_output_enabled": enable_file_output,
-            "matplotlib_backend": matplotlib.get_backend(),
-        }
-
     except Exception as e:
         _logger.error(f"Failed to setup advanced logging: {str(e)}")
         return {"status": "error", "error": str(e), "fallback_logging": True}
+
+
+# TODO Rename this here and in `setup_advanced_logging`
+def _extracted_from_setup_advanced_logging_25(
+    log_level, enable_performance_logging, enable_file_output, _logger
+):
+    # Configure development logging using configure_logging_for_development with enhanced parameters
+    logging_config = configure_logging_for_development(
+        log_level=log_level or "INFO",
+        enable_performance_monitoring=enable_performance_logging,
+        enable_file_logging=enable_file_output,
+        component_name="gymnasium_integration",
+    )
+
+    # Set up component-specific loggers for environment, registration, and performance monitoring
+    registration_logger = get_component_logger("registration", "CORE")
+    environment_logger = get_component_logger("environment", "CORE")
+    performance_logger = get_component_logger("performance", "UTILS")
+
+    # Configure matplotlib backend for cross-platform compatibility and headless operation
+    if not hasattr(matplotlib.get_backend(), "show"):
+        matplotlib.use("Agg")  # Use non-interactive backend for headless environments
+
+    # Enable performance logging integration with PerformanceTimer and ComponentLogger
+    performance_config = {
+        "timing_enabled": enable_performance_logging,
+        "memory_tracking": enable_performance_logging,
+        "operation_profiling": enable_performance_logging,
+    }
+
+    # Initialize performance logging baselines and threshold monitoring
+    global _performance_results
+    _performance_results = {
+        "logging_setup_time": time.time(),
+        "configuration": logging_config,
+        "performance_monitoring": performance_config,
+    }
+
+    _logger.info("Advanced logging configuration completed successfully")
+
+    # Return comprehensive logging configuration status for validation and monitoring
+    return {
+        "status": "success",
+        "logging_config": logging_config,
+        "performance_config": performance_config,
+        "loggers_configured": ["registration", "environment", "performance"],
+        "file_output_enabled": enable_file_output,
+        "matplotlib_backend": matplotlib.get_backend(),
+    }
 
 
 def demonstrate_advanced_registration(
@@ -914,11 +920,11 @@ def demonstrate_reproducibility_validation(
                 statistical_analysis = {
                     "overall_consistency_score": statistics.mean(consistency_scores),
                     "seeds_perfectly_consistent": sum(
-                        1 for score in consistency_scores if score > 0.99
+                        bool(score > 0.99) for score in consistency_scores
                     ),
                     "seeds_tested": len(test_seeds),
                     "consistency_percentage": (
-                        sum(1 for score in consistency_scores if score > 0.99)
+                        sum(bool(score > 0.99) for score in consistency_scores)
                         / len(test_seeds)
                     )
                     * 100,
@@ -998,10 +1004,11 @@ def demonstrate_reproducibility_validation(
         reproducibility_summary = {
             "total_seeds_tested": len(test_seeds),
             "perfect_reproducibility_count": sum(
-                1
+                bool(
+                    seed_data["trajectory_consistency"]
+                    and seed_data["reward_consistency"]
+                )
                 for seed_data in validation_results["seed_results"].values()
-                if seed_data["trajectory_consistency"]
-                and seed_data["reward_consistency"]
             ),
             "reproducibility_percentage": 0.0,
             "validation_duration_ms": validation_timer.get_duration_ms(),
@@ -3070,11 +3077,12 @@ def run_gymnasium_integration_demo(
         # Calculate final demonstration statistics
         total_time_seconds = total_demo_timer.get_duration_ms() / 1000.0
         successful_demos = sum(
-            1
+            bool(
+                isinstance(result, dict)
+                and "error" not in result
+                and "critical_error" not in result
+            )
             for result in demonstration_results.values()
-            if isinstance(result, dict)
-            and "error" not in result
-            and "critical_error" not in result
         )
 
         _logger.info("\n" + "=" * 80)

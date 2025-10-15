@@ -979,25 +979,27 @@ def validate_test_configuration(
                 )
                 is_valid = False
 
-        if "required_seed" in requirements and requirements["required_seed"]:
-            if test_config.random_seed is None:
-                validation_report["issues_found"].append(
-                    "Reproducibility tests require fixed seed"
-                )
-                recovery_suggestions.append("Set random_seed to a fixed integer value")
-                is_valid = False
+        if (
+            "required_seed" in requirements
+            and requirements["required_seed"]
+            and test_config.random_seed is None
+        ):
+            validation_report["issues_found"].append(
+                "Reproducibility tests require fixed seed"
+            )
+            recovery_suggestions.append("Set random_seed to a fixed integer value")
+            is_valid = False
 
         if (
             "required_monitoring" in requirements
             and requirements["required_monitoring"]
-        ):
-            if not test_config.enable_performance_monitoring:
-                validation_report["warnings"].append(
-                    "Performance tests should enable monitoring"
-                )
-                recovery_suggestions.append(
-                    "Enable performance monitoring for accurate measurements"
-                )
+        ) and not test_config.enable_performance_monitoring:
+            validation_report["warnings"].append(
+                "Performance tests should enable monitoring"
+            )
+            recovery_suggestions.append(
+                "Enable performance monitoring for accurate measurements"
+            )
 
     # Validate system compatibility including memory limits and performance capabilities
     if system_constraints:

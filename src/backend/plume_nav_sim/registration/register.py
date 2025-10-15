@@ -19,11 +19,9 @@ Notes:
 import contextlib
 import copy
 import importlib
-import os
 import re
 import sys
 import time
-import warnings
 from typing import Dict, List, Optional, Tuple, cast
 
 from typing_extensions import TypedDict
@@ -65,15 +63,11 @@ _registration_cache: Dict[str, Dict[str, object]] = {}
 # import it locally when needed.
 sys.modules.pop("gc", None)
 
-# Public API exports for comprehensive registration functionality
+# Public API exports for core registration functionality
 __all__ = [
     "register_env",
     "unregister_env",
     "is_registered",
-    "get_registration_info",
-    "create_registration_kwargs",
-    "validate_registration_config",
-    "register_with_custom_params",
     "ENV_ID",
     "ENTRY_POINT",
 ]
@@ -178,7 +172,7 @@ def register_env(  # noqa: C901
                     f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."  # noqa: E501
                 )
                 return effective_env_id
-        # Create complete kwargs dictionary using create_registration_kwargs() with parameter validation  # noqa: E501
+        # Create complete kwargs dictionary using _create_registration_kwargs() with parameter validation  # noqa: E501
         grid_size_arg = cast(
             Optional[Tuple[int, int]], effective_kwargs.get("grid_size")
         )
@@ -188,7 +182,7 @@ def register_env(  # noqa: C901
         max_steps_arg = cast(Optional[int], effective_kwargs.get("max_steps"))
         goal_radius_arg = cast(Optional[float], effective_kwargs.get("goal_radius"))
 
-        registration_kwargs = create_registration_kwargs(
+        registration_kwargs = _create_registration_kwargs(
             grid_size=grid_size_arg,
             source_location=source_location_arg,
             max_steps=max_steps_arg,
@@ -199,7 +193,7 @@ def register_env(  # noqa: C901
         # PlumeSearchEnv already delegates to DI factory internally - no parameter mapping needed
 
         # Validate registration configuration using validate_registration_config() for consistency checking  # noqa: E501
-        is_valid, validation_report = validate_registration_config(
+        is_valid, validation_report = _validate_registration_config(
             env_id=effective_env_id,
             entry_point=effective_entry_point,
             max_episode_steps=effective_max_steps,
@@ -420,8 +414,7 @@ def unregister_env(
                 )
             return True
 
-        removed = _pop_env_from_registry(effective_env_id)
-        if removed:
+        if _pop_env_from_registry(effective_env_id):
             _logger.debug(
                 f"Removed environment spec for '{effective_env_id}' from Gymnasium registry"
             )
@@ -634,71 +627,6 @@ def _system_info_for(info: Dict[str, object]) -> Dict[str, object]:
     }
 
 
-def get_registration_info(
-    env_id: Optional[str] = None, include_config_details: bool = True
-) -> Dict[str, object]:
-    """
-    Comprehensive registration information retrieval function providing detailed environment
-    metadata, configuration parameters, registration status, and debugging information for
-    monitoring and troubleshooting.
-
-    This function provides complete registration information for debugging, monitoring, and
-    administrative purposes, including detailed configuration analysis and system status.
-
-    Args:
-        env_id: Environment identifier to get information for, defaults to ENV_ID if not provided
-        include_config_details: Whether to include detailed configuration parameter breakdown
-
-    Returns:
-        Complete registration information dictionary including status, configuration, metadata, and debugging details  # noqa: E501
-
-    Example:
-        # Basic registration info
-        info = get_registration_info()
-        print(f"Status: {info['registered']}")
-
-        # Detailed configuration analysis
-        detailed_info = get_registration_info(include_config_details=True)
-        print(f"Config: {detailed_info['config_details']}")
-    """
-    try:
-        effective_env_id = env_id or ENV_ID
-
-        info = _base_registration_info(effective_env_id)
-
-        is_currently_registered = is_registered(effective_env_id, use_cache=False)
-        info["registered"] = is_currently_registered
-
-        if is_currently_registered:
-            info |= _env_spec_info(effective_env_id)
-
-        if include_config_details:
-            info["config_details"] = _config_details_for_id(effective_env_id)
-
-        cache_info = _cache_info_for_id(effective_env_id)
-        if cache_info is not None:
-            info["cache_info"] = cache_info
-
-        info |= _gymnasium_version_info()
-        info["system_info"] = _system_info_for(info)
-
-        _logger.debug(
-            f"Retrieved registration info for '{effective_env_id}', detailed={include_config_details}"  # noqa: E501
-        )
-        return info
-
-    except Exception as e:
-        _logger.error(
-            f"Failed to retrieve registration info for '{env_id or ENV_ID}': {e}"
-        )
-        return {
-            "env_id": env_id or ENV_ID,
-            "error": str(e),
-            "query_timestamp": time.time(),
-            "registered": False,
-        }
-
-
 def _assert_grid_size_or_raise(grid_size: object) -> Tuple[int, int]:
     """Validate grid_size and return (width, height) or raise ValidationError."""
     if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
@@ -761,7 +689,7 @@ def _assert_source_location_or_raise(
             parameter_name="source_location",
             parameter_value=source_location,
         )
-    return float(source_x), float(source_y)
+    return source_x, source_y
 
 
 def _assert_max_steps_or_raise(max_steps: object) -> int:
@@ -846,7 +774,7 @@ def _warn_if_goal_radius_edges(
             )
 
 
-def create_registration_kwargs(
+def _create_registration_kwargs(
     grid_size: Optional[Tuple[int, int]] = None,
     source_location: Optional[Tuple[int, int]] = None,
     max_steps: Optional[int] = None,
@@ -1161,7 +1089,7 @@ def _finalize_compatibility(
     }
 
 
-def validate_registration_config(
+def _validate_registration_config(
     env_id: str,
     entry_point: str,
     max_episode_steps: int,
@@ -1232,118 +1160,3 @@ def validate_registration_config(
             "performance_analysis": {},
             "compatibility_check": {},
         }
-
-
-def register_with_custom_params(
-    grid_size: Optional[Tuple[int, int]] = None,
-    source_location: Optional[Tuple[int, int]] = None,
-    max_steps: Optional[int] = None,
-    goal_radius: Optional[float] = None,
-    custom_env_id: Optional[str] = None,
-    force_reregister: bool = False,
-) -> str:
-    """
-    Convenience registration function with custom parameter overrides providing streamlined
-    environment registration with validation, error handling, and immediate availability for
-    specialized research configurations.
-
-    This function provides a convenient interface for registering environments with custom
-    parameters, handling all validation and configuration automatically while supporting
-    specialized research requirements.
-
-    Args:
-        grid_size: Custom grid dimensions, defaults to DEFAULT_GRID_SIZE if not provided
-        source_location: Custom source location, defaults to DEFAULT_SOURCE_LOCATION if not provided
-        max_steps: Custom maximum steps, defaults to DEFAULT_MAX_STEPS if not provided
-        goal_radius: Custom goal radius, defaults to DEFAULT_GOAL_RADIUS if not provided
-        custom_env_id: Custom environment identifier, defaults to ENV_ID if not provided
-        force_reregister: Whether to force re-registration if environment already exists
-
-    Returns:
-        Registered environment ID ready for immediate use with gym.make() calls
-
-    Raises:
-        ValidationError: If custom parameters fail validation
-        ConfigurationError: If registration fails due to configuration issues
-
-    Example:
-        # Register with larger grid
-        env_id = register_with_custom_params(
-            grid_size=(256, 256),
-            source_location=(128, 128)
-        )
-        env = gym.make(env_id)
-
-        # Register completely custom environment
-        env_id = register_with_custom_params(
-            grid_size=(64, 64),
-            source_location=(32, 32),
-            goal_radius=3.0,
-            custom_env_id="SmallPlume-v0"
-        )
-    """
-    try:
-        # Generate custom environment ID if custom_env_id provided with version suffix validation
-        if custom_env_id:
-            if not custom_env_id.endswith("-v0"):
-                custom_env_id = f"{custom_env_id}-v0"
-                _logger.info(
-                    f"Added version suffix to custom environment ID: {custom_env_id}"
-                )
-            effective_env_id = custom_env_id
-        else:
-            effective_env_id = ENV_ID
-
-        _logger.info(
-            f"Registering environment with custom parameters: {effective_env_id}"
-        )
-
-        # Create complete kwargs using create_registration_kwargs() with provided parameters
-        registration_kwargs = create_registration_kwargs(
-            grid_size=grid_size,
-            source_location=source_location,
-            max_steps=max_steps,
-            goal_radius=goal_radius,
-        )
-
-        # Apply custom environment ID or use default ENV_ID for registration
-        # Call register_env() with custom parameters and force_reregister flag
-        registered_env_id = register_env(
-            env_id=effective_env_id,
-            entry_point=ENTRY_POINT,
-            max_episode_steps=max_steps or MAX_EPISODE_STEPS,
-            kwargs=registration_kwargs,
-            force_reregister=force_reregister,
-        )
-
-        # Validate successful registration with immediate gym.make() test
-        try:
-            test_env = gymnasium.make(registered_env_id)
-            test_env.close()
-            _logger.debug(f"Custom registration verified for '{registered_env_id}'")
-        except Exception as test_error:
-            _logger.error(f"Custom registration verification failed: {test_error}")
-            raise ConfigurationError(
-                f"Custom registration verification failed: {test_error}",
-                config_parameter="custom_registration",
-            ) from test_error
-
-        # Log custom registration with parameter overrides and configuration summary
-        param_summary = {
-            "grid_size": grid_size or DEFAULT_GRID_SIZE,
-            "source_location": source_location or DEFAULT_SOURCE_LOCATION,
-            "max_steps": max_steps or DEFAULT_MAX_STEPS,
-            "goal_radius": (
-                goal_radius if goal_radius is not None else DEFAULT_GOAL_RADIUS
-            ),
-        }
-        _logger.info(
-            f"Successfully registered custom environment '{registered_env_id}' with parameters: {param_summary}"  # noqa: E501
-        )
-
-        # Return registered environment ID for immediate use with success confirmation
-        return registered_env_id
-
-    except Exception as e:
-        _logger.error(f"Custom registration failed: {e}")
-        raise

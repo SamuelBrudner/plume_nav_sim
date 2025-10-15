@@ -60,7 +60,6 @@ from .test_registration import (  # Registration test classes with complete test
     TestEnvironmentRegistration,
     TestEnvironmentUnregistration,
     TestRegistrationErrorHandling,
-    TestRegistrationInfo,
     TestRegistrationIntegration,
     TestRegistrationKwargs,
     TestRegistrationPerformance,
@@ -359,24 +358,9 @@ def validate_registration_test_environment(
         and validation_results["dependency_status"]["gymnasium"]["available"]
     ):
         try:
-            # Test basic registry operations
-            registry_test_id = "RegistryValidationTest-v0"
-            from .test_registration import is_registered, register_env, unregister_env
-
-            # Test registration capability
-            register_result = register_env(env_id=registry_test_id)
-            registry_accessible = is_registered(registry_test_id)
-            cleanup_result = unregister_env(registry_test_id, suppress_warnings=True)
-
-            validation_results["capability_assessment"]["registry_operations"] = {
-                "registration_works": register_result == registry_test_id,
-                "status_checking_works": registry_accessible,
-                "unregistration_works": cleanup_result,
-                "overall_capability": all(
-                    [register_result, registry_accessible, cleanup_result]
-                ),
-            }
-
+            _extracted_from_validate_registration_test_environment_56(
+                validation_results
+            )
         except Exception as e:
             validation_results["infrastructure_ready"] = False
             validation_results["capability_assessment"]["registry_operations"] = {
@@ -387,28 +371,9 @@ def validate_registration_test_environment(
     # Validate performance monitoring infrastructure and timing measurement accuracy
     if validate_performance_infrastructure:
         try:
-            # Test timing measurement capabilities
-            timing_test_start = time.time()
-            time.sleep(0.001)  # 1ms delay
-            timing_test_end = time.time()
-            timing_accuracy = (timing_test_end - timing_test_start) * 1000
-
-            validation_results["capability_assessment"]["performance_monitoring"] = {
-                "timing_available": True,
-                "timing_accuracy_ms": timing_accuracy,
-                "precision_adequate": 0.5
-                < timing_accuracy
-                < 5.0,  # Reasonable 1ms measurement
-            }
-
-            # Test PerformanceTestUtilities availability
-            performance_utilities_available = hasattr(
-                PerformanceTestUtilities, "benchmark_operation"
+            _extracted_from_validate_registration_test_environment_84(
+                validation_results
             )
-            validation_results["capability_assessment"]["performance_utilities"] = {
-                "utilities_available": performance_utilities_available
-            }
-
         except Exception as e:
             validation_results["capability_assessment"]["performance_monitoring"] = {
                 "error": str(e),
@@ -495,6 +460,50 @@ def validate_registration_test_environment(
 
     # Return comprehensive validation results with infrastructure assessment and capability analysis
     return validation_results
+
+
+# TODO Rename this here and in `validate_registration_test_environment`
+def _extracted_from_validate_registration_test_environment_84(validation_results):
+    # Test timing measurement capabilities
+    timing_test_start = time.time()
+    time.sleep(0.001)  # 1ms delay
+    timing_test_end = time.time()
+    timing_accuracy = (timing_test_end - timing_test_start) * 1000
+
+    validation_results["capability_assessment"]["performance_monitoring"] = {
+        "timing_available": True,
+        "timing_accuracy_ms": timing_accuracy,
+        "precision_adequate": 0.5 < timing_accuracy < 5.0,  # Reasonable 1ms measurement
+    }
+
+    # Test PerformanceTestUtilities availability
+    performance_utilities_available = hasattr(
+        PerformanceTestUtilities, "benchmark_operation"
+    )
+    validation_results["capability_assessment"]["performance_utilities"] = {
+        "utilities_available": performance_utilities_available
+    }
+
+
+# TODO Rename this here and in `validate_registration_test_environment`
+def _extracted_from_validate_registration_test_environment_56(validation_results):
+    # Test basic registry operations
+    registry_test_id = "RegistryValidationTest-v0"
+    from .test_registration import is_registered, register_env, unregister_env
+
+    # Test registration capability
+    register_result = register_env(env_id=registry_test_id)
+    registry_accessible = is_registered(registry_test_id)
+    cleanup_result = unregister_env(registry_test_id, suppress_warnings=True)
+
+    validation_results["capability_assessment"]["registry_operations"] = {
+        "registration_works": register_result == registry_test_id,
+        "status_checking_works": registry_accessible,
+        "unregistration_works": cleanup_result,
+        "overall_capability": all(
+            [register_result, registry_accessible, cleanup_result]
+        ),
+    }
 
 
 def benchmark_registration_operations(
@@ -1711,15 +1720,13 @@ def _generate_test_suite_recommendations(test_suite_results: dict) -> List[str]:
 __all__ = [
     # Registration test classes
     "TestEnvironmentRegistration",
-    "TestEnvironmentUnregistration",
-    "TestRegistrationStatus",
-    "TestRegistrationInfo",
+    TestEnvironmentUnregistration,
+    TestRegistrationKwargs,
     "TestRegistrationKwargs",
     "TestConfigurationValidation",
     "TestCustomParameterRegistration",
     "TestRegistrationErrorHandling",
     "TestRegistrationPerformance",
-    "TestRegistrationIntegration",
     # Registration test utilities and fixtures
     "create_registration_test_fixture",
     "cleanup_registration_tests",

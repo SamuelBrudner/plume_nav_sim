@@ -1,6 +1,9 @@
 import pytest
 
 from plume_nav_sim.registration import register as reg
+from plume_nav_sim.registration.register import (
+    _validate_registration_config as validate_registration_config,
+)
 from plume_nav_sim.utils.exceptions import ValidationError
 
 
@@ -67,21 +70,28 @@ class TestValidateValueHelpers:
         assert any("not set" in w for w in report["warnings"])
 
     def test_validate_max_episode_steps_invalid(self):
-        report = _new_report()
-        assert reg._validate_max_episode_steps("100", report) is False
-        assert any("integer" in e for e in report["errors"])
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            "100", False, "errors", "integer"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            0, False, "errors", "positive"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            100001, False, "errors", "exceeds"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            50, True, "warnings", "quite low"
+        )
 
-        report = _new_report()
-        assert reg._validate_max_episode_steps(0, report) is False
-        assert any("positive" in e for e in report["errors"])
+    # TODO Rename this here and in `test_validate_max_episode_steps_invalid`
+    def _extracted_from_test_validate_max_episode_steps_invalid_2(
+        self, arg0, arg1, arg2, arg3
+    ):
+        result = _new_report()
+        assert reg._validate_max_episode_steps(arg0, result) is arg1
+        assert any(arg3 in e for e in result[arg2])
 
-        report = _new_report()
-        assert reg._validate_max_episode_steps(100001, report) is False
-        assert any("exceeds" in e for e in report["errors"])
-
-        report = _new_report()
-        assert reg._validate_max_episode_steps(50, report) is True
-        assert any("quite low" in w for w in report["warnings"])
+        return result
 
     def test_cross_validate_params_bounds(self):
         report = _new_report()
@@ -125,7 +135,7 @@ class TestAssertHelpers:
 
 class TestValidateRegistrationConfig:
     def test_validate_registration_config_happy_path(self):
-        is_valid, report = reg.validate_registration_config(
+        is_valid, report = validate_registration_config(
             env_id="CustomEnv-v0",
             entry_point="a.b:C",
             max_episode_steps=None,
@@ -143,7 +153,7 @@ class TestValidateRegistrationConfig:
         )  # from max_episode_steps None
 
     def test_validate_registration_config_strict_name_warning(self):
-        _, report = reg.validate_registration_config(
+        _, report = validate_registration_config(
             env_id="gymMyEnv-v0",
             entry_point="x.y:Z",
             max_episode_steps=200,

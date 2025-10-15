@@ -382,54 +382,9 @@ class MatplotlibBackendManager:
         }
 
         try:
-            # Test backend display support and GUI toolkit integration
-            if effective_backend == "TkAgg":
-                capabilities["display_available"] = True
-                capabilities["interactive_supported"] = True
-                capabilities["gui_toolkit"] = "Tkinter"
-                capabilities["headless_compatible"] = False
-                capabilities["event_handling"] = True
-                capabilities["animation_supported"] = True
-            elif effective_backend == "Qt5Agg":
-                capabilities["display_available"] = True
-                capabilities["interactive_supported"] = True
-                capabilities["gui_toolkit"] = "Qt5"
-                capabilities["headless_compatible"] = False
-                capabilities["event_handling"] = True
-                capabilities["animation_supported"] = True
-            elif effective_backend == "Agg":
-                capabilities["display_available"] = False
-                capabilities["interactive_supported"] = False
-                capabilities["gui_toolkit"] = None
-                capabilities["headless_compatible"] = True
-
-            # Evaluate platform compatibility and system-specific features
-            platform_name = sys.platform
-            if platform_name.startswith("linux"):
-                capabilities["platform_support"]["linux"] = "full"
-            elif platform_name == "darwin":
-                capabilities["platform_support"]["macos"] = "full"
-            elif platform_name.startswith("win"):
-                capabilities["platform_support"]["windows"] = "community"
-
-            # Measure performance characteristics and derive tier
-            perf = self._measure_backend_performance(effective_backend)
-            capabilities["performance_characteristics"] = perf
-            total = perf.get("total_benchmark_ms", 0.0) or (
-                perf.get("figure_creation_ms", 0.0)
-                + perf.get("plot_operation_ms", 0.0)
-                + perf.get("draw_operation_ms", 0.0)
+            self._extracted_from_get_backend_capabilities_52(
+                effective_backend, capabilities, cache_key
             )
-            if total <= 50:
-                capabilities["performance_tier"] = "high"
-            elif total <= 150:
-                capabilities["performance_tier"] = "medium"
-            else:
-                capabilities["performance_tier"] = "low"
-
-            # Cache capabilities for performance optimization
-            self.configuration_cache[cache_key] = capabilities
-
         except Exception as e:
             self.logger.error(
                 f"Capability analysis failed for {effective_backend}: {e}"
@@ -437,6 +392,59 @@ class MatplotlibBackendManager:
             capabilities["error"] = str(e)
 
         return capabilities
+
+    # TODO Rename this here and in `get_backend_capabilities`
+    def _extracted_from_get_backend_capabilities_52(
+        self, effective_backend, capabilities, cache_key
+    ):
+        # Test backend display support and GUI toolkit integration
+        if effective_backend == "TkAgg":
+            self._extracted_from_get_backend_capabilities_53(capabilities, "Tkinter")
+        elif effective_backend == "Qt5Agg":
+            self._extracted_from_get_backend_capabilities_53(capabilities, "Qt5")
+        elif effective_backend == "Agg":
+            self._extracted_from_get_backend_capabilities_53(
+                False, capabilities, None, True
+            )
+        # Evaluate platform compatibility and system-specific features
+        platform_name = sys.platform
+        if platform_name.startswith("linux"):
+            capabilities["platform_support"]["linux"] = "full"
+        elif platform_name == "darwin":
+            capabilities["platform_support"]["macos"] = "full"
+        elif platform_name.startswith("win"):
+            capabilities["platform_support"]["windows"] = "community"
+
+        # Measure performance characteristics and derive tier
+        perf = self._measure_backend_performance(effective_backend)
+        capabilities["performance_characteristics"] = perf
+        total = perf.get("total_benchmark_ms", 0.0) or (
+            perf.get("figure_creation_ms", 0.0)
+            + perf.get("plot_operation_ms", 0.0)
+            + perf.get("draw_operation_ms", 0.0)
+        )
+        if total <= 50:
+            capabilities["performance_tier"] = "high"
+        elif total <= 150:
+            capabilities["performance_tier"] = "medium"
+        else:
+            capabilities["performance_tier"] = "low"
+
+        # Cache capabilities for performance optimization
+        self.configuration_cache[cache_key] = capabilities
+
+    # TODO Rename this here and in `get_backend_capabilities`
+    def _extracted_from_get_backend_capabilities_53(self, capabilities, arg1):
+        self._set_backend_capabilities(True, capabilities, arg1, False)
+        capabilities["event_handling"] = True
+        capabilities["animation_supported"] = True
+
+    # TODO Rename this here and in `get_backend_capabilities`
+    def _set_backend_capabilities(self, arg0, capabilities, arg2, arg3):
+        capabilities["display_available"] = arg0
+        capabilities["interactive_supported"] = arg0
+        capabilities["gui_toolkit"] = arg2
+        capabilities["headless_compatible"] = arg3
 
     def configure_backend(  # noqa: C901
         self, arg1=None, arg2=None, strict_validation: bool = False
@@ -483,7 +491,7 @@ class MatplotlibBackendManager:
             mapped["font_family"] = config_options["font_family"]
 
         if strict_validation:
-            dpi_val = mapped.get("dpi", None)
+            dpi_val = mapped.get("dpi")
             if dpi_val is not None and (
                 not isinstance(dpi_val, (int, float)) or dpi_val <= 0
             ):

@@ -82,9 +82,6 @@ from ..registration.register import (
     ENV_ID,  # Environment identifier constant 'PlumeNav-StaticGaussian-v0' for gym.make() calls
 )
 from ..registration.register import (
-    get_registration_info,  # Comprehensive registration information retrieval for debugging and monitoring
-)
-from ..registration.register import (
     is_registered,  # Registration status checking function with cache validation and registry verification
 )
 from ..registration.register import (
@@ -167,7 +164,6 @@ __all__ = [
     "register_env",  # Environment registration function for Gymnasium compatibility with parameter validation
     "unregister_env",  # Environment unregistration function for cleanup and testing workflows
     "is_registered",  # Registration status checking function with cache validation and registry verification
-    "get_registration_info",  # Registration information retrieval function for debugging and monitoring
     "ENV_ID",  # Environment identifier constant for gym.make() calls and registration
     # Core constants for configuration and parameter management
     "DEFAULT_GRID_SIZE",  # Default environment grid dimensions for consistent initialization
@@ -610,25 +606,11 @@ def get_environment_info(
             "total_environment_types": len(SUPPORTED_ENVIRONMENTS),
         }
 
-        # Include registration information using get_registration_info() with status details
-        try:
-            registration_info = get_registration_info(
-                env_id=ENV_ID, include_config_details=True
-            )
-            environment_info["registration_status"] = {
-                "env_id": ENV_ID,
-                "registered": registration_info.get("registered", False),
-                "registration_timestamp": registration_info.get("cache_info", {}).get(
-                    "registration_timestamp"
-                ),
-                "entry_point": registration_info.get("entry_point", "unknown"),
-            }
-        except Exception as reg_error:
-            environment_info["registration_status"] = {
-                "error": f"Failed to get registration info: {reg_error}",
-                "env_id": ENV_ID,
-                "registered": False,
-            }
+        # Include registration information with status details
+        environment_info["registration_status"] = {
+            "registered": is_registered(),
+            "environment_available": is_registered(),
+        }
 
         # Add default configuration parameters and validation rules for parameter guidance
         environment_info["default_configuration"] = {

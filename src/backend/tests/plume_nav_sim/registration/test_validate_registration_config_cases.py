@@ -1,8 +1,10 @@
-from plume_nav_sim.registration import register as reg
+from plume_nav_sim.registration.register import (
+    _validate_registration_config as validate_registration_config,
+)
 
 
 def test_env_id_suffix_required():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="CustomEnv",
         entry_point="m.n:C",
         max_episode_steps=100,
@@ -18,7 +20,7 @@ def test_env_id_suffix_required():
 
 
 def test_entry_point_missing_colon_error():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="CustomEnv-v0",
         entry_point="module_without_colon",
         max_episode_steps=100,
@@ -30,7 +32,7 @@ def test_entry_point_missing_colon_error():
 
 
 def test_entry_point_invalid_identifier_warning_strict():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="AnotherEnv-v0",
         entry_point="mod:123Bad",
         max_episode_steps=100,
@@ -42,7 +44,7 @@ def test_entry_point_invalid_identifier_warning_strict():
 
 
 def test_performance_analysis_present_when_grid_size_provided():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="PerfEnv-v0",
         entry_point="m.n:C",
         max_episode_steps=None,
@@ -53,7 +55,7 @@ def test_performance_analysis_present_when_grid_size_provided():
 
 
 def test_missing_params_recommendation_in_strict():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="RecsEnv-v0",
         entry_point="m.n:C",
         max_episode_steps=200,
@@ -64,7 +66,7 @@ def test_missing_params_recommendation_in_strict():
 
 
 def test_cross_validate_source_location_error():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="CrossEnv-v0",
         entry_point="m.n:C",
         max_episode_steps=200,
@@ -80,7 +82,7 @@ def test_goal_radius_edge_warning():
     mde = min(sx, sy, width - sx - 1, height - sy - 1)
     radius = float(mde + 1)
 
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="EdgeEnv-v0",
         entry_point="m.n:C",
         max_episode_steps=200,
@@ -97,7 +99,7 @@ def test_goal_radius_edge_warning():
 
 
 def test_integration_valid_config_true():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="ValidEnv-v0",
         entry_point="a.b:C",
         max_episode_steps=200,
@@ -109,7 +111,7 @@ def test_integration_valid_config_true():
 
 
 def test_integration_invalid_max_episode_steps():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="MaxEnv-v0",
         entry_point="a.b:C",
         max_episode_steps="100",  # invalid type

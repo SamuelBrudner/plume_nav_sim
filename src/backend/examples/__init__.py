@@ -497,7 +497,7 @@ def create_example_runner(
 
     except Exception as e:
         _logger.error(f"Failed to create example runner: {e}")
-        raise RuntimeError(f"Example runner creation failed: {e}")
+        raise RuntimeError(f"Example runner creation failed: {e}") from e
 
 
 def generate_examples_documentation(
@@ -572,7 +572,6 @@ def generate_examples_documentation(
                     ]
                 )
 
-            # Include code samples if include_code_samples enabled with syntax highlighting
             if include_code_samples:
                 if output_format == "markdown":
                     documentation_lines.extend(
@@ -580,12 +579,12 @@ def generate_examples_documentation(
                             "### Usage Example",
                             "",
                             "```python",
-                            f"from plume_nav_sim.examples import run_example",
+                            "from plume_nav_sim.examples import run_example",
                             "",
-                            f"# Basic execution",
+                            "# Basic execution",
                             f"status = run_example('{example_name}')",
                             "",
-                            f"# With verbose output",
+                            "# With verbose output",
                             f"status = run_example('{example_name}', verbose_output=True)",
                             "```",
                             "",
@@ -596,12 +595,12 @@ def generate_examples_documentation(
                         [
                             "Usage Example:",
                             "",
-                            f"    from plume_nav_sim.examples import run_example",
-                            f"    ",
-                            f"    # Basic execution",
+                            "    from plume_nav_sim.examples import run_example",
+                            "    ",
+                            "    # Basic execution",
                             f"    status = run_example('{example_name}')",
-                            f"    ",
-                            f"    # With verbose output",
+                            "    ",
+                            "    # With verbose output",
                             f"    status = run_example('{example_name}', verbose_output=True)",
                             "",
                         ]
@@ -845,11 +844,9 @@ class ExampleRunner:
         }
 
         try:
-            # Validate all example_names in batch with comprehensive error reporting
-            invalid_examples = [
+            if invalid_examples := [
                 name for name in example_names if name not in self.available_examples
-            ]
-            if invalid_examples:
+            ]:
                 batch_results["validation_error"] = (
                     f"Invalid examples: {invalid_examples}"
                 )
@@ -988,7 +985,7 @@ class ExampleRunner:
 
             # Calculate basic execution statistics
             successful_executions = sum(
-                1 for result in self.execution_history if result.get("success", False)
+                bool(result.get("success", False)) for result in self.execution_history
             )
             failed_executions = len(self.execution_history) - successful_executions
 
@@ -1001,11 +998,9 @@ class ExampleRunner:
 
             # Calculate performance statistics including timing analysis and resource usage
             if include_performance_analysis:
-                durations = [
+                if durations := [
                     result["duration_seconds"] for result in self.execution_history
-                ]
-
-                if durations:
+                ]:
                     import statistics
 
                     summary["performance_analysis"] = {
@@ -1026,62 +1021,20 @@ class ExampleRunner:
                         example_performance[example_name] = []
                     example_performance[example_name].append(result["duration_seconds"])
 
-                summary["performance_analysis"]["example_performance"] = {}
-                for example_name, times in example_performance.items():
-                    summary["performance_analysis"]["example_performance"][
-                        example_name
-                    ] = {
+                summary["performance_analysis"]["example_performance"] = {
+                    example_name: {
                         "executions": len(times),
                         "average_time": sum(times) / len(times),
                         "max_time": max(times),
                         "min_time": min(times),
                     }
-
+                    for example_name, times in example_performance.items()
+                }
             # Generate optimization recommendations if include_recommendations enabled
             if include_recommendations:
-                recommendations = []
-
-                # Success rate analysis
-                success_rate = summary["execution_statistics"]["success_rate"]
-                if success_rate == 1.0:
-                    recommendations.append(
-                        "Excellent: All examples executed successfully"
-                    )
-                elif success_rate >= 0.8:
-                    recommendations.append(
-                        "Good: Most examples successful, review failed executions"
-                    )
-                else:
-                    recommendations.append(
-                        "Attention needed: Low success rate indicates system issues"
-                    )
-
-                # Performance analysis
-                if (
-                    include_performance_analysis
-                    and "average_execution_time" in summary["performance_analysis"]
-                ):
-                    avg_time = summary["performance_analysis"]["average_execution_time"]
-                    if avg_time > 300:  # 5 minutes
-                        recommendations.append(
-                            "Consider optimizing long-running examples"
-                        )
-                    elif avg_time < 10:  # 10 seconds
-                        recommendations.append(
-                            "Examples execute quickly - system performance is good"
-                        )
-
-                # General recommendations
-                recommendations.extend(
-                    [
-                        "Review execution logs for detailed failure analysis",
-                        "Use batch execution for comprehensive testing",
-                        "Monitor execution history for performance trends",
-                    ]
+                self._extracted_from_get_execution_summary_88(
+                    summary, include_performance_analysis
                 )
-
-                summary["recommendations"] = recommendations
-
             self.logger.info(
                 f"Generated execution summary for {len(self.execution_history)} executions"
             )
@@ -1092,6 +1045,49 @@ class ExampleRunner:
         except Exception as e:
             self.logger.error(f"Failed to generate execution summary: {e}")
             return {"error": str(e), "total_executions": len(self.execution_history)}
+
+    # TODO Rename this here and in `get_execution_summary`
+    def _extracted_from_get_execution_summary_88(
+        self, summary, include_performance_analysis
+    ):
+        recommendations = []
+
+        # Success rate analysis
+        success_rate = summary["execution_statistics"]["success_rate"]
+        if success_rate == 1.0:
+            recommendations.append("Excellent: All examples executed successfully")
+        elif success_rate >= 0.8:
+            recommendations.append(
+                "Good: Most examples successful, review failed executions"
+            )
+        else:
+            recommendations.append(
+                "Attention needed: Low success rate indicates system issues"
+            )
+
+        # Performance analysis
+        if (
+            include_performance_analysis
+            and "average_execution_time" in summary["performance_analysis"]
+        ):
+            avg_time = summary["performance_analysis"]["average_execution_time"]
+            if avg_time > 300:  # 5 minutes
+                recommendations.append("Consider optimizing long-running examples")
+            elif avg_time < 10:  # 10 seconds
+                recommendations.append(
+                    "Examples execute quickly - system performance is good"
+                )
+
+        # General recommendations
+        recommendations.extend(
+            [
+                "Review execution logs for detailed failure analysis",
+                "Use batch execution for comprehensive testing",
+                "Monitor execution history for performance trends",
+            ]
+        )
+
+        summary["recommendations"] = recommendations
 
 
 # Export all relevant functions and classes for package interface
