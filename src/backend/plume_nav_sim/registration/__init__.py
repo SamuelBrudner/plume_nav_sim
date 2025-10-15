@@ -96,172 +96,15 @@ _registration_cache: Dict[str, object] = {}
 _cache_lock = threading.Lock()
 _initialization_timestamp: Optional[float] = None
 
-# Public API exports for registration functionality
+# Public API exports for core registration functionality
 __all__ = [
     "register_env",
     "unregister_env",
     "is_registered",
-    "create_registration_kwargs",
-    "validate_registration_config",
-    "register_with_custom_params",
-    "quick_register",
     "ensure_registered",
     "ENV_ID",
     "ENTRY_POINT",
 ]
-
-
-def quick_register(
-    force_reregister: bool = False, validate_creation: bool = True
-) -> str:
-    """
-    Convenience function for immediate environment registration with default parameters,
-    validation, error handling, and automatic gym.make() compatibility testing for
-    development and testing workflows.
-
-    This function provides streamlined environment registration with comprehensive validation
-    and immediate availability testing, ideal for development scenarios requiring rapid
-    environment setup and verification.
-
-    Args:
-        force_reregister (bool): Whether to force re-registration if environment already exists
-        validate_creation (bool): Whether to test environment creation using gym.make()
-
-    Returns:
-        str: Registered environment ID ready for immediate use with gym.make() calls
-        and confirmation of successful registration
-
-    Raises:
-        ConfigurationError: If registration fails or validation encounters errors
-
-    Example:
-        >>> env_id = quick_register(validate_creation=True)
-        >>> import gymnasium as gym
-        >>> env = gym.make(env_id)
-    """
-    try:
-        # Initialize module if not already done to ensure proper logging and cache setup
-        if not _module_initialized:
-            _initialize_registration_module()
-
-        # Check if environment already registered using is_registered() with cache consultation
-        if is_registered() and not force_reregister:
-            _module_logger.info(
-                f"Environment {ENV_ID} already registered, using existing registration",
-                extra={"force_reregister": force_reregister, "cache_hit": True},
-            )
-
-            # Update cache with quick registration timestamp for tracking
-            with _cache_lock:
-                _registration_cache["last_quick_register"] = time.time()
-                _qr_count_obj = _registration_cache.get("quick_register_count", 0)
-                _qr_count = _qr_count_obj if isinstance(_qr_count_obj, int) else 0
-                _registration_cache["quick_register_count"] = _qr_count + 1
-
-            return cast(str, ENV_ID)
-
-        # Log registration attempt with default parameters and force_reregister flag status
-        _module_logger.info(
-            f"Quick registration attempt for {ENV_ID}",
-            extra={
-                "force_reregister": force_reregister,
-                "validate_creation": validate_creation,
-                "registration_method": "quick_register",
-            },
-        )
-
-        # Call register_env() with default parameters and force_reregister flag
-        register_env(force_reregister=force_reregister)
-
-        # Validate successful registration by checking registry status and consistency
-        if not is_registered():
-            raise ConfigurationError(
-                f"Registration appeared successful but environment {ENV_ID} not found in registry",
-                config_parameter="registration_status",
-                parameter_value="inconsistent_state",
-            )
-
-        # Test environment creation using gym.make() if validate_creation is True
-        if validate_creation:
-            try:
-                _module_logger.debug(f"Testing environment creation for {ENV_ID}")
-                test_env = gymnasium.make(ENV_ID)
-                test_env.close()
-                _module_logger.debug(
-                    f"Environment creation test successful for {ENV_ID}"
-                )
-            except Exception as e:
-                _module_logger.error(
-                    f"Environment creation test failed for {ENV_ID}: {e}",
-                    extra={"validation_error": str(e)},
-                )
-                raise ConfigurationError(
-                    f"Environment registered but creation test failed: {e}",
-                    config_parameter="environment_creation",
-                    parameter_value=ENV_ID,
-                ) from e
-
-        # Update module registration cache with successful registration timestamp
-        with _cache_lock:
-            _qr_count_obj2 = _registration_cache.get("quick_register_count", 0)
-            _qr_count2 = _qr_count_obj2 if isinstance(_qr_count_obj2, int) else 0
-            _registration_cache.update(
-                {
-                    "last_quick_register": time.time(),
-                    "quick_register_successful": True,
-                    "validation_completed": validate_creation,
-                    "quick_register_count": _qr_count2 + 1,
-                    "registration_method": "quick_register",
-                }
-            )
-
-        # Log successful quick registration with environment ID and validation status
-        _module_logger.info(
-            f"Quick registration completed successfully for {ENV_ID}",
-            extra={
-                "environment_id": ENV_ID,
-                "validation_completed": validate_creation,
-                "cache_updated": True,
-            },
-        )
-
-        # Return registered environment ID with confirmation of immediate availability
-        return cast(str, ENV_ID)
-
-    except Exception as e:
-        # Enhanced error logging with context and recovery suggestions
-        _module_logger.error(
-            f"Quick registration failed for {ENV_ID}: {e}",
-            extra={
-                "error_type": type(e).__name__,
-                "force_reregister": force_reregister,
-                "validate_creation": validate_creation,
-            },
-        )
-
-        # Update cache with failure information for debugging
-        with _cache_lock:
-            _qrf_count_obj = _registration_cache.get("quick_register_failures", 0)
-            _qrf_count = _qrf_count_obj if isinstance(_qrf_count_obj, int) else 0
-            _registration_cache.update(
-                {
-                    "last_quick_register_error": time.time(),
-                    "last_error": str(e),
-                    "quick_register_failures": _qrf_count + 1,
-                }
-            )
-
-        # Re-raise as ConfigurationError if not already that type
-        if not isinstance(e, ConfigurationError):
-            raise ConfigurationError(
-                f"Quick registration failed: {e}",
-                config_parameter="quick_registration",
-                parameter_value=ENV_ID,
-            ) from e
-        raise
-
-
-# Removed: ensure_component_env_registered() - no longer needed with single env_id
 
 
 def ensure_registered(  # noqa: C901
@@ -328,10 +171,11 @@ def ensure_registered(  # noqa: C901
             },
         )
 
-        # Attempt automatic registration using quick_register() if auto_register is True
+        # Attempt automatic registration using register_env() if auto_register is True
         if auto_register:
             try:
-                env_id = quick_register(force_reregister=False, validate_creation=True)
+                register_env(force_reregister=False)
+                env_id = ENV_ID
 
                 # Validate registration success and environment availability after auto-registration
                 if is_registered():
