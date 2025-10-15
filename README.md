@@ -1,328 +1,117 @@
 # plume-nav-sim
 
-A proof-of-life Gymnasium-compatible reinforcement learning environment for plume navigation research
+Gymnasium-compatible plume navigation environments engineered for reproducible robotics and reinforcement-learning research. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Coverage Status](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)]()
 
-## Key Features
+## 1. What You Get
 
-- **Gymnasium Compatibility**: Full compliance with Gymnasium API including reset(), step(), render(), and close() methods with 5-tuple step returns
-- **Static Gaussian Plume Model**: Mathematical plume concentration field using Gaussian distribution with configurable source location and dispersion parameters
-- **Dual-Mode Rendering**: Both programmatic RGB array generation and interactive matplotlib visualization with fallback handling
-- **Deterministic Reproducibility**: Comprehensive seeding system ensuring identical episodes from identical seeds for scientific reproducibility
-- **Performance Optimized**: Sub-millisecond step execution with efficient NumPy operations and minimal memory footprint (<1ms step latency)
-- **Scientific Python Integration**: Seamless integration with NumPy for mathematical operations and Matplotlib for visualization
+- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with metrics, logging, and sensible defaults.
+- **Deterministic runs** – Centralized seeding utilities keep experiments reproducible across machines and CI.
+- **Pluggable architecture** – Swap observation, reward, action, or plume components via dependency injection.
+- **Research data workflow** – Built-in metadata export and curated examples accelerate analysis pipelines.
 
-## Table of Contents
+## 2. Quick Start
 
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage Examples](#usage-examples)
-- [API Documentation](#api-documentation)
-- [Performance](#performance)
-- [Contributing](#contributing)
-- [License](#license)
-- [Citation](#citation)
+```python
+import plume_nav_sim as pns
 
-## Features
+env = pns.make_env()
+obs, info = env.reset(seed=42)
+print(info["agent_xy"])  # starting position
+```
 
-### Core Features
+- **Gymnasium integration**: `gym.make("PlumeNav-v0", action_type="oriented")`
+- **Component knobs**: pass string options such as `observation_type="antennae"`
+- **See also**: `src/backend/examples/quickstart.py`
 
-| Feature | Description |
-|---------|-------------|
-| **Gymnasium Compatibility** | Full compliance with Gymnasium API including reset(), step(), render(), and close() methods with 5-tuple step returns |
-| **Static Gaussian Plume Model** | Mathematical plume concentration field using Gaussian distribution with configurable source location and dispersion parameters |
-| **Dual-Mode Rendering** | Both programmatic RGB array generation and interactive matplotlib visualization with fallback handling |
-| **Deterministic Reproducibility** | Comprehensive seeding system ensuring identical episodes from identical seeds for scientific reproducibility |
-| **Performance Optimized** | Sub-millisecond step execution with efficient NumPy operations and minimal memory footprint |
-| **Scientific Python Integration** | Seamless integration with NumPy for mathematical operations and Matplotlib for visualization |
+## 3. Progressive Customization
 
-### Technical Specifications
+| Stage | Goal | Example |
+|-------|------|---------|
+| **Customize** | Tune built-ins with typed kwargs | `examples/custom_configuration.py` |
+| **Extend** | Inject custom components (reward, observation, plume) | `examples/custom_components.py` |
+| **Reproduce** | Capture seeds and metadata for benchmarking | `examples/reproducibility.py` |
 
-| Specification | Value |
-|---------------|--------|
-| **Action Space** | Discrete(4) - Cardinal directions (up, right, down, left) |
-| **Observation Space** | Box([0,1], shape=(1,), dtype=float32) - Concentration values |
-| **Default Grid Size** | 128×128 configurable grid dimensions |
-| **Reward Structure** | Sparse rewards: +1.0 for goal achievement, 0.0 otherwise |
-| **Episode Termination** | Goal reached or maximum steps (default: 1000) |
+All examples live in `src/backend/examples/`. Run one from the backend root:
 
-## Installation
+```bash
+python -m examples.custom_components
+```
 
-### Requirements
-
-- **Python Version**: Python 3.10 or higher
-- **Operating Systems**: Linux (full support), macOS (full support), Windows (limited support)
-- **Dependencies**:
-  - `gymnasium>=0.29.0`
-  - `numpy>=2.1.0`
-  - `matplotlib>=3.9.0` (optional for human rendering)
-
-### Installation Methods
-
-#### Development Installation (Recommended)
+## 4. Installation
 
 ```bash
 git clone https://github.com/plume-nav-sim/plume_nav_sim.git
 cd plume_nav_sim/src/backend
-python -m venv plume-nav-env
-source plume-nav-env/bin/activate  # Linux/macOS
-# plume-nav-env\Scripts\activate  # Windows
-pip install -e .
-pip install -e .[dev]  # For development dependencies
-```
-
-#### Basic Installation
-
-```bash
-pip install -e .
-```
-
-#### Installation Validation
-
-```bash
-python -c "import plume_nav_sim; print('Installation successful!')"
-python examples/basic_usage.py
-```
-
-## Quick Start
-
-### Basic Usage Example
-
-```python
-import gymnasium as gym
-from plume_nav_sim import register_env, ENV_ID
-
-# Register the environment
-register_env()
-
-# Create environment
-env = gym.make(ENV_ID, render_mode="rgb_array")
-
-# Run a simple episode
-obs, info = env.reset(seed=42)
-print(f"Agent starts at: {info['agent_xy']}")
-
-for step in range(100):
-    action = env.action_space.sample()  # Random action
-    obs, reward, terminated, truncated, info = env.step(action)
-    
-    if terminated or truncated:
-        print(f"Episode completed in {step+1} steps")
-        print(f"Final reward: {reward}")
-        break
-
-env.close()
-```
-
-### Interactive Visualization
-
-```python
-# Interactive visualization example
-env = gym.make(ENV_ID, render_mode="human")
-obs, info = env.reset(seed=42)
-
-for step in range(50):
-    action = env.action_space.sample()
-    obs, reward, terminated, truncated, info = env.step(action)
-    env.render()  # Updates visualization window
-    
-    if terminated or truncated:
-        break
-
-env.close()
-```
-
-## Usage Examples
-
-### Example Files
-
-| File | Description |
-|------|-------------|
-| `examples/basic_usage.py` | Comprehensive basic usage demonstration with error handling and performance monitoring |
-| `examples/random_agent.py` | Random agent baseline with statistical analysis and performance benchmarking |
-| `examples/visualization_demo.py` | Dual-mode rendering demonstration with visualization capabilities |
-| `examples/reproducibility_demo.py` | Seeding and reproducibility validation for scientific workflows |
-
-### Advanced Usage
-
-#### Custom Environment Configuration
-
-```python
-# Custom environment configuration
-from plume_nav_sim import create_plume_search_env, EnvironmentConfig, GridSize
-
-config = EnvironmentConfig(
-    grid_size=GridSize(width=64, height=64),
-    source_location=(32, 32),
-    goal_radius=1,
-    max_steps=500
-)
-
-env = create_plume_search_env(config)
-```
-
-#### Performance Monitoring
-
-```python
-# Performance monitoring example
-import time
-
-env = gym.make(ENV_ID)
-obs, info = env.reset()
-
-step_times = []
-for _ in range(1000):
-    start_time = time.perf_counter()
-    obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
-    step_times.append(time.perf_counter() - start_time)
-    
-    if terminated or truncated:
-        obs, info = env.reset()
-
-avg_step_time = sum(step_times) / len(step_times)
-print(f"Average step time: {avg_step_time*1000:.2f}ms")
-```
-
-## API Documentation
-
-### Core Classes
-
-#### PlumeSearchEnv
-
-Main environment class implementing Gymnasium interface
-
-**Key Methods:**
-
-- `reset(seed=None) -> (observation, info)`: Reset environment and return initial observation
-- `step(action) -> (obs, reward, terminated, truncated, info)`: Execute action and return step results
-- `render(mode='rgb_array') -> np.ndarray | None`: Render environment state
-- `close() -> None`: Clean up environment resources
-
-### Utility Functions
-
-| Function | Description |
-|----------|-------------|
-| `register_env()` | Register environment with Gymnasium for gym.make() usage |
-| `create_plume_search_env(config)` | Factory function for creating configured environments |
-
-### Type Definitions
-
-| Type | Description |
-|------|-------------|
-| `Action` | Enumeration for movement actions (UP=0, RIGHT=1, DOWN=2, LEFT=3) |
-| `Coordinates` | 2D coordinate representation with utility methods |
-| `GridSize` | Grid dimension specification with validation |
-
-## Performance
-
-### Benchmarks
-
-| Metric | Target | Typical |
-|--------|---------|---------|
-| **Step Latency** | <1ms per step | 0.3-0.8ms |
-| **Memory Usage** | <50MB total | 15-35MB |
-| **Episode Reset** | <10ms | 2-5ms |
-| **RGB Rendering** | <5ms per frame | 1-3ms |
-
-### Scalability
-
-**Grid Sizes:**
-- 32×32: ~2MB memory, <0.5ms steps
-- 64×64: ~8MB memory, <0.7ms steps
-- 128×128: ~32MB memory, <1.0ms steps
-- 256×256: ~128MB memory, <2.0ms steps
-
-**Episode Lengths:** Tested up to 10,000 steps without performance degradation
-
-## Contributing
-
-### Development Setup
-
-```bash
-# Clone repository and create virtual environment
-git clone https://github.com/plume-nav-sim/plume_nav_sim.git
-cd plume_nav_sim/src/backend
-python -m venv plume-nav-env
-source plume-nav-env/bin/activate
-
-# Install development dependencies
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .[dev]
-
-# Run tests
-pytest -ra --strict-markers
-
-# Verify installation
-python examples/basic_usage.py
 ```
 
-### Testing Requirements
+Validate the install:
 
-- All tests must pass: `pytest`
-- Code coverage >95%: `pytest --cov`
-- Code formatting: `black src/ tests/`
-- Linting: `flake8 src/ tests/`
-- Type checking: `mypy src/`
+```bash
+python -c "import plume_nav_sim as pns; pns.make_env()"
+```
 
-### Contribution Guidelines
+## 5. Architecture Overview
 
-- Follow existing code style and documentation patterns
-- Add comprehensive tests for new features
-- Update documentation and examples as needed
-- Ensure backward compatibility for proof-of-life scope
+- `plume_nav_sim.make_env()` → default environment (auto-registered as `PlumeNav-v0`)
+- `ComponentBasedEnvironment` → DI-powered core that consumes protocol-compliant components (`plume_nav_sim.interfaces`)
+- `plume_nav_sim.envs.factory.create_component_environment()` → factory with validation and curated defaults
+- `docs/extending/` → deep dives on protocols, wiring, and testing
 
-## License
+## 6. Reproducibility Workflow
 
-### MIT License
+```python
+import plume_nav_sim as pns
+from plume_nav_sim.utils.seeding import SeedManager
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for full license text.
+manager = SeedManager()
+base_seed = 2025
+episode_seed = manager.derive_seed(base_seed, "episode-0")
 
-**Permissions:**
-- Commercial use
-- Modification
-- Distribution
-- Private use
+env = pns.make_env()
+obs, info = env.reset(seed=episode_seed)
+```
 
-**Limitations:**
-- No warranty
-- No liability
+- `SeedManager` tracks provenance across episodes.
+- `examples/reproducibility.py` writes JSON reports for audits.
+- `docs/extending/README.md` covers DI best practices for packaging reproducible components.
 
-### Dependencies Compatibility
+## 7. Extending PlumeNav
 
-- Gymnasium (MIT) - Compatible
-- NumPy (BSD-3-Clause) - Compatible
-- Matplotlib (PSF-2.0) - Compatible
+- **Protocols**: `docs/extending/protocol_interfaces.md`
+- **Component wiring**: `docs/extending/component_injection.md`
+- **Custom guides**: `docs/extending/custom_rewards.md`, `custom_observations.md`, `custom_actions.md`
+- **Testing**: contract suites under `src/backend/tests/contracts/`
 
-## Citation
+## 8. Contributing
+
+- Run `pre-commit run --all-files`
+- Execute targeted tests: `conda run -n plume-nav-sim pytest src/backend/tests/plume_nav_sim/registration/ -q`
+- Update docs/examples for user-facing changes
+
+See `src/backend/CONTRIBUTING.md` for the full checklist.
+
+## 9. License
+
+MIT License. See [LICENSE](LICENSE).
+
+## 10. Citation
 
 ```bibtex
 @software{plume_nav_sim_2024,
-  title={plume-nav-sim: Gymnasium-compatible reinforcement learning environment for plume navigation},
-  author={plume_nav_sim Development Team},
-  year={2024},
-  version={0.0.1},
-  url={https://github.com/plume-nav-sim/plume_nav_sim}
+  title        = {plume-nav-sim: Gymnasium-compatible reinforcement learning environment for plume navigation},
+  author       = {Sam Brudner},
+  year         = {2024},
+  version      = {0.0.1},
+  url          = {https://github.com/plume-nav-sim/plume_nav_sim}
 }
 ```
 
-### Acknowledgments
-
-- Built on Gymnasium framework for RL environment standards
-- Uses NumPy for efficient mathematical operations
-- Integrates Matplotlib for comprehensive visualization
-- Follows Scientific Python ecosystem best practices
-
-## Contact
-
-- **Repository**: https://github.com/plume-nav-sim/plume_nav_sim
-- **Issues**: https://github.com/plume-nav-sim/plume_nav_sim/issues
-- **Discussions**: https://github.com/plume-nav-sim/plume_nav_sim/discussions
-- **Email**: plume-nav-sim@example.com
-
 ---
 
-**Ready to get started?** Try the [Quick Start](#quick-start) guide above, or dive into the [comprehensive examples](examples/) to explore the full capabilities of plume-nav-sim for your reinforcement learning research!
+Questions or ideas? Open an issue or start a discussion at https://github.com/plume-nav-sim/plume_nav_sim.
