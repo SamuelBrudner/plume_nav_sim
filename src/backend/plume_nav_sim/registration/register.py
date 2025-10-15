@@ -420,8 +420,7 @@ def unregister_env(
                 )
             return True
 
-        removed = _pop_env_from_registry(effective_env_id)
-        if removed:
+        if _pop_env_from_registry(effective_env_id):
             _logger.debug(
                 f"Removed environment spec for '{effective_env_id}' from Gymnasium registry"
             )

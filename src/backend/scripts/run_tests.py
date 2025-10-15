@@ -725,7 +725,7 @@ class TestRunner:
             "edge_case": create_edge_case_test_config,
         }
 
-        category_config = config_method_map[category]()
+        config_method_map[category]()
 
         # Generate pytest command arguments
         pytest_cmd = ["python", "-m", "pytest"]

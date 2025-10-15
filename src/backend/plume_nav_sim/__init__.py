@@ -108,12 +108,7 @@ def initialize_package(  # noqa: C901
             configure_logging_for_development()
             status["logging_configured"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            # errors is a List[dict[str, str]] but stored in a heterogeneous mapping
-            errors = status.get("errors")
-            if isinstance(errors, list):
-                errors.append({"step": "configure_logging", "error": str(exc)})
-            status["initialized"] = False
-
+            _extracted_from_initialize_package_47(status, "configure_logging", exc)
     if auto_register_environment:
         try:
             from plume_nav_sim.registration import ensure_registered
@@ -121,11 +116,7 @@ def initialize_package(  # noqa: C901
             ensure_registered()
             status["environment_registered"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            errors = status.get("errors")
-            if isinstance(errors, list):
-                errors.append({"step": "register_environment", "error": str(exc)})
-            status["initialized"] = False
-
+            _extracted_from_initialize_package_47(status, "register_environment", exc)
     if validate_constants:
         try:
             from plume_nav_sim.core.constants import validate_constant_consistency
@@ -134,12 +125,17 @@ def initialize_package(  # noqa: C901
             status["constants_validated"] = bool(is_valid)
             status["constant_validation_report"] = report
         except Exception as exc:  # pragma: no cover - defensive guard
-            errors = status.get("errors")
-            if isinstance(errors, list):
-                errors.append({"step": "validate_constants", "error": str(exc)})
-            status["initialized"] = False
-
+            _extracted_from_initialize_package_47(status, "validate_constants", exc)
     return status
+
+
+# TODO Rename this here and in `initialize_package`
+def _extracted_from_initialize_package_47(status, arg1, exc):
+    # errors is a List[dict[str, str]] but stored in a heterogeneous mapping
+    errors = status.get("errors")
+    if isinstance(errors, list):
+        errors.append({"step": arg1, "error": str(exc)})
+    status["initialized"] = False
 
 
 def get_package_info(

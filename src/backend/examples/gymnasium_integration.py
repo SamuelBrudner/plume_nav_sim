@@ -914,11 +914,11 @@ def demonstrate_reproducibility_validation(
                 statistical_analysis = {
                     "overall_consistency_score": statistics.mean(consistency_scores),
                     "seeds_perfectly_consistent": sum(
-                        1 for score in consistency_scores if score > 0.99
+                        bool(score > 0.99) for score in consistency_scores
                     ),
                     "seeds_tested": len(test_seeds),
                     "consistency_percentage": (
-                        sum(1 for score in consistency_scores if score > 0.99)
+                        sum(bool(score > 0.99) for score in consistency_scores)
                         / len(test_seeds)
                     )
                     * 100,
@@ -998,10 +998,11 @@ def demonstrate_reproducibility_validation(
         reproducibility_summary = {
             "total_seeds_tested": len(test_seeds),
             "perfect_reproducibility_count": sum(
-                1
+                bool(
+                    seed_data["trajectory_consistency"]
+                    and seed_data["reward_consistency"]
+                )
                 for seed_data in validation_results["seed_results"].values()
-                if seed_data["trajectory_consistency"]
-                and seed_data["reward_consistency"]
             ),
             "reproducibility_percentage": 0.0,
             "validation_duration_ms": validation_timer.get_duration_ms(),
@@ -3070,11 +3071,12 @@ def run_gymnasium_integration_demo(
         # Calculate final demonstration statistics
         total_time_seconds = total_demo_timer.get_duration_ms() / 1000.0
         successful_demos = sum(
-            1
+            bool(
+                isinstance(result, dict)
+                and "error" not in result
+                and "critical_error" not in result
+            )
             for result in demonstration_results.values()
-            if isinstance(result, dict)
-            and "error" not in result
-            and "critical_error" not in result
         )
 
         _logger.info("\n" + "=" * 80)
