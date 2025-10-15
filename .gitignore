@@ -208,6 +208,9 @@ Desktop.ini
 # Pip cache
 .cache/pip/
 
+# Conda environment info
+src/backend/conda_env/
+
 # =============================================================================
 # LOG FILES AND TEMPORARY DATA
 # Application log files, temporary data files, and runtime artifacts
