@@ -442,7 +442,9 @@ class TestEnvironmentUnregistration:
         logging control, and silent operation modes for automated testing."""
         # Set up warning capture mechanism for testing output
         with warnings.catch_warnings(record=True) as all_warnings:
-            self._extracted_from_test_unregister_env_suppress_warnings_6(all_warnings)
+            self._extracted_from_test_unregister_env_suppress_warnings_6(
+                all_warnings, suppress_warnings=False
+            )
         # Test warning suppression with different unregistration scenarios
         # Register and then unregister with suppression
         test_env_id = register_env(env_id=TEST_ENV_ID)
