@@ -105,55 +105,61 @@ def setup_advanced_logging(
     )
 
     try:
-        # Configure development logging using configure_logging_for_development with enhanced parameters
-        logging_config = configure_logging_for_development(
-            log_level=log_level or "INFO",
-            enable_performance_monitoring=enable_performance_logging,
-            enable_file_logging=enable_file_output,
-            component_name="gymnasium_integration",
+        return _extracted_from_setup_advanced_logging_25(
+            log_level, enable_performance_logging, enable_file_output, _logger
         )
-
-        # Set up component-specific loggers for environment, registration, and performance monitoring
-        registration_logger = get_component_logger("registration", "CORE")
-        environment_logger = get_component_logger("environment", "CORE")
-        performance_logger = get_component_logger("performance", "UTILS")
-
-        # Configure matplotlib backend for cross-platform compatibility and headless operation
-        if not hasattr(matplotlib.get_backend(), "show"):
-            matplotlib.use(
-                "Agg"
-            )  # Use non-interactive backend for headless environments
-
-        # Enable performance logging integration with PerformanceTimer and ComponentLogger
-        performance_config = {
-            "timing_enabled": enable_performance_logging,
-            "memory_tracking": enable_performance_logging,
-            "operation_profiling": enable_performance_logging,
-        }
-
-        # Initialize performance logging baselines and threshold monitoring
-        global _performance_results
-        _performance_results = {
-            "logging_setup_time": time.time(),
-            "configuration": logging_config,
-            "performance_monitoring": performance_config,
-        }
-
-        _logger.info("Advanced logging configuration completed successfully")
-
-        # Return comprehensive logging configuration status for validation and monitoring
-        return {
-            "status": "success",
-            "logging_config": logging_config,
-            "performance_config": performance_config,
-            "loggers_configured": ["registration", "environment", "performance"],
-            "file_output_enabled": enable_file_output,
-            "matplotlib_backend": matplotlib.get_backend(),
-        }
-
     except Exception as e:
         _logger.error(f"Failed to setup advanced logging: {str(e)}")
         return {"status": "error", "error": str(e), "fallback_logging": True}
+
+
+# TODO Rename this here and in `setup_advanced_logging`
+def _extracted_from_setup_advanced_logging_25(
+    log_level, enable_performance_logging, enable_file_output, _logger
+):
+    # Configure development logging using configure_logging_for_development with enhanced parameters
+    logging_config = configure_logging_for_development(
+        log_level=log_level or "INFO",
+        enable_performance_monitoring=enable_performance_logging,
+        enable_file_logging=enable_file_output,
+        component_name="gymnasium_integration",
+    )
+
+    # Set up component-specific loggers for environment, registration, and performance monitoring
+    registration_logger = get_component_logger("registration", "CORE")
+    environment_logger = get_component_logger("environment", "CORE")
+    performance_logger = get_component_logger("performance", "UTILS")
+
+    # Configure matplotlib backend for cross-platform compatibility and headless operation
+    if not hasattr(matplotlib.get_backend(), "show"):
+        matplotlib.use("Agg")  # Use non-interactive backend for headless environments
+
+    # Enable performance logging integration with PerformanceTimer and ComponentLogger
+    performance_config = {
+        "timing_enabled": enable_performance_logging,
+        "memory_tracking": enable_performance_logging,
+        "operation_profiling": enable_performance_logging,
+    }
+
+    # Initialize performance logging baselines and threshold monitoring
+    global _performance_results
+    _performance_results = {
+        "logging_setup_time": time.time(),
+        "configuration": logging_config,
+        "performance_monitoring": performance_config,
+    }
+
+    _logger.info("Advanced logging configuration completed successfully")
+
+    # Return comprehensive logging configuration status for validation and monitoring
+    return {
+        "status": "success",
+        "logging_config": logging_config,
+        "performance_config": performance_config,
+        "loggers_configured": ["registration", "environment", "performance"],
+        "file_output_enabled": enable_file_output,
+        "matplotlib_backend": matplotlib.get_backend(),
+    }
 
 
 def demonstrate_advanced_registration(

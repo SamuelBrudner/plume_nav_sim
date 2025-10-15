@@ -495,7 +495,7 @@ class MatplotlibBackendManager:
             mapped["font_family"] = config_options["font_family"]
 
         if strict_validation:
-            dpi_val = mapped.get("dpi", None)
+            dpi_val = mapped.get("dpi")
             if dpi_val is not None and (
                 not isinstance(dpi_val, (int, float)) or dpi_val <= 0
             ):

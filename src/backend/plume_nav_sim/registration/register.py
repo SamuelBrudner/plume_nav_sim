@@ -65,12 +65,11 @@ _registration_cache: Dict[str, Dict[str, object]] = {}
 # import it locally when needed.
 sys.modules.pop("gc", None)
 
-# Public API exports for comprehensive registration functionality
+# Public API exports for core registration functionality
 __all__ = [
     "register_env",
     "unregister_env",
     "is_registered",
-    "get_registration_info",
     "create_registration_kwargs",
     "validate_registration_config",
     "register_with_custom_params",
@@ -631,71 +630,6 @@ def _system_info_for(info: Dict[str, object]) -> Dict[str, object]:
             else "authoritative_registry"
         ),
     }
-
-
-def get_registration_info(
-    env_id: Optional[str] = None, include_config_details: bool = True
-) -> Dict[str, object]:
-    """
-    Comprehensive registration information retrieval function providing detailed environment
-    metadata, configuration parameters, registration status, and debugging information for
-    monitoring and troubleshooting.
-
-    This function provides complete registration information for debugging, monitoring, and
-    administrative purposes, including detailed configuration analysis and system status.
-
-    Args:
-        env_id: Environment identifier to get information for, defaults to ENV_ID if not provided
-        include_config_details: Whether to include detailed configuration parameter breakdown
-
-    Returns:
-        Complete registration information dictionary including status, configuration, metadata, and debugging details  # noqa: E501
-
-    Example:
-        # Basic registration info
-        info = get_registration_info()
-        print(f"Status: {info['registered']}")
-
-        # Detailed configuration analysis
-        detailed_info = get_registration_info(include_config_details=True)
-        print(f"Config: {detailed_info['config_details']}")
-    """
-    try:
-        effective_env_id = env_id or ENV_ID
-
-        info = _base_registration_info(effective_env_id)
-
-        is_currently_registered = is_registered(effective_env_id, use_cache=False)
-        info["registered"] = is_currently_registered
-
-        if is_currently_registered:
-            info |= _env_spec_info(effective_env_id)
-
-        if include_config_details:
-            info["config_details"] = _config_details_for_id(effective_env_id)
-
-        cache_info = _cache_info_for_id(effective_env_id)
-        if cache_info is not None:
-            info["cache_info"] = cache_info
-
-        info |= _gymnasium_version_info()
-        info["system_info"] = _system_info_for(info)
-
-        _logger.debug(
-            f"Retrieved registration info for '{effective_env_id}', detailed={include_config_details}"  # noqa: E501
-        )
-        return info
-
-    except Exception as e:
-        _logger.error(
-            f"Failed to retrieve registration info for '{env_id or ENV_ID}': {e}"
-        )
-        return {
-            "env_id": env_id or ENV_ID,
-            "error": str(e),
-            "query_timestamp": time.time(),
-            "registered": False,
-        }
 
 
 def _assert_grid_size_or_raise(grid_size: object) -> Tuple[int, int]:
