@@ -69,21 +69,28 @@ class TestValidateValueHelpers:
         assert any("not set" in w for w in report["warnings"])
 
     def test_validate_max_episode_steps_invalid(self):
-        report = _new_report()
-        assert reg._validate_max_episode_steps("100", report) is False
-        assert any("integer" in e for e in report["errors"])
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            "100", False, "errors", "integer"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            0, False, "errors", "positive"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            100001, False, "errors", "exceeds"
+        )
+        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+            50, True, "warnings", "quite low"
+        )
 
-        report = _new_report()
-        assert reg._validate_max_episode_steps(0, report) is False
-        assert any("positive" in e for e in report["errors"])
+    # TODO Rename this here and in `test_validate_max_episode_steps_invalid`
+    def _extracted_from_test_validate_max_episode_steps_invalid_2(
+        self, arg0, arg1, arg2, arg3
+    ):
+        result = _new_report()
+        assert reg._validate_max_episode_steps(arg0, result) is arg1
+        assert any(arg3 in e for e in result[arg2])
 
-        report = _new_report()
-        assert reg._validate_max_episode_steps(100001, report) is False
-        assert any("exceeds" in e for e in report["errors"])
-
-        report = _new_report()
-        assert reg._validate_max_episode_steps(50, report) is True
-        assert any("quite low" in w for w in report["warnings"])
+        return result
 
     def test_cross_validate_params_bounds(self):
         report = _new_report()

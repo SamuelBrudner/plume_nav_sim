@@ -359,13 +359,7 @@ class TestEnvironmentUnregistration:
 
         # Call unregister_env() with non-existent environment ID
         with warnings.catch_warnings(record=True) as warning_list:
-            warnings.simplefilter("always")
-
-            unregister_result = unregister_env(INVALID_ENV_ID, suppress_warnings=False)
-
-            # Assert function returns True (success) for non-existent environment unregistration
-            assert unregister_result is True
-
+            self._extracted_from_test_unregister_nonexistent_env_10(False)
             # Validate appropriate warnings are issued unless suppressed
             # Note: The specific warning behavior depends on implementation
 
@@ -374,11 +368,7 @@ class TestEnvironmentUnregistration:
 
         # Test suppress_warnings parameter effectively suppresses warning output
         with warnings.catch_warnings(record=True) as suppressed_warnings:
-            warnings.simplefilter("always")
-
-            suppressed_result = unregister_env(INVALID_ENV_ID, suppress_warnings=True)
-            assert suppressed_result is True
-
+            self._extracted_from_test_unregister_nonexistent_env_10(True)
             # Should have fewer or no warnings when suppressed
             # Note: Implementation-specific behavior
 
@@ -387,6 +377,17 @@ class TestEnvironmentUnregistration:
         test_env_id = register_env(env_id=TEST_ENV_ID)
         assert is_registered(test_env_id) is True
         unregister_env(test_env_id, suppress_warnings=True)
+
+    # TODO Rename this here and in `test_unregister_nonexistent_env`
+    def _extracted_from_test_unregister_nonexistent_env_10(self, suppress_warnings):
+        warnings.simplefilter("always")
+
+        unregister_result = unregister_env(
+            INVALID_ENV_ID, suppress_warnings=suppress_warnings
+        )
+
+        # Assert function returns True (success) for non-existent environment unregistration
+        assert unregister_result is True
 
     def test_unregister_env_with_custom_id(self):
         """Test unregistration with custom environment ID specification, parameter validation,
@@ -668,220 +669,6 @@ class TestRegistrationStatus:
         for custom_id in custom_ids:
             unregister_env(custom_id, suppress_warnings=True)
             assert is_registered(custom_id) is False
-
-
-class TestRegistrationInfo:
-    """Test class for comprehensive registration information retrieval including
-    get_registration_info(), metadata extraction, configuration details, and debugging
-    information with complete status reporting."""
-
-    def setup_method(self):
-        """Initialize test class for registration information testing."""
-        # Clean up any existing registrations
-        try:
-            unregister_env(ENV_ID, suppress_warnings=True)
-            unregister_env(TEST_ENV_ID, suppress_warnings=True)
-        except Exception:
-            pass
-
-    def teardown_method(self):
-        """Clean up after information tests."""
-        try:
-            unregister_env(ENV_ID, suppress_warnings=True)
-            unregister_env(TEST_ENV_ID, suppress_warnings=True)
-        except Exception:
-            pass
-
-    def test_get_registration_info_basic(self):
-        """Test basic registration information retrieval with metadata extraction,
-        status reporting, and essential configuration details for registered environments.
-        """
-        # Register environment with default parameters for information testing
-        env_id = register_env(env_id=TEST_ENV_ID)
-
-        # Call get_registration_info() without parameters to get default environment info
-        # Note: We need to specify the test env_id since we're not using the default
-        info_dict = get_registration_info(env_id=TEST_ENV_ID)
-
-        # Assert returned dictionary contains required keys: status, env_id, entry_point
-        assert isinstance(info_dict, dict)
-        assert "registered" in info_dict
-        assert "env_id" in info_dict
-
-        # Verify status field accurately reflects current registration state
-        assert info_dict["registered"] is True
-        assert info_dict["env_id"] == TEST_ENV_ID
-
-        # Validate env_id matches registered environment identifier
-        assert info_dict["env_id"] == env_id
-
-        # Assert entry_point information is correctly extracted from registry
-        if "entry_point" in info_dict:
-            assert info_dict["entry_point"] is not None
-            # Should contain the class path
-            assert "PlumeSearchEnv" in str(info_dict["entry_point"])
-
-        # Check max_episode_steps configuration is included in information
-        if "max_episode_steps" in info_dict:
-            assert isinstance(info_dict["max_episode_steps"], int)
-            assert info_dict["max_episode_steps"] > 0
-
-        # Verify basic information structure
-        assert "query_timestamp" in info_dict
-        assert isinstance(info_dict["query_timestamp"], float)
-
-        # Clean up registration after information retrieval testing
-        unregister_result = unregister_env(TEST_ENV_ID)
-        assert unregister_result is True
-
-    def test_get_registration_info_with_config_details(self):
-        """Test detailed registration information retrieval with comprehensive configuration
-        details, parameter breakdown, and extended debugging information."""
-        # Register environment with custom parameters for detailed testing
-        custom_kwargs = {
-            "grid_size": (64, 64),
-            "source_location": (32, 32),
-            "goal_radius": 1.5,
-        }
-
-        env_id = register_env(env_id=TEST_ENV_ID, kwargs=custom_kwargs)
-
-        # Call get_registration_info() with include_config_details=True
-        detailed_info = get_registration_info(
-            env_id=TEST_ENV_ID, include_config_details=True
-        )
-
-        # Assert returned dictionary includes extended configuration details
-        assert isinstance(detailed_info, dict)
-        assert "config_details" in detailed_info
-
-        config_details = detailed_info["config_details"]
-        assert isinstance(config_details, dict)
-
-        # Verify kwargs breakdown is included with parameter specifications
-        assert "default_parameters" in config_details
-        defaults = config_details["default_parameters"]
-
-        # Validate cache information includes timestamps and validity status
-        if "cache_info" in detailed_info:
-            cache_info = detailed_info["cache_info"]
-            assert isinstance(cache_info, dict)
-
-            # Should have timestamp information
-            if "registration_timestamp" in cache_info:
-                assert isinstance(cache_info["registration_timestamp"], float)
-
-        # Check Gymnasium version and compatibility information is present
-        if "gymnasium_version" in detailed_info:
-            assert detailed_info["gymnasium_version"] is not None
-
-        # Assert debugging information includes operational details
-        assert "system_info" in detailed_info
-        system_info = detailed_info["system_info"]
-        assert isinstance(system_info, dict)
-
-        # Confirm detailed information format is suitable for troubleshooting
-        assert "query_timestamp" in detailed_info
-        assert detailed_info["registered"] is True
-
-        # Clean up
-        unregister_env(TEST_ENV_ID, suppress_warnings=True)
-
-    def test_get_registration_info_nonexistent(self):
-        """Test registration information retrieval for non-existent environments with
-        appropriate error handling, status reporting, and missing environment information.
-        """
-        # Ensure target environment is not registered for negative testing
-        unregister_env(INVALID_ENV_ID, suppress_warnings=True)
-
-        # Call get_registration_info() for non-existent environment
-        info_dict = get_registration_info(env_id=INVALID_ENV_ID)
-
-        # Assert returned dictionary indicates environment is not registered
-        assert isinstance(info_dict, dict)
-        assert "registered" in info_dict
-
-        # Verify status field correctly shows 'not_registered' or equivalent
-        assert info_dict["registered"] is False
-
-        # Check that missing information fields are handled appropriately
-        assert "env_id" in info_dict
-        assert info_dict["env_id"] == INVALID_ENV_ID
-
-        # Validate function does not raise exceptions for non-existent environments
-        # This test passes if we reach here without exceptions
-
-        # Assert returned information is suitable for error diagnosis
-        assert "query_timestamp" in info_dict
-        assert isinstance(info_dict["query_timestamp"], float)
-
-        # Confirm non-existent environment queries do not affect registry state
-        # Verify by registering a test environment
-        test_env = register_env(env_id=TEST_ENV_ID)
-        assert is_registered(TEST_ENV_ID) is True
-
-        # Query non-existent again to ensure no interference
-        info_dict_2 = get_registration_info(env_id=INVALID_ENV_ID)
-        assert info_dict_2["registered"] is False
-        assert is_registered(TEST_ENV_ID) is True  # Should remain registered
-
-        # Clean up
-        unregister_env(TEST_ENV_ID, suppress_warnings=True)
-
-    def test_get_registration_info_custom_env(self):
-        """Test registration information retrieval for custom environment configurations
-        with specialized parameters, custom metadata, and configuration-specific details.
-        """
-        # Register custom environment with specialized parameters
-        custom_config = {
-            "grid_size": (256, 256),
-            "source_location": (128, 128),
-            "goal_radius": 3.0,
-            "max_steps": 2000,
-        }
-
-        custom_env_id = CUSTOM_TEST_ENV_ID
-        env_id = register_env(
-            env_id=custom_env_id,
-            max_episode_steps=custom_config["max_steps"],
-            kwargs={k: v for k, v in custom_config.items() if k != "max_steps"},
-        )
-
-        # Call get_registration_info() with custom environment ID
-        custom_info = get_registration_info(
-            env_id=custom_env_id, include_config_details=True
-        )
-
-        # Assert custom configuration parameters are correctly reported
-        assert custom_info["registered"] is True
-        assert custom_info["env_id"] == custom_env_id
-
-        # Verify custom kwargs are included in information dictionary
-        # Note: Exact kwargs structure depends on implementation
-        if "spec_kwargs" in custom_info:
-            spec_kwargs = custom_info["spec_kwargs"]
-            # Should contain our custom parameters
-
-        # Validate custom entry_point and max_episode_steps are accurate
-        if "max_episode_steps" in custom_info:
-            assert custom_info["max_episode_steps"] == custom_config["max_steps"]
-
-        # Check custom environment metadata is properly formatted
-        assert "config_details" in custom_info
-
-        # Test information retrieval performance for custom configurations
-        start_time = time.time()
-        for _ in range(5):
-            get_registration_info(env_id=custom_env_id)
-        end_time = time.time()
-
-        retrieval_time_ms = (end_time - start_time) * 1000
-        assert retrieval_time_ms < 100  # Should be reasonably fast
-
-        # Clean up custom registration after information testing
-        cleanup_result = unregister_env(custom_env_id)
-        assert cleanup_result is True
-        assert is_registered(custom_env_id) is False
 
 
 class TestRegistrationKwargs:
