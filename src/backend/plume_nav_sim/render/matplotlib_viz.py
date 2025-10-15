@@ -435,16 +435,12 @@ class MatplotlibBackendManager:
 
     # TODO Rename this here and in `get_backend_capabilities`
     def _extracted_from_get_backend_capabilities_53(self, capabilities, arg1):
-        self._extracted_from_get_backend_capabilities_53(
-            True, capabilities, arg1, False
-        )
+        self._set_backend_capabilities(True, capabilities, arg1, False)
         capabilities["event_handling"] = True
         capabilities["animation_supported"] = True
 
     # TODO Rename this here and in `get_backend_capabilities`
-    def _extracted_from_get_backend_capabilities_53(
-        self, arg0, capabilities, arg2, arg3
-    ):
+    def _set_backend_capabilities(self, arg0, capabilities, arg2, arg3):
         capabilities["display_available"] = arg0
         capabilities["interactive_supported"] = arg0
         capabilities["gui_toolkit"] = arg2
