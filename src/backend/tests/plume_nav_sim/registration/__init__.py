@@ -60,7 +60,6 @@ from .test_registration import (  # Registration test classes with complete test
     TestEnvironmentRegistration,
     TestEnvironmentUnregistration,
     TestRegistrationErrorHandling,
-    TestRegistrationInfo,
     TestRegistrationIntegration,
     TestRegistrationKwargs,
     TestRegistrationPerformance,
@@ -1711,15 +1710,13 @@ def _generate_test_suite_recommendations(test_suite_results: dict) -> List[str]:
 __all__ = [
     # Registration test classes
     "TestEnvironmentRegistration",
-    "TestEnvironmentUnregistration",
-    "TestRegistrationStatus",
-    "TestRegistrationInfo",
+    TestEnvironmentUnregistration,
+    TestRegistrationKwargs,
     "TestRegistrationKwargs",
     "TestConfigurationValidation",
     "TestCustomParameterRegistration",
     "TestRegistrationErrorHandling",
     "TestRegistrationPerformance",
-    "TestRegistrationIntegration",
     # Registration test utilities and fixtures
     "create_registration_test_fixture",
     "cleanup_registration_tests",
