@@ -1,6 +1,8 @@
 import pytest
 
-from plume_nav_sim.registration import register as reg
+from plume_nav_sim.registration.register import (
+    _validate_registration_config as validate_registration_config,
+)
 from plume_nav_sim.utils.exceptions import ValidationError
 
 

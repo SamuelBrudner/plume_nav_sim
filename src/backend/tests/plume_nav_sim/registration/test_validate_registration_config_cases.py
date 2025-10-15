@@ -1,8 +1,10 @@
-from plume_nav_sim.registration import register as reg
+from plume_nav_sim.registration.register import (
+    _validate_registration_config as validate_registration_config,
+)
 
 
 def test_env_id_suffix_required():
-    is_valid, report = reg.validate_registration_config(
+    is_valid, report = validate_registration_config(
         env_id="CustomEnv",
         entry_point="m.n:C",
         max_episode_steps=100,

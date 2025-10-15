@@ -691,7 +691,7 @@ def _assert_source_location_or_raise(
             parameter_name="source_location",
             parameter_value=source_location,
         )
-    return float(source_x), float(source_y)
+    return source_x, source_y
 
 
 def _assert_max_steps_or_raise(max_steps: object) -> int:
