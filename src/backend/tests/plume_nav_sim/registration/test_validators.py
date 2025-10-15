@@ -1,5 +1,6 @@
 import pytest
 
+from plume_nav_sim.registration import register as reg
 from plume_nav_sim.registration.register import (
     _validate_registration_config as validate_registration_config,
 )
@@ -134,7 +135,7 @@ class TestAssertHelpers:
 
 class TestValidateRegistrationConfig:
     def test_validate_registration_config_happy_path(self):
-        is_valid, report = reg.validate_registration_config(
+        is_valid, report = validate_registration_config(
             env_id="CustomEnv-v0",
             entry_point="a.b:C",
             max_episode_steps=None,
@@ -152,7 +153,7 @@ class TestValidateRegistrationConfig:
         )  # from max_episode_steps None
 
     def test_validate_registration_config_strict_name_warning(self):
-        _, report = reg.validate_registration_config(
+        _, report = validate_registration_config(
             env_id="gymMyEnv-v0",
             entry_point="x.y:Z",
             max_episode_steps=200,

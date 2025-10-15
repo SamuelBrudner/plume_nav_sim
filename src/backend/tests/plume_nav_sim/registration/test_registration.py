@@ -439,48 +439,60 @@ class TestEnvironmentUnregistration:
         logging control, and silent operation modes for automated testing."""
         # Set up warning capture mechanism for testing output
         with warnings.catch_warnings(record=True) as all_warnings:
-            warnings.simplefilter("always")
-
-            # Call unregister_env() for non-existent environment without suppress_warnings
-            unregister_result_with_warnings = unregister_env(
-                INVALID_ENV_ID, suppress_warnings=False
-            )
-
-            # Verify appropriate warnings are generated and captured
-            assert unregister_result_with_warnings is True
-            warnings_without_suppression = len(all_warnings)
-
-            # Clear warning list for next test
-            all_warnings.clear()
-
-            # Call unregister_env() with suppress_warnings=True for same scenario
-            unregister_result_suppressed = unregister_env(
-                INVALID_ENV_ID, suppress_warnings=True
-            )
-
-            # Assert no warnings are generated when suppression is enabled
-            assert unregister_result_suppressed is True
-            warnings_with_suppression = len(all_warnings)
-
-            # Validate warning suppression effectiveness
-            # Note: Some warnings may come from external sources
-            assert warnings_with_suppression <= warnings_without_suppression
-
+            self._extracted_from_test_unregister_env_suppress_warnings_6(all_warnings)
         # Test warning suppression with different unregistration scenarios
         # Register and then unregister with suppression
         test_env_id = register_env(env_id=TEST_ENV_ID)
 
         with warnings.catch_warnings(record=True) as scenario_warnings:
-            warnings.simplefilter("always")
-
-            unregister_result = unregister_env(test_env_id, suppress_warnings=True)
-            assert unregister_result is True
-
+            unregister_result = (
+                self._extracted_from_test_unregister_env_suppress_warnings_6(
+                    test_env_id, True
+                )
+            )
             # Validate warning suppression does not affect function return values
             assert is_registered(test_env_id) is False
 
         # Confirm warning suppression maintains functionality
         assert unregister_result is True
+
+    # TODO Rename this here and in `test_unregister_env_suppress_warnings`
+    def _extracted_from_test_unregister_env_suppress_warnings_6(self, all_warnings):
+        unregister_result_with_warnings = (
+            self._extracted_from_test_unregister_env_suppress_warnings_6(
+                INVALID_ENV_ID, False
+            )
+        )
+        warnings_without_suppression = len(all_warnings)
+
+        # Clear warning list for next test
+        all_warnings.clear()
+
+        # Call unregister_env() with suppress_warnings=True for same scenario
+        unregister_result_suppressed = unregister_env(
+            INVALID_ENV_ID, suppress_warnings=True
+        )
+
+        # Assert no warnings are generated when suppression is enabled
+        assert unregister_result_suppressed is True
+        warnings_with_suppression = len(all_warnings)
+
+        # Validate warning suppression effectiveness
+        # Note: Some warnings may come from external sources
+        assert warnings_with_suppression <= warnings_without_suppression
+
+    # TODO Rename this here and in `test_unregister_env_suppress_warnings`
+    def _extracted_from_test_unregister_env_suppress_warnings_6(
+        self, arg0, suppress_warnings
+    ):
+        warnings.simplefilter("always")
+
+        # Call unregister_env() for non-existent environment without suppress_warnings
+        result = unregister_env(arg0, suppress_warnings=suppress_warnings)
+
+        # Verify appropriate warnings are generated and captured
+        assert result is True
+        return result
 
 
 class TestRegistrationStatus:
@@ -1313,15 +1325,9 @@ class TestCustomParameterRegistration:
 
             # This should either succeed (returning existing) or issue warnings
             kwargs = create_registration_kwargs(grid_size=(96, 96))
-            first_attempt = register_env(
-                env_id=TEST_ENV_ID, kwargs=kwargs, force_reregister=False
+            self._extracted_from_test_register_with_custom_params_force_reregister_15(
+                kwargs, False
             )
-
-            # Verify appropriate handling of registration conflict
-            assert first_attempt == TEST_ENV_ID
-            # Environment should still exist
-            assert is_registered(TEST_ENV_ID) is True
-
         # Call register_env() with force_reregister=True
         updated_grid_size = (128, 128)
         updated_source = (64, 64)
@@ -1332,16 +1338,9 @@ class TestCustomParameterRegistration:
             source_location=updated_source,
             goal_radius=updated_goal_radius,
         )
-        force_updated = register_env(
-            env_id=TEST_ENV_ID,
-            kwargs=kwargs,
-            force_reregister=True,
+        self._extracted_from_test_register_with_custom_params_force_reregister_15(
+            kwargs, True
         )
-
-        # Assert old registration is replaced with custom parameters
-        assert force_updated == TEST_ENV_ID
-        assert is_registered(TEST_ENV_ID) is True
-
         # Test gym.make() uses updated custom configuration
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1359,6 +1358,19 @@ class TestCustomParameterRegistration:
         # Clean up updated registration after testing
         cleanup_result = unregister_env(TEST_ENV_ID)
         assert cleanup_result is True
+
+    # TODO Rename this here and in `test_register_with_custom_params_force_reregister`
+    def _extracted_from_test_register_with_custom_params_force_reregister_15(
+        self, kwargs, force_reregister
+    ):
+        first_attempt = register_env(
+            env_id=TEST_ENV_ID, kwargs=kwargs, force_reregister=force_reregister
+        )
+
+        # Verify appropriate handling of registration conflict
+        assert first_attempt == TEST_ENV_ID
+        # Environment should still exist
+        assert is_registered(TEST_ENV_ID) is True
 
     def test_register_with_custom_params_validation(self):
         """Test custom parameter registration validation with invalid parameters, constraint checking,
