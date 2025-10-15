@@ -23,7 +23,7 @@ import time  # >=3.10 - Timestamp generation for cache management and registrati
 import warnings  # >=3.10 - Module initialization warnings and registration
 
 # compatibility notifications for development environments
-from typing import Dict, Optional, cast
+from typing import Dict, Optional
 
 # External imports with version comments
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
