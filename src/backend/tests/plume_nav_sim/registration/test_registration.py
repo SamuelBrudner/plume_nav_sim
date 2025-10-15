@@ -36,15 +36,17 @@ from plume_nav_sim.core.constants import (
 )
 
 # Internal imports for registration functions and dependencies
+from plume_nav_sim.registration.register import ENV_ID
 from plume_nav_sim.registration.register import (
-    ENV_ID,
-    create_registration_kwargs,
-    get_registration_info,
+    _create_registration_kwargs as create_registration_kwargs,
+)
+from plume_nav_sim.registration.register import (
+    _validate_registration_config as validate_registration_config,
+)
+from plume_nav_sim.registration.register import (
     is_registered,
     register_env,
-    register_with_custom_params,
     unregister_env,
-    validate_registration_config,
 )
 
 # Internal imports for exception classes and error handling testing
