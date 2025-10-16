@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import plume_nav_sim as pns
-from plume_nav_sim.registration import is_registered
+from plume_nav_sim.registration import ensure_registered, is_registered
 from plume_nav_sim.utils.seeding import SeedManager, validate_seed
 
 OUTPUT_PATH = Path("reproducibility_report.json")
@@ -46,22 +46,23 @@ def main() -> None:
     if not is_valid:
         raise ValueError(f"Invalid base seed: {error}")
 
+    ensure_registered()
+    assert is_registered()
+
     env = pns.make_env()
+    try:
+        summary = {
+            "environment": "PlumeNav-v0",
+            "base_seed": base_seed,
+            "episodes": [],
+        }
 
-    assert is_registered()  # sanity check that import side effects occurred
-
-    summary = {
-        "environment": "PlumeNav-v0",
-        "base_seed": base_seed,
-        "episodes": [],
-    }
-
-    for idx in range(3):
-        child_seed = seed_manager.derive_seed(base_seed, f"episode-{idx}")
-        episode = run_episode(env, seed=child_seed)
-        summary["episodes"].append(episode)
-
-    env.close()
+        for idx in range(3):
+            child_seed = seed_manager.derive_seed(base_seed, f"episode-{idx}")
+            episode = run_episode(env, seed=child_seed)
+            summary["episodes"].append(episode)
+    finally:
+        env.close()
 
     OUTPUT_PATH.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"Report written to {OUTPUT_PATH.resolve()}")
