@@ -12,7 +12,7 @@ def main() -> None:
         max_steps=500,
         goal_radius=2.5,
         action_type="oriented",
-        observation_type="antennae",
+        observation_type="concentration",
         reward_type="step_penalty",
         plume_model="static_gaussian",
     )
