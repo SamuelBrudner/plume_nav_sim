@@ -6,7 +6,7 @@ import numpy as np
 
 import plume_nav_sim as pns
 from plume_nav_sim.actions import DiscreteGridActions
-from plume_nav_sim.core.geometry import Coordinates, GridSize
+from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.envs.component_env import ComponentBasedEnvironment
 from plume_nav_sim.interfaces import ObservationModel, RewardFunction
 from plume_nav_sim.observations import ConcentrationSensor
@@ -55,10 +55,20 @@ class NoisyConcentrationSensor(ObservationModel):
 def build_environment() -> ComponentBasedEnvironment:
     """Construct an environment using custom components."""
 
-    base_env: ComponentBasedEnvironment = pns.make_env().env  # type: ignore[attr-defined]
+    wrapper = pns.make_env()
+    try:
+        base_env = getattr(wrapper, "_env", None)
+        if not isinstance(base_env, ComponentBasedEnvironment):
+            raise RuntimeError(
+                "Unexpected environment type; expected ComponentBasedEnvironment"
+            )
 
-    grid_size: GridSize = base_env.grid_size
-    goal_location: Coordinates = base_env.goal_location
+        grid_size: GridSize = base_env.grid_size
+        goal_location = base_env.goal_location
+        goal_radius = base_env.goal_radius
+        max_steps = base_env.max_steps
+    finally:
+        wrapper.close()
 
     action_processor = DiscreteGridActions(step_size=1)
     observation_model = NoisyConcentrationSensor(sigma=0.1)
@@ -66,7 +76,7 @@ def build_environment() -> ComponentBasedEnvironment:
     field = ConcentrationField(grid_size)
     field.generate_field(goal_location)
 
-    reward = DenseReward(goal_radius=base_env.goal_radius)
+    reward = DenseReward(goal_radius=goal_radius)
 
     return ComponentBasedEnvironment(
         action_processor=action_processor,
@@ -75,8 +85,8 @@ def build_environment() -> ComponentBasedEnvironment:
         concentration_field=field,
         grid_size=grid_size,
         goal_location=goal_location,
-        goal_radius=base_env.goal_radius,
-        max_steps=base_env.max_steps,
+        goal_radius=goal_radius,
+        max_steps=max_steps,
     )
 
 
