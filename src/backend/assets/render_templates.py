@@ -1,5 +1,6 @@
 # rendering template system providing reusable, configurable templates for both RGB array generation and matplotlib human mode visualization, with performance optimization, backend compatibility management, and standardized visualization patterns for plume navigation environment rendering.
 
+import contextlib
 import copy  # >=3.10 - Deep copying of template configurations for modification and customization without affecting base templates
 import functools  # >=3.10 - LRU cache decorator for template caching, performance optimization, and resource management in repeated operations
 import time  # >=3.10 - High-precision timing for template performance measurement, benchmarking, and optimization validation
@@ -273,7 +274,7 @@ class TemplateConfig:
 
             # Validate backend availability
             preferred_backend = self.backend_preferences.get("preferred_backend")
-            try:
+            with contextlib.suppress(Exception):
                 import matplotlib
 
                 available_backends = (
@@ -283,10 +284,7 @@ class TemplateConfig:
                     validation_errors.append(
                         f"Preferred backend '{preferred_backend}' not available"
                     )
-            except Exception:
-                pass  # Skip backend validation if matplotlib not available
-
-        is_valid = len(validation_errors) == 0
+        is_valid = not validation_errors
         return is_valid, validation_errors
 
     def optimize_for_system(self, system_info: Dict[str, Any]) -> "TemplateConfig":
@@ -516,13 +514,10 @@ class BaseRenderTemplate(ABC):
 
             # Attempt graceful degradation
             if hasattr(self, "_fallback_render"):
-                try:
+                with contextlib.suppress(Exception):
                     return self._fallback_render(
                         concentration_field, agent_position, source_position
                     )
-                except Exception:
-                    pass
-
             raise
 
     @abstractmethod
@@ -1346,10 +1341,8 @@ class MatplotlibTemplate(BaseRenderTemplate):
         except Exception as e:
             warnings.warn(f"Display refresh failed: {e}")
             # Attempt fallback refresh method
-            try:
+            with contextlib.suppress(Exception):
                 self.figure.canvas.flush_events()
-            except Exception:
-                pass  # Silent failure for refresh issues
 
     def configure_backend(self, preferred_backend: Optional[str] = None) -> bool:
         """
@@ -1626,11 +1619,10 @@ class MatplotlibTemplate(BaseRenderTemplate):
             performance_analysis["performance_data"] = {
                 "overall_average_ms": np.mean(all_times),
                 "overall_max_ms": np.max(all_times),
-                "success_rate": len(successful_tests) / len(test_results),
-                "target_compliance_rate": sum(
-                    1 for r in successful_tests if r["meets_target"]
-                )
-                / len(successful_tests),
+                "success_rate": float(np.mean([r["success"] for r in test_results])),
+                "target_compliance_rate": float(
+                    np.mean([r["meets_target"] for r in successful_tests])
+                ),
             }
 
             # Backend-specific analysis
@@ -2609,10 +2601,9 @@ def validate_template_performance(
                 "average_time_ms": np.mean(
                     [t["average_time_ms"] for t in successful_tests]
                 ),
-                "target_compliance_rate": sum(
-                    1 for t in successful_tests if t["meets_target"]
-                )
-                / len(successful_tests),
+                "target_compliance_rate": np.mean(
+                    [t["meets_target"] for t in successful_tests]
+                ),
             }
 
         performance_report["test_results"][scenario_name] = scenario_results
@@ -2635,10 +2626,9 @@ def validate_template_performance(
                     "overall_success_rate": np.mean(
                         [r["success_rate"] for r in successful_results]
                     ),
-                    "target_compliance_rate": sum(
-                        1 for r in successful_results if r["meets_target"]
-                    )
-                    / len(successful_results),
+                    "target_compliance_rate": np.mean(
+                        [r["meets_target"] for r in successful_results]
+                    ),
                     "performance_consistency": {
                         "std_deviation_ms": np.std(
                             [r["average_time_ms"] for r in successful_results]

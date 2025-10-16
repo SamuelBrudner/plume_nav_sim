@@ -114,4 +114,4 @@ MIT License. See [LICENSE](LICENSE).
 
 ---
 
-Questions or ideas? Open an issue or start a discussion at https://github.com/plume-nav-sim/plume_nav_sim.
+Questions or ideas? Open an issue or start a discussion at <https://github.com/plume-nav-sim/plume_nav_sim>.
