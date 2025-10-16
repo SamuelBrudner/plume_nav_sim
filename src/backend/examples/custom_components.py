@@ -55,9 +55,7 @@ class NoisyConcentrationSensor(ObservationModel):
 def build_environment() -> ComponentBasedEnvironment:
     """Construct an environment using custom components."""
 
-    env = pns.make_env()
-    base_env = env.unwrapped  # type: ignore[attr-defined]
-    assert isinstance(base_env, ComponentBasedEnvironment)
+    base_env: ComponentBasedEnvironment = pns.make_env().env  # type: ignore[attr-defined]
 
     grid_size: GridSize = base_env.grid_size
     goal_location: Coordinates = base_env.goal_location
@@ -69,8 +67,6 @@ def build_environment() -> ComponentBasedEnvironment:
     field.generate_field(goal_location)
 
     reward = DenseReward(goal_radius=base_env.goal_radius)
-
-    env.close()
 
     return ComponentBasedEnvironment(
         action_processor=action_processor,
