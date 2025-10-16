@@ -58,7 +58,9 @@ def main() -> None:
         }
 
         for idx in range(3):
-            child_seed = seed_manager.derive_seed(base_seed, f"episode-{idx}")
+            child_seed = seed_manager.generate_episode_seed(
+                base_seed, episode_number=idx, experiment_id="reproducibility"
+            )
             episode = run_episode(env, seed=child_seed)
             summary["episodes"].append(episode)
     finally:
