@@ -37,7 +37,7 @@ jobs:
           import plume_nav_sim as pns
           from plume_nav_sim.registration import ensure_registered
           ensure_registered()
-          env = gym.make("PlumeNav-v0", action_type="oriented")
+          env = gym.make("PlumeNav-Sim-v0", action_type="oriented")
           obs, info = env.reset(seed=0)
           env.close()
           PY
