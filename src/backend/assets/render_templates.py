@@ -1,5 +1,6 @@
 # rendering template system providing reusable, configurable templates for both RGB array generation and matplotlib human mode visualization, with performance optimization, backend compatibility management, and standardized visualization patterns for plume navigation environment rendering.
 
+import contextlib
 import copy  # >=3.10 - Deep copying of template configurations for modification and customization without affecting base templates
 import functools  # >=3.10 - LRU cache decorator for template caching, performance optimization, and resource management in repeated operations
 import time  # >=3.10 - High-precision timing for template performance measurement, benchmarking, and optimization validation
@@ -273,7 +274,7 @@ class TemplateConfig:
 
             # Validate backend availability
             preferred_backend = self.backend_preferences.get("preferred_backend")
-            try:
+            with contextlib.suppress(Exception):
                 import matplotlib
 
                 available_backends = (
@@ -283,10 +284,7 @@ class TemplateConfig:
                     validation_errors.append(
                         f"Preferred backend '{preferred_backend}' not available"
                     )
-            except Exception:
-                pass  # Skip backend validation if matplotlib not available
-
-        is_valid = len(validation_errors) == 0
+        is_valid = not validation_errors
         return is_valid, validation_errors
 
     def optimize_for_system(self, system_info: Dict[str, Any]) -> "TemplateConfig":
@@ -516,13 +514,10 @@ class BaseRenderTemplate(ABC):
 
             # Attempt graceful degradation
             if hasattr(self, "_fallback_render"):
-                try:
+                with contextlib.suppress(Exception):
                     return self._fallback_render(
                         concentration_field, agent_position, source_position
                     )
-                except Exception:
-                    pass
-
             raise
 
     @abstractmethod
@@ -728,9 +723,7 @@ class BaseRenderTemplate(ABC):
                 )
                 performance_analysis["meets_targets"] = False
 
-        # Generate performance summary
-        successful_tests = [r for r in test_results if r["success"]]
-        if successful_tests:
+        if successful_tests := [r for r in test_results if r["success"]]:
             render_times = [r["render_time"] for r in successful_tests]
             performance_analysis["performance_summary"] = {
                 "average_render_time_ms": np.mean(render_times) * 1000,
@@ -984,19 +977,16 @@ class RGBTemplate(BaseRenderTemplate):
         if use_cache and not self.config.caching_enabled:
             use_cache = False
 
-        if not use_cache and self._render_cache is not None:
-            # Temporarily disable cache for this render
-            original_cache = self._render_cache
-            self._render_cache = None
-            try:
-                result = self.render(
-                    concentration_field, agent_position, source_position
-                )
-            finally:
-                self._render_cache = original_cache
-            return result
-        else:
+        if use_cache or self._render_cache is None:
             return self.render(concentration_field, agent_position, source_position)
+        # Temporarily disable cache for this render
+        original_cache = self._render_cache
+        self._render_cache = None
+        try:
+            result = self.render(concentration_field, agent_position, source_position)
+        finally:
+            self._render_cache = original_cache
+        return result
 
     def _cleanup_template_resources(self) -> None:
         """
@@ -1095,9 +1085,7 @@ class RGBTemplate(BaseRenderTemplate):
                             }
                         )
 
-        # Analyze results and generate recommendations
-        successful_tests = [r for r in test_results if r["success"]]
-        if successful_tests:
+        if successful_tests := [r for r in test_results if r["success"]]:
             all_times = [r["avg_render_time_ms"] for r in successful_tests]
             performance_analysis["performance_data"] = {
                 "overall_average_ms": np.mean(all_times),
@@ -1271,20 +1259,17 @@ class MatplotlibTemplate(BaseRenderTemplate):
             self.refresh_display()
 
         except Exception as e:
-            # Handle backend errors with fallback mechanisms
-            if "backend" in str(e).lower() or "display" in str(e).lower():
-                fallback_success = self._handle_backend_error(e, self.active_backend)
-                if not fallback_success:
-                    raise RuntimeError(
-                        f"Matplotlib rendering failed with all backends: {e}"
-                    )
-                else:
-                    # Retry render with new backend
-                    self._execute_render(
-                        concentration_field, agent_position, source_position
-                    )
-            else:
+            if "backend" not in str(e).lower() and "display" not in str(e).lower():
                 raise
+            if fallback_success := self._handle_backend_error(e, self.active_backend):
+                # Retry render with new backend
+                self._execute_render(
+                    concentration_field, agent_position, source_position
+                )
+            else:
+                raise RuntimeError(
+                    f"Matplotlib rendering failed with all backends: {e}"
+                )
 
     def create_concentration_plot(self, concentration_field: np.ndarray) -> None:
         """
@@ -1309,13 +1294,11 @@ class MatplotlibTemplate(BaseRenderTemplate):
         self.axes.set_aspect("equal")
 
         # Add colorbar for concentration scale reference
-        try:
+        with contextlib.suppress(Exception):
             if not hasattr(self, "_colorbar"):
                 self._colorbar = self.figure.colorbar(
                     self.concentration_image, ax=self.axes, label="Concentration"
                 )
-        except Exception:
-            pass  # Colorbar is optional
 
     def refresh_display(self, force_redraw: bool = False) -> None:
         """
@@ -1323,22 +1306,8 @@ class MatplotlibTemplate(BaseRenderTemplate):
         interactive performance.
         """
         try:
-            if force_redraw or self.active_backend == "Agg":
-                # Force complete redraw for non-interactive backends
-                self.figure.canvas.draw()
-            else:
-                # Use efficient blitting for interactive backends if supported
-                try:
-                    # Attempt blitting for performance
-                    if hasattr(self.figure.canvas, "copy_from_bbox"):
-                        # Advanced blitting implementation would go here
-                        # For simplicity, falling back to regular draw
-                        self.figure.canvas.draw()
-                    else:
-                        self.figure.canvas.draw()
-                except AttributeError:
-                    self.figure.canvas.draw()
-
+            # Force complete redraw for non-interactive backends
+            self.figure.canvas.draw()
             # Allow GUI update with configured interval
             if self.backend_interactive:
                 plt.pause(self._animation_interval)
@@ -1346,10 +1315,8 @@ class MatplotlibTemplate(BaseRenderTemplate):
         except Exception as e:
             warnings.warn(f"Display refresh failed: {e}")
             # Attempt fallback refresh method
-            try:
+            with contextlib.suppress(Exception):
                 self.figure.canvas.flush_events()
-            except Exception:
-                pass  # Silent failure for refresh issues
 
     def configure_backend(self, preferred_backend: Optional[str] = None) -> bool:
         """
@@ -1380,18 +1347,8 @@ class MatplotlibTemplate(BaseRenderTemplate):
                 current_backend = plt.get_backend()
 
                 if current_backend.lower() == backend.lower():
-                    # Backend successfully activated
-                    self.active_backend = backend
-                    self.backend_interactive = backend not in ["Agg", "svg", "pdf"]
-
-                    # Test basic functionality
-                    test_fig, test_ax = plt.subplots(figsize=(1, 1))
-                    test_ax.plot([0, 1], [0, 1])
-                    plt.close(test_fig)
-
-                    return True
-
-            except (ImportError, RuntimeError, Exception) as e:
+                    return self._extracted_from_configure_backend_31(backend)
+            except (ImportError, RuntimeError) as e:
                 warnings.warn(f"Backend {backend} failed: {e}")
                 continue
 
@@ -1404,6 +1361,19 @@ class MatplotlibTemplate(BaseRenderTemplate):
             return True
         except Exception:
             return False
+
+    # TODO Rename this here and in `configure_backend`
+    def _extracted_from_configure_backend_31(self, backend):
+        # Backend successfully activated
+        self.active_backend = backend
+        self.backend_interactive = backend not in ["Agg", "svg", "pdf"]
+
+        # Test basic functionality
+        test_fig, test_ax = plt.subplots(figsize=(1, 1))
+        test_ax.plot([0, 1], [0, 1])
+        plt.close(test_fig)
+
+        return True
 
     def _update_agent_marker(self, agent_position: Coordinates) -> None:
         """
@@ -1460,53 +1430,56 @@ class MatplotlibTemplate(BaseRenderTemplate):
 
         # Get remaining backends from fallback chain
         remaining_backends = [
-            b
-            for b in self._backend_fallback_chain
-            if b != failed_backend and b != self.active_backend
+            backend
+            for backend in self._backend_fallback_chain
+            if backend not in {failed_backend, self.active_backend}
         ]
 
         # Try next available backend
         for backend in remaining_backends:
             try:
-                plt.switch_backend(backend)
-                self.active_backend = backend
-                self.backend_interactive = backend not in ["Agg", "svg", "pdf"]
-
-                # Reinitialize figure with new backend
-                figsize = self.config.backend_preferences.get(
-                    "figsize", MATPLOTLIB_DEFAULT_FIGSIZE
-                )
-                plt.close(self.figure)  # Close old figure
-                self.figure, self.axes = plt.subplots(figsize=figsize)
-
-                # Reconfigure axes
-                self.axes.set_title("Plume Navigation Environment")
-                self.axes.set_xlabel("X Position")
-                self.axes.set_ylabel("Y Position")
-
-                # Reinitialize markers
-                self.agent_marker = self.axes.scatter(
-                    [], [], c="red", s=100, marker="s", zorder=3
-                )
-                self.source_marker = self.axes.scatter(
-                    [],
-                    [],
-                    c="white",
-                    s=150,
-                    marker="+",
-                    linewidths=3,
-                    edgecolors="black",
-                    zorder=2,
-                )
-                self.concentration_image = None  # Will be recreated
-
-                return True
-
+                return self._extracted_from__handle_backend_error_17(backend)
             except Exception as e:
                 warnings.warn(f"Fallback to backend {backend} failed: {e}")
                 continue
 
         return False
+
+    # TODO Rename this here and in `_handle_backend_error`
+    def _extracted_from__handle_backend_error_17(self, backend):
+        plt.switch_backend(backend)
+        self.active_backend = backend
+        self.backend_interactive = backend not in {"Agg", "svg", "pdf"}
+
+        # Reinitialize figure with new backend
+        figsize = self.config.backend_preferences.get(
+            "figsize", MATPLOTLIB_DEFAULT_FIGSIZE
+        )
+        plt.close(self.figure)  # Close old figure
+        self.figure, self.axes = plt.subplots(figsize=figsize)
+
+        # Reconfigure axes
+        self.axes.set_title("Plume Navigation Environment")
+        self.axes.set_xlabel("X Position")
+        self.axes.set_ylabel("Y Position")
+
+        # Reinitialize markers
+        self.agent_marker = self.axes.scatter(
+            [], [], c="red", s=100, marker="s", zorder=3
+        )
+        self.source_marker = self.axes.scatter(
+            [],
+            [],
+            c="white",
+            s=150,
+            marker="+",
+            linewidths=3,
+            edgecolors="black",
+            zorder=2,
+        )
+        self.concentration_image = None  # Will be recreated
+
+        return True
 
     def _cleanup_template_resources(self) -> None:
         """
@@ -1622,60 +1595,67 @@ class MatplotlibTemplate(BaseRenderTemplate):
         # Analyze results
         successful_tests = [r for r in test_results if r["success"]]
         if successful_tests:
-            all_times = [r["avg_render_time_ms"] for r in successful_tests]
-            performance_analysis["performance_data"] = {
-                "overall_average_ms": np.mean(all_times),
-                "overall_max_ms": np.max(all_times),
-                "success_rate": len(successful_tests) / len(test_results),
-                "target_compliance_rate": sum(
-                    1 for r in successful_tests if r["meets_target"]
-                )
-                / len(successful_tests),
-            }
-
-            # Backend-specific analysis
-            backend_times = {}
-            for result in successful_tests:
-                backend = result["backend"]
-                if backend not in backend_times:
-                    backend_times[backend] = []
-                backend_times[backend].append(result["avg_render_time_ms"])
-
-            performance_analysis["backend_analysis"]["performance_by_backend"] = {
-                backend: {
-                    "average_ms": np.mean(times),
-                    "max_ms": np.max(times),
-                    "sample_count": len(times),
-                }
-                for backend, times in backend_times.items()
-            }
-
-            # Generate optimization recommendations
-            if not performance_analysis["meets_target"]:
-                recommendations = [
-                    "Consider using Agg backend for better performance in headless environments",
-                    "Reduce animation interval for less frequent updates",
-                    "Disable interactive features if not needed",
-                    "Use smaller figure sizes to improve rendering speed",
-                ]
-
-                # Backend-specific recommendations
-                if (
-                    self.active_backend in ["TkAgg", "Qt5Agg"]
-                    and not self.backend_interactive
-                ):
-                    recommendations.append(
-                        "Switch to Agg backend for non-interactive use"
-                    )
-
-                if np.mean(all_times) > matplotlib_target_ms * 2:
-                    recommendations.append(
-                        "Consider fallback to RGB array mode for critical performance"
-                    )
-
-                performance_analysis["optimization_recommendations"] = recommendations
-
+            self._extracted_from_validate_performance_87(
+                successful_tests,
+                test_results,
+                performance_analysis,
+                matplotlib_target_ms,
+            )
         return performance_analysis["meets_target"], performance_analysis
+
+    # TODO Rename this here and in `validate_performance`
+    def _extracted_from_validate_performance_87(
+        self, successful_tests, test_results, performance_analysis, matplotlib_target_ms
+    ):
+        all_times = [r["avg_render_time_ms"] for r in successful_tests]
+        performance_analysis["performance_data"] = {
+            "overall_average_ms": np.mean(all_times),
+            "overall_max_ms": np.max(all_times),
+            "success_rate": float(np.mean([r["success"] for r in test_results])),
+            "target_compliance_rate": float(
+                np.mean([r["meets_target"] for r in successful_tests])
+            ),
+        }
+
+        # Backend-specific analysis
+        backend_times = {}
+        for result in successful_tests:
+            backend = result["backend"]
+            if backend not in backend_times:
+                backend_times[backend] = []
+            backend_times[backend].append(result["avg_render_time_ms"])
+
+        performance_analysis["backend_analysis"]["performance_by_backend"] = {
+            backend: {
+                "average_ms": np.mean(times),
+                "max_ms": np.max(times),
+                "sample_count": len(times),
+            }
+            for backend, times in backend_times.items()
+        }
+
+        # Generate optimization recommendations
+        if not performance_analysis["meets_target"]:
+            recommendations = [
+                "Consider using Agg backend for better performance in headless environments",
+                "Reduce animation interval for less frequent updates",
+                "Disable interactive features if not needed",
+                "Use smaller figure sizes to improve rendering speed",
+            ]
+
+            # Backend-specific recommendations
+            if (
+                self.active_backend in ["TkAgg", "Qt5Agg"]
+                and not self.backend_interactive
+            ):
+                recommendations.append("Switch to Agg backend for non-interactive use")
+
+            if np.mean(all_times) > matplotlib_target_ms * 2:
+                recommendations.append(
+                    "Consider fallback to RGB array mode for critical performance"
+                )
+
+            performance_analysis["optimization_recommendations"] = recommendations
 
 
 # Factory Functions for Template Creation
@@ -2156,13 +2136,6 @@ def get_template_registry(
                 template, MatplotlibTemplate
             ):
                 continue
-            elif template_type_filter == "custom" and template_name not in [
-                "rgb_default",
-                "matplotlib_default",
-            ]:
-                # Custom filter logic could be expanded
-                pass
-
         # Apply quality_filter
         if quality_filter:
             valid_qualities = [q.value for q in TemplateQuality]
@@ -2609,10 +2582,9 @@ def validate_template_performance(
                 "average_time_ms": np.mean(
                     [t["average_time_ms"] for t in successful_tests]
                 ),
-                "target_compliance_rate": sum(
-                    1 for t in successful_tests if t["meets_target"]
-                )
-                / len(successful_tests),
+                "target_compliance_rate": np.mean(
+                    [t["meets_target"] for t in successful_tests]
+                ),
             }
 
         performance_report["test_results"][scenario_name] = scenario_results
@@ -2635,10 +2607,9 @@ def validate_template_performance(
                     "overall_success_rate": np.mean(
                         [r["success_rate"] for r in successful_results]
                     ),
-                    "target_compliance_rate": sum(
-                        1 for r in successful_results if r["meets_target"]
-                    )
-                    / len(successful_results),
+                    "target_compliance_rate": np.mean(
+                        [r["meets_target"] for r in successful_results]
+                    ),
                     "performance_consistency": {
                         "std_deviation_ms": np.std(
                             [r["average_time_ms"] for r in successful_results]
