@@ -293,7 +293,7 @@ class TestComponentBasedEnvironment:
         component_env.reset(seed=42)  # Seed for deterministic agent placement
 
         initial_pos = component_env._agent_state.position
-        
+
         # Choose action based on position to avoid boundary
         # If at right edge, use different action
         if initial_pos.x >= 62:

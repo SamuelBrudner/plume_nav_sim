@@ -9,10 +9,10 @@ optimization targeting <1ms step latency, comprehensive component coordination, 
 handling for production-ready reinforcement learning environments.
 """
 
-from collections import deque
 import copy
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -25,7 +25,12 @@ except ImportError:  # pragma: no cover
 
 from typing_extensions import NotRequired, TypedDict
 
-from ..utils.exceptions import ComponentError, ResourceError, StateError, ValidationError
+from ..utils.exceptions import (
+    ComponentError,
+    ResourceError,
+    StateError,
+    ValidationError,
+)
 from ..utils.logging import get_component_logger, monitor_performance
 from ..utils.seeding import SeedManager
 from .action_processor import ActionProcessingResult, ActionProcessor
@@ -64,9 +69,7 @@ class ProcessStepResult(tuple):
         truncated: bool,
         info: Dict[str, object],
     ) -> "ProcessStepResult":
-        return super().__new__(
-            cls, (observation, reward, terminated, truncated, info)
-        )
+        return super().__new__(cls, (observation, reward, terminated, truncated, info))
 
     def __getitem__(self, index):
         if isinstance(index, int):
@@ -75,6 +78,7 @@ class ProcessStepResult(tuple):
             if index == -2:
                 return super().__getitem__(3)
         return super().__getitem__(index)
+
 
 # Module-level constants for episode management configuration
 EPISODE_MANAGER_VERSION = "1.0.0"
@@ -412,7 +416,9 @@ class EpisodeManagerConfig:
                 if target_config is None:
                     target_config = component_configs.get(component_name.lower())
 
-                if target_config is None or not hasattr(target_config, "__dataclass_fields__"):
+                if target_config is None or not hasattr(
+                    target_config, "__dataclass_fields__"
+                ):
                     continue
 
                 for key, value in custom_config.items():
@@ -814,7 +820,9 @@ class EpisodeResult:
         }
 
         # Legacy keys for tests looking for goal status
-        summary["goal_reached"] = bool(self.termination_reason == "goal_reached" or self.terminated)
+        summary["goal_reached"] = bool(
+            self.termination_reason == "goal_reached" or self.terminated
+        )
         summary["success"] = self.terminated and not self.truncated
 
         if include_performance or include_performance_analysis:
@@ -1237,17 +1245,21 @@ class EpisodeManager:
             component_configs = self.config.derive_component_configs()
 
             # Create StateManager with derived StateManagerConfig for centralized state coordination
-            state_manager_config = component_configs.get("state_manager") or component_configs.get(
-                "StateManager"
-            )
-            reward_calculator_config = component_configs.get("reward_calculator") or component_configs.get(
-                "RewardCalculator"
-            )
-            action_processor_config = component_configs.get("action_processor") or component_configs.get(
-                "ActionProcessor"
-            )
+            state_manager_config = component_configs.get(
+                "state_manager"
+            ) or component_configs.get("StateManager")
+            reward_calculator_config = component_configs.get(
+                "reward_calculator"
+            ) or component_configs.get("RewardCalculator")
+            action_processor_config = component_configs.get(
+                "action_processor"
+            ) or component_configs.get("ActionProcessor")
 
-            if not state_manager_config or not reward_calculator_config or not action_processor_config:
+            if (
+                not state_manager_config
+                or not reward_calculator_config
+                or not action_processor_config
+            ):
                 raise ComponentError(
                     message="Derived component configurations missing",
                     component_name="EpisodeManagerConfig",

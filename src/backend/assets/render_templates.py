@@ -2562,9 +2562,7 @@ def validate_template_performance(
                 )
 
         if successful_tests := [
-            t
-            for t in scenario_results["tests"]
-            if t.get("success_rate", 0) > 0.5
+            t for t in scenario_results["tests"] if t.get("success_rate", 0) > 0.5
         ]:
             scenario_results["summary"] = {
                 "overall_success_rate": np.mean(
@@ -2657,7 +2655,9 @@ def validate_template_performance(
 
 
 # TODO Rename this here and in `validate_template_performance`
-def _extracted_from_validate_template_performance_(performance_report, all_test_results):
+def _extracted_from_validate_template_performance_(
+    performance_report, all_test_results
+):
     strict_failures = []
 
     # Check for any test failures

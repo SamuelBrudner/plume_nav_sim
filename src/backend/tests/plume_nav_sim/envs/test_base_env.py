@@ -10,10 +10,10 @@ Implementation details (private attributes, error wrapping, performance metrics)
 are not tested here - those are covered by concrete environment tests.
 """
 
+import gymnasium as gym
 import numpy as np
 import pytest
 
-import gymnasium as gym
 from plume_nav_sim.core.types import (
     EnvironmentConfig,
     PlumeParameters,

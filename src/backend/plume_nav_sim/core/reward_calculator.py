@@ -657,7 +657,9 @@ class RewardCalculator:
             f"reward_goal={config.reward_goal_reached}, reward_default={config.reward_default}"
         )
 
-    @monitor_performance("reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
+    @monitor_performance(
+        "reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS, False
+    )
     def calculate_reward(
         self,
         agent_position: Coordinates,

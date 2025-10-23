@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Quick test to verify the delegation test fix."""
 import sys
-sys.path.insert(0, 'src/backend')
+
+sys.path.insert(0, "src/backend")
+
+import numpy as np
 
 from plume_nav_sim.actions import DiscreteGridActions
 from plume_nav_sim.core.geometry import Coordinates, GridSize
@@ -9,7 +12,6 @@ from plume_nav_sim.envs import ComponentBasedEnvironment
 from plume_nav_sim.observations import ConcentrationSensor
 from plume_nav_sim.plume.concentration_field import ConcentrationField
 from plume_nav_sim.rewards import SparseGoalReward
-import numpy as np
 
 # Set up environment
 grid_size = GridSize(width=64, height=64)

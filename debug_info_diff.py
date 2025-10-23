@@ -2,7 +2,8 @@
 """Debug script to see what's different in info dicts."""
 
 import sys
-sys.path.insert(0, 'src/backend')
+
+sys.path.insert(0, "src/backend")
 
 from plume_nav_sim import PlumeSearchEnv
 
@@ -27,7 +28,7 @@ print()
 for key in sorted(set(info_0.keys()) | set(info_1.keys())):
     val0 = info_0.get(key, "<missing>")
     val1 = info_1.get(key, "<missing>")
-    
+
     if val0 != val1:
         print(f"DIFF: {key}")
         print(f"  info_0: {val0}")

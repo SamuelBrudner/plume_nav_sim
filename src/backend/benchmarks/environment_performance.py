@@ -241,15 +241,17 @@ class EnvironmentBenchmarkConfig:
             component_name="environment_performance",
             timestamp=time.time(),
         )
-        context.merge_context({
-            "iterations": self.iterations,
-            "warmup_iterations": self.warmup_iterations,
-            "scaling_grid_sizes": self.scaling_grid_sizes,
-            "performance_targets": self.performance_targets,
-            "timeout_seconds": self.timeout_seconds,
-            "enable_memory_profiling": self.enable_memory_profiling,
-            "enable_scaling_analysis": self.enable_scaling_analysis,
-        })
+        context.merge_context(
+            {
+                "iterations": self.iterations,
+                "warmup_iterations": self.warmup_iterations,
+                "scaling_grid_sizes": self.scaling_grid_sizes,
+                "performance_targets": self.performance_targets,
+                "timeout_seconds": self.timeout_seconds,
+                "enable_memory_profiling": self.enable_memory_profiling,
+                "enable_scaling_analysis": self.enable_scaling_analysis,
+            }
+        )
 
         validation_result = ValidationResult(
             is_valid=len(errors) == 0,

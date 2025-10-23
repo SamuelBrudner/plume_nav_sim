@@ -335,7 +335,9 @@ class PlumeNavSimError(Exception):
         # Remove potentially dangerous scripting content and injection attempts
         if user_message:
             # Remove script tags
-            script_pattern = re.compile(r"<script.*?>.*?</script>", re.IGNORECASE | re.DOTALL)
+            script_pattern = re.compile(
+                r"<script.*?>.*?</script>", re.IGNORECASE | re.DOTALL
+            )
             user_message = script_pattern.sub("", user_message)
 
             # Remove dangerous function calls
@@ -350,7 +352,9 @@ class PlumeNavSimError(Exception):
                 (r"\\x00", SANITIZATION_PLACEHOLDER),  # Null bytes
             ]
             for pattern, replacement in injection_patterns:
-                user_message = re.sub(pattern, replacement, user_message, flags=re.IGNORECASE)
+                user_message = re.sub(
+                    pattern, replacement, user_message, flags=re.IGNORECASE
+                )
 
             # Escape remaining HTML
             user_message = user_message.replace("<", "&lt;").replace(">", "&gt;")
@@ -381,7 +385,10 @@ class PlumeNavSimError(Exception):
         for sensitive_key in SENSITIVE_KEYS:
             if sensitive_key.lower() in user_message.lower():
                 user_message = re.sub(
-                    sensitive_key, SANITIZATION_PLACEHOLDER, user_message, flags=re.IGNORECASE
+                    sensitive_key,
+                    SANITIZATION_PLACEHOLDER,
+                    user_message,
+                    flags=re.IGNORECASE,
                 )
 
         return user_message
@@ -429,11 +436,17 @@ class PlumeNavSimError(Exception):
             if comp and op:
                 component_operation = f" [{comp}.{op}]"
 
-        final_message = f"{component_operation}{log_message}" if component_operation else log_message
+        final_message = (
+            f"{component_operation}{log_message}"
+            if component_operation
+            else log_message
+        )
         sanitized_log_message = final_message
         for sensitive_key in SENSITIVE_KEYS:
             pattern = re.compile(re.escape(sensitive_key), re.IGNORECASE)
-            sanitized_log_message = pattern.sub(SANITIZATION_PLACEHOLDER, sanitized_log_message)
+            sanitized_log_message = pattern.sub(
+                SANITIZATION_PLACEHOLDER, sanitized_log_message
+            )
 
         # Log using appropriate severity level with sanitized content
         if self.severity == ErrorSeverity.LOW:
@@ -1418,15 +1431,19 @@ def sanitize_error_context(  # noqa: C901
             # For very short sensitive terms (<=3 chars), only match if at start or exact match
             # to avoid false positives like "normal_key" matching "key"
             if len(sensitive_lower) <= 3:
-                if key_lower == sensitive_lower or key_lower.startswith(sensitive_lower + "_"):
+                if key_lower == sensitive_lower or key_lower.startswith(
+                    sensitive_lower + "_"
+                ):
                     is_sensitive = True
                     break
             else:
                 # For longer terms, match as whole word or with common separators
-                if (key_lower == sensitive_lower or  # Exact match
-                    key_lower.startswith(sensitive_lower + "_") or  # prefix_
-                    key_lower.endswith("_" + sensitive_lower) or  # _suffix
-                    f"_{sensitive_lower}_" in key_lower):  # _middle_
+                if (
+                    key_lower == sensitive_lower
+                    or key_lower.startswith(sensitive_lower + "_")  # Exact match
+                    or key_lower.endswith("_" + sensitive_lower)  # prefix_
+                    or f"_{sensitive_lower}_" in key_lower  # _suffix
+                ):  # _middle_
                     is_sensitive = True
                     break
 

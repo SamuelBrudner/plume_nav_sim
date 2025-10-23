@@ -24,7 +24,6 @@ from typing import (  # >=3.10 - Advanced type hints for validation functions, p
 
 # Third-party imports with version comments
 import numpy as np  # >=2.1.0 - Array validation, dtype checking, mathematical operations, and bounds verification for observation and coordinate validation
-
 from config.default_config import EnvironmentConfig
 
 from ..core.constants import (
@@ -473,7 +472,6 @@ class ParameterValidator:
                 parameter_name=parameter_name,
                 recovery_suggestion="Shorten parameter name",
             )
-
 
         try:
             # Sanitize parameter before validation

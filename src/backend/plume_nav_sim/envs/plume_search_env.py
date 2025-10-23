@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Optional, Tuple
 
-import math
-
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
 from gymnasium.utils import seeding as gym_seeding
 from gymnasium.wrappers import TimeLimit
 
-from .component_env import ComponentBasedEnvironment
-from .factory import create_component_environment
-from ..utils.exceptions import ValidationError
-from ..utils.validation import validate_seed_value
-from ..core.types import GridSize
+from ..core.types import GridSize, RenderMode
 from ..render.matplotlib_viz import MatplotlibRenderer
 from ..render.numpy_rgb import NumpyRGBRenderer
-from ..core.types import RenderMode
+from ..utils.exceptions import ValidationError
+from ..utils.validation import validate_seed_value
+from .component_env import ComponentBasedEnvironment
+from .factory import create_component_environment
 
 __all__ = [
     "PlumeSearchEnv",
@@ -240,7 +237,9 @@ class PlumeSearchEnv(gym.Env):
             def set_interactive_mode(self, enable: bool = True, **kwargs) -> bool:
                 if self.matplotlib_renderer is None:
                     return False
-                return bool(self.matplotlib_renderer.set_interactive_mode(enable, **kwargs))
+                return bool(
+                    self.matplotlib_renderer.set_interactive_mode(enable, **kwargs)
+                )
 
         w, h = normalized_grid
         self.renderer = _RendererAdapter(width=w, height=h)
@@ -278,7 +277,9 @@ class PlumeSearchEnv(gym.Env):
             if self.np_random is None:
                 self.np_random, seed_to_use = gym_seeding.np_random(None)
             else:
-                seed_to_use = int(self.np_random.integers(0, 2**32 - 1, dtype=np.uint32))
+                seed_to_use = int(
+                    self.np_random.integers(0, 2**32 - 1, dtype=np.uint32)
+                )
 
         if seed_to_use is not None:
             seed_to_use = int(seed_to_use)
@@ -304,7 +305,13 @@ class PlumeSearchEnv(gym.Env):
         self._cumulative_reward += float(reward)
         wrapped_obs = self._wrap_observation(obs)
         augmented_info = self._augment_step_info(info, terminated)
-        return wrapped_obs, self._cumulative_reward, terminated, truncated, augmented_info
+        return (
+            wrapped_obs,
+            self._cumulative_reward,
+            terminated,
+            truncated,
+            augmented_info,
+        )
 
     def render(self, mode: str = "human") -> Any:
         if mode not in {"human", "rgb_array"}:
@@ -416,9 +423,7 @@ def unwrap_to_plume_env(env: gym.Env) -> PlumeSearchEnv:
 
         break
 
-    raise TypeError(
-        "Unable to locate PlumeSearchEnv within provided wrapper stack."
-    )
+    raise TypeError("Unable to locate PlumeSearchEnv within provided wrapper stack.")
 
 
 def create_plume_search_env(**kwargs: Any) -> PlumeSearchEnv:

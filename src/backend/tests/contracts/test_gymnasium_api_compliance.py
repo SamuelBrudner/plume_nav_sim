@@ -7,12 +7,12 @@ This is the PUBLIC API that external RL libraries depend on.
 Reference: contracts/gymnasium_api.md
 """
 
+import gymnasium as gym
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-import gymnasium as gym
 from plume_nav_sim import PlumeSearchEnv
 from plume_nav_sim.utils.exceptions import StateError
 
@@ -104,7 +104,10 @@ class TestObservationSpace:
             space = env.observation_space
             assert isinstance(space, gym.spaces.Box)
             # Accept either shape (1,) for sensor reading or 2D for full concentration field
-            assert len(space.shape) in (1, 2), f"Expected shape (1,) or 2D, got shape {space.shape}"
+            assert len(space.shape) in (
+                1,
+                2,
+            ), f"Expected shape (1,) or 2D, got shape {space.shape}"
             if len(space.shape) == 1:
                 assert space.shape == (1,), "1D observation should be shape (1,)"
 
@@ -138,7 +141,10 @@ class TestObservationSpace:
         else:
             # Box observation: accept either 2D concentration field OR 1D sensor reading
             assert isinstance(obs_space, gym.spaces.Box)
-            assert len(obs_space.shape) in (1, 2), f"Expected shape (1,) or 2D, got shape {obs_space.shape}"
+            assert len(obs_space.shape) in (
+                1,
+                2,
+            ), f"Expected shape (1,) or 2D, got shape {obs_space.shape}"
             if len(obs_space.shape) == 1:
                 assert obs_space.shape == (1,), "1D observation should be shape (1,)"
 
@@ -477,10 +483,14 @@ class TestDeterminism:
         # Handle both Dict and Box observations
         if isinstance(obs1, dict):
             # Agent positions should match
-            np.testing.assert_array_equal(obs1["agent_position"], obs2["agent_position"])
+            np.testing.assert_array_equal(
+                obs1["agent_position"], obs2["agent_position"]
+            )
 
             # Source locations should match
-            np.testing.assert_array_equal(obs1["source_location"], obs2["source_location"])
+            np.testing.assert_array_equal(
+                obs1["source_location"], obs2["source_location"]
+            )
 
             # Concentration fields should match
             if "concentration_field" in obs1:
@@ -532,7 +542,9 @@ class TestDeterminism:
 
         # Handle both Dict and Box observations
         if isinstance(obs1, dict):
-            np.testing.assert_array_equal(obs1["agent_position"], obs2["agent_position"])
+            np.testing.assert_array_equal(
+                obs1["agent_position"], obs2["agent_position"]
+            )
         else:
             np.testing.assert_allclose(obs1, obs2, rtol=1e-10)
 

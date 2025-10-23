@@ -874,10 +874,7 @@ def test_memory_usage_constraints(
     # Perform memory leak detection through growth pattern analysis
     leak_threshold_mb = 5.0  # 5MB growth threshold for leak detection
     leak_detected = memory_growth_mb > leak_threshold_mb
-    memory_stability = (
-        not leak_detected
-        and (peak_memory_mb - mean_memory_mb) < 10.0
-    )
+    memory_stability = not leak_detected and (peak_memory_mb - mean_memory_mb) < 10.0
 
     # Generate memory optimization recommendations based on usage patterns
     optimization_recommendations = []

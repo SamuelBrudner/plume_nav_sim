@@ -22,6 +22,7 @@ from collections.abc import Mapping
 from typing import List
 
 import gymnasium as gym
+
 from plume_nav_sim.core.constants import DEFAULT_PLUME_SIGMA
 from plume_nav_sim.registration import (
     COMPONENT_ENV_ID,

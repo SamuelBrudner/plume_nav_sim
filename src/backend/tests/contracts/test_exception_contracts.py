@@ -64,7 +64,9 @@ class TestValidationErrorContract:
 
         # invalid_value exists as deprecated alias but parameter_value is preferred
         assert hasattr(error, "invalid_value")
-        assert error.invalid_value == error.parameter_value, "invalid_value should alias parameter_value"
+        assert (
+            error.invalid_value == error.parameter_value
+        ), "invalid_value should alias parameter_value"
 
     def test_deprecated_invalid_value_parameter_rejected(self):
         """Using deprecated invalid_value parameter still works but is deprecated."""

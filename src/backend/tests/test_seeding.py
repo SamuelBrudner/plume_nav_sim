@@ -16,8 +16,6 @@ of SeedManager, ReproducibilityTracker, and core seeding functions.
 
 # json>=3.10 for JSON serialization testing and reproducibility data export validation
 import json
-import warnings
-from contextlib import contextmanager
 
 # pathlib>=3.10 for path handling and cross-platform file system compatibility
 import pathlib
@@ -30,6 +28,8 @@ import threading
 
 # time>=3.10 for high-precision timing measurements and performance validation
 import time
+import warnings
+from contextlib import contextmanager
 
 # numpy>=2.1.0 for array operations and mathematical precision testing
 import numpy as np
@@ -1348,7 +1348,9 @@ class TestEdgeCases:
         edge_seed = edge_case_parameter
 
         # Validate operations complete successfully without errors (may warn for large seeds)
-        require_warning = edge_seed is not None and int(edge_seed) > OVERFLOW_WARNING_THRESHOLD
+        require_warning = (
+            edge_seed is not None and int(edge_seed) > OVERFLOW_WARNING_THRESHOLD
+        )
         with _overflow_warning_context(edge_seed, require_warning=require_warning):
             is_valid, normalized_seed, error_message = validate_seed(edge_seed)
 

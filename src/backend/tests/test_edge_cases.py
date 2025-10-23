@@ -11,14 +11,14 @@ validation utilities, rendering pipeline, and state management.
 
 import contextlib  # standard library - Context managers for edge case resource management
 import gc  # standard library - Garbage collection control for memory edge case testing
+import importlib.util  # >=3.10 - Module availability checks for conditional skips
 import math  # standard library - Mathematical utilities for edge case calculations
+import os  # >=3.10 - Environment introspection for conditional edge-case skips
 import sys  # standard library - System utilities for testing system limit edge cases
 import time  # standard library - Timing utilities for performance edge case testing
 import unittest.mock  # standard library - Mocking utilities for simulating edge case scenarios
 import warnings  # standard library - Warning management for edge case testing
 
-import os  # >=3.10 - Environment introspection for conditional edge-case skips
-import importlib.util  # >=3.10 - Module availability checks for conditional skips
 import numpy as np  # >=2.1.0 - Array operations for mathematical edge cases and precision testing
 
 # External imports with version requirements
@@ -485,9 +485,9 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         # Test corner position validation
         corner_coords = Coordinates(corner_x, corner_y)
         position_valid = boundary_enforcer.validate_position(corner_coords)
-        assert position_valid is True, (
-            f"Corner position {corner_coords.to_tuple()} should be valid"
-        )
+        assert (
+            position_valid is True
+        ), f"Corner position {corner_coords.to_tuple()} should be valid"
 
         # Test movement actions from corner positions that would violate boundaries
         corner_actions = boundary_enforcer.get_valid_moves(corner_coords)
@@ -524,9 +524,9 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
     for edge_x, edge_y in edge_positions:
         edge_coords = Coordinates(edge_x, edge_y)
         edge_validation = boundary_enforcer.validate_position(edge_coords)
-        assert edge_validation is True, (
-            f"Edge position {edge_coords.to_tuple()} should be valid"
-        )
+        assert (
+            edge_validation is True
+        ), f"Edge position {edge_coords.to_tuple()} should be valid"
 
         # Test edge movement constraints
         valid_moves = boundary_enforcer.get_valid_moves(edge_coords)
@@ -1839,7 +1839,9 @@ def test_error_handling_and_recovery_mechanisms():
     except ResourceError as e:
         # Critical errors should be handled appropriately
         if hasattr(e, "severity"):
-            assert e.severity == ErrorSeverity.CRITICAL, "Should preserve error severity"
+            assert (
+                e.severity == ErrorSeverity.CRITICAL
+            ), "Should preserve error severity"
 
         # Should suggest immediate cleanup actions
         if hasattr(e, "suggest_cleanup_actions"):

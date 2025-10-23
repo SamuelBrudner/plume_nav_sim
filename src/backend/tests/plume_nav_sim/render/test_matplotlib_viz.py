@@ -1632,10 +1632,14 @@ def test_memory_usage_optimization():
 
         try:
             # Memory usage should scale reasonably with grid size
-            complex_field = rng.random((grid_size.height, grid_size.width), dtype=np.float32)
+            complex_field = rng.random(
+                (grid_size.height, grid_size.width), dtype=np.float32
+            )
             complex_context = create_render_context(
                 concentration_field=complex_field,
-                agent_position=Coordinates(x=grid_size.width // 2, y=grid_size.height // 2),
+                agent_position=Coordinates(
+                    x=grid_size.width // 2, y=grid_size.height // 2
+                ),
                 source_position=Coordinates(
                     x=grid_size.width // 4, y=grid_size.height // 4
                 ),

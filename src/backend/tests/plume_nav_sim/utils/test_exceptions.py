@@ -2740,7 +2740,9 @@ class TestErrorPerformance:
         # Just verify that after cleanup, current memory hasn't grown excessively
         current_memory = sum(stat.size for stat in cleanup_stats[:10] if stat.size > 0)
         # Memory after cleanup should be reasonable (not more than 2x peak from test)
-        assert current_memory < peak_memory * 2, f"Memory not cleaned up properly: current {current_memory} bytes vs peak {peak_memory} bytes"
+        assert (
+            current_memory < peak_memory * 2
+        ), f"Memory not cleaned up properly: current {current_memory} bytes vs peak {peak_memory} bytes"
 
         tracemalloc.stop()
 

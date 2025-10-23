@@ -7,4 +7,6 @@ They are skipped by default to avoid cluttering the test suite during active dev
 import pytest
 
 # Skip all tests in this directory by default
-pytestmark = pytest.mark.skip(reason="Archived tests - implementation details may be outdated")
+pytestmark = pytest.mark.skip(
+    reason="Archived tests - implementation details may be outdated"
+)

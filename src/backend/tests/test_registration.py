@@ -19,18 +19,19 @@ across registration operations with comprehensive scenario coverage.
 import time  # >=3.10 - High-precision timing utilities for performance testing
 import warnings  # >=3.10 - Warning system testing for registration conflicts
 
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
+
 # External imports
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, assertion handling
 
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
 from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, unwrap_to_plume_env
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions
 )
 from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,  # Default plume source location
 )
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, unwrap_to_plume_env
 
 # Internal imports
 from plume_nav_sim.registration.register import (
@@ -293,7 +294,7 @@ def create_test_registration_config(
                 raise ValidationError(
                     f"Test configuration validation failed: {error_msgs}",
                     parameter_name="config",
-                    parameter_value=config
+                    parameter_value=config,
                 )
         except ValidationError:
             raise  # Re-raise ValidationError as-is
@@ -386,10 +387,10 @@ def validate_gym_make_compatibility(
 
             # Validate observation space
             dtype_ok = (
-                hasattr(env.observation_space.dtype, 'name') 
+                hasattr(env.observation_space.dtype, "name")
                 and env.observation_space.dtype.name == "float32"
             ) or str(env.observation_space.dtype) == "float32"
-            
+
             if env.observation_space.shape == (1,) and dtype_ok:
                 pass  # Correct observation space
             else:

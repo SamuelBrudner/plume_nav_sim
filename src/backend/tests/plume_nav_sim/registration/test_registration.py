@@ -21,10 +21,10 @@ import time  # >=3.10 - Timing utilities for performance testing and registratio
 import unittest.mock as mock  # >=3.10 - Mock object creation for testing error conditions, external dependency mocking, and isolation testing
 import warnings  # >=3.10 - Warning system testing for registration conflicts, deprecation notices, and compatibility warning validation
 
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation, gym.make() testing, and registry management
+
 # External imports with version comments for testing framework and dependencies
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, and assertion handling with comprehensive test execution management
-
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation, gym.make() testing, and registry management
 from gymnasium.wrappers import TimeLimit
 
 # Internal imports for constants and configuration parameters
@@ -35,6 +35,7 @@ from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,
     ENVIRONMENT_ID,
 )
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 
 # Internal imports for registration functions and dependencies
 from plume_nav_sim.registration.register import ENV_ID
@@ -49,10 +50,13 @@ from plume_nav_sim.registration.register import (
     register_env,
     unregister_env,
 )
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 
 # Internal imports for exception classes and error handling testing
-from plume_nav_sim.utils.exceptions import ConfigurationError, IntegrationError, ValidationError
+from plume_nav_sim.utils.exceptions import (
+    ConfigurationError,
+    IntegrationError,
+    ValidationError,
+)
 
 # Global test constants for comprehensive registration testing scenarios
 TEST_ENV_ID = "TestPlumeNav-StaticGaussian-v0"

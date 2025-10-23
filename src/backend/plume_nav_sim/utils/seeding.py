@@ -18,9 +18,8 @@ from typing import (  # >=3.10 - Type hints for comprehensive type safety
     Union,
 )
 
-import numpy  # >=2.1.0 - Random number generation, array operations, and mathematical functions for deterministic seeding
-
 import gymnasium.utils.seeding  # >=0.29.0 - Gymnasium-compatible random number generator creation using np_random function for RL environment integration
+import numpy  # >=2.1.0 - Random number generation, array operations, and mathematical functions for deterministic seeding
 
 # Internal imports from core constants and utility exceptions
 from ..core.constants import (
@@ -1280,7 +1279,10 @@ class SeedManager:
                 generator_info = None
                 context_id = None
 
-                if self._episode_rng_context and self._episode_rng_context in self.active_generators:
+                if (
+                    self._episode_rng_context
+                    and self._episode_rng_context in self.active_generators
+                ):
                     context_id = self._episode_rng_context
                     generator_info = self.active_generators[context_id]
 
@@ -1327,7 +1329,10 @@ class SeedManager:
                     if exclude_position is None:
                         return position
 
-                    if position.x != exclude_position.x or position.y != exclude_position.y:
+                    if (
+                        position.x != exclude_position.x
+                        or position.y != exclude_position.y
+                    ):
                         return position
 
             finally:

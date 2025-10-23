@@ -13,6 +13,7 @@ def test_create_legacy_via_unified_factory():
     obs, info = env.reset(seed=0)
     # Accept both dict and Box observations
     import numpy as np
+
     assert isinstance(obs, (dict, np.ndarray))
     env.close()
 
@@ -24,5 +25,6 @@ def test_create_component_via_unified_factory():
     obs, info = env.reset()
     # Accept both dict and Box observations
     import numpy as np
+
     assert isinstance(obs, (dict, np.ndarray))
     env.close()

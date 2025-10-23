@@ -14,7 +14,6 @@ import time
 
 import matplotlib
 import numpy as np
-
 import pytest  # noqa: E402
 from matplotlib import rcParams  # noqa: E402
 
@@ -113,7 +112,9 @@ class MemoryMonitor:
 
     def __init__(self) -> None:
         if _psutil is None:
-            raise RuntimeError("psutil is required for memory monitoring; install optional extras")
+            raise RuntimeError(
+                "psutil is required for memory monitoring; install optional extras"
+            )
 
         self._process = _psutil.Process()
         self._samples: list[float] = []
@@ -211,7 +212,9 @@ class CleanupValidator:
             renderer = env.renderer
             if hasattr(renderer, "active_render_targets"):
                 state["active_render_targets"] = len(renderer.active_render_targets)
-        state["open_figures"] = len([fig for fig in getattr(plt, "get_fignums", lambda: [])()])
+        state["open_figures"] = len(
+            [fig for fig in getattr(plt, "get_fignums", lambda: [])()]
+        )
         return state
 
 

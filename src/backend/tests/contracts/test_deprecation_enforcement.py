@@ -43,7 +43,7 @@ class TestDeprecatedExceptionParameters:
 
     def test_configuration_error_rejects_invalid_value(self):
         """ConfigurationError invalid_value is DEPRECATED but functional."""
-        # invalid_value is deprecated but doesn't raise - it's keyword-only  
+        # invalid_value is deprecated but doesn't raise - it's keyword-only
         error = ConfigurationError(
             "test",
             config_parameter="param",
@@ -205,15 +205,15 @@ class TestNoSilentFailures:
         """Wrong parameters should raise TypeError immediately."""
         # Some deprecated parameters still work (invalid_value) for backward compat
         # Others (severity) are fully removed and raise TypeError
-        
+
         # invalid_value is deprecated but functional - doesn't raise
         error1 = ValidationError("test", invalid_value=1)  # type: ignore
         assert error1.parameter_value == 1
-        
+
         # ComponentError.severity is REMOVED - raises TypeError
         with pytest.raises(TypeError):
             ComponentError("test", severity="HIGH")  # type: ignore
-        
+
         # ConfigurationError.invalid_value is deprecated but functional
         error2 = ConfigurationError("test", invalid_value=1)  # type: ignore
         assert error2.parameter_value == 1

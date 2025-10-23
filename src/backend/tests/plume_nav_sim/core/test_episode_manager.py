@@ -169,7 +169,9 @@ class TestEpisodeManagerConfig:
 
         # Assert all derived configurations are dataclass instances
         for component_name, component_config in component_configs.items():
-            assert hasattr(component_config, "__dataclass_fields__"), f"{component_name} should be a dataclass"
+            assert hasattr(
+                component_config, "__dataclass_fields__"
+            ), f"{component_name} should be a dataclass"
 
     def test_resource_estimation(self):
         """Test computational and memory resource estimation for episode processing with performance analysis."""
@@ -189,17 +191,17 @@ class TestEpisodeManagerConfig:
 
         # Assert returned dictionary contains resource estimation data
         assert isinstance(resource_estimate, dict)
-        
+
         # Check that we got some resource estimation data back
         # The structure may vary, so just verify we have keys
         assert len(resource_estimate) > 0, "Should return non-empty resource estimate"
-        
+
         # If specific keys exist, validate their types
         if "memory_usage_mb" in resource_estimate:
             mem_val = resource_estimate["memory_usage_mb"]
             # Could be a number or nested dict
             assert isinstance(mem_val, (int, float, dict))
-        
+
         if "computation_time_ms" in resource_estimate:
             comp_val = resource_estimate["computation_time_ms"]
             assert isinstance(comp_val, (int, float, dict))
@@ -302,7 +304,10 @@ class TestEpisodeManager:
         # Verify observation is numpy array with correct shape and dtype
         # Note: observation may be Box(1,) sensor reading OR full grid
         assert observation.dtype == np.float32
-        assert len(observation.shape) in (1, 2), f"Unexpected shape: {observation.shape}"
+        assert len(observation.shape) in (
+            1,
+            2,
+        ), f"Unexpected shape: {observation.shape}"
 
         # Assert info dictionary contains agent_xy, distance_to_source, step_count
         required_info_keys = [
@@ -1709,8 +1714,7 @@ class TestEpisodeResultAndStatistics:
         assert "episode_duration_ms" in performance_summary["average_metrics"]
         assert "performance_indicators" in performance_summary
         assert (
-            "average_step_latency_ms"
-            in performance_summary["performance_indicators"]
+            "average_step_latency_ms" in performance_summary["performance_indicators"]
         )
 
         # Verify trend analysis includes performance changes over time
@@ -1719,9 +1723,7 @@ class TestEpisodeResultAndStatistics:
 
         # Assert optimization recommendations based on performance patterns
         if "optimization_recommendations" in performance_summary:
-            assert isinstance(
-                performance_summary["optimization_recommendations"], list
-            )
+            assert isinstance(performance_summary["optimization_recommendations"], list)
 
 
 class TestFactoryFunctions:

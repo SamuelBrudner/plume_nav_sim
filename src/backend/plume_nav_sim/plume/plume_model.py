@@ -33,12 +33,14 @@ from ..core.constants import (
     PLUME_MODEL_TYPES,
     STATIC_GAUSSIAN_MODEL_TYPE,
 )
-from ..core.types import Coordinates, GridDimensions, PlumeParameters
 
 # Internal imports - Core types and data structures
 from ..core.types import (
+    Coordinates,
     CoordinateType,
+    GridDimensions,
     GridSize,
+    PlumeParameters,
 )
 
 # Internal imports - Exception handling
@@ -674,7 +676,9 @@ class BasePlumeModel(abc.ABC):
                 if new_sigma is not None:
                     if new_sigma <= 0:
                         raise ValidationError("Sigma parameter must be positive")
-                    max_recommended_sigma = min(self.grid_size.width, self.grid_size.height) / 2
+                    max_recommended_sigma = (
+                        min(self.grid_size.width, self.grid_size.height) / 2
+                    )
                     if new_sigma > max_recommended_sigma:
                         self.logger.warning(
                             "Sigma %.3f exceeds recommended limit %.3f for grid %sx%s",
@@ -1656,7 +1660,9 @@ class PlumeModelRegistry:
                     },
                     override_existing=False,
                 )
-            except Exception as registration_error:  # pragma: no cover - registry safety
+            except (
+                Exception
+            ) as registration_error:  # pragma: no cover - registry safety
                 self.logger.warning(
                     "Builtin model registration failed for '%s': %s",
                     STATIC_GAUSSIAN_MODEL_TYPE,

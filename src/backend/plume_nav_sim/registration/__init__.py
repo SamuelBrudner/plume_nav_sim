@@ -69,6 +69,7 @@ except Exception:
 try:
     import gymnasium.error as _gym_error_module
 except Exception:
+
     class _GymnasiumErrorNamespace:
         class Error(Exception):
             pass
@@ -93,9 +94,9 @@ from ..utils.logging import get_component_logger
 
 # Internal imports for core registration functionality
 from .register import (
+    COMPONENT_ENV_ID,
     ENTRY_POINT,
     ENV_ID,
-    COMPONENT_ENV_ID,
     ensure_component_env_registered,
     is_registered,
     register_env,

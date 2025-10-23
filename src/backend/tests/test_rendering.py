@@ -37,9 +37,7 @@ import numpy as np  # >=2.1.0 - Array operations for RGB array validation, conce
 import pytest  # >=8.0.0 - Testing framework for fixtures, parameterized tests, markers, and comprehensive integration test execution with cross-mode validation
 
 pytestmark = [
-    pytest.mark.filterwarnings(
-        "ignore:Human mode not available.*:UserWarning"
-    ),
+    pytest.mark.filterwarnings("ignore:Human mode not available.*:UserWarning"),
     pytest.mark.filterwarnings(
         "ignore:No Matplotlib backends reported as available; falling back to Agg-only behavior:UserWarning"
     ),

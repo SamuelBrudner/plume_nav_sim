@@ -37,13 +37,13 @@ from typing import (  # >=3.10 - Type hints for test parameter specifications, r
     Optional,
 )
 
+import gymnasium  # >=0.29.0 - RL environment framework for API compliance testing, space validation, gym.make() testing, and Gymnasium interface verification
 import numpy as np  # >=2.1.0 - Array operations for observation validation, mathematical testing, performance benchmarking, and numerical accuracy verification
 
 # External imports with version comments for comprehensive dependency management
 import pytest  # >=8.0.0 - Testing framework for test organization, fixtures, parametrization, and comprehensive test execution with assertion support
-
-import gymnasium  # >=0.29.0 - RL environment framework for API compliance testing, space validation, gym.make() testing, and Gymnasium interface verification
 from gymnasium.wrappers import TimeLimit
+
 from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # System constants for environment configuration and performance validation
 )
@@ -84,7 +84,7 @@ API_COMPLIANCE_TIMEOUT = 30.0  # Timeout seconds for API compliance testing
 def _validate_dict_observation(obs: Any) -> None:
     """Validate observation structure (supports both Box and Dict formats)."""
     import numpy as np
-    
+
     if isinstance(obs, dict):
         # Dict-based observation (future format)
         assert set(obs.keys()) == {
@@ -94,8 +94,12 @@ def _validate_dict_observation(obs: Any) -> None:
         }, f"Unexpected observation keys: {obs.keys()}"
         assert obs["agent_position"].shape == (2,), "agent_position must be shape (2,)"
         assert obs["sensor_reading"].shape == (1,), "sensor_reading must be shape (1,)"
-        assert obs["source_location"].shape == (2,), "source_location must be shape (2,)"
-        assert 0.0 <= obs["sensor_reading"][0] <= 1.0, "sensor_reading must be in [0, 1]"
+        assert obs["source_location"].shape == (
+            2,
+        ), "source_location must be shape (2,)"
+        assert (
+            0.0 <= obs["sensor_reading"][0] <= 1.0
+        ), "sensor_reading must be in [0, 1]"
     elif isinstance(obs, np.ndarray):
         # Box-based observation (current format)
         assert obs.shape == (1,), f"Box observation must be shape (1,), got {obs.shape}"
@@ -714,7 +718,7 @@ def test_gymnasium_api_compliance():
         assert hasattr(
             test_env, "observation_space"
         ), "Environment must have observation_space"
-        
+
         if isinstance(test_env.observation_space, gymnasium.spaces.Dict):
             # Dict format
             assert (
@@ -926,7 +930,9 @@ def test_observation_space_validation():
         else:
             # Box observation space (current format)
             assert isinstance(test_env.observation_space, gymnasium.spaces.Box)
-            assert test_env.observation_space.shape == (1,), "Box obs should be shape (1,)"
+            assert test_env.observation_space.shape == (
+                1,
+            ), "Box obs should be shape (1,)"
 
     finally:
         test_env.close()
@@ -970,7 +976,8 @@ def test_reset_method_functionality():
             )
         else:
             np.testing.assert_array_equal(
-                obs1, obs2,
+                obs1,
+                obs2,
                 "Same seed should produce identical observations",
             )
 
@@ -1013,7 +1020,8 @@ def test_reset_method_functionality():
                     )
                 else:
                     np.testing.assert_array_equal(
-                        obs_i, obs_first,
+                        obs_i,
+                        obs_first,
                         "Consecutive resets with same seed should be identical",
                     )
 
@@ -1158,7 +1166,8 @@ def test_seeding_and_reproducibility(seed):
         else:
             # Box observation - just sensor reading
             np.testing.assert_array_equal(
-                obs1, obs2,
+                obs1,
+                obs2,
                 f"Seed {seed}: identical seeds should produce identical observations",
             )
 
@@ -1190,7 +1199,8 @@ def test_seeding_and_reproducibility(seed):
             else:
                 # Box observation
                 np.testing.assert_array_equal(
-                    step1[0], step2[0],
+                    step1[0],
+                    step2[0],
                     f"Seed {seed}, action {action}: observations should be identical",
                 )
 
@@ -1256,7 +1266,8 @@ def test_seeding_and_reproducibility(seed):
                 )
             else:
                 np.testing.assert_array_equal(
-                    obs1, obs3,
+                    obs1,
+                    obs3,
                     f"Seed {seed}: cross-session reproducibility should be maintained",
                 )
 
@@ -1275,7 +1286,8 @@ def test_seeding_and_reproducibility(seed):
                 )
             else:
                 np.testing.assert_array_equal(
-                    trajectory1[0][0], step3[0],
+                    trajectory1[0][0],
+                    step3[0],
                     f"Seed {seed}: first step should be reproducible across sessions",
                 )
 
@@ -1992,7 +2004,8 @@ def test_component_integration():
                 )
             else:
                 np.testing.assert_array_equal(
-                    obs1, obs2,
+                    obs1,
+                    obs2,
                     "Seeding should coordinate across all components",
                 )
 
@@ -2015,9 +2028,10 @@ def test_component_integration():
                     )
                 else:
                     np.testing.assert_array_equal(
-                        result1[0], result2[0],
+                        result1[0],
+                        result2[0],
                         "Action results should be reproducible",
-                )
+                    )
                 assert result1[1] == result2[1], "Rewards should be reproducible"
 
         finally:
@@ -2065,8 +2079,8 @@ def test_component_integration():
         ), "Action space should match movement system"
         # Observation space can be Dict or Box
         assert isinstance(
-            integration_env.observation_space, 
-            (gymnasium.spaces.Dict, gymnasium.spaces.Box)
+            integration_env.observation_space,
+            (gymnasium.spaces.Dict, gymnasium.spaces.Box),
         ), "Observation space should be Dict or Box"
 
     finally:

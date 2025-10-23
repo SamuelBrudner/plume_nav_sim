@@ -40,7 +40,9 @@ def test_complete_episode_workflow() -> None:
             assert observation["source_location"].shape == (2,)
         else:
             # Box observation - just sensor reading
-            assert observation.shape == (1,), f"Expected shape (1,), got {observation.shape}"
+            assert observation.shape == (
+                1,
+            ), f"Expected shape (1,), got {observation.shape}"
         assert info["agent_xy"]
 
         total_steps = 0

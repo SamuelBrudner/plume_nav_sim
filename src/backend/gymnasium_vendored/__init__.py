@@ -26,6 +26,7 @@ from .spaces import Space as Space  # top-level alias for typing/annotations
 class _ErrorModule:
     class Error(Exception):
         """Base exception for Gymnasium errors."""
+
         pass
 
 

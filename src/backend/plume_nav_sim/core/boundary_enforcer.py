@@ -478,9 +478,7 @@ class BoundaryEnforcer:
             )
 
             if not is_valid and raise_on_invalid:
-                message = (
-                    f"Position {coords} outside grid bounds {self.grid_size}"
-                )
+                message = f"Position {coords} outside grid bounds {self.grid_size}"
                 if context_info:
                     message += f" (Context: {context_info})"
                 raise ValidationError(
@@ -576,13 +574,13 @@ class BoundaryEnforcer:
 
             initial_in_bounds = coords.is_within_bounds(self.grid_size)
 
-            in_bounds = 0 <= new_x < self.grid_size.width and 0 <= new_y < self.grid_size.height
+            in_bounds = (
+                0 <= new_x < self.grid_size.width and 0 <= new_y < self.grid_size.height
+            )
 
             if in_bounds:
                 final_position = (
-                    coords
-                    if movement_vector == (0, 0)
-                    else Coordinates(new_x, new_y)
+                    coords if movement_vector == (0, 0) else Coordinates(new_x, new_y)
                 )
                 boundary_hit = not initial_in_bounds
             else:
@@ -867,8 +865,7 @@ class BoundaryEnforcer:
                 parameter_name="constraint_config",
             ) from e
 
-
-# Standalone utility functions for performance-critical boundary validation operations
+    # Standalone utility functions for performance-critical boundary validation operations
 
     def _normalize_action(self, action: ActionType) -> Action:
         """Normalize incoming action to an `Action` enum, raising `ValidationError` if invalid."""

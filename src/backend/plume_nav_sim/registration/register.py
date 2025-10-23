@@ -24,10 +24,9 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, cast
 
-from typing_extensions import TypedDict
-
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
+from typing_extensions import TypedDict
 
 # Internal imports for configuration constants and system integration
 from ..core.constants import (
@@ -297,7 +296,11 @@ def ensure_component_env_registered(
         unregister_env(COMPONENT_ENV_ID, suppress_warnings=True)
 
     if not is_registered(COMPONENT_ENV_ID, use_cache=True):
-        register_env(env_id=COMPONENT_ENV_ID, entry_point=COMPONENT_ENTRY_POINT, force_reregister=False)
+        register_env(
+            env_id=COMPONENT_ENV_ID,
+            entry_point=COMPONENT_ENTRY_POINT,
+            force_reregister=False,
+        )
 
     if validate_creation:
         test_env = gymnasium.make(COMPONENT_ENV_ID)
@@ -320,7 +323,11 @@ def _convert_kwargs_for_component_env(kwargs: Dict[str, object]) -> Dict[str, ob
         converted["goal_location"] = converted.pop("source_location")
 
     plume_params = converted.pop("plume_params", None)
-    if isinstance(plume_params, dict) and "sigma" in plume_params and "plume_sigma" not in converted:
+    if (
+        isinstance(plume_params, dict)
+        and "sigma" in plume_params
+        and "plume_sigma" not in converted
+    ):
         converted["plume_sigma"] = plume_params["sigma"]
 
     return converted
@@ -456,7 +463,10 @@ def _pop_env_from_registry(effective_env_id: str) -> bool:
             # Try internal _env_specs attribute
             elif hasattr(registry_obj, "_env_specs"):
                 env_specs_internal = registry_obj._env_specs
-                if isinstance(env_specs_internal, dict) and effective_env_id in env_specs_internal:
+                if (
+                    isinstance(env_specs_internal, dict)
+                    and effective_env_id in env_specs_internal
+                ):
                     del env_specs_internal[effective_env_id]
                     removed = True
 

@@ -27,12 +27,10 @@ import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
+import gymnasium as gym
 import numpy as np
 
-import gymnasium as gym
-
 from ..core.constants import AGENT_MARKER_COLOR, SOURCE_MARKER_COLOR
-
 from ..core.geometry import Coordinates, GridSize
 from ..core.state import AgentState
 from ..utils.exceptions import StateError, ValidationError
@@ -443,7 +441,11 @@ class ComponentBasedEnvironment(gym.Env):
             ax, ay = int(agent_state.position.x), int(agent_state.position.y)
         else:
             start = getattr(self, "start_location", None)
-            ax, ay = (int(start.x), int(start.y)) if start is not None else (width // 2, height // 2)
+            ax, ay = (
+                (int(start.x), int(start.y))
+                if start is not None
+                else (width // 2, height // 2)
+            )
 
         if 0 <= ay < height and 0 <= ax < width:
             canvas[ay, ax] = np.array(AGENT_MARKER_COLOR, dtype=np.uint8)
