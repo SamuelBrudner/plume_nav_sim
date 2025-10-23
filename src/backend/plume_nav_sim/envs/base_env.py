@@ -791,12 +791,22 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             List containing the seed value used following Gymnasium specification
         """
         try:
-            # Validate seed parameter using validate_seed_value
-            if seed is not None and not validate_seed_value(seed):
-                raise ValidationError(
-                    f"Invalid seed value: {seed}",
-                    context={"seed_type": type(seed).__name__, "seed_value": seed},
-                )
+            # Validate seed parameter using validate_seed_value with strict typing
+            if seed is not None:
+                try:
+                    validate_seed_value(
+                        seed,
+                        allow_none=False,
+                        strict_type_checking=True,
+                    )
+                except ValidationError as exc:
+                    raise ValidationError(
+                        f"Invalid seed value: {seed}",
+                        context={
+                            "seed_type": type(seed).__name__,
+                            "seed_value": seed,
+                        },
+                    ) from exc
 
             # Create seeded random number generator using gymnasium seeding
             self.np_random, actual_seed = gymnasium.utils.seeding.np_random(seed)
@@ -828,11 +838,17 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
     def _validate_and_apply_seed(self, seed: Optional[int]) -> None:
         if seed is None:
             return
-        if not validate_seed_value(seed):
+        try:
+            validate_seed_value(
+                seed,
+                allow_none=False,
+                strict_type_checking=True,
+            )
+        except ValidationError as exc:
             raise ValidationError(
                 f"Invalid seed value: {seed}",
                 context={"seed_type": type(seed).__name__, "seed_value": seed},
-            )
+            ) from exc
         self.seed(seed)
 
     def _build_initial_info(self, seed: Optional[int]) -> dict:

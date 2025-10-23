@@ -93,6 +93,7 @@ def component_env(
         max_steps=100,
         goal_location=goal_location,
         goal_radius=5.0,
+        start_location=Coordinates(0, 0),
     )
 
 
@@ -279,6 +280,7 @@ class TestComponentBasedEnvironment:
             max_steps=100,
             goal_location=component_env.goal_location,
             goal_radius=5.0,
+            start_location=Coordinates(0, 0),
         )
 
         obs2, _ = env2.reset(seed=42)

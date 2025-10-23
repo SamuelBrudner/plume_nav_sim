@@ -1088,12 +1088,8 @@ class ResourceError(PlumeNavSimError):
             )
 
     def suggest_cleanup_actions(self) -> List[str]:
-        """Suggest specific cleanup actions based on resource type and usage analysis.
-
-        Returns:
-            list: List of cleanup actions to resolve resource constraints
-        """
-        actions = []
+        """Suggest cleanup actions based on resource diagnostics."""
+        actions: List[str] = []
 
         # Analyze resource_type for resource-specific cleanup strategies
         if self.resource_type:

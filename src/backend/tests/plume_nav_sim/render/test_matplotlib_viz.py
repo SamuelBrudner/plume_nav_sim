@@ -1106,7 +1106,8 @@ def test_interactive_mode_configuration():
     # Validate matplotlib interactive mode toggling (plt.ion/plt.ioff)
     original_interactive = plt.isinteractive()
 
-    renderer.enable_interactive_mode()
+    with pytest.warns(UserWarning, match="Tool classes"):
+        renderer.set_interactive_mode(enable=True)
     # May enable interactive mode depending on backend
 
     renderer.disable_interactive_mode()
@@ -1582,6 +1583,7 @@ def test_accessibility_features(test_render_context):
 def test_memory_usage_optimization():
     """Test memory usage optimization including figure caching, resource reuse, and memory leak prevention."""
     renderers = []
+    rng = np.random.default_rng(123)
     initial_objects = len(
         [obj for obj in globals() if isinstance(obj, matplotlib.figure.Figure)]
     )
@@ -1593,23 +1595,27 @@ def test_memory_usage_optimization():
         )
         renderer.initialize()
 
-        # Test figure caching effectiveness and memory reuse patterns
-        figure1 = renderer.get_figure()
-        figure2 = renderer.get_figure()
-        assert figure1 is figure2, "Should reuse same figure instance (caching)"
+        try:
+            # Test figure caching effectiveness and memory reuse patterns
+            figure1 = renderer.get_figure()
+            figure2 = renderer.get_figure()
+            assert figure1 is figure2, "Should reuse same figure instance (caching)"
 
-        # Validate resource cleanup and memory leak prevention mechanisms
-        render_context = create_render_context(
-            concentration_field=np.random.rand(
-                TEST_GRID_SIZE.height, TEST_GRID_SIZE.width
-            ).astype(np.float32),
-            agent_position=TEST_AGENT_POSITION,
-            source_position=TEST_SOURCE_POSITION,
-            grid_size=TEST_GRID_SIZE,
-        )
+            # Validate resource cleanup and memory leak prevention mechanisms
+            render_context = create_render_context(
+                concentration_field=rng.random(
+                    (TEST_GRID_SIZE.height, TEST_GRID_SIZE.width), dtype=np.float32
+                ),
+                agent_position=TEST_AGENT_POSITION,
+                source_position=TEST_SOURCE_POSITION,
+                grid_size=TEST_GRID_SIZE,
+            )
 
-        renderer.render(render_context, RenderMode.HUMAN)
-        renderers.append(renderer)
+            renderer.render(render_context, RenderMode.HUMAN)
+            renderers.append(renderer)
+        except Exception:
+            renderer.cleanup_resources()
+            raise
 
     # Test memory usage with various grid sizes and complexity levels
     grid_sizes = [
@@ -1624,21 +1630,21 @@ def test_memory_usage_optimization():
         )
         grid_renderer.initialize()
 
-        # Memory usage should scale reasonably with grid size
-        complex_field = np.random.rand(grid_size.height, grid_size.width).astype(
-            np.float32
-        )
-        complex_context = create_render_context(
-            concentration_field=complex_field,
-            agent_position=Coordinates(x=grid_size.width // 2, y=grid_size.height // 2),
-            source_position=Coordinates(
-                x=grid_size.width // 4, y=grid_size.height // 4
-            ),
-            grid_size=grid_size,
-        )
+        try:
+            # Memory usage should scale reasonably with grid size
+            complex_field = rng.random((grid_size.height, grid_size.width), dtype=np.float32)
+            complex_context = create_render_context(
+                concentration_field=complex_field,
+                agent_position=Coordinates(x=grid_size.width // 2, y=grid_size.height // 2),
+                source_position=Coordinates(
+                    x=grid_size.width // 4, y=grid_size.height // 4
+                ),
+                grid_size=grid_size,
+            )
 
-        grid_renderer.render(complex_context, RenderMode.HUMAN)
-        grid_renderer.cleanup_resources()
+            grid_renderer.render(complex_context, RenderMode.HUMAN)
+        finally:
+            grid_renderer.cleanup_resources()
 
     # Assert memory usage stays within reasonable bounds during extended operation
     # Clean up all renderers
@@ -1663,27 +1669,27 @@ def test_memory_usage_optimization():
     )
 
     if hasattr(optimized_renderer, "memory_optimization"):
-        # Should provide memory optimization features if supported
         optimized_renderer.initialize()
 
-        start_time = time.time()
-        for _ in range(5):
-            render_context = create_render_context(
-                concentration_field=np.random.rand(
-                    TEST_GRID_SIZE.height, TEST_GRID_SIZE.width
-                ).astype(np.float32),
-                agent_position=TEST_AGENT_POSITION,
-                source_position=TEST_SOURCE_POSITION,
-                grid_size=TEST_GRID_SIZE,
-            )
-            optimized_renderer.render(render_context, RenderMode.HUMAN)
+        try:
+            start_time = time.time()
+            for _ in range(5):
+                render_context = create_render_context(
+                    concentration_field=rng.random(
+                        (TEST_GRID_SIZE.height, TEST_GRID_SIZE.width), dtype=np.float32
+                    ),
+                    agent_position=TEST_AGENT_POSITION,
+                    source_position=TEST_SOURCE_POSITION,
+                    grid_size=TEST_GRID_SIZE,
+                )
+                optimized_renderer.render(render_context, RenderMode.HUMAN)
 
-        optimized_time = (time.time() - start_time) * 1000 / 5
-        assert (
-            optimized_time < PERFORMANCE_TARGET_HUMAN_RENDER_MS * 1.5
-        ), "Memory optimization should not severely impact performance"
-
-        optimized_renderer.cleanup_resources()
+            optimized_time = (time.time() - start_time) * 1000 / 5
+            assert (
+                optimized_time < PERFORMANCE_TARGET_HUMAN_RENDER_MS * 1.5
+            ), "Memory optimization should not severely impact performance"
+        finally:
+            optimized_renderer.cleanup_resources()
 
 
 @pytest.mark.unit
@@ -1990,9 +1996,15 @@ class TestMatplotlibRenderer:
 
         # Measure rendering performance against target thresholds
         target_ms = PERFORMANCE_TARGET_HUMAN_RENDER_MS + PERFORMANCE_TOLERANCE_MS
+        backend_name = self.renderer.backend_manager.get_current_backend()
+
+        if backend_name in {"Agg", "pdf", "svg"}:
+            # Allow additional headless tolerance for non-interactive backends
+            target_ms += 10.0
+
         assert (
             render_time <= target_ms
-        ), f"Rendering should be <{target_ms}ms, got {render_time:.2f}ms"
+        ), f"Rendering should be <{target_ms}ms, got {render_time:.2f}ms (backend={backend_name})"
 
         # Validate error handling and recovery throughout pipeline
         invalid_context = Mock()

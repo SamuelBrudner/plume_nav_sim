@@ -21,10 +21,7 @@ Key Features:
 # External imports with version comments
 import logging  # >=3.10 - Logging integration for boundary enforcement operations and debugging
 import time  # >=3.10 - High-precision timing for performance measurement and benchmarking
-from dataclasses import (  # >=3.10 - Data class utilities for configuration and result structures
-    dataclass,
-    field,
-)
+from dataclasses import dataclass, field
 from typing import (  # >=3.10 - Type hints for boundary enforcer methods and interfaces
     Any,
     Dict,
@@ -51,7 +48,7 @@ from .constants import (
 # Internal imports from core modules for coordinate and action type system integration
 from .enums import Action
 from .geometry import Coordinates, GridSize
-from .types import ActionType, CoordinateType, create_coordinates
+from .types import ActionType, CoordinateType, create_coordinates, create_grid_size
 
 # Global constants for boundary enforcement configuration and performance optimization
 DEFAULT_CLAMPING_ENABLED = True  # Default clamping behavior for position enforcement
@@ -383,23 +380,15 @@ class BoundaryEnforcer:
         Raises:
             ValidationError: If grid_size is invalid or constraint configuration is inconsistent
         """
-        # Validate and store grid_size for boundary calculations using validate_coordinates
-        if not isinstance(grid_size, GridSize):
-            raise ValidationError(
-                "grid_size must be a GridSize instance",
-                parameter_name="grid_size",
-                parameter_value=type(grid_size).__name__,
-            )
-
         try:
-            validate_coordinates((0, 0), grid_size)  # Validate grid_size format
-            self.grid_size = grid_size
-        except Exception as e:
+            self.grid_size = create_grid_size(grid_size)
+            validate_coordinates((0, 0), self.grid_size)  # Validate grid configuration
+        except ValidationError as exc:
             raise ValidationError(
-                f"Invalid grid_size for boundary enforcer: {e}",
+                f"Invalid grid_size for boundary enforcer: {exc}",
                 parameter_name="grid_size",
                 parameter_value=str(grid_size),
-            ) from e
+            ) from exc
 
         # Set up constraint_config or create default MovementConstraint if None provided
         if constraint_config is None:
@@ -585,6 +574,8 @@ class BoundaryEnforcer:
             new_x = coords.x + movement_vector[0]
             new_y = coords.y + movement_vector[1]
 
+            initial_in_bounds = coords.is_within_bounds(self.grid_size)
+
             in_bounds = 0 <= new_x < self.grid_size.width and 0 <= new_y < self.grid_size.height
 
             if in_bounds:
@@ -593,7 +584,7 @@ class BoundaryEnforcer:
                     if movement_vector == (0, 0)
                     else Coordinates(new_x, new_y)
                 )
-                boundary_hit = False
+                boundary_hit = not initial_in_bounds
             else:
                 proposed_position = Coordinates(new_x, new_y)
                 if self.constraint_config.enable_clamping:

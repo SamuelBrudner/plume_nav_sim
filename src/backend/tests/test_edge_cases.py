@@ -38,6 +38,38 @@ from plume_nav_sim.utils.exceptions import (
 from plume_nav_sim.utils.validation import ParameterValidator
 
 
+class PerformanceTracker:
+    """Collect timing metrics during performance edge-case scenarios."""
+
+    def __init__(self):
+        self._metrics: dict[str, list[float]] = {}
+
+    def start_monitoring(self, name: str):
+        self._metrics.setdefault(name, [])
+
+    def record(self, name: str, duration: float):
+        self._metrics.setdefault(name, []).append(duration)
+
+    def get_metrics(self) -> dict[str, list[float]]:
+        return dict(self._metrics)
+
+    def reset(self):
+        self._metrics.clear()
+
+    def stop_monitoring(self):
+        summary = {
+            key: sum(values) / len(values) if values else 0.0
+            for key, values in self._metrics.items()
+        }
+        self.reset()
+        return summary
+
+
+@pytest.fixture
+def performance_tracker():
+    return PerformanceTracker()
+
+
 # Conditional feature flags for skip markers
 MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
 SINGLE_THREADED_ONLY = os.environ.get("PLUME_SKIP_CONCURRENCY", "0") == "1"
@@ -453,9 +485,9 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         # Test corner position validation
         corner_coords = Coordinates(corner_x, corner_y)
         position_valid = boundary_enforcer.validate_position(corner_coords)
-        assert (
-            position_valid.is_valid
-        ), f"Corner position {corner_coords.to_tuple()} should be valid"
+        assert position_valid is True, (
+            f"Corner position {corner_coords.to_tuple()} should be valid"
+        )
 
         # Test movement actions from corner positions that would violate boundaries
         corner_actions = boundary_enforcer.get_valid_moves(corner_coords)
@@ -492,9 +524,9 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
     for edge_x, edge_y in edge_positions:
         edge_coords = Coordinates(edge_x, edge_y)
         edge_validation = boundary_enforcer.validate_position(edge_coords)
-        assert (
-            edge_validation.is_valid
-        ), f"Edge position {edge_coords.to_tuple()} should be valid"
+        assert edge_validation is True, (
+            f"Edge position {edge_coords.to_tuple()} should be valid"
+        )
 
         # Test edge movement constraints
         valid_moves = boundary_enforcer.get_valid_moves(edge_coords)
@@ -518,11 +550,11 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         ):
             # Should be invalid for out-of-bounds positions
             assert (
-                not validation_result.is_valid
+                validation_result is False
             ), f"Extreme position {extreme_coords.to_tuple()} should be invalid"
 
         # Test coordinate clamping behavior with out-of-bounds positions
-        if not validation_result.is_valid:
+        if validation_result is False:
             # Test all actions to ensure clamping works
             for action in [Action.UP, Action.RIGHT, Action.DOWN, Action.LEFT]:
                 clamped_result = boundary_enforcer.enforce_movement_bounds(
@@ -1812,10 +1844,13 @@ def test_error_handling_and_recovery_mechanisms():
         # Should suggest immediate cleanup actions
         if hasattr(e, "suggest_cleanup_actions"):
             cleanup_actions = e.suggest_cleanup_actions()
-            assert (
-                "immediate" in cleanup_actions.lower()
-                or "urgent" in cleanup_actions.lower()
-            )
+            if isinstance(cleanup_actions, str):
+                normalized_actions = cleanup_actions.lower()
+            else:
+                normalized_actions = " ".join(
+                    str(action).lower() for action in cleanup_actions
+                )
+            assert "immediate" in normalized_actions or "urgent" in normalized_actions
 
     # Test exception handling thread safety during concurrent errors
     import queue

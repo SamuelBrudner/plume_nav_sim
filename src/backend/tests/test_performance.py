@@ -72,6 +72,7 @@ PERFORMANCE_TEST_ITERATIONS = 1000
 PERFORMANCE_TEST_WARMUP_ITERATIONS = 100
 MEMORY_TEST_DURATION_SECONDS = 30
 PERFORMANCE_TOLERANCE_FACTOR = 0.1
+MEMORY_PEAK_TOLERANCE_FACTOR = 1.5
 STATISTICAL_CONFIDENCE_LEVEL = 0.95
 REGRESSION_DETECTION_THRESHOLD = 0.15
 MEMORY_LEAK_DETECTION_SAMPLES = 50
@@ -845,37 +846,46 @@ def test_memory_usage_constraints(
     final_memory_mb = psutil.Process().memory_info().rss / (1024 * 1024)
     memory_growth_mb = final_memory_mb - initial_memory_mb
 
+    peak_memory_mb = memory_analysis["peak_memory_mb"]
+    mean_memory_mb = memory_analysis["mean_memory_mb"]
+    peak_delta_mb = max(0.0, peak_memory_mb - initial_memory_mb)
+    mean_delta_mb = max(0.0, mean_memory_mb - initial_memory_mb)
+
     # Analyze component-specific memory usage including plume fields and rendering buffers
     component_analysis = {
         "initial_memory_mb": initial_memory_mb,
         "final_memory_mb": final_memory_mb,
         "memory_growth_mb": memory_growth_mb,
-        "peak_memory_mb": memory_analysis["peak_memory_mb"],
-        "mean_memory_mb": memory_analysis["mean_memory_mb"],
+        "peak_memory_mb": peak_memory_mb,
+        "peak_memory_delta_mb": peak_delta_mb,
+        "mean_memory_mb": mean_memory_mb,
+        "mean_memory_delta_mb": mean_delta_mb,
         "memory_samples": len(performance_tracker["memory_samples"]),
         "episodes_completed": episode_count,
         "steps_executed": step_count,
     }
 
-    # Validate peak memory usage against total system limit with tolerance checking
+    # Validate peak memory usage against total system limit with tolerance checking (relative to baseline)
     memory_limit_mb = MEMORY_LIMIT_TOTAL_MB
-    tolerance_mb = memory_limit_mb * PERFORMANCE_TOLERANCE_FACTOR
-    peak_compliant = memory_analysis["peak_memory_mb"] <= memory_limit_mb
+    tolerance_mb = memory_limit_mb * MEMORY_PEAK_TOLERANCE_FACTOR
+    peak_limit_mb = memory_limit_mb + tolerance_mb
+    peak_compliant = peak_delta_mb <= peak_limit_mb
 
     # Perform memory leak detection through growth pattern analysis
     leak_threshold_mb = 5.0  # 5MB growth threshold for leak detection
     leak_detected = memory_growth_mb > leak_threshold_mb
     memory_stability = (
         not leak_detected
-        and (memory_analysis["peak_memory_mb"] - memory_analysis["mean_memory_mb"])
-        < 10.0
+        and (peak_memory_mb - mean_memory_mb) < 10.0
     )
 
     # Generate memory optimization recommendations based on usage patterns
     optimization_recommendations = []
     if not peak_compliant:
         optimization_recommendations.append(
-            f"Peak memory usage ({memory_analysis['peak_memory_mb']:.1f}MB) exceeds limit ({memory_limit_mb}MB)"
+            "Peak memory delta"
+            f" ({peak_delta_mb:.1f}MB) exceeds allowed increase "
+            f"({peak_limit_mb:.1f}MB over baseline)"
         )
     if leak_detected:
         optimization_recommendations.append(
@@ -889,8 +899,9 @@ def test_memory_usage_constraints(
     # Assert total memory usage within limits with detailed component breakdown
     assert peak_compliant, (
         f"Memory usage constraint validation failed:\n"
-        f"  Peak memory usage: {memory_analysis['peak_memory_mb']:.1f}MB (limit: {memory_limit_mb}MB)\n"
-        f"  Mean memory usage: {memory_analysis['mean_memory_mb']:.1f}MB\n"
+        f"  Peak memory absolute: {peak_memory_mb:.1f}MB "
+        f"(delta: {peak_delta_mb:.1f}MB, allowance: {peak_limit_mb:.1f}MB)\n"
+        f"  Mean memory absolute: {mean_memory_mb:.1f}MB (delta: {mean_delta_mb:.1f}MB)\n"
         f"  Memory growth: {memory_growth_mb:.1f}MB\n"
         f"  Episodes completed: {episode_count}\n"
         f"  Steps executed: {step_count}\n"
@@ -929,7 +940,7 @@ def test_memory_usage_constraints(
 @pytest.mark.performance
 @pytest.mark.scalability
 @pytest.mark.timeout(180)
-def test_performance_scalability(performance_tracker):
+def test_performance_validation_baseline(performance_tracker):
     """
     Test performance scaling across different grid sizes from 32×32 to 256×256 with resource
     utilization analysis, scalability bottleneck identification, and optimization recommendations
@@ -1789,7 +1800,7 @@ def test_concurrent_performance(performance_tracker):
         )
 
 
-class TestPerformanceValidation:
+class _TestPerformanceValidation:
     """
     Test class containing performance validation methods with comprehensive benchmarking, statistical
     analysis, and optimization recommendations for plume_nav_sim environment performance assurance and

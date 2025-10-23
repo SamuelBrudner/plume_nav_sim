@@ -58,7 +58,11 @@ from plume_nav_sim.core.geometry import GridSize
 
 # Internal imports for environment benchmarking and validation framework integration
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from plume_nav_sim.utils.validation import ValidationResult, validate_environment_config
+from plume_nav_sim.utils.validation import (
+    ValidationContext,
+    ValidationResult,
+    validate_environment_config,
+)
 
 # Global configuration constants for benchmark execution and analysis
 DEFAULT_BENCHMARK_ITERATIONS = 1000
@@ -232,12 +236,39 @@ class EnvironmentBenchmarkConfig:
             if fmt not in valid_formats:
                 warnings.append(f"Unknown output format: {fmt}")
 
-        return ValidationResult(
-            is_valid=len(errors) == 0,
-            errors=errors,
-            warnings=warnings,
-            validated_object="EnvironmentBenchmarkConfig",
+        context = ValidationContext(
+            operation_name="EnvironmentBenchmarkConfig.validate_config",
+            component_name="environment_performance",
+            timestamp=time.time(),
         )
+        context.merge_context({
+            "iterations": self.iterations,
+            "warmup_iterations": self.warmup_iterations,
+            "scaling_grid_sizes": self.scaling_grid_sizes,
+            "performance_targets": self.performance_targets,
+            "timeout_seconds": self.timeout_seconds,
+            "enable_memory_profiling": self.enable_memory_profiling,
+            "enable_scaling_analysis": self.enable_scaling_analysis,
+        })
+
+        validation_result = ValidationResult(
+            is_valid=len(errors) == 0,
+            operation_name="EnvironmentBenchmarkConfig.validate_config",
+            context=context,
+        )
+
+        for error in errors:
+            validation_result.add_error(error)
+        for warning in warnings:
+            validation_result.add_warning(warning)
+
+        validation_result.summary_message = (
+            "Configuration valid"
+            if validation_result.is_valid
+            else "Configuration validation failed"
+        )
+
+        return validation_result
 
     def to_dict(self) -> dict:
         """
@@ -2895,7 +2926,24 @@ class PerformanceAnalysis:
         scalability = performance_data.get("scalability") or {}
         measurements = scalability.get("scaling_measurements") or {}
         if measurements:
-            analyzer = ScalabilityAnalyzer()
+            grid_size_range = [
+                tuple(value["grid_dimensions"])
+                for value in measurements.values()
+                if isinstance(value, dict) and "grid_dimensions" in value
+            ]
+            if not grid_size_range:
+                grid_size_range = []
+                for key in measurements.keys():
+                    if isinstance(key, str) and "x" in key:
+                        try:
+                            width_str, height_str = key.split("x", 1)
+                            grid_size_range.append((int(width_str), int(height_str)))
+                        except (ValueError, TypeError):
+                            continue
+
+            analyzer = ScalabilityAnalyzer(
+                grid_size_range=grid_size_range or [(32, 32)]
+            )
             trends["scaling"] = analyzer._analyze_scaling_trends(measurements)
 
         step = performance_data.get("step_latency") or {}

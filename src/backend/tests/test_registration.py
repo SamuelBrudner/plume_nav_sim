@@ -24,7 +24,7 @@ import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, param
 
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
 from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, unwrap_to_plume_env
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions
 )
@@ -735,13 +735,16 @@ class TestRegistrationIntegration:
         env1 = gymnasium.make(TEST_ENV_ID_BASE)
         env2 = gymnasium.make(TEST_ENV_ID_BASE)
 
+        plume_env1 = unwrap_to_plume_env(env1)
+        plume_env2 = unwrap_to_plume_env(env2)
+
         # Both environments should be valid instances
         assert isinstance(
-            env1, PlumeSearchEnv
-        ), "First instance should be PlumeSearchEnv"
+            plume_env1, PlumeSearchEnv
+        ), "First instance should unwrap to PlumeSearchEnv"
         assert isinstance(
-            env2, PlumeSearchEnv
-        ), "Second instance should be PlumeSearchEnv"
+            plume_env2, PlumeSearchEnv
+        ), "Second instance should unwrap to PlumeSearchEnv"
 
         # Test independent operation
         obs1, info1 = env1.reset(seed=42)
@@ -766,8 +769,9 @@ class TestRegistrationIntegration:
 
         # Validate updated registration
         env3 = gymnasium.make(TEST_ENV_ID_BASE)
+        plume_env3 = unwrap_to_plume_env(env3)
         assert (
-            env3.grid_size == updated_config["grid_size"]
+            plume_env3.grid_size == updated_config["grid_size"]
         ), "Updated grid size should be applied"
 
         # Stage 4: Complete lifecycle cleanup
@@ -832,16 +836,17 @@ class TestRegistrationIntegration:
 
                 # Test environment creation and parameter validation
                 env = gymnasium.make(test_env_id)
+                plume_env = unwrap_to_plume_env(env)
 
                 # Verify parameter consistency
                 for param_name, param_value in overrides.items():
                     if param_name == "grid_size":
                         assert (
-                            env.grid_size == param_value
+                            plume_env.grid_size == param_value
                         ), f"Grid size mismatch for {config_name}"
                     elif param_name == "source_location":
                         assert (
-                            env.source_location == param_value
+                            plume_env.source_location == param_value
                         ), f"Source location mismatch for {config_name}"
                     elif param_name == "max_steps":
                         # Validate through environment operation

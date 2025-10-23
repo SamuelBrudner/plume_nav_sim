@@ -235,6 +235,21 @@ def register_env(  # noqa: C901
             additional_wrappers=(),
         )
 
+        try:
+            spec = gymnasium.spec(effective_env_id)
+            if spec is not None:
+                # Ensure Gymnasium does not wrap the environment with OrderEnforcing or TimeLimit
+                if hasattr(spec, "order_enforcing"):
+                    spec.order_enforcing = False
+                if hasattr(spec, "max_episode_steps"):
+                    spec.max_episode_steps = None
+        except Exception as spec_error:  # pragma: no cover - defensive guard
+            _logger.debug(
+                "Unable to adjust Gymnasium spec for %s: %s",
+                effective_env_id,
+                spec_error,
+            )
+
         # Update registration cache with successful registration information and timestamp
         _registration_cache[effective_env_id] = {
             "registered": True,

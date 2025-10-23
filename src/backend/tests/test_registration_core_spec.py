@@ -20,7 +20,8 @@ def test_register_make_isinstance_and_cleanup():
     # make() should yield an instance recognized as PlumeSearchEnv (even if wrapped)
     env = gymnasium.make(env_id)
     try:
-        assert isinstance(env, PlumeSearchEnv)
+        base_env = getattr(env, "unwrapped", env)
+        assert isinstance(base_env, PlumeSearchEnv)
     finally:
         env.close()
 
