@@ -22,7 +22,7 @@ import importlib
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Protocol, Tuple, cast
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
@@ -304,10 +304,16 @@ def ensure_component_env_registered(
 
     if validate_creation:
         test_env = gymnasium.make(COMPONENT_ENV_ID)
+
+        class _EnvProbe(Protocol):
+            def reset(self, *args: object, **kwargs: object) -> object: ...
+            def close(self) -> None: ...
+
+        probe = cast(_EnvProbe, test_env)
         try:
-            test_env.reset()
+            probe.reset()
         finally:
-            test_env.close()
+            probe.close()
 
     return COMPONENT_ENV_ID
 
@@ -585,7 +591,12 @@ def _query_registry_direct(effective_env_id: str) -> bool:
 def _query_registry_fallback(effective_env_id: str) -> bool:
     with contextlib.suppress(Exception):
         test_env = gymnasium.make(effective_env_id)
-        test_env.close()
+
+        class _Closable(Protocol):
+            def close(self) -> None: ...
+
+        closable_env = cast(_Closable, test_env)
+        closable_env.close()
         return True
     return False
 

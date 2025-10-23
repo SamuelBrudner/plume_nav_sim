@@ -23,7 +23,7 @@ import time  # >=3.10 - Timestamp generation for cache management and registrati
 import warnings  # >=3.10 - Module initialization warnings and registration
 
 # compatibility notifications for development environments
-from typing import Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 # External imports with version comments
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
@@ -37,14 +37,15 @@ try:
     # 'gc' is not preloaded here so their conditional path chooses the safe branch.
     sys.modules.pop("gc", None)
 
-    reg = gymnasium.envs.registry
+    envs_mod = gymnasium.envs
+    reg = getattr(envs_mod, "registry", None)
     if isinstance(reg, dict) and not hasattr(reg, "env_specs"):
 
         class _RegistryAdapter:
-            def __init__(self, mapping: dict[str, object]) -> None:
-                self.env_specs: dict[str, object] = mapping
+            def __init__(self, mapping: Mapping[str, object]) -> None:
+                self.env_specs: Mapping[str, object] = mapping
 
-        gymnasium.envs.registry = _RegistryAdapter(reg)  # type: ignore[assignment]
+        setattr(envs_mod, "registry", _RegistryAdapter(reg))
 except Exception:
     warnings.warn(
         "Gymnasium registry may not be fully compatible - some features may be limited",
@@ -56,13 +57,14 @@ except Exception:
 try:
     from gymnasium.wrappers.common import OrderEnforcing
 
-    def _order_enforcing_getattr(self, name: str):  # type: ignore[override]
+    def _order_enforcing_getattr(self: object, name: str) -> object:
         if name == "env":
             raise AttributeError(name)
         env = object.__getattribute__(self, "env")
         return getattr(env, name)
 
-    OrderEnforcing.__getattr__ = _order_enforcing_getattr
+    # Assign via setattr to avoid static type complaints in strict mode
+    setattr(OrderEnforcing, "__getattr__", _order_enforcing_getattr)
 except Exception:
     pass
 
@@ -83,9 +85,9 @@ except Exception:
         class ResetNeeded(Error):
             pass
 
-    gymnasium.error = _GymnasiumErrorNamespace()
+    setattr(gymnasium, "error", _GymnasiumErrorNamespace())
 else:
-    gymnasium.error = _gym_error_module
+    setattr(gymnasium, "error", _gym_error_module)
 
 from ..utils.exceptions import ConfigurationError
 
@@ -426,8 +428,14 @@ def _initialize_registration_module() -> bool:  # noqa: C901
         # Perform initial registration system validation and compatibility checking
         try:
             # Test basic gymnasium registry access
-            registry = gymnasium.envs.registry
-            if not hasattr(registry, "all") or not callable(registry.all):
+            envs_mod2 = gymnasium.envs
+            registry = getattr(envs_mod2, "registry", None)
+            has_all = bool(
+                registry is not None
+                and hasattr(registry, "all")
+                and callable(getattr(registry, "all"))
+            )
+            if not has_all:
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
