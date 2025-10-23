@@ -44,7 +44,7 @@ def create_edge_case_test_config(**overrides: object) -> Dict[str, object]:
 
 
 @dataclass
-class TestConfigFactory:
+class _TestConfigFactory:
     """Simplified stand-in for the production configuration factory."""
 
     auto_optimize: bool = False
@@ -80,3 +80,7 @@ class TestConfigFactory:
         except KeyError as exc:
             raise ValueError(f"Unknown test configuration profile: {profile}") from exc
         return builder(**overrides)
+
+
+# Preserve public API while avoiding pytest collection on helper class name
+TestConfigFactory = _TestConfigFactory

@@ -205,7 +205,7 @@ class BasePlumeModel(abc.ABC):
     def __init__(
         self,
         grid_size: GridDimensions,
-        source_location: CoordinateType,
+        source_location: Optional[CoordinateType] = None,
         sigma: Optional[float] = None,
         model_options: Optional[Dict] = None,
     ):
@@ -233,18 +233,24 @@ class BasePlumeModel(abc.ABC):
         )
 
         # Convert and validate source_location using validate_coordinates with grid bounds
-        if isinstance(source_location, tuple):
-            self.source_location = Coordinates(
-                x=source_location[0], y=source_location[1]
-            )
-        elif isinstance(source_location, list):
-            self.source_location = Coordinates(
-                x=source_location[0], y=source_location[1]
-            )
-        elif isinstance(source_location, Coordinates):
-            self.source_location = source_location
+        if source_location is None:
+            # Default to grid center when source not specified (maintains backwards compatibility)
+            center_x = self.grid_size.width // 2
+            center_y = self.grid_size.height // 2
+            self.source_location = Coordinates(x=center_x, y=center_y)
         else:
-            raise ValidationError("Invalid source_location type")
+            if isinstance(source_location, tuple):
+                self.source_location = Coordinates(
+                    x=source_location[0], y=source_location[1]
+                )
+            elif isinstance(source_location, list):
+                self.source_location = Coordinates(
+                    x=source_location[0], y=source_location[1]
+                )
+            elif isinstance(source_location, Coordinates):
+                self.source_location = source_location
+            else:
+                raise ValidationError("Invalid source_location type")
 
         validate_coordinates(self.source_location, self.grid_size)
 
@@ -670,9 +676,16 @@ class BasePlumeModel(abc.ABC):
                 if new_sigma is not None:
                     if new_sigma <= 0:
                         raise ValidationError("Sigma parameter must be positive")
-                    if new_sigma > min(self.grid_size.width, self.grid_size.height) / 2:
-                        raise ValidationError(
-                            "Sigma parameter too large for grid dimensions"
+                    max_recommended_sigma = (
+                        min(self.grid_size.width, self.grid_size.height) / 2
+                    )
+                    if new_sigma > max_recommended_sigma:
+                        self.logger.warning(
+                            "Sigma %.3f exceeds recommended limit %.3f for grid %sx%s",
+                            new_sigma,
+                            max_recommended_sigma,
+                            self.grid_size.width,
+                            self.grid_size.height,
                         )
 
             # Update source_location and sigma properties with validated values
@@ -1201,6 +1214,7 @@ class PlumeModelRegistry:
         source_location: CoordinateType,
         sigma: Optional[float] = None,
         creation_options: Optional[Dict] = None,
+        **constructor_overrides: Any,
     ) -> BasePlumeModel:
         """
         Factory method for creating plume model instances with parameter validation,
@@ -1257,12 +1271,17 @@ class PlumeModelRegistry:
                 sigma = DEFAULT_PLUME_SIGMA
 
             # Instantiate model_class with validated parameters and merged options
-            model_instance = model_class(
-                grid_size=grid_size,
-                source_location=source_location,
-                sigma=sigma,
-                model_options=merged_options,
-            )
+            model_constructor_kwargs = {
+                "grid_size": grid_size,
+                "source_location": source_location,
+                "sigma": sigma,
+                "model_options": merged_options,
+            }
+            # Allow caller to supply additional constructor overrides (e.g., custom parameters)
+            if constructor_overrides:
+                model_constructor_kwargs.update(constructor_overrides)
+
+            model_instance = model_class(**model_constructor_kwargs)
 
             # Set model type for the instance
             model_instance.model_type = model_type
@@ -1616,9 +1635,39 @@ class PlumeModelRegistry:
         Register built-in model types during registry initialization.
         Note: Actual model classes would be imported and registered here.
         """
-        # Placeholder for built-in model registration
-        # In a real implementation, this would register the StaticGaussianPlume model
-        pass
+        try:
+            from .static_gaussian import StaticGaussianPlume
+        except Exception as import_error:  # pragma: no cover - defensive logging
+            self.logger.warning(
+                "Failed to import StaticGaussianPlume for builtin registration: %s",
+                import_error,
+            )
+            return
+
+        # Ensure registration only occurs when not already present
+        if STATIC_GAUSSIAN_MODEL_TYPE not in self.registered_models:
+            try:
+                self.register_model(
+                    model_type=STATIC_GAUSSIAN_MODEL_TYPE,
+                    model_class=StaticGaussianPlume,
+                    metadata={
+                        "description": "Static Gaussian plume implementation",
+                        "capabilities": [
+                            "gaussian_concentration_calculation",
+                            "static_field_generation",
+                            "efficient_position_sampling",
+                        ],
+                    },
+                    override_existing=False,
+                )
+            except (
+                Exception
+            ) as registration_error:  # pragma: no cover - registry safety
+                self.logger.warning(
+                    "Builtin model registration failed for '%s': %s",
+                    STATIC_GAUSSIAN_MODEL_TYPE,
+                    registration_error,
+                )
 
 
 class PlumeModelError(ComponentError):

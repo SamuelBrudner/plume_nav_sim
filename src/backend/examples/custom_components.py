@@ -57,8 +57,23 @@ def build_environment() -> ComponentBasedEnvironment:
 
     wrapper = pns.make_env()
     try:
-        base_env = getattr(wrapper, "_env", None)
-        if not isinstance(base_env, ComponentBasedEnvironment):
+        base_env: ComponentBasedEnvironment | None = None
+        # Prefer direct access to the core component environment if exposed
+        core_env = getattr(wrapper, "_core_env", None)
+        if isinstance(core_env, ComponentBasedEnvironment):
+            base_env = core_env
+        else:
+            # Fallback: unwrap common Gymnasium wrappers to locate the component env
+            current = getattr(wrapper, "_env", None)
+            visited: set[int] = set()
+            while current is not None and id(current) not in visited:
+                visited.add(id(current))
+                if isinstance(current, ComponentBasedEnvironment):
+                    base_env = current
+                    break
+                current = getattr(current, "env", None)
+
+        if base_env is None:
             raise RuntimeError(
                 "Unexpected environment type; expected ComponentBasedEnvironment"
             )

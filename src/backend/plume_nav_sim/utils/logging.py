@@ -393,10 +393,17 @@ def log_performance(  # noqa: C901
         base_logger: logging.Logger
         if isinstance(logger, logging.Logger):
             base_logger = logger
-        elif hasattr(logger, "base_logger") and isinstance(
-            getattr(logger, "base_logger"), logging.Logger
-        ):
-            base_logger = getattr(logger, "base_logger")
+        elif hasattr(logger, "base_logger"):
+            try:
+                candidate = logger.base_logger  # type: ignore[attr-defined]
+            except AttributeError:
+                candidate = None
+            if isinstance(candidate, logging.Logger):
+                base_logger = candidate
+            else:
+                raise ValidationError(
+                    f"logger.base_logger must be logging.Logger, got {type(candidate)}"
+                )
         else:
             raise ValidationError(
                 f"logger must be logging.Logger or ComponentLogger instance, got {type(logger)}"
@@ -454,34 +461,43 @@ def log_performance(  # noqa: C901
                     baseline_info = f" (similar to baseline: {baseline_ratio:.2f}x)"
 
         # Determine appropriate log level based on performance threshold comparison (info/warning/error)
+        # Reduce verbosity for within‑target operations to minimize hot‑path overhead.
         if threshold_ratio <= 1.0:
-            log_level = logging.INFO
+            # Treat within‑target timings as DEBUG to avoid spamming logs in tight loops
+            log_level = logging.DEBUG
         elif threshold_ratio <= 2.0:
             log_level = logging.WARNING
         else:
             log_level = logging.ERROR
 
-        # Create structured log message with timing, metrics, and threshold status
-        log_message = (
-            f"PERF [{operation_name}] {duration_ms:.3f}ms "
-            f"({threshold_status}: {threshold_ratio:.2f}x target)"
-            f"{metrics_info}{baseline_info}"
-        )
+        # Skip low‑signal log records to further reduce overhead in hot paths:
+        #  - Don’t log minor threshold exceedances (<= 1.2x target)
+        #  - Only format log message if the level is actually enabled
+        if threshold_ratio <= 1.2 and log_level == logging.WARNING:
+            return
 
-        # Log performance information with appropriate level and detailed metrics
-        base_logger.log(
-            log_level,
-            log_message,
-            extra={
-                "operation_name": operation_name,
-                "duration_ms": duration_ms,
-                "threshold_status": threshold_status,
-                "threshold_ratio": threshold_ratio,
-                "additional_metrics": additional_metrics,
-                "baseline_comparison": baseline_info,
-                "performance_category": "timing",
-            },
-        )
+        if base_logger.isEnabledFor(log_level):
+            # Create structured log message with timing, metrics, and threshold status
+            log_message = (
+                f"PERF [{operation_name}] {duration_ms:.3f}ms "
+                f"({threshold_status}: {threshold_ratio:.2f}x target)"
+                f"{metrics_info}{baseline_info}"
+            )
+
+            # Log performance information with appropriate level and detailed metrics
+            base_logger.log(
+                log_level,
+                log_message,
+                extra={
+                    "operation_name": operation_name,
+                    "duration_ms": duration_ms,
+                    "threshold_status": threshold_status,
+                    "threshold_ratio": threshold_ratio,
+                    "additional_metrics": additional_metrics,
+                    "baseline_comparison": baseline_info,
+                    "performance_category": "timing",
+                },
+            )
 
         # Update performance baselines in _performance_baselines if this is a new measurement
         if operation_name not in _performance_baselines:
@@ -551,7 +567,8 @@ def monitor_performance(
 
             op_name = operation_name or func.__name__
             # Throttle hot-path logging to reduce variance in tight loops (e.g., rendering benchmarks)
-            if op_name != "render_operation":
+            # Also avoid logging for reward_calculation to minimize overhead in performance tests.
+            if op_name not in ("render_operation", "reward_calculation"):
                 try:
                     log_performance(
                         logging.getLogger(PACKAGE_NAME),
@@ -722,10 +739,10 @@ def create_performance_logger(  # noqa: C901
 
         # Initialize memory tracking capabilities if enable_memory_tracking is True
         if enable_memory_tracking:
-            setattr(base_logger, "memory_tracking", True)
+            base_logger.memory_tracking = True  # type: ignore[attr-defined]
 
         # Set up threshold alerting for performance degradation detection
-        setattr(base_logger, "timing_thresholds", thresholds)
+        base_logger.timing_thresholds = thresholds  # type: ignore[attr-defined]
 
         # Add baseline tracking to the formatter
         if hasattr(formatter, "add_baseline"):

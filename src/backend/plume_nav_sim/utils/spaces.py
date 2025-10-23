@@ -25,10 +25,9 @@ from typing import (  # >=3.10 - Type hints for space factory functions, validat
     Union,
 )
 
-import numpy as np  # >=2.1.0 - Array operations, dtype specifications, and mathematical operations for space bounds and observation validation
-
 # External imports with version comments
 import gymnasium.spaces  # >=0.29.0 - Core Gymnasium space classes including Discrete and Box for action and observation space creation with standard RL API compliance
+import numpy as np  # >=2.1.0 - Array operations, dtype specifications, and mathematical operations for space bounds and observation validation
 
 from ..core.constants import (
     ACTION_DOWN,
@@ -131,6 +130,7 @@ def _create_action_space_impl(  # noqa: C901
             warnings.warn(
                 f"Creating action space with {final_num_actions} actions, but standard size is {ACTION_SPACE_SIZE}",
                 UserWarning,
+                stacklevel=2,
             )
 
         action_space = gymnasium.spaces.Discrete(final_num_actions)
@@ -302,7 +302,7 @@ def _create_observation_space_impl(  # noqa: C901
         high_bound = np.full(final_shape, bounds[1], dtype=dtype)
 
         observation_space = gymnasium.spaces.Box(
-            low=low_bound, high=high_bound, dtype=dtype
+            low=low_bound, high=high_bound, shape=final_shape, dtype=dtype
         )
 
         observation_metadata = {
@@ -591,6 +591,7 @@ def validate_observation(  # noqa: C901
             warnings.warn(
                 f"Observation dtype {observation.dtype} differs from expected {OBSERVATION_DTYPE}",
                 UserWarning,
+                stacklevel=2,
             )
 
             # Convert to expected dtype
@@ -737,6 +738,7 @@ def validate_action_space(  # noqa: C901
                 warnings.warn(
                     f"Action space size {action_space.n} differs from standard {ACTION_SPACE_SIZE}",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         # Validate action space sample() method produces valid actions in expected range
@@ -814,6 +816,7 @@ def validate_action_space(  # noqa: C901
                         warnings.warn(
                             f"Action space metadata missing optional keys: {missing_keys}",
                             UserWarning,
+                            stacklevel=2,
                         )
 
         # Apply strict validation including performance testing if strict_validation enabled
@@ -828,6 +831,7 @@ def validate_action_space(  # noqa: C901
                 warnings.warn(
                     f"Action space sampling performance slower than expected: {sample_time:.3f}ms for 1000 samples",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         # Test action space compatibility with Action enum values
@@ -916,6 +920,7 @@ def validate_observation_space(  # noqa: C901
                 warnings.warn(
                     f"Observation space shape {observation_space.shape} differs from standard {expected_shape}",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         # Validate observation space bounds match CONCENTRATION_RANGE [0.0, 1.0] if check_bounds enabled
@@ -936,6 +941,7 @@ def validate_observation_space(  # noqa: C901
                     warnings.warn(
                         "Observation space low bounds differ from standard concentration range",
                         UserWarning,
+                        stacklevel=2,
                     )
 
             # Check high bounds
@@ -952,6 +958,7 @@ def validate_observation_space(  # noqa: C901
                     warnings.warn(
                         "Observation space high bounds differ from standard concentration range",
                         UserWarning,
+                        stacklevel=2,
                     )
 
         # Check observation space dtype matches OBSERVATION_DTYPE (float32) if check_dtype enabled
@@ -970,6 +977,7 @@ def validate_observation_space(  # noqa: C901
                     warnings.warn(
                         f"Observation space dtype {observation_space.dtype} differs from expected {expected_dtype}",
                         UserWarning,
+                        stacklevel=2,
                     )
 
         # Validate observation space sample() method produces valid observations in expected range
@@ -1059,6 +1067,7 @@ def validate_observation_space(  # noqa: C901
                 warnings.warn(
                     f"Observation space sampling performance slower than expected: {sample_time:.3f}ms for 1000 samples",
                     UserWarning,
+                    stacklevel=2,
                 )
 
             # Test mathematical properties
@@ -1066,6 +1075,7 @@ def validate_observation_space(  # noqa: C901
                 warnings.warn(
                     f"Observation space is not bounded on both sides: {observation_space.is_bounded()}",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         # Test observation space compatibility with plume concentration values
@@ -1083,12 +1093,15 @@ def validate_observation_space(  # noqa: C901
                         warnings.warn(
                             f"Observation space may not be compatible with concentration value {conc_val}",
                             UserWarning,
+                            stacklevel=2,
                         )
         except ValidationError:
             raise
         except Exception as e:
             warnings.warn(
-                f"Could not test concentration compatibility: {e}", UserWarning
+                f"Could not test concentration compatibility: {e}",
+                UserWarning,
+                stacklevel=2,
             )
 
         logger.debug(
@@ -1312,7 +1325,7 @@ def sample_valid_action(
         max_attempts = 100
         excluded_set = set(excluded_actions) if excluded_actions else set()
 
-        for attempt in range(max_attempts):
+        for _attempt in range(max_attempts):
             action_sample = action_space.sample()
 
             # Check sampled action against excluded_actions list and resample if necessary
@@ -1963,6 +1976,7 @@ class SpaceConfig:
                     warnings.warn(
                         f"Large memory usage per observation: {memory_per_observation} bytes",
                         UserWarning,
+                        stacklevel=2,
                     )
 
             return True

@@ -967,6 +967,9 @@ def detect_rendering_capabilities(
         "color_scheme_support": {},
         "recommendations": [],
         "warnings": [],
+        "gui_toolkits": {},
+        "interactive_support": False,
+        "qt_binding_available": False,
     }
 
     try:
@@ -1059,6 +1062,13 @@ def _extracted_from_detect_rendering_capabilities_99(
     )
     capabilities["display_available"] = capabilities_result.get(
         "display_available", False
+    )
+    capabilities["qt_binding_available"] = capabilities_result.get(
+        "qt_binding_available", False
+    )
+    capabilities["gui_toolkits"] = capabilities_result.get("gui_toolkits", {})
+    capabilities["interactive_support"] = capabilities_result.get(
+        "interactive_support", False
     )
 
     if test_performance_characteristics:
@@ -1185,12 +1195,20 @@ def _warn_matplotlib_backends(capabilities: Dict[str, Any]) -> None:
         interactive_backends = [
             b for b in available_backends if b not in ["Agg", "svg", "pdf"]
         ]
-        if not interactive_backends:
+
+        qt_available = capabilities.get("qt_binding_available", False)
+        has_display = capabilities.get("display_available", False)
+
+        if not interactive_backends and not qt_available:
             warnings.warn(
                 "No interactive matplotlib backends available - human mode will use non-interactive display. "
                 "Install tkinter or Qt for full interactive visualization.",
                 UserWarning,
                 stacklevel=2,
+            )
+        elif not has_display and qt_available:
+            _logger.info(
+                "Qt backend detected without display; using Agg fallback for headless operation"
             )
     else:
         warnings.warn(

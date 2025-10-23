@@ -256,7 +256,7 @@ class LoggingConfig:
                 test_file = self.log_directory_path / ".test_write"
                 test_file.touch()
                 test_file.unlink()
-        except (OSError, PermissionError) as e:
+        except OSError as e:
             errors.append(f"Cannot create or write to log directory: {e}")
 
     def _validate_format_string(self, errors: List[str]) -> None:

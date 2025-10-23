@@ -28,6 +28,8 @@ import threading
 
 # time>=3.10 for high-precision timing measurements and performance validation
 import time
+import warnings
+from contextlib import contextmanager
 
 # numpy>=2.1.0 for array operations and mathematical precision testing
 import numpy as np
@@ -98,6 +100,48 @@ NONE_SEED_IS_VALID = True  # Per Gymnasium standard and semantic model
 REPRODUCIBILITY_TOLERANCE = (
     1e-10  # Tolerance for floating point reproducibility comparisons
 )
+OVERFLOW_WARNING_THRESHOLD = 2**31 - 1
+OVERFLOW_WARNING_REGEX = "integer overflow"
+
+
+@contextmanager
+def _overflow_warning_context(seed, require_warning: bool = False):
+    """Capture overflow warnings for large seeds and assert they are well-formed."""
+
+    if seed is None:
+        yield
+        return
+
+    try:
+        numeric_seed = int(seed)
+    except (TypeError, ValueError):
+        yield
+        return
+
+    if numeric_seed <= OVERFLOW_WARNING_THRESHOLD:
+        yield
+        return
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", category=UserWarning)
+        yield
+
+        overflow_warnings = [
+            warning
+            for warning in caught
+            if isinstance(warning.message, UserWarning)
+            and OVERFLOW_WARNING_REGEX in str(warning.message)
+        ]
+
+        if require_warning and not overflow_warnings:
+            raise AssertionError(
+                "Expected overflow warning for large seed but none were emitted"
+            )
+
+        for warning in overflow_warnings:
+            assert OVERFLOW_WARNING_REGEX in str(warning.message)
+
+
 PERFORMANCE_TEST_ITERATIONS = 1000  # Number of iterations for performance benchmarking
 THREAD_SAFETY_ITERATIONS = 100  # Number of iterations for thread safety testing
 EPISODE_LENGTH_FOR_TESTING = 50  # Standard episode length for reproducibility testing
@@ -115,8 +159,10 @@ class TestSeedValidation:
         - No normalization is performed (validation only, identity transformation)
         - Single consistent behavior (no mode flags)
         """
-        # Call validate_seed function with test seed value
-        is_valid, normalized_seed, error_message = validate_seed(seed)
+        # Call validate_seed function with test seed value (may warn for large seeds)
+        require_warning = seed is not None and int(seed) > OVERFLOW_WARNING_THRESHOLD
+        with _overflow_warning_context(seed, require_warning=require_warning):
+            is_valid, normalized_seed, error_message = validate_seed(seed)
 
         # Assert validation returns (True, seed, '') - NO transformation
         assert is_valid is True, f"Valid seed {seed} failed validation"
@@ -1301,8 +1347,12 @@ class TestEdgeCases:
         # Execute seeding operations with edge case parameters
         edge_seed = edge_case_parameter
 
-        # Validate operations complete successfully without errors
-        is_valid, normalized_seed, error_message = validate_seed(edge_seed)
+        # Validate operations complete successfully without errors (may warn for large seeds)
+        require_warning = (
+            edge_seed is not None and int(edge_seed) > OVERFLOW_WARNING_THRESHOLD
+        )
+        with _overflow_warning_context(edge_seed, require_warning=require_warning):
+            is_valid, normalized_seed, error_message = validate_seed(edge_seed)
 
         assert is_valid, f"Edge case seed {edge_seed} should be valid: {error_message}"
         assert (
@@ -1319,8 +1369,9 @@ class TestEdgeCases:
                 normalized_seed == SEED_MAX_VALUE
             ), "Maximum seed should normalize to itself"
 
-        # Verify mathematical operations handle edge cases correctly
-        np_random, used_seed = create_seeded_rng(edge_seed)
+        # Verify mathematical operations handle edge cases correctly (may warn for large seeds)
+        with _overflow_warning_context(edge_seed, require_warning=False):
+            np_random, used_seed = create_seeded_rng(edge_seed)
         assert isinstance(
             np_random, np.random.Generator
         ), f"RNG creation should work with edge case {edge_seed}"
@@ -1331,13 +1382,15 @@ class TestEdgeCases:
         # Test that edge cases work with environment integration
         env = PlumeSearchEnv(grid_size=(16, 16))
         try:
-            # Use Gymnasium standard API (reset with seed parameter)
-            obs, info = env.reset(seed=edge_seed)
+            # Use Gymnasium standard API (reset with seed parameter, may warn for large seeds)
+            with _overflow_warning_context(edge_seed, require_warning=False):
+                obs, info = env.reset(seed=edge_seed)
             assert (
                 obs is not None
             ), f"Environment reset should work with edge case {edge_seed}"
 
-            obs, info = env.reset(seed=edge_seed)
+            with _overflow_warning_context(edge_seed, require_warning=False):
+                obs, info = env.reset(seed=edge_seed)
             assert (
                 obs is not None
             ), f"Environment reset should work with edge case {edge_seed}"
@@ -1359,9 +1412,10 @@ class TestEdgeCases:
             ), "Overflow handling should keep result in valid range"
 
         # Ensure edge cases don't compromise reproducibility
-        # Test that same edge case produces same results
-        np_random1, _ = create_seeded_rng(edge_seed)
-        np_random2, _ = create_seeded_rng(edge_seed)
+        # Test that same edge case produces same results (may warn for large seeds)
+        with _overflow_warning_context(edge_seed, require_warning=False):
+            np_random1, _ = create_seeded_rng(edge_seed)
+            np_random2, _ = create_seeded_rng(edge_seed)
 
         val1 = np_random1.random()
         val2 = np_random2.random()
@@ -1371,12 +1425,12 @@ class TestEdgeCases:
         ), f"Edge case {edge_seed} should still be reproducible: {val1} != {val2}"
 
         # Validate system behavior with extreme but valid configurations
-        # Test with SeedManager
-        manager = SeedManager(default_seed=edge_seed, enable_validation=True)
-
-        np_random_mgr, used_seed_mgr = manager.seed(
-            edge_seed, context_id=f"edge_case_{edge_seed}"
-        )
+        # Test with SeedManager (may warn for large seeds)
+        with _overflow_warning_context(edge_seed, require_warning=False):
+            manager = SeedManager(default_seed=edge_seed, enable_validation=True)
+            np_random_mgr, used_seed_mgr = manager.seed(
+                edge_seed, context_id=f"edge_case_{edge_seed}"
+            )
         assert isinstance(
             np_random_mgr, np.random.Generator
         ), f"SeedManager should handle edge case {edge_seed}"

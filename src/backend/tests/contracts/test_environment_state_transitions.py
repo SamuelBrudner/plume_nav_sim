@@ -34,7 +34,7 @@ class TestEnvironmentStateTransitions:
         env = PlumeSearchEnv()
 
         # Should not be able to step before reset
-        with pytest.raises(StateError, match="[Cc]annot step.*reset"):
+        with pytest.raises(StateError, match="[Mm]ust call reset.*before step"):
             env.step(0)
 
     def test_reset_transitions_created_to_ready(self):

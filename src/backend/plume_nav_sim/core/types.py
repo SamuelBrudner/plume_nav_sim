@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
@@ -394,7 +393,6 @@ def create_step_info(
         "step_count": agent_state.step_count,
         "total_reward": agent_state.total_reward,
         "goal_reached": agent_state.goal_reached,
-        "timestamp": time.time(),
     }
     if additional_info:
         info.update(additional_info)

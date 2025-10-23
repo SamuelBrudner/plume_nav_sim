@@ -451,6 +451,7 @@ class ConcentrationField:
                 warnings.warn(
                     f"Small sigma ({sigma}) may cause numerical precision issues",
                     RuntimeWarning,
+                    stacklevel=2,
                 )
 
         except ValidationError as e:

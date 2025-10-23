@@ -1332,7 +1332,7 @@ class LoggerManager:
         with self.manager_lock:
             # Flush all registered loggers to ensure data integrity
             flushed_loggers = 0
-            for key, weak_ref in self.logger_registry.items():
+            for _, weak_ref in self.logger_registry.items():
                 logger = weak_ref()
                 if logger:
                     for handler in logger.handlers:
@@ -1798,7 +1798,7 @@ def get_logging_statistics(  # noqa: C901
 
         # Count active loggers by type (component, performance, cached) and status
         component_types = {}
-        for key, logger in _component_loggers.items():
+        for _, logger in _component_loggers.items():
             comp_type = (
                 logger.component_type.name
                 if hasattr(logger, "component_type")

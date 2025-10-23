@@ -39,10 +39,9 @@ from typing import (  # >=3.10 - Type hints for abstract methods and generic typ
     Union,
 )
 
-import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and performance-optimized numerical computing
-
 # Third-party imports
 import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework with standard API methods
+import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and performance-optimized numerical computing
 
 # Internal imports - Core types and constants
 from ..core import RenderMode  # Core data types for environment state management
@@ -155,6 +154,7 @@ def _strict_rules_goal_radius_and_steps(
         warnings.warn(
             f"Max steps ({config.max_steps}) may be excessive for grid size",
             UserWarning,
+            stacklevel=2,
         )
 
 
@@ -568,10 +568,11 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         try:
             # Validate environment is initialized and ready for steps
             if not self._environment_initialized:
-                raise StateError(
+                error = StateError(
                     "Environment not initialized - call reset() before step()",
-                    context={"environment_state": "uninitialized"},
                 )
+                error.context = {"environment_state": "uninitialized"}
+                raise error
 
             # Validate action parameter; returns canonical integer in [0, ACTION_SPACE_SIZE-1]
             action = self._canonicalize_action(action)
@@ -626,7 +627,6 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             step_time_ms = (time.perf_counter() - step_start_time) * 1000
             info = {
                 "step_count": self._step_count,
-                "episode_count": self._episode_count,
                 "action_taken": int(action) if hasattr(action, "__int__") else action,
                 "performance_info": {
                     "step_time_ms": step_time_ms,
@@ -673,9 +673,9 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 raise StateError(f"Environment step failed: {e}")
 
     @monitor_performance("base_render", 50.0, False)
-    def render(
+    def render(  # noqa: C901
         self, mode: Optional[str] = None
-    ) -> Union[np.ndarray, None]:  # noqa: C901
+    ) -> Union[np.ndarray, None]:
         """
         Render environment visualization in specified mode with lazy renderer initialization, performance
         monitoring, error handling, and fallback strategies following Gymnasium render specification.
@@ -791,12 +791,22 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             List containing the seed value used following Gymnasium specification
         """
         try:
-            # Validate seed parameter using validate_seed_value
-            if seed is not None and not validate_seed_value(seed):
-                raise ValidationError(
-                    f"Invalid seed value: {seed}",
-                    context={"seed_type": type(seed).__name__, "seed_value": seed},
-                )
+            # Validate seed parameter using validate_seed_value with strict typing
+            if seed is not None:
+                try:
+                    validate_seed_value(
+                        seed,
+                        allow_none=False,
+                        strict_type_checking=True,
+                    )
+                except ValidationError as exc:
+                    raise ValidationError(
+                        f"Invalid seed value: {seed}",
+                        context={
+                            "seed_type": type(seed).__name__,
+                            "seed_value": seed,
+                        },
+                    ) from exc
 
             # Create seeded random number generator using gymnasium seeding
             self.np_random, actual_seed = gymnasium.utils.seeding.np_random(seed)
@@ -828,16 +838,21 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
     def _validate_and_apply_seed(self, seed: Optional[int]) -> None:
         if seed is None:
             return
-        if not validate_seed_value(seed):
+        try:
+            validate_seed_value(
+                seed,
+                allow_none=False,
+                strict_type_checking=True,
+            )
+        except ValidationError as exc:
             raise ValidationError(
                 f"Invalid seed value: {seed}",
                 context={"seed_type": type(seed).__name__, "seed_value": seed},
-            )
+            ) from exc
         self.seed(seed)
 
     def _build_initial_info(self, seed: Optional[int]) -> dict:
         return {
-            "episode_count": self._episode_count,
             "step_count": self._step_count,
             "seed_used": seed,
             "config_summary": {
@@ -1451,7 +1466,9 @@ def create_base_environment_config(  # noqa: C901
         total_cells = width * height
         if total_cells > 1000000:  # 1M cells threshold
             warnings.warn(
-                f"Large grid ({total_cells} cells) may impact performance", UserWarning
+                f"Large grid ({total_cells} cells) may impact performance",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Validate source_location coordinates are within grid bounds
@@ -1489,7 +1506,9 @@ def create_base_environment_config(  # noqa: C901
 
         if max_steps > 100000:  # Reasonable upper limit
             warnings.warn(
-                f"Very high max_steps ({max_steps}) may impact performance", UserWarning
+                f"Very high max_steps ({max_steps}) may impact performance",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Validate goal_radius is non-negative float
@@ -1545,7 +1564,9 @@ def create_base_environment_config(  # noqa: C901
         resource_estimate = config.estimate_resources()
         if resource_estimate.get("memory_mb", 0) > 500:  # 500MB threshold
             warnings.warn(
-                f"High memory estimate: {resource_estimate['memory_mb']}MB", UserWarning
+                f"High memory estimate: {resource_estimate['memory_mb']}MB",
+                UserWarning,
+                stacklevel=2,
             )
 
         return config
@@ -1619,6 +1640,7 @@ def validate_base_environment_setup(
                 warnings.warn(
                     f"Estimated step time ({estimated_step_time:.2f}ms) may exceed targets",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         return True

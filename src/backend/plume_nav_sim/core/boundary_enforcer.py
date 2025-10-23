@@ -21,10 +21,7 @@ Key Features:
 # External imports with version comments
 import logging  # >=3.10 - Logging integration for boundary enforcement operations and debugging
 import time  # >=3.10 - High-precision timing for performance measurement and benchmarking
-from dataclasses import (  # >=3.10 - Data class utilities for configuration and result structures
-    dataclass,
-    field,
-)
+from dataclasses import dataclass, field
 from typing import (  # >=3.10 - Type hints for boundary enforcer methods and interfaces
     Any,
     Dict,
@@ -42,19 +39,19 @@ from ..utils.logging import ComponentType, get_component_logger, monitor_perform
 from ..utils.validation import validate_action_parameter, validate_coordinates
 
 # Internal imports for system-wide constants and configuration values
-from .constants import MOVEMENT_VECTORS
+from .constants import (
+    BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
+    BOUNDARY_VALIDATION_CACHE_SIZE,
+    MOVEMENT_VECTORS,
+)
 
 # Internal imports from core modules for coordinate and action type system integration
 from .enums import Action
 from .geometry import Coordinates, GridSize
-from .types import ActionType, CoordinateType, create_coordinates
+from .types import ActionType, CoordinateType, create_coordinates, create_grid_size
 
 # Global constants for boundary enforcement configuration and performance optimization
-BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS = (
-    0.1  # Performance target for boundary operations
-)
 DEFAULT_CLAMPING_ENABLED = True  # Default clamping behavior for position enforcement
-BOUNDARY_VALIDATION_CACHE_SIZE = 500  # Cache size for validation result optimization
 POSITION_BOUNDS_TOLERANCE = (
     0  # Tolerance for position bounds checking (strict by default)
 )
@@ -298,7 +295,7 @@ class MovementConstraint:
                 )
 
             # Validate custom boundary entries have required structure
-            for key, value in self.custom_boundaries.items():
+            for key, _value in self.custom_boundaries.items():
                 if not isinstance(key, str):
                     raise ValidationError(
                         f"Custom boundary key must be string, got {type(key).__name__}",
@@ -383,16 +380,15 @@ class BoundaryEnforcer:
         Raises:
             ValidationError: If grid_size is invalid or constraint configuration is inconsistent
         """
-        # Validate and store grid_size for boundary calculations using validate_coordinates
         try:
-            validate_coordinates((0, 0), grid_size)  # Validate grid_size format
-            self.grid_size = grid_size
-        except Exception as e:
+            self.grid_size = create_grid_size(grid_size)
+            validate_coordinates((0, 0), self.grid_size)  # Validate grid configuration
+        except ValidationError as exc:
             raise ValidationError(
-                f"Invalid grid_size for boundary enforcer: {e}",
+                f"Invalid grid_size for boundary enforcer: {exc}",
                 parameter_name="grid_size",
                 parameter_value=str(grid_size),
-            ) from e
+            ) from exc
 
         # Set up constraint_config or create default MovementConstraint if None provided
         if constraint_config is None:
@@ -412,263 +408,214 @@ class BoundaryEnforcer:
             enable_performance_tracking=True,
         )
 
-        # Initialize validation_cache dictionary if caching enabled for performance
+        # Initialize validation_cache dictionary for position validation results
         self.validation_cache: Dict[str, Any] = {} if enable_caching else {}
 
-        # Initialize performance_metrics for operation monitoring and timing analysis
+        # Initialize performance metrics tracking dictionary for boundary operations
         self.performance_metrics: Dict[str, List[float]] = {
             "validation_times": [],
             "enforcement_times": [],
-            "cache_hits": [],
-            "cache_misses": [],
+            "movement_validations": [],
+        }
+        self.cache_metrics: Dict[str, int] = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
         }
 
         # Reset enforcement_count and boundary_hits for enforcement statistics tracking
         self.enforcement_count = 0
         self.boundary_hits = 0
 
-        # Log boundary enforcer initialization with configuration details
-        self.logger.info(
-            f"BoundaryEnforcer initialized with grid_size={grid_size}, "
-            f"caching={'enabled' if enable_caching else 'disabled'}"
-        )
-
-    @monitor_performance("position_validation", 0.1, False)
+    @monitor_performance("position_validation", 0.05, False)
     def validate_position(  # noqa: C901
         self,
         position: CoordinateType,
-        raise_on_invalid: bool = True,
+        *,
+        raise_on_invalid: bool = False,
         context_info: Optional[str] = None,
     ) -> bool:
-        """
-        Comprehensive position validation ensuring coordinates are within grid boundaries
-        with detailed error reporting and constraint analysis for position management.
-
-        Args:
-            position: Position coordinates to validate against grid boundaries
-            raise_on_invalid: Whether to raise ValidationError for invalid positions
-            context_info: Optional context information for detailed error reporting
-
-        Returns:
-            bool: True if position is valid, False if invalid (when raise_on_invalid=False)
-
-        Raises:
-            ValidationError: If position is invalid and raise_on_invalid=True
-        """
+        """Validate that `position` lies within the configured grid bounds."""
         start_time = time.perf_counter()
 
         try:
-            # Convert position to Coordinates using create_coordinates with validation
             coords = create_coordinates(position)
 
-            # Check validation cache if caching enabled for performance optimization
+            cache_key = None
             if self.enable_caching:
-                cache_key = f"validate_{coords.x}_{coords.y}_{self.grid_size.width}_{self.grid_size.height}"
-                if cache_key in self.validation_cache:
-                    self.performance_metrics["cache_hits"].append(1)
-                    return self.validation_cache[cache_key]
-                else:
-                    self.performance_metrics["cache_misses"].append(1)
+                cache_key = (
+                    f"validate_{coords.x}_{coords.y}_"
+                    f"{self.grid_size.width}_{self.grid_size.height}"
+                )
+                cached = self.validation_cache.get(cache_key)
+                if cached is not None:
+                    self.cache_metrics["hits"] += 1
+                    return cached
+                self.cache_metrics["misses"] += 1
 
-            # Validate position is within grid bounds using position.is_within_bounds()
             is_valid = coords.is_within_bounds(self.grid_size)
 
-            # Apply strict validation rules if constraint_config.strict_validation enabled
             if self.constraint_config.strict_validation and is_valid:
-                # Additional strict validation checks
-                tolerance = self.constraint_config.tolerance
-                if (
-                    coords.x < tolerance
-                    or coords.x >= self.grid_size.width - tolerance
-                    or coords.y < tolerance
-                    or coords.y >= self.grid_size.height - tolerance
-                ):
-                    if tolerance > 0:
-                        is_valid = False
+                tol = max(self.constraint_config.tolerance, 0.0)
+                near_edge = (
+                    coords.x < tol
+                    or coords.x >= self.grid_size.width - tol
+                    or coords.y < tol
+                    or coords.y >= self.grid_size.height - tol
+                )
+                if near_edge:
+                    is_valid = False
 
-            # Cache validation result if caching enabled for future lookups
-            if self.enable_caching:
+            if self.enable_caching and cache_key is not None:
                 self.validation_cache[cache_key] = is_valid
+                if len(self.validation_cache) > BOUNDARY_VALIDATION_CACHE_SIZE:
+                    first_key = next(iter(self.validation_cache))
+                    self.validation_cache.pop(first_key, None)
+                    self.cache_metrics["evictions"] += 1
 
-            # Update performance metrics with operation timing and success data
-            validation_time = (time.perf_counter() - start_time) * 1000
-            self.performance_metrics["validation_times"].append(validation_time)
+            self.performance_metrics["validation_times"].append(
+                (time.perf_counter() - start_time) * 1000
+            )
 
-            # Log validation activity with context information if provided
+            if not is_valid and raise_on_invalid:
+                message = f"Position {coords} outside grid bounds {self.grid_size}"
+                if context_info:
+                    message += f" (Context: {context_info})"
+                raise ValidationError(
+                    message,
+                    parameter_name="position",
+                    parameter_value=(coords.x, coords.y),
+                    expected_format=(
+                        f"coordinates within bounds (0, 0) to "
+                        f"({self.grid_size.width - 1}, {self.grid_size.height - 1})"
+                    ),
+                )
+
             if context_info and not is_valid:
                 self.logger.debug(
                     f"Position validation failed: {context_info}, position={coords}"
                 )
 
-            # Raise ValidationError with boundary details if raise_on_invalid and position invalid
-            if not is_valid and raise_on_invalid:
-                error_msg = f"Position {coords} outside grid bounds {self.grid_size}"
-                if context_info:
-                    error_msg += f" (Context: {context_info})"
-
-                raise ValidationError(
-                    error_msg,
-                    parameter_name="position",
-                    parameter_value=(coords.x, coords.y),
-                    expected_format=f"coordinates within bounds (0, 0) to ({self.grid_size.width-1}, {self.grid_size.height-1})",
-                )
-
-            # Return validation result indicating position validity within grid boundaries
             return is_valid
 
-        except ValidationError:
-            # Re-raise ValidationError without modification
-            raise
-        except Exception as e:
-            # Handle unexpected errors during validation
-            self.logger.error(f"Unexpected error during position validation: {e}")
+        except ValidationError as exc:
+            if raise_on_invalid:
+                raise
+            self.logger.debug(f"Validation error for position {position}: {exc}")
+            return False
+        except Exception as exc:
+            self.logger.error(f"Unexpected error during position validation: {exc}")
             if raise_on_invalid:
                 raise ValidationError(
-                    f"Position validation failed due to internal error: {e}",
+                    f"Position validation failed due to internal error: {exc}",
                     parameter_name="position",
                     parameter_value=str(position),
-                ) from e
+                ) from exc
             return False
 
     @monitor_performance("movement_validation", 0.05, False)
     def is_movement_valid(
         self, current_position: CoordinateType, action: ActionType
     ) -> bool:
-        """
-        Fast boolean check for movement validity from current position with action ensuring
-        proposed movement stays within grid bounds optimized for high-frequency validation.
+        """Fast boolean validation for proposed movement."""
+        if not isinstance(current_position, Coordinates):
+            current_position = create_coordinates(current_position)
 
-        Args:
-            current_position: Current agent position coordinates
-            action: Action to be performed (Action enum or integer)
-
-        Returns:
-            bool: True if movement is valid within bounds, False if movement would violate boundaries
-        """
         try:
-            # Use validate_movement_bounds for fast validation without comprehensive analysis
+            validated_action = self._normalize_action(action)
+        except ValidationError:
+            return False
+
+        vector = MOVEMENT_VECTORS.get(validated_action.value)
+        if vector is None:
+            return False
+
+        new_x = current_position.x + vector[0]
+        new_y = current_position.y + vector[1]
+        if 0 <= new_x < self.grid_size.width and 0 <= new_y < self.grid_size.height:
+            self.performance_metrics["movement_validations"].append(1)
+            return True
+
+        try:
             result = validate_movement_bounds(
                 current_position=current_position,
-                action=action,
+                action=validated_action,
                 grid_bounds=self.grid_size,
-                strict_validation=False,  # Optimize for speed
+                strict_validation=False,
             )
-
-            # Update movement validation statistics for performance monitoring
-            self.performance_metrics.setdefault("movement_validations", []).append(1)
-
-            # Return boolean result without raising exceptions for performance optimization
+            if result:
+                self.performance_metrics["movement_validations"].append(1)
             return result
-
-        except Exception as e:
-            # Log error but return False for graceful degradation
-            self.logger.warning(f"Movement validation error: {e}")
+        except Exception as exc:
+            self.logger.warning(f"Movement validation error: {exc}")
             return False
 
     @monitor_performance("boundary_enforcement", 0.1, True)
     def enforce_movement_bounds(
         self, current_position: CoordinateType, action: ActionType
     ) -> BoundaryEnforcementResult:
-        """
-        Primary movement enforcement method applying boundary constraints to agent movement
-        with comprehensive result analysis and performance monitoring for environment step operations.
-
-        Args:
-            current_position: Current agent position coordinates
-            action: Action to be performed (Action enum or integer)
-
-        Returns:
-            BoundaryEnforcementResult: Comprehensive boundary enforcement result with position updates and constraint analysis
-        """
         start_time = time.perf_counter()
 
         try:
-            # Convert current_position to Coordinates and validate action parameter
-            coords = create_coordinates(current_position)
-            validate_action_parameter(action)
+            coords = (
+                current_position
+                if isinstance(current_position, Coordinates)
+                else create_coordinates(current_position)
+            )
 
-            # Calculate movement delta using action.to_vector() or MOVEMENT_VECTORS lookup
-            if hasattr(action, "to_vector"):
-                movement_vector = action.to_vector()
+            normalized_action = self._normalize_action(action)
+            if hasattr(normalized_action, "to_vector"):
+                movement_vector = normalized_action.to_vector()
             else:
-                # Convert integer action to movement vector
-                action_int = int(action)
-                movement_vector = MOVEMENT_VECTORS.get(action_int, (0, 0))
+                movement_vector = MOVEMENT_VECTORS.get(normalized_action.value)
 
-            # Determine proposed destination position by adding movement delta
-            proposed_x = coords.x + movement_vector[0]
-            proposed_y = coords.y + movement_vector[1]
-            proposed_position = Coordinates(proposed_x, proposed_y)
+            new_x = coords.x + movement_vector[0]
+            new_y = coords.y + movement_vector[1]
 
-            # Check if proposed position is within grid bounds using GridSize.contains_coordinates()
-            is_valid_movement = proposed_position.is_within_bounds(self.grid_size)
+            initial_in_bounds = coords.is_within_bounds(self.grid_size)
 
-            # Initialize result tracking variables
-            final_position = coords  # Default to current position
-            position_modified = False
-            boundary_hit = False
+            in_bounds = (
+                0 <= new_x < self.grid_size.width and 0 <= new_y < self.grid_size.height
+            )
 
-            if is_valid_movement:
-                # If movement valid, return BoundaryEnforcementResult with original position unchanged
-                final_position = proposed_position
+            if in_bounds:
+                final_position = (
+                    coords if movement_vector == (0, 0) else Coordinates(new_x, new_y)
+                )
+                boundary_hit = not initial_in_bounds
             else:
-                # Movement exceeds bounds - apply constraint policy
-                boundary_hit = True
-
+                proposed_position = Coordinates(new_x, new_y)
                 if self.constraint_config.enable_clamping:
-                    # If movement exceeds bounds and clamping enabled, clamp position using clamp_coordinates_to_bounds
                     final_position = clamp_coordinates_to_bounds(
                         proposed_position, self.grid_size
                     )
-                    position_modified = (
-                        final_position.x != coords.x or final_position.y != coords.y
-                    )
                 else:
-                    # If movement exceeds bounds and clamping disabled, keep current position
                     final_position = coords
-                    position_modified = False
+                boundary_hit = True
 
-            # Create BoundaryEnforcementResult with final position and constraint analysis
             result = BoundaryEnforcementResult(
                 original_position=coords,
                 final_position=final_position,
-                position_modified=position_modified,
+                position_modified=(boundary_hit and final_position != coords),
                 boundary_hit=boundary_hit,
             )
 
-            # Set enforcement timing
             enforcement_time = (time.perf_counter() - start_time) * 1000
+            self.performance_metrics["enforcement_times"].append(enforcement_time)
             object.__setattr__(result, "enforcement_time", enforcement_time)
 
-            # Update boundary hit statistics and performance metrics
             self.enforcement_count += 1
             if boundary_hit:
                 self.boundary_hits += 1
 
-            self.performance_metrics["enforcement_times"].append(enforcement_time)
-
-            # Log boundary enforcement if constraint_config.log_boundary_violations enabled
-            if self.constraint_config.log_boundary_violations and boundary_hit:
-                self.logger.info(
-                    f"Boundary enforcement applied: {coords} -> {final_position} "
-                    f"(action={action}, hit={boundary_hit})"
-                )
-
-            # Return comprehensive BoundaryEnforcementResult with enforcement analysis
             return result
 
-        except Exception as e:
-            # Handle errors during boundary enforcement
-            self.logger.error(f"Boundary enforcement failed: {e}")
-
-            # Return safe result with current position preserved
-            safe_coords = create_coordinates(current_position)
-            return BoundaryEnforcementResult(
-                original_position=safe_coords,
-                final_position=safe_coords,
-                position_modified=False,
-                boundary_hit=True,  # Indicate error condition
-            )
+        except ValidationError as exc:
+            self.logger.error(f"Movement enforcement validation failed: {exc}")
+            raise
+        except Exception as exc:
+            self.logger.error(f"Movement enforcement error: {exc}")
+            raise
 
     def get_valid_moves(self, current_position: CoordinateType) -> List[Action]:
         """
@@ -781,8 +728,8 @@ class BoundaryEnforcer:
 
         # Include cache hit/miss ratios if caching is enabled
         if self.enable_caching:
-            cache_hits = sum(self.performance_metrics.get("cache_hits", []))
-            cache_misses = sum(self.performance_metrics.get("cache_misses", []))
+            cache_hits = self.cache_metrics["hits"]
+            cache_misses = self.cache_metrics["misses"]
             total_cache_attempts = cache_hits + cache_misses
 
             stats["cache_statistics"] = {
@@ -794,6 +741,8 @@ class BoundaryEnforcer:
                     else 0.0
                 ),
                 "cache_entries": len(self.validation_cache),
+                "cache_capacity": BOUNDARY_VALIDATION_CACHE_SIZE,
+                "evictions": self.cache_metrics["evictions"],
             }
 
         # Add performance metrics including average enforcement time
@@ -840,16 +789,11 @@ class BoundaryEnforcer:
         if not self.enable_caching:
             return 0
 
-        # Count current cache entries for reporting
         entries_cleared = len(self.validation_cache)
-
-        # Clear validation_cache dictionary
         self.validation_cache.clear()
 
-        # Reset cache-related performance metrics
         if force_cleanup:
-            self.performance_metrics["cache_hits"] = []
-            self.performance_metrics["cache_misses"] = []
+            self.cache_metrics = {"hits": 0, "misses": 0, "evictions": 0}
 
         # Log cache clearing operation with entry count
         self.logger.debug(f"Cache cleared: {entries_cleared} entries removed")
@@ -872,7 +816,6 @@ class BoundaryEnforcer:
             ValidationError: If configuration is invalid or inconsistent
         """
         try:
-            # Validate constraint_config using MovementConstraint.validate_configuration()
             self.constraint_config.validate_configuration()
 
             # Check grid_size compatibility with constraint configuration
@@ -922,8 +865,23 @@ class BoundaryEnforcer:
                 parameter_name="constraint_config",
             ) from e
 
+    # Standalone utility functions for performance-critical boundary validation operations
 
-# Standalone utility functions for performance-critical boundary validation operations
+    def _normalize_action(self, action: ActionType) -> Action:
+        """Normalize incoming action to an `Action` enum, raising `ValidationError` if invalid."""
+        if isinstance(action, Action):
+            return action
+
+        if not isinstance(action, (int, np.integer)):
+            raise ValidationError(
+                f"Invalid action type: {type(action)}. Expected int or Action enum"
+            )
+
+        validated = validate_action_parameter(int(action), allow_enum_types=False)
+        try:
+            return Action(validated)
+        except ValueError as exc:
+            raise ValidationError(f"Invalid action value: {validated}") from exc
 
 
 def validate_movement_bounds(
@@ -954,13 +912,10 @@ def validate_movement_bounds(
         if strict_validation:
             validate_action_parameter(action)
 
-        # Get movement vector from action using Action.to_vector() or MOVEMENT_VECTORS lookup
         if hasattr(action, "to_vector"):
             movement_vector = action.to_vector()
         else:
-            # Convert integer action to movement vector
-            action_int = int(action)
-            movement_vector = MOVEMENT_VECTORS.get(action_int, (0, 0))
+            movement_vector = MOVEMENT_VECTORS.get(int(action), (0, 0))
 
         # Calculate proposed destination position by adding movement delta to current position
         new_x = coords.x + movement_vector[0]

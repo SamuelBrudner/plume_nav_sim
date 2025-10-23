@@ -27,6 +27,7 @@ from config.test_configs import (
     create_reproducibility_test_config,
     create_unit_test_config,
 )
+
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,
     MAX_GRID_SIZE,
@@ -363,6 +364,8 @@ class TestScenario:
     This class provides a complete representation of test scenarios with comprehensive
     configuration management, execution planning, and result validation capabilities.
     """
+
+    __test__ = False
 
     # Required fields for scenario identification and configuration
     name: str
@@ -718,6 +721,8 @@ class TestScenarioCollection:
     This class manages collections of test scenarios with comprehensive organization,
     execution coordination, and result analysis capabilities.
     """
+
+    __test__ = False
 
     scenarios: Dict[str, TestScenario]
     collection_name: str

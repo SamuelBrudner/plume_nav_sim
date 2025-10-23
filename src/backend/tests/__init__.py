@@ -14,11 +14,21 @@ _src_path = os.path.join(os.path.dirname(__file__), "..")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
-# Internal imports - Pytest auto-loads conftest.py; avoid importing it here to
-# prevent circular import during package initialization (pytest imports
-# `tests/__init__.py` before `tests/conftest.py`).
-# The original eager import caused a ModuleNotFoundError under normal pytest
-# discovery order. Leaving fixture resolution to pytest avoids that issue.
+# Internal imports - ensure the shared conftest module is available and fail fast if missing.
+try:
+    from . import conftest as _shared_conftest  # type: ignore
+except Exception as import_error:  # pragma: no cover - exercised via guardrail tests
+    raise ImportError(
+        "The plume_nav_sim backend test suite requires tests/conftest.py. "
+        "Ensure the shared test fixtures are available before running tests."
+    ) from import_error
+else:
+    if not hasattr(_shared_conftest, "_require_psutil"):
+        raise ImportError(
+            "tests/conftest.py is missing required guard `_require_psutil`. "
+            "Verify the correct shared conftest module is available."
+        )
+
 _PYTEST_AUTOCONFIG = True  # Marker for test tooling; no functional effect
 
 """

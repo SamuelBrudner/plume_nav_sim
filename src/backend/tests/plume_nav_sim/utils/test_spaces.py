@@ -15,12 +15,12 @@ from unittest.mock import (  # standard library - Mock objects for testing error
     Mock,
 )
 
+import gymnasium.spaces  # >=0.29.0 - Gymnasium space classes for testing compatibility and API compliance validation
 import numpy as np  # >=2.1.0 - Array operations and dtype testing for space validation and mathematical operations
 
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for comprehensive unit tests with fixtures, parameterization, and assertion validation
 
-import gymnasium.spaces  # >=0.29.0 - Gymnasium space classes for testing compatibility and API compliance validation
 from plume_nav_sim.core.constants import (
     ACTION_SPACE_SIZE,
     CONCENTRATION_RANGE,
@@ -700,7 +700,8 @@ def test_validate_observation_space_invalid():
         low=0.0, high=1.0, shape=(2,), dtype=np.float32
     )
     # Should pass normal validation but warn in strict mode
-    result = validate_observation_space(wrong_shape_space, strict_validation=False)
+    with pytest.warns(UserWarning, match="Observation space"):
+        result = validate_observation_space(wrong_shape_space, strict_validation=False)
     assert result is True, "Wrong shape should pass normal validation"
 
     with pytest.raises(ValidationError):
@@ -708,11 +709,16 @@ def test_validate_observation_space_invalid():
 
     # Test Box space with wrong bounds (not [0.0, 1.0])
     wrong_bounds_space = gymnasium.spaces.Box(
-        low=-1.0, high=2.0, shape=(1,), dtype=np.float32
+        low=-1.0, high=1.5, shape=(1,), dtype=np.float32
     )
-    # Should pass normal validation but warn in strict mode
-    result = validate_observation_space(wrong_bounds_space, check_bounds=False)
-    assert result is True, "Wrong bounds should pass when check_bounds=False"
+    # Should pass normal validation but warn when checking bounds
+    with pytest.warns(UserWarning, match="Observation space"):
+        result = validate_observation_space(
+            wrong_bounds_space, check_bounds=True, strict_validation=False
+        )
+    assert (
+        result is True
+    ), "Wrong bounds should pass when check_bounds=True and strict_validation=False"
 
     with pytest.raises(ValidationError):
         validate_observation_space(
@@ -723,14 +729,24 @@ def test_validate_observation_space_invalid():
     wrong_dtype_space = gymnasium.spaces.Box(
         low=0.0, high=1.0, shape=(1,), dtype=np.float64
     )
-    # Should pass normal validation but warn in strict mode
-    result = validate_observation_space(wrong_dtype_space, check_dtype=False)
-    assert result is True, "Wrong dtype should pass when check_dtype=False"
+    # Should pass normal validation but warn when checking dtype
+    with pytest.warns(UserWarning, match="Observation space"):
+        result = validate_observation_space(
+            wrong_dtype_space, check_dtype=True, strict_validation=False
+        )
+    assert (
+        result is True
+    ), "Wrong dtype should pass when check_dtype=True and strict_validation=False"
 
     with pytest.raises(ValidationError):
         validate_observation_space(
             wrong_dtype_space, check_dtype=True, strict_validation=True
         )
+
+    # Test extremely large observation space configuration warning for shape
+    large_shape_config = SpaceConfig(observation_shape=(1000,))
+    with pytest.warns(UserWarning, match="Observation space"):
+        large_shape_config.create_observation_space()
 
     # Create mock spaces with invalid properties
     mock_space = Mock(spec=gymnasium.spaces.Box)

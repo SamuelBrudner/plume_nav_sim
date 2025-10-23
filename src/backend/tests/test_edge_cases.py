@@ -11,7 +11,9 @@ validation utilities, rendering pipeline, and state management.
 
 import contextlib  # standard library - Context managers for edge case resource management
 import gc  # standard library - Garbage collection control for memory edge case testing
+import importlib.util  # >=3.10 - Module availability checks for conditional skips
 import math  # standard library - Mathematical utilities for edge case calculations
+import os  # >=3.10 - Environment introspection for conditional edge-case skips
 import sys  # standard library - System utilities for testing system limit edge cases
 import time  # standard library - Timing utilities for performance edge case testing
 import unittest.mock  # standard library - Mocking utilities for simulating edge case scenarios
@@ -27,12 +29,50 @@ from plume_nav_sim.core.types import Action, Coordinates
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 from plume_nav_sim.utils.exceptions import (
     ConfigurationError,
+    ErrorSeverity,
     RenderingError,
     ResourceError,
     StateError,
     ValidationError,
 )
 from plume_nav_sim.utils.validation import ParameterValidator
+
+
+class PerformanceTracker:
+    """Collect timing metrics during performance edge-case scenarios."""
+
+    def __init__(self):
+        self._metrics: dict[str, list[float]] = {}
+
+    def start_monitoring(self, name: str):
+        self._metrics.setdefault(name, [])
+
+    def record(self, name: str, duration: float):
+        self._metrics.setdefault(name, []).append(duration)
+
+    def get_metrics(self) -> dict[str, list[float]]:
+        return dict(self._metrics)
+
+    def reset(self):
+        self._metrics.clear()
+
+    def stop_monitoring(self):
+        summary = {
+            key: sum(values) / len(values) if values else 0.0
+            for key, values in self._metrics.items()
+        }
+        self.reset()
+        return summary
+
+
+@pytest.fixture
+def performance_tracker():
+    return PerformanceTracker()
+
+
+# Conditional feature flags for skip markers
+MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
+SINGLE_THREADED_ONLY = os.environ.get("PLUME_SKIP_CONCURRENCY", "0") == "1"
 
 # Internal imports - core environment and utilities
 
@@ -446,7 +486,7 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         corner_coords = Coordinates(corner_x, corner_y)
         position_valid = boundary_enforcer.validate_position(corner_coords)
         assert (
-            position_valid.is_valid
+            position_valid is True
         ), f"Corner position {corner_coords.to_tuple()} should be valid"
 
         # Test movement actions from corner positions that would violate boundaries
@@ -485,7 +525,7 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         edge_coords = Coordinates(edge_x, edge_y)
         edge_validation = boundary_enforcer.validate_position(edge_coords)
         assert (
-            edge_validation.is_valid
+            edge_validation is True
         ), f"Edge position {edge_coords.to_tuple()} should be valid"
 
         # Test edge movement constraints
@@ -510,11 +550,11 @@ def test_boundary_position_edge_cases(edge_case_test_env, boundary_enforcer=None
         ):
             # Should be invalid for out-of-bounds positions
             assert (
-                not validation_result.is_valid
+                validation_result is False
             ), f"Extreme position {extreme_coords.to_tuple()} should be invalid"
 
         # Test coordinate clamping behavior with out-of-bounds positions
-        if not validation_result.is_valid:
+        if validation_result is False:
             # Test all actions to ensure clamping works
             for action in [Action.UP, Action.RIGHT, Action.DOWN, Action.LEFT]:
                 clamped_result = boundary_enforcer.enforce_movement_bounds(
@@ -775,7 +815,7 @@ def test_mathematical_precision_edge_cases(edge_case_test_env):
 
 @pytest.mark.edge_case
 @pytest.mark.rendering
-@pytest.mark.skipif("not matplotlib_available", reason="Matplotlib not available")
+@pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
 def test_rendering_edge_cases_and_failures(edge_case_test_env):
     """
     Test rendering system robustness under extreme conditions including backend
@@ -1021,7 +1061,7 @@ def test_memory_exhaustion_and_resource_limits(memory_monitor, cleanup_validator
 
 @pytest.mark.edge_case
 @pytest.mark.concurrency
-@pytest.mark.skipif("single_threaded_only", reason="Concurrency testing disabled")
+@pytest.mark.skipif(SINGLE_THREADED_ONLY, reason="Concurrency testing disabled")
 def test_concurrent_operations_and_thread_safety(edge_case_test_env):
     """
     Test thread safety and concurrent operation handling including simultaneous
@@ -1661,17 +1701,28 @@ def test_error_handling_and_recovery_mechanisms():
         {
             "exception_class": StateError,
             "test_message": "Test state transition failure",
-            "test_context": {"current_state": "invalid", "attempted_operation": "step"},
+            "test_context": {
+                "current_state": "invalid",
+                "expected_state": "ready",
+                "component_name": "environment",
+                "attempted_operation": "step",
+            },
         },
         {
             "exception_class": RenderingError,
             "test_message": "Test rendering failure",
-            "test_context": {"render_mode": "human", "backend": "matplotlib"},
+            "test_context": {
+                "render_mode": "human",
+                "backend_name": "matplotlib",
+            },
         },
         {
             "exception_class": ConfigurationError,
             "test_message": "Test configuration failure",
-            "test_context": {"config_key": "grid_size", "config_value": (-1, -1)},
+            "test_context": {
+                "config_parameter": "grid_size",
+                "parameter_value": (-1, -1),
+            },
         },
         {
             "exception_class": ResourceError,
@@ -1687,7 +1738,20 @@ def test_error_handling_and_recovery_mechanisms():
 
         # Create and test exception instance
         try:
-            raise exception_class(test_message, **test_context)
+            context_kwargs = dict(test_context)
+            if exception_class is StateError:
+                attempted_operation = context_kwargs.pop("attempted_operation", None)
+                error_instance = exception_class(
+                    test_message,
+                    current_state=context_kwargs.get("current_state"),
+                    expected_state=context_kwargs.get("expected_state"),
+                    component_name=context_kwargs.get("component_name"),
+                )
+                if attempted_operation:
+                    setattr(error_instance, "attempted_operation", attempted_operation)
+                raise error_instance
+
+            raise exception_class(test_message, **context_kwargs)
         except exception_class as e:
             # Verify error context preservation during exception propagation
             error_message = str(e)
@@ -1764,24 +1828,31 @@ def test_error_handling_and_recovery_mechanisms():
     # Test error escalation mechanisms for critical failures
     try:
         # Simulate critical system failure
-        raise ResourceError(
+        critical_resource_error = ResourceError(
             "Critical system failure - memory exhausted",
             resource_type="memory",
-            severity="critical",
-            current_usage="999MB",
+            current_usage=999.0,
+            limit_exceeded=512.0,
         )
+        critical_resource_error.severity = ErrorSeverity.CRITICAL
+        raise critical_resource_error
     except ResourceError as e:
         # Critical errors should be handled appropriately
         if hasattr(e, "severity"):
-            assert e.severity == "critical", "Should preserve error severity"
+            assert (
+                e.severity == ErrorSeverity.CRITICAL
+            ), "Should preserve error severity"
 
         # Should suggest immediate cleanup actions
         if hasattr(e, "suggest_cleanup_actions"):
             cleanup_actions = e.suggest_cleanup_actions()
-            assert (
-                "immediate" in cleanup_actions.lower()
-                or "urgent" in cleanup_actions.lower()
-            )
+            if isinstance(cleanup_actions, str):
+                normalized_actions = cleanup_actions.lower()
+            else:
+                normalized_actions = " ".join(
+                    str(action).lower() for action in cleanup_actions
+                )
+            assert "immediate" in normalized_actions or "urgent" in normalized_actions
 
     # Test exception handling thread safety during concurrent errors
     import queue

@@ -882,7 +882,7 @@ class StateManager:
 
                 # Generate random agent start position excluding source location
                 max_attempts = 100
-                for attempt in range(max_attempts):
+                for _attempt in range(max_attempts):
                     start_position = self.seed_manager.generate_random_position(
                         self.config.grid_size,
                         exclude_position=self.config.source_location,

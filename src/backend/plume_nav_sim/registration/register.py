@@ -22,12 +22,11 @@ import importlib
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Tuple, cast
-
-from typing_extensions import TypedDict
+from typing import Dict, List, Optional, Protocol, Tuple, cast
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
+from typing_extensions import TypedDict
 
 # Internal imports for configuration constants and system integration
 from ..core.constants import (
@@ -39,7 +38,7 @@ from ..core.constants import (
 )
 
 # Internal imports for error handling and logging integration
-from ..utils.exceptions import ConfigurationError, ValidationError
+from ..utils.exceptions import ConfigurationError, IntegrationError, ValidationError
 from ..utils.logging import get_component_logger
 
 # providing register() function, environment registry, and gym.make() compatibility for
@@ -48,7 +47,9 @@ from ..utils.logging import get_component_logger
 
 # Global constants for registration system configuration and environment identification
 ENV_ID = ENVIRONMENT_ID  # Primary environment identifier: 'PlumeNav-StaticGaussian-v0'
-ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Entry point (delegates to DI factory)
+ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Legacy entry point
+COMPONENT_ENV_ID = "PlumeNav-Components-v0"  # Component-based DI environment identifier
+COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
 MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000)
 
 # Component logger for registration system debugging and operation tracking
@@ -68,8 +69,12 @@ __all__ = [
     "register_env",
     "unregister_env",
     "is_registered",
+    "get_registration_info",
+    "ensure_component_env_registered",
     "ENV_ID",
     "ENTRY_POINT",
+    "COMPONENT_ENV_ID",
+    "COMPONENT_ENTRY_POINT",
 ]
 
 
@@ -137,8 +142,13 @@ def register_env(  # noqa: C901
     try:
         # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided  # noqa: E501
         effective_env_id = env_id or ENV_ID
-        # Use provided entry point or default (PlumeSearchEnv, which delegates to DI factory)
-        effective_entry_point = entry_point or ENTRY_POINT
+
+        if entry_point is not None:
+            effective_entry_point = entry_point
+        elif effective_env_id == COMPONENT_ENV_ID:
+            effective_entry_point = COMPONENT_ENTRY_POINT
+        else:
+            effective_entry_point = ENTRY_POINT
         effective_max_steps = max_episode_steps or MAX_EPISODE_STEPS
         effective_kwargs = kwargs or {}
 
@@ -190,7 +200,12 @@ def register_env(  # noqa: C901
             additional_kwargs=effective_kwargs,
         )
 
+        if _is_component_entry_point(effective_entry_point):
+            registration_kwargs = _convert_kwargs_for_component_env(registration_kwargs)
+
         # PlumeSearchEnv already delegates to DI factory internally - no parameter mapping needed
+
+        _validate_entry_point_resolves(effective_entry_point)
 
         # Validate registration configuration using validate_registration_config() for consistency checking  # noqa: E501
         is_valid, validation_report = _validate_registration_config(
@@ -219,6 +234,21 @@ def register_env(  # noqa: C901
             additional_wrappers=(),
         )
 
+        try:
+            spec = gymnasium.spec(effective_env_id)
+            if spec is not None:
+                # Ensure Gymnasium does not wrap the environment with OrderEnforcing or TimeLimit
+                if hasattr(spec, "order_enforcing"):
+                    spec.order_enforcing = False
+                if hasattr(spec, "max_episode_steps"):
+                    spec.max_episode_steps = None
+        except Exception as spec_error:  # pragma: no cover - defensive guard
+            _logger.debug(
+                "Unable to adjust Gymnasium spec for %s: %s",
+                effective_env_id,
+                spec_error,
+            )
+
         # Update registration cache with successful registration information and timestamp
         _registration_cache[effective_env_id] = {
             "registered": True,
@@ -245,6 +275,90 @@ def register_env(  # noqa: C901
     except Exception as e:
         _logger.error(f"Environment registration failed for '{env_id or ENV_ID}': {e}")
         raise
+
+
+def ensure_component_env_registered(
+    *,
+    force: bool = False,
+    validate_creation: bool = False,
+) -> str:
+    """Ensure the component-based environment id is present in the registry.
+
+    Args:
+        force: Force re-registration even if already registered.
+        validate_creation: If True, instantiate the environment once to confirm availability.
+
+    Returns:
+        The component environment id.
+    """
+
+    if force:
+        unregister_env(COMPONENT_ENV_ID, suppress_warnings=True)
+
+    if not is_registered(COMPONENT_ENV_ID, use_cache=True):
+        register_env(
+            env_id=COMPONENT_ENV_ID,
+            entry_point=COMPONENT_ENTRY_POINT,
+            force_reregister=False,
+        )
+
+    if validate_creation:
+        test_env = gymnasium.make(COMPONENT_ENV_ID)
+
+        class _EnvProbe(Protocol):
+            def reset(self, *args: object, **kwargs: object) -> object:
+                """Protocol method stub."""
+                ...
+
+            def close(self) -> None:
+                """Protocol method stub."""
+                ...
+
+        probe = cast(_EnvProbe, test_env)
+        try:
+            probe.reset()
+        finally:
+            probe.close()
+
+    return COMPONENT_ENV_ID
+
+
+def _is_component_entry_point(entry_point: str) -> bool:
+    return entry_point == COMPONENT_ENTRY_POINT
+
+
+def _convert_kwargs_for_component_env(kwargs: Dict[str, object]) -> Dict[str, object]:
+    converted = dict(kwargs)
+
+    if "source_location" in converted and "goal_location" not in converted:
+        converted["goal_location"] = converted.pop("source_location")
+
+    plume_params = converted.pop("plume_params", None)
+    if (
+        isinstance(plume_params, dict)
+        and "sigma" in plume_params
+        and "plume_sigma" not in converted
+    ):
+        converted["plume_sigma"] = plume_params["sigma"]
+
+    return converted
+
+
+def _validate_entry_point_resolves(entry_point: str) -> None:
+    module_path, class_name = entry_point.split(":", 1)
+    try:
+        module = importlib.import_module(module_path)
+    except Exception as exc:
+        raise IntegrationError(
+            f"Failed to import entry point module '{module_path}'",
+            dependency_name=module_path,
+        ) from exc
+
+    if not hasattr(module, class_name):
+        raise IntegrationError(
+            f"Entry point class '{class_name}' not found in module '{module_path}'",
+            dependency_name=module_path,
+        )
 
 
 def _validate_grid_size_value(
@@ -336,30 +450,49 @@ def _apply_strict_checks(
         _strict_checks(env_id, kwargs, report)
 
 
-def _pop_env_from_registry(effective_env_id: str) -> bool:
+def _pop_env_from_registry(effective_env_id: str) -> bool:  # noqa: C901
     """Attempt to remove env spec from Gymnasium registry across versions.
 
     Returns True if a registry entry was removed, False otherwise.
     """
+    removed = False
     try:
-        if hasattr(gymnasium.envs, "registry") and hasattr(
-            gymnasium.envs.registry, "env_specs"
-        ):
-            # Older Gymnasium versions expose a Registry object with env_specs dict
-            env_specs_any = gymnasium.envs.registry.env_specs
-            if isinstance(env_specs_any, dict):
-                return env_specs_any.pop(effective_env_id, None) is not None
-        if hasattr(gymnasium, "envs") and hasattr(gymnasium.envs, "registration"):
-            # Newer Gymnasium may expose the registry mapping directly as a dict
+        # Modern Gymnasium (>= 0.29): registry is a plain dict
+        if hasattr(gymnasium.envs, "registry"):
+            registry_obj = gymnasium.envs.registry
+
+            # If registry itself is a dict, delete directly
+            if isinstance(registry_obj, dict) and effective_env_id in registry_obj:
+                del registry_obj[effective_env_id]
+                removed = True
+            # Older versions: registry is an object with env_specs attribute
+            elif hasattr(registry_obj, "env_specs"):
+                env_specs = registry_obj.env_specs
+                if isinstance(env_specs, dict) and effective_env_id in env_specs:
+                    del env_specs[effective_env_id]
+                    removed = True
+            # Try internal _env_specs attribute
+            elif hasattr(registry_obj, "_env_specs"):
+                env_specs_internal = registry_obj._env_specs
+                if (
+                    isinstance(env_specs_internal, dict)
+                    and effective_env_id in env_specs_internal
+                ):
+                    del env_specs_internal[effective_env_id]
+                    removed = True
+
+        # Fallback: try registration.registry dict (for some Gymnasium versions)
+        if not removed and hasattr(gymnasium.envs, "registration"):
             reg_any = gymnasium.envs.registration.registry
             if isinstance(reg_any, dict) and effective_env_id in reg_any:
                 del reg_any[effective_env_id]
-                return True
+                removed = True
+
     except Exception as registry_error:
         _logger.warning(
             f"Error accessing Gymnasium registry during unregistration: {registry_error}"
         )
-    return False
+    return removed
 
 
 def _clear_cache_entry(effective_env_id: str) -> None:
@@ -463,7 +596,14 @@ def _query_registry_direct(effective_env_id: str) -> bool:
 def _query_registry_fallback(effective_env_id: str) -> bool:
     with contextlib.suppress(Exception):
         test_env = gymnasium.make(effective_env_id)
-        test_env.close()
+
+        class _Closable(Protocol):
+            def close(self) -> None:
+                """Protocol method stub."""
+                ...
+
+        closable_env = cast(_Closable, test_env)
+        closable_env.close()
         return True
     return False
 
@@ -627,6 +767,50 @@ def _system_info_for(info: Dict[str, object]) -> Dict[str, object]:
     }
 
 
+def get_registration_info(
+    env_id: Optional[str] = None,
+    *,
+    include_registry_details: bool = True,
+    include_cache_details: bool = True,
+    include_defaults: bool = True,
+    include_system_info: bool = True,
+) -> Dict[str, object]:
+    """Return structured registration metadata for tooling and diagnostics.
+
+    Args:
+        env_id: Environment identifier to query (defaults to ``ENV_ID``).
+        include_registry_details: Include Gymnasium registry spec metadata.
+        include_cache_details: Include cached registration state, when available.
+        include_defaults: Include default configuration summary and cached validation report.
+        include_system_info: Include registry/cache summary information.
+
+    Returns:
+        Dictionary containing registration metadata. Missing fields fall back to
+        empty dictionaries when the registry/cache lacks information to avoid
+        raising during diagnostic probes.
+    """
+
+    effective_env_id = env_id or ENV_ID
+
+    info: Dict[str, object] = _base_registration_info(effective_env_id)
+
+    if include_registry_details:
+        info["registry_details"] = _env_spec_info(effective_env_id)
+
+    if include_cache_details:
+        cache_info = _cache_info_for_id(effective_env_id)
+        if cache_info is not None:
+            info["cache_details"] = cache_info
+
+    if include_defaults:
+        info["configuration_defaults"] = _config_details_for_id(effective_env_id)
+
+    if include_system_info:
+        info["system_info"] = _system_info_for(info) | _gymnasium_version_info()
+
+    return info
+
+
 def _assert_grid_size_or_raise(grid_size: object) -> Tuple[int, int]:
     """Validate grid_size and return (width, height) or raise ValidationError."""
     if not isinstance(grid_size, (tuple, list)) or len(grid_size) != 2:
@@ -761,6 +945,39 @@ def _merge_and_clean_kwargs(
     return merged
 
 
+def _validate_and_normalize_registration_kwargs(
+    kwargs: Dict[str, object]
+) -> Dict[str, object]:
+    """Re-validate kwargs after merging overrides to catch invalid custom values."""
+
+    normalized: Dict[str, object] = dict(kwargs)
+
+    width, height = _assert_grid_size_or_raise(normalized.get("grid_size"))
+    normalized["grid_size"] = (width, height)
+
+    if "source_location" in normalized:
+        sx, sy = _assert_source_location_or_raise(
+            normalized["source_location"], width, height
+        )
+        normalized["source_location"] = (int(sx), int(sy))
+
+    if "start_location" in normalized and normalized["start_location"] is not None:
+        start_x, start_y = _assert_source_location_or_raise(
+            normalized["start_location"], width, height
+        )
+        normalized["start_location"] = (int(start_x), int(start_y))
+
+    if "max_steps" in normalized:
+        normalized["max_steps"] = _assert_max_steps_or_raise(normalized["max_steps"])
+
+    if "goal_radius" in normalized:
+        normalized["goal_radius"] = _assert_goal_radius_or_raise(
+            normalized["goal_radius"], width, height
+        )
+
+    return normalized
+
+
 def _warn_if_goal_radius_edges(
     goal_radius: float, source_x: float, source_y: float, width: int, height: int
 ) -> None:
@@ -857,6 +1074,7 @@ def _create_registration_kwargs(
 
         # Merge and clean additional kwargs
         base_kwargs = _merge_and_clean_kwargs(base_kwargs, additional_kwargs)
+        base_kwargs = _validate_and_normalize_registration_kwargs(base_kwargs)
 
         # Warn if goal radius extends beyond edges
         _warn_if_goal_radius_edges(

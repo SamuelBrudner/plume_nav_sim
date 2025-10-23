@@ -3,6 +3,7 @@ import dataclasses
 import enum
 import inspect  # >=3.10 - Frame inspection for automatic error context extraction and caller information
 import logging  # >=3.10 - Logger creation and error logging integration for development debugging and monitoring
+import re  # >=3.10 - Regular expressions for sanitizing untrusted error messages
 import threading  # >=3.10 - Thread-safe error handling and context management for multi-threaded exception scenarios
 import time  # >=3.10 - Timestamp generation for error tracking and performance context in exception handling
 import traceback  # >=3.10 - Stack trace formatting for detailed error context and development debugging
@@ -19,7 +20,17 @@ from typing import (  # >=3.10 - Type hints for exception parameters, error cont
 ERROR_CONTEXT_MAX_LENGTH = 1000
 MAX_STACK_TRACE_DEPTH = 10
 SANITIZATION_PLACEHOLDER = "<sanitized>"
-SENSITIVE_KEYS = ["password", "token", "key", "secret", "credential"]
+SENSITIVE_KEYS = [
+    "password",
+    "token",
+    "key",
+    "secret",
+    "credential",
+    "internal",
+    "debug",
+    "stack_trace",
+    "private",
+]
 RECOVERY_SUGGESTION_MAX_LENGTH = 500
 ERROR_HISTORY_MAX_SIZE = 50
 
@@ -168,8 +179,12 @@ class ErrorContext:
         """Convert error context to dictionary for serialization and logging.
 
         Returns:
-            dict: Dictionary representation of error context
+            dict: Dictionary representation of error context with auto-sanitization
         """
+        # Auto-sanitize if not already sanitized to prevent sensitive data exposure
+        if not self.is_sanitized:
+            self.sanitize()
+
         # Create dictionary with all context fields
         result = {
             "component_name": self.component_name,
@@ -317,9 +332,50 @@ class PlumeNavSimError(Exception):
         # Extract user-readable message removing technical jargon
         user_message = self.message
 
+        # Remove potentially dangerous scripting content and injection attempts
+        if user_message:
+            # Remove script tags
+            script_pattern = re.compile(
+                r"<script.*?>.*?</script>", re.IGNORECASE | re.DOTALL
+            )
+            user_message = script_pattern.sub("", user_message)
+
+            # Remove dangerous function calls
+            for dangerous in ("javascript:", "eval(", "exec("):
+                user_message = user_message.replace(dangerous, "")
+
+            # Sanitize common injection patterns
+            injection_patterns = [
+                (r"';?\s*DROP\s+TABLE", SANITIZATION_PLACEHOLDER),  # SQL injection
+                (r"\$\{jndi:", SANITIZATION_PLACEHOLDER),  # Log4j injection
+                (r"\.\./\.\./", SANITIZATION_PLACEHOLDER),  # Path traversal
+                (r"\\x00", SANITIZATION_PLACEHOLDER),  # Null bytes
+            ]
+            for pattern, replacement in injection_patterns:
+                user_message = re.sub(
+                    pattern, replacement, user_message, flags=re.IGNORECASE
+                )
+
+            # Escape remaining HTML
+            user_message = user_message.replace("<", "&lt;").replace(">", "&gt;")
+
         # Remove stack traces and internal system information
         if user_message.lower().startswith(("traceback", "exception", "error in")):
             user_message = "An error occurred in the plume navigation environment."
+
+        # Remove internal implementation details that shouldn't be exposed to users
+        internal_disclosure_terms = [
+            ("file path disclosure:", "File disclosure:"),
+            ("class name", "component"),
+            ("method name", "operation"),
+            ("variable name", "parameter"),
+        ]
+        user_message_lower = user_message.lower()
+        for term, replacement in internal_disclosure_terms:
+            if term in user_message_lower:
+                # Replace the term case-insensitively
+                pattern = re.compile(re.escape(term), re.IGNORECASE)
+                user_message = pattern.sub(replacement, user_message)
 
         # Include recovery suggestions if include_suggestions is True and available
         if include_suggestions and self.recovery_suggestion:
@@ -328,13 +384,16 @@ class PlumeNavSimError(Exception):
         # Ensure no sensitive information is disclosed
         for sensitive_key in SENSITIVE_KEYS:
             if sensitive_key.lower() in user_message.lower():
-                user_message = user_message.replace(
-                    sensitive_key, SANITIZATION_PLACEHOLDER
+                user_message = re.sub(
+                    sensitive_key,
+                    SANITIZATION_PLACEHOLDER,
+                    user_message,
+                    flags=re.IGNORECASE,
                 )
 
         return user_message
 
-    def log_error(
+    def log_error(  # noqa: C901
         self, logger: Optional[logging.Logger] = None, include_stack_trace: bool = False
     ) -> None:
         """Log error with appropriate logger including context, recovery suggestions, and debugging information.
@@ -369,15 +428,35 @@ class PlumeNavSimError(Exception):
 
         log_message = f"[{self.error_id}] {self.message}{context_str}{stack_trace_str}"
 
-        # Log with level appropriate for error severity
+        # Format component.operation info if context available
+        component_operation = ""
+        if self.context:
+            comp = self.context.component_name
+            op = self.context.operation_name
+            if comp and op:
+                component_operation = f" [{comp}.{op}]"
+
+        final_message = (
+            f"{component_operation}{log_message}"
+            if component_operation
+            else log_message
+        )
+        sanitized_log_message = final_message
+        for sensitive_key in SENSITIVE_KEYS:
+            pattern = re.compile(re.escape(sensitive_key), re.IGNORECASE)
+            sanitized_log_message = pattern.sub(
+                SANITIZATION_PLACEHOLDER, sanitized_log_message
+            )
+
+        # Log using appropriate severity level with sanitized content
         if self.severity == ErrorSeverity.LOW:
-            logger.info(log_message)
+            logger.info(sanitized_log_message)
         elif self.severity == ErrorSeverity.MEDIUM:
-            logger.warning(log_message)
+            logger.warning(sanitized_log_message)
         elif self.severity == ErrorSeverity.HIGH:
-            logger.error(log_message)
+            logger.error(sanitized_log_message)
         else:  # CRITICAL
-            logger.critical(log_message)
+            logger.critical(sanitized_log_message)
 
         # Set logged flag to True to prevent duplicate logging
         self.logged = True
@@ -595,22 +674,30 @@ class StateError(PlumeNavSimError):
         Returns:
             str: Recovery action suggestion for resolving state error
         """
-        # Analyze current_state and expected_state for recovery options
-        if self.current_state and self.expected_state:
-            if "uninitialized" in self.current_state.lower():
+        # Check for specific state conditions first (uninitialized, terminated, error)
+        # These are high-priority indicators that override component-specific logic
+        if self.current_state:
+            current_lower = self.current_state.lower()
+            if "uninitialized" in current_lower:
                 return "Initialize component or environment before use"
-            elif "terminated" in self.current_state.lower():
+            elif "terminated" in current_lower:
                 return "Reset environment to begin new episode"
-            elif "error" in self.current_state.lower():
-                return "Clear error state and reinitialize component"
+            elif "error" in current_lower and self.component_name:
+                # For error states, prefer component-specific recovery
+                component_lower = self.component_name.lower()
+                if "plume" in component_lower:
+                    return "Reinitialize plume model with valid parameters"
+                else:
+                    return "Clear error state and reinitialize component"
 
         # Consider component_name for component-specific recovery strategies
         if self.component_name:
-            if "plume" in self.component_name.lower():
+            component_lower = self.component_name.lower()
+            if "plume" in component_lower:
                 return "Reinitialize plume model with valid parameters"
-            elif "render" in self.component_name.lower():
+            elif "render" in component_lower:
                 return "Reset rendering pipeline or switch to fallback mode"
-            elif "env" in self.component_name.lower():
+            elif "env" in component_lower:
                 return "Reset environment to initial state"
 
         # Return most appropriate recovery action based on error context
@@ -1014,12 +1101,8 @@ class ResourceError(PlumeNavSimError):
             )
 
     def suggest_cleanup_actions(self) -> List[str]:
-        """Suggest specific cleanup actions based on resource type and usage analysis.
-
-        Returns:
-            list: List of cleanup actions to resolve resource constraints
-        """
-        actions = []
+        """Suggest cleanup actions based on resource diagnostics."""
+        actions: List[str] = []
 
         # Analyze resource_type for resource-specific cleanup strategies
         if self.resource_type:
@@ -1170,6 +1253,31 @@ class IntegrationError(PlumeNavSimError):
         self.compatibility_info = compatibility_report
         return compatibility_report
 
+    def set_compatibility_info(self, info: Dict[str, Any]) -> None:
+        """Store extended compatibility information with sanitization and guidance."""
+
+        if not isinstance(info, dict):
+            raise TypeError("Compatibility info must be provided as a dictionary")
+
+        sanitized_info = sanitize_error_context(info)
+        self.compatibility_info.update(sanitized_info)
+
+        if "version_compatible" in sanitized_info:
+            self.version_mismatch = not bool(sanitized_info["version_compatible"])
+
+        upgrade_path = sanitized_info.get("upgrade_path")
+        if isinstance(upgrade_path, list) and upgrade_path:
+            path_str = " -> ".join(str(step) for step in upgrade_path[:3])
+            self.set_recovery_suggestion(f"Follow upgrade path: {path_str}")
+
+        breaking_changes = sanitized_info.get("breaking_changes")
+        if breaking_changes:
+            self.error_details["breaking_changes"] = breaking_changes
+
+        migration_guide = sanitized_info.get("migration_guide")
+        if migration_guide:
+            self.error_details["migration_guide"] = migration_guide
+
 
 class PlumeModelError(ComponentError):
     """Model-specific error with recovery suggestion helpers used by plume model tests."""
@@ -1316,7 +1424,30 @@ def sanitize_error_context(  # noqa: C901
             continue
 
         # Replace sensitive values with SANITIZATION_PLACEHOLDER
-        if any(sensitive in key_lower for sensitive in sensitive_keys):
+        # Use word boundary matching to avoid false positives (e.g., "normal_key" should not match "key")
+        is_sensitive = False
+        for sensitive in sensitive_keys:
+            sensitive_lower = sensitive.lower()
+            # For very short sensitive terms (<=3 chars), only match if at start or exact match
+            # to avoid false positives like "normal_key" matching "key"
+            if len(sensitive_lower) <= 3:
+                if key_lower == sensitive_lower or key_lower.startswith(
+                    sensitive_lower + "_"
+                ):
+                    is_sensitive = True
+                    break
+            else:
+                # For longer terms, match as whole word or with common separators
+                if (
+                    key_lower == sensitive_lower
+                    or key_lower.startswith(sensitive_lower + "_")  # Exact match
+                    or key_lower.endswith("_" + sensitive_lower)  # prefix_
+                    or f"_{sensitive_lower}_" in key_lower  # _suffix
+                ):  # _middle_
+                    is_sensitive = True
+                    break
+
+        if is_sensitive:
             sanitized[key] = SANITIZATION_PLACEHOLDER
             continue
 
@@ -1325,28 +1456,31 @@ def sanitize_error_context(  # noqa: C901
             sanitized[key] = sanitize_error_context(value, additional_sensitive_keys)
             continue
 
-        # Truncate large string values to ERROR_CONTEXT_MAX_LENGTH and remove nulls
+        # Handle string values: truncate large strings and check for sensitive content
         if isinstance(value, str):
+            # Remove null bytes
             if "\x00" in value:
                 value = value.replace("\x00", "")
-            if len(value) > ERROR_CONTEXT_MAX_LENGTH:
-                sanitized[key] = value[: ERROR_CONTEXT_MAX_LENGTH - 3] + "..."
-            # Check string content for sensitive information
+            # Check string content for sensitive information BEFORE truncating
             value_lower = value.lower()
             if any(sensitive in value_lower for sensitive in sensitive_keys):
                 sanitized[key] = SANITIZATION_PLACEHOLDER
+            elif len(value) > ERROR_CONTEXT_MAX_LENGTH:
+                sanitized[key] = value[: ERROR_CONTEXT_MAX_LENGTH - 3] + "..."
             else:
                 sanitized[key] = value
+            continue
 
         # Remove private attributes (starting with underscore) from context
         if isinstance(key, str) and key.startswith("_"):
             del sanitized[key]
+            continue
 
     # Return sanitized context dictionary safe for external logging
     return sanitized
 
 
-def format_error_details(
+def format_error_details(  # noqa: C901
     error: Exception,
     context: Optional[dict] = None,
     recovery_suggestion: Optional[str] = None,
@@ -1384,6 +1518,18 @@ def format_error_details(
         details_lines.append(
             f"Severity: {error.severity.name} - {error.severity.get_description()}"
         )
+
+    # Add component identification if available (for ComponentError, StateError, etc.)
+    if hasattr(error, "component_name") and error.component_name:
+        details_lines.append(f"Component: {error.component_name}")
+        if hasattr(error, "operation_name") and error.operation_name:
+            details_lines.append(f"Operation: {error.operation_name}")
+    # Also check context for component/operation info
+    elif hasattr(error, "context") and error.context:
+        if hasattr(error.context, "component_name") and error.context.component_name:
+            details_lines.append(f"Component: {error.context.component_name}")
+        if hasattr(error.context, "operation_name") and error.context.operation_name:
+            details_lines.append(f"Operation: {error.context.operation_name}")
 
     # Add sanitized context information if provided
     if context:

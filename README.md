@@ -56,6 +56,17 @@ Validate the install:
 python -c "import plume_nav_sim as pns; pns.make_env()"
 ```
 
+### Test and performance requirements
+
+Running the full test matrix (contracts, property-based suites, and performance checks) requires optional packages that are not included in the base install.
+
+```bash
+# Add property-based testing and perf monitors
+pip install -e .[test,benchmark]
+```
+
+This installs `hypothesis` (for property/contract suites) and `psutil` (for performance benchmarks). Without them, `pytest` will report import-time failures.
+
 ## 5. Architecture Overview
 
 - `plume_nav_sim.make_env()` → default environment (auto-registered as `PlumeNav-v0`)

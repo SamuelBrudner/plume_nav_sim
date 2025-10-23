@@ -2,16 +2,28 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Optional, Tuple
 
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
+from gymnasium.utils import seeding as gym_seeding
+from gymnasium.wrappers import TimeLimit
 
+from ..core.types import GridSize, RenderMode
+from ..render.matplotlib_viz import MatplotlibRenderer
+from ..render.numpy_rgb import NumpyRGBRenderer
+from ..utils.exceptions import ValidationError
+from ..utils.validation import validate_seed_value
 from .component_env import ComponentBasedEnvironment
 from .factory import create_component_environment
 
-__all__ = ["PlumeSearchEnv", "create_plume_search_env", "validate_plume_search_config"]
+__all__ = [
+    "PlumeSearchEnv",
+    "create_plume_search_env",
+    "validate_plume_search_config",
+    "unwrap_to_plume_env",
+]
 
 
 def _normalize_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int]:
@@ -19,9 +31,19 @@ def _normalize_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int
         from ..core.constants import DEFAULT_GRID_SIZE
 
         return DEFAULT_GRID_SIZE
+
+    from ..core.constants import MAX_GRID_SIZE
+
     width, height = int(grid_size[0]), int(grid_size[1])
     if width <= 0 or height <= 0:
         raise ValueError("grid_size must contain positive integers")
+
+    max_width, max_height = MAX_GRID_SIZE
+    if width > max_width or height > max_height:
+        raise ValueError(
+            f"grid_size dimensions ({width}, {height}) exceed maximum ({max_width}, {max_height})"
+        )
+
     return width, height
 
 
@@ -69,9 +91,30 @@ def _normalize_plume_sigma(plume_params: Optional[Dict[str, Any]]) -> float:
 
         return float(DEFAULT_PLUME_SIGMA)
     value = float(sigma)
+    if math.isnan(value) or math.isinf(value):
+        raise ValueError("plume sigma must be finite numeric value")
     if value <= 0:
         raise ValueError("plume sigma must be positive")
     return value
+
+
+class _AttributeForwardingTimeLimit(TimeLimit):
+    """TimeLimit wrapper that forwards common attributes from the wrapped env."""
+
+    _FORWARDED_ATTRS = (
+        "grid_size",
+        "source_location",
+        "max_steps",
+        "goal_radius",
+        "action_space",
+        "observation_space",
+        "metadata",
+    )
+
+    def __getattr__(self, name: str):
+        if name in self._FORWARDED_ATTRS:
+            return getattr(self.env, name)
+        return super().__getattr__(name)
 
 
 class PlumeSearchEnv(gym.Env):
@@ -79,7 +122,7 @@ class PlumeSearchEnv(gym.Env):
 
     metadata = ComponentBasedEnvironment.metadata
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         *,
         grid_size: Optional[Tuple[int, int]] = None,
@@ -121,66 +164,177 @@ class PlumeSearchEnv(gym.Env):
             elif key in kwargs:
                 factory_kwargs[key] = kwargs[key]
 
-        self._env = create_component_environment(**factory_kwargs)
+        self._core_env = create_component_environment(**factory_kwargs)
 
-        self.action_space = self._env.action_space
+        # Legacy attribute compatibility expected by registration tests
+        self.grid_size = normalized_grid
+        self.source_location = goal_position
+        self.max_steps = max_steps_value
+        self.goal_radius = goal_radius_value
+
+        self.action_space = self._core_env.action_space
         width, height = normalized_grid
-        self.observation_space = gym.spaces.Dict(
-            {
-                "agent_position": gym.spaces.Box(
-                    low=np.array([0, 0], dtype=np.float32),
-                    high=np.array([width - 1, height - 1], dtype=np.float32),
-                    shape=(2,),
-                    dtype=np.float32,
-                ),
-                "sensor_reading": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(1,),
-                    dtype=np.float32,
-                ),
-                "source_location": gym.spaces.Box(
-                    low=np.array([0, 0], dtype=np.float32),
-                    high=np.array([width - 1, height - 1], dtype=np.float32),
-                    shape=(2,),
-                    dtype=np.float32,
-                ),
-            }
+        # Legacy Box observation space for backward compatibility
+        self.observation_space = gym.spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(1,),
+            dtype=np.float32,
+        )
+
+        self._env = _AttributeForwardingTimeLimit(
+            self._core_env, max_episode_steps=self.max_steps
         )
 
         self._cumulative_reward: float = 0.0
         self._latest_seed: Optional[int] = None
+        self.np_random, self._latest_seed = gym_seeding.np_random(None)
+
+        # Provide a renderer handle and default interactive configuration
+        # for integration tests that expect env.renderer.* APIs to be present.
+        # Adapter exposes a minimal unified surface across RGB and Matplotlib renderers.
+        class _RendererAdapter:
+            def __init__(self, width: int, height: int) -> None:
+                grid = GridSize(width=int(width), height=int(height))
+                # Initialize lightweight RGB renderer (for mode support checks)
+                try:
+                    self.rgb_renderer = NumpyRGBRenderer(grid)
+                except Exception:
+                    self.rgb_renderer = None
+                # Initialize Matplotlib renderer for interactive configuration APIs
+                try:
+                    self.matplotlib_renderer = MatplotlibRenderer(grid)
+                except Exception:
+                    self.matplotlib_renderer = None
+
+            # Mode support check used by test helper
+            def supports_render_mode(self, mode: RenderMode) -> bool:
+                if mode == RenderMode.RGB_ARRAY:
+                    return self.rgb_renderer is not None
+                if mode == RenderMode.HUMAN:
+                    if self.matplotlib_renderer is None:
+                        return False
+                    try:
+                        return self.matplotlib_renderer.supports_render_mode(mode)
+                    except Exception:
+                        return False
+                return False
+
+            # Interactive configuration helpers forwarded to matplotlib renderer if available
+            def configure_interactive_mode(self, cfg) -> bool:
+                if self.matplotlib_renderer is None:
+                    return False
+                return bool(self.matplotlib_renderer.configure_interactive_mode(cfg))
+
+            def enable_interactive_mode(self) -> None:
+                if self.matplotlib_renderer is not None:
+                    self.matplotlib_renderer.enable_interactive_mode()
+
+            def disable_interactive_mode(self) -> None:
+                if self.matplotlib_renderer is not None:
+                    self.matplotlib_renderer.disable_interactive_mode()
+
+            def set_interactive_mode(self, enable: bool = True, **kwargs) -> bool:
+                if self.matplotlib_renderer is None:
+                    return False
+                return bool(
+                    self.matplotlib_renderer.set_interactive_mode(enable, **kwargs)
+                )
+
+        w, h = normalized_grid
+        self.renderer = _RendererAdapter(width=w, height=h)
+
+        # Default interactive configuration consumed by rendering tests
+        self.interactive_config = {
+            "enable_toolbar": True,
+            "enable_key_bindings": True,
+            "update_interval": 0.1,
+            "animation_enabled": True,
+        }
 
     def reset(
         self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
     ) -> Tuple[Any, Dict[str, Any]]:
-        self._latest_seed = seed
+        seed_to_use: int
+        try:
+            validate_seed_value(
+                seed,
+                allow_none=True,
+                strict_type_checking=True,
+            )
+        except ValidationError as exc:
+            raise ValidationError(
+                f"Invalid seed value: {seed}",
+                context={
+                    "seed_type": type(seed).__name__,
+                    "seed_value": seed,
+                },
+            ) from exc
+
+        if seed is not None:
+            self.np_random, seed_to_use = gym_seeding.np_random(seed)
+        else:
+            if self.np_random is None:
+                self.np_random, seed_to_use = gym_seeding.np_random(None)
+            else:
+                seed_to_use = int(
+                    self.np_random.integers(0, 2**32 - 1, dtype=np.uint32)
+                )
+
+        if seed_to_use is not None:
+            seed_to_use = int(seed_to_use)
+
+        self._latest_seed = seed_to_use
         self._cumulative_reward = 0.0
-        obs, info = self._env.reset(seed=seed, options=options)
+
+        # Ensure underlying environment shares the same deterministic seed
+        try:
+            if hasattr(self._env, "seed"):
+                self._env.seed(seed_to_use)
+        except Exception:
+            # Fall back to relying on reset seeding if seed() not supported
+            pass
+
+        obs, info = self._env.reset(seed=seed_to_use, options=options)
         wrapped_obs = self._wrap_observation(obs)
         augmented_info = self._augment_reset_info(info)
         return wrapped_obs, augmented_info
 
     def step(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
         obs, reward, terminated, truncated, info = self._env.step(action)
-        self._cumulative_reward += float(reward)
+        immediate_reward = float(reward)
+        self._cumulative_reward += immediate_reward
         wrapped_obs = self._wrap_observation(obs)
         augmented_info = self._augment_step_info(info, terminated)
-        return wrapped_obs, float(reward), terminated, truncated, augmented_info
+        return (
+            wrapped_obs,
+            immediate_reward,
+            terminated,
+            truncated,
+            augmented_info,
+        )
 
     def render(self, mode: str = "human") -> Any:
         if mode not in {"human", "rgb_array"}:
             raise ValueError(f"Unsupported render mode: {mode}")
 
+        grid_size = getattr(self._env, "grid_size", None)
+        if grid_size is not None:
+            width = getattr(grid_size, "width", None) or grid_size[0]
+            height = getattr(grid_size, "height", None) or grid_size[1]
+        else:
+            width = height = 1
+
         result = self._env.render()
         if mode == "rgb_array":
             if result is not None:
                 return result
-            height, width = self._env.grid_size.height, self._env.grid_size.width
             return np.zeros((height, width, 3), dtype=np.uint8)
 
         # human mode: defer to underlying environment even if it returns rgb
-        return result
+        if result is not None:
+            return result
+        return np.zeros((height, width, 3), dtype=np.uint8)
 
     def close(self) -> None:
         self._env.close()
@@ -191,38 +345,36 @@ class PlumeSearchEnv(gym.Env):
         return True
 
     def seed(self, seed: Optional[int] = None) -> list[Optional[int]]:
-        self._latest_seed = seed
-        self._env.reset(seed=seed)
-        return [seed]
+        self.np_random, seed_used = gym_seeding.np_random(seed)
+        if seed_used is not None:
+            seed_used = int(seed_used)
+        self._latest_seed = seed_used
+
+        if hasattr(self._env, "seed"):
+            try:
+                return self._env.seed(seed_used)
+            except Exception:
+                pass
+
+        # Fall back to resetting with the seed if environment lacks a dedicated seed API
+        self._env.reset(seed=seed_used)
+        return [seed_used]
 
     # ------------------------------------------------------------------
-    def _wrap_observation(self, observation: Any) -> Dict[str, np.ndarray]:
+    def _wrap_observation(self, observation: Any) -> np.ndarray:
+        """Extract sensor reading and return as Box(1,) observation."""
         if isinstance(observation, dict):
-            return observation
+            sensor = observation.get("sensor_reading") or observation.get("observation")
+        else:
+            sensor = observation
 
-        agent_state = getattr(self._env, "_agent_state", None)
-        if agent_state is None:
-            raise RuntimeError("Underlying environment did not initialize agent state")
-
-        agent_pos = np.array(
-            [agent_state.position.x, agent_state.position.y], dtype=np.float32
-        )
-        sensor = np.atleast_1d(np.asarray(observation, dtype=np.float32))
-        if sensor.shape != (1,):
+        sensor_array = np.atleast_1d(np.asarray(sensor, dtype=np.float32))
+        if sensor_array.shape != (1,):
             raise ValueError(
-                "Wrapped observation expected shape (1,) from ConcentrationSensor"
+                f"Expected sensor reading shape (1,), received shape {sensor_array.shape}"
             )
 
-        goal = getattr(self._env, "goal_location", None)
-        if goal is None:
-            raise RuntimeError("Underlying environment missing goal_location")
-        goal_pos = np.array([goal.x, goal.y], dtype=np.float32)
-
-        return {
-            "agent_position": agent_pos,
-            "sensor_reading": sensor,
-            "source_location": goal_pos,
-        }
+        return sensor_array
 
     def _augment_reset_info(self, info: Dict[str, Any]) -> Dict[str, Any]:
         info = dict(info)
@@ -248,6 +400,37 @@ class PlumeSearchEnv(gym.Env):
         if "agent_position" in info:
             info.setdefault("agent_xy", info["agent_position"])
         return info
+
+
+def unwrap_to_plume_env(env: gym.Env) -> PlumeSearchEnv:
+    """Traverse common Gymnasium wrappers to locate the underlying PlumeSearchEnv."""
+
+    visited = set()
+    current: Any = env
+
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+
+        if isinstance(current, PlumeSearchEnv):
+            return current
+
+        if hasattr(current, "env"):
+            try:
+                current = current.env
+            except AttributeError:
+                break
+            continue
+
+        if hasattr(current, "unwrapped"):
+            try:
+                current = current.unwrapped
+            except AttributeError:
+                break
+            continue
+
+        break
+
+    raise TypeError("Unable to locate PlumeSearchEnv within provided wrapper stack.")
 
 
 def create_plume_search_env(**kwargs: Any) -> PlumeSearchEnv:

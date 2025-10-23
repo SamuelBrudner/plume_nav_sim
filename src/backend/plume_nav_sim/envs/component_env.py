@@ -27,10 +27,10 @@ import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
+import gymnasium as gym
 import numpy as np
 
-import gymnasium as gym
-
+from ..core.constants import AGENT_MARKER_COLOR, SOURCE_MARKER_COLOR
 from ..core.geometry import Coordinates, GridSize
 from ..core.state import AgentState
 from ..utils.exceptions import StateError, ValidationError
@@ -158,9 +158,13 @@ class ComponentBasedEnvironment(gym.Env):
         self.max_steps = max_steps
         self.goal_location = goal_location
         self.goal_radius = goal_radius
-        self.start_location = start_location or Coordinates(
-            grid_size.width // 2, grid_size.height // 2
-        )
+        self._user_start_location = start_location
+        if start_location is not None:
+            self.start_location = start_location
+        else:
+            self.start_location = Coordinates(
+                grid_size.width // 2, grid_size.height // 2
+            )
         self.render_mode = render_mode
 
         # Episode state (initialized in reset())
@@ -213,13 +217,23 @@ class ComponentBasedEnvironment(gym.Env):
             if not isinstance(seed, int) or seed < 0:
                 raise ValidationError(f"Seed must be non-negative int, got {seed}")
             self._seed = seed
-            np.random.seed(seed)
+            self._rng = np.random.default_rng(seed)
             logger.debug(f"Environment seeded: {seed}")
+        elif not hasattr(self, "_rng"):
+            self._rng = np.random.default_rng()
 
         # Reset episode counters
         # Contract: environment_state_machine.md - C2, C3
         self._step_count = 0
         self._episode_count += 1
+
+        # Select start location for this episode
+        if self._user_start_location is not None:
+            start_position = self._user_start_location
+        else:
+            start_position = self._sample_random_start_location()
+
+        self.start_location = start_position
 
         # Initialize agent state
         # Contract: environment_state_machine.md - C4
@@ -242,7 +256,6 @@ class ComponentBasedEnvironment(gym.Env):
         # Contract: environment_state_machine.md - C6
         info = {
             "seed": self._seed,
-            "episode": self._episode_count,
             "agent_position": (
                 self._agent_state.position.x,
                 self._agent_state.position.y,
@@ -346,7 +359,6 @@ class ComponentBasedEnvironment(gym.Env):
         # Build info dict
         info = {
             "step_count": self._step_count,
-            "episode": self._episode_count,
             "agent_position": (
                 self._agent_state.position.x,
                 self._agent_state.position.y,
@@ -355,6 +367,16 @@ class ComponentBasedEnvironment(gym.Env):
         }
 
         return observation, float(reward), terminated, truncated, info
+
+    def _sample_random_start_location(self) -> Coordinates:
+        rng = getattr(self, "_rng", None)
+        if rng is None:
+            rng = np.random.default_rng()
+            self._rng = rng
+
+        start_x = int(rng.integers(low=0, high=self.grid_size.width))
+        start_y = int(rng.integers(low=0, high=self.grid_size.height))
+        return Coordinates(x=start_x, y=start_y)
 
     def close(self) -> None:
         """
@@ -380,17 +402,55 @@ class ComponentBasedEnvironment(gym.Env):
 
     def render(self) -> Optional[np.ndarray]:
         """
-        Generate visualization (not implemented in minimal version).
+        Generate visualization composed of the concentration field with agent/source markers.
 
         Contract: environment_state_machine.md - render() contract
 
         Returns:
             RGB array if render_mode='rgb_array', else None
         """
-        if self.render_mode == "rgb_array":
-            # Placeholder: return blank image
-            return np.zeros((100, 100, 3), dtype=np.uint8)
-        return None
+        if self.render_mode != "rgb_array":
+            return None
+
+        height, width = self.grid_size.height, self.grid_size.width
+        canvas = np.zeros((height, width, 3), dtype=np.uint8)
+
+        # Base grayscale from concentration field to provide gradient variation
+        field = getattr(self, "_concentration_field", None)
+        field_array = getattr(field, "field_array", None)
+        if isinstance(field_array, np.ndarray) and field_array.size == height * width:
+            field_min = float(field_array.min()) if field_array.size else 0.0
+            field_max = float(field_array.max()) if field_array.size else 0.0
+            if field_max > field_min:
+                normalized = (field_array - field_min) / (field_max - field_min)
+            else:
+                normalized = field_array * 0.0
+            grayscale = (normalized * 255.0).astype(np.uint8)
+            canvas[:, :, :] = grayscale[:, :, None]
+
+        # Apply source marker (goal position)
+        source = getattr(self, "goal_location", None)
+        if source is not None:
+            sx, sy = int(source.x), int(source.y)
+            if 0 <= sy < height and 0 <= sx < width:
+                canvas[sy, sx] = np.array(SOURCE_MARKER_COLOR, dtype=np.uint8)
+
+        # Apply agent marker
+        agent_state = getattr(self, "_agent_state", None)
+        if agent_state is not None and agent_state.position is not None:
+            ax, ay = int(agent_state.position.x), int(agent_state.position.y)
+        else:
+            start = getattr(self, "start_location", None)
+            ax, ay = (
+                (int(start.x), int(start.y))
+                if start is not None
+                else (width // 2, height // 2)
+            )
+
+        if 0 <= ay < height and 0 <= ax < width:
+            canvas[ay, ax] = np.array(AGENT_MARKER_COLOR, dtype=np.uint8)
+
+        return canvas
 
     # Private helper methods
 

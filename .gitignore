@@ -11,6 +11,7 @@
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -198,6 +199,18 @@ Desktop.ini
 # Matplotlib configuration and cache
 .matplotlib/
 .config/matplotlib/
+
+# =============================================================================
+# PROJECT-LOCAL TRACKING/STATE
+# Local artifacts that should not be committed
+# =============================================================================
+
+# Beads issue tracker local state
+.beads/
+
+# Agent instructions docs that should not be versioned
+AGENTS.md
+Angent.md
 .cache/matplotlib/
 
 # Jupyter notebook checkpoints

@@ -442,7 +442,7 @@ class BaseRenderTemplate(ABC):
                         "Template functionality test returned None - may indicate rendering issues"
                     )
             except Exception as e:
-                raise RuntimeError(f"Template functionality test failed: {e}")
+                raise RuntimeError(f"Template functionality test failed: {e}") from e
 
             # Set initialization status
             self._initialized = True
@@ -1216,7 +1216,7 @@ class MatplotlibTemplate(BaseRenderTemplate):
 
         except Exception as e:
             warnings.warn(f"Matplotlib functionality test failed: {e}")
-            raise RuntimeError("Matplotlib backend test failed")
+            raise RuntimeError("Matplotlib backend test failed") from e
 
     def _execute_render(
         self,
@@ -1269,7 +1269,7 @@ class MatplotlibTemplate(BaseRenderTemplate):
             else:
                 raise RuntimeError(
                     f"Matplotlib rendering failed with all backends: {e}"
-                )
+                ) from e
 
     def create_concentration_plot(self, concentration_field: np.ndarray) -> None:
         """
@@ -1592,9 +1592,7 @@ class MatplotlibTemplate(BaseRenderTemplate):
                             }
                         )
 
-        # Analyze results
-        successful_tests = [r for r in test_results if r["success"]]
-        if successful_tests:
+        if successful_tests := [r for r in test_results if r["success"]]:
             self._extracted_from_validate_performance_87(
                 successful_tests,
                 test_results,
@@ -1793,13 +1791,11 @@ def create_matplotlib_template(
 
     # Configure matplotlib backend selection with fallback chain
     backend_chain = BACKEND_PRIORITY_LIST.copy()
-    if preferred_backend and preferred_backend not in backend_chain:
+    if preferred_backend:
+        if preferred_backend in backend_chain:
+            # Move preferred backend to front
+            backend_chain.remove(preferred_backend)
         backend_chain.insert(0, preferred_backend)
-    elif preferred_backend:
-        # Move preferred backend to front
-        backend_chain.remove(preferred_backend)
-        backend_chain.insert(0, preferred_backend)
-
     # Apply template options with matplotlib defaults
     if template_options is None:
         template_options = {}
@@ -1901,52 +1897,50 @@ def create_custom_template(
     # Apply custom_parameters with validation against template type requirements
     if custom_parameters:
         # Validate custom parameters based on template type
-        if template_type == "rgb":
-            rgb_params = [
-                "agent_marker_size",
-                "source_marker_size",
-                "performance_optimized",
-            ]
-            invalid_params = [
-                p
-                for p in custom_parameters.keys()
-                if p not in rgb_params and not p.startswith("custom_")
-            ]
-            if invalid_params:
-                warnings.warn(
-                    f"Custom parameters {invalid_params} may not apply to RGB templates"
-                )
-
-        elif template_type == "matplotlib":
+        if template_type == "matplotlib":
             mpl_params = [
                 "figsize",
                 "backend_fallback",
                 "interactive_updates",
                 "animation_interval",
             ]
-            invalid_params = [
+            if invalid_params := [
                 p
-                for p in custom_parameters.keys()
+                for p in custom_parameters
                 if p not in mpl_params and not p.startswith("custom_")
-            ]
-            if invalid_params:
+            ]:
                 warnings.warn(
                     f"Custom parameters {invalid_params} may not apply to matplotlib templates"
+                )
+
+        elif template_type == "rgb":
+            rgb_params = [
+                "agent_marker_size",
+                "source_marker_size",
+                "performance_optimized",
+            ]
+            if invalid_params := [
+                p
+                for p in custom_parameters
+                if p not in rgb_params and not p.startswith("custom_")
+            ]:
+                warnings.warn(
+                    f"Custom parameters {invalid_params} may not apply to RGB templates"
                 )
 
         # Merge custom parameters into config
         config.custom_parameters.update(custom_parameters)
 
     # Create template instance using appropriate factory based on template_type
-    if template_type == "rgb":
-        template = RGBTemplate(config)
-    elif template_type == "matplotlib":
-        template = MatplotlibTemplate(config)
-    elif template_type == "hybrid":
+    if template_type == "hybrid":
         # Hybrid template implementation - for future extension
         raise NotImplementedError(
             "Hybrid templates not implemented in proof-of-life version"
         )
+    elif template_type == "matplotlib":
+        template = MatplotlibTemplate(config)
+    elif template_type == "rgb":
+        template = RGBTemplate(config)
     else:
         raise ValueError(f"Unknown template type: {template_type}")
 
@@ -1955,7 +1949,7 @@ def create_custom_template(
         if not template.initialize():
             raise RuntimeError(f"Custom {template_type} template initialization failed")
     except Exception as e:
-        raise RuntimeError(f"Custom template creation failed: {e}")
+        raise RuntimeError(f"Custom template creation failed: {e}") from e
 
     # Perform performance validation if requested
     if validate_performance:
@@ -1973,9 +1967,9 @@ def create_custom_template(
                 f"Custom template does not meet performance targets: {performance_data.get('target_violations', [])}"
             )
 
-            # Provide optimization recommendations
-            recommendations = performance_data.get("optimization_recommendations", [])
-            if recommendations:
+            if recommendations := performance_data.get(
+                "optimization_recommendations", []
+            ):
                 warnings.warn(
                     f"Performance optimization recommendations: {recommendations}"
                 )
@@ -2529,10 +2523,7 @@ def validate_template_performance(
                         ] = {"success": False, "error": str(e), "iteration": iteration}
                         break
 
-            # Analyze results for this grid size
-            successful_times = [t for t in render_times if t > 0]
-
-            if successful_times:
+            if successful_times := [t for t in render_times if t > 0]:
                 test_result = {
                     "grid_size": f"{grid_size[0]}x{grid_size[1]}",
                     "success_rate": success_count / iterations,
@@ -2570,11 +2561,9 @@ def validate_template_performance(
                     }
                 )
 
-        # Summarize scenario results
-        successful_tests = [
+        if successful_tests := [
             t for t in scenario_results["tests"] if t.get("success_rate", 0) > 0.5
-        ]
-        if successful_tests:
+        ]:
             scenario_results["summary"] = {
                 "overall_success_rate": np.mean(
                     [t["success_rate"] for t in successful_tests]
@@ -2591,11 +2580,9 @@ def validate_template_performance(
 
     # Generate comprehensive performance analysis
     if all_test_results:
-        successful_results = [
+        if successful_results := [
             r for r in all_test_results if r.get("success_rate", 0) > 0.8
-        ]
-
-        if successful_results:
+        ]:
             performance_report["performance_analysis"].update(
                 {
                     "overall_average_time_ms": np.mean(
@@ -2624,80 +2611,12 @@ def validate_template_performance(
 
     # Test backend compatibility for matplotlib templates
     if isinstance(template, MatplotlibTemplate):
-        compatibility_results = {}
-
-        original_backend = template.active_backend
-        test_backends = ["Agg", "TkAgg", "Qt5Agg"]
-
-        for backend in test_backends:
-            try:
-                backend_compatible = template.configure_backend(backend)
-                if backend_compatible:
-                    # Quick functionality test
-                    test_field = np.random.rand(32, 32).astype(np.float32)
-                    test_agent = Coordinates(16, 16)
-                    test_source = Coordinates(8, 8)
-
-                    start_time = time.perf_counter()
-                    template.render(test_field, test_agent, test_source)
-                    backend_time = time.perf_counter() - start_time
-
-                    compatibility_results[backend] = {
-                        "compatible": True,
-                        "render_time_ms": backend_time * 1000,
-                        "interactive": backend not in ["Agg", "svg", "pdf"],
-                    }
-                else:
-                    compatibility_results[backend] = {
-                        "compatible": False,
-                        "error": "Backend configuration failed",
-                    }
-
-            except Exception as e:
-                compatibility_results[backend] = {"compatible": False, "error": str(e)}
-
-        # Restore original backend
-        template.configure_backend(original_backend)
-        performance_report["compatibility_results"] = compatibility_results
-
+        _extracted_from_validate_template_performance_199(template, performance_report)
     # Apply strict validation rules if enabled
     if strict_validation:
-        strict_failures = []
-
-        # Check for any test failures
-        if (
-            performance_report["performance_analysis"].get("overall_success_rate", 1.0)
-            < 1.0
-        ):
-            strict_failures.append("Not all test iterations succeeded")
-
-        # Check performance consistency
-        consistency = performance_report["performance_analysis"].get(
-            "performance_consistency", {}
+        _extracted_from_validate_template_performance_(
+            performance_report, all_test_results
         )
-        cv = consistency.get("coefficient_of_variation", 0)
-        if cv > 0.5:  # More than 50% variation
-            strict_failures.append(f"High performance variation (CV={cv:.2f})")
-
-        # Check memory efficiency for large grids
-        large_grid_tests = [
-            r
-            for r in all_test_results
-            if "128x128" in r["grid_size"] and "memory_analysis" in r
-        ]
-        if large_grid_tests:
-            avg_memory = np.mean(
-                [r["memory_analysis"]["average_memory_mb"] for r in large_grid_tests]
-            )
-            if avg_memory > 25:  # Strict memory limit
-                strict_failures.append(
-                    f"High memory usage for large grids: {avg_memory:.1f}MB"
-                )
-
-        if strict_failures:
-            performance_report["validation_passed"] = False
-            performance_report["strict_validation_failures"] = strict_failures
-
     # Generate optimization recommendations based on results
     recommendations = []
 
@@ -2733,6 +2652,83 @@ def validate_template_performance(
     performance_report["recommendations"] = recommendations
 
     return performance_report["validation_passed"], performance_report
+
+
+# TODO Rename this here and in `validate_template_performance`
+def _extracted_from_validate_template_performance_(
+    performance_report, all_test_results
+):
+    strict_failures = []
+
+    # Check for any test failures
+    if (
+        performance_report["performance_analysis"].get("overall_success_rate", 1.0)
+        < 1.0
+    ):
+        strict_failures.append("Not all test iterations succeeded")
+
+    # Check performance consistency
+    consistency = performance_report["performance_analysis"].get(
+        "performance_consistency", {}
+    )
+    cv = consistency.get("coefficient_of_variation", 0)
+    if cv > 0.5:  # More than 50% variation
+        strict_failures.append(f"High performance variation (CV={cv:.2f})")
+
+    if large_grid_tests := [
+        r
+        for r in all_test_results
+        if "128x128" in r["grid_size"] and "memory_analysis" in r
+    ]:
+        avg_memory = np.mean(
+            [r["memory_analysis"]["average_memory_mb"] for r in large_grid_tests]
+        )
+        if avg_memory > 25:  # Strict memory limit
+            strict_failures.append(
+                f"High memory usage for large grids: {avg_memory:.1f}MB"
+            )
+
+    if strict_failures:
+        performance_report["validation_passed"] = False
+        performance_report["strict_validation_failures"] = strict_failures
+
+
+# TODO Rename this here and in `validate_template_performance`
+def _extracted_from_validate_template_performance_199(template, performance_report):
+    compatibility_results = {}
+
+    original_backend = template.active_backend
+    test_backends = ["Agg", "TkAgg", "Qt5Agg"]
+
+    for backend in test_backends:
+        try:
+            if backend_compatible := template.configure_backend(backend):
+                # Quick functionality test
+                test_field = np.random.rand(32, 32).astype(np.float32)
+                test_agent = Coordinates(16, 16)
+                test_source = Coordinates(8, 8)
+
+                start_time = time.perf_counter()
+                template.render(test_field, test_agent, test_source)
+                backend_time = time.perf_counter() - start_time
+
+                compatibility_results[backend] = {
+                    "compatible": True,
+                    "render_time_ms": backend_time * 1000,
+                    "interactive": backend not in ["Agg", "svg", "pdf"],
+                }
+            else:
+                compatibility_results[backend] = {
+                    "compatible": False,
+                    "error": "Backend configuration failed",
+                }
+
+        except Exception as e:
+            compatibility_results[backend] = {"compatible": False, "error": str(e)}
+
+    # Restore original backend
+    template.configure_backend(original_backend)
+    performance_report["compatibility_results"] = compatibility_results
 
 
 # Export all public interfaces

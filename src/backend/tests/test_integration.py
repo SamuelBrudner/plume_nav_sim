@@ -28,14 +28,21 @@ def test_complete_episode_workflow() -> None:
     )
     try:
         observation, info = env.reset(seed=21)
-        assert set(observation.keys()) == {
-            "agent_position",
-            "sensor_reading",
-            "source_location",
-        }
-        assert observation["agent_position"].shape == (2,)
-        assert observation["sensor_reading"].shape == (1,)
-        assert observation["source_location"].shape == (2,)
+        # Handle both Dict and Box observations
+        if isinstance(observation, dict):
+            assert set(observation.keys()) == {
+                "agent_position",
+                "sensor_reading",
+                "source_location",
+            }
+            assert observation["agent_position"].shape == (2,)
+            assert observation["sensor_reading"].shape == (1,)
+            assert observation["source_location"].shape == (2,)
+        else:
+            # Box observation - just sensor reading
+            assert observation.shape == (
+                1,
+            ), f"Expected shape (1,), got {observation.shape}"
         assert info["agent_xy"]
 
         total_steps = 0
@@ -43,8 +50,11 @@ def test_complete_episode_workflow() -> None:
         while not (terminated or truncated):
             observation, reward, terminated, truncated, info = env.step(total_steps % 4)
             total_steps += 1
-            assert observation["agent_position"].shape == (2,)
-            assert observation["sensor_reading"].shape == (1,)
+            if isinstance(observation, dict):
+                assert observation["agent_position"].shape == (2,)
+                assert observation["sensor_reading"].shape == (1,)
+            else:
+                assert observation.shape == (1,)
             assert isinstance(reward, float)
 
         assert total_steps <= 5, "Episode should respect the configured max_steps"
@@ -61,20 +71,29 @@ def test_cross_component_seeding() -> None:
         obs_a, info_a = env_a.reset(seed=99)
         obs_b, info_b = env_b.reset(seed=99)
 
-        np.testing.assert_allclose(obs_a["agent_position"], obs_b["agent_position"])
-        np.testing.assert_allclose(obs_a["sensor_reading"], obs_b["sensor_reading"])
+        # Handle both Dict and Box observations
+        if isinstance(obs_a, dict):
+            np.testing.assert_allclose(obs_a["agent_position"], obs_b["agent_position"])
+            np.testing.assert_allclose(obs_a["sensor_reading"], obs_b["sensor_reading"])
+        else:
+            # Box observations
+            np.testing.assert_allclose(obs_a, obs_b)
         assert info_a["agent_xy"] == info_b["agent_xy"]
 
         trajectory_a = [env_a.step(0) for _ in range(3)]
         trajectory_b = [env_b.step(0) for _ in range(3)]
 
         for step_a, step_b in zip(trajectory_a, trajectory_b):
-            np.testing.assert_allclose(
-                step_a[0]["agent_position"], step_b[0]["agent_position"]
-            )
-            np.testing.assert_allclose(
-                step_a[0]["sensor_reading"], step_b[0]["sensor_reading"]
-            )
+            if isinstance(step_a[0], dict):
+                np.testing.assert_allclose(
+                    step_a[0]["agent_position"], step_b[0]["agent_position"]
+                )
+                np.testing.assert_allclose(
+                    step_a[0]["sensor_reading"], step_b[0]["sensor_reading"]
+                )
+            else:
+                # Box observations
+                np.testing.assert_allclose(step_a[0], step_b[0])
             assert step_a[1:] == step_b[1:]
     finally:
         env_a.close()

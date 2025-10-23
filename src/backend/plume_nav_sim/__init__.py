@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, cast
+from typing import Dict, Optional
 
 from typing_extensions import NotRequired, TypedDict
 
@@ -171,7 +171,7 @@ def get_package_info(
     if include_environment_info:
 
         class EnvironmentDetails(TypedDict, total=False):
-            available: List[str]
+            available: list[str]
             factory: NotRequired[str]
             module: NotRequired[str]
             error: NotRequired[str]

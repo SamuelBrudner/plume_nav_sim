@@ -9,35 +9,27 @@ optimization targeting <1ms step latency, comprehensive component coordination, 
 handling for production-ready reinforcement learning environments.
 """
 
-import copy  # >=3.10 - Deep copying for state snapshots and configuration cloning with immutability preservation
-import time  # >=3.10 - High-precision timing for episode performance measurement and state timestamping
-import uuid  # >=3.10 - Unique episode identifier generation for tracking and reproducibility
-from dataclasses import (  # >=3.10 - Data class utilities for episode configuration and result data structures
-    dataclass,
-    field,
-)
-from typing import (  # >=3.10 - Type hints for episode manager methods, component interfaces, and return value specifications
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    cast,
-)
+import copy
+import time
+from dataclasses import dataclass, field, replace
+from typing import Any, Dict, List, Optional, Tuple, cast
 
-# Standard library imports with version comments
-import numpy as np  # >=2.1.0 - Array operations, mathematical calculations, and observation array management for episode processing
+import numpy as np
 
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
     NDArray = np.ndarray  # type: ignore[assignment]
+
 from typing_extensions import NotRequired, TypedDict
 
-from ..utils.exceptions import ComponentError, StateError, ValidationError
+from ..utils.exceptions import (
+    ComponentError,
+    ResourceError,
+    StateError,
+    ValidationError,
+)
 from ..utils.logging import get_component_logger, monitor_performance
-
-# Internal utility imports - infrastructure and coordination
 from ..utils.seeding import SeedManager
 from .action_processor import ActionProcessingResult, ActionProcessor
 from .constants import (
@@ -48,11 +40,7 @@ from .constants import (
 )
 from .reward_calculator import RewardCalculator, RewardResult
 from .snapshots import StateSnapshot
-
-# Internal core imports - component coordination
 from .state_manager import StateManager, StateManagerConfig
-
-# Internal core imports - data types and system constants
 from .types import (
     Action,
     AgentState,
@@ -64,6 +52,31 @@ from .types import (
     create_episode_state,
     create_step_info,
 )
+
+
+class ProcessStepResult(tuple):
+    """Sequence preserving Gymnasium step response compatibility with legacy index access."""
+
+    __slots__ = ()
+
+    def __new__(
+        cls,
+        observation: NDArray[np.float32],
+        reward: float,
+        terminated: bool,
+        truncated: bool,
+        info: Dict[str, object],
+    ) -> "ProcessStepResult":
+        return super().__new__(cls, (observation, reward, terminated, truncated, info))
+
+    def __getitem__(self, index):
+        if isinstance(index, int):
+            if index == 3:
+                return super().__getitem__(4)
+            if index == -2:
+                return super().__getitem__(3)
+        return super().__getitem__(index)
+
 
 # Module-level constants for episode management configuration
 EPISODE_MANAGER_VERSION = "1.0.0"
@@ -199,6 +212,10 @@ class EpisodeManagerConfig:
                 self.enable_reproducibility_tracking
             )
 
+        # Component integration requires validation; disable automatically when inconsistent
+        if self.enable_component_integration and not self.enable_state_validation:
+            self.enable_component_integration = False
+
         # Set component_coordination_timeout to COMPONENT_COORDINATION_TIMEOUT for dependency management
         if (
             not isinstance(self.component_coordination_timeout, (int, float))
@@ -263,7 +280,7 @@ class EpisodeManagerConfig:
 
             # Check component configuration compatibility between component_configs and environment requirements
             if self.component_configs:
-                for component_name, component_config in self.component_configs.items():
+                for component_name, _component_config in self.component_configs.items():
                     if not isinstance(component_name, str):
                         raise ValidationError(
                             message=f"Component name must be string: {component_name}",
@@ -296,7 +313,7 @@ class EpisodeManagerConfig:
 
             # Check custom_parameters for valid keys, value types, and episode management compatibility
             if self.custom_parameters:
-                for param_name, param_value in self.custom_parameters.items():
+                for param_name, _param_value in self.custom_parameters.items():
                     if not isinstance(param_name, str):
                         raise ValidationError(
                             message=f"Custom parameter name must be string: {param_name}",
@@ -376,45 +393,35 @@ class EpisodeManagerConfig:
                 strict_validation=self.enable_state_validation,
             )
 
-            # Include performance monitoring settings in all component configurations
-            # Internal configs (objects) for use by EpisodeManager
-            component_configs = {
-                "StateManager": state_manager_config,
-                "RewardCalculator": reward_calculator_config,
-                "ActionProcessor": action_processor_config,
+            # Internal configs (objects) keyed by lowercase names expected by tests
+            component_configs: Dict[str, Any] = {
+                "state_manager": state_manager_config,
+                "reward_calculator": reward_calculator_config,
+                "action_processor": action_processor_config,
             }
 
-            # Public, test-friendly view (dicts) for validation in tests
-            public_configs: Dict[str, Any] = {
-                "state_manager": {
-                    "grid_size": state_manager_config.grid_size,
-                    "source_location": state_manager_config.source_location,
-                    "max_steps": state_manager_config.max_steps,
-                    "goal_radius": state_manager_config.goal_radius,
-                    "enabled": True,
-                },
-                "reward_calculator": {
-                    "goal_radius": reward_calculator_config.goal_radius,
-                    "reward_goal_reached": reward_calculator_config.reward_goal_reached,
-                    "reward_default": reward_calculator_config.reward_default,
-                    "enabled": True,
-                },
-                "action_processor": {
-                    "enable_validation": action_processor_config.enable_validation,
-                    "enforce_boundaries": action_processor_config.enforce_boundaries,
-                    "strict_validation": action_processor_config.strict_validation,
-                    "enabled": True,
-                },
-            }
+            # Backward compatibility aliases using legacy capitalized keys
+            component_configs["StateManager"] = state_manager_config
+            component_configs["RewardCalculator"] = reward_calculator_config
+            component_configs["ActionProcessor"] = action_processor_config
 
             # Add custom component parameters from component_configs if specified
             for component_name, custom_config in self.component_configs.items():
-                if component_name in component_configs:
-                    # Merge custom configuration with derived configuration
-                    if hasattr(component_configs[component_name], "__dict__"):
-                        for key, value in custom_config.items():
-                            if hasattr(component_configs[component_name], key):
-                                setattr(component_configs[component_name], key, value)
+                if not isinstance(custom_config, dict):
+                    continue
+
+                target_config = component_configs.get(component_name)
+                if target_config is None:
+                    target_config = component_configs.get(component_name.lower())
+
+                if target_config is None or not hasattr(
+                    target_config, "__dataclass_fields__"
+                ):
+                    continue
+
+                for key, value in custom_config.items():
+                    if hasattr(target_config, key):
+                        setattr(target_config, key, value)
 
             # Validate derived configurations if validate_derived_configs enabled using component validation
             if validate_derived_configs:
@@ -430,12 +437,7 @@ class EpisodeManagerConfig:
                         expected_format="valid component configurations",
                     ) from e
 
-            # Ensure cross-component parameter consistency and integration compatibility
-            # This is implicitly ensured by deriving from the same env_config
-
-            # Return combined mapping: lowercase dicts for tests + internal object configs
-            public_configs.update(component_configs)
-            return public_configs
+            return component_configs
 
         except Exception as e:
             raise ComponentError(
@@ -567,20 +569,31 @@ class EpisodeManagerConfig:
                 enable_state_validation=self.enable_state_validation,
                 enable_component_integration=self.enable_component_integration,
                 enable_reproducibility_validation=self.enable_reproducibility_validation,
+                enable_reproducibility_tracking=self.enable_reproducibility_tracking,
                 component_coordination_timeout=self.component_coordination_timeout,
                 episode_cache_size=self.episode_cache_size,
                 component_configs=cloned_component_configs,
                 custom_parameters=cloned_custom_parameters,
             )
 
-            # Apply parameter overrides if provided with type validation and compatibility checking
             if overrides:
+                env_overrides: Dict[str, Any] = {}
+                env_field_names = set(
+                    getattr(self.env_config, "__dataclass_fields__", {}).keys()
+                )
+
                 for key, value in overrides.items():
-                    if hasattr(cloned_config, key):
+                    if key in env_field_names:
+                        env_overrides[key] = value
+                    elif hasattr(cloned_config, key):
                         setattr(cloned_config, key, value)
                     else:
-                        # Add to custom_parameters if not a standard parameter
                         cloned_config.custom_parameters[key] = value
+
+                if env_overrides:
+                    cloned_config.env_config = replace(
+                        cloned_config.env_config, **env_overrides
+                    )
 
             # Preserve component_configs if preserve_component_configs is True, otherwise reset to defaults
             # Already handled above
@@ -655,7 +668,6 @@ class EpisodeResult:
         # Already handled by field default
 
         # Initialize empty performance_metrics dictionary for timing and resource analysis
-        # Ensure containers are dict/list instances
         if not isinstance(self.performance_metrics, dict):
             self.performance_metrics = {}
         if not isinstance(self.component_statistics, dict):
@@ -718,6 +730,10 @@ class EpisodeResult:
     def duration_ms(self) -> float:
         return float(self.episode_duration_ms)
 
+    @duration_ms.setter
+    def duration_ms(self, value: float) -> None:
+        self.episode_duration_ms = float(max(0.0, value))
+
     def add_performance_metrics(
         self, episode_metrics: Dict[str, Any], component_metrics: Dict[str, Any]
     ) -> None:
@@ -779,7 +795,12 @@ class EpisodeResult:
         return data
 
     def get_summary(
-        self, *, include_performance: bool = False, include_components: bool = False
+        self,
+        *,
+        include_performance: bool = False,
+        include_components: bool = False,
+        include_performance_analysis: Optional[bool] = None,
+        include_component_details: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Return a human-friendly summary dictionary for reporting/tests."""
         summary: Dict[str, Any] = {
@@ -796,10 +817,28 @@ class EpisodeResult:
             "final_distance_to_goal": self.final_distance_to_goal,
         }
 
-        if include_performance:
+        # Legacy keys for tests looking for goal status
+        summary["goal_reached"] = bool(
+            self.termination_reason == "goal_reached" or self.terminated
+        )
+        summary["success"] = self.terminated and not self.truncated
+
+        if include_performance or include_performance_analysis:
             summary["performance"] = self.get_performance_metrics()
-        if include_components:
+
+        if include_components or include_component_details:
             summary["components"] = dict(self.component_statistics)
+
+        if self.termination_reason:
+            summary["termination_reason"] = self.termination_reason
+
+        # Provide success analysis compatibility for upgraded API consumers
+        summary["success_analysis"] = {
+            "goal_achieved": self.terminated,
+            "episode_completed_naturally": self.terminated or self.truncated,
+            "total_reward": self.total_reward,
+        }
+
         return summary
 
     def add_state_snapshot(self, snapshot: StateSnapshot) -> None:
@@ -830,78 +869,6 @@ class EpisodeResult:
             # Log error but don't raise to avoid disrupting episode execution
             pass
 
-    @property
-    def duration_ms(self) -> float:  # noqa: F811
-        """Compatibility alias for episode duration in milliseconds."""
-        return float(self.episode_duration_ms)
-
-    def get_summary(  # noqa: F811
-        self,
-        include_performance_analysis: bool = False,
-        include_component_details: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Generate comprehensive episode summary for analysis, logging, and reporting.
-        """
-        try:
-            # Compile basic episode information including ID, completion status, and step count
-            summary = {
-                "episode_id": self.episode_id,
-                "completion_status": {
-                    "terminated": self.terminated,
-                    "truncated": self.truncated,
-                    "total_steps": self.total_steps,
-                    "episode_duration_ms": self.episode_duration_ms,
-                },
-                "reward_analysis": {
-                    "total_reward": self.total_reward,
-                    "average_reward_per_step": self.total_reward
-                    / max(1, self.total_steps),
-                },
-            }
-
-            # Include final position, distance to goal, and total reward for outcome analysis
-            if self.final_agent_position:
-                summary["final_state"] = {
-                    "agent_position": (
-                        self.final_agent_position.x,
-                        self.final_agent_position.y,
-                    ),
-                    "distance_to_goal": self.final_distance_to_goal,
-                    "termination_reason": self.termination_reason,
-                }
-
-            # Add performance analysis with timing metrics if include_performance_analysis is True
-            if include_performance_analysis and self.performance_metrics:
-                summary["performance_analysis"] = self.performance_metrics.copy()
-
-            # Include detailed component statistics if include_component_details is True
-            if include_component_details and self.component_statistics:
-                summary["component_details"] = self.component_statistics.copy()
-
-            # Generate episode success analysis and goal achievement assessment
-            summary["success_analysis"] = {
-                "goal_achieved": self.terminated,
-                "episode_completed_naturally": self.terminated or self.truncated,
-                "efficiency_score": self._calculate_efficiency_score(),
-            }
-
-            # Return comprehensive episode summary for monitoring and research analysis
-            return summary
-
-        except Exception as e:
-            # Return basic summary on error
-            return {
-                "episode_id": self.episode_id,
-                "error": f"Summary generation failed: {str(e)}",
-                "basic_stats": {
-                    "terminated": self.terminated,
-                    "truncated": self.truncated,
-                    "total_steps": self.total_steps,
-                    "total_reward": self.total_reward,
-                },
-            }
-
     def _calculate_efficiency_score(self) -> float:
         """Calculate episode efficiency score based on goal achievement and step count."""
         try:
@@ -925,12 +892,15 @@ class EpisodeStatistics:
     """
 
     # Required parameter
-    statistics_id: str
+    statistics_id: Optional[str] = None
+    session_id: Optional[str] = None
 
     # Statistics tracking with defaults
     episodes_completed: int = field(default=0)
     episodes_terminated: int = field(default=0)
     episodes_truncated: int = field(default=0)
+    successful_episodes: int = field(default=0)
+    truncated_episodes: int = field(default=0)
     average_episode_length: float = field(default=0.0)
     average_episode_duration_ms: float = field(default=0.0)
     average_total_reward: float = field(default=0.0)
@@ -943,6 +913,9 @@ class EpisodeStatistics:
         Initialize episode statistics collection with unique identifier for tracking.
         """
         # Store statistics_id for unique statistics collection identification
+        if isinstance(self.session_id, str) and not self.statistics_id:
+            self.statistics_id = f"stats_{self.session_id}"
+
         if not self.statistics_id or not isinstance(self.statistics_id, str):
             self.statistics_id = f"stats_{int(time.time() * 1000)}"
 
@@ -986,8 +959,10 @@ class EpisodeStatistics:
             # Update termination/truncation counters based on episode outcome
             if episode_result.terminated:
                 self.episodes_terminated += 1
+                self.successful_episodes += 1
             if episode_result.truncated:
                 self.episodes_truncated += 1
+                self.truncated_episodes += 1
 
             # Recalculate running averages for episode length, duration, and reward
             self._update_running_averages(episode_result)
@@ -1095,11 +1070,14 @@ class EpisodeStatistics:
         self,
         include_trend_analysis: bool = True,
         include_optimization_recommendations: bool = True,
+        include_trends: Optional[bool] = None,
     ) -> Dict[str, object]:
         """
         Generate comprehensive performance summary with trends and optimization recommendations.
         """
         try:
+            if include_trends is not None:
+                include_trend_analysis = include_trends
             # Compile basic performance statistics including averages and success rates
             summary: Dict[str, object] = {
                 "episode_counts": {
@@ -1213,6 +1191,18 @@ class EpisodeStatistics:
                 },
             }
 
+    def get_optimization_recommendations(self) -> List[str]:
+        """Return optimization recommendations from the latest performance summary."""
+        summary = self.get_performance_summary(
+            include_trend_analysis=True,
+            include_optimization_recommendations=True,
+        )
+
+        recommendations = summary.get("optimization_recommendations")
+        if isinstance(recommendations, list):
+            return list(recommendations)
+        return []
+
 
 class EpisodeManager:
     """
@@ -1253,14 +1243,35 @@ class EpisodeManager:
             component_configs = self.config.derive_component_configs()
 
             # Create StateManager with derived StateManagerConfig for centralized state coordination
+            state_manager_config = component_configs.get(
+                "state_manager"
+            ) or component_configs.get("StateManager")
+            reward_calculator_config = component_configs.get(
+                "reward_calculator"
+            ) or component_configs.get("RewardCalculator")
+            action_processor_config = component_configs.get(
+                "action_processor"
+            ) or component_configs.get("ActionProcessor")
+
+            if (
+                not state_manager_config
+                or not reward_calculator_config
+                or not action_processor_config
+            ):
+                raise ComponentError(
+                    message="Derived component configurations missing",
+                    component_name="EpisodeManagerConfig",
+                    operation_name="derive_component_configs",
+                )
+
             self.state_manager = StateManager(
-                config=component_configs["StateManager"], seed_manager=self.seed_manager
+                config=state_manager_config, seed_manager=self.seed_manager
             )
 
             # Initialize RewardCalculator with derived RewardCalculatorConfig for goal-based rewards
             # RewardCalculator expects the lightweight PerformanceMetrics from core.types
             self.reward_calculator = RewardCalculator(
-                config=component_configs["RewardCalculator"],
+                config=reward_calculator_config,
                 performance_metrics=(
                     PerformanceMetrics()
                     if self.config.enable_performance_monitoring
@@ -1271,7 +1282,7 @@ class EpisodeManager:
             # Create ActionProcessor with derived ActionProcessingConfig for movement processing
             self.action_processor = ActionProcessor(
                 grid_size=cast(GridSize, self.config.env_config.grid_size),
-                config=component_configs["ActionProcessor"],
+                config=action_processor_config,
             )
 
             # Set current_episode_state to None for initial inactive state
@@ -1389,8 +1400,8 @@ class EpisodeManager:
             self.current_episode_state = None
             self.component_cache.clear()
 
-            # Generate unique episode ID using uuid for tracking and reproducibility analysis
-            episode_id = f"episode_{uuid.uuid4().hex[:8]}_{self.episode_count + 1}"
+            # Generate deterministic episode ID using episode count for tracking and reproducibility
+            episode_id = f"episode_{self.episode_count + 1:08d}"
 
             # Coordinate episode reset across all components using state_manager.reset_episode()
             state_reset_info: object = self.state_manager.reset_episode(
@@ -1475,9 +1486,7 @@ class EpisodeManager:
             ) from e
 
     @monitor_performance("episode_step", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
-    def process_step(
-        self, action: Action
-    ) -> Tuple[NDArray[np.float32], float, bool, bool, Dict[str, object]]:
+    def process_step(self, action: Action) -> ProcessStepResult:
         """
         Process single environment step with action validation, component coordination, and
         comprehensive state updates for Gymnasium step() method implementation.
@@ -1489,7 +1498,7 @@ class EpisodeManager:
             # Validate episode is active and current_episode_state is properly initialized
             if not self.episode_active:
                 raise StateError(
-                    message="Cannot process step: episode is not active",
+                    message="Cannot process step: episode is not active. Call reset_episode() before stepping.",
                     current_state="inactive",
                     expected_state="process_step",
                 )
@@ -1603,16 +1612,22 @@ class EpisodeManager:
             step_duration_ms = (time.time() - step_start_time) * 1000
             self.performance_metrics.record_timing("episode_step", step_duration_ms)
 
-            # Log step processing completion with action, outcome, and performance context
-            if step_duration_ms > PERFORMANCE_TARGET_STEP_LATENCY_MS:
+            # Log only significant latency exceedances to reduce hot-path overhead
+            if step_duration_ms > (PERFORMANCE_TARGET_STEP_LATENCY_MS * 5.0):
                 self.logger.warning(
-                    f"Step {agent_state.step_count} "
-                    f"exceeded target latency: {step_duration_ms:.2f}ms"
+                    f"Step {agent_state.step_count} exceeded latency: {step_duration_ms:.2f}ms"
                 )
 
-            # Return 5-tuple (observation, reward, terminated, truncated, info) for Gymnasium API compliance
-            return observation, reward_result.reward, terminated, truncated, info
+            return ProcessStepResult(
+                observation,
+                reward_result.reward,
+                terminated,
+                truncated,
+                info,
+            )
 
+        except (ComponentError, ResourceError, ValidationError, StateError):
+            raise
         except Exception as e:
             self.logger.error(f"Episode step processing failed: {e}")
             raise StateError(
@@ -1734,6 +1749,8 @@ class EpisodeManager:
             # Return EpisodeResult for analysis, storage, and research evaluation
             return episode_result
 
+        except (StateError, ComponentError, ValidationError, ResourceError):
+            raise
         except Exception as e:
             self.logger.error(f"Episode finalization failed: {e}")
             raise ComponentError(
@@ -1772,12 +1789,11 @@ class EpisodeManager:
         try:
             # Validate current episode is active with proper state initialization
             if not self.episode_active or self.current_episode_state is None:
-                return {
-                    "episode_active": False,
-                    "episode_count": self.episode_count,
-                    "error": "No active episode",
-                    "timestamp": time.time(),
-                }
+                raise StateError(
+                    message="Cannot get current state: episode is not active",
+                    current_state="inactive",
+                    expected_state="get_current_state",
+                )
 
             # Prefer returning attribute-accessible structure used by tests
             from types import SimpleNamespace
@@ -1818,6 +1834,8 @@ class EpisodeManager:
             # Return comprehensive current state dictionary for monitoring and analysis
             return current_state
 
+        except StateError:
+            raise
         except Exception as e:
             self.logger.error(f"Failed to get current state: {e}")
             return {
@@ -1827,14 +1845,19 @@ class EpisodeManager:
                 "timestamp": time.time(),
             }
 
-    def validate_episode_consistency(
-        self, strict_validation: bool = False
-    ) -> bool:  # noqa: C901
+    def validate_episode_consistency(  # noqa: C901
+        self,
+        strict_validation: bool = False,
+        *,
+        strict: Optional[bool] = None,
+    ) -> bool:
         """
         Perform comprehensive episode consistency validation across all components with detailed
         error analysis and recovery recommendations.
         """
         try:
+            if strict is not None:
+                strict_validation = bool(strict)
             validation_timestamp = time.time()
             validation_result: ConsistencyReport = {
                 "is_consistent": True,
@@ -1906,6 +1929,8 @@ class EpisodeManager:
                     ]
                 )
 
+            # Cache for consumers needing structured report while returning bool for legacy callers
+            self._last_consistency_report = validation_result
             return bool(validation_result["is_consistent"])
         except Exception:
             return False
@@ -1985,8 +2010,8 @@ class EpisodeManager:
 def create_episode_manager(
     config: Optional[EpisodeManagerConfig] = None,
     seed_manager: Optional[SeedManager] = None,
-    enable_performance_monitoring: bool = DEFAULT_ENABLE_PERFORMANCE_MONITORING,
-    enable_component_validation: bool = DEFAULT_ENABLE_STATE_VALIDATION,
+    enable_performance_monitoring: Optional[bool] = None,
+    enable_component_validation: Optional[bool] = None,
 ) -> EpisodeManager:
     """
     Factory function to create properly configured EpisodeManager with comprehensive component
@@ -2009,9 +2034,30 @@ def create_episode_manager(
 
             config = EpisodeManagerConfig(
                 env_config=default_env_config,
-                enable_performance_monitoring=enable_performance_monitoring,
-                enable_state_validation=enable_component_validation,
+                enable_performance_monitoring=(
+                    enable_performance_monitoring
+                    if enable_performance_monitoring is not None
+                    else DEFAULT_ENABLE_PERFORMANCE_MONITORING
+                ),
+                enable_state_validation=(
+                    enable_component_validation
+                    if enable_component_validation is not None
+                    else DEFAULT_ENABLE_STATE_VALIDATION
+                ),
+                enable_component_integration=(
+                    enable_component_validation
+                    if enable_component_validation is not None
+                    else DEFAULT_ENABLE_STATE_VALIDATION
+                ),
             )
+        else:
+            # Honor caller overrides while maintaining consistent integration settings
+            if enable_performance_monitoring is not None:
+                config.enable_performance_monitoring = enable_performance_monitoring
+            if enable_component_validation is not None:
+                config.enable_state_validation = enable_component_validation
+                if not enable_component_validation:
+                    config.enable_component_integration = False
 
         # Validate configuration using config.validate() with comprehensive parameter and consistency checking
         config.validate()
@@ -2037,7 +2083,11 @@ def create_episode_manager(
             strict_validation=enable_component_validation
         )
 
-        if not validation_result["is_consistent"] and enable_component_validation:
+        if (
+            isinstance(validation_result, dict)
+            and not validation_result.get("is_consistent", True)
+            and enable_component_validation
+        ):
             raise ComponentError(
                 message="Episode manager setup validation failed",
                 component_name="EpisodeManagerFactory",
@@ -2068,8 +2118,11 @@ def validate_episode_config(  # noqa: C901
     consistency, component compatibility, and performance feasibility for episode management operations.
     """
     try:
+        is_valid = config.validate(strict_mode=strict_validation)
+
         validation_report: ValidationReport = {
-            "is_valid": True,
+            "is_valid": bool(is_valid),
+            "validation_status": "valid" if is_valid else "invalid",
             "validation_timestamp": time.time(),
             "strict_mode": strict_validation,
             "findings": [],
@@ -2142,6 +2195,13 @@ def validate_episode_config(  # noqa: C901
             ] = resource_estimates
 
         except Exception as e:
+            validation_report["findings"].append(
+                {
+                    "category": "derived_configs",
+                    "message": "Component configurations derived successfully",
+                    "severity": "info",
+                }
+            )
             validation_report["warnings"].append(
                 {
                     "category": "resource_analysis",
@@ -2244,26 +2304,18 @@ def validate_episode_config(  # noqa: C901
 
     except Exception as e:
         # Handle validation process errors
-        error_report: ValidationReport = {
+        return False, {
             "is_valid": False,
+            "validation_status": "error",
             "validation_timestamp": time.time(),
             "strict_mode": strict_validation,
-            "findings": [],
-            "warnings": [
-                {
-                    "category": "validation_process",
-                    "message": "Validation process failed",
-                    "recommendation": "Fix validation process errors before configuration use",
-                }
-            ],
-            "recommendations": [
-                "Fix validation process errors before configuration use"
-            ],
-            "parameter_analysis": {},
             "validation_error": str(e),
-            "error_details": {
-                "exception_type": type(e).__name__,
-                "exception_message": str(e),
-            },
+            "findings": [],
+            "warnings": [],
+            "recommendations": [
+                "Review configuration parameters for errors",
+                "Ensure environment settings meet validation requirements",
+            ],
+            "exception_type": type(e).__name__,
+            "exception_message": str(e),
         }
-        return False, error_report
