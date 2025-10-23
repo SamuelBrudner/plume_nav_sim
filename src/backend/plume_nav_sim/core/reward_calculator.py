@@ -665,6 +665,7 @@ class RewardCalculator:
         self,
         agent_position: Coordinates,
         source_location: Coordinates,
+        step_count: Optional[int] = None,
         calculation_context: Optional[Dict] = None,
     ) -> RewardResult:
         """

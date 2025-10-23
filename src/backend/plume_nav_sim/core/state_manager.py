@@ -1096,6 +1096,38 @@ class StateManager:
                     component_name="StateManager",
                 ) from e
 
+    # ------------------------------------------------------------------
+    # Lightweight compatibility helpers used by invariant tests
+    def initialize_episode(self, episode_seed: Optional[int] = None) -> Dict[str, Any]:
+        """Compatibility alias that delegates to reset_episode.
+
+        Some tests and legacy code expect an initialize_episode API; this method
+        simply calls reset_episode(seed=...).
+        """
+        return self.reset_episode(seed=episode_seed)
+
+    def update_agent_state(self, action: int, step_reward: float) -> Dict[str, Any]:
+        """Process an action and accumulate reward on the agent state.
+
+        This helper mirrors the invariants tests' expectations: it advances the
+        state machine one step (position + step count) and then adds the provided
+        step_reward to the agent's cumulative total_reward.
+        """
+        # Delegate movement/step processing
+        step_info = self.process_step(action)  # type: ignore[arg-type]
+
+        # Accumulate reward on the agent state
+        if self.current_agent_state is None:
+            raise StateError(
+                message="Cannot update reward: no active agent state",
+                current_state="no_active_episode",
+                expected_state="active_episode",
+                component_name="StateManager",
+            )
+        self.current_agent_state.add_reward(float(step_reward))
+
+        return step_info
+
     def check_episode_termination(
         self,
         source_location: Coordinates,

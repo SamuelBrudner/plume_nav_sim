@@ -129,9 +129,6 @@ class TestStepCountInvariant:
                 assert final_step_count == actual_steps
                 break
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_agent_state_step_count_consistent(self):
         """AgentState.step_count must match actual steps taken."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
@@ -189,9 +186,6 @@ class TestRewardAccumulationInvariant:
             if terminated or truncated:
                 break
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_agent_state_reward_accumulation(self):
         """AgentState.total_reward must accumulate correctly."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
@@ -367,9 +361,6 @@ class TestGoalDetectionConsistency:
     - All three signals must agree
     """
 
-    @pytest.mark.skip(
-        reason="RewardCalculator integration not complete - TODO: wire components"
-    )
     def test_goal_signals_consistent_when_reached(self):
         """When goal reached, all signals must agree."""
         from plume_nav_sim.core.reward_calculator import (
@@ -399,9 +390,6 @@ class TestGoalDetectionConsistency:
         assert result.goal_reached is True, "goal_reached flag must be True"
         # Note: terminated is handled by environment, but reward/goal_reached must agree
 
-    @pytest.mark.skip(
-        reason="RewardCalculator integration not complete - TODO: wire components"
-    )
     def test_goal_signals_consistent_when_not_reached(self):
         """When goal not reached, signals must agree."""
         from plume_nav_sim.core.reward_calculator import (
@@ -557,9 +545,6 @@ class TestComponentIsolation:
                 obs1_a, obs2_a
             ), "Different seeds should give different obs"
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_state_manager_instances_independent(self):
         """Multiple StateManager instances must not interfere."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
