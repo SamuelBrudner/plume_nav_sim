@@ -307,6 +307,7 @@ def ensure_component_env_registered(
 
         class _EnvProbe(Protocol):
             def reset(self, *args: object, **kwargs: object) -> object: ...
+
             def close(self) -> None: ...
 
         probe = cast(_EnvProbe, test_env)
