@@ -672,9 +672,15 @@ class RewardCalculator:
         Calculate reward based on agent position and goal achievement with distance analysis,
         performance monitoring, and sparse reward implementation for reinforcement learning.
 
+        Notes:
+            ``step_count`` is accepted for compatibility with some tests and
+            call sites but is not used by the current sparse reward logic.
+            More elaborate reward strategies may use it for shaping.
+
         Args:
             agent_position: Current agent coordinates
             source_location: Goal/source location coordinates
+            step_count: Optional current step number (ignored by sparse policy)
             calculation_context: Optional context for calculation customization
 
         Returns:
