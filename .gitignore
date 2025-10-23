@@ -11,6 +11,7 @@
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -207,7 +208,8 @@ Desktop.ini
 # Beads issue tracker local state
 .beads/
 
-# Common misspelled agent doc that should be ignored if present
+# Agent instructions docs that should not be versioned
+AGENTS.md
 Angent.md
 .cache/matplotlib/
 
