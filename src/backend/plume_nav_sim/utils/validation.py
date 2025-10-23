@@ -24,6 +24,7 @@ from typing import (  # >=3.10 - Advanced type hints for validation functions, p
 
 # Third-party imports with version comments
 import numpy as np  # >=2.1.0 - Array validation, dtype checking, mathematical operations, and bounds verification for observation and coordinate validation
+
 from config.default_config import EnvironmentConfig
 
 from ..core.constants import (
@@ -486,7 +487,7 @@ class ParameterValidator:
 
             if validation_success:
                 result.validated_parameters[parameter_name] = sanitized_value
-                setattr(result, "sanitized_value", sanitized_value)
+                result.sanitized_value = sanitized_value  # type: ignore[attr-defined]
 
         except Exception as e:
             result.add_error(

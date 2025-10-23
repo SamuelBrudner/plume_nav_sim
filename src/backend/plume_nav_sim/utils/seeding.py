@@ -145,7 +145,9 @@ def validate_seed(seed: Any) -> Tuple[bool, Optional[int], str]:
         # Warn about potential overflow on 32-bit systems
         if seed > 2**31 - 1:
             warnings.warn(
-                f"Seed {seed} may cause integer overflow in some systems", UserWarning
+                f"Seed {seed} may cause integer overflow in some systems",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Return validated seed (identity transformation for valid integers)
@@ -703,7 +705,7 @@ def save_seed_state(  # noqa: C901
             # Atomic move to final location
             temp_path.replace(file_path)
 
-        except (OSError, PermissionError):
+        except OSError:
             # Clean up temporary file if write fails
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
@@ -736,7 +738,7 @@ def save_seed_state(  # noqa: C901
     except (ValidationError, ResourceError, ComponentError):
         # Re-raise specific exceptions with original context
         raise
-    except (OSError, PermissionError, FileNotFoundError):
+    except OSError:
         # Surface native OS errors for tests expecting built-in exceptions
         raise
     except Exception as e:
@@ -808,7 +810,7 @@ def load_seed_state(  # noqa: C901
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 state_data = json.load(f)
-        except (OSError, PermissionError) as e:
+        except OSError as e:
             raise ResourceError(
                 message=f"Cannot read seed state file: {str(e)}",
                 resource_type="disk",
@@ -1061,7 +1063,7 @@ class SeedManager:
             f"validation={self.enable_validation}, thread_safe={self.thread_safe})"
         )
 
-    def seed(
+    def seed(  # noqa: C901
         self, seed: Optional[int] = None, context_id: Optional[str] = None
     ) -> Tuple[numpy.random.Generator, int]:
         """Primary seeding method for creating and managing random number generators with validation, tracking,
@@ -1241,7 +1243,7 @@ class SeedManager:
                 operation_name="generate_episode_seed",
             ) from e
 
-    def generate_random_position(
+    def generate_random_position(  # noqa: C901
         self,
         grid_size: "GridSize",
         exclude_position: Optional["Coordinates"] = None,
@@ -1321,7 +1323,7 @@ class SeedManager:
                 generator_info["access_count"] += 1
                 generator_info["last_access_timestamp"] = time.time()
 
-                for attempt in range(max_attempts):
+                for _attempt in range(max_attempts):
                     x = int(rng.integers(0, grid_size.width))
                     y = int(rng.integers(0, grid_size.height))
                     position = Coordinates(x=x, y=y)

@@ -1271,12 +1271,12 @@ class PlumeModelRegistry:
                 sigma = DEFAULT_PLUME_SIGMA
 
             # Instantiate model_class with validated parameters and merged options
-            model_constructor_kwargs = dict(
-                grid_size=grid_size,
-                source_location=source_location,
-                sigma=sigma,
-                model_options=merged_options,
-            )
+            model_constructor_kwargs = {
+                "grid_size": grid_size,
+                "source_location": source_location,
+                "sigma": sigma,
+                "model_options": merged_options,
+            }
             # Allow caller to supply additional constructor overrides (e.g., custom parameters)
             if constructor_overrides:
                 model_constructor_kwargs.update(constructor_overrides)

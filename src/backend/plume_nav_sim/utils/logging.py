@@ -393,10 +393,17 @@ def log_performance(  # noqa: C901
         base_logger: logging.Logger
         if isinstance(logger, logging.Logger):
             base_logger = logger
-        elif hasattr(logger, "base_logger") and isinstance(
-            getattr(logger, "base_logger"), logging.Logger
-        ):
-            base_logger = getattr(logger, "base_logger")
+        elif hasattr(logger, "base_logger"):
+            try:
+                candidate = logger.base_logger  # type: ignore[attr-defined]
+            except AttributeError:
+                candidate = None
+            if isinstance(candidate, logging.Logger):
+                base_logger = candidate
+            else:
+                raise ValidationError(
+                    f"logger.base_logger must be logging.Logger, got {type(candidate)}"
+                )
         else:
             raise ValidationError(
                 f"logger must be logging.Logger or ComponentLogger instance, got {type(logger)}"
@@ -732,10 +739,10 @@ def create_performance_logger(  # noqa: C901
 
         # Initialize memory tracking capabilities if enable_memory_tracking is True
         if enable_memory_tracking:
-            setattr(base_logger, "memory_tracking", True)
+            base_logger.memory_tracking = True  # type: ignore[attr-defined]
 
         # Set up threshold alerting for performance degradation detection
-        setattr(base_logger, "timing_thresholds", thresholds)
+        base_logger.timing_thresholds = thresholds  # type: ignore[attr-defined]
 
         # Add baseline tracking to the formatter
         if hasattr(formatter, "add_baseline"):

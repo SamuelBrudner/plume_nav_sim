@@ -488,7 +488,7 @@ class ActionProcessor:
                     underlying_error=e,
                 ) from e
 
-    @functools.lru_cache(maxsize=ACTION_VALIDATION_CACHE_SIZE)
+    @functools.lru_cache(maxsize=ACTION_VALIDATION_CACHE_SIZE)  # noqa: B019
     def validate_action(
         self, action: ActionType, raise_on_invalid: bool = True
     ) -> bool:

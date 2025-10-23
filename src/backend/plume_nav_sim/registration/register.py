@@ -439,7 +439,7 @@ def _apply_strict_checks(
         _strict_checks(env_id, kwargs, report)
 
 
-def _pop_env_from_registry(effective_env_id: str) -> bool:
+def _pop_env_from_registry(effective_env_id: str) -> bool:  # noqa: C901
     """Attempt to remove env spec from Gymnasium registry across versions.
 
     Returns True if a registry entry was removed, False otherwise.

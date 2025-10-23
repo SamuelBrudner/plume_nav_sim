@@ -154,6 +154,7 @@ def _strict_rules_goal_radius_and_steps(
         warnings.warn(
             f"Max steps ({config.max_steps}) may be excessive for grid size",
             UserWarning,
+            stacklevel=2,
         )
 
 
@@ -672,9 +673,9 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 raise StateError(f"Environment step failed: {e}")
 
     @monitor_performance("base_render", 50.0, False)
-    def render(
+    def render(  # noqa: C901
         self, mode: Optional[str] = None
-    ) -> Union[np.ndarray, None]:  # noqa: C901
+    ) -> Union[np.ndarray, None]:
         """
         Render environment visualization in specified mode with lazy renderer initialization, performance
         monitoring, error handling, and fallback strategies following Gymnasium render specification.
@@ -1465,7 +1466,9 @@ def create_base_environment_config(  # noqa: C901
         total_cells = width * height
         if total_cells > 1000000:  # 1M cells threshold
             warnings.warn(
-                f"Large grid ({total_cells} cells) may impact performance", UserWarning
+                f"Large grid ({total_cells} cells) may impact performance",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Validate source_location coordinates are within grid bounds
@@ -1503,7 +1506,9 @@ def create_base_environment_config(  # noqa: C901
 
         if max_steps > 100000:  # Reasonable upper limit
             warnings.warn(
-                f"Very high max_steps ({max_steps}) may impact performance", UserWarning
+                f"Very high max_steps ({max_steps}) may impact performance",
+                UserWarning,
+                stacklevel=2,
             )
 
         # Validate goal_radius is non-negative float
@@ -1559,7 +1564,9 @@ def create_base_environment_config(  # noqa: C901
         resource_estimate = config.estimate_resources()
         if resource_estimate.get("memory_mb", 0) > 500:  # 500MB threshold
             warnings.warn(
-                f"High memory estimate: {resource_estimate['memory_mb']}MB", UserWarning
+                f"High memory estimate: {resource_estimate['memory_mb']}MB",
+                UserWarning,
+                stacklevel=2,
             )
 
         return config
@@ -1633,6 +1640,7 @@ def validate_base_environment_setup(
                 warnings.warn(
                     f"Estimated step time ({estimated_step_time:.2f}ms) may exceed targets",
                     UserWarning,
+                    stacklevel=2,
                 )
 
         return True

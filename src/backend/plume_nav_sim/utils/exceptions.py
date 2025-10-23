@@ -393,7 +393,7 @@ class PlumeNavSimError(Exception):
 
         return user_message
 
-    def log_error(
+    def log_error(  # noqa: C901
         self, logger: Optional[logging.Logger] = None, include_stack_trace: bool = False
     ) -> None:
         """Log error with appropriate logger including context, recovery suggestions, and debugging information.
@@ -1480,7 +1480,7 @@ def sanitize_error_context(  # noqa: C901
     return sanitized
 
 
-def format_error_details(
+def format_error_details(  # noqa: C901
     error: Exception,
     context: Optional[dict] = None,
     recovery_suggestion: Optional[str] = None,

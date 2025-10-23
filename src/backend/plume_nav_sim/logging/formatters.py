@@ -1433,7 +1433,7 @@ class SecurityFilter(logging.Filter):
             redaction_count = 0
 
             # Apply regex_patterns to detect sensitive information in message
-            for i, pattern in enumerate(self.regex_patterns):
+            for _, pattern in enumerate(self.regex_patterns):
                 if redaction_count >= self.max_redactions_per_message:
                     break
 

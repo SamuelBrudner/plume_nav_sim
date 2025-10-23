@@ -295,7 +295,7 @@ class MovementConstraint:
                 )
 
             # Validate custom boundary entries have required structure
-            for key, value in self.custom_boundaries.items():
+            for key, _value in self.custom_boundaries.items():
                 if not isinstance(key, str):
                     raise ValidationError(
                         f"Custom boundary key must be string, got {type(key).__name__}",
@@ -428,7 +428,7 @@ class BoundaryEnforcer:
         self.boundary_hits = 0
 
     @monitor_performance("position_validation", 0.05, False)
-    def validate_position(
+    def validate_position(  # noqa: C901
         self,
         position: CoordinateType,
         *,

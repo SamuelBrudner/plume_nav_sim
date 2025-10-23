@@ -631,7 +631,8 @@ class RewardCalculator:
                 return pm.get_performance_summary()
 
             try:  # Best-effort; ignore if instance forbids attribute set
-                setattr(self.performance_metrics, "get_summary", _compat_get_summary)
+                # Assign directly to avoid getattr/setattr with constant attribute name
+                self.performance_metrics.get_summary = _compat_get_summary  # type: ignore[attr-defined]
             except Exception:
                 pass
 

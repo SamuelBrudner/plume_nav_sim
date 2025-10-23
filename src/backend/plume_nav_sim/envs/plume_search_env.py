@@ -122,7 +122,7 @@ class PlumeSearchEnv(gym.Env):
 
     metadata = ComponentBasedEnvironment.metadata
 
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         *,
         grid_size: Optional[Tuple[int, int]] = None,
@@ -414,11 +414,17 @@ def unwrap_to_plume_env(env: gym.Env) -> PlumeSearchEnv:
             return current
 
         if hasattr(current, "env"):
-            current = getattr(current, "env")
+            try:
+                current = current.env
+            except AttributeError:
+                break
             continue
 
         if hasattr(current, "unwrapped"):
-            current = getattr(current, "unwrapped")
+            try:
+                current = current.unwrapped
+            except AttributeError:
+                break
             continue
 
         break

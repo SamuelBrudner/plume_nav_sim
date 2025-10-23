@@ -11,8 +11,6 @@ handling for production-ready reinforcement learning environments.
 
 import copy
 import time
-import uuid
-from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -282,7 +280,7 @@ class EpisodeManagerConfig:
 
             # Check component configuration compatibility between component_configs and environment requirements
             if self.component_configs:
-                for component_name, component_config in self.component_configs.items():
+                for component_name, _component_config in self.component_configs.items():
                     if not isinstance(component_name, str):
                         raise ValidationError(
                             message=f"Component name must be string: {component_name}",
@@ -315,7 +313,7 @@ class EpisodeManagerConfig:
 
             # Check custom_parameters for valid keys, value types, and episode management compatibility
             if self.custom_parameters:
-                for param_name, param_value in self.custom_parameters.items():
+                for param_name, _param_value in self.custom_parameters.items():
                     if not isinstance(param_name, str):
                         raise ValidationError(
                             message=f"Custom parameter name must be string: {param_name}",
@@ -1847,12 +1845,12 @@ class EpisodeManager:
                 "timestamp": time.time(),
             }
 
-    def validate_episode_consistency(
+    def validate_episode_consistency(  # noqa: C901
         self,
         strict_validation: bool = False,
         *,
         strict: Optional[bool] = None,
-    ) -> bool:  # noqa: C901
+    ) -> bool:
         """
         Perform comprehensive episode consistency validation across all components with detailed
         error analysis and recovery recommendations.
