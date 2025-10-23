@@ -9,6 +9,7 @@ performance optimization, caching strategies, and comprehensive validation for p
 reinforcement learning environments with sub-millisecond computation targets.
 """
 
+import copy  # >=3.10 - Deep copy utilities for configuration cloning with nested structures
 import math  # >=3.10 - Mathematical functions for distance calculations, precision handling, and numerical operations
 import time  # >=3.10 - High-precision timing for reward calculation performance measurement and optimization analysis
 from dataclasses import (  # >=3.10 - Data class utilities for reward calculation configuration and result data structures
@@ -318,7 +319,9 @@ class RewardCalculatorConfig:
             enable_performance_monitoring=self.enable_performance_monitoring,
             enable_caching=self.enable_caching,
             custom_parameters=(
-                self.custom_parameters.copy() if preserve_custom_parameters else {}
+                copy.deepcopy(self.custom_parameters)
+                if preserve_custom_parameters
+                else {}
             ),
         )
 
@@ -326,10 +329,17 @@ class RewardCalculatorConfig:
         if overrides:
             for param_name, param_value in overrides.items():
                 if hasattr(cloned_config, param_name):
-                    setattr(cloned_config, param_name, param_value)
+                    value = (
+                        copy.deepcopy(param_value)
+                        if isinstance(param_value, (dict, list, set, tuple))
+                        else param_value
+                    )
+                    setattr(cloned_config, param_name, value)
                 else:
                     # Add to custom_parameters if not a standard parameter
-                    cloned_config.custom_parameters[param_name] = param_value
+                    cloned_config.custom_parameters[param_name] = copy.deepcopy(
+                        param_value
+                    )
 
         # Validate cloned configuration with new parameters using comprehensive validate method
         cloned_config.validate()
@@ -532,12 +542,14 @@ class TerminationResult:
             additional_details: Additional termination context and analysis
         """
         # Store final_distance for episode performance analysis
-        if isinstance(final_distance, (int, float)) and final_distance >= 0:
+        if isinstance(final_distance, (int, float)):
             self.final_distance = float(final_distance)
+            if self.final_distance < 0:
+                self.final_distance = 0.0
 
         # Store final_step_count for episode statistics and optimization
-        if isinstance(final_step_count, int) and final_step_count >= 0:
-            self.final_step_count = final_step_count
+        if isinstance(final_step_count, int):
+            self.final_step_count = max(0, final_step_count)
 
         # Add additional_details to termination_details if provided
         if additional_details and isinstance(additional_details, dict):
@@ -645,9 +657,7 @@ class RewardCalculator:
             f"reward_goal={config.reward_goal_reached}, reward_default={config.reward_default}"
         )
 
-    @monitor_performance(
-        "reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS / 2, False
-    )
+    @monitor_performance("reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
     def calculate_reward(
         self,
         agent_position: Coordinates,
@@ -679,7 +689,7 @@ class RewardCalculator:
             )
 
             # Determine goal achievement using distance <= config.goal_radius comparison
-            goal_reached = distance <= self.config.goal_radius
+            goal_reached = bool(distance <= self.config.goal_radius)
 
             # Set reward to config.reward_goal_reached if goal achieved, config.reward_default otherwise
             reward = (
@@ -779,7 +789,7 @@ class RewardCalculator:
             )
 
             # Check goal achievement using distance <= config.goal_radius for termination
-            goal_achieved = current_distance <= self.config.goal_radius
+            goal_achieved = bool(current_distance <= self.config.goal_radius)
 
             # Check step limit truncation using agent_state.step_count >= max_steps
             step_limit_reached = agent_state.step_count >= max_steps
@@ -1121,8 +1131,18 @@ class RewardCalculator:
             current_avg * (current_count - 1) + distance
         ) / current_count
 
+        # Track goal achievements and success rate
+        if goal_reached:
+            self.goal_achievement_stats["goals_achieved"] += 1
+
+        calculations = self.goal_achievement_stats["total_calculations"]
+        if calculations > 0:
+            self.goal_achievement_stats["goal_achievement_rate"] = (
+                self.goal_achievement_stats["goals_achieved"] / calculations
+            )
+
         # Track performance violations
-        if calculation_time_ms > PERFORMANCE_TARGET_STEP_LATENCY_MS / 2:
+        if calculation_time_ms > PERFORMANCE_TARGET_STEP_LATENCY_MS:
             self.goal_achievement_stats["performance_violations"] += 1
 
 

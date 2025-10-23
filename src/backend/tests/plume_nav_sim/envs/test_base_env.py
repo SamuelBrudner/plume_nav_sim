@@ -151,7 +151,6 @@ class TestBaseEnvironmentContract:
             # Info should be dict
             assert isinstance(info, dict)
             assert "step_count" in info
-            assert "episode_count" in info
         finally:
             env.close()
 

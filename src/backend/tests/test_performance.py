@@ -608,8 +608,9 @@ def test_rgb_rendering_performance(performance_test_env, performance_tracker):
 
 @pytest.mark.performance
 @pytest.mark.timeout(60)
-@pytest.mark.skipif("not matplotlib_available")
-def test_human_mode_rendering_performance(performance_test_env, performance_tracker):
+def test_human_mode_rendering_performance(
+    matplotlib_available, performance_test_env, performance_tracker
+):
     """
     Test human mode interactive rendering performance against <50ms target with matplotlib
     backend compatibility testing, graceful degradation validation, and visualization quality
@@ -629,7 +630,9 @@ def test_human_mode_rendering_performance(performance_test_env, performance_trac
         Visualization quality and consistency maintained across updates
     """
     # Check matplotlib backend availability and compatibility for interactive rendering
-    matplotlib_available = True
+    if not matplotlib_available:
+        pytest.skip("Matplotlib not available for human mode rendering testing")
+
     backend_info = {"available": False, "backend": "none", "interactive": False}
 
     try:

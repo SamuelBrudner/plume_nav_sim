@@ -18,6 +18,7 @@ Notes:
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping
 from typing import List
 
 import gymnasium as gym
@@ -107,10 +108,16 @@ def test_di_vs_legacy_parity_simple_path():
                 # Sparse rewards must match
                 assert float(di_r) == float(legacy_r)
 
-                # Observation parity at agent position: DI provides a scalar concentration,
-                # legacy provides the full field; compare value at current position.
-                ly, lx = lpos[1], lpos[0]
-                legacy_val = float(legacy_obs[ly, lx])
+                # Observation parity: both now provide scalar sensor reading
+                if isinstance(legacy_obs, Mapping):
+                    legacy_val = float(legacy_obs["sensor_reading"][0])
+                elif legacy_obs.ndim == 1:
+                    # 1D observation - just the sensor reading
+                    legacy_val = float(legacy_obs[0])
+                else:
+                    # 2D observation - full concentration field
+                    ly, lx = lpos[1], lpos[0]
+                    legacy_val = float(legacy_obs[ly, lx])
                 di_val = float(di_obs[0])
                 assert abs(di_val - legacy_val) < 1e-6
 

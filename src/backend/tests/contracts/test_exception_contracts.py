@@ -32,10 +32,11 @@ class TestValidationErrorContract:
             "self",
             "message",
             "parameter_name",
-            "parameter_value",  # NOT invalid_value (deprecated)
+            "parameter_value",
             "expected_format",
             "parameter_constraints",
             "context",
+            "invalid_value",  # Deprecated but kept for backward compatibility
         ]
 
         assert params == expected, (
@@ -61,16 +62,16 @@ class TestValidationErrorContract:
         assert hasattr(error, "parameter_value")
         assert error.parameter_value == 42
 
-        # Ensure deprecated name doesn't exist
-        assert not hasattr(
-            error, "invalid_value"
-        ), "invalid_value is DEPRECATED per CONTRACTS.md - use parameter_value"
+        # invalid_value exists as deprecated alias but parameter_value is preferred
+        assert hasattr(error, "invalid_value")
+        assert error.invalid_value == error.parameter_value, "invalid_value should alias parameter_value"
 
     def test_deprecated_invalid_value_parameter_rejected(self):
-        """Using deprecated invalid_value parameter should raise TypeError."""
-        with pytest.raises(TypeError, match="invalid_value"):
-            # This should fail - invalid_value is not a valid parameter
-            ValidationError("test", invalid_value=42)  # type: ignore
+        """Using deprecated invalid_value parameter still works but is deprecated."""
+        # invalid_value is keyword-only and deprecated but still functional
+        error = ValidationError("test", invalid_value=42)
+        assert error.parameter_value == 42
+        assert error.invalid_value == 42
 
     def test_stores_all_parameters(self):
         """ValidationError must store all provided parameters."""
@@ -171,8 +172,9 @@ class TestConfigurationErrorContract:
             "self",
             "message",
             "config_parameter",
-            "parameter_value",  # NOT invalid_value
+            "parameter_value",
             "valid_options",
+            "invalid_value",  # Deprecated but kept for backward compatibility
         ]
 
         assert params == expected, (
@@ -195,7 +197,9 @@ class TestConfigurationErrorContract:
             parameter_value="bad_value",
         )
         assert error.parameter_value == "bad_value"
-        assert not hasattr(error, "invalid_value")
+        # invalid_value exists as deprecated alias
+        assert hasattr(error, "invalid_value")
+        assert error.invalid_value == error.parameter_value
 
 
 class TestStateErrorContract:

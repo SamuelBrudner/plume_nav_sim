@@ -568,10 +568,11 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
         try:
             # Validate environment is initialized and ready for steps
             if not self._environment_initialized:
-                raise StateError(
+                error = StateError(
                     "Environment not initialized - call reset() before step()",
-                    context={"environment_state": "uninitialized"},
                 )
+                error.context = {"environment_state": "uninitialized"}
+                raise error
 
             # Validate action parameter; returns canonical integer in [0, ACTION_SPACE_SIZE-1]
             action = self._canonicalize_action(action)
@@ -626,7 +627,6 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
             step_time_ms = (time.perf_counter() - step_start_time) * 1000
             info = {
                 "step_count": self._step_count,
-                "episode_count": self._episode_count,
                 "action_taken": int(action) if hasattr(action, "__int__") else action,
                 "performance_info": {
                     "step_time_ms": step_time_ms,
@@ -837,7 +837,6 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
 
     def _build_initial_info(self, seed: Optional[int]) -> dict:
         return {
-            "episode_count": self._episode_count,
             "step_count": self._step_count,
             "seed_used": seed,
             "config_summary": {

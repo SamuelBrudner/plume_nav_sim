@@ -22,6 +22,16 @@ from . import spaces  # noqa: F401
 from .spaces import Space as Space  # top-level alias for typing/annotations
 
 
+# Error module for compatibility
+class _ErrorModule:
+    class Error(Exception):
+        """Base exception for Gymnasium errors."""
+        pass
+
+
+error = _ErrorModule()
+
+
 class _Registry:
     def __init__(self) -> None:
         # Mapping[str, EnvSpec]
@@ -67,7 +77,7 @@ def register(
 def make(id: str, **override_kwargs: Any):  # noqa: A002 - match gym API
     spec = envs.registry.env_specs.get(id)
     if spec is None:
-        raise KeyError(f"Environment id '{id}' is not registered")
+        raise error.Error(f"Environment id '{id}' is not registered")
     module_name, _, attr_name = spec.entry_point.partition(":")
     if not module_name or not attr_name:
         raise ImportError(f"Invalid entry point '{spec.entry_point}'")

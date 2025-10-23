@@ -1127,7 +1127,11 @@ class StaticGaussianPlume(BasePlumeModel):
                     self.gaussian_parameters["grid_height"],
                 ),
                 enable_caching=self.enable_field_caching,
-                field_config={"dtype": FIELD_DTYPE},
+                source_location=Coordinates(
+                    x=self.gaussian_parameters["source_x"],
+                    y=self.gaussian_parameters["source_y"],
+                ),
+                sigma=self.gaussian_parameters["sigma"],
             )
 
             # Establish performance baselines for timing comparisons
@@ -1230,7 +1234,9 @@ class StaticGaussianPlume(BasePlumeModel):
                         enable_caching=self.enable_field_caching,
                     )
 
-                self.concentration_field.update_field(concentration)
+                # Directly set the field array
+                self.concentration_field.field_array = concentration
+                self.concentration_field.is_generated = True
 
                 # Update generation statistics
                 self.field_generated = True
@@ -1630,77 +1636,70 @@ class StaticGaussianPlume(BasePlumeModel):
             True if parameters updated successfully, False if validation failed
         """
         try:
-            # Store original parameters for rollback
-            original_params = self.gaussian_parameters.copy()
-            parameters_changed = False
+            # Delegate to BasePlumeModel for core validation and updates
+            base_updated = super().update_parameters(
+                new_source_location=new_source_location,
+                new_sigma=new_sigma,
+                validate_parameters=validate_parameters,
+                auto_regenerate=auto_regenerate,
+            )
 
-            # Update source location if provided
-            if new_source_location is not None:
-                if isinstance(new_source_location, tuple):
-                    coords = Coordinates(
-                        x=new_source_location[0], y=new_source_location[1]
+            if not base_updated:
+                return False
+
+            # Synchronize Gaussian-specific parameter cache with current state
+            current_coords = self.source_location
+            current_sigma = self.sigma
+
+            self.gaussian_parameters["source_x"] = current_coords.x
+            self.gaussian_parameters["source_y"] = current_coords.y
+            self.gaussian_parameters["sigma"] = current_sigma
+
+            if isinstance(self.plume_params, dict):
+                self.plume_params["source_location"] = current_coords
+                self.plume_params["sigma"] = current_sigma
+            else:
+                try:
+                    self.plume_params = self.plume_params.__class__(
+                        source_location=current_coords,
+                        sigma=current_sigma,
+                        grid_compatibility=self.plume_params.grid_compatibility,
                     )
-                else:
-                    coords = new_source_location
+                except Exception:
+                    # Fallback: store minimal dict representation
+                    self.plume_params = {
+                        "source_location": current_coords,
+                        "sigma": current_sigma,
+                        "model_type": STATIC_GAUSSIAN_MODEL_TYPE,
+                    }
 
-                if (
-                    coords.x != self.gaussian_parameters["source_x"]
-                    or coords.y != self.gaussian_parameters["source_y"]
-                ):
-                    self.gaussian_parameters["source_x"] = coords.x
-                    self.gaussian_parameters["source_y"] = coords.y
-                    self.plume_params.source_location = coords
-                    parameters_changed = True
+            # Gaussian-specific validation to keep diagnostics up to date
+            validation_result = validate_gaussian_parameters(
+                GridSize(
+                    width=self.gaussian_parameters["grid_width"],
+                    height=self.gaussian_parameters["grid_height"],
+                ),
+                Coordinates(
+                    x=self.gaussian_parameters["source_x"],
+                    y=self.gaussian_parameters["source_y"],
+                ),
+                self.gaussian_parameters["sigma"],
+                check_memory_limits=validate_parameters,
+                check_mathematical_consistency=True,
+            )
 
-            # Update sigma parameter if provided
-            if new_sigma is not None and new_sigma != self.gaussian_parameters["sigma"]:
-                self.gaussian_parameters["sigma"] = new_sigma
-                self.plume_params.sigma = new_sigma
-                parameters_changed = True
-
-            # Validate parameters if requested
-            if validate_parameters and parameters_changed:
-                validation_result = validate_gaussian_parameters(
-                    GridSize(
-                        width=self.gaussian_parameters["grid_width"],
-                        height=self.gaussian_parameters["grid_height"],
-                    ),
-                    Coordinates(
-                        x=self.gaussian_parameters["source_x"],
-                        y=self.gaussian_parameters["source_y"],
-                    ),
-                    self.gaussian_parameters["sigma"],
-                    check_memory_limits=True,
-                    check_mathematical_consistency=True,
+            if validation_result["status"] != "valid":
+                self.logger.warning(
+                    "Post-update validation flagged issues: %s",
+                    validation_result["errors"],
                 )
 
-                if validation_result["status"] != "valid":
-                    # Rollback parameters
-                    self.gaussian_parameters = original_params
-                    self.logger.error(
-                        f"Parameter validation failed: {validation_result['errors']}"
-                    )
-                    return False
-
-            # Update ConcentrationField parameters if field exists
-            if parameters_changed and self.concentration_field is not None:
-                # Clear field cache since parameters changed
-                if self.enable_field_caching:
-                    cache_key = self._generate_cache_key()
-                    _FIELD_CACHE.pop(cache_key, None)
-
-                # Mark field as needing regeneration
-                self.field_generated = False
-
-                # Auto-regenerate if requested
-                if auto_regenerate:
-                    self.generate_concentration_field()
-
-            # Log parameter update
-            if parameters_changed:
-                self.logger.info(
-                    f"Updated Gaussian parameters: {self.gaussian_parameters}"
-                )
+            self.logger.info(
+                "Updated Gaussian parameters: source=(%s, %s), sigma=%.3f",
+                current_coords.x,
+                current_coords.y,
+                current_sigma,
+            )
 
             return True
 
@@ -1917,7 +1916,11 @@ class StaticGaussianPlume(BasePlumeModel):
                 "enable_performance_monitoring": True,
             }
             if not cloned_model.initialize_model(init_params):
-                raise ComponentError("Failed to initialize cloned model")
+                raise GaussianPlumeError(
+                    "Failed to initialize cloned model",
+                    gaussian_params=self.gaussian_parameters,
+                    calculation_context="model_cloning",
+                )
 
             # Copy field data if requested and available
             if (
@@ -1926,7 +1929,8 @@ class StaticGaussianPlume(BasePlumeModel):
                 and self.concentration_field is not None
             ):
                 field_array = self.concentration_field.get_field_array().copy()
-                cloned_model.concentration_field.update_field(field_array)
+                cloned_model.concentration_field.field_array = field_array
+                cloned_model.concentration_field.is_generated = True
                 cloned_model.field_generated = True
 
             # Preserve performance statistics if requested

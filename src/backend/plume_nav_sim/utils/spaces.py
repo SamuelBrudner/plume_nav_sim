@@ -302,7 +302,7 @@ def _create_observation_space_impl(  # noqa: C901
         high_bound = np.full(final_shape, bounds[1], dtype=dtype)
 
         observation_space = gymnasium.spaces.Box(
-            low=low_bound, high=high_bound, dtype=dtype
+            low=low_bound, high=high_bound, shape=final_shape, dtype=dtype
         )
 
         observation_metadata = {

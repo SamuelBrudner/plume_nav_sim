@@ -667,6 +667,8 @@ class TestErrorHandling:
     automated error analysis.
     """
 
+    __test__ = False
+
     def __init__(self):
         """
         Initialize comprehensive error handling test infrastructure with logging, performance
@@ -1744,8 +1746,10 @@ class TestErrorScenarios:
     """
     Specialized test class for systematic error scenario testing including edge cases, boundary
     conditions, stress testing, and comprehensive error condition validation with automated
-    scenario generation and validation.
+    scenario generation, recovery testing, and diagnostics collection.
     """
+
+    __test__ = False
 
     def __init__(self):
         """

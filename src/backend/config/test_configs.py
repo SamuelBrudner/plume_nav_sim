@@ -1316,6 +1316,8 @@ class TestConfigMetadata:
     test selection, resource planning, and execution optimization.
     """
 
+    __test__ = False
+
     # Required metadata fields
     category: str
     description: str
@@ -1601,6 +1603,8 @@ class TestConfigFactory:
     This class provides centralized test configuration management with intelligent optimization
     and caching for efficient test execution.
     """
+
+    __test__ = False
 
     def __init__(
         self,

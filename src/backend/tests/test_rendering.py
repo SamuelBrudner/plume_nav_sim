@@ -471,10 +471,11 @@ def _detect_agent_marker_in_rgb(rgb_array: np.ndarray) -> bool:
     if rgb_array is None or rgb_array.size == 0:
         return False
 
-    # Look for red pixels matching AGENT_MARKER_COLOR
-    agent_color = np.array(AGENT_MARKER_COLOR)
-    color_matches = np.all(rgb_array == agent_color, axis=2)
-    return np.any(color_matches)
+    # Look for pixels close to the configured agent marker color (allowing minor rendering noise)
+    agent_color = np.array(AGENT_MARKER_COLOR, dtype=np.int16)
+    rgb_int = rgb_array.astype(np.int16)
+    color_delta = np.abs(rgb_int - agent_color)
+    return np.any(np.max(color_delta, axis=2) <= 16)
 
 
 def _detect_source_marker_in_rgb(rgb_array: np.ndarray) -> bool:
@@ -482,10 +483,11 @@ def _detect_source_marker_in_rgb(rgb_array: np.ndarray) -> bool:
     if rgb_array is None or rgb_array.size == 0:
         return False
 
-    # Look for white pixels matching SOURCE_MARKER_COLOR
-    source_color = np.array(SOURCE_MARKER_COLOR)
-    color_matches = np.all(rgb_array == source_color, axis=2)
-    return np.any(color_matches)
+    # Look for pixels close to the configured source marker color (allowing minor rendering noise)
+    source_color = np.array(SOURCE_MARKER_COLOR, dtype=np.int16)
+    rgb_int = rgb_array.astype(np.int16)
+    color_delta = np.abs(rgb_int - source_color)
+    return np.any(np.max(color_delta, axis=2) <= 16)
 
 
 def _analyze_color_precision(rgb_array: np.ndarray) -> Dict[str, Any]:

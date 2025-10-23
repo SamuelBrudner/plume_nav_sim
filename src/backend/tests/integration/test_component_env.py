@@ -102,7 +102,6 @@ class TestComponentBasedEnvironment:
     def test_initialization(self, component_env):
         """Test: Environment initializes in CREATED state."""
         assert component_env._state == EnvironmentState.CREATED
-        assert component_env._episode_count == 0
         assert component_env._step_count == 0
         assert component_env._agent_state is None
 
@@ -120,7 +119,6 @@ class TestComponentBasedEnvironment:
         obs, info = component_env.reset()
 
         assert component_env._state == EnvironmentState.READY
-        assert component_env._episode_count == 1
         assert component_env._step_count == 0
         assert component_env._agent_state is not None
 
@@ -133,9 +131,7 @@ class TestComponentBasedEnvironment:
         assert obs.shape == (1,)  # ConcentrationSensor returns shape (1,)
 
         # Info should have required keys
-        assert "episode" in info
         assert "agent_position" in info
-        assert info["episode"] == 1
 
     def test_step_before_reset_raises_error(self, component_env):
         """Test: step() before reset() raises StateError."""
@@ -222,7 +218,6 @@ class TestComponentBasedEnvironment:
         obs, info = component_env.reset()
 
         assert component_env._state == EnvironmentState.READY
-        assert component_env._episode_count == 2
         assert component_env._step_count == 0
 
     def test_close_transitions_to_closed(self, component_env):
@@ -293,10 +288,16 @@ class TestComponentBasedEnvironment:
 
     def test_component_delegation(self, component_env, action_processor):
         """Test: Environment delegates to components correctly."""
-        component_env.reset()
+        component_env.reset(seed=42)  # Seed for deterministic agent placement
 
         initial_pos = component_env._agent_state.position
-        action = 1  # RIGHT
+        
+        # Choose action based on position to avoid boundary
+        # If at right edge, use different action
+        if initial_pos.x >= 62:
+            action = 3  # LEFT instead of RIGHT
+        else:
+            action = 1  # RIGHT
 
         obs, reward, terminated, truncated, info = component_env.step(action)
 

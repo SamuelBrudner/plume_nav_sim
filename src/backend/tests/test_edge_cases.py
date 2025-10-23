@@ -17,6 +17,8 @@ import time  # standard library - Timing utilities for performance edge case tes
 import unittest.mock  # standard library - Mocking utilities for simulating edge case scenarios
 import warnings  # standard library - Warning management for edge case testing
 
+import os  # >=3.10 - Environment introspection for conditional edge-case skips
+import importlib.util  # >=3.10 - Module availability checks for conditional skips
 import numpy as np  # >=2.1.0 - Array operations for mathematical edge cases and precision testing
 
 # External imports with version requirements
@@ -27,12 +29,18 @@ from plume_nav_sim.core.types import Action, Coordinates
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
 from plume_nav_sim.utils.exceptions import (
     ConfigurationError,
+    ErrorSeverity,
     RenderingError,
     ResourceError,
     StateError,
     ValidationError,
 )
 from plume_nav_sim.utils.validation import ParameterValidator
+
+
+# Conditional feature flags for skip markers
+MATPLOTLIB_AVAILABLE = importlib.util.find_spec("matplotlib") is not None
+SINGLE_THREADED_ONLY = os.environ.get("PLUME_SKIP_CONCURRENCY", "0") == "1"
 
 # Internal imports - core environment and utilities
 
@@ -775,7 +783,7 @@ def test_mathematical_precision_edge_cases(edge_case_test_env):
 
 @pytest.mark.edge_case
 @pytest.mark.rendering
-@pytest.mark.skipif("not matplotlib_available", reason="Matplotlib not available")
+@pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
 def test_rendering_edge_cases_and_failures(edge_case_test_env):
     """
     Test rendering system robustness under extreme conditions including backend
@@ -1021,7 +1029,7 @@ def test_memory_exhaustion_and_resource_limits(memory_monitor, cleanup_validator
 
 @pytest.mark.edge_case
 @pytest.mark.concurrency
-@pytest.mark.skipif("single_threaded_only", reason="Concurrency testing disabled")
+@pytest.mark.skipif(SINGLE_THREADED_ONLY, reason="Concurrency testing disabled")
 def test_concurrent_operations_and_thread_safety(edge_case_test_env):
     """
     Test thread safety and concurrent operation handling including simultaneous
@@ -1661,17 +1669,28 @@ def test_error_handling_and_recovery_mechanisms():
         {
             "exception_class": StateError,
             "test_message": "Test state transition failure",
-            "test_context": {"current_state": "invalid", "attempted_operation": "step"},
+            "test_context": {
+                "current_state": "invalid",
+                "expected_state": "ready",
+                "component_name": "environment",
+                "attempted_operation": "step",
+            },
         },
         {
             "exception_class": RenderingError,
             "test_message": "Test rendering failure",
-            "test_context": {"render_mode": "human", "backend": "matplotlib"},
+            "test_context": {
+                "render_mode": "human",
+                "backend_name": "matplotlib",
+            },
         },
         {
             "exception_class": ConfigurationError,
             "test_message": "Test configuration failure",
-            "test_context": {"config_key": "grid_size", "config_value": (-1, -1)},
+            "test_context": {
+                "config_parameter": "grid_size",
+                "parameter_value": (-1, -1),
+            },
         },
         {
             "exception_class": ResourceError,
@@ -1687,7 +1706,20 @@ def test_error_handling_and_recovery_mechanisms():
 
         # Create and test exception instance
         try:
-            raise exception_class(test_message, **test_context)
+            context_kwargs = dict(test_context)
+            if exception_class is StateError:
+                attempted_operation = context_kwargs.pop("attempted_operation", None)
+                error_instance = exception_class(
+                    test_message,
+                    current_state=context_kwargs.get("current_state"),
+                    expected_state=context_kwargs.get("expected_state"),
+                    component_name=context_kwargs.get("component_name"),
+                )
+                if attempted_operation:
+                    setattr(error_instance, "attempted_operation", attempted_operation)
+                raise error_instance
+
+            raise exception_class(test_message, **context_kwargs)
         except exception_class as e:
             # Verify error context preservation during exception propagation
             error_message = str(e)
@@ -1764,16 +1796,18 @@ def test_error_handling_and_recovery_mechanisms():
     # Test error escalation mechanisms for critical failures
     try:
         # Simulate critical system failure
-        raise ResourceError(
+        critical_resource_error = ResourceError(
             "Critical system failure - memory exhausted",
             resource_type="memory",
-            severity="critical",
-            current_usage="999MB",
+            current_usage=999.0,
+            limit_exceeded=512.0,
         )
+        critical_resource_error.severity = ErrorSeverity.CRITICAL
+        raise critical_resource_error
     except ResourceError as e:
         # Critical errors should be handled appropriately
         if hasattr(e, "severity"):
-            assert e.severity == "critical", "Should preserve error severity"
+            assert e.severity == ErrorSeverity.CRITICAL, "Should preserve error severity"
 
         # Should suggest immediate cleanup actions
         if hasattr(e, "suggest_cleanup_actions"):

@@ -328,3 +328,8 @@ class EpisodeState:
         self.state_history.clear()
         if not preserve_episode_id:
             self.episode_id = str(uuid.uuid4())
+
+    @property
+    def step_count(self) -> int:
+        """Expose the agent's current step count for compatibility with legacy consumers."""
+        return self.agent_state.step_count

@@ -78,11 +78,10 @@ INVALID_TEST_SEEDS = [
 VALID_TEST_GRID_DIMENSIONS = [(16, 16), (32, 32), (64, 64), (128, 128), (256, 256)]
 INVALID_TEST_GRID_DIMENSIONS = [
     (0, 0),
-    (15, 15),
     (-1, -1),
     "invalid",
     None,
-]  # Note: (1000,1000) removed - within MAX_GRID_SIZE (1024,1024)
+]  # Note: (1000,1000) removed - within MAX_GRID_SIZE (1024,1024); (15,15) removed - above MIN_GRID_SIZE (1,1)
 VALID_TEST_COORDINATES = [(0, 0), (16, 16), (63, 63), (127, 127)]
 INVALID_TEST_COORDINATES = [
     (-1, 0),

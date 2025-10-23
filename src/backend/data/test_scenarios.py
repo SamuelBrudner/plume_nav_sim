@@ -364,6 +364,8 @@ class TestScenario:
     configuration management, execution planning, and result validation capabilities.
     """
 
+    __test__ = False
+
     # Required fields for scenario identification and configuration
     name: str
     category: str
@@ -718,6 +720,8 @@ class TestScenarioCollection:
     This class manages collections of test scenarios with comprehensive organization,
     execution coordination, and result analysis capabilities.
     """
+
+    __test__ = False
 
     scenarios: Dict[str, TestScenario]
     collection_name: str

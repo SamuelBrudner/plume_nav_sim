@@ -1039,13 +1039,17 @@ class SeedManager:
 
         # Set thread_safe flag and initialize threading.Lock if required
         self.thread_safe = bool(thread_safe)
+        self._lock: Optional[threading.RLock]
         if self.thread_safe:
-            self._lock = threading.Lock()
+            self._lock = threading.RLock()
         else:
             self._lock = None
 
-        # Initialize empty active_generators dictionary for RNG tracking
+        # Initialize active_generators for context-aware RNG tracking
         self.active_generators: Dict[str, Dict[str, Any]] = {}
+
+        # Track generator used for episode resets to reuse during position sampling
+        self._episode_rng_context: Optional[str] = None
 
         # Initialize empty seed_history list for operation tracking
         self.seed_history: List[Dict[str, Any]] = []
@@ -1115,6 +1119,9 @@ class SeedManager:
                     "last_access_timestamp": time.time(),
                 }
                 self.active_generators[context_id] = generator_info
+
+                if context_id.startswith("episode_reset_"):
+                    self._episode_rng_context = context_id
 
                 # Add seed operation to seed_history with timestamp and context information
                 history_entry = {
@@ -1265,22 +1272,67 @@ class SeedManager:
                     parameter_value=str(type(grid_size)),
                 )
 
-            # Get current RNG (use seed with default or create new)
-            rng, _ = self.seed(context_id="generate_position")
+            if self._lock:
+                self._lock.acquire()
 
-            for attempt in range(max_attempts):
-                # Generate random position within bounds
-                x = int(rng.integers(0, grid_size.width))
-                y = int(rng.integers(0, grid_size.height))
-                position = Coordinates(x=x, y=y)
+            try:
+                # Determine seed to use: prefer last explicit seed recorded during seed() call, otherwise default
+                generator_info = None
+                context_id = None
 
-                # Check if we need to exclude this position
-                if exclude_position is None:
-                    return position
+                if self._episode_rng_context and self._episode_rng_context in self.active_generators:
+                    context_id = self._episode_rng_context
+                    generator_info = self.active_generators[context_id]
 
-                # If position different from excluded, return it
-                if position.x != exclude_position.x or position.y != exclude_position.y:
-                    return position
+                if generator_info is None:
+                    if self.seed_history:
+                        last_entry = self.seed_history[-1]
+                        seed_value = last_entry.get("seed_used")
+                        if seed_value is None:
+                            raise StateError(
+                                message="Seed history missing seed_used entry",
+                                current_state="generate_random_position",
+                                expected_state="seed_recorded",
+                            )
+                    else:
+                        if self.default_seed is None:
+                            raise StateError(
+                                message="No seed history or default seed available",
+                                current_state="generate_random_position",
+                                expected_state="seed_initialized",
+                            )
+                        seed_value = self.default_seed
+
+                    rng, seed_used = create_seeded_rng(seed_value, validate_input=False)
+                    context_id = f"generate_position_{uuid.uuid4().hex[:8]}"
+                    generator_info = {
+                        "generator": rng,
+                        "seed_used": seed_used,
+                        "creation_timestamp": time.time(),
+                        "access_count": 0,
+                        "last_access_timestamp": time.time(),
+                    }
+                    self.active_generators[context_id] = generator_info
+                else:
+                    rng = generator_info["generator"]
+
+                generator_info["access_count"] += 1
+                generator_info["last_access_timestamp"] = time.time()
+
+                for attempt in range(max_attempts):
+                    x = int(rng.integers(0, grid_size.width))
+                    y = int(rng.integers(0, grid_size.height))
+                    position = Coordinates(x=x, y=y)
+
+                    if exclude_position is None:
+                        return position
+
+                    if position.x != exclude_position.x or position.y != exclude_position.y:
+                        return position
+
+            finally:
+                if self._lock:
+                    self._lock.release()
 
             # Failed to generate non-excluded position
             raise ComponentError(

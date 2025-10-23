@@ -881,6 +881,9 @@ def test_human_mode_rendering(
         # Allow minor variance in CI; do not fail the test solely on init timing
         pass
 
+    # Warm up renderer to isolate steady-state performance from first-frame setup cost
+    renderer.render(render_context, RenderMode.HUMAN)
+
     # Test _render_human method with complete visualization pipeline (steady-state)
     performance_monitor["start_timing"]("human_render")
     result = renderer.render(render_context, RenderMode.HUMAN)

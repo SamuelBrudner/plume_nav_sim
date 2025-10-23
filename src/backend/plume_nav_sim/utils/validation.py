@@ -474,14 +474,21 @@ class ParameterValidator:
                 recovery_suggestion="Shorten parameter name",
             )
 
+
         try:
+            # Sanitize parameter before validation
+            sanitized_value = sanitize_parameters(
+                {parameter_name: parameter_value}
+            ).get(parameter_name, parameter_value)
+
             # Apply rule-based validation using rule_engine with parameter constraints
             validation_success = self._apply_validation_rules(
-                parameter_name, parameter_value, validation_constraints, result
+                parameter_name, sanitized_value, validation_constraints, result
             )
 
             if validation_success:
-                result.validated_parameters[parameter_name] = parameter_value
+                result.validated_parameters[parameter_name] = sanitized_value
+                setattr(result, "sanitized_value", sanitized_value)
 
         except Exception as e:
             result.add_error(
@@ -809,8 +816,8 @@ def validate_environment_config(  # noqa: C901
         # Convert dict config to EnvironmentConfig if necessary with type validation
         if isinstance(config, dict):
             try:
-                # Validate required keys
-                required_keys = ["grid_size", "source_location", "plume_parameters"]
+                # Validate required keys (plume_params is optional, not required)
+                required_keys = ["grid_size", "source_location"]
                 missing_keys = [key for key in required_keys if key not in config]
                 if missing_keys:
                     result.add_error(
@@ -829,44 +836,44 @@ def validate_environment_config(  # noqa: C901
                 return result
 
         # Validate individual configuration parameters using component-specific validators
-        grid_result = validate_grid_size(
-            config.grid_size, check_memory_limits=True, context=context
-        )
-        if not grid_result.is_valid:
+        try:
+            validate_grid_size(
+                config.grid_size, check_memory_limits=True, context=context
+            )
+        except ValidationError as e:
             result.add_error(
-                "Grid size validation failed",
+                f"Grid size validation failed: {str(e)}",
                 recovery_suggestion="Adjust grid dimensions",
             )
-            result.errors.extend(grid_result.errors)
 
         # Validate source location within grid bounds
-        coords_result = validate_coordinates(
-            config.source_location, config.grid_size, context=context
-        )
-        if not coords_result.is_valid:
+        try:
+            validate_coordinates(
+                config.source_location, config.grid_size, context=context
+            )
+        except ValidationError as e:
             result.add_error(
-                "Source location validation failed",
+                f"Source location validation failed: {str(e)}",
                 recovery_suggestion="Adjust source coordinates",
             )
-            result.errors.extend(coords_result.errors)
 
         # Validate plume parameters
-        plume_result = validate_plume_parameters(
-            config.plume_parameters, config.grid_size, context=context
-        )
-        if not plume_result.is_valid:
+        try:
+            validate_plume_parameters(
+                config.plume_params, config.grid_size, context=context
+            )
+        except ValidationError as e:
             result.add_error(
-                "Plume parameters validation failed",
+                f"Plume parameters validation failed: {str(e)}",
                 recovery_suggestion="Adjust plume configuration",
             )
-            result.errors.extend(plume_result.errors)
 
         # Check cross-parameter consistency
         consistency_issues = check_parameter_consistency(
             {
                 "grid_size": config.grid_size,
                 "source_location": config.source_location,
-                "plume_parameters": config.plume_parameters,
+                "plume_parameters": config.plume_params,
             }
         )
 
@@ -2067,19 +2074,19 @@ def sanitize_parameters(  # noqa: C901
 
         # Check for sensitive content in string values
         if isinstance(value, str):
-            for pattern in compiled_patterns:
-                if pattern.search(value):
-                    return SANITIZATION_PLACEHOLDER
+            sanitized_str = value.replace("\x00", "")
+            if len(sanitized_str) > 1000:
+                truncated_value = sanitized_str[:1000]
+                if strict_sanitization:
+                    truncated_value += "..."
+                return truncated_value
+            return sanitized_str
 
-        # Recursively sanitize nested dictionaries
-        if isinstance(value, dict):
+        # Convert numpy arrays to lists to avoid serialization issues
+        if isinstance(value, np.ndarray):
             return {k: _sanitize_value(k, v) for k, v in value.items()}
         elif isinstance(value, (list, tuple)):
             return type(value)(_sanitize_value(f"{key}_item", item) for item in value)
-
-        # Truncate very long values to prevent information disclosure
-        if isinstance(value, str) and len(value) > 1000:
-            return value[:100] + "...[TRUNCATED]"
 
         return value
 

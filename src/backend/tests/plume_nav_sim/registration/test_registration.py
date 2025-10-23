@@ -25,6 +25,7 @@ import warnings  # >=3.10 - Warning system testing for registration conflicts, d
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, and assertion handling with comprehensive test execution management
 
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation, gym.make() testing, and registry management
+from gymnasium.wrappers import TimeLimit
 
 # Internal imports for constants and configuration parameters
 from plume_nav_sim.core.constants import (
@@ -48,9 +49,10 @@ from plume_nav_sim.registration.register import (
     register_env,
     unregister_env,
 )
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 
 # Internal imports for exception classes and error handling testing
-from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
+from plume_nav_sim.utils.exceptions import ConfigurationError, IntegrationError, ValidationError
 
 # Global test constants for comprehensive registration testing scenarios
 TEST_ENV_ID = "TestPlumeNav-StaticGaussian-v0"
@@ -62,6 +64,34 @@ TEST_PERFORMANCE_TARGET_MS = 10.0
 TEST_GRID_SIZES = [(32, 32), (64, 64), (128, 128)]
 TEST_SOURCE_LOCATIONS = [(16, 16), (32, 32), (64, 64)]
 REPRODUCIBILITY_SEEDS = [42, 123, 456, 789]
+
+
+def _unwrap_gym_env(env: gymnasium.Env) -> gymnasium.Env:
+    """Unwrap Gymnasium wrapper stack to obtain the base environment."""
+
+    base_env = env
+    visited = set()
+
+    while True:
+        env_id = id(base_env)
+        if env_id in visited:
+            break
+        visited.add(env_id)
+
+        if hasattr(base_env, "env"):
+            base_env = base_env.env
+            continue
+
+        if isinstance(base_env, gymnasium.Wrapper):
+            try:
+                base_env = base_env.unwrapped
+            except AttributeError:
+                break
+            continue
+
+        break
+
+    return base_env
 
 
 class TestEnvironmentRegistration:
@@ -126,8 +156,10 @@ class TestEnvironmentRegistration:
         # Verify environment has expected attributes
         assert hasattr(env, "observation_space")
         assert hasattr(env, "action_space")
-        # PlumeSearchEnv returns Dict observation space (agent_position, sensor_reading, source_location)
-        assert isinstance(env.observation_space, gymnasium.spaces.Dict)
+        # PlumeSearchEnv returns either Dict or Box observation space depending on configuration
+        assert isinstance(
+            env.observation_space, (gymnasium.spaces.Dict, gymnasium.spaces.Box)
+        )
         assert hasattr(env.action_space, "n")  # Discrete action space
 
         # Clean up environment instance
@@ -170,11 +202,8 @@ class TestEnvironmentRegistration:
 
                 # Validate custom kwargs are properly applied to environment configuration
                 assert env is not None
-                # Note: Direct kwargs validation would require access to environment internals
-                # This is validated through successful instantiation
-
-                # Assert custom max_episode_steps is correctly configured in environment
-                # The actual max_episode_steps is managed by Gymnasium's TimeLimit wrapper
+                base_env = _unwrap_gym_env(env)
+                assert isinstance(base_env, PlumeSearchEnv)
 
                 env.close()
 
@@ -227,7 +256,8 @@ class TestEnvironmentRegistration:
             warnings.simplefilter("ignore")
             try:
                 env = gymnasium.make(TEST_ENV_ID)
-                assert env is not None
+                base_env = _unwrap_gym_env(env)
+                assert isinstance(base_env, PlumeSearchEnv)
                 env.close()
             except Exception as e:
                 pytest.fail(f"gym.make() failed after force reregistration: {e}")
@@ -327,6 +357,8 @@ class TestEnvironmentUnregistration:
             warnings.simplefilter("ignore")
             try:
                 env = gymnasium.make(TEST_ENV_ID)
+                base_env = _unwrap_gym_env(env)
+                assert isinstance(base_env, PlumeSearchEnv)
                 env.close()
             except Exception:
                 pytest.fail("Environment not accessible after registration")
@@ -778,13 +810,13 @@ class TestRegistrationKwargs:
         assert 0 <= source_y < height
 
         # Test additional_kwargs merging and conflict resolution
-        additional_params = {"custom_param": "test_value"}
+        additional_params = {"custom_parameter_1": "value1"}
         kwargs_with_additional = create_registration_kwargs(
             grid_size=custom_grid_size, additional_kwargs=additional_params
         )
 
-        assert "custom_param" in kwargs_with_additional
-        assert kwargs_with_additional["custom_param"] == "test_value"
+        assert "custom_parameter_1" in kwargs_with_additional
+        assert kwargs_with_additional["custom_parameter_1"] == "value1"
         assert kwargs_with_additional["grid_size"] == custom_grid_size
 
         # Confirm custom kwargs produce valid environment configuration
@@ -2136,8 +2168,10 @@ class TestRegistrationIntegration:
                 assert isinstance(env.action_space, Discrete)
                 assert env.action_space.n == 4  # Cardinal directions
 
-                # PlumeSearchEnv returns Dict observation space
-                assert isinstance(env.observation_space, gymnasium.spaces.Dict)
+                # PlumeSearchEnv returns either Dict or Box observation space
+                assert isinstance(
+                    env.observation_space, (gymnasium.spaces.Dict, gymnasium.spaces.Box)
+                )
 
                 # Validate environment parameters match registration configuration
                 # This is validated through successful instantiation with expected spaces

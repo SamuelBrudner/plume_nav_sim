@@ -14,7 +14,7 @@ Example:
 
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
     "ActionConfig",
@@ -49,11 +49,7 @@ class ActionConfig(BaseModel):
         default_factory=dict, description="Additional processor-specific parameters"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        validate_assignment = True
-        extra = "forbid"  # Fail on unknown fields
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class ObservationConfig(BaseModel):
@@ -104,11 +100,7 @@ class ObservationConfig(BaseModel):
                 )
         return v
 
-    class Config:
-        """Pydantic config."""
-
-        validate_assignment = True
-        extra = "forbid"
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class RewardConfig(BaseModel):
@@ -152,11 +144,7 @@ class RewardConfig(BaseModel):
         default_factory=dict, description="Additional function-specific parameters"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        validate_assignment = True
-        extra = "forbid"
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class PlumeConfig(BaseModel):
@@ -185,11 +173,7 @@ class PlumeConfig(BaseModel):
         default_factory=dict, description="Additional plume-specific parameters"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        validate_assignment = True
-        extra = "forbid"
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
 class EnvironmentConfig(BaseModel):
@@ -270,12 +254,10 @@ class EnvironmentConfig(BaseModel):
             )
         return v
 
-    class Config:
-        """Pydantic config."""
-
-        validate_assignment = True
-        extra = "forbid"
-        json_schema_extra = {
+    model_config = ConfigDict(
+        validate_assignment=True,
+        extra="forbid",
+        json_schema_extra={
             "example": {
                 "grid_size": [128, 128],
                 "goal_location": [64, 64],
@@ -285,4 +267,5 @@ class EnvironmentConfig(BaseModel):
                 "reward": {"type": "sparse", "goal_radius": 5.0},
                 "plume": {"sigma": 20.0, "normalize": True},
             }
-        }
+        },
+    )

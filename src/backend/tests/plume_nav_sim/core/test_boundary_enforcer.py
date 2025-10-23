@@ -49,6 +49,7 @@ from plume_nav_sim.core.boundary_enforcer import (
 from plume_nav_sim.core.constants import (
     BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
     MOVEMENT_VECTORS,
+    BOUNDARY_VALIDATION_CACHE_SIZE
 )
 
 # Internal imports from core types for coordinate and action system integration

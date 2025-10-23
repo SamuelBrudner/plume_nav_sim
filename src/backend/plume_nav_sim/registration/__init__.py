@@ -56,20 +56,35 @@ except Exception:
 try:
     from gymnasium.wrappers.common import OrderEnforcing
 
-    if not hasattr(OrderEnforcing, "__getattr__"):
+    def _order_enforcing_getattr(self, name: str):  # type: ignore[override]
+        if name == "env":
+            raise AttributeError(name)
+        env = object.__getattribute__(self, "env")
+        return getattr(env, name)
 
-        def __getattr__(self, name):  # type: ignore[no-untyped-def, misc]
-            if name == "env":
-                raise AttributeError(name)
-            try:
-                env = object.__getattribute__(self, "env")
-            except Exception:
-                raise AttributeError(name)
-            return getattr(env, name)
-
-        OrderEnforcing.__getattr__ = __getattr__
+    OrderEnforcing.__getattr__ = _order_enforcing_getattr
 except Exception:
     pass
+
+try:
+    import gymnasium.error as _gym_error_module
+except Exception:
+    class _GymnasiumErrorNamespace:
+        class Error(Exception):
+            pass
+
+        class UnregisteredEnv(Error):
+            pass
+
+        class RegistrationError(Error):
+            pass
+
+        class ResetNeeded(Error):
+            pass
+
+    gymnasium.error = _GymnasiumErrorNamespace()
+else:
+    gymnasium.error = _gym_error_module
 
 from ..utils.exceptions import ConfigurationError
 
@@ -77,7 +92,15 @@ from ..utils.exceptions import ConfigurationError
 from ..utils.logging import get_component_logger
 
 # Internal imports for core registration functionality
-from .register import ENTRY_POINT, ENV_ID, is_registered, register_env, unregister_env
+from .register import (
+    ENTRY_POINT,
+    ENV_ID,
+    COMPONENT_ENV_ID,
+    ensure_component_env_registered,
+    is_registered,
+    register_env,
+    unregister_env,
+)
 
 # Global module state for initialization tracking and cache management
 _module_logger = get_component_logger("registration")
@@ -94,6 +117,8 @@ __all__ = [
     "ensure_registered",
     "ENV_ID",
     "ENTRY_POINT",
+    "COMPONENT_ENV_ID",
+    "ensure_component_env_registered",
 ]
 
 

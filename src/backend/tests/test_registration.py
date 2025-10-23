@@ -23,13 +23,14 @@ import warnings  # >=3.10 - Warning system testing for registration conflicts
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, assertion handling
 
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for registration validation
+from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
+from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions
 )
 from plume_nav_sim.core.constants import (
     DEFAULT_SOURCE_LOCATION,  # Default plume source location
 )
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv  # Main environment class
 
 # Internal imports
 from plume_nav_sim.registration.register import (
@@ -71,6 +72,34 @@ ERROR_TEST_SCENARIOS = [
     "invalid_parameters",
     "registry_corruption",
 ]
+
+
+def _unwrap_gym_env(env: gymnasium.Env) -> gymnasium.Env:
+    """Unwrap common Gymnasium wrappers to reach the base environment."""
+
+    base_env = env
+    visited = set()
+
+    while True:
+        env_id = id(base_env)
+        if env_id in visited:
+            break
+        visited.add(env_id)
+
+        if hasattr(base_env, "env"):
+            base_env = base_env.env
+            continue
+
+        if isinstance(base_env, gymnasium.Wrapper):
+            try:
+                base_env = base_env.unwrapped
+            except AttributeError:
+                break
+            continue
+
+        break
+
+    return base_env
 
 
 def setup_module():
@@ -222,18 +251,21 @@ def create_test_registration_config(
             "source_location": DEFAULT_SOURCE_LOCATION,
             "goal_radius": 0,
             "max_steps": 1000,
+            "plume_params": {"sigma": 1.0},  # Required for validation
         },
         "minimal": {
             "grid_size": (32, 32),
             "source_location": (16, 16),
             "goal_radius": 0,
             "max_steps": 100,
+            "plume_params": {"sigma": 1.0},
         },
         "extended": {
             "grid_size": (256, 256),
             "source_location": (128, 128),
             "goal_radius": 1,
             "max_steps": 2000,
+            "plume_params": {"sigma": 2.0},
         },
     }
 
@@ -252,19 +284,28 @@ def create_test_registration_config(
                 logger = logging.getLogger("test_registration")
                 logger.warning(f"Unknown configuration parameter: {key}")
 
-    # Add test metadata
+    # Validate configuration if requested (before adding metadata)
+    if validate_config:
+        try:
+            result = validate_environment_config(config)
+            if not result.is_valid:
+                error_msgs = "; ".join(str(e) for e in result.errors)
+                raise ValidationError(
+                    f"Test configuration validation failed: {error_msgs}",
+                    parameter_name="config",
+                    parameter_value=config
+                )
+        except ValidationError:
+            raise  # Re-raise ValidationError as-is
+        except Exception as e:
+            raise ConfigurationError(f"Test configuration validation failed: {str(e)}")
+
+    # Add test metadata after validation
     config["_test_metadata"] = {
         "config_type": config_type,
         "created_at": time.time(),
         "validation_enabled": validate_config,
     }
-
-    # Validate configuration if requested
-    if validate_config:
-        try:
-            validate_environment_config(config)
-        except Exception as e:
-            raise ConfigurationError(f"Test configuration validation failed: {str(e)}")
 
     return config
 
@@ -311,15 +352,16 @@ def validate_gym_make_compatibility(
         # Attempt environment creation using gymnasium.make()
         kwargs = make_kwargs or {}
         env = gymnasium.make(env_id, **kwargs)
-        environment_instance = env
         validation_report["gym_make_success"] = True
+        base_env = _unwrap_gym_env(env)
+        environment_instance = base_env
 
         # Validate returned environment type
-        if isinstance(env, PlumeSearchEnv):
+        if isinstance(base_env, PlumeSearchEnv):
             validation_report["type_validation"] = True
         else:
             validation_report["errors"].append(
-                f"Expected PlumeSearchEnv, got {type(env)}"
+                f"Expected PlumeSearchEnv, got {type(base_env)}"
             )
 
         # Check environment has proper spaces
@@ -332,11 +374,23 @@ def validate_gym_make_compatibility(
                     f"Expected Discrete(4) action space, got {env.action_space}"
                 )
 
-            # Validate observation space
-            if (
-                env.observation_space.shape == (1,)
-                and env.observation_space.dtype.name == "float32"
+            # Validate observation space type (Dict or Box)
+            if isinstance(
+                env.observation_space, (gymnasium.spaces.Dict, gymnasium.spaces.Box)
             ):
+                validation_report["space_validation"] = True
+            else:
+                validation_report["errors"].append(
+                    f"Unexpected observation space type: {type(env.observation_space)}"
+                )
+
+            # Validate observation space
+            dtype_ok = (
+                hasattr(env.observation_space.dtype, 'name') 
+                and env.observation_space.dtype.name == "float32"
+            ) or str(env.observation_space.dtype) == "float32"
+            
+            if env.observation_space.shape == (1,) and dtype_ok:
                 pass  # Correct observation space
             else:
                 validation_report["errors"].append(
@@ -1595,7 +1649,7 @@ class TestRegistrationScenarios:
             env.close()
 
         # Simulate complete session cleanup
-        for env_id in session2_env_ids:
+        for env_id in [session_env_id] + session2_env_ids:
             unregister_env(env_id)
             self.test_registrations.discard(env_id)
             assert not is_registered(
