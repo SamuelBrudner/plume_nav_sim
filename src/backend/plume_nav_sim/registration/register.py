@@ -306,9 +306,13 @@ def ensure_component_env_registered(
         test_env = gymnasium.make(COMPONENT_ENV_ID)
 
         class _EnvProbe(Protocol):
-            def reset(self, *args: object, **kwargs: object) -> object: ...
+            def reset(self, *args: object, **kwargs: object) -> object:
+                """Protocol method stub."""
+                ...
 
-            def close(self) -> None: ...
+            def close(self) -> None:
+                """Protocol method stub."""
+                ...
 
         probe = cast(_EnvProbe, test_env)
         try:
@@ -594,7 +598,9 @@ def _query_registry_fallback(effective_env_id: str) -> bool:
         test_env = gymnasium.make(effective_env_id)
 
         class _Closable(Protocol):
-            def close(self) -> None: ...
+            def close(self) -> None:
+                """Protocol method stub."""
+                ...
 
         closable_env = cast(_Closable, test_env)
         closable_env.close()
