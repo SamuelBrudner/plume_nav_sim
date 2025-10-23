@@ -302,12 +302,13 @@ class PlumeSearchEnv(gym.Env):
 
     def step(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
         obs, reward, terminated, truncated, info = self._env.step(action)
-        self._cumulative_reward += float(reward)
+        immediate_reward = float(reward)
+        self._cumulative_reward += immediate_reward
         wrapped_obs = self._wrap_observation(obs)
         augmented_info = self._augment_step_info(info, terminated)
         return (
             wrapped_obs,
-            self._cumulative_reward,
+            immediate_reward,
             terminated,
             truncated,
             augmented_info,
