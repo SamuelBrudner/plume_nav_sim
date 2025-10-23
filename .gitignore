@@ -198,6 +198,17 @@ Desktop.ini
 # Matplotlib configuration and cache
 .matplotlib/
 .config/matplotlib/
+
+# =============================================================================
+# PROJECT-LOCAL TRACKING/STATE
+# Local artifacts that should not be committed
+# =============================================================================
+
+# Beads issue tracker local state
+.beads/
+
+# Common misspelled agent doc that should be ignored if present
+Angent.md
 .cache/matplotlib/
 
 # Jupyter notebook checkpoints
