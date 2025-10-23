@@ -900,9 +900,6 @@ class TestEnvironmentIntegration:
     """Test suite for seeding integration with PlumeSearchEnv."""
 
     @pytest.mark.parametrize("env_seed", TEST_SEEDS)
-    @pytest.mark.skip(
-        reason="Environment-level reproducibility issue - not seeding system. Move to test_environment.py"
-    )
     def test_environment_seeding_integration(self, env_seed):
         """Test seeding integration with PlumeSearchEnv ensuring deterministic environment
         behavior and proper seed propagation across components."""
@@ -998,9 +995,6 @@ class TestEnvironmentIntegration:
         env3.close()
 
     @pytest.mark.parametrize("session_seed", TEST_SEEDS[:3])
-    @pytest.mark.skip(
-        reason="Environment-level reproducibility issue - not seeding system. Move to test_environment.py"
-    )
     def test_cross_session_reproducibility(self, session_seed):
         """Test cross-session reproducibility ensuring identical results across different
         execution sessions and environment instances."""
