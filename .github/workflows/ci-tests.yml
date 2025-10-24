@@ -15,6 +15,7 @@ jobs:
     env:
       MPLBACKEND: Agg
       PYTHONUNBUFFERED: "1"
+      PLUME_CI_PERF_SCALE: "1.15"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
