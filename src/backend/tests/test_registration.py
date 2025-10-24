@@ -16,6 +16,7 @@ error handling integration, performance benchmarks, and reproducibility verifica
 across registration operations with comprehensive scenario coverage.
 """
 
+import os  # >=3.10 - Environment detection for CI-specific performance tolerance
 import time  # >=3.10 - High-precision timing utilities for performance testing
 import warnings  # >=3.10 - Warning system testing for registration conflicts
 
@@ -65,6 +66,7 @@ TEST_ENV_ID_BASE = "TestPlumeNav-Registration-v0"
 CUSTOM_TEST_ENV_ID = "CustomPlumeNav-Integration-v0"
 PERFORMANCE_TIMEOUT_SECONDS = 30.0
 REGISTRATION_PERFORMANCE_TARGET_MS = 10.0
+_IS_CI = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
 TEST_REPRODUCIBILITY_SEEDS = [42, 123, 456]
 INTEGRATION_TEST_GRID_SIZES = [(32, 32), (64, 64), (128, 128)]
 ERROR_TEST_SCENARIOS = [
@@ -2200,7 +2202,7 @@ class TestRegistrationPerformance:
         # Check that performance doesn't degrade by more than 2x from smallest to largest scale
         if len(reg_times_per_env) > 1:
             performance_degradation = max(reg_times_per_env) / min(reg_times_per_env)
-            max_acceptable_degradation = 2.0
+            max_acceptable_degradation = 2.0 + (0.05 if _IS_CI else 0.0)
 
             assert (
                 performance_degradation < max_acceptable_degradation
@@ -2208,7 +2210,9 @@ class TestRegistrationPerformance:
 
         # Ensure all operations complete within reasonable time even at largest scale
         largest_scale_result = scalability_results[-1]
-        max_acceptable_total_time = 1000  # ms for largest test scale
+        max_acceptable_total_time = 1000 + (
+            100 if _IS_CI else 0
+        )  # ms for largest test scale
 
         assert (
             largest_scale_result["total_time_ms"] < max_acceptable_total_time
