@@ -24,10 +24,11 @@ class Policy(Protocol):
     """
 
     @property
-    def action_space(self) -> gym.Space: ...
+    def action_space(self) -> gym.Space:
+        pass
 
-    def reset(self, *, seed: int | None = None) -> None: ...
+    def reset(self, *, seed: int | None = None) -> None:
+        pass
 
-    def select_action(
-        self, observation: np.ndarray, *, explore: bool = True
-    ) -> int: ...
+    def select_action(self, observation: np.ndarray, *, explore: bool = True) -> int:
+        pass
