@@ -7,7 +7,7 @@ plugging in rule-based controllers and RL policies interchangeably.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import gymnasium as gym
 import numpy as np
