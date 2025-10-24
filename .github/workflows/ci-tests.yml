@@ -27,8 +27,8 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install package with dev extras
-        run: python -m pip install -e "src/backend[dev]"
+      - name: Install package with test + benchmark extras (and dev tools)
+        run: python -m pip install -e "src/backend[dev,test,benchmark]"
 
       - name: Run pytest and assert no tests are skipped
         run: |
