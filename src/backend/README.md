@@ -34,6 +34,8 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
 - **Gymnasium ≥0.29.0** (Core RL environment framework)
 - **NumPy ≥2.1.0** (Mathematical computing foundation)
 - **Matplotlib ≥3.9.0** (Visualization and rendering)
+- Optional for notebooks: **ipympl ≥0.9** (Interactive Matplotlib widgets in Jupyter)
+  - Also install: **ipywidgets ≥8.0.0** (widget support)
 
 ### Installation Steps
 
@@ -53,6 +55,16 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
    
    # With development dependencies
    pip install -e .[dev]
+
+   # For Jupyter notebooks with interactive plots (includes ipympl)
+   pip install -e .[notebooks]
+
+   # If '%matplotlib widget' is not recognized, install runtime deps to the kernel
+   # pip
+   %pip install -U ipympl ipywidgets matplotlib ipykernel
+   # conda
+   # conda install -c conda-forge ipympl ipywidgets matplotlib ipykernel
+   # Then restart the kernel
    ```
 
 3. **Verify Installation**:
@@ -509,6 +521,25 @@ print(matplotlib.get_backend())
 # Set interactive backend
 matplotlib.use('TkAgg')  # or 'Qt5Agg'
 ```
+
+**Notebook interactivity (Jupyter)**
+
+```bash
+# Ensure notebook extras (installs ipympl)
+pip install -e .[notebooks]
+```
+
+In a Jupyter notebook cell, enable the widget backend before plotting:
+
+```python
+%matplotlib widget
+```
+
+If you see “'widget' is not a recognised backend name”:
+- Install ipympl and ipywidgets in the active kernel and restart it:
+  - `%pip install -U ipympl ipywidgets`
+- Clear forced backends: `import os; os.environ.pop('MPLBACKEND', None)`
+- Classic Notebook: `jupyter nbextension enable --py widgetsnbextension`
 
 ### Performance Optimization
 

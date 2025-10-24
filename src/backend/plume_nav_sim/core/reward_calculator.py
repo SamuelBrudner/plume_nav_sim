@@ -665,15 +665,22 @@ class RewardCalculator:
         self,
         agent_position: Coordinates,
         source_location: Coordinates,
+        step_count: Optional[int] = None,
         calculation_context: Optional[Dict] = None,
     ) -> RewardResult:
         """
         Calculate reward based on agent position and goal achievement with distance analysis,
         performance monitoring, and sparse reward implementation for reinforcement learning.
 
+        Notes:
+            ``step_count`` is accepted for compatibility with some tests and
+            call sites but is not used by the current sparse reward logic.
+            More elaborate reward strategies may use it for shaping.
+
         Args:
             agent_position: Current agent coordinates
             source_location: Goal/source location coordinates
+            step_count: Optional current step number (ignored by sparse policy)
             calculation_context: Optional context for calculation customization
 
         Returns:
@@ -938,6 +945,7 @@ class RewardCalculator:
 
         # Calculate distance using calculate_euclidean_distance with precision settings
         if self.config.distance_calculation_method == "euclidean":
+            # Use standard helper to preserve established performance characteristics
             distance = calculate_euclidean_distance(agent_position, goal_position)
         elif self.config.distance_calculation_method == "manhattan":
             distance = abs(agent_position.x - goal_position.x) + abs(

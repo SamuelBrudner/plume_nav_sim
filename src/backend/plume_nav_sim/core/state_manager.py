@@ -1096,6 +1096,74 @@ class StateManager:
                     component_name="StateManager",
                 ) from e
 
+    # ------------------------------------------------------------------
+    # Lightweight compatibility helpers used by invariant tests
+    def initialize_episode(self, episode_seed: Optional[int] = None) -> Dict[str, Any]:
+        """Initialize a new episode (compatibility alias).
+
+        This is a thin alias for ``reset_episode(seed=...)`` maintained for
+        backwards‑compatibility with invariant tests and legacy helpers. It
+        performs a full episode reset (agent placement, counters, etc.) and
+        returns the same metadata dictionary produced by ``reset_episode``.
+
+        Args:
+            episode_seed: Optional deterministic seed forwarded to the seeding
+                system for reproducible start state generation.
+
+        Returns:
+            Episode initialization metadata from ``reset_episode``.
+        """
+        return self.reset_episode(seed=episode_seed)
+
+    def update_agent_state(self, action: int, step_reward: float) -> Dict[str, Any]:
+        """Process an action and accumulate an externally computed reward.
+
+        Rationale: StateManager is responsible for state transitions (position,
+        step count, episode bookkeeping) while reward semantics are owned by a
+        separate component (e.g., ``RewardCalculator``). This method accepts the
+        immediate reward value computed elsewhere and records it on the
+        ``AgentState`` to keep responsibilities decoupled.
+
+        Args:
+            action: Discrete action identifier to apply for this step.
+            step_reward: Immediate reward for this step (as computed by an
+                external reward component) to be added to ``AgentState``.
+
+        Returns:
+            Step processing information from ``process_step``.
+        """
+        return self.apply_step(action=action, reward=step_reward)
+
+    def apply_step(self, action: int, reward: float) -> Dict[str, Any]:
+        """Apply an action and record an external immediate reward.
+
+        Why accept ``reward`` here? To preserve separation of concerns. The
+        StateManager updates state and counters, while the reward is supplied by
+        a dedicated calculator. ``apply_step`` aggregates that immediate reward
+        into the agent's cumulative total without embedding reward logic here.
+
+        Args:
+            action: Discrete action identifier for this step.
+            reward: Immediate reward computed by an external component.
+
+        Returns:
+            Step processing information from ``process_step``.
+        """
+        # Delegate movement/step processing
+        step_info = self.process_step(action)  # type: ignore[arg-type]
+
+        # Accumulate reward on the agent state
+        if self.current_agent_state is None:
+            raise StateError(
+                message="Cannot update reward: no active agent state",
+                current_state="no_active_episode",
+                expected_state="active_episode",
+                component_name="StateManager",
+            )
+        self.current_agent_state.add_reward(float(reward))
+
+        return step_info
+
     def check_episode_termination(
         self,
         source_location: Coordinates,

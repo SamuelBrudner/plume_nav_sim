@@ -116,8 +116,8 @@ class TestStepCountInvariant:
 
     def test_step_count_matches_episode_length(self):
         """Total steps must equal final step_count."""
-        env = create_plume_search_env(env_config=EnvironmentConfig(max_steps=10))
-        env.reset()
+        env = create_plume_search_env(max_steps=10)
+        env.reset(seed=123)
 
         actual_steps = 0
         for _ in range(15):  # More than max_steps
@@ -129,9 +129,6 @@ class TestStepCountInvariant:
                 assert final_step_count == actual_steps
                 break
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_agent_state_step_count_consistent(self):
         """AgentState.step_count must match actual steps taken."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
@@ -162,33 +159,33 @@ class TestRewardAccumulationInvariant:
     - No reward should be lost or duplicated
     """
 
-    @pytest.mark.skip(
-        reason="Environment doesn't track total_reward in info yet - TODO: implement"
-    )
     def test_total_reward_equals_sum_of_steps(self):
-        """Total reward must equal sum of individual step rewards."""
-        env = create_plume_search_env()
-        env.reset()
+        """Total reward must equal sum of individual step rewards at each step."""
+        # Use step-penalty to ensure non-zero step rewards across steps.
+        env = create_plume_search_env(
+            grid_size=(6, 6),
+            source_location=(5, 5),
+            goal_radius=0.5,
+            reward_type="step_penalty",
+            start_location=(0, 0),
+        )
+        env.reset(seed=7)
 
-        collected_rewards = []
-        for _ in range(20):
-            obs, reward, terminated, truncated, info = env.step(0)
-            collected_rewards.append(reward)
+        cumulative = 0.0
+        for _ in range(15):
+            _obs, reward, terminated, truncated, info = env.step(1)
+            cumulative += reward
 
-            # INVARIANT: total = sum
-            expected_total = sum(collected_rewards)
-            actual_total = info.get("total_reward", 0.0)
-
+            # INVARIANT: total = sum(rewards so far)
+            actual_total = info.get("total_reward", None)
+            assert actual_total is not None, "info must include total_reward"
             assert np.isclose(
-                actual_total, expected_total, rtol=1e-9
-            ), f"Total reward {actual_total} != sum {expected_total}"
+                actual_total, cumulative, rtol=1e-9
+            ), f"Total reward {actual_total} != running sum {cumulative}"
 
             if terminated or truncated:
                 break
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_agent_state_reward_accumulation(self):
         """AgentState.total_reward must accumulate correctly."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig
@@ -211,7 +208,67 @@ class TestRewardAccumulationInvariant:
 
             state = manager.current_agent_state
             # INVARIANT: Accumulation is exact
-            assert np.isclose(state.total_reward, expected_total, rtol=1e-9)
+        assert np.isclose(state.total_reward, expected_total, rtol=1e-9)
+
+
+class TestRewardWrapperSemantics:
+    """Wrapper-level reward semantics invariants.
+
+    Ensures the Gym-facing wrapper returns the immediate step reward while
+    exposing the cumulative total via info["total_reward"].
+    """
+
+    def test_immediate_vs_cumulative_with_step_penalty(self):
+        """Immediate reward returned; info carries cumulative sum."""
+        from plume_nav_sim.envs.plume_search_env import create_plume_search_env
+
+        env = create_plume_search_env(
+            grid_size=(5, 5),
+            source_location=(4, 4),
+            goal_radius=0.5,
+            reward_type="step_penalty",
+            start_location=(0, 0),
+        )
+
+        try:
+            env.reset(seed=123)
+
+            # First step
+            _obs1, r1, term1, trunc1, info1 = env.step(1)  # RIGHT
+            assert not term1 and not trunc1
+            assert r1 < 0.0
+            assert info1["total_reward"] == pytest.approx(r1)
+
+            # Second step
+            _obs2, r2, term2, trunc2, info2 = env.step(1)
+            assert not term2 and not trunc2
+            assert r2 < 0.0
+            assert info2["total_reward"] == pytest.approx(r1 + r2)
+            assert r2 != pytest.approx(info2["total_reward"])  # must be immediate
+        finally:
+            env.close()
+
+    def test_sparse_reward_immediate_and_termination(self):
+        """Entering goal yields reward==1.0, terminated=True, cumulative==1.0."""
+        from plume_nav_sim.envs.plume_search_env import create_plume_search_env
+
+        env = create_plume_search_env(
+            grid_size=(5, 5),
+            source_location=(1, 1),
+            goal_radius=0.5,
+            reward_type="sparse",
+            start_location=(0, 1),  # One step RIGHT reaches goal
+        )
+
+        try:
+            env.reset(seed=42)
+            _obs, reward, terminated, truncated, info = env.step(1)  # RIGHT
+            assert reward == pytest.approx(1.0)
+            assert terminated is True
+            assert truncated is False
+            assert info["total_reward"] == pytest.approx(1.0)
+        finally:
+            env.close()
 
 
 class TestDeterminismInvariant:
@@ -304,9 +361,6 @@ class TestGoalDetectionConsistency:
     - All three signals must agree
     """
 
-    @pytest.mark.skip(
-        reason="RewardCalculator integration not complete - TODO: wire components"
-    )
     def test_goal_signals_consistent_when_reached(self):
         """When goal reached, all signals must agree."""
         from plume_nav_sim.core.reward_calculator import (
@@ -336,9 +390,6 @@ class TestGoalDetectionConsistency:
         assert result.goal_reached is True, "goal_reached flag must be True"
         # Note: terminated is handled by environment, but reward/goal_reached must agree
 
-    @pytest.mark.skip(
-        reason="RewardCalculator integration not complete - TODO: wire components"
-    )
     def test_goal_signals_consistent_when_not_reached(self):
         """When goal not reached, signals must agree."""
         from plume_nav_sim.core.reward_calculator import (
@@ -378,8 +429,8 @@ class TestTerminationConsistency:
 
     def test_terminated_and_truncated_mutually_exclusive(self):
         """Episode cannot be both terminated and truncated."""
-        env = create_plume_search_env(env_config=EnvironmentConfig(max_steps=10))
-        env.reset()
+        env = create_plume_search_env(max_steps=10)
+        env.reset(seed=321)
 
         for _ in range(15):  # More than max_steps
             obs, reward, terminated, truncated, info = env.step(0)
@@ -394,8 +445,8 @@ class TestTerminationConsistency:
 
     def test_episode_ends_with_one_signal(self):
         """Episode must end with exactly one termination signal."""
-        env = create_plume_search_env(env_config=EnvironmentConfig(max_steps=5))
-        env.reset()
+        env = create_plume_search_env(max_steps=5)
+        env.reset(seed=654)
 
         terminated_count = 0
         truncated_count = 0
@@ -494,9 +545,6 @@ class TestComponentIsolation:
                 obs1_a, obs2_a
             ), "Different seeds should give different obs"
 
-    @pytest.mark.skip(
-        reason="StateManager integration not complete - TODO: wire components"
-    )
     def test_state_manager_instances_independent(self):
         """Multiple StateManager instances must not interfere."""
         from plume_nav_sim.core.state_manager import StateManager, StateManagerConfig

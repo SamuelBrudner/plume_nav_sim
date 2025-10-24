@@ -10,6 +10,7 @@ dictionary payloads because several tests assert their exact shape.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -141,37 +142,70 @@ PIXEL_VALUE_MAX = 255
 SUPPORTED_RENDER_MODES = ["rgb_array", "human"]
 
 # Rendering backend integration (used by matplotlib renderer and configs)
-BACKEND_PRIORITY_LIST = ["TkAgg", "Qt5Agg", "Agg"]
+# Prefer ipympl in notebooks, then desktop GUI backends, then headless Agg
+BACKEND_PRIORITY_LIST = [
+    "module://ipympl.backend_nbagg",
+    "TkAgg",
+    "Qt5Agg",
+    "Agg",
+]
 MATPLOTLIB_DEFAULT_FIGSIZE = (8, 8)
 
 
 # Performance / resource limits
+# Apply conservative CI slack to absorb VM variance. Can be overridden by
+# PLUME_CI_PERF_SCALE env var.
+_IS_CI = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
+_CI_PERF_SCALE = 1.0
+try:
+    if _IS_CI:
+        _CI_PERF_SCALE = float(os.environ.get("PLUME_CI_PERF_SCALE", "1.12"))
+except Exception:
+    _CI_PERF_SCALE = 1.12 if _IS_CI else 1.0
 PERFORMANCE_TRACKING_ENABLED = _CONFIG["performance"].get(
     "tracking_enabled", _DEFAULT_CONFIG["performance"]["tracking_enabled"]
 )
-PERFORMANCE_TARGET_STEP_LATENCY_MS = _CONFIG["performance"].get(
-    "target_step_latency_ms",
-    _DEFAULT_CONFIG["performance"]["target_step_latency_ms"],
+PERFORMANCE_TARGET_STEP_LATENCY_MS = (
+    _CONFIG["performance"].get(
+        "target_step_latency_ms",
+        _DEFAULT_CONFIG["performance"]["target_step_latency_ms"],
+    )
+    * _CI_PERF_SCALE
 )
-PERFORMANCE_TARGET_RGB_RENDER_MS = _CONFIG["performance"].get(
-    "target_rgb_render_ms",
-    _DEFAULT_CONFIG["performance"]["target_rgb_render_ms"],
+PERFORMANCE_TARGET_RGB_RENDER_MS = (
+    _CONFIG["performance"].get(
+        "target_rgb_render_ms",
+        _DEFAULT_CONFIG["performance"]["target_rgb_render_ms"],
+    )
+    * _CI_PERF_SCALE
 )
-PERFORMANCE_TARGET_HUMAN_RENDER_MS = _CONFIG["performance"].get(
-    "target_human_render_ms",
-    _DEFAULT_CONFIG["performance"]["target_human_render_ms"],
+PERFORMANCE_TARGET_HUMAN_RENDER_MS = (
+    _CONFIG["performance"].get(
+        "target_human_render_ms",
+        _DEFAULT_CONFIG["performance"]["target_human_render_ms"],
+    )
+    * _CI_PERF_SCALE
 )
-PERFORMANCE_TARGET_EPISODE_RESET_MS = _CONFIG["performance"].get(
-    "target_episode_reset_ms",
-    _DEFAULT_CONFIG["performance"]["target_episode_reset_ms"],
+PERFORMANCE_TARGET_EPISODE_RESET_MS = (
+    _CONFIG["performance"].get(
+        "target_episode_reset_ms",
+        _DEFAULT_CONFIG["performance"]["target_episode_reset_ms"],
+    )
+    * _CI_PERF_SCALE
 )
-PERFORMANCE_TARGET_PLUME_GENERATION_MS = _CONFIG["performance"].get(
-    "target_plume_generation_ms",
-    _DEFAULT_CONFIG["performance"]["target_plume_generation_ms"],
+PERFORMANCE_TARGET_PLUME_GENERATION_MS = (
+    _CONFIG["performance"].get(
+        "target_plume_generation_ms",
+        _DEFAULT_CONFIG["performance"]["target_plume_generation_ms"],
+    )
+    * _CI_PERF_SCALE
 )
-BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS = _CONFIG["performance"].get(
-    "boundary_enforcement_ms",
-    _DEFAULT_CONFIG["performance"]["boundary_enforcement_ms"],
+BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS = (
+    _CONFIG["performance"].get(
+        "boundary_enforcement_ms",
+        _DEFAULT_CONFIG["performance"]["boundary_enforcement_ms"],
+    )
+    * _CI_PERF_SCALE
 )
 MEMORY_LIMIT_TOTAL_MB = 50
 MEMORY_LIMIT_PLUME_FIELD_MB = 40

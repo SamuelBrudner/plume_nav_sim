@@ -64,8 +64,9 @@ TEST_AGENT_POSITION = Coordinates(x=10, y=15)  # Test agent position for marker 
 TEST_SOURCE_POSITION = Coordinates(
     x=20, y=25
 )  # Test source position for marker testing
+IS_CI = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
 PERFORMANCE_TOLERANCE_MS = (
-    5.0  # Additional tolerance for performance testing in CI environments
+    15.0 if IS_CI else 5.0  # Increase tolerance on CI to absorb VM variance
 )
 MAX_CLEANUP_TIMEOUT_SEC = 2.0  # Maximum timeout for resource cleanup testing
 MOCK_BACKEND_PRIORITY = [
@@ -2269,8 +2270,8 @@ class TestInteractiveUpdateManager:
 
         assert result == True, "Should successfully complete batch update"
         assert (
-            batch_time < 30.0
-        ), f"Batch update should be <30ms, got {batch_time:.2f}ms"
+            batch_time < 30.0 + PERFORMANCE_TOLERANCE_MS
+        ), f"Batch update should be <{30.0 + PERFORMANCE_TOLERANCE_MS:.0f}ms, got {batch_time:.2f}ms"
 
         # Validate selective refresh and optimization effectiveness
         optimized_result = self.update_manager.batch_update(

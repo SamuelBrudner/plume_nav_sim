@@ -331,10 +331,8 @@ class PlumeSearchEnv(gym.Env):
                 return result
             return np.zeros((height, width, 3), dtype=np.uint8)
 
-        # human mode: defer to underlying environment even if it returns rgb
-        if result is not None:
-            return result
-        return np.zeros((height, width, 3), dtype=np.uint8)
+        # human mode: per Gymnasium convention, return None regardless of backend
+        return None
 
     def close(self) -> None:
         self._env.close()

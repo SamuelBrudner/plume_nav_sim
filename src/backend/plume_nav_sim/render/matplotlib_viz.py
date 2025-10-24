@@ -274,7 +274,7 @@ class MatplotlibBackendManager:
                 # Skip interactive backends in headless environment unless explicitly configured
                 if (
                     headless
-                    and backend_name not in ["Agg"]
+                    and backend_name not in ["Agg", "module://ipympl.backend_nbagg"]
                     and not self.backend_options.get(
                         "force_interactive_in_headless", False
                     )
@@ -385,13 +385,31 @@ class MatplotlibBackendManager:
             capabilities = self._analyze_backend_capabilities(
                 effective_backend, capabilities
             )
-            if self.caching_enabled:
-                self.configuration_cache[cache_key] = capabilities.copy()
+            # Defer caching until after environment-based finalization below
         except Exception as e:
             self.logger.error(
                 f"Capability analysis failed for {effective_backend}: {e}"
             )
             capabilities["error"] = str(e)
+
+        # Finalize display/headless flags using fresh environment detection so tests
+        # that patch os.environ (e.g., DISPLAY) are respected at call time.
+        try:
+            headless_now = self._detect_headless_environment()
+            # In headless OS context, report display as unavailable regardless of backend
+            capabilities["display_available"] = not bool(headless_now)
+            # Ensure headless_compatible reflects either backend property or current env
+            capabilities["headless_compatible"] = bool(
+                capabilities.get("headless_compatible", False) or headless_now
+            )
+            # interactive_supported remains as set by backend analysis; tests only assert presence
+        except Exception:
+            # Keep previously inferred values on detection failure
+            pass
+
+        # Cache after finalization
+        if self.caching_enabled:
+            self.configuration_cache[cache_key] = capabilities.copy()
 
         return capabilities
 
@@ -401,6 +419,9 @@ class MatplotlibBackendManager:
             self._set_backend_capabilities(capabilities, display=True, gui="Tkinter")
         elif effective_backend == "Qt5Agg":
             self._set_backend_capabilities(capabilities, display=True, gui="Qt5")
+        elif effective_backend == "module://ipympl.backend_nbagg":
+            # ipympl runs interactively inside Jupyter without OS display
+            self._set_backend_capabilities(capabilities, display=True, gui="ipympl")
         elif effective_backend == "Agg":
             self._set_backend_capabilities(
                 capabilities, display=False, gui=None, headless=True
@@ -726,6 +747,11 @@ class MatplotlibBackendManager:
 
                 importlib.import_module("matplotlib.backends.backend_qt5agg")
                 # PyQt5 or PySide2 availability test would go here
+            elif backend_name == "module://ipympl.backend_nbagg":
+                import importlib
+
+                importlib.import_module("ipympl")
+                importlib.import_module("ipympl.backend_nbagg")
             elif backend_name == "Agg":
                 import importlib
 
@@ -2177,16 +2203,28 @@ def create_matplotlib_renderer(
 
         # Filter preferences based on detected capabilities
         if not capabilities.get("display_available", True):
+            # In headless OS environments, still allow ipympl for notebook rendering
             effective_preferences = [
-                backend for backend in effective_preferences if backend == "Agg"
-            ]  # Only headless backend for no display
+                backend
+                for backend in effective_preferences
+                if backend in ("Agg", "module://ipympl.backend_nbagg")
+            ]
 
         # Configure renderer options with performance defaults
         effective_options = renderer_options or {}
         default_options = {
             "figure_size": MATPLOTLIB_DEFAULT_FIGSIZE,
             "dpi": DEFAULT_DPI,
-            "interactive": capabilities.get("display_available", False),
+            # Treat ipympl as interactive even without OS display
+            "interactive": (
+                capabilities.get("display_available", False)
+                or (
+                    plt.get_backend().startswith("module://ipympl")
+                    if hasattr(plt, "get_backend")
+                    else False
+                )
+                or ("module://ipympl.backend_nbagg" in effective_preferences)
+            ),
             "update_interval": INTERACTIVE_UPDATE_INTERVAL,
         }
         default_options.update(effective_options)
@@ -2313,7 +2351,12 @@ def detect_matplotlib_capabilities(  # noqa: C901
 
         # Test backend availability if requested
         if test_backends:
-            backends_to_test = ["TkAgg", "Qt5Agg", "Agg"]
+            backends_to_test = [
+                "module://ipympl.backend_nbagg",
+                "TkAgg",
+                "Qt5Agg",
+                "Agg",
+            ]
 
             for backend in backends_to_test:
                 try:
@@ -2336,6 +2379,12 @@ def detect_matplotlib_capabilities(  # noqa: C901
                             capabilities["gui_toolkits"]["pyqt5"] = True
                         except Exception:
                             capabilities["gui_toolkits"].setdefault("pyqt5", False)
+                    elif backend == "module://ipympl.backend_nbagg":
+                        # ipympl Jupyter backend (widget-based interactive figures)
+                        importlib.import_module("ipympl")
+                        importlib.import_module("ipympl.backend_nbagg")
+                        capabilities["backend_availability"][backend] = True
+                        capabilities["gui_toolkits"]["ipympl"] = True
                     elif backend == "Agg":
                         importlib.import_module("matplotlib.backends.backend_agg")
                         capabilities["backend_availability"][backend] = True
@@ -2377,9 +2426,24 @@ def detect_matplotlib_capabilities(  # noqa: C901
             )
 
         if not capabilities.get("display_available", True):
-            recommendations.append(
-                "Running in headless mode - only Agg backend available"
-            )
+            # If ipympl is available or active, recommend widget backend instead of Agg-only
+            try:
+                active_backend = plt.get_backend()
+            except Exception:
+                active_backend = None
+            if capabilities["backend_availability"].get(
+                "module://ipympl.backend_nbagg", False
+            ) or (
+                isinstance(active_backend, str)
+                and active_backend.startswith("module://ipympl")
+            ):
+                recommendations.append(
+                    "Headless OS display detected - use %matplotlib widget (ipympl) in notebooks"
+                )
+            else:
+                recommendations.append(
+                    "Running in headless mode - only Agg backend available"
+                )
 
         backend_count = sum(capabilities.get("backend_availability", {}).values())
         if backend_count == 0:
@@ -2412,7 +2476,7 @@ def detect_matplotlib_capabilities(  # noqa: C901
         )
 
         # Determine interactive support (GUI backends like TkAgg, Qt5Agg available)
-        interactive_backends = [b for b in available_backend_names if b != "Agg"]
+        interactive_backends = [b for b in available_backend_names if b not in ("Agg",)]
         capabilities["interactive_support"] = len(interactive_backends) > 0
 
     except Exception as e:
