@@ -89,7 +89,12 @@ _DEFAULT_RGB_CONFIG = {
 }
 
 _DEFAULT_MATPLOTLIB_CONFIG = {
-    "backend_preferences": ["TkAgg", "Qt5Agg", "Agg"],
+    "backend_preferences": [
+        "module://ipympl.backend_nbagg",
+        "TkAgg",
+        "Qt5Agg",
+        "Agg",
+    ],
     "enable_interactive": True,
     "figure_size": (8, 8),
     "dpi": 100,

@@ -141,7 +141,13 @@ PIXEL_VALUE_MAX = 255
 SUPPORTED_RENDER_MODES = ["rgb_array", "human"]
 
 # Rendering backend integration (used by matplotlib renderer and configs)
-BACKEND_PRIORITY_LIST = ["TkAgg", "Qt5Agg", "Agg"]
+# Prefer ipympl in notebooks, then desktop GUI backends, then headless Agg
+BACKEND_PRIORITY_LIST = [
+    "module://ipympl.backend_nbagg",
+    "TkAgg",
+    "Qt5Agg",
+    "Agg",
+]
 MATPLOTLIB_DEFAULT_FIGSIZE = (8, 8)
 
 
