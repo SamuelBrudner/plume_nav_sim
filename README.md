@@ -56,6 +56,48 @@ Validate the install:
 python -c "import plume_nav_sim as pns; pns.make_env()"
 ```
 
+### Jupyter notebooks (interactive plots)
+
+If you plan to run the example notebooks or want interactive Matplotlib widgets inside Jupyter, install the notebooks extra which includes ipympl:
+
+```bash
+pip install -e .[notebooks]
+```
+
+In your notebook, enable the widget backend before plotting:
+
+```python
+%matplotlib widget
+```
+
+If the widget backend is not recognized, install the runtime deps into the SAME kernel and restart it:
+
+- pip:
+  - `%pip install -U ipympl ipywidgets matplotlib ipykernel`
+- conda:
+  - `conda install -c conda-forge ipympl ipywidgets matplotlib ipykernel`
+
+Classic Notebook only (not JupyterLab): enable widgets extension once:
+
+```bash
+jupyter nbextension enable --py widgetsnbextension
+```
+
+Troubleshooting “'widget' is not a recognised backend name”:
+- Ensure `ipympl` and `ipywidgets` are installed in the kernel, then restart it.
+- Clear any forced backend: `import os; os.environ.pop('MPLBACKEND', None)` in the first cell.
+- Fallback safely when ipympl is missing:
+  -
+  ```python
+  import matplotlib as mpl
+  try:
+      %matplotlib widget
+  except Exception as e:
+      print("ipympl unavailable, falling back to inline:", e)
+      %matplotlib inline
+  print("Backend:", mpl.get_backend())
+  ```
+
 ### Test and performance requirements
 
 Running the full test matrix (contracts, property-based suites, and performance checks) requires optional packages that are not included in the base install.

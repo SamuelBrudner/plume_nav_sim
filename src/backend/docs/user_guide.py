@@ -393,11 +393,45 @@ This section demonstrates how to effectively use the environment in notebook-bas
 ### Setting Up Jupyter Environment
 
 ```bash
-# Install Jupyter in your plume_nav_sim environment
-pip install jupyter jupyterlab
+# Install notebook extras (includes ipympl for interactive widgets)
+pip install -e .[notebooks]
+
+# Optional: JupyterLab UI
+pip install jupyterlab
 
 # Start Jupyter Lab
 jupyter lab
+```
+
+In your notebook, enable the widget backend before plotting:
+
+```python
+%matplotlib widget
+```
+
+Troubleshooting (widget backend not recognized):
+
+```python
+# Ensure deps are installed in the SAME kernel and restart it
+%pip install -U ipympl ipywidgets matplotlib ipykernel
+
+# Clear forced backend if set
+import os; os.environ.pop('MPLBACKEND', None)
+
+# Safe fallback to inline if ipympl missing
+import matplotlib as mpl
+try:
+    %matplotlib widget
+except Exception as e:
+    print('ipympl unavailable, falling back to inline:', e)
+    %matplotlib inline
+print('Backend:', mpl.get_backend())
+```
+
+Classic Notebook (not JupyterLab) may need:
+
+```bash
+jupyter nbextension enable --py widgetsnbextension
 ```
 
 ### Basic Notebook Setup
