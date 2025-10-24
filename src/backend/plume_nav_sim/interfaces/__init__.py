@@ -13,10 +13,12 @@ Contract References:
 
 from .action import ActionProcessor
 from .observation import ObservationModel
+from .policy import Policy
 from .reward import RewardFunction
 
 __all__ = [
     "RewardFunction",
     "ObservationModel",
     "ActionProcessor",
+    "Policy",
 ]
