@@ -9,4 +9,4 @@ dependencies:
   - pip:
     # This line installs the project in editable mode with all optional dependencies.
     # The '.' refers to the current directory where pyproject.toml is located.
-    - -e .[dev,test,security,docs,benchmark]
+    - -e .[dev,test,security,docs,benchmark,notebooks]
