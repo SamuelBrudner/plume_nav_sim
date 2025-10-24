@@ -8,9 +8,11 @@ from emitting exceptions during teardown.
 
 import gc
 import logging
+import os
 import queue
 import threading
 import time
+import warnings
 
 import matplotlib
 import numpy as np
@@ -75,10 +77,17 @@ def _require_psutil() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _normalize_matplotlib_and_logging():
+def _normalize_matplotlib_and_logging(tmp_path_factory):
     """Normalize Matplotlib rcParams and guard logging exceptions for CI."""
     # Prevent logging module from printing handler/stream errors during teardown
     logging.raiseExceptions = False
+
+    # Ensure Matplotlib has a writable cache/config directory to avoid noisy warnings
+    try:
+        mpl_cfg_dir = tmp_path_factory.mktemp("mplconfig")
+        os.environ.setdefault("MPLCONFIGDIR", str(mpl_cfg_dir))
+    except Exception:
+        pass
 
     # Normalize core rcParams for consistent sizing and rendering
     rcParams.update(
@@ -92,6 +101,29 @@ def _normalize_matplotlib_and_logging():
             # Ensure antialiasing for consistent visuals (does not affect Agg determinism)
             "text.antialiased": True,
         }
+    )
+
+    # Reduce benign warning noise in CI output while preserving important failures
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Matplotlib is building the font cache.*",
+        module=r"matplotlib\\.font_manager",
+        category=UserWarning,
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Observation dtype .* differs from expected",
+        category=UserWarning,
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Action space size .* differs from standard",
+        category=UserWarning,
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Observation space is not bounded on both sides",
+        category=UserWarning,
     )
 
     yield
