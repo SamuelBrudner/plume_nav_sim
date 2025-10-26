@@ -40,6 +40,14 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    """Run episodes and capture analysis-ready artifacts via data_capture.
+
+    Args:
+        argv: Optional list of CLI arguments for testing
+
+    Returns:
+        Process exit code (0 on success)
+    """
     args = _parse_args(argv)
     try:
         w, h = (int(p) for p in args.grid.lower().split("x"))
