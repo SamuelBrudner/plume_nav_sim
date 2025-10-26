@@ -16,6 +16,19 @@ class _PolicyLike(Protocol):  # minimal protocol to support tests
 
 @dataclass
 class StepEvent:
+    """Per-step event emitted by the runner stream.
+
+    Attributes:
+        t: Zero-based step index within the episode
+        obs: Observation before taking the action (policy input)
+        action: Action applied to the environment
+        reward: Scalar reward returned by the step
+        terminated: True if episode terminated
+        truncated: True if episode truncated (time or other limit)
+        info: Info dict returned by env.step
+        frame: Optional RGB ndarray when render=True and env supports rgb_array
+    """
+
     t: int
     obs: np.ndarray
     action: int | np.integer | np.ndarray
@@ -28,6 +41,17 @@ class StepEvent:
 
 @dataclass
 class EpisodeResult:
+    """Summary result of a completed episode run.
+
+    Attributes:
+        seed: Seed used to reset env/policy for this run
+        steps: Number of steps executed
+        total_reward: Sum of rewards across steps
+        terminated: True if episode terminated
+        truncated: True if episode truncated (time or other limit)
+        metrics: Optional metrics dictionary (reserved for future use)
+    """
+
     seed: Optional[int]
     steps: int
     total_reward: float
