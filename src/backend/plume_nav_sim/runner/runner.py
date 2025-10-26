@@ -7,11 +7,11 @@ import numpy as np
 
 
 class _PolicyLike(Protocol):  # minimal protocol to support tests
-    def reset(self, *, seed: int | None = None) -> None: ...
+    def reset(self, *, seed: int | None = None) -> None:
+        pass
 
-    def select_action(
-        self, observation: np.ndarray, *, explore: bool = True
-    ) -> int: ...
+    def select_action(self, observation: np.ndarray, *, explore: bool = True) -> int:
+        pass
 
 
 @dataclass
