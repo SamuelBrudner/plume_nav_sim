@@ -22,3 +22,17 @@ setup-dev:
 
 maintain:
 	$(SETUP_SCRIPT) --name $(ENV_NAME) --python $(PYTHON_VERSION) --update $(DEV_FLAG)
+
+.PHONY: dev-core install-qt debugger
+
+# Editable install of backend/core in the conda env
+dev-core:
+	conda run -n $(ENV_NAME) pip install -e src/backend
+
+# Install Qt toolkit for the debugger UI (PySide6)
+install-qt:
+	conda run -n $(ENV_NAME) python -m pip install "PySide6>=6.5"
+
+# Run the debugger from source without packaging (uses PYTHONPATH)
+debugger:
+	PYTHONPATH=src conda run -n $(ENV_NAME) python -m plume_nav_debugger.app
