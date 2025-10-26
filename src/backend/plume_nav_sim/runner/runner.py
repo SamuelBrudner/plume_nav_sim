@@ -92,7 +92,7 @@ def run_episode(
 
         action = _select_action(policy, obs)
         next_obs, reward, term, trunc, info = env.step(action)
-        frame = env.render() if render else None
+        frame = env.render("rgb_array") if render else None
 
         ev = StepEvent(
             t=steps,
@@ -155,7 +155,7 @@ def stream(
     while True:
         action = _select_action(policy, obs)
         next_obs, reward, term, trunc, info = env.step(action)
-        frame = env.render() if render else None
+        frame = env.render("rgb_array") if render else None
 
         ev = StepEvent(
             t=t,
