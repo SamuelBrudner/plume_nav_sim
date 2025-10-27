@@ -16,6 +16,8 @@ def build_env(spec: SimulationSpec):
     kwargs: dict[str, Any] = {}
     if spec.grid_size is not None:
         kwargs["grid_size"] = tuple(spec.grid_size)
+    if spec.source_location is not None:
+        kwargs["source_location"] = tuple(spec.source_location)
     if spec.start_location is not None:
         kwargs["start_location"] = tuple(spec.start_location)
     if spec.goal_radius is not None:

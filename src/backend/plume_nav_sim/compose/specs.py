@@ -55,6 +55,7 @@ class SimulationSpec(BaseModel):
 
     # Environment parameters (subset; defaults are taken from make_env if None)
     grid_size: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
+    source_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
     start_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
     goal_radius: Optional[float] = Field(default=None, ge=0.0)
     plume_sigma: Optional[float] = Field(default=None, ge=0.0)
