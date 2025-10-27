@@ -6,7 +6,6 @@ from typing import Optional
 import gymnasium as gym
 import numpy as np
 
-from ..actions.oriented_grid import OrientedGridActions
 from ..interfaces import Policy
 
 
@@ -35,7 +34,6 @@ class RunTumbleTemporalDerivativePolicy(Policy):
     eps_seed: Optional[int] = None
 
     def __post_init__(self) -> None:
-        self._actions = OrientedGridActions()
         self._rng = np.random.default_rng(self.eps_seed)
         self._last_c: Optional[float] = None
         self._last_action: Optional[int] = None
@@ -43,7 +41,8 @@ class RunTumbleTemporalDerivativePolicy(Policy):
     # Policy protocol -----------------------------------------------------
     @property
     def action_space(self) -> gym.Space:
-        return self._actions.action_space
+        # Dedicated run/tumble 2-action space: 0=RUN, 1=TUMBLE
+        return gym.spaces.Discrete(2)
 
     def reset(self, *, seed: int | None = None) -> None:
         if seed is not None:
@@ -65,15 +64,15 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         # Compute dc identically every step
         dc = c - self._last_c
 
-        # Probe-after-turn gating: after any TURN, issue a forward probe
-        if self._last_action in (1, 2):
+        # Probe-after-turn gating: after a TUMBLE, issue a forward probe
+        if self._last_action == 1:
             a = 0
         else:
             if dc >= self.threshold:
                 a = 0  # RUN -> FORWARD
             else:
-                # TUMBLE: choose a single TURN (LEFT=1 or RIGHT=2) uniformly
-                a = int(self._rng.integers(1, 3))
+                # TUMBLE: one-step orientation reset handled by env action processor
+                a = 1
 
         # Inject base stochasticity: occasionally ignore dc-based decision
         if self.eps > 0.0 and self._rng.random() < self.eps:

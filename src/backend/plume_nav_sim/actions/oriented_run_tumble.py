@@ -46,9 +46,6 @@ class OrientedRunTumbleActions:
         current_state: AgentState,
         grid_size: GridSize,
     ) -> AgentState:
-        # Accept 2 as an alias for TUMBLE to interoperate with oriented policies
-        if isinstance(action, (int, np.integer)) and action == 2:
-            action = 1
         if not isinstance(action, (int, np.integer)) or action not in (0, 1):
             raise ValueError(f"Invalid action: {action}, must be 0 (RUN) or 1 (TUMBLE)")
 
@@ -81,8 +78,7 @@ class OrientedRunTumbleActions:
         )
 
     def validate_action(self, action: int) -> bool:
-        # Accept 2 as alias for TUMBLE for compatibility with oriented policies
-        return isinstance(action, (int, np.integer)) and int(action) in (0, 1, 2)
+        return isinstance(action, (int, np.integer)) and int(action) in (0, 1)
 
     def get_metadata(self) -> Dict[str, Any]:
         return {

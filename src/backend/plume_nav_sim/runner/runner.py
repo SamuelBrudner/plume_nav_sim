@@ -81,6 +81,30 @@ def _select_action(policy: Any, observation: np.ndarray) -> Any:
     raise TypeError("Policy must implement select_action() or be callable")
 
 
+def _ensure_action_space_compat(env: Any, policy: Any) -> None:
+    """Validate that policy and env action spaces are compatible.
+
+    Currently supports Discrete spaces; raises ValueError on mismatch.
+    """
+    try:
+        import gymnasium as gym  # type: ignore
+        from gymnasium.spaces import Discrete  # type: ignore
+    except Exception:  # pragma: no cover
+        return  # If gym not available, skip compatibility check
+
+    env_space = getattr(env, "action_space", None)
+    pol_space = getattr(policy, "action_space", None)
+    if env_space is None or pol_space is None:
+        return
+    # Only enforce for Discrete spaces where sizes must match
+    if isinstance(env_space, Discrete) and isinstance(pol_space, Discrete):
+        if int(env_space.n) != int(pol_space.n):
+            raise ValueError(
+                f"Policy/env action_space mismatch: policy Discrete({int(pol_space.n)}) "
+                f"vs env Discrete({int(env_space.n)}). Choose a compatible policy/env pair."
+            )
+
+
 def run_episode(
     env: Any,
     policy: Any,
@@ -102,6 +126,7 @@ def run_episode(
     else:
         obs, _ = env.reset()
         _maybe_policy_reset(policy, seed=None)
+    _ensure_action_space_compat(env, policy)
 
     steps = 0
     total_reward = 0.0
@@ -174,6 +199,7 @@ def stream(
     else:
         obs, _ = env.reset()
         _maybe_policy_reset(policy, seed=None)
+    _ensure_action_space_compat(env, policy)
 
     t = 0
     while True:

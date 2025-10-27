@@ -26,7 +26,7 @@ def _env(*, rgb: bool = False, action_type: str = "oriented"):
 
 def test_td_deterministic_stream_probe_and_dc_rule():
     seed = 123
-    env = _env(rgb=False, action_type="run_tumble")
+    env = _env(rgb=False, action_type="oriented")
     try:
         policy = TemporalDerivativeDeterministicPolicy(
             threshold=1e-6, alternate_cast=True
@@ -149,7 +149,7 @@ def test_td_deterministic_run_episode_callbacks_and_summary():
 
 def test_run_tumble_td_behavior_sequences():
     seed = 42
-    env = _env(rgb=False)
+    env = _env(rgb=False, action_type="run_tumble")
     try:
         policy = RunTumbleTemporalDerivativePolicy(threshold=1e-6, eps_seed=seed)
 
@@ -162,10 +162,10 @@ def test_run_tumble_td_behavior_sequences():
                 last_c = c
             else:
                 dc = c - last_c
-                if last_a not in (1, 2):
+                if last_a != 1:
                     if dc < 1e-6:
-                        # Tumble should be a single TURN step
-                        assert ev.action in (1, 2)
+                        # Tumble should be a single TUMBLE step (1)
+                        assert ev.action == 1
                         saw_tumble = True
                     else:
                         assert ev.action == 0
@@ -179,3 +179,26 @@ def test_run_tumble_td_behavior_sequences():
         assert saw_tumble
     finally:
         env.close()
+
+
+def test_policy_env_mismatch_errors():
+    import pytest
+
+    seed = 1
+    # Oriented policy with run_tumble env should error
+    env_rt = _env(rgb=False, action_type="run_tumble")
+    try:
+        pol_oriented = TemporalDerivativeDeterministicPolicy()
+        with pytest.raises(ValueError):
+            _ = next(r.stream(env_rt, pol_oriented, seed=seed, render=False))
+    finally:
+        env_rt.close()
+
+    # Run/Tumble policy with oriented env should error
+    env_or = _env(rgb=False, action_type="oriented")
+    try:
+        pol_rt = RunTumbleTemporalDerivativePolicy()
+        with pytest.raises(ValueError):
+            _ = next(r.stream(env_or, pol_rt, seed=seed, render=False))
+    finally:
+        env_or.close()
