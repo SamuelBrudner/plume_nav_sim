@@ -32,6 +32,7 @@ def test_prepare_with_builtin_deterministic_policy():
         grid_size=(16, 16),
         max_steps=50,
         render=False,
+        action_type="oriented",
         policy=PolicySpec(builtin="deterministic_td"),
         seed=123,
     )
