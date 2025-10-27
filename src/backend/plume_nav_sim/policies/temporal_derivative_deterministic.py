@@ -22,6 +22,7 @@ class TemporalDerivativeDeterministicPolicy(Policy):
 
     threshold: float = 1e-6
     cast_right_first: bool = True
+    alternate_cast: bool = True  # if False, always turn RIGHT on negative derivative
 
     def __post_init__(self) -> None:
         self._actions = OrientedGridActions()
@@ -61,9 +62,15 @@ class TemporalDerivativeDeterministicPolicy(Policy):
             action = 0  # FORWARD
             self._prev_moving = c
         else:
-            # Deterministic alternating cast direction
-            action = 2 if self._cast_right_next else 1  # RIGHT then LEFT alternating
-            self._cast_right_next = not self._cast_right_next
+            if self.alternate_cast:
+                # Deterministic alternating cast direction
+                action = (
+                    2 if self._cast_right_next else 1
+                )  # RIGHT then LEFT alternating
+                self._cast_right_next = not self._cast_right_next
+            else:
+                # Pure greedy: always turn RIGHT when dC < 0
+                action = 2
 
         self._last_action = action
         return action

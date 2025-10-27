@@ -16,6 +16,8 @@ def build_env(spec: SimulationSpec):
     kwargs: dict[str, Any] = {}
     if spec.grid_size is not None:
         kwargs["grid_size"] = tuple(spec.grid_size)
+    if spec.start_location is not None:
+        kwargs["start_location"] = tuple(spec.start_location)
     if spec.goal_radius is not None:
         kwargs["goal_radius"] = float(spec.goal_radius)
     if spec.plume_sigma is not None:
@@ -64,6 +66,12 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             from plume_nav_sim.policies import TemporalDerivativePolicy
 
             return TemporalDerivativePolicy(**policy_spec.kwargs)
+        if name == "greedy_td":
+            from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
+
+            params = dict(policy_spec.kwargs)
+            params.setdefault("alternate_cast", False)
+            return TemporalDerivativeDeterministicPolicy(**params)
         if name == "random":
             if env is None:
                 raise ValueError("'random' builtin policy requires env to be provided")
