@@ -29,6 +29,9 @@ class RunTumbleTemporalDerivativePolicy(Policy):
     """
 
     threshold: float = 1e-6
+    eps: float = (
+        0.0  # base stochasticity: with probability eps, ignore dc and pick random action
+    )
     eps_seed: Optional[int] = None
 
     def __post_init__(self) -> None:
@@ -62,8 +65,11 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         if dc >= self.threshold:
             a = 0  # RUN -> FORWARD
         else:
-            # TUMBLE: one-step random turn; encoded as action=1 for run-tumble actions
-            a = 1
+            a = 1  # TUMBLE: one-step orientation reset + forward
+
+        # Inject base stochasticity: occasionally ignore dc-based decision
+        if self.eps > 0.0 and self._rng.random() < self.eps:
+            a = int(self._rng.integers(0, 2))
 
         self._last_c = c
         return a

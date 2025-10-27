@@ -36,3 +36,8 @@ install-qt:
 # Run the debugger from source without packaging (uses PYTHONPATH)
 debugger:
 	PYTHONPATH=src conda run -n $(ENV_NAME) python -m plume_nav_debugger.app
+
+.PHONY: nb-clean
+# Strip outputs/exec counts from notebooks in-place for clean commits
+nb-clean:
+	python src/backend/scripts/strip_notebook_outputs.py notebooks/*.ipynb

@@ -9,6 +9,7 @@ BuiltinPolicyName = Literal[
     "stochastic_td",
     "greedy_td",
     "run_tumble_td",
+    "stochastic_run_tumble_td",
     "random",
 ]
 

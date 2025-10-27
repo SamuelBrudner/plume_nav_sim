@@ -86,6 +86,14 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             )
 
             return RunTumbleTemporalDerivativePolicy(**policy_spec.kwargs)
+        if name == "stochastic_run_tumble_td":
+            from plume_nav_sim.policies.run_tumble_td import (
+                RunTumbleTemporalDerivativePolicy,
+            )
+
+            params = dict(policy_spec.kwargs)
+            params.setdefault("eps", 0.05)
+            return RunTumbleTemporalDerivativePolicy(**params)
         if name == "random":
             if env is None:
                 raise ValueError("'random' builtin policy requires env to be provided")

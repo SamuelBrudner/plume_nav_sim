@@ -24,6 +24,28 @@ ci:
   skip: []
 
 repos:
+  # Ensure Jupyter notebooks are clean in commits (strip outputs/exec counts)
+  - repo: local
+    hooks:
+      - id: nb-clean
+        name: Strip Jupyter notebook outputs
+        description: Remove outputs and execution counts from .ipynb files
+        entry: bash
+        language: system
+        files: '\\.(ipynb)$'
+        pass_filenames: true
+        args: ['-lc', 'python3 src/backend/scripts/strip_notebook_outputs.py "$@"']
+
+  # Optional: Use nbstripout when available (CI/devs with pre-commit network)
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+        name: nbstripout (strip Notebook outputs)
+        files: '\\.(ipynb)$'
+        types: [file]
+        additional_dependencies: []
+
   # Ruff: fast linter and formatter (complements/optionally replaces flake8 + black)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.3

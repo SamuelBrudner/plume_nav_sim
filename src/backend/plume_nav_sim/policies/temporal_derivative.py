@@ -37,7 +37,7 @@ class TemporalDerivativePolicy(Policy):
     def __post_init__(self) -> None:
         self._rng = np.random.default_rng(self.eps_seed)
         self._actions = OrientedGridActions()
-        self._prev_moving: Optional[float] = None
+        self._last_c: Optional[float] = None
         self._last_action: Optional[int] = None
 
     # Policy protocol -----------------------------------------------------
@@ -48,45 +48,40 @@ class TemporalDerivativePolicy(Policy):
     def reset(self, *, seed: int | None = None) -> None:
         if seed is not None:
             self._rng = np.random.default_rng(seed)
-        self._prev_moving = None
+        self._last_c = None
         self._last_action = None
 
     def select_action(self, observation: np.ndarray, *, explore: bool = True) -> int:
         c = float(observation[0])
 
-        # First step: move forward to obtain moving sample
-        if self._prev_moving is None:
-            self._prev_moving = c
-            self._last_action = 0  # FORWARD
-            return 0
-
-        # After a TURN, force a FORWARD probe to avoid spinning on zero dC
-        if self._last_action in (1, 2):  # TURN_LEFT or TURN_RIGHT
-            # optional small exploration here
-            if explore and self._rng.random() < self.eps_after_turn:
-                return self._sample_explore(after_turn=True)
+        # Initialize reference on first call
+        if self._last_c is None:
+            self._last_c = c
             self._last_action = 0
             return 0
 
-        # Greedy decision based on temporal derivative
-        dc = c - self._prev_moving
-        if dc >= self.threshold:
-            action = 0  # Deterministic forward when improving
-        else:
-            if self.uniform_random_on_non_increase:
-                # Uniform among all actions when non-increasing
-                action = int(self._rng.integers(0, 3))
+        # Compute dc identically every step
+        dc = c - self._last_c
+
+        # After a TURN, force a FORWARD probe (optionally explore)
+        if self._last_action in (1, 2):
+            if explore and self._rng.random() < self.eps_after_turn:
+                action = self._sample_explore(after_turn=True)
             else:
-                # Default: alternate casting direction stochastically
-                action = int(1 + (self._rng.random() < 0.5))  # 1 or 2
-            # Optional additional exploration on top (off by default)
-            if explore and self._rng.random() < self.eps:
-                action = self._sample_explore()
+                action = 0
+        else:
+            if dc >= self.threshold:
+                action = 0
+            else:
+                if self.uniform_random_on_non_increase:
+                    action = int(self._rng.integers(0, 3))
+                else:
+                    action = 1 if self._rng.random() < 0.5 else 2
+                if explore and self._rng.random() < self.eps:
+                    action = self._sample_explore()
 
-        # Update memory only when moving forward
-        if action == 0:
-            self._prev_moving = c
-
+        # Update reference and last action
+        self._last_c = c
         self._last_action = action
         return action
 
