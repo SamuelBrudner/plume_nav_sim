@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 @dataclass
 class LoadedPolicy:
+    """Container for a loaded policy object and its spec string."""
+
     obj: Any
     spec: str
 
@@ -98,6 +100,15 @@ def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
 
 
 def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
+    """Call `reset(seed=...)` on policy-like objects when available.
+
+    Parameters
+    ----------
+    obj
+        Policy object that may define a `reset(seed=...)` method.
+    seed
+        Seed to pass to the reset method.
+    """
     try:
         obj.reset(seed=seed)  # type: ignore[attr-defined]
     except Exception:

@@ -20,6 +20,12 @@ from plume_nav_sim.core.state import AgentState
 
 
 class OrientedRunTumbleActions:
+    """Oriented 2-action processor implementing RUN/TUMBLE semantics.
+
+    - RUN keeps the current heading and advances one step.
+    - TUMBLE samples a uniform new heading in [0, 360) and then advances.
+    """
+
     def __init__(self, step_size: int = 1):
         if step_size <= 0:
             raise ValueError(f"step_size must be positive, got {step_size}")

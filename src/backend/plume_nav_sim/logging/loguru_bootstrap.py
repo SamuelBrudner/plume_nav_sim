@@ -81,6 +81,13 @@ def _bridge_stdlib(level: str = "INFO") -> None:
 
 
 def get_logger():  # pragma: no cover - trivial accessor
+    """Return the configured loguru logger instance.
+
+    Raises
+    ------
+    ImportError
+        If loguru is not installed/available.
+    """
     if _logger is None:
         raise ImportError("loguru is not installed.")
     return _logger

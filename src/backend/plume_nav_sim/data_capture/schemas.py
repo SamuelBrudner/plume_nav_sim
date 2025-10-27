@@ -9,6 +9,8 @@ SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
 class RunMeta(BaseModel):
+    """Metadata describing a run and its environment/configuration."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = Field(default=SCHEMA_VERSION)
@@ -27,6 +29,8 @@ class RunMeta(BaseModel):
 
     # System metadata for provenance
     class SystemInfo(BaseModel):
+        """Host and runtime information captured for provenance."""
+
         model_config = ConfigDict(extra="forbid", frozen=True)
         hostname: Optional[str] = None
         platform: Optional[str] = None
@@ -45,12 +49,16 @@ class RunMeta(BaseModel):
 
 
 class Position(BaseModel):
+    """2D integer grid coordinate."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     x: int
     y: int
 
 
 class StepRecord(BaseModel):
+    """Per-step event record for analysis and auditing."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = Field(default=SCHEMA_VERSION)
@@ -77,6 +85,8 @@ class StepRecord(BaseModel):
 
 
 class EpisodeRecord(BaseModel):
+    """Summary of an episode with totals and final state."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = Field(default=SCHEMA_VERSION)
