@@ -67,11 +67,14 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
 
             return TemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "greedy_td":
-            from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
+            # Bacterial-like TD: deterministic forward on dC>=0, random LEFT/RIGHT on dC<0
+            from plume_nav_sim.policies import TemporalDerivativePolicy
 
             params = dict(policy_spec.kwargs)
-            params.setdefault("alternate_cast", False)
-            return TemporalDerivativeDeterministicPolicy(**params)
+            params.setdefault("eps", 0.0)
+            params.setdefault("eps_after_turn", 0.0)
+            params.setdefault("eps_greedy_forward_bias", 0.0)
+            return TemporalDerivativePolicy(**params)
         if name == "random":
             if env is None:
                 raise ValueError("'random' builtin policy requires env to be provided")

@@ -251,6 +251,7 @@ class ControlBar(QtWidgets.QWidget):
         self.policy_combo = QtWidgets.QComboBox()
         self.policy_combo.addItems(
             [
+                "Greedy TD (bacterial)",
                 "Stochastic TD",
                 "Deterministic TD",
                 "Random Sampler",
@@ -391,7 +392,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Map combo index to built-in policies
         label = self.controls.policy_combo.itemText(idx)
         try:
-            if label == "Deterministic TD":
+            if label == "Greedy TD (bacterial)":
+                from plume_nav_sim.policies import TemporalDerivativePolicy
+
+                policy = TemporalDerivativePolicy(eps=0.0, eps_after_turn=0.0)
+                self.driver.set_policy(policy, seed=self._current_seed_value())
+                self.statusBar().showMessage(
+                    "Loaded Greedy TD (bacterial) policy", 1500
+                )
+            elif label == "Deterministic TD":
                 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 
                 policy = TemporalDerivativeDeterministicPolicy()
