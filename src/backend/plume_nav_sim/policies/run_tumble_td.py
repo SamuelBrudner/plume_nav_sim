@@ -62,8 +62,8 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         if dc >= self.threshold:
             a = 0  # RUN -> FORWARD
         else:
-            # TUMBLE: one-step random turn
-            a = 1 if self._rng.random() < 0.5 else 2
+            # TUMBLE: one-step random turn; encoded as action=1 for run-tumble actions
+            a = 1
 
         self._last_c = c
         return a

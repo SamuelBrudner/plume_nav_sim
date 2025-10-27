@@ -248,6 +248,13 @@ class ComponentBasedEnvironment(gym.Env):
         # Contract: environment_state_machine.md - C1
         self._state = EnvironmentState.READY
 
+        # If action processor accepts RNG, provide episode RNG for deterministic actions
+        if hasattr(self._action_processor, "set_rng"):
+            try:
+                self._action_processor.set_rng(self._rng)
+            except Exception:
+                pass
+
         # Generate initial observation
         env_state = self._build_env_state_dict()
         observation = self._observation_model.get_observation(env_state)

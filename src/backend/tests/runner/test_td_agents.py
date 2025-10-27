@@ -11,14 +11,14 @@ from plume_nav_sim.policies.run_tumble_td import RunTumbleTemporalDerivativePoli
 from plume_nav_sim.runner import runner as r
 
 
-def _env(*, rgb: bool = False):
+def _env(*, rgb: bool = False, action_type: str = "oriented"):
     return pns.make_env(
         grid_size=(32, 32),
         source_location=(24, 24),
         start_location=(4, 28),
         max_steps=200,
         render_mode=("rgb_array" if rgb else None),
-        action_type="oriented",
+        action_type=action_type,
         observation_type="concentration",
         reward_type="step_penalty",
     )
@@ -26,7 +26,7 @@ def _env(*, rgb: bool = False):
 
 def test_td_deterministic_stream_probe_and_dc_rule():
     seed = 123
-    env = _env(rgb=False)
+    env = _env(rgb=False, action_type="run_tumble")
     try:
         policy = TemporalDerivativeDeterministicPolicy(
             threshold=1e-6, alternate_cast=True
