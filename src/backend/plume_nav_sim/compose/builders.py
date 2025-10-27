@@ -114,5 +114,38 @@ def prepare(sim: SimulationSpec) -> Tuple[Any, Any]:
     """
     env = build_env(sim)
     policy = build_policy(sim.policy, env=env)
+
+    # If action spaces are Discrete and mismatch, try to infer a compatible
+    # action_type from the builtin policy when the spec didn't set one.
+    try:
+        from gymnasium.spaces import Discrete  # type: ignore
+
+        if (
+            getattr(sim, "action_type", None) in (None, "")
+            and hasattr(env, "action_space")
+            and hasattr(policy, "action_space")
+            and isinstance(env.action_space, Discrete)
+            and isinstance(policy.action_space, Discrete)
+            and int(env.action_space.n) != int(policy.action_space.n)
+        ):
+            inferred: Optional[str] = None
+            if sim.policy and sim.policy.builtin:
+                if sim.policy.builtin in {
+                    "deterministic_td",
+                    "stochastic_td",
+                    "greedy_td",
+                }:
+                    inferred = "oriented"
+                elif sim.policy.builtin in {
+                    "run_tumble_td",
+                    "stochastic_run_tumble_td",
+                }:
+                    inferred = "run_tumble"
+            if inferred:
+                sim2 = sim.model_copy(update={"action_type": inferred})
+                env = build_env(sim2)
+    except Exception:
+        # Be tolerant if gymnasium isn't importable at compose-time
+        pass
     reset_policy_if_possible(policy, seed=sim.seed)
     return env, policy
