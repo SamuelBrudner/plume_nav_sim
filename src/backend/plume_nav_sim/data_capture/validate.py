@@ -38,6 +38,19 @@ def _flatten_steps(rows: List[dict]):
         if isinstance(pos, dict):
             rp["agent_x"] = pos.get("x")
             rp["agent_y"] = pos.get("y")
+        # Provide conservative defaults for missing fields (tolerant validation)
+        rp.setdefault("distance_to_goal", 0.0)
+        rp.setdefault("terminated", False)
+        rp.setdefault("truncated", False)
+        if "schema_version" not in rp:
+            try:
+                from .schemas import (  # local import to avoid heavy deps at import time
+                    SCHEMA_VERSION,
+                )
+
+                rp["schema_version"] = SCHEMA_VERSION
+            except Exception:
+                rp["schema_version"] = "1.0.0"
         flat.append(rp)
     # Construct DataFrame lazily to avoid import cost at module import time
     import pandas as pd  # type: ignore
@@ -55,6 +68,14 @@ def _flatten_episodes(rows: List[dict]):
         if isinstance(pos, dict):
             rp["final_x"] = pos.get("x")
             rp["final_y"] = pos.get("y")
+        # Defaults for robustness
+        if "schema_version" not in rp:
+            try:
+                from .schemas import SCHEMA_VERSION
+
+                rp["schema_version"] = SCHEMA_VERSION
+            except Exception:
+                rp["schema_version"] = "1.0.0"
         flat.append(rp)
     import pandas as pd  # type: ignore
 

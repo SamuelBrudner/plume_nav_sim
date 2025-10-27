@@ -38,6 +38,7 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         self._actions = OrientedGridActions()
         self._rng = np.random.default_rng(self.eps_seed)
         self._last_c: Optional[float] = None
+        self._last_action: Optional[int] = None
 
     # Policy protocol -----------------------------------------------------
     @property
@@ -48,6 +49,7 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
         self._last_c = None
+        self._last_action = None
 
     def select_action(
         self, observation: np.ndarray, *, explore: bool = False
@@ -57,19 +59,26 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         # Initialize reference and start by moving forward
         if self._last_c is None:
             self._last_c = c
+            self._last_action = 0
             return 0
 
         # Compute dc identically every step
         dc = c - self._last_c
 
-        if dc >= self.threshold:
-            a = 0  # RUN -> FORWARD
+        # Probe-after-turn gating: after any TURN, issue a forward probe
+        if self._last_action in (1, 2):
+            a = 0
         else:
-            a = 1  # TUMBLE: one-step orientation reset + forward
+            if dc >= self.threshold:
+                a = 0  # RUN -> FORWARD
+            else:
+                # TUMBLE: choose a single TURN (LEFT=1 or RIGHT=2) uniformly
+                a = int(self._rng.integers(1, 3))
 
         # Inject base stochasticity: occasionally ignore dc-based decision
         if self.eps > 0.0 and self._rng.random() < self.eps:
             a = int(self._rng.integers(0, 2))
 
         self._last_c = c
+        self._last_action = a
         return a
