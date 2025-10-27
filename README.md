@@ -56,6 +56,33 @@ Validate the install:
 python -c "import plume_nav_sim as pns; pns.make_env()"
 ```
 
+### Debugger (Qt MVP)
+
+A minimal Qt debugger is available for stepping the environment and viewing RGB frames.
+
+- Install Qt toolkit into your conda env:
+
+```bash
+make install-qt ENV_NAME=plume-nav-sim
+```
+
+- Run the debugger from source (uses `PYTHONPATH=src`):
+
+```bash
+make debugger ENV_NAME=plume-nav-sim
+```
+
+Controls:
+- Start/Pause, Step, Reset with seed; adjust interval (ms)
+- Keyboard: Space (toggle run), N (step), R (reset)
+
+Policies:
+- Built-ins: Stochastic TD, Deterministic TD, Random Sampler
+- Custom: enter `module:ClassOrCallable` (or `module.sub.Class`) and click Load
+  - Contract: either implement `select_action(obs, explore=False)` (preferred) or be a simple callable `policy(obs) -> action`
+  - Optional: `reset(seed=...)` will be called if provided
+
+
 ### Jupyter notebooks (interactive plots)
 
 If you plan to run the example notebooks or want interactive Matplotlib widgets inside Jupyter, install the notebooks extra which includes ipympl:
@@ -166,5 +193,75 @@ MIT License. See [LICENSE](LICENSE).
 ```
 
 ---
+
+Operational logging vs. data capture
+
+- Use loguru for operational, human-readable logs (console/file). Keep it separate from analysis data capture.
+- Enable loguru sinks and stdlib bridge:
+
+```python
+from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+
+setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
+```
+
+- Use the data capture pipeline for analysis-ready data (JSONL.gz schemas, optional Parquet export). See backend README for details.
+
+Data capture dependencies
+
+- Install the optional data extras to enable fast JSONL, Pandera validation, and Parquet export:
+
+```bash
+pip install -e .[data]
+```
+
+This pulls in:
+- orjson (faster JSON serialization for JSONL)
+- pandas + pandera (batch validation of captured data)
+- pyarrow (optional Parquet export)
+
+Notes:
+- JSONL.gz capture works without extras; extras are needed for validation/parquet.
+- Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
+
+Validation and Parquet examples
+
+- Validate captured artifacts with Pandera (end-of-run):
+
+```python
+from pathlib import Path
+from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+run_dir = Path("results/demo/<run_id>")
+report = validate_run_artifacts(run_dir)
+print(report)  # {"steps": {"ok": True, "rows": N}, "episodes": {"ok": True, "rows": M}}
+```
+
+- Load JSONL.gz into pandas and export to Parquet:
+
+```python
+import pandas as pd
+
+# Read JSONL.gz (newline-delimited JSON)
+steps_df = pd.read_json(run_dir / "steps.jsonl.gz", lines=True, compression="gzip")
+episodes_df = pd.read_json(run_dir / "episodes.jsonl.gz", lines=True, compression="gzip")
+
+# Export to Parquet (requires pyarrow)
+steps_df.to_parquet(run_dir / "steps.parquet", index=False)
+episodes_df.to_parquet(run_dir / "episodes.parquet", index=False)
+
+# Read Parquet back
+df = pd.read_parquet(run_dir / "steps.parquet")
+```
+
+- Or let the recorder/CLI write Parquet at end-of-run:
+
+```bash
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
+```
+
+Schema reference
+
+- See detailed field definitions and evolution policy in `src/backend/docs/data_capture_schemas.md`.
 
 Questions or ideas? Open an issue or start a discussion at <https://github.com/plume-nav-sim/plume_nav_sim>.
