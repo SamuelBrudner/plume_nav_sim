@@ -153,24 +153,29 @@ def test_run_tumble_td_behavior_sequences():
     try:
         policy = RunTumbleTemporalDerivativePolicy(threshold=1e-6, eps_seed=seed)
 
-        # Collect a few actions and ensure that on non-increase we enqueue turns then forward
         last_c = None
         last_a = None
-        saw_tumble_sequence = False
+        saw_tumble = False
         for ev in r.stream(env, policy, seed=seed, render=False):
             c = float(ev.obs[0])
             if last_c is None:
                 last_c = c
             else:
                 dc = c - last_c
-                if last_a not in (1, 2):  # only check decisions (not mid-tumble)
+                if last_a not in (1, 2):
                     if dc < 1e-6:
-                        # Next few steps should include 1..3 turns then a forward
-                        saw_tumble_sequence = True
+                        # Tumble should be a single TURN step
+                        assert ev.action in (1, 2)
+                        saw_tumble = True
+                    else:
+                        assert ev.action == 0
+                else:
+                    # After a TURN, probe forward
+                    assert ev.action == 0
                 last_c = c
             last_a = int(ev.action)
             if ev.terminated or ev.truncated:
                 break
-        assert saw_tumble_sequence
+        assert saw_tumble
     finally:
         env.close()

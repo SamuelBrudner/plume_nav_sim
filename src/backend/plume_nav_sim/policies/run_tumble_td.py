@@ -16,12 +16,11 @@ class RunTumbleTemporalDerivativePolicy(Policy):
 
     Semantics:
     - Always compute dc = c_now - last_c identically every step.
-    - If a tumble is in progress, output the next queued action (one or more turns
-      followed by a forward probe) until the queue is empty.
-    - Otherwise:
+    - One-step tumble: no action queue.
+    - Decision:
         * If dc >= threshold: RUN → FORWARD
-        * If dc < threshold: TUMBLE → choose a new heading at random by scheduling
-          1–3 quarter-turns in a random direction, then a FORWARD probe.
+        * If dc < threshold: TUMBLE → single random TURN (LEFT or RIGHT). The
+          next step will naturally be a FORWARD probe in consumer logic.
 
     Notes:
     - This policy uses only the 1-D concentration observation; it does not require
@@ -36,9 +35,6 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         self._actions = OrientedGridActions()
         self._rng = np.random.default_rng(self.eps_seed)
         self._last_c: Optional[float] = None
-        self._pending: list[int] = (
-            []
-        )  # queued oriented actions (1=LEFT, 2=RIGHT, 0=FWD)
 
     # Policy protocol -----------------------------------------------------
     @property
@@ -49,7 +45,6 @@ class RunTumbleTemporalDerivativePolicy(Policy):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
         self._last_c = None
-        self._pending.clear()
 
     def select_action(
         self, observation: np.ndarray, *, explore: bool = False
@@ -61,23 +56,14 @@ class RunTumbleTemporalDerivativePolicy(Policy):
             self._last_c = c
             return 0
 
-        # If a tumble is in progress, continue it
-        if self._pending:
-            a = int(self._pending.pop(0))
-            self._last_c = c
-            return a
-
         # Compute dc identically every step
         dc = c - self._last_c
 
         if dc >= self.threshold:
             a = 0  # RUN -> FORWARD
         else:
-            # TUMBLE: pick a random new heading via k quarter-turns and then forward.
-            k = int(self._rng.integers(1, 4))  # 1..3 turns
-            turn = 1 if self._rng.random() < 0.5 else 2  # LEFT or RIGHT
-            self._pending = [turn] * k + [0]
-            a = int(self._pending.pop(0))
+            # TUMBLE: one-step random turn
+            a = 1 if self._rng.random() < 0.5 else 2
 
         self._last_c = c
         return a
