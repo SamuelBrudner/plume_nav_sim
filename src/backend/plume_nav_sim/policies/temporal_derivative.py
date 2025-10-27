@@ -61,6 +61,8 @@ class TemporalDerivativePolicy(Policy):
             # optional small exploration here
             if explore and self._rng.random() < self.eps_after_turn:
                 return self._sample_explore(after_turn=True)
+            # Update moving reference with current reading before probing forward
+            self._prev_moving = c
             self._last_action = 0
             return 0
 

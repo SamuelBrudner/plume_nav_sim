@@ -49,6 +49,9 @@ class TemporalDerivativeDeterministicPolicy(Policy):
 
         # After a TURN, force a FORWARD probe to avoid spinning on zero dC
         if self._last_action in (1, 2):
+            # Update moving reference with current reading before the probe
+            # so next step compares against the forward move we are about to take.
+            self._prev_moving = c
             self._last_action = 0
             return 0
 
