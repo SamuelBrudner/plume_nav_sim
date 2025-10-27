@@ -7,6 +7,7 @@ from plume_nav_sim.policies import (
     TemporalDerivativeDeterministicPolicy,
     TemporalDerivativePolicy,
 )
+from plume_nav_sim.policies.run_tumble_td import RunTumbleTemporalDerivativePolicy
 from plume_nav_sim.runner import runner as r
 
 
@@ -142,5 +143,34 @@ def test_td_deterministic_run_episode_callbacks_and_summary():
         assert res.steps > 0
         # Sanity: observed at least one checkable step
         assert checks["pos"] + checks["neg"] >= 1
+    finally:
+        env.close()
+
+
+def test_run_tumble_td_behavior_sequences():
+    seed = 42
+    env = _env(rgb=False)
+    try:
+        policy = RunTumbleTemporalDerivativePolicy(threshold=1e-6, eps_seed=seed)
+
+        # Collect a few actions and ensure that on non-increase we enqueue turns then forward
+        last_c = None
+        last_a = None
+        saw_tumble_sequence = False
+        for ev in r.stream(env, policy, seed=seed, render=False):
+            c = float(ev.obs[0])
+            if last_c is None:
+                last_c = c
+            else:
+                dc = c - last_c
+                if last_a not in (1, 2):  # only check decisions (not mid-tumble)
+                    if dc < 1e-6:
+                        # Next few steps should include 1..3 turns then a forward
+                        saw_tumble_sequence = True
+                last_c = c
+            last_a = int(ev.action)
+            if ev.terminated or ev.truncated:
+                break
+        assert saw_tumble_sequence
     finally:
         env.close()

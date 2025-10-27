@@ -80,6 +80,12 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             # Uniform over all actions when non-increasing
             params["uniform_random_on_non_increase"] = True
             return TemporalDerivativePolicy(**params)
+        if name == "run_tumble_td":
+            from plume_nav_sim.policies.run_tumble_td import (
+                RunTumbleTemporalDerivativePolicy,
+            )
+
+            return RunTumbleTemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "random":
             if env is None:
                 raise ValueError("'random' builtin policy requires env to be provided")

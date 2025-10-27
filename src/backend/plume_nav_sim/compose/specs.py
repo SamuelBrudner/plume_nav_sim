@@ -4,7 +4,13 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
-BuiltinPolicyName = Literal["deterministic_td", "stochastic_td", "greedy_td", "random"]
+BuiltinPolicyName = Literal[
+    "deterministic_td",
+    "stochastic_td",
+    "greedy_td",
+    "run_tumble_td",
+    "random",
+]
 
 
 class PolicySpec(BaseModel):
