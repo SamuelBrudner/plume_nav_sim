@@ -99,11 +99,21 @@ notebooks = [
     "ipympl>=0.9",
     "ipywidgets>=8.0.0"
 ]
+data = [
+    "orjson>=3.9.0",
+    "pandas>=2.2.0; python_version>='3.10'",
+    "pyarrow>=14.0.0; python_version>='3.10'",
+    "pandera>=0.18.0",
+]
+ops = [
+    "loguru>=0.7.0",
+]
 
 [project.scripts]
 plume-nav-validate = "plume_nav_sim.scripts:validate_installation"
 plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
 plume-nav-constants-check = "scripts.validate_constants_drift:main"
+plume-nav-capture = "plume_nav_sim.cli.capture:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
