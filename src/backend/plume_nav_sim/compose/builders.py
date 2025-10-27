@@ -70,15 +70,15 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             return TemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "greedy_td":
             # Bacterial-like TD: deterministic forward on dC>=0,
-            # random TURN_LEFT/RIGHT (50/50) when dC<=0
+            # uniform random among all actions when dC<=0 (diffusion)
             from plume_nav_sim.policies import TemporalDerivativePolicy
 
             params = dict(policy_spec.kwargs)
             params.setdefault("eps", 0.0)
             params.setdefault("eps_after_turn", 0.0)
             params.setdefault("eps_greedy_forward_bias", 0.0)
-            # Ensure turn-only randomness on non-increase
-            params["uniform_random_on_non_increase"] = False
+            # Uniform over all actions when non-increasing
+            params["uniform_random_on_non_increase"] = True
             return TemporalDerivativePolicy(**params)
         if name == "random":
             if env is None:
