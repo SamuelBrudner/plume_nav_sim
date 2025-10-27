@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional, Tuple
 
 import plume_nav_sim as pns
+from plume_nav_sim.utils.spaces import is_space_subset
 
 from .policy_loader import load_policy, reset_policy_if_possible
 from .specs import PolicySpec, SimulationSpec
@@ -114,21 +115,13 @@ def prepare(sim: SimulationSpec) -> Tuple[Any, Any]:
     """
     env = build_env(sim)
     policy = build_policy(sim.policy, env=env)
-    # Minimal composition-time compatibility check: if both action spaces are
-    # Discrete, require policy.n <= env.n (subset). Runner enforces stricter
-    # identity later.
-    try:
-        from gymnasium.spaces import Discrete  # type: ignore
-
-        env_space = getattr(env, "action_space", None)
-        pol_space = getattr(policy, "action_space", None)
-        if isinstance(env_space, Discrete) and isinstance(pol_space, Discrete):
-            if int(pol_space.n) > int(env_space.n):
-                raise ValueError(
-                    "Policy action space must be subset of env action space: "
-                    f"policy Discrete({int(pol_space.n)}) > env Discrete({int(env_space.n)})"
-                )
-    except Exception:
-        pass
+    # Composition-time subset check (structural, supports common spaces)
+    env_space = getattr(env, "action_space", None)
+    pol_space = getattr(policy, "action_space", None)
+    if env_space is not None and pol_space is not None:
+        if not is_space_subset(pol_space, env_space):
+            raise ValueError(
+                "Policy action space must be a subset of the environment's action space"
+            )
     reset_policy_if_possible(policy, seed=sim.seed)
     return env, policy

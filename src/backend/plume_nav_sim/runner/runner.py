@@ -5,6 +5,8 @@ from typing import Any, Callable, Iterator, Optional, Protocol
 
 import numpy as np
 
+from plume_nav_sim.utils.spaces import is_space_subset
+
 
 class _PolicyLike(Protocol):  # minimal protocol to support tests
     def reset(self, *, seed: int | None = None) -> None:
@@ -86,24 +88,14 @@ def _ensure_action_space_compat(env: Any, policy: Any) -> None:
 
     Currently supports Discrete spaces; raises ValueError on mismatch.
     """
-    try:
-        import gymnasium as gym  # type: ignore
-        from gymnasium.spaces import Discrete  # type: ignore
-    except Exception:  # pragma: no cover
-        return  # If gym not available, skip compatibility check
-
     env_space = getattr(env, "action_space", None)
     pol_space = getattr(policy, "action_space", None)
     if env_space is None or pol_space is None:
         return
-    # Only enforce for Discrete spaces where sizes must match
-    if isinstance(env_space, Discrete) and isinstance(pol_space, Discrete):
-        # Require subset at runtime: policy.n must not exceed env.n
-        if int(pol_space.n) > int(env_space.n):
-            raise ValueError(
-                "Policy action space must be subset of env action space: "
-                f"policy Discrete({int(pol_space.n)}) > env Discrete({int(env_space.n)})"
-            )
+    if not is_space_subset(pol_space, env_space):
+        raise ValueError(
+            "Policy action space must be a subset of the environment's action space"
+        )
 
 
 def run_episode(

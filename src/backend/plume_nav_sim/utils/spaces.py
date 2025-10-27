@@ -68,6 +68,7 @@ __all__ = [
     "sample_valid_observation",
     "check_space_compatibility",
     "optimize_space_operations",
+    "is_space_subset",
 ]
 
 # Initialize component logger for space operations and validation monitoring
@@ -99,6 +100,82 @@ def create_action_space(
         return _create_action_space_impl(num_actions, validate_actions, space_config)
 
     return _create_action_space_cached(num_actions, validate_actions)
+
+
+def is_space_subset(
+    policy_space: gymnasium.spaces.Space, env_space: gymnasium.spaces.Space
+) -> bool:
+    """Check if policy_space is a subset of env_space (structural, no sampling).
+
+    Supports common Gymnasium spaces:
+    - Discrete: policy.n <= env.n
+    - MultiDiscrete: elementwise nvec <= nvec
+    - MultiBinary: policy.n <= env.n
+    - Box: same shape and bounds within env [low, high]
+    - Tuple: same length and pairwise subset
+    - Dict: policy keys subset of env keys and pairwise subset per key
+    """
+    # Trivial identity
+    if policy_space is env_space:
+        return True
+
+    # Discrete
+    if isinstance(policy_space, gymnasium.spaces.Discrete) and isinstance(
+        env_space, gymnasium.spaces.Discrete
+    ):
+        return int(policy_space.n) <= int(env_space.n)
+
+    # MultiDiscrete
+    if isinstance(policy_space, gymnasium.spaces.MultiDiscrete) and isinstance(
+        env_space, gymnasium.spaces.MultiDiscrete
+    ):
+        p = np.asarray(policy_space.nvec, dtype=np.int64)
+        e = np.asarray(env_space.nvec, dtype=np.int64)
+        return p.shape == e.shape and np.all(p <= e)
+
+    # MultiBinary
+    if isinstance(policy_space, gymnasium.spaces.MultiBinary) and isinstance(
+        env_space, gymnasium.spaces.MultiBinary
+    ):
+        return int(policy_space.n) <= int(env_space.n)
+
+    # Box (require identical shapes and tighter/equal bounds)
+    if isinstance(policy_space, gymnasium.spaces.Box) and isinstance(
+        env_space, gymnasium.spaces.Box
+    ):
+        if tuple(policy_space.shape) != tuple(env_space.shape):
+            return False
+        p_low = np.asarray(policy_space.low)
+        p_high = np.asarray(policy_space.high)
+        e_low = np.asarray(env_space.low)
+        e_high = np.asarray(env_space.high)
+        return bool(np.all(p_low >= e_low) and np.all(p_high <= e_high))
+
+    # Tuple
+    if isinstance(policy_space, gymnasium.spaces.Tuple) and isinstance(
+        env_space, gymnasium.spaces.Tuple
+    ):
+        if len(policy_space.spaces) != len(env_space.spaces):
+            return False
+        return all(
+            is_space_subset(ps, es)
+            for ps, es in zip(policy_space.spaces, env_space.spaces)
+        )
+
+    # Dict
+    if isinstance(policy_space, gymnasium.spaces.Dict) and isinstance(
+        env_space, gymnasium.spaces.Dict
+    ):
+        p_keys = set(policy_space.spaces.keys())
+        e_keys = set(env_space.spaces.keys())
+        if not p_keys.issubset(e_keys):
+            return False
+        return all(
+            is_space_subset(policy_space.spaces[k], env_space.spaces[k]) for k in p_keys
+        )
+
+    # Unknown space types: be conservative
+    return False
 
 
 @functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
