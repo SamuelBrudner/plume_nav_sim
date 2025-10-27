@@ -737,6 +737,95 @@ This project builds upon the excellent work of the scientific Python ecosystem:
 
 ---
 
+## 📑 Operational Logging vs Data Capture
+
+- Use loguru for operational, human-readable logs (console/file). Configure it independently of data capture.
+
+```python
+from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
+```
+
+- Use the data capture pipeline for analysis-ready data (validated JSONL.gz, optional Parquet export).
+
+Quick start (data capture):
+
+```python
+from plume_nav_sim.data_capture import RunRecorder
+from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.core.types import EnvironmentConfig
+
+env = plume_nav_sim.make_env(action_type="oriented", observation_type="concentration")
+rec = RunRecorder("results", experiment="demo")
+cfg = EnvironmentConfig()
+env = DataCaptureWrapper(env, rec, cfg)
+
+obs, info = env.reset(seed=123)
+for _ in range(100):
+    obs, r, term, trunc, info = env.step(env.action_space.sample())
+    if term or trunc:
+        break
+rec.finalize(export_parquet=False)
+```
+
+### Data Capture Dependencies
+
+- Install optional extras for analysis workflows:
+
+```bash
+pip install -e .[data]
+```
+
+Includes:
+- orjson: fast JSON serialization for JSONL.gz
+- pandas + pandera: DataFrame operations and batch validation
+- pyarrow: Parquet export (optional)
+
+Operational logging extras (separate):
+
+```bash
+pip install -e .[ops]
+```
+
+Parquet export and Pandera validation require the `[data]` extra; JSONL.gz capture works without it.
+
+### Validation and Parquet Examples
+
+- Validate a run’s artifacts:
+
+```python
+from pathlib import Path
+from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+run_dir = Path("results/demo/<run_id>")
+report = validate_run_artifacts(run_dir)
+print(report)
+```
+
+- Load JSONL.gz and export Parquet:
+
+```python
+import pandas as pd
+
+steps_df = pd.read_json(run_dir / "steps.jsonl.gz", lines=True, compression="gzip")
+episodes_df = pd.read_json(run_dir / "episodes.jsonl.gz", lines=True, compression="gzip")
+
+steps_df.to_parquet(run_dir / "steps.parquet", index=False)
+episodes_df.to_parquet(run_dir / "episodes.parquet", index=False)
+```
+
+- Or export Parquet automatically using the CLI:
+
+```bash
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
+```
+
+### Schema Reference
+
+See the detailed field definitions and evolution policy:
+
+- `src/backend/docs/data_capture_schemas.md`
+
 **Ready to start your plume navigation research?** 🧪
 
 ```bash

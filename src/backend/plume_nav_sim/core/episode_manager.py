@@ -1458,8 +1458,10 @@ class EpisodeManager:
 
             # Create initial state snapshot for reproducibility and debugging support
             if self.config.enable_state_validation:
+                # Collect a lightweight snapshot without full consistency validation to avoid
+                # adding overhead to reset in performance-sensitive contexts.
                 initial_snapshot = self.state_manager.create_state_snapshot(
-                    snapshot_name=f"{episode_id}_initial", validate_consistency=True
+                    snapshot_name=f"{episode_id}_initial", validate_consistency=False
                 )
 
                 # Store snapshot in component cache
@@ -1470,7 +1472,7 @@ class EpisodeManager:
             self.performance_metrics.record_timing("episode_reset", reset_duration_ms)
 
             # Log episode reset completion with performance context and episode identification
-            self.logger.info(
+            self.logger.debug(
                 f"Episode {self.episode_count} reset completed in {reset_duration_ms:.2f}ms"
             )
 

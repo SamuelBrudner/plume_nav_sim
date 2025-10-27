@@ -29,6 +29,10 @@ class TemporalDerivativePolicy(Policy):
     )
     eps_seed: Optional[int] = None
     threshold: float = 1e-6
+    # When True, if dC <= threshold, sample uniformly from all actions (0,1,2)
+    # rather than only turning. This models bacterial-like random tumbles that
+    # can include a forward step even without improvement.
+    uniform_random_on_non_increase: bool = False
 
     def __post_init__(self) -> None:
         self._rng = np.random.default_rng(self.eps_seed)
@@ -69,15 +73,17 @@ class TemporalDerivativePolicy(Policy):
         # Greedy decision based on temporal derivative
         dc = c - self._prev_moving
         if dc >= self.threshold:
-            greedy_action = 0  # FORWARD
+            action = 0  # Deterministic forward when improving
         else:
-            # Alternate casting direction stochastically
-            greedy_action = int(1 + (self._rng.random() < 0.5))  # 1 or 2
-
-        if explore and self._rng.random() < self.eps:
-            action = self._sample_explore()
-        else:
-            action = greedy_action
+            if self.uniform_random_on_non_increase:
+                # Uniform among all actions when non-increasing
+                action = int(self._rng.integers(0, 3))
+            else:
+                # Default: alternate casting direction stochastically
+                action = int(1 + (self._rng.random() < 0.5))  # 1 or 2
+            # Optional additional exploration on top (off by default)
+            if explore and self._rng.random() < self.eps:
+                action = self._sample_explore()
 
         # Update memory only when moving forward
         if action == 0:

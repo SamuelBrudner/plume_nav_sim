@@ -953,7 +953,7 @@ class StateManager:
                     "episode_count": self.episode_count,
                 }
 
-                self.logger.info(
+                self.logger.debug(
                     f"Episode {self.episode_count} reset completed in {reset_duration_ms:.2f}ms"
                 )
                 return episode_init_info

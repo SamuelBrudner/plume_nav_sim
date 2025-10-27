@@ -4,7 +4,7 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
-BuiltinPolicyName = Literal["deterministic_td", "stochastic_td", "random"]
+BuiltinPolicyName = Literal["deterministic_td", "stochastic_td", "greedy_td", "random"]
 
 
 class PolicySpec(BaseModel):
@@ -55,6 +55,7 @@ class SimulationSpec(BaseModel):
 
     # Environment parameters (subset; defaults are taken from make_env if None)
     grid_size: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
+    start_location: Optional[Tuple[PositiveInt, PositiveInt]] = Field(default=None)
     goal_radius: Optional[float] = Field(default=None, ge=0.0)
     plume_sigma: Optional[float] = Field(default=None, ge=0.0)
     max_steps: Optional[PositiveInt] = Field(default=None)

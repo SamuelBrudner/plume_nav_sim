@@ -395,7 +395,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if label == "Greedy TD (bacterial)":
                 from plume_nav_sim.policies import TemporalDerivativePolicy
 
-                policy = TemporalDerivativePolicy(eps=0.0, eps_after_turn=0.0)
+                policy = TemporalDerivativePolicy(
+                    eps=0.0, eps_after_turn=0.0, uniform_random_on_non_increase=True
+                )
                 self.driver.set_policy(policy, seed=self._current_seed_value())
                 self.statusBar().showMessage(
                     "Loaded Greedy TD (bacterial) policy", 1500
