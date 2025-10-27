@@ -181,11 +181,11 @@ def test_run_tumble_td_behavior_sequences():
         env.close()
 
 
-def test_policy_env_mismatch_errors():
+def test_policy_env_superset_pair_errors_and_subset_pair_ok():
     import pytest
 
     seed = 1
-    # Oriented policy with run_tumble env should error
+    # Oriented policy (n=3) with run_tumble env (n=2) should error (superset)
     env_rt = _env(rgb=False, action_type="run_tumble")
     try:
         pol_oriented = TemporalDerivativeDeterministicPolicy()
@@ -194,11 +194,13 @@ def test_policy_env_mismatch_errors():
     finally:
         env_rt.close()
 
-    # Run/Tumble policy with oriented env should error
+    # Run/Tumble policy (n=2) with oriented env (n=3) should stream (subset)
     env_or = _env(rgb=False, action_type="oriented")
     try:
         pol_rt = RunTumbleTemporalDerivativePolicy()
-        with pytest.raises(ValueError):
-            _ = next(r.stream(env_or, pol_rt, seed=seed, render=False))
+        events = list(r.stream(env_or, pol_rt, seed=seed, render=False))
+        assert len(events) >= 1
+        for ev in events:
+            assert env_or.action_space.contains(int(ev.action))
     finally:
         env_or.close()

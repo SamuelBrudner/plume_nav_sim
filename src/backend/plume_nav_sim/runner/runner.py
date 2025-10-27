@@ -98,10 +98,11 @@ def _ensure_action_space_compat(env: Any, policy: Any) -> None:
         return
     # Only enforce for Discrete spaces where sizes must match
     if isinstance(env_space, Discrete) and isinstance(pol_space, Discrete):
-        if int(env_space.n) != int(pol_space.n):
+        # Require subset at runtime: policy.n must not exceed env.n
+        if int(pol_space.n) > int(env_space.n):
             raise ValueError(
-                f"Policy/env action_space mismatch: policy Discrete({int(pol_space.n)}) "
-                f"vs env Discrete({int(env_space.n)}). Choose a compatible policy/env pair."
+                "Policy action space must be subset of env action space: "
+                f"policy Discrete({int(pol_space.n)}) > env Discrete({int(env_space.n)})"
             )
 
 
