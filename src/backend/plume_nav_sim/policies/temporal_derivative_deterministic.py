@@ -22,10 +22,11 @@ class TemporalDerivativeDeterministicPolicy(Policy):
 
     threshold: float = 1e-6
     cast_right_first: bool = True
+    alternate_cast: bool = True  # if False, always turn RIGHT on negative derivative
 
     def __post_init__(self) -> None:
         self._actions = OrientedGridActions()
-        self._prev_moving: Optional[float] = None
+        self._last_c: Optional[float] = None
         self._last_action: Optional[int] = None
         self._cast_right_next: bool = self.cast_right_first
 
@@ -34,33 +35,36 @@ class TemporalDerivativeDeterministicPolicy(Policy):
         return self._actions.action_space
 
     def reset(self, *, seed: int | None = None) -> None:
-        self._prev_moving = None
+        self._last_c = None
         self._last_action = None
         self._cast_right_next = self.cast_right_first
 
     def select_action(self, observation: np.ndarray, *, explore: bool = False) -> int:
         c = float(observation[0])
 
-        # First step: move forward to obtain moving sample
-        if self._prev_moving is None:
-            self._prev_moving = c
-            self._last_action = 0  # FORWARD
-            return 0
-
-        # After a TURN, force a FORWARD probe to avoid spinning on zero dC
-        if self._last_action in (1, 2):
+        # Initialize reference on first call
+        if self._last_c is None:
+            self._last_c = c
             self._last_action = 0
             return 0
 
-        # Greedy decision based on temporal derivative
-        dc = c - self._prev_moving
-        if dc >= self.threshold:
-            action = 0  # FORWARD
-            self._prev_moving = c
-        else:
-            # Deterministic alternating cast direction
-            action = 2 if self._cast_right_next else 1  # RIGHT then LEFT alternating
-            self._cast_right_next = not self._cast_right_next
+        # Compute dc identically every step
+        dc = c - self._last_c
 
+        # Decision gating: probe after any turn
+        if self._last_action in (1, 2):
+            action = 0
+        else:
+            if dc >= self.threshold:
+                action = 0
+            else:
+                if self.alternate_cast:
+                    action = 2 if self._cast_right_next else 1
+                    self._cast_right_next = not self._cast_right_next
+                else:
+                    action = 2
+
+        # Update reference and last action
+        self._last_c = c
         self._last_action = action
         return action

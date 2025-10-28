@@ -5,6 +5,8 @@ from typing import Any, Callable, Iterator, Optional, Protocol
 
 import numpy as np
 
+from plume_nav_sim.utils.spaces import is_space_subset
+
 
 class _PolicyLike(Protocol):  # minimal protocol to support tests
     def reset(self, *, seed: int | None = None) -> None:
@@ -81,6 +83,21 @@ def _select_action(policy: Any, observation: np.ndarray) -> Any:
     raise TypeError("Policy must implement select_action() or be callable")
 
 
+def _ensure_action_space_compat(env: Any, policy: Any) -> None:
+    """Validate that policy and env action spaces are compatible.
+
+    Currently supports Discrete spaces; raises ValueError on mismatch.
+    """
+    env_space = getattr(env, "action_space", None)
+    pol_space = getattr(policy, "action_space", None)
+    if env_space is None or pol_space is None:
+        return
+    if not is_space_subset(pol_space, env_space):
+        raise ValueError(
+            "Policy action space must be a subset of the environment's action space"
+        )
+
+
 def run_episode(
     env: Any,
     policy: Any,
@@ -102,6 +119,7 @@ def run_episode(
     else:
         obs, _ = env.reset()
         _maybe_policy_reset(policy, seed=None)
+    _ensure_action_space_compat(env, policy)
 
     steps = 0
     total_reward = 0.0
@@ -174,6 +192,7 @@ def stream(
     else:
         obs, _ = env.reset()
         _maybe_policy_reset(policy, seed=None)
+    _ensure_action_space_compat(env, policy)
 
     t = 0
     while True:
@@ -202,3 +221,51 @@ def stream(
 
         obs = next_obs
         t += 1
+
+
+class Runner:
+    """Thin OO wrapper over runner functions with upfront validation.
+
+    Validates policy/env action-space subset on construction and exposes
+    `stream` and `run_episode` bound to the provided env and policy.
+    """
+
+    def __init__(self, env: Any, policy: Any) -> None:
+        _ensure_action_space_compat(env, policy)
+        self._env = env
+        self._policy = policy
+
+    @staticmethod
+    def validate(env: Any, policy: Any) -> None:
+        """Validate that policy.action_space ⊆ env.action_space."""
+        _ensure_action_space_compat(env, policy)
+
+    def run_episode(
+        self,
+        *,
+        max_steps: Optional[int] = None,
+        seed: Optional[int] = None,
+        on_step: Optional[Callable[[StepEvent], None]] = None,
+        on_episode_end: Optional[Callable[[EpisodeResult], None]] = None,
+        render: bool = False,
+    ) -> EpisodeResult:
+        return run_episode(
+            self._env,
+            self._policy,
+            max_steps=max_steps,
+            seed=seed,
+            on_step=on_step,
+            on_episode_end=on_episode_end,
+            render=render,
+        )
+
+    def stream(
+        self,
+        *,
+        seed: Optional[int] = None,
+        render: bool = False,
+        on_step: Optional[Callable[[StepEvent], None]] = None,
+    ) -> Iterator[StepEvent]:
+        return stream(
+            self._env, self._policy, seed=seed, render=render, on_step=on_step
+        )

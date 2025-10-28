@@ -24,6 +24,7 @@ from typing import Literal, Optional, Union
 import numpy as np
 
 from ..actions import DiscreteGridActions, OrientedGridActions
+from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..observations import AntennaeArraySensor, ConcentrationSensor
 from ..plume.concentration_field import ConcentrationField
@@ -109,6 +110,8 @@ def create_component_environment(  # noqa: C901
         action_processor = DiscreteGridActions(step_size=step_size)
     elif action_type == "oriented":
         action_processor = OrientedGridActions(step_size=step_size)
+    elif action_type == "run_tumble":
+        action_processor = OrientedRunTumbleActions(step_size=step_size)
     else:
         raise ValueError(
             f"Invalid action_type: {action_type}. Must be 'discrete' or 'oriented'."
