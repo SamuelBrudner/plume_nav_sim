@@ -4,12 +4,18 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.skipif(
-    pytest.importorskip("loguru", reason="loguru not installed") is None,
-    reason="loguru missing",
-)
 def test_setup_logging_console_and_file(tmp_path: Path):
     from plume_nav_sim.logging.loguru_bootstrap import get_logger, setup_logging
+
+    try:
+        import loguru  # noqa: F401
+    except Exception:
+        # When loguru isn't installed, setup must raise ImportError and get_logger too
+        with pytest.raises(ImportError):
+            setup_logging(level="INFO", console=True, file_path=tmp_path / "x.log")
+        with pytest.raises(ImportError):
+            _ = get_logger()
+        return
 
     logfile = tmp_path / "app.log"
     setup_logging(level="INFO", console=True, file_path=logfile)

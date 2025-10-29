@@ -35,17 +35,22 @@ def build_env(spec: SimulationSpec):
         kwargs["reward_type"] = spec.reward_type
     kwargs["render_mode"] = "rgb_array" if spec.render else None
 
-    env = pns.make_env(**kwargs)
-    return env
+    return pns.make_env(**kwargs)
 
 
 def _make_random_sampler(env) -> Any:
     class _Sampler:
         def __init__(self, env):
             self._env = env
+            # Expose action_space so tests and runner can validate subset/identity
+            self._space = getattr(env, "action_space", None)
 
         def __call__(self, _obs):
             return self._env.action_space.sample()
+
+        @property
+        def action_space(self):
+            return self._space
 
     return _Sampler(env)
 
@@ -70,31 +75,9 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
 
             return TemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "greedy_td":
-            # Bacterial-like TD: deterministic forward on dC>=0,
-            # uniform random among all actions when dC<=0 (diffusion)
-            from plume_nav_sim.policies import TemporalDerivativePolicy
-
-            params = dict(policy_spec.kwargs)
-            params.setdefault("eps", 0.0)
-            params.setdefault("eps_after_turn", 0.0)
-            params.setdefault("eps_greedy_forward_bias", 0.0)
-            # Uniform over all actions when non-increasing
-            params["uniform_random_on_non_increase"] = True
-            return TemporalDerivativePolicy(**params)
-        if name == "run_tumble_td":
-            from plume_nav_sim.policies.run_tumble_td import (
-                RunTumbleTemporalDerivativePolicy,
-            )
-
-            return RunTumbleTemporalDerivativePolicy(**policy_spec.kwargs)
-        if name == "stochastic_run_tumble_td":
-            from plume_nav_sim.policies.run_tumble_td import (
-                RunTumbleTemporalDerivativePolicy,
-            )
-
-            params = dict(policy_spec.kwargs)
-            params.setdefault("eps", 0.05)
-            return RunTumbleTemporalDerivativePolicy(**params)
+            return _extracted_from_build_policy_23(policy_spec)
+        # Note: run–tumble TD policy is intentionally not a builtin here.
+        # External projects (or the demo package) should provide it via dotted-path.
         if name == "random":
             if env is None:
                 raise ValueError("'random' builtin policy requires env to be provided")
@@ -108,20 +91,65 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
     return loaded.obj
 
 
+# TODO Rename this here and in `build_policy`
+def _extracted_from_build_policy_23(policy_spec):
+    # Bacterial-like TD: deterministic forward on dC>=0,
+    # uniform random among all actions when dC<=0 (diffusion)
+    from plume_nav_sim.policies import TemporalDerivativePolicy
+
+    params = dict(policy_spec.kwargs)
+    params.setdefault("eps", 0.0)
+    params.setdefault("eps_after_turn", 0.0)
+    params.setdefault("eps_greedy_forward_bias", 0.0)
+    # Uniform over all actions when non-increasing
+    params["uniform_random_on_non_increase"] = True
+    return TemporalDerivativePolicy(**params)
+
+
 def prepare(sim: SimulationSpec) -> Tuple[Any, Any]:
     """Build (env, policy) pair from SimulationSpec.
 
     Applies deterministic reset(seed) to the policy if available.
     """
     env = build_env(sim)
+    # Apply observation wrappers (ordered), specified via dotted-path classes
+    # with signature Wrapper(env, **kwargs) -> gym.Env
+    if getattr(sim, "observation_wrappers", None):
+        from importlib import import_module
+
+        def _import_attr(dotted: str) -> Any:
+            if ":" in dotted:
+                module_name, attr_path = dotted.split(":", 1)
+                mod = import_module(module_name)
+                target = mod
+                for part in attr_path.split("."):
+                    target = getattr(target, part)
+                return target
+            parts = dotted.split(".")
+            if len(parts) < 2:
+                raise ValueError(
+                    f"Wrapper spec must include module and attribute: {dotted}"
+                )
+            module_name = ".".join(parts[:-1])
+            attr = parts[-1]
+            mod = import_module(module_name)
+            return getattr(mod, attr)
+
+        for w in sim.observation_wrappers:
+            wrapper_cls = _import_attr(w.spec)
+            env = wrapper_cls(env, **(w.kwargs or {}))
+
     policy = build_policy(sim.policy, env=env)
     # Composition-time subset check (structural, supports common spaces)
     env_space = getattr(env, "action_space", None)
     pol_space = getattr(policy, "action_space", None)
-    if env_space is not None and pol_space is not None:
-        if not is_space_subset(pol_space, env_space):
-            raise ValueError(
-                "Policy action space must be a subset of the environment's action space"
-            )
+    if (
+        env_space is not None
+        and pol_space is not None
+        and not is_space_subset(pol_space, env_space)
+    ):
+        raise ValueError(
+            "Policy action space must be a subset of the environment's action space"
+        )
     reset_policy_if_possible(policy, seed=sim.seed)
     return env, policy

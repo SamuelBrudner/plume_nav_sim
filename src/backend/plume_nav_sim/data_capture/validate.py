@@ -83,8 +83,13 @@ def _flatten_episodes(rows: List[dict]):
 
 
 def _schemas():
-    import pandera as pa  # type: ignore
-    from pandera import Column, DataFrameSchema  # type: ignore
+    # Prefer pandas-specific API to avoid deprecation warnings
+    try:  # pandera >= recommended API
+        import pandera.pandas as pa  # type: ignore
+        from pandera.pandas import Column, DataFrameSchema  # type: ignore
+    except Exception:  # fallback for older pandera
+        import pandera as pa  # type: ignore
+        from pandera import Column, DataFrameSchema  # type: ignore
     from pandera.dtypes import Bool, Float, Int, String  # type: ignore
 
     steps_schema = DataFrameSchema(

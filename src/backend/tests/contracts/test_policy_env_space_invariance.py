@@ -37,9 +37,6 @@ def _spaces_identical(env_space, pol_space) -> bool:
 
 @pytest.mark.parametrize("builtin", [b for b in get_args(BuiltinPolicyName)])
 def test_builtin_policy_has_matching_env_action_space(builtin: str):
-    # Skip policies that intentionally have no declared action space (e.g., 'random')
-    if builtin == "random":
-        pytest.skip("random policy has no intrinsic action_space")
 
     candidates = ("discrete", "oriented", "run_tumble")
     found = False

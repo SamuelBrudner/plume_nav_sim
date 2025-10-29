@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 from plume_nav_sim.compose.builders import prepare
 from plume_nav_sim.compose.specs import PolicySpec, SimulationSpec
+
+# Ensure demo package (external policy) is importable for dotted-path spec
+_demo_path = Path(__file__).resolve().parents[4] / "plug-and-play-demo"
+if _demo_path.is_dir():
+    sys.path.append(str(_demo_path))
 
 
 def test_prepare_rejects_policy_superset_of_env_space():
@@ -40,7 +48,7 @@ def test_prepare_allows_equal_or_subset_spaces():
         max_steps=10,
         render=False,
         action_type="oriented",
-        policy=PolicySpec(builtin="run_tumble_td"),
+        policy=PolicySpec(spec="plug_and_play_demo:DeltaBasedRunTumblePolicy"),
         seed=1,
     )
     env2, pol2 = prepare(sim_subset)

@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 import plume_nav_sim as pns
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
-from plume_nav_sim.policies.run_tumble_td import RunTumbleTemporalDerivativePolicy
+
+# Expose demo package policy
+_demo_path = Path(__file__).resolve().parents[4] / "plug-and-play-demo"
+if _demo_path.is_dir():
+    sys.path.append(str(_demo_path))
+
+plug_demo = pytest.importorskip("plug_and_play_demo")
+DeltaBasedRunTumblePolicy = plug_demo.DeltaBasedRunTumblePolicy
 from plume_nav_sim.runner.runner import Runner
 
 
@@ -35,7 +45,7 @@ def test_runner_instantiation_allows_subset_pair_and_streams():
     # Run/Tumble policy (n=2) on oriented env (n=3) should construct and stream
     env = _env("oriented")
     try:
-        pol = RunTumbleTemporalDerivativePolicy()
+        pol = DeltaBasedRunTumblePolicy()
         rr = Runner(env, pol)
         events = list(rr.stream(seed=123, render=False))
         assert len(events) >= 1

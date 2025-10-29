@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
@@ -8,8 +8,6 @@ BuiltinPolicyName = Literal[
     "deterministic_td",
     "stochastic_td",
     "greedy_td",
-    "run_tumble_td",
-    "stochastic_run_tumble_td",
     "random",
 ]
 
@@ -71,6 +69,16 @@ class SimulationSpec(BaseModel):
     observation_type: Optional[str] = Field(default=None)
     reward_type: Optional[str] = Field(default=None)
     render: bool = Field(default=True)
+
+    # Optional observation wrappers applied after env creation (in order).
+    # Each wrapper is specified via dotted path and kwargs; the wrapper class
+    # must have signature Wrapper(env, **kwargs) and return a gym.Env.
+    class WrapperSpec(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        spec: str
+        kwargs: Dict[str, Any] = Field(default_factory=dict)
+
+    observation_wrappers: List[WrapperSpec] = Field(default_factory=list)
 
     # Seeding / policy
     seed: Optional[int] = Field(default=123)

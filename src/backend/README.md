@@ -314,6 +314,44 @@ for step in range(50):
 env.close()
 ```
 
+### Compose: Applying observation wrappers via SimulationSpec
+
+Use SimulationSpec to declare observation adapters (wrappers) so the full runtime
+behavior is defined in one place. Each wrapper is specified with a dotted path
+and kwargs and applied in order by `compose.prepare()`.
+
+```python
+from plume_nav_sim.compose import SimulationSpec, PolicySpec, WrapperSpec, prepare
+
+sim = SimulationSpec(
+    grid_size=(64, 64),
+    max_steps=200,
+    action_type="run_tumble",           # Discrete(2): 0=RUN, 1=TUMBLE
+    observation_type="concentration",    # Box(1,): odor at agent position
+    reward_type="step_penalty",
+    render=False,
+    seed=123,
+    policy=PolicySpec(spec="my_project.policies:MyRunTumblePolicy"),
+    observation_wrappers=[
+        # Core 1‑back odor history: transforms Box(1,) → Box(2,) [c_prev, c_now]
+        WrapperSpec(
+            spec="plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
+            kwargs={"n": 2},
+        ),
+    ],
+)
+
+env, policy = prepare(sim)
+obs, info = env.reset(seed=sim.seed)
+print(env.observation_space.shape)  # (2,)
+```
+
+Notes:
+- Wrapper targets accept `(env, **kwargs)` and return a Gymnasium `Env`.
+- Dotted path can be `"module:Attr"` or `"module.sub.Attr"`.
+- Wrappers are applied before policy subset validation so the policy can target
+  the adapted observation space.
+
 ### Reproducibility Demo
 
 ```python

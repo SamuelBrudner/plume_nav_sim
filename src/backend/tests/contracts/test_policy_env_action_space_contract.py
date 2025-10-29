@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 import plume_nav_sim as pns
@@ -7,7 +10,14 @@ from plume_nav_sim.policies import (
     TemporalDerivativeDeterministicPolicy,
     TemporalDerivativePolicy,
 )
-from plume_nav_sim.policies.run_tumble_td import RunTumbleTemporalDerivativePolicy
+
+# Make demo package available for import
+_demo_path = Path(__file__).resolve().parents[4] / "plug-and-play-demo"
+if _demo_path.is_dir():
+    sys.path.append(str(_demo_path))
+
+plug_demo = pytest.importorskip("plug_and_play_demo")
+DeltaBasedRunTumblePolicy = plug_demo.DeltaBasedRunTumblePolicy
 from plume_nav_sim.runner import runner as r
 
 
@@ -69,8 +79,8 @@ def test_oriented_policies_match_oriented_env(policy_ctor):
 @pytest.mark.parametrize(
     "policy_ctor",
     [
-        lambda: RunTumbleTemporalDerivativePolicy(),
-        lambda: RunTumbleTemporalDerivativePolicy(eps=0.1, eps_seed=7),
+        lambda: DeltaBasedRunTumblePolicy(),
+        lambda: DeltaBasedRunTumblePolicy(eps=0.1, eps_seed=7),
     ],
 )
 def test_run_tumble_policies_match_run_tumble_env(policy_ctor):
@@ -100,7 +110,7 @@ def test_superset_pair_raises_and_subset_pair_streams():
     # Subset: run_tumble (n=2) on oriented (n=3) should stream
     env_or = _make_env("oriented")
     try:
-        pol_rt = RunTumbleTemporalDerivativePolicy()
+        pol_rt = DeltaBasedRunTumblePolicy()
         events = list(r.stream(env_or, pol_rt, seed=1, render=False))
         assert len(events) >= 1
         for ev in events:

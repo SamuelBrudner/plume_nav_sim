@@ -134,7 +134,24 @@ def run_episode(
 
         action = _select_action(policy, obs)
         next_obs, reward, term, trunc, info = env.step(action)
-        frame = env.render("rgb_array") if render else None
+        frame = None
+        if render:
+            try:
+                # Prefer modern Gymnasium pattern: render() uses configured render_mode
+                frame = env.render()
+            except TypeError:
+                # Fallback to legacy signature render(mode)
+                try:
+                    frame = env.render("rgb_array")
+                except Exception:
+                    frame = None
+            else:
+                # If no frame produced, try explicit rgb_array
+                if not isinstance(frame, np.ndarray):
+                    try:
+                        frame = env.render("rgb_array")
+                    except Exception:
+                        frame = None
 
         ev = StepEvent(
             t=steps,
@@ -198,7 +215,21 @@ def stream(
     while True:
         action = _select_action(policy, obs)
         next_obs, reward, term, trunc, info = env.step(action)
-        frame = env.render("rgb_array") if render else None
+        frame = None
+        if render:
+            try:
+                frame = env.render()
+            except TypeError:
+                try:
+                    frame = env.render("rgb_array")
+                except Exception:
+                    frame = None
+            else:
+                if not isinstance(frame, np.ndarray):
+                    try:
+                        frame = env.render("rgb_array")
+                    except Exception:
+                        frame = None
 
         ev = StepEvent(
             t=t,

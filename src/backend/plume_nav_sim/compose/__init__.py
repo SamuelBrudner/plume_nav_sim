@@ -10,4 +10,8 @@ from .policy_loader import (  # noqa: F401
     load_policy,
     reset_policy_if_possible,
 )
-from .specs import PolicySpec, SimulationSpec  # noqa: F401
+from .specs import PolicySpec  # noqa: F401
+from .specs import SimulationSpec  # noqa: F401
+
+# Re-export nested WrapperSpec for convenience
+WrapperSpec = SimulationSpec.WrapperSpec  # noqa: F401

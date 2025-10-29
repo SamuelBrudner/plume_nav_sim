@@ -40,6 +40,11 @@ All examples live in `src/backend/examples/`. Run one from the backend root:
 python -m examples.custom_components
 ```
 
+Spec-driven observation wrappers
+
+- You can declare observation adapters (wrappers) directly in a `SimulationSpec` so that the full runtime behavior is defined in one place. See the backend guide for a concrete example using the core 1‑back concentration history wrapper:
+  - `src/backend/README.md` (section: "Compose: Applying observation wrappers via SimulationSpec")
+
 ## 4. Installation
 
 ```bash
