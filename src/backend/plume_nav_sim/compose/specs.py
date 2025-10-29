@@ -74,6 +74,16 @@ class SimulationSpec(BaseModel):
     # Each wrapper is specified via dotted path and kwargs; the wrapper class
     # must have signature Wrapper(env, **kwargs) and return a gym.Env.
     class WrapperSpec(BaseModel):
+        """Specification for an observation wrapper to apply in prepare().
+
+        Fields
+        ------
+        spec
+            Dotted path identifying the wrapper class ("module:Class" or "module.Class").
+        kwargs
+            Keyword arguments forwarded to the wrapper constructor.
+        """
+
         model_config = ConfigDict(extra="forbid")
         spec: str
         kwargs: Dict[str, Any] = Field(default_factory=dict)
