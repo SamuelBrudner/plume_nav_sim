@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Optional, Protocol
 
 import numpy as np
 
 from plume_nav_sim.utils.spaces import is_space_subset
+
+logger = logging.getLogger(__name__)
 
 
 class _PolicyLike(Protocol):  # minimal protocol to support tests
@@ -125,6 +128,10 @@ def run_episode(
     total_reward = 0.0
     terminated = False
     truncated = False
+    frames_captured = 0
+    fallback_successes = 0
+    fallback_failures = 0
+    warned_missing = False
 
     while True:
         if max_steps is not None and steps >= max_steps:
@@ -142,16 +149,50 @@ def run_episode(
             except TypeError:
                 # Fallback to legacy signature render(mode)
                 try:
-                    frame = env.render("rgb_array")
+                    frame = env.render(mode="rgb_array")
+                    if isinstance(frame, np.ndarray):
+                        fallback_successes += 1
+                    else:
+                        fallback_failures += 1
                 except Exception:
                     frame = None
+                    fallback_failures += 1
             else:
                 # If no frame produced, try explicit rgb_array
                 if not isinstance(frame, np.ndarray):
                     try:
-                        frame = env.render("rgb_array")
+                        frame = env.render(mode="rgb_array")
+                        if isinstance(frame, np.ndarray):
+                            fallback_successes += 1
+                        else:
+                            fallback_failures += 1
                     except Exception:
                         frame = None
+                        fallback_failures += 1
+
+            if isinstance(frame, np.ndarray):
+                frames_captured += 1
+                try:
+                    logger.debug(
+                        "Captured frame at step %d: shape=%s dtype=%s",
+                        steps,
+                        getattr(frame, "shape", None),
+                        getattr(frame, "dtype", None),
+                    )
+                except Exception:
+                    # Avoid any potential logging formatting errors from exotic array types
+                    logger.debug("Captured frame at step %d", steps)
+            else:
+                if (
+                    fallback_failures > 0 or fallback_successes > 0
+                ) and not warned_missing:
+                    logger.warning(
+                        "No frame after fallback at step %d (successes=%d failures=%d)",
+                        steps,
+                        fallback_successes,
+                        fallback_failures,
+                    )
+                    warned_missing = True
 
         ev = StepEvent(
             t=steps,
@@ -185,6 +226,14 @@ def run_episode(
         metrics={},
     )
 
+    logger.info(
+        "Episode finished: steps=%d frames_captured=%d fallback_successes=%d fallback_failures=%d",
+        steps,
+        frames_captured,
+        fallback_successes,
+        fallback_failures,
+    )
+
     if on_episode_end is not None:
         on_episode_end(result)
 
@@ -212,6 +261,9 @@ def stream(
     _ensure_action_space_compat(env, policy)
 
     t = 0
+    warned_missing = False
+    fallback_successes = 0
+    fallback_failures = 0
     while True:
         action = _select_action(policy, obs)
         next_obs, reward, term, trunc, info = env.step(action)
@@ -221,15 +273,47 @@ def stream(
                 frame = env.render()
             except TypeError:
                 try:
-                    frame = env.render("rgb_array")
+                    frame = env.render(mode="rgb_array")
+                    if isinstance(frame, np.ndarray):
+                        fallback_successes += 1
+                    else:
+                        fallback_failures += 1
                 except Exception:
                     frame = None
+                    fallback_failures += 1
             else:
                 if not isinstance(frame, np.ndarray):
                     try:
-                        frame = env.render("rgb_array")
+                        frame = env.render(mode="rgb_array")
+                        if isinstance(frame, np.ndarray):
+                            fallback_successes += 1
+                        else:
+                            fallback_failures += 1
                     except Exception:
                         frame = None
+                        fallback_failures += 1
+
+            if isinstance(frame, np.ndarray):
+                try:
+                    logger.debug(
+                        "Captured frame at step %d: shape=%s dtype=%s",
+                        t,
+                        getattr(frame, "shape", None),
+                        getattr(frame, "dtype", None),
+                    )
+                except Exception:
+                    logger.debug("Captured frame at step %d", t)
+            else:
+                if (
+                    fallback_failures > 0 or fallback_successes > 0
+                ) and not warned_missing:
+                    logger.warning(
+                        "No frame after fallback at step %d (successes=%d failures=%d)",
+                        t,
+                        fallback_successes,
+                        fallback_failures,
+                    )
+                    warned_missing = True
 
         ev = StepEvent(
             t=t,

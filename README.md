@@ -63,7 +63,7 @@ python -c "import plume_nav_sim as pns; pns.make_env()"
 
 ### Debugger (Qt MVP)
 
-A minimal Qt debugger is available for stepping the environment and viewing RGB frames.
+A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It now includes a dockable, information-only Inspector.
 
 - Install Qt toolkit into your conda env:
 
@@ -86,6 +86,50 @@ Policies:
 - Custom: enter `module:ClassOrCallable` (or `module.sub.Class`) and click Load
   - Contract: either implement `select_action(obs, explore=False)` (preferred) or be a simple callable `policy(obs) -> action`
   - Optional: `reset(seed=...)` will be called if provided
+
+Inspector (information-only):
+- Dockable window (View → Inspector) with tabs:
+  - Action: shows the expected action for the current frame and an action distribution preview when the policy exposes probabilities.
+    - Distribution probing order: `action_probabilities(obs)` → `q_values(obs)` via softmax → `logits(obs)` via softmax → `action_distribution(obs)`.
+    - No side effects: the inspector never calls `select_action` and never influences the simulation.
+    - Distributions are normalized; when inputs are degenerate (e.g., all zeros), a uniform distribution is shown.
+  - Observation: shows observation shape and min/mean/max summary.
+- The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
+
+Provider Plugins (ODC):
+- The debugger auto-detects application-specific actions/observations/pipeline via the Opinionated Debugger Contract (ODC).
+- Preferred integration is an entry-point plugin:
+  - `pyproject.toml`:
+    ```toml
+    [project.entry-points."plume_nav_sim.debugger_plugins"]
+    my_app = "my_app.debugger:provider_factory"
+    ```
+  - `my_app/debugger.py`:
+    ```python
+    from plume_nav_debugger.odc.provider import DebuggerProvider
+    from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
+
+    class MyProvider(DebuggerProvider):
+        def get_action_info(self, env):
+            return ActionInfo(names=["RUN", "TUMBLE"])  # len == action_space.n
+        def policy_distribution(self, policy, observation):
+            return {"probs": [0.8, 0.2]}  # side-effect free
+        def get_pipeline(self, env):
+            return PipelineInfo(names=[type(env).__name__, "MyWrapper", "CoreEnv"])
+
+    def provider_factory(env, policy):
+        return MyProvider()
+    ```
+- Strict mode (default) disables heuristics and shows a banner if no provider is detected. Disable in Preferences to allow guarded fallbacks.
+
+Preferences & Config:
+- Edit → Preferences provides toggles for:
+  - Strict provider-only mode, Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
+- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json`.
+ - CLI override: pass `--no-strict-provider-only` (or `--strict-provider-only`) when launching the app:
+   ```bash
+   PYTHONPATH=src python -m plume_nav_debugger.app --no-strict-provider-only
+   ```
 
 
 ### Jupyter notebooks (interactive plots)
@@ -268,5 +312,9 @@ plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --p
 Schema reference
 
 - See detailed field definitions and evolution policy in `src/backend/docs/data_capture_schemas.md`.
+
+Data catalog
+
+- See consolidated consumer docs and loading examples in `src/backend/docs/data_catalog_capture.md`.
 
 Questions or ideas? Open an issue or start a discussion at <https://github.com/plume-nav-sim/plume_nav_sim>.

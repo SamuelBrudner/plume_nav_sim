@@ -20,7 +20,12 @@ class DataCaptureWrapper(gym.Wrapper):
     """
 
     def __init__(
-        self, env: gym.Env, recorder: RunRecorder, env_config: EnvironmentConfig
+        self,
+        env: gym.Env,
+        recorder: RunRecorder,
+        env_config: EnvironmentConfig,
+        *,
+        meta_overrides: Optional[dict] = None,
     ):
         super().__init__(env)
         self.recorder = recorder
@@ -39,6 +44,12 @@ class DataCaptureWrapper(gym.Wrapper):
             episode_seeds=None,
             system=RunMeta.SystemInfo(),
         )
+        if meta_overrides:
+            try:
+                meta = meta.model_copy(update={**meta_overrides})
+            except Exception:
+                # Best-effort: ignore invalid overrides
+                pass
         # pydantic will coerce start_time to datetime if string in ISO format
         self.recorder.write_run_meta(meta)
         self._episode_id: Optional[str] = None
@@ -104,3 +115,11 @@ class DataCaptureWrapper(gym.Wrapper):
             self.recorder.append_episode(ep)
 
         return obs, reward, terminated, truncated, info
+
+    def render(self, *args, **kwargs):
+        """Passthrough to underlying env.render to preserve frames.
+
+        Ensures that calls like env.render() or env.render("rgb_array")
+        return the ndarray produced by the wrapped environment.
+        """
+        return self.env.render(*args, **kwargs)

@@ -246,6 +246,22 @@ def make_env(**kwargs):
     return create_plume_search_env(**kwargs)
 
 
+def get_conf_dir():
+    """Return the repository "conf" directory for Hydra configs if available.
+
+    This resolves the path relative to the installed package when running from
+    source. For installed distributions without a source tree, callers should
+    prefer hydra.initialize_config_module with a packaged config module.
+    """
+    try:
+        from pathlib import Path
+
+        # src/backend/plume_nav_sim/__init__.py -> conf at src/backend/conf
+        return Path(__file__).resolve().parents[1] / "conf"
+    except Exception:  # pragma: no cover - defensive fallback
+        return None  # type: ignore[return-value]
+
+
 __all__ = [
     # Recommended entry point
     "make_env",
@@ -295,6 +311,7 @@ __all__ = [
     "create_plume_search_env",
     "initialize_package",
     "get_package_info",
+    "get_conf_dir",
 ]
 
 __version__ = PACKAGE_VERSION

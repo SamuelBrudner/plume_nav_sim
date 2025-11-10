@@ -1,0 +1,16 @@
+stages:
+  capture_ingest:
+    cmd: >-
+      python src/backend/scripts/ingest_capture.py
+      --run-dir ${ingest_capture.run_dir}
+      --out-dir ${ingest_capture.out_dir}
+    deps:
+      - src/backend/scripts/ingest_capture.py
+      - ${ingest_capture.run_dir}
+    params:
+      - ingest_capture.run_dir
+      - ingest_capture.out_dir
+    outs:
+      - ${ingest_capture.out_dir}:
+          cache: true
+          persist: true

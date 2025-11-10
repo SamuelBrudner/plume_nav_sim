@@ -109,6 +109,7 @@ class _AttributeForwardingTimeLimit(TimeLimit):
         "action_space",
         "observation_space",
         "metadata",
+        "render_mode",
     )
 
     def __getattr__(self, name: str):
@@ -314,9 +315,18 @@ class PlumeSearchEnv(gym.Env):
             augmented_info,
         )
 
-    def render(self, mode: str = "human") -> Any:
-        if mode not in {"human", "rgb_array"}:
-            raise ValueError(f"Unsupported render mode: {mode}")
+    def render(self, mode: Optional[str] = None) -> Any:
+        """Render with Gymnasium-compatible semantics.
+
+        - If no mode is provided, respect the wrapped env's configured render_mode.
+        - For 'rgb_array', return an ndarray frame; fall back to core env or zeros.
+        - For 'human', return None (side-effects may occur in wrapped envs).
+        """
+        effective_mode = (
+            mode if mode is not None else getattr(self._env, "render_mode", None)
+        )
+        if effective_mode not in {None, "human", "rgb_array"}:
+            raise ValueError(f"Unsupported render mode: {effective_mode}")
 
         grid_size = getattr(self._env, "grid_size", None)
         if grid_size is not None:
@@ -325,13 +335,25 @@ class PlumeSearchEnv(gym.Env):
         else:
             width = height = 1
 
+        # First attempt: delegate to wrapped env in its configured mode
         result = self._env.render()
-        if mode == "rgb_array":
-            if result is not None:
+
+        # Effective behavior depends on resolved mode
+        if (effective_mode or "human") == "rgb_array":
+            if isinstance(result, np.ndarray):
                 return result
+            # Avoid wrapper kwarg signature issues by calling core env directly
+            try:
+                core = getattr(self, "_core_env", None)
+                if core is not None:
+                    alt = core.render()
+                    if isinstance(alt, np.ndarray):
+                        return alt
+            except Exception:
+                pass
             return np.zeros((height, width, 3), dtype=np.uint8)
 
-        # human mode: per Gymnasium convention, return None regardless of backend
+        # human mode: per Gymnasium convention, return None (ignore ndarray result)
         return None
 
     def close(self) -> None:

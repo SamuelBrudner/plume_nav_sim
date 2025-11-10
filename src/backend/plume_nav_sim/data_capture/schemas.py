@@ -23,6 +23,10 @@ class RunMeta(BaseModel):
     # Serialized EnvironmentConfig
     env_config: dict
 
+    # Deterministic fingerprint of the config used for this run
+    # (typically a stable hash of a resolved Hydra config)
+    config_hash: Optional[str] = None
+
     # Seeding information
     base_seed: Optional[int] = None
     episode_seeds: Optional[List[int]] = None

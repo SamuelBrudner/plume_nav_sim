@@ -570,7 +570,7 @@ pip install -e .[notebooks]
 In a Jupyter notebook cell, enable the widget backend before plotting:
 
 ```python
-%matplotlib widget
+    %matplotlib widget
 ```
 
 If you see “'widget' is not a recognised backend name”:
@@ -858,11 +858,19 @@ episodes_df.to_parquet(run_dir / "episodes.parquet", index=False)
 plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
 ```
 
+Note: For manifest usage and an end-to-end reference, see bead plume_nav_sim-152.
+
 ### Schema Reference
 
 See the detailed field definitions and evolution policy:
 
 - `src/backend/docs/data_capture_schemas.md`
+
+### Data Catalog
+
+For a consolidated overview of artifacts, DVC workflow, and consumer loading/validation examples, see:
+
+- `src/backend/docs/data_catalog_capture.md`
 
 **Ready to start your plume navigation research?** 🧪
 
@@ -872,3 +880,6 @@ python examples/basic_usage.py
 ```
 
 Happy researching! 🚀
+- Exploration notebook (capture end‑to‑end): notebooks/stable/capture_end_to_end.ipynb
+  - Render to HTML for docs with nbconvert:
+    - `make nb-render` (outputs to `src/backend/docs/notebooks/capture_end_to_end.html`)

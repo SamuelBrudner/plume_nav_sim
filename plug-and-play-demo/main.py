@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from typing import List, Optional
 
 import numpy as np
 
 from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare
+from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.runner import runner
 
 # Quick reference for demo behavior:
@@ -152,28 +154,143 @@ def main() -> None:
         default=None,
         help="Optional output GIF filepath to save rendered frames",
     )
+    # Capture mode flags (optional). Capture is enabled when any of these are provided.
+    parser.add_argument(
+        "--capture-root",
+        type=str,
+        default="results",
+        help="Enable capture mode and write under this root",
+    )
+    parser.add_argument(
+        "--experiment",
+        type=str,
+        default="demo",
+        help="Experiment name (subfolder under capture root)",
+    )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=1,
+        help="Number of episodes when capture is enabled",
+    )
+    parser.add_argument(
+        "--parquet",
+        action="store_true",
+        help="Export Parquet at end of run (if pyarrow available)",
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate captured artifacts and print a summary",
+    )
     args = parser.parse_args()
 
-    # How string options map to concrete simulation behavior (SimulationSpec):
-    # - grid (e.g., "128x128") → grid_size=(128, 128)
-    # - action_type="run_tumble" → OrientedRunTumbleActions (Discrete(2): 0=RUN, 1=TUMBLE).
-    #   TUMBLE samples a new heading from a seeded RNG then moves forward; RUN advances in-place heading.
-    # - observation_type="concentration" → ConcentrationSensor, returning Box(1,) with odor at agent position.
-    # - reward_type="step_penalty" → StepPenaltyReward (sparse goal reward + per-step penalty).
-    # - render=True/False → env render_mode "rgb_array"/None; runner attaches frames to events when True.
-    # - policy spec string (dotted path) → import + instantiate user policy via compose.policy_loader.
-    #   In this demo we load plug_and_play_demo:DeltaBasedRunTumblePolicy.
-    # - Observation wrapper (applied inside run_demo): ConcentrationNBackWrapper(n=2) converts Box(1,)
-    #   to a 2-vector [c_prev, c_now] so the policy can compute delta without internal state.
+    def _flag_provided(flag: str) -> bool:
+        return flag in sys.argv[1:]
 
-    run_demo(
-        seed=args.seed,
-        grid=args.grid,
-        max_steps=args.max_steps,
-        render=(not args.no_render),
-        policy_spec=args.policy_spec,
-        save_gif=args.save_gif,
+    capture_requested = any(
+        _flag_provided(f)
+        for f in (
+            "--capture-root",
+            "--experiment",
+            "--episodes",
+            "--parquet",
+            "--validate",
+        )
     )
+
+    # Parse grid string early (shared across flows)
+    try:
+        w, h = (int(p) for p in args.grid.lower().split("x"))
+    except Exception:
+        raise SystemExit("--grid must be formatted as WxH, e.g., 128x128")
+
+    # Build SimulationSpec consistently with run_demo
+    wrapper_specs: List[WrapperSpec] = [
+        WrapperSpec(
+            spec="plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
+            kwargs={"n": 2},
+        )
+    ]
+    sim = SimulationSpec(
+        grid_size=(w, h),
+        max_steps=args.max_steps,
+        action_type="run_tumble",
+        observation_type="concentration",
+        reward_type="step_penalty",
+        render=(not args.no_render),
+        seed=args.seed,
+        policy=PolicySpec(spec=args.policy_spec),
+        observation_wrappers=wrapper_specs,
+    )
+
+    # Preserve original behavior unless capture flags are provided
+    if not capture_requested:
+        run_demo(
+            seed=args.seed,
+            grid=args.grid,
+            max_steps=args.max_steps,
+            render=(not args.no_render),
+            policy_spec=args.policy_spec,
+            save_gif=args.save_gif,
+        )
+        return
+
+    # Capture mode: wrap env and record
+    env, policy = prepare(sim)
+    from plume_nav_sim.data_capture import RunRecorder  # lazy import
+    from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper  # lazy import
+
+    rec = RunRecorder(args.capture_root, experiment=args.experiment)
+    env_cfg = EnvironmentConfig(grid_size=(w, h), source_location=(w // 2, h // 2))
+    env_wrapped = DataCaptureWrapper(env, rec, env_cfg)
+
+    frames: List[np.ndarray] = []
+
+    def on_step(ev: runner.StepEvent) -> None:
+        if ev.frame is not None and sim.render:
+            frames.append(ev.frame)
+
+    base_seed = int(args.seed)
+    for i in range(int(args.episodes)):
+        frames.clear()
+        ep_seed = base_seed + i
+        _ = runner.run_episode(
+            env_wrapped,
+            policy,
+            seed=ep_seed,
+            render=bool(sim.render),
+            on_step=on_step,
+        )
+        if args.save_gif and frames:
+            try:
+                from plume_nav_sim.utils.video import save_video_frames
+
+                save_video_frames(frames, args.save_gif, fps=10)
+                print(f"Saved video: {args.save_gif}")
+            except ImportError as e:
+                print("Could not save video (install imageio):", e)
+            except Exception as e:
+                print("Video export failed:", e)
+
+    rec.finalize(export_parquet=bool(args.parquet))
+    run_dir = rec.root
+    print(f"Capture complete. Run directory: {run_dir}")
+
+    if args.validate:
+        try:
+            from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+            report = validate_run_artifacts(run_dir)
+            print(
+                "Validation:",
+                {
+                    "steps_ok": bool(report.get("steps", {}).get("ok")),
+                    "episodes_ok": bool(report.get("episodes", {}).get("ok")),
+                },
+            )
+        except Exception as e:
+            print(f"Validation skipped or failed: {e}")
 
 
 if __name__ == "__main__":

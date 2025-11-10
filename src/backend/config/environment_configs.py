@@ -124,12 +124,7 @@ class PresetMetadata:
 
     def _estimate_step_latency(self) -> float:
         """Estimate step execution latency."""
-        grid_size = self.technical_specs.get("grid_size", DEFAULT_GRID_SIZE)
-        if isinstance(grid_size, (list, tuple)):
-            total_cells = grid_size[0] * grid_size[1]
-            # Base latency + scaling factor
-            return 0.1 + (total_cells / 100000.0)  # ms
-        return 1.0  # Default estimate
+        return self._extracted_from__estimate_rendering_time_3(0.1, 100000.0, 1.0)
 
     def _estimate_reset_time(self) -> float:
         """Estimate environment reset time."""
@@ -137,11 +132,15 @@ class PresetMetadata:
 
     def _estimate_rendering_time(self) -> float:
         """Estimate rendering time based on grid size."""
+        return self._extracted_from__estimate_rendering_time_3(1.0, 50000.0, 5.0)
+
+    # TODO Rename this here and in `_estimate_step_latency` and `_estimate_rendering_time`
+    def _extracted_from__estimate_rendering_time_3(self, arg0, arg1, arg2):
         grid_size = self.technical_specs.get("grid_size", DEFAULT_GRID_SIZE)
         if isinstance(grid_size, (list, tuple)):
             total_cells = grid_size[0] * grid_size[1]
-            return 1.0 + (total_cells / 50000.0)  # ms
-        return 5.0  # Default estimate
+            return arg0 + total_cells / arg1
+        return arg2
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -182,8 +181,8 @@ class PresetMetadata:
             if isinstance(required_use_cases, str):
                 required_use_cases = [required_use_cases]
 
-            if not any(
-                uc.lower() in [existing.lower() for existing in self.use_cases]
+            if all(
+                uc.lower() not in [existing.lower() for existing in self.use_cases]
                 for uc in required_use_cases
             ):
                 return False

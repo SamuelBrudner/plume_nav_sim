@@ -41,3 +41,11 @@ debugger:
 # Strip outputs/exec counts from notebooks in-place for clean commits
 nb-clean:
 	python src/backend/scripts/strip_notebook_outputs.py notebooks/*.ipynb
+
+.PHONY: nb-render
+# Render the stable capture exploration notebook to docs via nbconvert
+nb-render:
+	@mkdir -p src/backend/docs/notebooks
+	conda run -n $(ENV_NAME) jupyter nbconvert --to html \
+		--output-dir src/backend/docs/notebooks \
+		notebooks/stable/capture_end_to_end.ipynb

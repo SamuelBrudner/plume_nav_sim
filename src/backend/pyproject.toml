@@ -110,6 +110,14 @@ ops = [
     "loguru>=0.7.0",
 ]
 
+# Media / video export (GIF/MP4)
+media = [
+    "imageio>=2.31.0",
+    "pillow>=10.0.0",
+    # For MP4 writing via imageio; requires system ffmpeg otherwise
+    "imageio-ffmpeg>=0.4.9",
+]
+
 [project.scripts]
 plume-nav-validate = "plume_nav_sim.scripts:validate_installation"
 plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"

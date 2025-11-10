@@ -23,7 +23,6 @@ What it does
 - Instantiates the stateless run–tumble policy implemented in this demo via dotted-path
 - Runs a single episode with `runner.run_episode`, collecting RGB frames via the per-step callback
 - Prints a concise episode summary and the number of frames captured
-Advanced demos available for determinism and subset validation
 
 Policy interface (see inline comments in `plug_and_play_demo/stateless_policy.py`)
 
@@ -39,28 +38,67 @@ Files
 - `plug-and-play-demo/plug_and_play_demo/stateless_policy.py` – stateless run–tumble policy (uses [c_prev, c_now])
 - `plug-and-play-demo/plug_and_play_demo.ipynb` – notebook demo (spec-first + frames)
 
-Advanced: custom observation space
+Notes
 
-- Use the `advanced/nback_demo.py` script to expose an n-back history via the core `ConcentrationNBackWrapper`.
+- This demo intentionally stays minimal to highlight the plug‑and‑play flow.
+- Determinism, subset checks, and other deeper features are covered by tests and docs in `src/backend/`.
 
-```
-PYTHONPATH=src/backend:plug-and-play-demo \
-  python plug-and-play-demo/advanced/nback_demo.py --n 5
-```
+Capture Workflow
 
-Showcase the benefits
+Why capture?
 
-Core benefits provided by the library:
-- Spec-first composition: SimulationSpec + prepare() builds env+policy with one source of truth.
-- Deterministic seeding: runner resets env and policy with the same seed.
-- Safe wiring: action-space subset checks catch policy/env mismatches early.
-- Plug-and-play policies: dotted-path loader keeps user policies outside the library.
-- Frames and callbacks: runner emits StepEvent with RGB frames for visualization.
+- Produce analysis‑ready, versioned datasets for notebooks, ML, and reports
+- Reproducible runs with explicit seeds and environment config
+- Validated schemas to catch drift; optional Parquet export for fast loading
 
-Examples:
+Prerequisites
+
+- Install data extras to enable validation and Parquet:
 
 ```
-# Determinism and subset validation (advanced)
-PYTHONPATH=src/backend:plug-and-play-demo \
-  python plug-and-play-demo/advanced/benefits_demo.py
+pip install -e src/backend[data]
 ```
+
+Quick start (CLI)
+
+- Capture one or more episodes to a capture root (`results/` by default):
+
+```
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8
+```
+
+- Export Parquet at end of run (requires `pyarrow`):
+
+```
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
+```
+
+- Validate captured artifacts (JSONL.gz) after the run:
+
+```python
+from pathlib import Path
+from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+run_dir = Path("results/demo/<run_id>")
+report = validate_run_artifacts(run_dir)
+assert report["steps"]["ok"] and report["episodes"]["ok"], report
+```
+
+Artifacts
+
+- Each run writes under `results/<experiment>/<run_id>/` (capture root → experiment → run):
+  - `run.json` – run metadata and provenance
+  - `steps.jsonl.gz` – per‑step events (newline‑delimited JSON, gzip)
+  - `episodes.jsonl.gz` – per‑episode summaries (newline‑delimited JSON, gzip)
+  - Optional: `steps.parquet`, `episodes.parquet` – columnar export
+  - Optional: `manifest.json` – provenance/validation manifest when present
+
+Cross‑links
+
+- Schemas and versioning details: `src/backend/docs/data_capture_schemas.md`
+- Data catalog (loading examples, Parquet notes, DVC pointers): `src/backend/docs/data_catalog_capture.md`
+- Ops runbook (Hydra config, publishing/DVC, manifests): `src/backend/docs/ops_runbook_data_capture.md`
+
+Notes
+
+- This plug‑and‑play demo focuses on running a minimal episode and saving an optional GIF. For producing reusable datasets, prefer the `plume-nav-capture` CLI above.

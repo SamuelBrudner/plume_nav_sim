@@ -1,0 +1,15 @@
+# @package _global_
+
+# Minimal demo capture setup
+env:
+  grid_size: [64, 64]
+  max_steps: 200
+  action_type: oriented
+  observation_type: concentration
+  reward_type: step_penalty
+  render: false
+
+episodes: 2
+seed: 123
+output: results
+experiment: demo
