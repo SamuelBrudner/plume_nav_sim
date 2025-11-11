@@ -182,17 +182,17 @@ MIT License (see LICENSE file for details)
 
 ### Citation
 ```bibtex
-@software{plume_nav_sim_2024,
+@software{plume_nav_sim_2025,
   title={plume-nav-sim: Gymnasium Environment for Plume Navigation Research},
   author={plume_nav_sim Development Team},
-  year={2024},
+  year={2025},
   version={0.0.1},
-  url={https://github.com/plume-nav-sim/plume_nav_sim}
+  url={https://github.com/SamuelBrudner/plume_nav_sim}
 }
 ```
 
 ### Contact
-For questions, bug reports, or feature requests, please visit the GitHub Issues page: https://github.com/plume-nav-sim/plume_nav_sim/issues
+For questions, bug reports, or feature requests, please visit the GitHub Issues page: https://github.com/SamuelBrudner/plume_nav_sim/issues
 
 ---
 

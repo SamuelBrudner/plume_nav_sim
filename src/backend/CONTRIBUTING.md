@@ -35,7 +35,7 @@ We provide an automated setup script that handles the complete development envir
 
 ```bash
 # Clone the repository
-git clone https://github.com/plume-nav-sim/plume_nav_sim.git
+git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 
 # Run automated setup script
@@ -1401,11 +1401,11 @@ When contributing:
 If plume-nav-sim contributes to your research, please cite:
 
 ```bibtex
-@software{plume_nav_sim_2024,
+@software{plume_nav_sim_2025,
   title = {plume-nav-sim: A Gymnasium Environment for Plume Navigation Research},
-  version = {0.1.0},
-  url = {https://github.com/plume-nav-sim/plume_nav_sim},
-  year = {2024},
+  version = {0.0.1},
+  url = {https://github.com/SamuelBrudner/plume_nav_sim},
+  year = {2025},
   note = {Proof-of-Life Implementation}
 }
 ```

@@ -7,7 +7,7 @@ Gymnasium-compatible plume navigation environments engineered for reproducible r
 
 ## 1. What You Get
 
-- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with metrics, logging, and sensible defaults.
+- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.loguru_bootstrap.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
 - **Deterministic runs** – Centralized seeding utilities keep experiments reproducible across machines and CI.
 - **Pluggable architecture** – Swap observation, reward, action, or plume components via dependency injection.
 - **Research data workflow** – Built-in metadata export and curated examples accelerate analysis pipelines.
@@ -22,7 +22,16 @@ obs, info = env.reset(seed=42)
 print(info["agent_xy"])  # starting position
 ```
 
-- **Gymnasium integration**: `gym.make("PlumeNav-v0", action_type="oriented")`
+- **Gymnasium integration**:
+
+  ```python
+  from plume_nav_sim.registration import ensure_registered, ENV_ID
+  ensure_registered()  # make ENV_ID available to gym.make()
+
+  import gymnasium as gym
+  env = gym.make(ENV_ID, action_type="oriented")
+  ```
+
 - **Component knobs**: pass string options such as `observation_type="antennae"`
 - **See also**: `src/backend/examples/quickstart.py`
 
@@ -48,7 +57,7 @@ Spec-driven observation wrappers
 ## 4. Installation
 
 ```bash
-git clone https://github.com/plume-nav-sim/plume_nav_sim.git
+git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -78,33 +87,39 @@ make debugger ENV_NAME=plume-nav-sim
 ```
 
 Controls:
+
 - Start/Pause, Step, Reset with seed; adjust interval (ms)
 - Keyboard: Space (toggle run), N (step), R (reset)
 
 Policies:
+
 - Built-ins: Stochastic TD, Deterministic TD, Random Sampler
 - Custom: enter `module:ClassOrCallable` (or `module.sub.Class`) and click Load
   - Contract: either implement `select_action(obs, explore=False)` (preferred) or be a simple callable `policy(obs) -> action`
   - Optional: `reset(seed=...)` will be called if provided
 
 Inspector (information-only):
+
 - Dockable window (View → Inspector) with tabs:
-  - Action: shows the expected action for the current frame and an action distribution preview when the policy exposes probabilities.
-    - Distribution probing order: `action_probabilities(obs)` → `q_values(obs)` via softmax → `logits(obs)` via softmax → `action_distribution(obs)`.
+  - Action: shows the expected action for the current frame and, when an ODC provider supplies it, an action distribution preview.
+    - Provider‑only: labels and distributions are displayed only when a DebuggerProvider (ODC) is detected.
     - No side effects: the inspector never calls `select_action` and never influences the simulation.
-    - Distributions are normalized; when inputs are degenerate (e.g., all zeros), a uniform distribution is shown.
   - Observation: shows observation shape and min/mean/max summary.
 - The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
 
 Provider Plugins (ODC):
+
 - The debugger auto-detects application-specific actions/observations/pipeline via the Opinionated Debugger Contract (ODC).
 - Preferred integration is an entry-point plugin:
   - `pyproject.toml`:
+
     ```toml
     [project.entry-points."plume_nav_sim.debugger_plugins"]
     my_app = "my_app.debugger:provider_factory"
     ```
+
   - `my_app/debugger.py`:
+
     ```python
     from plume_nav_debugger.odc.provider import DebuggerProvider
     from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
@@ -120,17 +135,14 @@ Provider Plugins (ODC):
     def provider_factory(env, policy):
         return MyProvider()
     ```
-- Strict mode (default) disables heuristics and shows a banner if no provider is detected. Disable in Preferences to allow guarded fallbacks.
+
+- Strict provider‑only mode is always enabled. If no provider is detected, a banner appears and the inspector shows limited information. Heuristic fallbacks are removed and there is no CLI or preference to disable strict mode.
 
 Preferences & Config:
-- Edit → Preferences provides toggles for:
-  - Strict provider-only mode, Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
-- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json`.
- - CLI override: pass `--no-strict-provider-only` (or `--strict-provider-only`) when launching the app:
-   ```bash
-   PYTHONPATH=src python -m plume_nav_debugger.app --no-strict-provider-only
-   ```
 
+- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
+- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json` if present.
+- Strict provider-only mode is not configurable.
 
 ### Jupyter notebooks (interactive plots)
 
@@ -160,10 +172,13 @@ jupyter nbextension enable --py widgetsnbextension
 ```
 
 Troubleshooting “'widget' is not a recognised backend name”:
+
 - Ensure `ipympl` and `ipywidgets` are installed in the kernel, then restart it.
 - Clear any forced backend: `import os; os.environ.pop('MPLBACKEND', None)` in the first cell.
-- Fallback safely when ipympl is missing:
+
+- Fallback safely when ipympl is missing
   -
+
   ```python
   import matplotlib as mpl
   try:
@@ -187,7 +202,8 @@ This installs `hypothesis` (for property/contract suites) and `psutil` (for perf
 
 ## 5. Architecture Overview
 
-- `plume_nav_sim.make_env()` → default environment (auto-registered as `PlumeNav-v0`)
+- `plume_nav_sim.make_env()` → default environment
+- For `gym.make()`, call `ensure_registered()` and use `ENV_ID`.
 - `ComponentBasedEnvironment` → DI-powered core that consumes protocol-compliant components (`plume_nav_sim.interfaces`)
 - `plume_nav_sim.envs.factory.create_component_environment()` → factory with validation and curated defaults
 - `docs/extending/` → deep dives on protocols, wiring, and testing
@@ -200,7 +216,9 @@ from plume_nav_sim.utils.seeding import SeedManager
 
 manager = SeedManager()
 base_seed = 2025
-episode_seed = manager.derive_seed(base_seed, "episode-0")
+episode_seed = manager.generate_episode_seed(
+    base_seed, episode_number=0, experiment_id="repro"
+)
 
 env = pns.make_env()
 obs, info = env.reset(seed=episode_seed)
@@ -219,7 +237,12 @@ obs, info = env.reset(seed=episode_seed)
 
 ## 8. Contributing
 
-- Run `pre-commit run --all-files`
+- Pre-commit hooks
+  - From repo root (uses backend config):
+    - `pre-commit install -c src/backend/.pre-commit-config.yaml`
+    - `pre-commit run -c src/backend/.pre-commit-config.yaml --all-files`
+  - Or from backend directory:
+    - `(cd src/backend && pre-commit install && pre-commit run --all-files)`
 - Execute targeted tests: `conda run -n plume-nav-sim pytest src/backend/tests/plume_nav_sim/registration/ -q`
 - Update docs/examples for user-facing changes
 
@@ -232,12 +255,12 @@ MIT License. See [LICENSE](LICENSE).
 ## 10. Citation
 
 ```bibtex
-@software{plume_nav_sim_2024,
+@software{plume_nav_sim_2025,
   title        = {plume-nav-sim: Gymnasium-compatible reinforcement learning environment for plume navigation},
-  author       = {Sam Brudner},
-  year         = {2024},
+  author       = {plume_nav_sim Development Team},
+  year         = {2025},
   version      = {0.0.1},
-  url          = {https://github.com/plume-nav-sim/plume_nav_sim}
+  url          = {https://github.com/SamuelBrudner/plume_nav_sim}
 }
 ```
 
@@ -251,7 +274,8 @@ Operational logging vs. data capture
 ```python
 from plume_nav_sim.logging.loguru_bootstrap import setup_logging
 
-setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
+# Minimal ops logging setup
+setup_logging(level="INFO", console=True)
 ```
 
 - Use the data capture pipeline for analysis-ready data (JSONL.gz schemas, optional Parquet export). See backend README for details.
@@ -265,11 +289,13 @@ pip install -e .[data]
 ```
 
 This pulls in:
+
 - orjson (faster JSON serialization for JSONL)
 - pandas + pandera (batch validation of captured data)
 - pyarrow (optional Parquet export)
 
 Notes:
+
 - JSONL.gz capture works without extras; extras are needed for validation/parquet.
 - Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
 
@@ -317,4 +343,4 @@ Data catalog
 
 - See consolidated consumer docs and loading examples in `src/backend/docs/data_catalog_capture.md`.
 
-Questions or ideas? Open an issue or start a discussion at <https://github.com/plume-nav-sim/plume_nav_sim>.
+Questions or ideas? Open an issue or start a discussion at <https://github.com/SamuelBrudner/plume_nav_sim>.

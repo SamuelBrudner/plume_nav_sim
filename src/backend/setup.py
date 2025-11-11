@@ -37,7 +37,7 @@ AUTHOR = "plume_nav_sim Development Team"
 AUTHOR_EMAIL = "plume-nav-sim@example.com"
 DESCRIPTION = "Proof-of-life Gymnasium-compatible reinforcement learning environment for plume navigation research"
 LICENSE = "MIT"
-URL = "https://github.com/plume-nav-sim/plume_nav_sim"
+URL = "https://github.com/SamuelBrudner/plume_nav_sim"
 
 # SEO and discovery keywords for PyPI categorization and package discoverability
 KEYWORDS = [

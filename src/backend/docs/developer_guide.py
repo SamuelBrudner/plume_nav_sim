@@ -2830,7 +2830,7 @@ git --version
 cd ~/dev  # or your preferred development location
 
 # Clone the repository (replace with actual repository URL)
-git clone https://github.com/your-org/plume_nav_sim.git
+git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim
 
 # Create virtual environment

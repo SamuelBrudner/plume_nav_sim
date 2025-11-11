@@ -2,7 +2,7 @@
 
 🧪 Proof-of-Life Gymnasium Environment for Plume Navigation Research
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 A minimal Gymnasium-compatible reinforcement learning environment for plume navigation research, providing a standard API to communicate between learning algorithms and chemical plume environments. Designed specifically for researchers, educators, and students developing autonomous agents that navigate chemical plumes to locate their sources.
 
@@ -78,21 +78,17 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
 ### Basic Usage
 
 ```python
+from plume_nav_sim.registration import ensure_registered, ENV_ID
+ensure_registered()  # make ENV_ID available to gym.make()
+
 import gymnasium as gym
-import plume_nav_sim
-
-# Register environment with Gymnasium
-plume_nav_sim.register_env()
-
-# Create environment instance
-env = gym.make('PlumeNav-StaticGaussian-v0')
+env = gym.make(ENV_ID)
 
 # Basic episode execution
 obs, info = env.reset(seed=42)
 for step in range(100):
     action = env.action_space.sample()  # Random action
     obs, reward, terminated, truncated, info = env.step(action)
-    
     if terminated or truncated:
         print(f"Episode completed in {step + 1} steps")
         break
@@ -100,13 +96,13 @@ for step in range(100):
 env.close()
 ```
 
-### Quick Start with Convenience Function
+### Quick Start with Factory Function
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 
-# Streamlined environment setup
-env = plume_nav_sim.quick_start()
+# Streamlined environment setup using the factory
+env = pns.make_env()
 obs, info = env.reset()
 
 # Run single step
@@ -221,16 +217,16 @@ See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
 ### Registration System
 
 ```python
-import plume_nav_sim
+from plume_nav_sim.registration import ensure_registered, is_registered, register_env, ENV_ID
 
-# Register with default parameters
-plume_nav_sim.register_env()
+# Register with default parameters (idempotent)
+ensure_registered()
 
 # Register with custom configuration
-plume_nav_sim.register_env(kwargs=custom_config)
+register_env(kwargs=custom_config)
 
 # Check registration status
-if plume_nav_sim.is_registered('PlumeNav-StaticGaussian-v0'):
+if is_registered():
     print("Environment registered successfully")
 ```
 
@@ -286,14 +282,11 @@ env.close()
 ### Visualization Demo
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 import matplotlib.pyplot as plt
 
-# Create environment with visualization enabled
-env = plume_nav_sim.quick_start(
-    env_config={'grid_size': (64, 64)},
-    auto_register=True
-)
+# Create environment with visualization in mind
+env = pns.make_env(grid_size=(64, 64))
 
 # Run episode with human rendering
 obs, info = env.reset(seed=123)
@@ -355,10 +348,10 @@ Notes:
 ### Reproducibility Demo
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 
 def run_deterministic_episode(seed=42):
-    env = plume_nav_sim.quick_start()
+    env = pns.make_env()
     obs, info = env.reset(seed=seed)
     
     trajectory = [info['agent_position']]
@@ -471,7 +464,8 @@ performance_configs = {
 }
 
 # Apply configuration
-env = plume_nav_sim.quick_start(env_config=performance_configs['fast_training'])
+import plume_nav_sim as pns
+env = pns.make_env(**performance_configs['fast_training'])
 ```
 
 ### Custom Environment Creation
@@ -545,8 +539,8 @@ python --version
 import matplotlib
 matplotlib.use('Agg')  # Set backend before importing plume_nav_sim
 
-import plume_nav_sim
-env = plume_nav_sim.quick_start()
+import plume_nav_sim as pns
+env = pns.make_env()
 ```
 
 **Problem: Interactive rendering not working**
@@ -585,11 +579,12 @@ If you see “'widget' is not a recognised backend name”:
 
 ```python
 # Use smaller grid sizes for faster performance
+import plume_nav_sim as pns
 config = {
     'grid_size': (64, 64),    # Instead of (128, 128)
     'max_steps': 500,         # Shorter episodes
 }
-env = plume_nav_sim.quick_start(env_config=config)
+env = pns.make_env(**config)
 ```
 
 **Problem: Memory usage too high**
@@ -615,18 +610,19 @@ config = {
 
 ```python
 # Ensure registration before gym.make()
-import plume_nav_sim
-plume_nav_sim.register_env()
+from plume_nav_sim.registration import ensure_registered, ENV_ID
+ensure_registered()
 
 import gymnasium as gym
-env = gym.make('PlumeNav-StaticGaussian-v0')
+env = gym.make(ENV_ID)
 ```
 
 **Problem: Inconsistent reproducibility**
 
 ```python
 # Proper seeding approach
-env = plume_nav_sim.quick_start()
+import plume_nav_sim as pns
+env = pns.make_env()
 
 # Always pass seed to reset()
 obs, info = env.reset(seed=42)
@@ -713,6 +709,15 @@ python examples/performance_benchmark.py
 4. **Backwards Compatibility**: Maintain API compatibility
 5. **Performance**: Ensure changes don't degrade performance
 
+#### Pre-commit Hooks
+
+- Install hooks (from repo root using backend config):
+  - `pre-commit install -c src/backend/.pre-commit-config.yaml`
+- Run all hooks (from repo root):
+  - `pre-commit run -c src/backend/.pre-commit-config.yaml --all-files`
+- Alternative (from backend directory):
+  - `(cd src/backend && pre-commit install && pre-commit run --all-files)`
+
 ### Development Workflow
 
 1. **Feature Branch**: Create branch from main
@@ -725,7 +730,7 @@ python examples/performance_benchmark.py
 
 ### License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
 
 ```
 MIT License
@@ -748,11 +753,11 @@ copies or substantial portions of the Software.
 If you use plume-nav-sim in your research, please cite:
 
 ```bibtex
-@software{plume_nav_sim2024,
+@software{plume_nav_sim_2025,
   title={plume-nav-sim: Gymnasium Environment for Plume Navigation Research},
   author={plume_nav_sim Development Team},
-  year={2024},
-  url={https://github.com/your-org/plume-nav-sim},
+  year={2025},
+  url={https://github.com/SamuelBrudner/plume_nav_sim},
   version={0.0.1}
 }
 ```
@@ -769,8 +774,8 @@ This project builds upon the excellent work of the scientific Python ecosystem:
 ### Contact & Support
 
 - **Documentation**: [Link to full documentation]
-- **Issues**: [GitHub Issues](https://github.com/your-org/plume-nav-sim/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/plume-nav-sim/discussions)
+- **Issues**: [GitHub Issues](https://github.com/SamuelBrudner/plume_nav_sim/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/SamuelBrudner/plume_nav_sim/discussions)
 - **Email**: <plume-nav-sim@example.com>
 
 ---

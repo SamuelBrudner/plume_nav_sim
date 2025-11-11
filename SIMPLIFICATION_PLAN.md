@@ -20,12 +20,14 @@
 ### Phase 1: Unify on DI (Remove Dual Architecture)
 
 #### 1.1 Make Factory the Default
+
 - [ ] Remove `PlumeSearchEnv` as separate class (or make it thin wrapper over factory)
 - [ ] Eliminate `ENV_ID` vs `COMPONENT_ENV_ID` distinction → Single `PlumeNav-v0`
 - [ ] Remove `PLUMENAV_DEFAULT` environment variable (always use DI internally)
 - [ ] Update `plume_search_env.py` to always delegate to `create_component_environment`
 
 **Files to modify:**
+
 ```
 src/backend/plume_nav_sim/envs/plume_search_env.py    # Make wrapper over factory
 src/backend/plume_nav_sim/registration/register.py     # Single env_id, single entry point
@@ -33,11 +35,13 @@ src/backend/plume_nav_sim/registration/__init__.py     # Remove dual-ID exports
 ```
 
 #### 1.2 Keep Factory String-Only (Opinionated Design)
+
 - [x] **Decision**: Factory accepts ONLY string shortcuts, NOT component instances
 - [ ] Add better error messages for invalid `action_type`, `observation_type`, etc.
 - [ ] Keep existing signature (already excellent with Literal types)
 
 **Rationale:**
+
 - Clear separation: Factory = convenience, ComponentBasedEnvironment = power
 - Simpler mental model: strings for built-ins, direct instantiation for custom
 - Better error messages: "Unknown action_type" vs "Expected str or ActionProcessor"
@@ -50,12 +54,14 @@ src/backend/plume_nav_sim/registration/__init__.py     # Remove dual-ID exports
 ### Phase 2: Simplify Registration
 
 #### 2.1 Reduce Registration Module Complexity
+
 - [ ] Move complex caching/status functions to `registration/_internal.py` (testing only)
 - [ ] Reduce `registration/__init__.py` from 1046 lines → ~100 lines
 - [ ] Auto-register on import (no manual `register_env()` call needed)
 - [ ] Keep only essential public API: `register()`, `is_registered()`
 
 **Current bloat to remove from public API:**
+
 ```python
 # Remove from __all__ and public docs
 _module_initialized          # Internal state
@@ -68,6 +74,7 @@ get_package_info()          # Redundant with metadata
 ```
 
 **Target public API:**
+
 ```python
 # plume_nav_sim/registration/__init__.py
 __all__ = [
@@ -77,11 +84,13 @@ __all__ = [
 ```
 
 #### 2.2 Simplify Package Init
+
 - [ ] Add `make_env()` convenience function to `plume_nav_sim/__init__.py`
 - [ ] Auto-register on import (remove manual registration burden)
 - [ ] Reduce exports from 40+ → ~15 essential items
 
 **Target package API:**
+
 ```python
 # plume_nav_sim/__init__.py
 __all__ = [
@@ -110,12 +119,14 @@ __all__ = [
 ### Phase 3: Documentation Overhaul
 
 #### 3.1 Update README.md
+
 - [ ] Lead with simplest API: `plume_nav_sim.make_env()`
 - [ ] Show customization with string parameters
 - [ ] Move custom component examples to `docs/extending/`
 - [ ] Remove dual-architecture explanations
 
 **New README structure:**
+
 ```markdown
 ## Quick Start
 
@@ -126,6 +137,7 @@ env = plume_nav_sim.make_env()
 ```
 
 ### Customize Components
+
 ```python
 env = plume_nav_sim.make_env(
     action_type='oriented',
@@ -135,6 +147,7 @@ env = plume_nav_sim.make_env(
 ```
 
 ### Gymnasium Integration
+
 ```python
 import gymnasium as gym
 import plume_nav_sim
@@ -144,6 +157,7 @@ env = gym.make('PlumeNav-v0', action_type='oriented')
 ```
 
 **Want to build custom components?** → [Extending Guide](docs/extending/)
+
 ```
 
 #### 3.2 Reorganize Examples
@@ -156,11 +170,13 @@ env = gym.make('PlumeNav-v0', action_type='oriented')
 
 **Target examples structure:**
 ```
+
 examples/
 ├── quickstart.py              (50 lines: basic usage)
 ├── custom_configuration.py    (100 lines: customize via strings)
 ├── custom_components.py       (150 lines: inject custom classes)
 └── reproducibility.py         (80 lines: seeding examples)
+
 ```
 
 #### 3.3 Update docs/extending/
@@ -208,6 +224,7 @@ env = plume_nav_sim.make_env(
 - [ObservationModel](custom_observations.md) - Design observations  
 - [RewardFunction](custom_rewards.md) - Shape rewards
 - [PlumeModel](custom_plumes.md) - Simulate environments
+
 ```
 
 ---
@@ -268,16 +285,16 @@ env = plume_nav_sim.make_env()
 1. **Week 1:** Phase 1 (Unify on DI)
    - Remove dual architecture
    - Enhance factory for progressive disclosure
-   
+
 2. **Week 2:** Phase 2 (Simplify Registration)
    - Reduce registration complexity
    - Streamline package API
-   
+
 3. **Week 3:** Phase 3 (Documentation)
    - Rewrite README
    - Reorganize examples
    - Update extending guide
-   
+
 4. **Week 4:** Phase 4 (Cleanup & Testing)
    - Remove deprecated code
    - Update test suite
@@ -290,11 +307,13 @@ env = plume_nav_sim.make_env()
 ### Why Keep DI?
 
 **For research tools, extensibility is critical:**
+
 - Users need to test novel algorithms
 - Standard components should be swappable
 - Custom implementations shouldn't require forking
 
 **DI provides:**
+
 - Clean interfaces (Protocols)
 - Easy testing (inject mocks)
 - Zero coupling (components don't know about each other)
@@ -302,11 +321,13 @@ env = plume_nav_sim.make_env()
 ### Why Hide Complexity?
 
 **Most users don't need customization:**
+
 - 80% use case: "just give me an environment"
 - 15% use case: "customize with built-in options"
 - 5% use case: "inject my custom research code"
 
 **Progressive disclosure:**
+
 - Level 1: `make_env()` → works immediately
 - Level 2: `make_env(action_type='oriented')` → built-in options
 - Level 3: `make_env(action_type=MyActions())` → full power
@@ -314,12 +335,14 @@ env = plume_nav_sim.make_env()
 ### Why Single Architecture?
 
 **Maintaining two implementations is costly:**
+
 - Double testing burden
 - Confusing for users ("which one?")
 - Creates technical debt
 - No clear migration path
 
 **DI handles all use cases:**
+
 - Simple: factory with defaults
 - Custom: factory with string options
 - Extended: factory with custom instances
@@ -331,12 +354,14 @@ env = plume_nav_sim.make_env()
 ### From Legacy to Unified
 
 **Old way:**
+
 ```python
 from plume_nav_sim.envs import PlumeSearchEnv
 env = PlumeSearchEnv(grid_size=(128, 128))
 ```
 
 **New way:**
+
 ```python
 import plume_nav_sim
 env = plume_nav_sim.make_env(grid_size=(128, 128))
@@ -345,12 +370,14 @@ env = plume_nav_sim.make_env(grid_size=(128, 128))
 ### From Component-Specific to Unified
 
 **Old way:**
+
 ```python
 from plume_nav_sim.registration import register_env, COMPONENT_ENV_ID
 env_id = register_env(env_id=COMPONENT_ENV_ID)
 ```
 
 **New way:**
+
 ```python
 import plume_nav_sim
 env = plume_nav_sim.make_env()  # Uses DI internally

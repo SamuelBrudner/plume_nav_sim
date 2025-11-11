@@ -50,11 +50,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/plume-nav-sim/plume_nav_sim"
+Homepage = "https://github.com/SamuelBrudner/plume_nav_sim"
 Documentation = "https://plume-nav-sim.readthedocs.io"
-Repository = "https://github.com/plume-nav-sim/plume_nav_sim.git"
-Issues = "https://github.com/plume-nav-sim/plume_nav_sim/issues"
-Changelog = "https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.md"
+Repository = "https://github.com/SamuelBrudner/plume_nav_sim.git"
+Issues = "https://github.com/SamuelBrudner/plume_nav_sim/issues"
+Changelog = "https://github.com/SamuelBrudner/plume_nav_sim/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

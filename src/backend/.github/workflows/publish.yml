@@ -594,10 +594,10 @@ jobs:
 
           \`\`\`bash
           # Install from GitHub release
-          pip install https://github.com/plume-nav-sim/plume_nav_sim/releases/download/v$VERSION/plume_nav_sim-$VERSION-py3-none-any.whl
+          pip install https://github.com/SamuelBrudner/plume_nav_sim/releases/download/v$VERSION/plume_nav_sim-$VERSION-py3-none-any.whl
 
           # Or install in development mode
-          git clone https://github.com/plume-nav-sim/plume_nav_sim.git
+          git clone https://github.com/SamuelBrudner/plume_nav_sim.git
           cd plume_nav_sim/src/backend
           pip install -e .
           \`\`\`
@@ -641,17 +641,17 @@ jobs:
           ## 🔗 Documentation
 
           - [API Reference](https://plume-nav-sim.readthedocs.io)
-          - [User Guide](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/docs/user_guide.py)
-          - [Developer Guide](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/docs/developer_guide.py)
-          - [Examples](https://github.com/plume-nav-sim/plume_nav_sim/tree/main/examples)
+          - [User Guide](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/docs/user_guide.py)
+          - [Developer Guide](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/docs/developer_guide.py)
+          - [Examples](https://github.com/SamuelBrudner/plume_nav_sim/tree/main/examples)
 
           ## 🐛 Bug Reports
 
-          Please report issues at: https://github.com/plume-nav-sim/plume_nav_sim/issues
+          Please report issues at: https://github.com/SamuelBrudner/plume_nav_sim/issues
 
           ## 📄 License
 
-          MIT License - see [LICENSE](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/LICENSE)
+          MIT License - see [LICENSE](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/LICENSE)
 
           EOF
 
@@ -665,7 +665,7 @@ jobs:
               if grep -q "## \[$VERSION\]" CHANGELOG.md; then
                   sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | head -n -1
               else
-                  echo "See [CHANGELOG.md](https://github.com/plume-nav-sim/plume_nav_sim/blob/main/CHANGELOG.md) for detailed changes."
+                  echo "See [CHANGELOG.md](https://github.com/SamuelBrudner/plume_nav_sim/blob/main/CHANGELOG.md) for detailed changes."
               fi
           fi >> release-notes.md
 

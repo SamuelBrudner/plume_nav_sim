@@ -1431,7 +1431,7 @@ reward = 1.0 if distance_to_source ≤ goal_radius else 0.0
 - Gymnasium API documentation and best practices
 
 #### Community Resources
-- GitHub repository: [plume_nav_sim](https://github.com/example/plume_nav_sim)
+- GitHub repository: [plume_nav_sim](https://github.com/SamuelBrudner/plume_nav_sim)
 - Discussion forums and user community
 - Issue tracker for bug reports and feature requests
 
@@ -1460,10 +1460,10 @@ If you use plume_nav_sim in your research, please cite:
 ```bibtex
 @software{{plume_nav_sim,
   title={{Plume Navigation Simulation Environment}},
-  author={{[Authors]}},
-  year={{2024}},
+  author={{plume_nav_sim Development Team}},
+  year={{2025}},
   version={{{USER_GUIDE_VERSION}}},
-  url={{https://github.com/example/plume_nav_sim}}
+  url={{https://github.com/SamuelBrudner/plume_nav_sim}}
 }}
 ```
 
