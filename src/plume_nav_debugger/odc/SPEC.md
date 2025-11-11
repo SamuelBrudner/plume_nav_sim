@@ -4,7 +4,7 @@ Status: Draft 1.0.0
 
 Goal: Enable the debugger to automatically and deterministically introspect user applications (custom actions, observations, policies, overlays) without requiring changes to debugger code, while remaining side‑effect free and reproducible.
 
-Scope: This contract is optional. When present, the debugger prefers ODC over heuristics. In strict mode, ODC is required and heuristics are disabled.
+Scope: This contract is optional. When present, the debugger prefers ODC. Heuristic fallbacks are not used; ODC is required for labels, distributions, and pipeline.
 
 ---
 
@@ -38,7 +38,7 @@ class DebuggerProvider:
 Notes:
 - Side‑effect free: Never call `select_action`, never mutate policy/env state.
 - Determinism: For a given `(policy, observation)`, return the same distribution.
-- Partial capability: Return `None` to decline; the debugger will hide that detail (or use heuristics when strict mode is off).
+- Partial capability: Return `None` to decline; the debugger will hide that detail.
 
 ## Data Models
 
@@ -125,11 +125,10 @@ For now, version is implicit (1.0.0). Providers may optionally expose `odc_versi
 
 ## Strict Mode
 
-- When strict mode is enabled (default), the debugger:
-  - Does not apply heuristics.
-  - Hides labels/distributions/pipeline unless the provider supplies them.
-  - Shows an informational banner (with link to ODC documentation) explaining how to enable details.
-- When strict mode is disabled, the debugger may use guarded heuristics as a fallback.
+- Strict provider-only behavior is always enabled:
+  - The debugger does not apply heuristics.
+  - The UI hides labels/distributions/pipeline unless the provider supplies them.
+  - An informational banner indicates when no provider is detected and links to ODC docs.
 
 ## Error Handling
 

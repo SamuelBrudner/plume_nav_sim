@@ -76,60 +76,9 @@ class ActionPanelModel:
             self.state.action_label = "-"
 
     def probe_distribution(self, policy: object, observation: np.ndarray) -> None:
+        # Provider-only UI: do not derive distributions from policy without provider
         self.state.distribution = None
         self.state.distribution_source = None
-        if policy is None:
-            return
-
-        # Try a few common patterns in order of specificity
-        try:
-            if hasattr(policy, "action_probabilities"):
-                probs = np.asarray(policy.action_probabilities(observation))  # type: ignore[attr-defined]
-                if probs.ndim == 1 and probs.size:
-                    p = (
-                        probs / probs.sum()
-                        if probs.sum()
-                        else np.full_like(probs, 1.0 / probs.size)
-                    )
-                    self.state.distribution = [float(x) for x in p.tolist()]
-                    self.state.distribution_source = "probs"
-                    return
-        except Exception:
-            pass
-
-        try:
-            if hasattr(policy, "q_values"):
-                q = np.asarray(policy.q_values(observation))  # type: ignore[attr-defined]
-                if q.ndim == 1 and q.size:
-                    p = _softmax(q)
-                    self.state.distribution = [float(x) for x in p.tolist()]
-                    self.state.distribution_source = "q_values"
-                    return
-        except Exception:
-            pass
-
-        try:
-            if hasattr(policy, "logits"):
-                l = np.asarray(policy.logits(observation))  # type: ignore[attr-defined]
-                if l.ndim == 1 and l.size:
-                    p = _softmax(l)
-                    self.state.distribution = [float(x) for x in p.tolist()]
-                    self.state.distribution_source = "logits"
-                    return
-        except Exception:
-            pass
-
-        # Best-effort generic
-        try:
-            if hasattr(policy, "action_distribution"):
-                d = np.asarray(policy.action_distribution(observation))  # type: ignore[attr-defined]
-                if d.ndim == 1 and d.size:
-                    p = d / d.sum() if d.sum() else np.full_like(d, 1.0 / d.size)
-                    self.state.distribution = [float(x) for x in p.tolist()]
-                    self.state.distribution_source = "probs"
-                    return
-        except Exception:
-            pass
 
     # ------------------------------------------------------------------
     def _label_for(self, idx: int) -> str:

@@ -12,10 +12,11 @@ from .provider import DebuggerProvider
 
 
 class ProviderMux:
-    """Merge provider capabilities with debugger heuristics.
+    """Provider-only multiplexer for debugger capabilities.
 
-    Provider takes precedence; debugger falls back to heuristics otherwise.
-    Results are cached per-instance where prudent.
+    - No heuristic fallbacks. If no provider is available, methods return
+      empty/None values suitable for a provider-required UI.
+    - Results are cached per-instance where prudent.
     """
 
     def __init__(
@@ -33,7 +34,7 @@ class ProviderMux:
     def get_action_names(self) -> List[str]:
         if self._action_names is not None:
             return list(self._action_names)
-        # Provider
+        # Provider-only
         if self._provider is not None:
             try:
                 info = self._provider.get_action_info(self._env)
@@ -46,43 +47,13 @@ class ProviderMux:
                         return list(self._action_names)
             except Exception:
                 pass
-        # Heuristic from env.action_space metadata
-        names: Optional[List[str]] = None
-        try:
-            space = getattr(self._env, "action_space", None)
-            if space is not None:
-                meta = getattr(space, "_metadata", {}) or {}
-                cand = meta.get("action_names")
-                if isinstance(cand, (list, tuple)) and all(
-                    isinstance(x, str) for x in cand
-                ):
-                    names = list(cand)
-        except Exception:
-            names = None
-        if names is None:
-            try:
-                n = getattr(getattr(self._env, "action_space", None), "n", None)
-                if isinstance(n, (int, np.integer)):
-                    n = int(n)
-                    if n == 3:
-                        names = ["FORWARD", "TURN_LEFT", "TURN_RIGHT"]
-                    elif n == 4:
-                        names = ["UP", "RIGHT", "DOWN", "LEFT"]
-            except Exception:
-                names = None
-        if names is None:
-            try:
-                n = getattr(getattr(self._env, "action_space", None), "n", 0) or 0
-                n = int(n) if isinstance(n, (int, np.integer)) else 0
-            except Exception:
-                n = 0
-            names = [str(i) for i in range(max(0, n))]
-        self._action_names = names
-        return list(self._action_names)
+        # No provider → no labels
+        self._action_names = []
+        return []
 
     # Distribution ------------------------------------------------------------
     def get_policy_distribution(self, observation: np.ndarray) -> Optional[List[float]]:
-        # Provider
+        # Provider-only
         if self._provider is not None:
             tried_provider = False
             try:
@@ -107,40 +78,6 @@ class ProviderMux:
             # If provider responded but was invalid, do not fallback
             if tried_provider:
                 return None
-        # Heuristic probing (side-effect free)
-        n = _action_count(self._env)
-        try:
-            if hasattr(self._policy, "action_probabilities"):
-                probs = np.asarray(self._policy.action_probabilities(observation))  # type: ignore[attr-defined]
-                if probs.ndim == 1 and probs.size:
-                    if n == 0 or probs.size == n:
-                        return _normalize_1d(probs).tolist()
-        except Exception:
-            pass
-        try:
-            if hasattr(self._policy, "q_values"):
-                q = np.asarray(self._policy.q_values(observation))  # type: ignore[attr-defined]
-                if q.ndim == 1 and q.size:
-                    if n == 0 or q.size == n:
-                        return _softmax(q).tolist()
-        except Exception:
-            pass
-        try:
-            if hasattr(self._policy, "logits"):
-                l = np.asarray(self._policy.logits(observation))  # type: ignore[attr-defined]
-                if l.ndim == 1 and l.size:
-                    if n == 0 or l.size == n:
-                        return _softmax(l).tolist()
-        except Exception:
-            pass
-        try:
-            if hasattr(self._policy, "action_distribution"):
-                d = np.asarray(self._policy.action_distribution(observation))  # type: ignore[attr-defined]
-                if d.ndim == 1 and d.size:
-                    if n == 0 or d.size == n:
-                        return _normalize_1d(d).tolist()
-        except Exception:
-            pass
         return None
 
     # Pipeline ----------------------------------------------------------------
@@ -155,11 +92,12 @@ class ProviderMux:
                     return list(self._pipeline)
             except Exception:
                 pass
-        try:
-            self._pipeline = get_env_chain_names(self._env)
-        except Exception:
-            self._pipeline = []
-        return list(self._pipeline)
+        # No provider → no pipeline
+        self._pipeline = []
+        return []
+
+    def has_provider(self) -> bool:
+        return self._provider is not None
 
 
 def _is_1d(x: Any) -> bool:

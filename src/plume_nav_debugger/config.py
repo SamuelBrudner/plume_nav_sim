@@ -11,7 +11,6 @@ DEFAULT_CONFIG_PATH = Path.home() / ".config" / "plume-nav-sim" / "debugger.json
 
 @dataclass
 class DebuggerPreferences:
-    strict_provider_only: bool = True
     show_pipeline: bool = True
     show_preview: bool = True
     show_sparkline: bool = True
@@ -25,9 +24,6 @@ class DebuggerPreferences:
 
             s = QtCore.QSettings("plume-nav-sim", "Debugger")
             return cls(
-                strict_provider_only=bool(
-                    s.value("prefs/strict_provider_only", True, type=bool)
-                ),
                 show_pipeline=bool(s.value("prefs/show_pipeline", True, type=bool)),
                 show_preview=bool(s.value("prefs/show_preview", True, type=bool)),
                 show_sparkline=bool(s.value("prefs/show_sparkline", True, type=bool)),
@@ -44,7 +40,6 @@ class DebuggerPreferences:
             from PySide6 import QtCore
 
             s = QtCore.QSettings("plume-nav-sim", "Debugger")
-            s.setValue("prefs/strict_provider_only", self.strict_provider_only)
             s.setValue("prefs/show_pipeline", self.show_pipeline)
             s.setValue("prefs/show_preview", self.show_preview)
             s.setValue("prefs/show_sparkline", self.show_sparkline)
@@ -59,7 +54,6 @@ class DebuggerPreferences:
             with open(path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             return cls(
-                strict_provider_only=bool(data.get("strict_provider_only", True)),
                 show_pipeline=bool(data.get("show_pipeline", True)),
                 show_preview=bool(data.get("show_preview", True)),
                 show_sparkline=bool(data.get("show_sparkline", True)),

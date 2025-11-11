@@ -11,7 +11,7 @@ class DebuggerProvider:
     Implementers expose debugger-facing metadata without changing debugger code.
     All methods are optional and MUST be side-effect free and deterministic for
     a given input. When a method returns None, the debugger treats it as "no
-    opinion" and may hide that detail (or use heuristics when strict mode is off).
+    opinion" and will hide that detail. No heuristics are applied.
     See SPEC.md for full semantics and invariants.
     """
 

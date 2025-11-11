@@ -127,6 +127,19 @@ class EnvDriver(QtCore.QObject):
 
             self._mux = ProviderMux(self._env, self._policy)
             self.provider_mux_changed.emit(self._mux)
+            # Structured one-time warning if no provider detected
+            try:
+                import warnings as _warnings
+
+                if not getattr(self, "_warned_no_provider", False):
+                    if hasattr(self._mux, "has_provider") and not self._mux.has_provider():  # type: ignore[attr-defined]
+                        _warnings.warn(
+                            "plume_nav_debugger:no_provider_detected provider is required for action labels, distributions, and pipeline",
+                            RuntimeWarning,
+                        )
+                        self._warned_no_provider = True
+            except Exception:
+                pass
         except Exception:
             self._mux = None
         self._emit_action_space_changed()
@@ -414,24 +427,13 @@ class EnvDriver(QtCore.QObject):
         return self._last_event
 
     def get_action_names(self) -> list[str]:
-        # Prefer ProviderMux if available
+        # Provider-only: no heuristics or numeric fallbacks
         if self._mux is not None:
             try:
                 return self._mux.get_action_names()
             except Exception:
-                pass
-        # Strict mode: avoid heuristic fallbacks
-        if getattr(self, "config", None) is not None and getattr(
-            self.config, "strict_provider_only", False
-        ):
-            return []
-        # Non-strict fallback numeric labels
-        try:
-            n = getattr(getattr(self._env, "action_space", None), "n", 0) or 0
-            n = int(n) if isinstance(n, (int, np.integer)) else 0
-        except Exception:
-            n = 0
-        return [str(i) for i in range(max(0, n))]
+                return []
+        return []
 
     def _emit_action_space_changed(self) -> None:
         try:
@@ -647,7 +649,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Load preferences and configure driver
         self.prefs = DebuggerPreferences.initial_load()
         cfg = DebuggerConfig()
-        cfg.strict_provider_only = bool(self.prefs.strict_provider_only)
+        # Enforce strict provider-only mode via Inspector; DebuggerConfig flag is not user-modifiable
         self.driver = EnvDriver(cfg)
         self.driver.frame_ready.connect(self.frame_view.update_frame)
         self.driver.step_done.connect(self._on_step_event)
@@ -690,12 +692,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 getattr(self.driver, "_env", None)
             ),
         )
-        # Configure inspector strictness from driver config
+        # Enforce strict provider-only mode unconditionally
         QtCore.QTimer.singleShot(
-            80,
-            lambda: self.inspector.set_strict_provider_only(
-                getattr(self.driver.config, "strict_provider_only", True)
-            ),
+            80, lambda: self.inspector.set_strict_provider_only(True)
         )
         # Apply inspector display prefs
         QtCore.QTimer.singleShot(90, lambda: self._apply_inspector_prefs())
@@ -804,11 +803,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.prefs.save_json_file()
             except Exception:
                 pass
-            # Apply to driver and inspector
-            self.driver.config.strict_provider_only = bool(
-                self.prefs.strict_provider_only
-            )
-            self.inspector.set_strict_provider_only(self.prefs.strict_provider_only)
+            # Apply display-related prefs
             self._apply_inspector_prefs()
             self._apply_theme(self.prefs.theme)
             try:
@@ -862,9 +857,6 @@ class PreferencesDialog(QtWidgets.QDialog):
         self.setWindowTitle("Preferences")
         self._prefs = DebuggerPreferences(**vars(prefs))
         layout = QtWidgets.QFormLayout(self)
-        # Strict mode
-        self.chk_strict = QtWidgets.QCheckBox("Strict provider-only mode")
-        self.chk_strict.setChecked(self._prefs.strict_provider_only)
         # Inspector toggles
         self.chk_pipeline = QtWidgets.QCheckBox("Show pipeline")
         self.chk_pipeline.setChecked(self._prefs.show_pipeline)
@@ -888,7 +880,6 @@ class PreferencesDialog(QtWidgets.QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
 
-        layout.addRow(self.chk_strict)
         layout.addRow(self.chk_pipeline)
         layout.addRow(self.chk_preview)
         layout.addRow(self.chk_spark)
@@ -897,7 +888,6 @@ class PreferencesDialog(QtWidgets.QDialog):
         layout.addRow(btns)
 
     def get_prefs(self) -> DebuggerPreferences:
-        self._prefs.strict_provider_only = bool(self.chk_strict.isChecked())
         self._prefs.show_pipeline = bool(self.chk_pipeline.isChecked())
         self._prefs.show_preview = bool(self.chk_preview.isChecked())
         self._prefs.show_sparkline = bool(self.chk_spark.isChecked())
@@ -974,7 +964,7 @@ class ActionPanelWidget(QtWidgets.QWidget):
         # Policy insight
         self.expected_action_label = QtWidgets.QLabel("expected action: -")
         self.distribution_label = QtWidgets.QLabel("distribution: N/A")
-        self.source_label = QtWidgets.QLabel("source: heuristic")
+        self.source_label = QtWidgets.QLabel("source: none")
         # Layout
         layout.addWidget(self.expected_action_label, 0, 0)
         layout.addWidget(self.distribution_label, 0, 1)
@@ -1141,9 +1131,8 @@ class InspectorWidget(QtWidgets.QWidget):
                 action if isinstance(action, (int, np.integer)) else None
             )
 
-            # Probe distribution (best effort)
+            # Probe distribution (provider-only)
             if isinstance(obs, np.ndarray):
-                # Prefer ProviderMux for distribution
                 dist = None
                 if self._mux is not None:
                     try:
@@ -1153,10 +1142,6 @@ class InspectorWidget(QtWidgets.QWidget):
                 if dist is not None:
                     self._act_model.state.distribution = [float(x) for x in dist]
                     self._act_model.state.distribution_source = "provider"
-                elif (
-                    not self._strict_provider_only
-                ) and self._policy_for_probe is not None:
-                    self._act_model.probe_distribution(self._policy_for_probe, obs)
                 else:
                     self._act_model.state.distribution = None
                     self._act_model.state.distribution_source = None
@@ -1224,11 +1209,8 @@ class InspectorWidget(QtWidgets.QWidget):
         self._policy_for_probe = policy
 
     def set_observation_pipeline_from_env(self, env: object) -> None:
-        try:
-            chain = get_env_chain_names(env)
-            self._pipeline_text = f"Pipeline: {format_pipeline(chain)}"
-        except Exception:
-            self._pipeline_text = ""
+        # Provider-only UI: pipeline derived only via ProviderMux
+        self._pipeline_text = ""
 
     @QtCore.Slot(object)
     def on_mux_changed(self, mux: object) -> None:
@@ -1250,7 +1232,7 @@ class InspectorWidget(QtWidgets.QWidget):
         except Exception:
             self._mux = None
             try:
-                self.action_panel.source_label.setText("source: heuristic")
+                self.action_panel.source_label.setText("source: none")
             except Exception:
                 pass
             self._update_strict_banner()
@@ -1292,49 +1274,19 @@ class InspectorWidget(QtWidgets.QWidget):
             self.info_label.setVisible(False)
 
 
-def main(
-    *, strict_provider_only: Optional[bool] = None
-) -> None:  # pragma: no cover - UI entry point
+def main() -> None:  # pragma: no cover - UI entry point
     # macOS layer workaround for some terminals: set before QApplication
     if sys.platform == "darwin":
         import os
 
         os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
-    # Optional CLI override for strict mode
-    try:
-        import argparse
-
-        parser = argparse.ArgumentParser(add_help=True)
-        # BooleanOptionalAction supports --strict-provider-only / --no-strict-provider-only
-        parser.add_argument(
-            "--strict-provider-only",
-            dest="cli_strict_provider_only",
-            action=getattr(argparse, "BooleanOptionalAction", "store_true"),
-            default=None,
-            help="Enable/disable strict provider-only mode (default: preference)",
-        )
-        # Only parse known args; ignore others to avoid conflicts in embedded contexts
-        ns, _ = parser.parse_known_args(sys.argv[1:])
-        if strict_provider_only is None:
-            strict_provider_only = getattr(ns, "cli_strict_provider_only", None)
-    except Exception:
-        # Fall back to provided kwarg or preferences
-        pass
     app = QtWidgets.QApplication(sys.argv)
     # QSettings identifiers for layout persistence
     QtCore.QCoreApplication.setOrganizationName("plume-nav-sim")
     QtCore.QCoreApplication.setApplicationName("Debugger")
     win = MainWindow()
     win.show()
-    # Apply strict-provider-only override if provided
-    try:
-        if strict_provider_only is not None:
-            win.prefs.strict_provider_only = bool(strict_provider_only)
-            # Reflect into driver and inspector immediately
-            win.driver.config.strict_provider_only = bool(strict_provider_only)
-            win.inspector.set_strict_provider_only(bool(strict_provider_only))
-    except Exception:
-        pass
+    # Strict provider-only is always enforced by the UI; no CLI or pref overrides
     sys.exit(app.exec())
 
 
