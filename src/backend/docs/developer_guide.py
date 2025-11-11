@@ -1082,7 +1082,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY src/ src/
 COPY tests/ tests/
-COPY setup.py .
 
 # Install in development mode
 RUN pip install -e .

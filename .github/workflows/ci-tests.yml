@@ -102,47 +102,47 @@ jobs:
         run: |
           set -euo pipefail
           RUN_DIR=$(python - <<'PY'
-from pathlib import Path
-import os
-from plume_nav_sim.cli import capture
+          from pathlib import Path
+          import os
+          from plume_nav_sim.cli import capture
 
-out_root = Path(os.environ.get('RUNNER_TEMP', '.')) / 'ingest_demo' / 'results'
-argv = [
-    '--output', str(out_root),
-    '--experiment', 'ci_ingest',
-    '--episodes', '1',
-    '--grid', '8x8',
-    '--seed', '123',
-    '--max-steps', '10',
-    '--parquet',
-]
-rc = int(capture.main(argv))
-if rc != 0:
-    raise SystemExit(rc)
-exp_dir = out_root / 'ci_ingest'
-run_dirs = sorted([p for p in exp_dir.iterdir() if p.is_dir() and p.name.startswith('run-')])
-run_dir = run_dirs[-1]
-print(run_dir, end='')
-PY
+          out_root = Path(os.environ.get('RUNNER_TEMP', '.')) / 'ingest_demo' / 'results'
+          argv = [
+              '--output', str(out_root),
+              '--experiment', 'ci_ingest',
+              '--episodes', '1',
+              '--grid', '8x8',
+              '--seed', '123',
+              '--max-steps', '10',
+              '--parquet',
+          ]
+          rc = int(capture.main(argv))
+          if rc != 0:
+              raise SystemExit(rc)
+          exp_dir = out_root / 'ci_ingest'
+          run_dirs = sorted([p for p in exp_dir.iterdir() if p.is_dir() and p.name.startswith('run-')])
+          run_dir = run_dirs[-1]
+          print(run_dir, end='')
+          PY
           )
           echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: DVC smoke: reproduce capture_ingest stage
+      - name: "DVC smoke: reproduce capture_ingest stage"
         env:
           RUN_DIR: ${{ steps.make_run.outputs.run_dir }}
         run: |
           set -euo pipefail
           echo "Using RUN_DIR=$RUN_DIR"
-          OUT_DIR="$(pwd)/.ci-captures"
+          export OUT_DIR="$(pwd)/.ci-captures"
           cp params.yaml params.yaml.bak
           python - <<PY
-from pathlib import Path
-import os
-run_dir = os.environ['RUN_DIR']
-out_dir = os.environ.get('OUT_DIR', '.ci-captures')
-Path('params.yaml').write_text(f"""ingest_capture:\n  run_dir: {run_dir}\n  out_dir: {out_dir}\n\n""")
-print(Path('params.yaml').read_text())
-PY
+          from pathlib import Path
+          import os
+          run_dir = os.environ['RUN_DIR']
+          out_dir = os.environ.get('OUT_DIR', '.ci-captures')
+          Path('params.yaml').write_text(f"""ingest_capture:\n  run_dir: {run_dir}\n  out_dir: {out_dir}\n\n""")
+          print(Path('params.yaml').read_text())
+          PY
           dvc repro -f capture_ingest
           test -d "$OUT_DIR" || (echo "OUT_DIR missing: $OUT_DIR" >&2; exit 1)
           # Restore original params.yaml
