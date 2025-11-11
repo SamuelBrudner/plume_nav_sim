@@ -14,13 +14,8 @@ class _StubIIO:
 
     def imwrite(self, path, frames, **kwargs):
         # Record a shallow copy of frames info (length) to avoid holding arrays
-        self.calls.append(
-            (
-                path,
-                len(list(frames)) if not isinstance(frames, list) else len(frames),
-                kwargs,
-            )
-        )
+        length = len(frames) if isinstance(frames, list) else len(list(frames))
+        self.calls.append((path, length, kwargs))
 
 
 def _install_imageio_stub(monkeypatch: pytest.MonkeyPatch) -> _StubIIO:
@@ -74,12 +69,17 @@ def test_save_video_events_filters_none_frames(
     assert kwargs.get("codec") == "libx264"
 
 
-def test_save_video_import_error(tmp_path):
-    # Ensure imageio import fails by removing from sys.modules if present
-    import sys
+def test_save_video_import_error(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    import builtins
 
-    for k in [m for m in list(sys.modules.keys()) if m.startswith("imageio")]:
-        sys.modules.pop(k)
+    original_import = builtins.__import__
+
+    def _raise_when_imageio(name, *args, **kwargs):
+        if name.startswith("imageio"):
+            raise ImportError("imageio not installed")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _raise_when_imageio)
 
     with pytest.raises(ImportError):
         save_video_frames(_make_frames(1), tmp_path / "x.gif")
