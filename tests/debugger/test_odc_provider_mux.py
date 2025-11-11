@@ -69,14 +69,11 @@ def test_provider_mux_falls_back_when_provider_absent():
     pol = _PolicyHeuristic()
     mux = ProviderMux(env, pol, provider=None)
 
-    # Actions: fall back to metadata
-    assert mux.get_action_names() == ["A", "B", "C"]
+    # Strict mode: no provider means no labels or distribution
+    assert mux.get_action_names() == []
 
-    # Distribution: fall back to q_values → softmax
     obs = np.array([0.0])
-    p = np.array(mux.get_policy_distribution(obs))
-    assert p.shape == (3,)
-    assert abs(float(p.sum()) - 1.0) < 1e-6
+    assert mux.get_policy_distribution(obs) is None
 
 
 def test_provider_invalid_action_names_length_falls_back_to_metadata():
@@ -88,8 +85,8 @@ def test_provider_invalid_action_names_length_falls_back_to_metadata():
     env = _Env()
     pol = _PolicyHeuristic()
     mux = ProviderMux(env, pol, provider=_BadProvider())
-    # Should ignore provider names and fall back to metadata
-    assert mux.get_action_names() == ["A", "B", "C"]
+    # Strict mode: invalid provider response yields empty labels, no heuristics
+    assert mux.get_action_names() == []
 
 
 def test_provider_invalid_distribution_length_returns_none():

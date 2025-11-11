@@ -5,7 +5,6 @@ from plume_nav_debugger.config import DebuggerPreferences
 
 def test_preferences_json_roundtrip(tmp_path: Path):
     p = DebuggerPreferences(
-        strict_provider_only=False,
         show_pipeline=False,
         show_preview=True,
         show_sparkline=False,
