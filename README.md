@@ -200,6 +200,16 @@ pip install -e .[test,benchmark]
 
 This installs `hypothesis` (for property/contract suites) and `psutil` (for performance benchmarks). Without them, `pytest` will report import-time failures.
 
+### Zarr storage policy (chunks + compression)
+
+- Default chunks for time-indexed video/plume tensors follow `CHUNKS_TYX = (8, 64, 64)`.
+- Compression uses Blosc with Zstandard at `clevel=5` when available; otherwise falls back to Blosc LZ4 with a warning while preserving the same interface.
+- Helper API and constants live in `plume_nav_sim/storage/zarr_policies.py`:
+  - `create_blosc_compressor()` → returns a configured numcodecs compressor
+  - `create_zarr_array(path, name, shape, dtype, ...)` → creates a Zarr dataset and records policy attrs
+
+These policies are referenced by dataset ingest and loader components to ensure consistent on-disk formats across tools and CI.
+
 ## 5. Architecture Overview
 
 - `plume_nav_sim.make_env()` → default environment
