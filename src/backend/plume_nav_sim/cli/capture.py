@@ -124,17 +124,61 @@ def main(argv: Optional[list[str]] = None) -> int:
             overrides=overrides,
         )
         env_cfg = cfg.get("env", {})
-        grid = env_cfg.get("grid_size", [64, 64])
-        if not isinstance(grid, (list, tuple)) or len(grid) != 2:
-            raise SystemExit("env.grid_size must be a 2-element list or tuple")
-        w, h = int(grid[0]), int(grid[1])
-        env = pns.make_env(
-            grid_size=(w, h),
-            action_type=env_cfg.get("action_type", "oriented"),
-            observation_type=env_cfg.get("observation_type", "concentration"),
-            reward_type=env_cfg.get("reward_type", "step_penalty"),
-            max_steps=env_cfg.get("max_steps", None) or None,
-        )
+        plume_mode = env_cfg.get("plume", "static")
+
+        # Build kwargs for make_env, handling movie mode specially
+        make_kwargs = {
+            "action_type": env_cfg.get("action_type", "oriented"),
+            "observation_type": env_cfg.get("observation_type", "concentration"),
+            "reward_type": env_cfg.get("reward_type", "step_penalty"),
+            "max_steps": env_cfg.get("max_steps", None) or None,
+        }
+
+        if plume_mode == "movie":
+            movie_cfg = cfg.get("movie", {})
+            make_kwargs.update(
+                {
+                    "plume": "movie",
+                    "movie_path": movie_cfg.get("path"),
+                    "movie_fps": movie_cfg.get("fps"),
+                    "movie_pixel_to_grid": (
+                        tuple(movie_cfg.get("pixel_to_grid"))
+                        if movie_cfg.get("pixel_to_grid")
+                        else None
+                    ),
+                    "movie_origin": (
+                        tuple(movie_cfg.get("origin"))
+                        if movie_cfg.get("origin")
+                        else None
+                    ),
+                    "movie_extent": (
+                        tuple(movie_cfg.get("extent"))
+                        if movie_cfg.get("extent")
+                        else None
+                    ),
+                    "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
+                }
+            )
+            # In movie mode, grid_size derives from dataset; ignore env.grid_size if provided
+            w = h = None  # filled after env constructed
+            env = pns.make_env(**make_kwargs)
+            # Try to discover grid from env for RunMeta
+            gs = getattr(env, "grid_size", None)
+            if gs is not None:
+                # grid_size may be tuple or GridSize
+                w = getattr(gs, "width", None) or int(gs[0])
+                h = getattr(gs, "height", None) or int(gs[1])
+            else:
+                raise SystemExit(
+                    "Failed to determine grid size from movie dataset/environment"
+                )
+        else:
+            grid = env_cfg.get("grid_size", [64, 64])
+            if not isinstance(grid, (list, tuple)) or len(grid) != 2:
+                raise SystemExit("env.grid_size must be a 2-element list or tuple")
+            w, h = int(grid[0]), int(grid[1])
+            make_kwargs.update({"grid_size": (w, h)})
+            env = pns.make_env(**make_kwargs)
         # Sync top-level controls from cfg unless explicitly overridden via CLI
         args.output = (
             args.output if _is_provided("--output") else cfg.get("output", "results")
@@ -173,7 +217,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         rec = RunRecorder(
             args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
         )
-        cfg = EnvironmentConfig(grid_size=(w, h), source_location=(w // 2, h // 2))
+        if w is None or h is None:
+            # Fallback guard, should not happen
+            raise SystemExit("Unable to resolve grid dimensions for EnvironmentConfig")
+        cfg = EnvironmentConfig(
+            grid_size=(int(w), int(h)), source_location=(int(w) // 2, int(h) // 2)
+        )
         env = DataCaptureWrapper(
             env,
             rec,

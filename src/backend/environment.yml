@@ -6,6 +6,10 @@ dependencies:
   - pip
   # Core dependencies managed by Conda for performance/compatibility
   - numpy>=2.1.0
+  - xarray>=2024.1.0
+  - zarr>=2.16.0
+  - numcodecs>=0.12.0
+  - imageio>=2.31.0
   - pip:
     # This line installs the project in editable mode with all optional dependencies.
     # The '.' refers to the current directory where pyproject.toml is located.

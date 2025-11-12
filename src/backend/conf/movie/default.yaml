@@ -1,0 +1,9 @@
+movie:
+  # Path to Zarr dataset containing concentration: (t,y,x)
+  path: null
+  # Optional overrides when attrs omitted or to force policies
+  fps: null
+  pixel_to_grid: null  # [scale_y, scale_x]
+  origin: null         # [y0, x0] in grid units
+  extent: null         # [height, width] in grid units
+  step_policy: wrap    # wrap|clamp

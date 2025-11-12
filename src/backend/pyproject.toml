@@ -116,6 +116,9 @@ media = [
     "pillow>=10.0.0",
     # For MP4 writing via imageio; requires system ffmpeg otherwise
     "imageio-ffmpeg>=0.4.9",
+    "xarray>=2024.1.0",
+    "zarr>=2.16.0",
+    "numcodecs>=0.12.0",
 ]
 
 [project.scripts]
@@ -123,6 +126,7 @@ plume-nav-validate = "plume_nav_sim.scripts:validate_installation"
 plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
 plume-nav-constants-check = "scripts.validate_constants_drift:main"
 plume-nav-capture = "plume_nav_sim.cli.capture:main"
+plume-nav-video-ingest = "plume_nav_sim.cli.video_ingest:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

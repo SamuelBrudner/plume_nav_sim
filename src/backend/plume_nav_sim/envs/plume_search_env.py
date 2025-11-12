@@ -165,10 +165,33 @@ class PlumeSearchEnv(gym.Env):
             elif key in kwargs:
                 factory_kwargs[key] = kwargs[key]
 
+        # Forward optional plume selection and movie configuration if provided
+        for key in (
+            "plume",
+            "movie_path",
+            "movie_fps",
+            "movie_pixel_to_grid",
+            "movie_origin",
+            "movie_extent",
+            "movie_step_policy",
+        ):
+            if key in env_options:
+                factory_kwargs[key] = env_options[key]
+            elif key in kwargs:
+                factory_kwargs[key] = kwargs[key]
+
         self._core_env = create_component_environment(**factory_kwargs)
 
         # Legacy attribute compatibility expected by registration tests
-        self.grid_size = normalized_grid
+        # Prefer grid size from created core env (e.g., movie plume derives from dataset)
+        core_grid = getattr(self._core_env, "grid_size", None)
+        if core_grid is not None:
+            try:
+                self.grid_size = core_grid
+            except Exception:
+                self.grid_size = normalized_grid
+        else:
+            self.grid_size = normalized_grid
         self.source_location = goal_position
         self.max_steps = max_steps_value
         self.goal_radius = goal_radius_value

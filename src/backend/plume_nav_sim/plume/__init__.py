@@ -61,76 +61,79 @@ class CacheReport(TypedDict, total=False):
 
 
 # Core type system imports from shared types module
-from ..core.types import (  # noqa: E402
+from ..core.types import (
     Coordinates,  # 2D coordinate representation for type annotations and parameter validation
 )
-from ..core.types import (  # noqa: E402
+from ..core.types import (
     CoordinateType,  # Type alias for flexible coordinate parameter validation
 )
-from ..core.types import (  # noqa: E402
+from ..core.types import (
     GridDimensions,  # Type alias for grid size parameters in factory functions
 )
-from ..core.types import (  # noqa: E402; noqa: E402; noqa: E402; Core data structures for coordinate and grid management; Grid dimension representation for type annotations and factory functions
+from ..core.types import (  # noqa: E402; noqa: E402; noqa: E402; noqa: E402; Core data structures for coordinate and grid management; Grid dimension representation for type annotations and factory functions
     GridSize,
 )
 
 # Concentration field data structure imports
-from .concentration_field import (  # noqa: E402
+from .concentration_field import (
     ConcentrationField,  # Core data structure for efficient 2D field management and sampling
 )
-from .concentration_field import (  # noqa: E402
+from .concentration_field import (
     FieldGenerationError,  # Specialized exception for concentration field generation failures
 )
-from .concentration_field import (  # noqa: E402
+from .concentration_field import (
     FieldSamplingError,  # Specialized exception for field sampling errors with position analysis
 )
-from .concentration_field import (  # noqa: E402
+from .concentration_field import (
     create_concentration_field,  # Factory function for creating validated concentration field instances
 )
-from .concentration_field import (  # noqa: E402; noqa: E402; noqa: E402; Core concentration field class for efficient 2D field management; Factory and utility functions for concentration field operations; Specialized exceptions for concentration field operations; Comprehensive parameter validation for concentration field initialization
+from .concentration_field import (  # noqa: E402; noqa: E402; noqa: E402; noqa: E402; Core concentration field class for efficient 2D field management; Factory and utility functions for concentration field operations; Specialized exceptions for concentration field operations; Comprehensive parameter validation for concentration field initialization
     validate_field_parameters,
 )
 
+# Movie plume field (video-backed) loader
+from .movie_field import MoviePlumeField  # noqa: E402
+
 # Abstract plume model framework imports for extensibility
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     BasePlumeModel,  # Abstract base class providing common functionality for plume implementations
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     ModelRegistrationError,  # Exception for plume model registration failures with detailed context
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     PlumeModelError,  # General exception for plume model operation failures
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     PlumeModelInterface,  # Protocol interface for structural typing and duck typing compatibility
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     PlumeModelRegistry,  # Registry manager for plume model types with factory functionality
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     create_plume_model,  # Factory function for creating plume model instances with parameter validation
 )
-from .plume_model import (  # noqa: E402
+from .plume_model import (
     get_supported_plume_types,  # Utility function returning comprehensive information about supported plume types
 )
-from .plume_model import (  # noqa: E402; noqa: E402; noqa: E402; Abstract base classes and interfaces for plume model implementations; Registry system for plume model management and extensibility; Factory and utility functions for plume model operations; Specialized exceptions for plume model operations; Register custom plume model class with global registry
+from .plume_model import (  # noqa: E402; noqa: E402; noqa: E402; noqa: E402; Abstract base classes and interfaces for plume model implementations; Registry system for plume model management and extensibility; Factory and utility functions for plume model operations; Specialized exceptions for plume model operations; Register custom plume model class with global registry
     register_plume_model,
 )
 
 # Static Gaussian plume model implementation imports
-from .static_gaussian import (  # noqa: E402
+from .static_gaussian import (
     GaussianPlumeError,  # Exception with mathematical analysis and recovery guidance
 )
-from .static_gaussian import (  # noqa: E402
+from .static_gaussian import (
     StaticGaussianPlume,  # Mathematical implementation providing concentration field calculations
 )
-from .static_gaussian import (  # noqa: E402
+from .static_gaussian import (
     calculate_gaussian_concentration,  # Pure mathematical function for Gaussian concentration calculations
 )
-from .static_gaussian import (  # noqa: E402
+from .static_gaussian import (
     create_static_gaussian_plume,  # Factory function for creating validated StaticGaussianPlume instances
 )
-from .static_gaussian import (  # noqa: E402; noqa: E402; noqa: E402; Main static Gaussian plume model class with mathematical implementation; Factory and utility functions for Gaussian plume operations; Specialized exception for StaticGaussianPlume-specific errors; Comprehensive parameter validation for static Gaussian plume model
+from .static_gaussian import (  # noqa: E402; noqa: E402; noqa: E402; noqa: E402; Main static Gaussian plume model class with mathematical implementation; Factory and utility functions for Gaussian plume operations; Specialized exception for StaticGaussianPlume-specific errors; Comprehensive parameter validation for static Gaussian plume model
     validate_gaussian_parameters,
 )
 
@@ -602,6 +605,7 @@ __all__ = [
     "BasePlumeModel",  # Abstract base class providing common functionality
     "PlumeModelInterface",  # Protocol interface defining structural contract
     "ConcentrationField",  # Core concentration field data structure
+    "MoviePlumeField",  # Zarr-backed movie field loader (read-only)
     # Factory functions for creating validated instances with optimized configuration
     "create_static_gaussian_plume",  # Factory function for StaticGaussianPlume instances
     "create_plume_model",  # Generic factory function for plume model instances

@@ -2,6 +2,8 @@
 
 defaults:
   - experiment: default
+  - env/plume: static
+  - movie: default
   - _self_
 
 # Output + run control
@@ -21,3 +23,7 @@ env:
   observation_type: concentration
   reward_type: step_penalty
   render: false
+
+# When env.plume=movie, the 'movie' group provides dataset configuration.
+# Example overrides:
+#   env.plume=movie movie.path=/path/to/ds.zarr movie.step_policy=clamp

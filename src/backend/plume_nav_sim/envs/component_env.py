@@ -255,6 +255,15 @@ class ComponentBasedEnvironment(gym.Env):
             except Exception:
                 pass
 
+        # Allow concentration field to reset dynamic state (e.g., movie frame 0)
+        try:
+            on_reset = getattr(self._concentration_field, "on_reset", None)
+            if callable(on_reset):
+                on_reset()
+        except Exception:
+            # Defensive: dynamic hooks are optional
+            pass
+
         # Generate initial observation
         env_state = self._build_env_state_dict()
         observation = self._observation_model.get_observation(env_state)
@@ -322,6 +331,15 @@ class ComponentBasedEnvironment(gym.Env):
         # Update step count
         new_agent_state.step_count = self._step_count + 1
         self._step_count += 1
+
+        # Advance dynamic plume state for this step if supported
+        try:
+            adv = getattr(self._concentration_field, "advance_to_step", None)
+            if callable(adv):
+                adv(self._step_count)
+        except Exception:
+            # Defensive: optional dynamic hook
+            pass
 
         # Compute reward
         # Delegation to RewardFunction
