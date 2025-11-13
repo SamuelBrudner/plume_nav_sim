@@ -9,11 +9,13 @@
 ---
 
 ## 🎯 Core Abstractions
+
 ### 1. **Environment**
 
 **semantic Meaning:** A single instantiation of the plume navigation task.
 
 **Lifecycle:**
+
 ```text
 ┌─────────┐     ┌───────┐     ┌──────────┐     ┌────────┐
 │ Created │────▶│ Reset │◀───▶│ Stepping │────▶│ Closed │
@@ -24,6 +26,7 @@
 ```
 
 **States:**
+
 - **Created**: Constructor called, components initialized
 - **Reset**: Episode begins, agent at start position
 - **Stepping**: Agent taking actions, receiving observations
@@ -32,6 +35,7 @@
 - **Closed**: Resources released, no longer usable
 
 **Invariants:**
+
 - Can only `step()` after `reset()`
 - Cannot `reset()` after `close()`
 - Same seed → same sequence of `(obs, reward, terminated, truncated, info)`
@@ -43,6 +47,7 @@
 **Semantic Meaning:** The entity navigating toward a goal in the environment.
 
 **Properties:**
+
 - Has a **position** in grid coordinates
 - Accumulates **reward** over episode
 - Tracks **step count** (age of episode)
@@ -51,6 +56,7 @@
 **Actions:** Movement in 8 directions + stay (9-dimensional discrete action space)
 
 **Invariants:**
+
 - Position always within grid bounds (enforced by boundary enforcer)
 - Step count monotonically increases
 - Total reward is cumulative sum of step rewards
@@ -63,26 +69,44 @@
 **Semantic Meaning:** A concentration field representing odor/chemical diffusion.
 
 **Types:**
+
 1. **Static Gaussian**: Fixed 2D Gaussian centered at source
 2. **Dynamic**: Time-varying concentration (future extension)
 
 **Properties:**
+
 - **Source location**: Origin point of plume
 - **Concentration field**: 2D array of concentration values
 - **Range**: Values in `[0.0, 1.0]` (normalized)
 
 **Invariants:**
+
 - Concentration highest at source, decays with distance
 - Field dimensions match grid dimensions
 - Values never negative or > 1.0
 
 ---
 
+### Video Plume Dataset Contract (Source of Truth)
+
+See `metadata/video_dataset_contract.md` for the canonical, testable contract for video-backed plume datasets (Zarr + xarray).
+
+Summary (authoritative details in the contract document):
+
+- Variable name: `concentration`
+- Dims: `("t","y","x")`, declared via `_ARRAY_DIMENSIONS` on the array
+- Array dtype: `float32`
+- Required dataset/global attrs: `schema_version`, `fps`, `source_dtype`, `pixel_to_grid`, `origin`, `extent`
+- `manifest.json` at dataset root, validating against `ProvenanceManifest`
+
+Validators and writers in `plume_nav_sim` must conform to that contract; this semantic model references it as the source of truth.
+
 ### 4. **Observation**
 
 **Semantic Meaning:** What the agent perceives at current position.
 
 **Structure:**
+
 ```python
 observation = {
     'concentration': float,        # [0.0, 1.0] at agent position
@@ -93,6 +117,7 @@ observation = {
 ```
 
 **Invariants:**
+
 - Concentration matches plume field at agent position
 - Position always valid coordinates within grid
 - Step count matches environment's episode state
@@ -105,12 +130,14 @@ observation = {
 **Semantic Meaning:** Scalar signal indicating progress toward goal.
 
 **Structure:** Sparse binary reward
+
 - `+1.0` when goal reached (distance to source ≤ goal_radius)
 - `0.0` otherwise
 
 **Rationale:** Sparse rewards force agent to learn exploration.
 
 **Invariants:**
+
 - Reward determined solely by distance to goal
 - Goal detection is deterministic and consistent
 - Reward structure unchanged within episode
@@ -122,6 +149,7 @@ observation = {
 **Semantic Meaning:** Single attempt from start to termination.
 
 **Structure:**
+
 ```python
 Episode = {
     seed: int,                    # RNG seed for reproducibility
@@ -133,11 +161,13 @@ Episode = {
 ```
 
 **Termination Conditions:**
+
 1. **Terminated (Success)**: Agent reaches goal
 2. **Terminated (Failure)**: Invalid state (should be rare)
 3. **Truncated**: Step limit reached
 
 **Invariants:**
+
 - Each episode has unique seed (for tracking)
 - Trajectory length ≤ max_steps
 - Final state consistent with termination reason
@@ -155,12 +185,14 @@ Episode = {
 **Core Principle:** Environment is assembled from swappable components via dependency injection (DI).
 
 **Rationale:**
+
 - **Research tool extensibility**: Users need to inject novel algorithms without forking
 - **Testing**: Easy to inject mocks and test components in isolation
 - **Zero coupling**: Components communicate via Protocol interfaces only
 - **Progressive disclosure**: Simple by default, powerful when needed
 
 **Architecture:**
+
 ```text
                     Factory
                       │
@@ -174,6 +206,7 @@ Episode = {
 ```
 
 **Component Interfaces (Protocols):**
+
 - `ActionProcessor`: Defines action space and action→movement mapping
 - `ObservationModel`: Defines observation space and state→observation computation
 - `RewardFunction`: Defines reward computation and goal detection
@@ -182,21 +215,25 @@ Episode = {
 **Assembly Patterns:**
 
 1. **Simple (Default):** Factory with defaults
+
    ```python
    env = make_env()  # Uses DiscreteGridActions, ConcentrationSensor, SparseGoalReward
    ```
 
 2. **Customized (String-based):** Factory with built-in options
+
    ```python
    env = make_env(action_type='oriented', observation_type='antennae')
    ```
 
 3. **Extended (Instance-based):** Factory with custom implementations
+
    ```python
    env = make_env(action_type=MyNovelActions(), observation_type=MyNovelSensor())
    ```
 
 **Semantic Invariants:**
+
 - Components MUST implement their Protocol completely
 - Components MUST NOT directly access other components' internal state
 - Factory MUST validate component compatibility before assembly
@@ -261,6 +298,7 @@ Environment (ComponentBasedEnvironment)
 ```
 
 **Semantics:**
+
 - `(0, 0)` is top-left corner
 - `(width-1, height-1)` is bottom-right corner
 - Negative coordinates are valid (off-grid)
@@ -277,12 +315,14 @@ distance = sqrt((x₂ - x₁)² + (y₂ - y₁)²)
 ```
 
 **Invariants:**
+
 - `distance(a, b) = distance(b, a)` (symmetry)
 - `distance(a, a) = 0` (identity)
 - `distance(a, c) ≤ distance(a, b) + distance(b, c)` (triangle inequality)
 - Non-negative always
 
 **Goal Detection:**
+
 ```python
 goal_reached = (distance_to_source ≤ goal_radius)
 ```
@@ -305,6 +345,7 @@ Action 8 = Stay/No-op
 ```
 
 **Movement Vectors:**
+
 ```python
 MOVEMENTS = {
     0: (0, -1),   # North
@@ -320,6 +361,7 @@ MOVEMENTS = {
 ```
 
 **Invariants:**
+
 - All movements are unit steps (1 or √2 distance)
 - Diagonal movements cost same as cardinal (no movement cost)
 - Invalid actions cause `ValidationError` (fail-fast)
@@ -331,6 +373,7 @@ MOVEMENTS = {
 ### Seeding Model
 
 **Hierarchy:**
+
 ```text
 Base Seed (user-provided or entropy)
     │
@@ -345,6 +388,7 @@ Base Seed (user-provided or entropy)
 ```
 
 **Derivation:**
+
 ```python
 episode_seed = hash(base_seed, episode_number, experiment_id)
 ```
@@ -371,12 +415,14 @@ episode_seed = hash(base_seed, episode_number, experiment_id)
 ### Two-Layer Validation
 
 **Layer 1: Type Validation** (entry points)
+
 - Check types: `isinstance(x, expected_type)`
 - Check ranges: `min_value ≤ x ≤ max_value`
 - Check special values: `math.isfinite(x)`, `x is not None`
 - **Raises:** `ValidationError` immediately
 
 **Layer 2: Semantic Validation** (deeper logic)
+
 - Check state consistency: "can step() be called now?"
 - Check component interactions: "is agent within grid?"
 - Check invariants: "does total_reward match sum of step rewards?"
@@ -389,10 +435,12 @@ episode_seed = hash(base_seed, episode_number, experiment_id)
 ### Validation Contexts
 
 **Strict Mode (Deprecated):**
+
 - ❌ No longer used - removed in refactor
 - All validation is now "strict" by default
 
 **Validation Contexts:**
+
 ```python
 @dataclass
 class ValidationContext:
@@ -423,16 +471,19 @@ Used for debugging: "which component detected the error?"
 ### Caching Strategy
 
 **Cacheable:**
+
 - Distance calculations (same coordinates → same distance)
 - Plume field lookups (static plume)
 - Validation results (same input → same result)
 
 **Not Cacheable:**
+
 - Agent state (changes every step)
 - Episode statistics (accumulated)
 - Random number generation (stateful)
 
 **Cache Invalidation:**
+
 - Distance cache: Cleared on `reset()`
 - Plume cache: Never (static)
 - State cache: No cache (always recomputed)
@@ -489,6 +540,7 @@ assert env.agent_state.position.y < env.grid_size.height
 ```
 
 #### 2. **Step Count Invariant**
+
 ```python
 initial_steps = env.agent_state.step_count
 env.step(action)
@@ -496,6 +548,7 @@ assert env.agent_state.step_count == initial_steps + 1
 ```
 
 #### 3. **Reward Accumulation Invariant**
+
 ```python
 initial_total = env.agent_state.total_reward
 obs, reward, term, trunc, info = env.step(action)
@@ -503,6 +556,7 @@ assert env.agent_state.total_reward == initial_total + reward
 ```
 
 #### 4. **Determinism Invariant**
+
 ```python
 # Two environments with same seed
 trajectory1 = run_episode(env1, seed=42)
@@ -511,6 +565,7 @@ assert trajectory1 == trajectory2
 ```
 
 #### 5. **Goal Detection Consistency**
+
 ```python
 distance = calculate_distance(agent_pos, source_pos)
 goal_reached = (distance <= goal_radius)
@@ -519,6 +574,7 @@ reward = (1.0 if goal_reached else 0.0)
 ```
 
 #### 6. **Termination Consistency**
+
 ```python
 if terminated:
     assert goal_reached or invalid_state
@@ -528,6 +584,7 @@ if truncated:
 ```
 
 #### 7. **State Immutability (Configs)**
+
 ```python
 config = RewardCalculatorConfig(...)
 original_radius = config.goal_radius
@@ -549,6 +606,7 @@ assert config.goal_radius == original_radius  # unchanged
 **Three Levels of Interface:**
 
 #### Level 1: Simple (Default)
+
 **Target Users:** Students, quick experiments, tutorials  
 **Complexity:** Minimal - just works
 
@@ -562,6 +620,7 @@ env = plume_nav_sim.make_env()  # Uses sensible defaults
 ---
 
 #### Level 2: Customized (String-based)
+
 **Target Users:** Researchers comparing approaches, RL practitioners  
 **Complexity:** Medium - choose from built-in options
 
@@ -578,6 +637,7 @@ env = plume_nav_sim.make_env(
 ---
 
 #### Level 3: Extended (Instance-based)
+
 **Target Users:** Novel algorithm developers, framework builders  
 **Complexity:** Full - inject custom implementations
 
@@ -600,6 +660,7 @@ env = plume_nav_sim.make_env(
 ### API Design Invariants
 
 **Must Hold:**
+
 - Level 1 MUST work with zero configuration
 - Level 2 MUST accept all Level 1 parameters
 - Level 3 MUST accept all Level 2 parameters
@@ -607,6 +668,7 @@ env = plume_nav_sim.make_env(
 - Implementation details MUST NOT leak into simple levels
 
 **Forbidden:**
+
 - Requiring users to understand DI to use defaults
 - Exposing internal caching/registration complexity
 - Multiple ways to do the same simple thing
@@ -775,22 +837,26 @@ raise Exception("Something broke")
 ### What Must Be Tested
 
 **Unit Tests:**
+
 - Each semantic invariant (1 test per invariant minimum)
 - Each component's public API
 - Each exception path (ValidationError, StateError, etc.)
 - Edge cases (boundaries, special values)
 
 **Integration Tests:**
+
 - Component interactions (StateManager + EpisodeManager)
 - Full episode workflow (reset → steps → termination)
 - Cross-module contracts (RewardCalculator + AgentState)
 
 **Property Tests:**
+
 - Determinism (same seed → same trajectory)
 - Invariants hold under random actions
 - State transitions are valid
 
 **Not Required:**
+
 - Parametric tests of same logic with different values
 - Performance tests in unit test suite (separate suite)
 - Exhaustive combination testing (combinatorial explosion)

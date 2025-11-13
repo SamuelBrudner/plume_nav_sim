@@ -328,11 +328,29 @@ def _is_component_entry_point(entry_point: str) -> bool:
 
 
 def _convert_kwargs_for_component_env(kwargs: Dict[str, object]) -> Dict[str, object]:
+    """Translate legacy-style kwargs to the component factory interface.
+
+    - source_location -> goal_location
+    - plume_params.sigma -> plume_sigma
+    - Ensure grid_size is a plain (w, h) tuple of ints
+    """
     converted = dict(kwargs)
 
+    # Normalize grid_size shape for factory
+    if "grid_size" in converted:
+        grid_val = converted["grid_size"]
+        try:
+            if isinstance(grid_val, (list, tuple)) and len(grid_val) == 2:
+                converted["grid_size"] = (int(grid_val[0]), int(grid_val[1]))
+        except Exception:
+            # Leave as-is; validation will catch issues later
+            pass
+
+    # Map goal/source naming
     if "source_location" in converted and "goal_location" not in converted:
         converted["goal_location"] = converted.pop("source_location")
 
+    # Extract plume sigma from nested params if provided
     plume_params = converted.pop("plume_params", None)
     if (
         isinstance(plume_params, dict)

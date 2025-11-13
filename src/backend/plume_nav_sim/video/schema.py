@@ -89,7 +89,10 @@ class VideoPlumeAttrs(BaseModel):
     @field_validator("pixel_to_grid", mode="before")
     @classmethod
     def _coerce_pixel_to_grid(cls, v: Any) -> Tuple[float, float]:
-        return _tuple2(v, name="pixel_to_grid")
+        yx = _tuple2(v, name="pixel_to_grid")
+        if yx[0] <= 0 or yx[1] <= 0:
+            raise ValueError("pixel_to_grid values must be positive")
+        return yx
 
     @field_validator("origin", mode="before")
     @classmethod

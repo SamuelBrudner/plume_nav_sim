@@ -90,7 +90,8 @@ class MoviePlumeField:
             "origin": cfg.origin if cfg.origin else attrs.origin,
             "extent": cfg.extent if cfg.extent else attrs.extent,
             "schema_version": attrs.schema_version,
-            "timebase": attrs.timebase,
+            # Optional in some schema versions; include when present
+            "timebase": getattr(attrs, "timebase", None),
             "source_dtype": getattr(attrs, "source_dtype"),
         }
         self.attrs: VideoPlumeAttrs = VideoPlumeAttrs(**attrs_overrides)  # type: ignore[arg-type]

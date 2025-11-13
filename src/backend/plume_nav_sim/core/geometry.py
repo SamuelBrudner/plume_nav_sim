@@ -178,6 +178,38 @@ class GridSize:
         """Convert grid size to a tuple."""
         return (self.width, self.height)
 
+    # ------------------------------------------------------------------
+    # Tuple-like behavior for compatibility with callers that expect
+    # `(width, height)` tuples. Tests index into `env.grid_size[0/1]` and
+    # compare against plain tuples.
+    def __iter__(self):
+        return iter(self.to_tuple())
+
+    def __len__(self) -> int:  # pragma: no cover - trivial
+        return 2
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return self.to_tuple()[index]
+        if index in (0, -2):
+            return self.width
+        if index in (1, -1):
+            return self.height
+        raise IndexError("GridSize index out of range")
+
+    def __eq__(self, other: object) -> bool:  # type: ignore[override]
+        if isinstance(other, GridSize):
+            return (self.width == other.width) and (self.height == other.height)
+        # Gracefully compare to 2-tuples/lists/arrays
+        try:
+            a, b = other  # type: ignore[misc]
+        except Exception:
+            return False
+        try:
+            return (self.width == int(a)) and (self.height == int(b))
+        except Exception:
+            return False
+
 
 def calculate_euclidean_distance(
     coord1: Coordinates, coord2: Coordinates, high_precision: bool = False

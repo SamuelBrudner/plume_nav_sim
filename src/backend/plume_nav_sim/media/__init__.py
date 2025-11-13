@@ -24,6 +24,7 @@ from .mapping import (
     STEP_POLICY_WRAP,
     VideoTimebase,
     map_step_to_frame,
+    video_timebase_from_attrs,
 )
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "write_manifest",
     # Mapping contract
     "VideoTimebase",
+    "video_timebase_from_attrs",
     "map_step_to_frame",
     "STEP_POLICY_INDEX",
     "STEP_POLICY_CLAMP",

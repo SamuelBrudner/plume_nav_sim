@@ -183,15 +183,28 @@ class PlumeSearchEnv(gym.Env):
         self._core_env = create_component_environment(**factory_kwargs)
 
         # Legacy attribute compatibility expected by registration tests
-        # Prefer grid size from created core env (e.g., movie plume derives from dataset)
+        # Ensure grid_size exposed here is always a plain (width, height) tuple
+        # matching the constructor/config values used during registration.
+        # Some underlying component envs may expose a dataclass or override
+        # dimensions (e.g., movie plumes); tests expect tuple equality to the
+        # provided config for registration scenarios.
         core_grid = getattr(self._core_env, "grid_size", None)
         if core_grid is not None:
             try:
-                self.grid_size = core_grid
+                # Coerce possible dataclass/tuple into a plain tuple[int, int]
+                w = getattr(core_grid, "width", None)
+                h = getattr(core_grid, "height", None)
+                if w is not None and h is not None:
+                    self.grid_size = (int(w), int(h))
+                else:
+                    cw0 = int(core_grid[0])  # type: ignore[index]
+                    cw1 = int(core_grid[1])  # type: ignore[index]
+                    self.grid_size = (cw0, cw1)
             except Exception:
-                self.grid_size = normalized_grid
+                # Fall back to normalized constructor value on any mismatch
+                self.grid_size = (int(normalized_grid[0]), int(normalized_grid[1]))
         else:
-            self.grid_size = normalized_grid
+            self.grid_size = (int(normalized_grid[0]), int(normalized_grid[1]))
         self.source_location = goal_position
         self.max_steps = max_steps_value
         self.goal_radius = goal_radius_value
