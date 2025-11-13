@@ -14,6 +14,9 @@ Rationale (abridged):
   operations while keeping per-chunk memory modest for CI.
 - Zstd generally yields good compression ratios with solid speed; clevel=5
   balances CPU cost with CI throughput. LZ4 is the compatibility fallback.
+  Note: Zstd availability depends on the c-blosc build bundled with
+  numcodecs; many environments provide only LZ4. If you require Zstd, ensure
+  your numcodecs/c-blosc installation includes Zstd support for your platform.
 """
 
 from __future__ import annotations
@@ -29,6 +32,10 @@ DEFAULT_BLOSC_CNAME: str = "zstd"
 DEFAULT_BLOSC_CLEVEL: int = 5
 # Blosc shuffle filter: 0=NOSHUFFLE, 1=SHUFFLE, 2=BITSHUFFLE
 DEFAULT_BLOSC_SHUFFLE: int = 1
+
+# Internal guard to avoid spamming tests/logs when zstd is unavailable.
+# We emit at most one downgraded warning per process for the zstd->lz4 fallback.
+_ZSTD_FALLBACK_WARNED: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,7 +101,18 @@ def create_blosc_compressor(
         )
         return None  # type: ignore[return-value]
 
-    warnings.warn("Blosc zstd not available; falling back to lz4.", RuntimeWarning)
+    # Downgrade and emit at most once per process to avoid noisy test output.
+    # Note: Zstd support depends on the c-blosc build bundled with numcodecs;
+    # many environments only include lz4. To enable zstd, install a build of
+    # numcodecs/c-blosc with zstd enabled on your platform.
+    global _ZSTD_FALLBACK_WARNED
+    if not _ZSTD_FALLBACK_WARNED:
+        warnings.warn(
+            "Blosc zstd not available; falling back to lz4.",
+            UserWarning,
+            stacklevel=2,
+        )
+        _ZSTD_FALLBACK_WARNED = True
     return _blosc.Blosc(cname=fallback, clevel=clevel, shuffle=shuffle)
 
 
