@@ -1955,15 +1955,33 @@ class MatplotlibRenderer(BaseRenderer):
             # Apply additional interactive options (best-effort)
             # Recognize a few common flags used in tests; ignore unknowns safely
             if isinstance(options, dict):
+                # Determine current backend once to make toolbar handling backend-aware
+                try:
+                    current_backend = plt.get_backend()
+                except Exception:
+                    current_backend = ""
+
+                # Avoid triggering traitlets/matplotlib deprecation paths for ipympl
+                # by not forcing the ToolManager toolbar on widget backends.
+                using_ipympl = str(current_backend).startswith("module://ipympl")
+
                 known_map = {
-                    "enable_toolbar": ("toolbar", "toolmanager"),
+                    # Only request the ToolManager toolbar when not using ipympl to
+                    # avoid traitlets deprecation about Toolbar __init__ args.
+                    "enable_toolbar": (
+                        None if using_ipympl else ("toolbar", "toolmanager")
+                    ),
                     "enable_key_bindings": ("keymap.all_axes", True),
                     "animation_enabled": ("animation.html", "jshtml"),
                 }
                 for key, val in options.items():
                     try:
                         if key in known_map:
-                            rc_key, rc_val = known_map[key]
+                            mapping = known_map[key]
+                            if mapping is None:
+                                # Skip toolbar override for ipympl/widget backends
+                                continue
+                            rc_key, rc_val = mapping
                             plt.rcParams[rc_key] = (
                                 rc_val if val else plt.rcParams.get(rc_key, rc_val)
                             )
@@ -2002,12 +2020,21 @@ class MatplotlibRenderer(BaseRenderer):
         when appropriate.
         """
         try:
-            # Nudge rcParams to the ToolManager toolbar to mirror test expectations
-            # and surface the UserWarning about Tool classes when available.
+            # Nudge rcParams to the ToolManager toolbar to mirror test expectations,
+            # but avoid forcing it on ipympl/widget backends to prevent traitlets
+            # deprecation warnings about Toolbar initialization.
             try:
                 import matplotlib.pyplot as plt  # Local import to avoid module import costs
 
-                if enable:
+                current_backend = ""
+                try:
+                    current_backend = plt.get_backend()
+                except Exception:
+                    current_backend = ""
+
+                using_ipympl = str(current_backend).startswith("module://ipympl")
+
+                if enable and not using_ipympl:
                     plt.rcParams["toolbar"] = "toolmanager"
                 else:
                     # Restore a safe default without forcing a specific backend
