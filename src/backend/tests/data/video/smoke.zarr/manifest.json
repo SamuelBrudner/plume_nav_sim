@@ -1,0 +1,28 @@
+{
+  "created_at": "2025-11-12T17:33:29.540391Z",
+  "git_sha": "9d233a28c13b60159dd90756654109ee91adee5d",
+  "package_version": "0.0.1",
+  "config_hash": null,
+  "cli_args": [
+    "/Users/samuelbrudner/CascadeProjects/plume_nav_sim/src/backend/plume_nav_sim/cli/video_ingest.py",
+    "--input",
+    "/Users/samuelbrudner/CascadeProjects/plume_nav_sim/src/backend/tests/data/video/_gen_frames_smoke",
+    "--output",
+    "/Users/samuelbrudner/CascadeProjects/plume_nav_sim/src/backend/tests/data/video/smoke.zarr",
+    "--fps",
+    "10",
+    "--pixel-to-grid",
+    "1",
+    "1",
+    "--origin",
+    "0",
+    "0",
+    "--normalize"
+  ],
+  "source_dtype": "uint8",
+  "env": {
+    "hostname": null,
+    "platform": null,
+    "python_version": null
+  }
+}
