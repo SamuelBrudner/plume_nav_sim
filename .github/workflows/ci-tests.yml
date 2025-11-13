@@ -147,3 +147,46 @@ jobs:
           test -d "$OUT_DIR" || (echo "OUT_DIR missing: $OUT_DIR" >&2; exit 1)
           # Restore original params.yaml
           mv params.yaml.bak params.yaml
+
+  hydra-smoke:
+    runs-on: ubuntu-latest
+    name: "Hydra Smoke: data_capture/config resolution"
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install package with [data] extras
+        run: python -m pip install -e "src/backend[data,test]"
+
+      - name: "Hydra smoke run: minimal capture via --config-name"
+        id: hydra_smoke
+        run: |
+          set -euo pipefail
+          RUN_TMP="${{ runner.temp }}"
+          OUT_DIR="$RUN_TMP/pns-hydra-out"
+          # Run a tiny capture using Hydra config name and CLI overrides
+          python -m plume_nav_sim.cli.capture \
+            --output "$OUT_DIR" \
+            --experiment hydra-smoke \
+            --seed 1 \
+            --config-name data_capture/config \
+            episodes=1 env.grid_size=[8,8]
+
+          EXP_DIR="$OUT_DIR/hydra-smoke"
+          test -d "$EXP_DIR" || (echo "Experiment directory missing: $EXP_DIR" >&2; exit 1)
+          # Find latest run directory and assert run.json exists
+          RUN_DIR=$(ls -1dt "$EXP_DIR"/run-* | head -n1)
+          test -n "$RUN_DIR" || (echo "No run-* directory found under $EXP_DIR" >&2; exit 1)
+          test -f "$RUN_DIR/run.json" || (echo "Missing run.json in $RUN_DIR" >&2; exit 1)
+          echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
