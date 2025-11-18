@@ -1,0 +1,18 @@
+grid_size = [128, 128]
+max_steps = 500
+action_type = "run_tumble"
+observation_type = "concentration"
+reward_type = "step_penalty"
+render = true
+seed = 123
+plume = "static"
+
+# Load the demo policy via dotted path
+policy = { spec = "plug_and_play_demo:DeltaBasedRunTumblePolicy" }
+
+# Apply 2-back concentration wrapper so the policy sees [c_prev, c_now]
+[[observation_wrappers]]
+spec = "plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper"
+
+[observation_wrappers.kwargs]
+n = 2

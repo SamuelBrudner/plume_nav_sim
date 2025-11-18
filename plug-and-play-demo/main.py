@@ -63,6 +63,54 @@ def _build_movie_kwargs(
     return movie_kwargs
 
 
+def _load_simulation_spec_from_config(path: str) -> Dict[str, Any]:
+    """Load a SimulationSpec dictionary from a config file.
+
+    Supports JSON by default. Attempts TOML (via tomllib) or YAML (via PyYAML)
+    if available based on file extension.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise SystemExit(f"Config file not found: {path}")
+
+    ext = p.suffix.lower()
+
+    if ext == ".json":
+        import json
+
+        with p.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    elif ext in (".toml",):
+        try:
+            import tomllib  # Python 3.11+
+        except Exception as e:  # pragma: no cover - optional path
+            raise SystemExit("TOML config requires Python 3.11+ (tomllib)") from e
+        with p.open("rb") as f:
+            data = tomllib.load(f)
+    elif ext in (".yml", ".yaml"):
+        try:
+            import yaml  # type: ignore
+        except Exception as e:  # pragma: no cover - optional path
+            raise SystemExit("YAML config requires PyYAML to be installed") from e
+        with p.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    else:
+        raise SystemExit(
+            f"Unsupported config extension '{ext}'. Use .json, .toml, or .yaml"
+        )
+
+    # Allow top-level SimulationSpec, or nested under a 'simulation' key.
+    if (
+        isinstance(data, dict)
+        and "simulation" in data
+        and isinstance(data["simulation"], dict)
+    ):
+        return data["simulation"]
+    if isinstance(data, dict):
+        return data
+    raise SystemExit("Config must parse into a dict or a dict with 'simulation' key")
+
+
 def run_demo(
     *,
     seed: Optional[int] = 123,
@@ -172,6 +220,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Plug-and-play demo: run–tumble TD with runner"
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help=(
+            "Path to SimulationSpec config (json|toml|yaml). "
+            "If provided, CLI flags act as overrides when specified."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument(
         "--grid", type=str, default="128x128", help="WxH, e.g., 128x128"
@@ -274,48 +331,127 @@ def main() -> None:
     except Exception:
         raise SystemExit("--grid must be formatted as WxH, e.g., 128x128")
 
-    # Build SimulationSpec consistently with run_demo
-    wrapper_specs: List[WrapperSpec] = [
-        WrapperSpec(
-            spec="plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
-            kwargs={"n": 2},
+    # Build SimulationSpec: from config if provided, otherwise from CLI defaults
+    sim: SimulationSpec
+    if args.config:
+        raw_cfg = _load_simulation_spec_from_config(args.config)
+        # Track whether wrappers were specified explicitly in config
+        wrappers_specified = (
+            isinstance(raw_cfg, dict) and "observation_wrappers" in raw_cfg
         )
-    ]
-    movie_kwargs = _build_movie_kwargs(
-        plume=args.plume,
-        movie_path=args.movie_path,
-        movie_fps=args.movie_fps,
-        movie_step_policy=args.movie_step_policy,
-    )
 
-    sim = SimulationSpec(
-        grid_size=(w, h),
-        max_steps=args.max_steps,
-        action_type="run_tumble",
-        observation_type="concentration",
-        reward_type="step_penalty",
-        render=(not args.no_render),
-        seed=args.seed,
-        plume=args.plume,
-        policy=PolicySpec(spec=args.policy_spec),
-        observation_wrappers=wrapper_specs,
-        **movie_kwargs,
-    )
+        # Apply targeted CLI overrides when flags were explicitly provided
+        cfg = dict(raw_cfg)
+        if _flag_provided("--seed"):
+            cfg["seed"] = int(args.seed)
+        if _flag_provided("--grid"):
+            cfg["grid_size"] = (int(w), int(h))
+        if _flag_provided("--max-steps"):
+            cfg["max_steps"] = int(args.max_steps)
+        if _flag_provided("--no-render"):
+            cfg["render"] = not args.no_render
+        if _flag_provided("--plume"):
+            cfg["plume"] = args.plume
+        # Movie-specific overrides (only meaningful for plume='movie')
+        if _flag_provided("--movie-path"):
+            cfg["movie_path"] = args.movie_path
+        if _flag_provided("--movie-fps"):
+            cfg["movie_fps"] = args.movie_fps
+        if _flag_provided("--movie-step-policy"):
+            cfg["movie_step_policy"] = args.movie_step_policy
+        # Policy override
+        if _flag_provided("--policy-spec"):
+            cfg["policy"] = {"spec": args.policy_spec}
 
-    # Preserve original behavior unless capture flags are provided
-    if not capture_requested:
-        run_demo(
-            seed=args.seed,
-            grid=args.grid,
-            max_steps=args.max_steps,
-            render=(not args.no_render),
-            policy_spec=args.policy_spec,
-            save_gif=args.save_gif,
+        # Ensure baseline action/observation/reward if not specified at all
+        cfg.setdefault("action_type", "run_tumble")
+        cfg.setdefault("observation_type", "concentration")
+        cfg.setdefault("reward_type", "step_penalty")
+
+        # Default wrapper only if not provided by config
+        if not wrappers_specified:
+            cfg.setdefault(
+                "observation_wrappers",
+                [
+                    {
+                        "spec": "plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
+                        "kwargs": {"n": 2},
+                    }
+                ],
+            )
+
+        # Validate via model
+        sim = SimulationSpec.model_validate(cfg)
+    else:
+        # Build SimulationSpec consistently with run_demo defaults
+        wrapper_specs: List[WrapperSpec] = [
+            WrapperSpec(
+                spec="plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
+                kwargs={"n": 2},
+            )
+        ]
+        movie_kwargs = _build_movie_kwargs(
             plume=args.plume,
             movie_path=args.movie_path,
             movie_fps=args.movie_fps,
             movie_step_policy=args.movie_step_policy,
         )
+
+        sim = SimulationSpec(
+            grid_size=(w, h),
+            max_steps=args.max_steps,
+            action_type="run_tumble",
+            observation_type="concentration",
+            reward_type="step_penalty",
+            render=(not args.no_render),
+            seed=args.seed,
+            plume=args.plume,
+            policy=PolicySpec(spec=args.policy_spec),
+            observation_wrappers=wrapper_specs,
+            **movie_kwargs,
+        )
+
+    # Preserve original behavior unless capture flags are provided
+    if not capture_requested:
+        # Non-capture: execute a single episode using the composed spec
+        env, policy = prepare(sim)
+
+        frames: List[np.ndarray] = []
+
+        def on_step(ev: runner.StepEvent) -> None:
+            if ev.frame is not None and sim.render:
+                frames.append(ev.frame)
+
+        result = runner.run_episode(
+            env,
+            policy,
+            seed=sim.seed,
+            render=bool(sim.render),
+            on_step=on_step,
+        )
+
+        print(
+            "Episode summary:",
+            {
+                "seed": result.seed,
+                "steps": result.steps,
+                "total_reward": round(result.total_reward, 3),
+                "terminated": result.terminated,
+                "truncated": result.truncated,
+                "frames_captured": len(frames),
+            },
+        )
+
+        if args.save_gif and frames:
+            try:
+                from plume_nav_sim.utils.video import save_video_frames
+
+                save_video_frames(frames, args.save_gif, fps=10)
+                print(f"Saved video: {args.save_gif}")
+            except ImportError as e:
+                print("Could not save video (install imageio):", e)
+            except Exception as e:
+                print("Video export failed:", e)
         return
 
     # Capture mode: wrap env and record
