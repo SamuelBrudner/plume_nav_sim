@@ -22,6 +22,16 @@ obs, info = env.reset(seed=42)
 print(info["agent_xy"])  # starting position
 ```
 
+- Visible artifact out-of-the-box:
+  - Run the bundled example to generate a short GIF (falls back to PNG if media extras are not installed):
+
+    ```bash
+    # From repo root
+    cd src/backend
+    python -m examples.quickstart
+    # -> writes quickstart.gif (or quickstart.png without media extras)
+    ```
+
 - **Gymnasium integration**:
 
   ```python
@@ -33,7 +43,7 @@ print(info["agent_xy"])  # starting position
   ```
 
 - **Component knobs**: pass string options such as `observation_type="antennae"`
-- **See also**: `src/backend/examples/quickstart.py`
+- **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
 
 ## 3. Progressive Customization
 
@@ -138,6 +148,22 @@ Provider Plugins (ODC):
 
 - Strict provider‑only mode is always enabled. If no provider is detected, a banner appears and the inspector shows limited information. Heuristic fallbacks are removed and there is no CLI or preference to disable strict mode.
 
+ODC Provider Contract (Developer Guide):
+
+- Purpose: let the debugger introspect your app (action names, observation kind/label, policy distribution preview, pipeline) with zero debugger changes and no side effects.
+- Implement `plume_nav_debugger.odc.provider.DebuggerProvider` with optional, side‑effect‑free methods:
+  - `get_action_info(env) -> ActionInfo` — returns `names: list[str]` aligned to action indices `0..n-1`.
+  - `describe_observation(observation, *, context=None) -> ObservationInfo | None` — returns `kind ∈ {"vector","image","scalar","unknown"}` and optional `label` for UI.
+  - `policy_distribution(policy, observation) -> dict | None` — exactly one of `{ "probs" | "q_values" | "logits" }: list[float]`; must not call `select_action`.
+  - `get_pipeline(env) -> PipelineInfo | None` — ordered wrapper/component names from outermost to core.
+- Data models: `ActionInfo`, `ObservationInfo`, `PipelineInfo` live in `plume_nav_debugger.odc.models`.
+- Discovery order: entry‑point plugin (recommended) → reflection on `env`/`policy` (`get_debugger_provider()`, `__debugger_provider__`, `debugger_provider`).
+- Strict mode: labels, distributions, and pipeline appear only when a provider is detected; no heuristics.
+- Examples and tests:
+  - Minimal provider: `src/examples/odc_provider_example.py`
+  - Discovery and mux behavior: `tests/debugger/test_odc_discovery.py`, `tests/debugger/test_odc_provider_mux.py`, `tests/debugger/test_odc_example_provider.py`
+- Full specification: see `src/plume_nav_debugger/odc/SPEC.md`.
+
 Preferences & Config:
 
 - Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
@@ -188,6 +214,19 @@ Troubleshooting “'widget' is not a recognised backend name”:
       %matplotlib inline
   print("Backend:", mpl.get_backend())
   ```
+
+### Plug-and-play demo and capture notebooks
+
+- Plug-and-play demo (external-style usage)
+  - Quick run from repo root: `python plug-and-play-demo/main.py`
+  - Notebook: `plug-and-play-demo/plug_and_play_demo.ipynb`
+  - Details and options: `plug-and-play-demo/README.md`
+
+- Capture workflow notebook (stable)
+  - Notebook: `notebooks/stable/capture_end_to_end.ipynb`
+  - Render to HTML into backend docs: `make nb-render`
+    - Output: `src/backend/docs/notebooks/capture_end_to_end.html`
+  - Related docs: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_catalog_capture.md`
 
 ### Test and performance requirements
 
