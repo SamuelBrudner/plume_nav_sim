@@ -296,7 +296,7 @@ repos:
         args: ['-lc', 'cd src/backend && conda run -n plume-nav-sim python scripts/validate_constants_drift.py']
         pass_filenames: false
         stages: [pre-push]
-        files: '^(config/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
+        files: '^(conf/constants\.yaml|src/backend/plume_nav_sim/core/constants\.py)$'
 
   # Commitizen-based release reminder (warn-only by default)
   - repo: local

@@ -31,7 +31,7 @@ For an overview of the public API surface and where code lives in the repository
   - Actions → `docs/extending/custom_actions.md`
 
 - **Configuration & Factories**
-  - API surface: `plume_nav_sim/envs/factory.py`, `plume_nav_sim/utils/config/`.
+  - API surface: `plume_nav_sim/envs/factory.py`, `plume_nav_sim/config`.
   - Sample configs: `conf/experiment/*.yaml`.
   - Migration history: `docs/MIGRATION_COMPONENT_ENV.md`.
 
