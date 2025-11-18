@@ -38,6 +38,9 @@ from typing import (  # >=3.10 - Type hints for rendering configuration manageme
     Union,
 )
 
+# Import color scheme and template systems (absolute imports; assets is a top-level package)
+from assets.default_colormap import PredefinedScheme
+from assets.render_templates import TemplateQuality
 from plume_nav_sim.core.constants import (
     BACKEND_PRIORITY_LIST,
     MATPLOTLIB_DEFAULT_FIGSIZE,
@@ -49,10 +52,6 @@ from plume_nav_sim.core.constants import (
 from plume_nav_sim.core.enums import RenderMode
 from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.core.types import create_grid_size
-
-# Import color scheme and template systems
-from ..assets.default_colormap import PredefinedScheme
-from ..assets.render_templates import TemplateQuality
 
 # Initialize module logger
 logger = logging.getLogger("plume_nav_sim.config.render_configs")

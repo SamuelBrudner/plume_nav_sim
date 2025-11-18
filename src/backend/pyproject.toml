@@ -127,6 +127,7 @@ plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
 plume-nav-constants-check = "scripts.validate_constants_drift:main"
 plume-nav-capture = "plume_nav_sim.cli.capture:main"
 plume-nav-video-ingest = "plume_nav_sim.cli.video_ingest:main"
+plume-nav-config = "config.__main__:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

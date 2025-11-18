@@ -5,6 +5,11 @@ configurations, and test configurations. Serves as the primary interface for the
 plume_nav_sim configuration system with unified imports, factory functions, and registry
 management for all configuration categories.
 
+IMPORTANT: Do not execute this file directly (e.g. ``python src/backend/config/__init__.py``).
+Relative imports in this package require it to be imported as a package. Use one of:
+- ``python -m config`` (preferred)
+- A console script that imports ``config``
+
 This module handles the graceful integration of multiple configuration subsystems:
 - Default configuration classes and factory functions (with fallback handling)
 - Environment configuration presets and registry management
@@ -16,6 +21,16 @@ This module handles the graceful integration of multiple configuration subsystem
 The module is designed to work seamlessly whether default_config.py exists or not,
 providing robust fallback mechanisms and comprehensive configuration management.
 """
+
+# Guard against direct execution to ensure package-safe imports
+if __name__ == "__main__":  # pragma: no cover - defensive runtime guard
+    import sys
+
+    sys.stderr.write(
+        "Error: Do not execute config/__init__.py directly.\n"
+        "Use `python -m config` or import `config` as a package.\n"
+    )
+    sys.exit(2)
 
 import logging  # >=3.10 - Structured logging for configuration operations, error reporting, and system monitoring
 import warnings  # >=3.10 - Configuration warning management, deprecation alerts, and fallback notifications
@@ -62,9 +77,9 @@ try:
         EnvironmentConfig,
         PerformanceConfig,
         PlumeConfig,
+        RenderConfig,
         get_complete_default_config,
     )
-    from .render_configs import RenderConfig
 
     logger.info("Successfully imported default configuration components")
     DEFAULT_CONFIG_AVAILABLE = True
