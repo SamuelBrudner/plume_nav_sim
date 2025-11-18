@@ -83,6 +83,51 @@ BACKEND_COMPATIBILITY_MATRIX = {
 }
 
 
+# --- Internal helpers to keep factory functions simple (lower cyclomatic complexity) ---
+def _validate_positive_grid_size(grid_size: GridSize) -> None:
+    if grid_size.width <= 0 or grid_size.height <= 0:
+        raise ValueError("Grid size dimensions must be positive")
+
+
+def _optimize_scheme_for_mode(
+    scheme: Optional[ColorScheme], mode: RenderMode
+) -> ColorScheme:
+    scheme = scheme or create_default_scheme()
+    try:
+        scheme.optimize_for_render_mode(mode)
+    except Exception as e:
+        warnings.warn(f"Color scheme optimization failed: {e}")
+    return scheme
+
+
+def _merge_options(
+    defaults: Dict[str, Any], overrides: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    merged = defaults.copy()
+    if overrides:
+        merged.update(overrides)
+    return merged
+
+
+def _calculate_figsize_for_grid(grid_size: GridSize) -> Tuple[float, float]:
+    base = 8.0
+    aspect = grid_size.width / grid_size.height
+    if aspect > 1.5:
+        return (base * 1.2, base / 1.2)
+    if aspect < 0.67:
+        return (base / 1.2, base * 1.2)
+    return (base, base)
+
+
+def _backend_chain_with_preference(preferred: Optional[str]) -> list[str]:
+    chain = BACKEND_PRIORITY_LIST.copy()
+    if preferred:
+        if preferred in chain:
+            chain.remove(preferred)
+        chain.insert(0, preferred)
+    return chain
+
+
 class TemplateQuality(Enum):
     """Quality levels with predefined performance/feature profiles."""
 
@@ -1670,8 +1715,7 @@ def create_rgb_template(
     programmatic visualization.
     """
     # Validate grid_size dimensions and calculate memory requirements
-    if grid_size.width <= 0 or grid_size.height <= 0:
-        raise ValueError("Grid size dimensions must be positive")
+    _validate_positive_grid_size(grid_size)
 
     memory_estimate_mb = (grid_size.width * grid_size.height * 3) / (1024 * 1024)
     if memory_estimate_mb > 500:  # Reasonable upper limit
@@ -1679,27 +1723,15 @@ def create_rgb_template(
             f"Large grid size may require {memory_estimate_mb:.1f}MB of memory"
         )
 
-    # Initialize color scheme using default if none provided, optimize for RGB mode
-    if color_scheme is None:
-        color_scheme = create_default_scheme()
-
-    # Optimize color scheme for RGB rendering mode
-    try:
-        color_scheme.optimize_for_render_mode(RenderMode.RGB_ARRAY)
-    except Exception as e:
-        warnings.warn(f"Color scheme optimization failed: {e}")
+    # Initialize and optimize color scheme for RGB rendering mode
+    color_scheme = _optimize_scheme_for_mode(color_scheme, RenderMode.RGB_ARRAY)
 
     # Configure quality level with performance targets
     if quality_level is None:
         quality_level = TemplateQuality.STANDARD
 
-    # Apply template options with defaults
-    if template_options is None:
-        template_options = {}
-
-    # Merge with RGB template defaults
-    merged_options = DEFAULT_RGB_TEMPLATE_CONFIG.copy()
-    merged_options.update(template_options)
+    # Merge options with defaults
+    merged_options = _merge_options(DEFAULT_RGB_TEMPLATE_CONFIG, template_options)
 
     # Pre-compute template resources and optimization settings
     marker_config = {
@@ -1736,8 +1768,6 @@ def create_rgb_template(
 
     # Initialize and validate RGB template
     template = RGBTemplate(config)
-
-    # Configure performance monitoring based on quality level
     if not template.initialize():
         raise RuntimeError("RGB template initialization failed")
 
@@ -1763,44 +1793,19 @@ def create_matplotlib_template(
     backend management, interactive optimization, and cross-platform compatibility for
     research workflows.
     """
-    # Validate grid_size and calculate optimal figure sizing
-    if grid_size.width <= 0 or grid_size.height <= 0:
-        raise ValueError("Grid size dimensions must be positive")
-
-    # Calculate optimal figure size based on grid dimensions
-    aspect_ratio = grid_size.width / grid_size.height
-    base_size = 8  # Base figure size
-
-    if aspect_ratio > 1.5:
-        figsize = (base_size * 1.2, base_size / 1.2)
-    elif aspect_ratio < 0.67:
-        figsize = (base_size / 1.2, base_size * 1.2)
-    else:
-        figsize = (base_size, base_size)
+    # Validate and size figure
+    _validate_positive_grid_size(grid_size)
+    figsize = _calculate_figsize_for_grid(grid_size)
 
     # Initialize color scheme optimized for matplotlib visualization
-    if color_scheme is None:
-        color_scheme = create_default_scheme()
-
-    # Optimize for matplotlib rendering with colormap integration
-    try:
-        color_scheme.optimize_for_render_mode(RenderMode.HUMAN)
-    except Exception as e:
-        warnings.warn(f"Color scheme optimization for matplotlib failed: {e}")
+    color_scheme = _optimize_scheme_for_mode(color_scheme, RenderMode.HUMAN)
 
     # Configure matplotlib backend selection with fallback chain
-    backend_chain = BACKEND_PRIORITY_LIST.copy()
-    if preferred_backend:
-        if preferred_backend in backend_chain:
-            # Move preferred backend to front
-            backend_chain.remove(preferred_backend)
-        backend_chain.insert(0, preferred_backend)
+    backend_chain = _backend_chain_with_preference(preferred_backend)
     # Apply template options with matplotlib defaults
-    if template_options is None:
-        template_options = {}
-
-    merged_options = DEFAULT_MATPLOTLIB_TEMPLATE_CONFIG.copy()
-    merged_options.update(template_options)
+    merged_options = _merge_options(
+        DEFAULT_MATPLOTLIB_TEMPLATE_CONFIG, template_options
+    )
     merged_options["figsize"] = figsize  # Override with calculated size
 
     # Configure backend preferences with compatibility
@@ -1850,7 +1855,6 @@ def create_matplotlib_template(
 
     # Test backend availability and configure fallback mechanisms
     template = MatplotlibTemplate(config)
-
     # Initialize with backend compatibility and optimization settings
     if not template.initialize():
         warnings.warn(
@@ -1895,39 +1899,7 @@ def create_custom_template(
 
     # Apply custom_parameters with validation against template type requirements
     if custom_parameters:
-        # Validate custom parameters based on template type
-        if template_type == "matplotlib":
-            mpl_params = [
-                "figsize",
-                "backend_fallback",
-                "interactive_updates",
-                "animation_interval",
-            ]
-            if invalid_params := [
-                p
-                for p in custom_parameters
-                if p not in mpl_params and not p.startswith("custom_")
-            ]:
-                warnings.warn(
-                    f"Custom parameters {invalid_params} may not apply to matplotlib templates"
-                )
-
-        elif template_type == "rgb":
-            rgb_params = [
-                "agent_marker_size",
-                "source_marker_size",
-                "performance_optimized",
-            ]
-            if invalid_params := [
-                p
-                for p in custom_parameters
-                if p not in rgb_params and not p.startswith("custom_")
-            ]:
-                warnings.warn(
-                    f"Custom parameters {invalid_params} may not apply to RGB templates"
-                )
-
-        # Merge custom parameters into config
+        _validate_custom_parameters(template_type, custom_parameters)
         config.custom_parameters.update(custom_parameters)
 
     # Create template instance using appropriate factory based on template_type
@@ -1974,6 +1946,31 @@ def create_custom_template(
                 )
 
     return template
+
+
+def _validate_custom_parameters(template_type: str, params: Dict[str, Any]) -> None:
+    if template_type == "matplotlib":
+        allowed = {
+            "figsize",
+            "backend_fallback",
+            "interactive_updates",
+            "animation_interval",
+        }
+        invalid = [
+            p for p in params if p not in allowed and not p.startswith("custom_")
+        ]
+        if invalid:
+            warnings.warn(
+                f"Custom parameters {invalid} may not apply to matplotlib templates"
+            )
+        return
+    if template_type == "rgb":
+        allowed = {"agent_marker_size", "source_marker_size", "performance_optimized"}
+        invalid = [
+            p for p in params if p not in allowed and not p.startswith("custom_")
+        ]
+        if invalid:
+            warnings.warn(f"Custom parameters {invalid} may not apply to RGB templates")
 
 
 def register_template(

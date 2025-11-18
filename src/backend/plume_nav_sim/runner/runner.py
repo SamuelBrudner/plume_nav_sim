@@ -101,6 +101,46 @@ def _ensure_action_space_compat(env: Any, policy: Any) -> None:
         )
 
 
+def _render_with_fallback(env: Any) -> tuple[Optional[np.ndarray], bool, bool]:
+    """Attempt to render a frame, trying modern and legacy signatures.
+
+    Returns (frame, fallback_success, fallback_failure) where fallback flags
+    indicate whether the legacy path was attempted and succeeded/failed.
+    """
+    frame = None
+    fallback_success = False
+    fallback_failure = False
+    try:
+        # Prefer modern Gymnasium: render() uses configured render_mode
+        frame = env.render()
+    except TypeError:
+        try:
+            frame = env.render(mode="rgb_array")
+            fallback_success = isinstance(frame, np.ndarray)
+            if not fallback_success:
+                fallback_failure = True
+        except Exception:
+            frame = None
+            fallback_failure = True
+    else:
+        # If no frame produced, try explicit rgb_array
+        if not isinstance(frame, np.ndarray):
+            try:
+                frame = env.render(mode="rgb_array")
+                fallback_success = isinstance(frame, np.ndarray)
+                if not fallback_success:
+                    fallback_failure = True
+            except Exception:
+                frame = None
+                fallback_failure = True
+
+    return (
+        frame if isinstance(frame, np.ndarray) else None,
+        fallback_success,
+        fallback_failure,
+    )
+
+
 def run_episode(
     env: Any,
     policy: Any,
@@ -143,34 +183,13 @@ def run_episode(
         next_obs, reward, term, trunc, info = env.step(action)
         frame = None
         if render:
-            try:
-                # Prefer modern Gymnasium pattern: render() uses configured render_mode
-                frame = env.render()
-            except TypeError:
-                # Fallback to legacy signature render(mode)
-                try:
-                    frame = env.render(mode="rgb_array")
-                    if isinstance(frame, np.ndarray):
-                        fallback_successes += 1
-                    else:
-                        fallback_failures += 1
-                except Exception:
-                    frame = None
-                    fallback_failures += 1
-            else:
-                # If no frame produced, try explicit rgb_array
-                if not isinstance(frame, np.ndarray):
-                    try:
-                        frame = env.render(mode="rgb_array")
-                        if isinstance(frame, np.ndarray):
-                            fallback_successes += 1
-                        else:
-                            fallback_failures += 1
-                    except Exception:
-                        frame = None
-                        fallback_failures += 1
+            frame, succ, fail = _render_with_fallback(env)
+            if succ:
+                fallback_successes += 1
+            if fail:
+                fallback_failures += 1
 
-            if isinstance(frame, np.ndarray):
+            if frame is not None:
                 frames_captured += 1
                 try:
                     logger.debug(
@@ -180,19 +199,17 @@ def run_episode(
                         getattr(frame, "dtype", None),
                     )
                 except Exception:
-                    # Avoid any potential logging formatting errors from exotic array types
                     logger.debug("Captured frame at step %d", steps)
-            else:
-                if (
-                    fallback_failures > 0 or fallback_successes > 0
-                ) and not warned_missing:
-                    logger.warning(
-                        "No frame after fallback at step %d (successes=%d failures=%d)",
-                        steps,
-                        fallback_successes,
-                        fallback_failures,
-                    )
-                    warned_missing = True
+            elif (
+                fallback_failures > 0 or fallback_successes > 0
+            ) and not warned_missing:
+                logger.warning(
+                    "No frame after fallback at step %d (successes=%d failures=%d)",
+                    steps,
+                    fallback_successes,
+                    fallback_failures,
+                )
+                warned_missing = True
 
         ev = StepEvent(
             t=steps,
@@ -269,31 +286,13 @@ def stream(
         next_obs, reward, term, trunc, info = env.step(action)
         frame = None
         if render:
-            try:
-                frame = env.render()
-            except TypeError:
-                try:
-                    frame = env.render(mode="rgb_array")
-                    if isinstance(frame, np.ndarray):
-                        fallback_successes += 1
-                    else:
-                        fallback_failures += 1
-                except Exception:
-                    frame = None
-                    fallback_failures += 1
-            else:
-                if not isinstance(frame, np.ndarray):
-                    try:
-                        frame = env.render(mode="rgb_array")
-                        if isinstance(frame, np.ndarray):
-                            fallback_successes += 1
-                        else:
-                            fallback_failures += 1
-                    except Exception:
-                        frame = None
-                        fallback_failures += 1
+            frame, succ, fail = _render_with_fallback(env)
+            if succ:
+                fallback_successes += 1
+            if fail:
+                fallback_failures += 1
 
-            if isinstance(frame, np.ndarray):
+            if frame is not None:
                 try:
                     logger.debug(
                         "Captured frame at step %d: shape=%s dtype=%s",
@@ -303,17 +302,16 @@ def stream(
                     )
                 except Exception:
                     logger.debug("Captured frame at step %d", t)
-            else:
-                if (
-                    fallback_failures > 0 or fallback_successes > 0
-                ) and not warned_missing:
-                    logger.warning(
-                        "No frame after fallback at step %d (successes=%d failures=%d)",
-                        t,
-                        fallback_successes,
-                        fallback_failures,
-                    )
-                    warned_missing = True
+            elif (
+                fallback_failures > 0 or fallback_successes > 0
+            ) and not warned_missing:
+                logger.warning(
+                    "No frame after fallback at step %d (successes=%d failures=%d)",
+                    t,
+                    fallback_successes,
+                    fallback_failures,
+                )
+                warned_missing = True
 
         ev = StepEvent(
             t=t,

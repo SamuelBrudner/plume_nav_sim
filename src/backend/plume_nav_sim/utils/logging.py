@@ -148,6 +148,162 @@ __all__ = [
 ]
 
 
+# ------------------------------
+# Internal helper functions
+# ------------------------------
+
+
+def _validate_log_level_name(log_level: str) -> str:
+    """Return validated, uppercased log level or raise ValidationError."""
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    level_upper = str(log_level).upper()
+    if level_upper not in valid_levels:
+        raise ValidationError(
+            f"Invalid log_level '{log_level}'. Must be one of: {valid_levels}"
+        )
+    return level_upper
+
+
+def _build_console_config(enable_console_colors: bool) -> Dict[str, Any]:
+    return {
+        "enabled": True,
+        "colors": enable_console_colors,
+        "terminal_support": enable_console_colors,
+    }
+
+
+def _build_file_config(enable_file_logging: bool, log_directory: str) -> Dict[str, Any]:
+    return {
+        "enabled": enable_file_logging,
+        "directory": log_directory if enable_file_logging else None,
+    }
+
+
+def _init_component_logger_for_name(component_name: str, log_level: str) -> bool:
+    """Initialize a component logger for a single component name.
+
+    Returns True on success, False on failure without raising.
+    """
+    try:
+        name_l = component_name.lower()
+        if "environment" in name_l:
+            comp_type = ComponentType.ENVIRONMENT
+        elif "plume" in name_l:
+            comp_type = ComponentType.PLUME_MODEL
+        elif "render" in name_l:
+            comp_type = ComponentType.RENDERING
+        else:
+            comp_type = ComponentType.UTILS
+
+        _ = get_component_logger(
+            component_name=component_name,
+            component_type=comp_type,
+            logger_level=log_level,
+            enable_performance_tracking=True,
+        )
+        return True
+    except Exception as e:
+        logging.getLogger(PACKAGE_NAME).warning(
+            f"Failed to initialize component logger for '{component_name}': {e}"
+        )
+        return False
+
+
+def _initialize_component_loggers(log_level: str) -> List[str]:
+    """Initialize loggers for all known components and return the list created."""
+    initialized: List[str] = []
+    for component_name in COMPONENT_NAMES:
+        if _init_component_logger_for_name(component_name, log_level):
+            initialized.append(component_name)
+    return initialized
+
+
+def _resolve_base_logger(logger: Any) -> logging.Logger:
+    """Return a stdlib Logger from either a Logger or Component-like wrapper."""
+    if isinstance(logger, logging.Logger):
+        return logger
+    candidate = getattr(logger, "base_logger", None)
+    if isinstance(candidate, logging.Logger):
+        return candidate
+    raise ValidationError(
+        f"logger must be logging.Logger or ComponentLogger instance, got {type(logger)}"
+    )
+
+
+def _format_metrics(additional_metrics: Optional[Dict[str, Any]]) -> str:
+    if not additional_metrics:
+        return ""
+    try:
+        parts = [f"{k}={v}" for k, v in additional_metrics.items()]
+        return f" [{', '.join(parts)}]"
+    except Exception:
+        return ""
+
+
+def _performance_thresholds(
+    duration_ms: float, target_ms: Optional[float]
+) -> tuple[str, float, float]:
+    target = target_ms if target_ms is not None else PERFORMANCE_TARGET_STEP_LATENCY_MS
+    if target <= 0:
+        return ("within_target", 1.0, 0.0)
+    status = "within_target" if duration_ms <= target else "exceeds_target"
+    ratio = duration_ms / target
+    return (status, ratio, target)
+
+
+def _resolve_logger_from_kwargs(kwargs: Dict[str, Any]) -> logging.Logger:
+    component_name = kwargs.get("component_name", "error_logger")
+    comp_type = kwargs.get("component_type", ComponentType.UTILS)
+    desired_level = kwargs.get("log_level")
+    comp_logger = get_component_logger(
+        component_name=component_name, component_type=comp_type
+    )
+    base = getattr(comp_logger, "base_logger", None)
+    logger = (
+        base if isinstance(base, logging.Logger) else logging.getLogger(component_name)
+    )
+    if desired_level:
+        with suppress(Exception):
+            logger.setLevel(getattr(logging, str(desired_level).upper()))
+    return logger
+
+
+def _ensure_exception_types(
+    exception_types_to_log: Optional[List[Type[Exception]]],
+) -> List[Type[Exception]]:
+    types: List[Type[Exception]] = list(exception_types_to_log or [])
+    if PlumeNavSimError not in types:
+        types.append(PlumeNavSimError)
+    if ValidationError not in types:
+        types.append(ValidationError)
+    if Exception not in types:
+        types.append(Exception)
+    return types
+
+
+def _attach_log_exception_method(logger: logging.Logger) -> None:
+    def log_exception(exc: Exception, context: Dict[str, Any] | None = None) -> None:
+        try:
+            error_details = {
+                "exception_type": exc.__class__.__name__,
+                "exception_message": str(exc),
+                "component_context": context or {},
+            }
+            handle_component_error(exc, logger.name, error_details)
+            logger.error(
+                f"Exception in {logger.name}: {exc}",
+                extra=error_details,
+                exc_info=True,
+            )
+        except Exception as logging_error:
+            logging.getLogger(PACKAGE_NAME).critical(
+                f"Error logging failed: {logging_error}. Original exception: {exc}"
+            )
+
+    # Attach as attribute for callers expecting this convenience
+    setattr(logger, "log_exception", log_exception)
+
+
 def get_component_logger(
     component_name: str,
     component_type: ComponentType = ComponentType.UTILS,
@@ -298,7 +454,7 @@ def get_component_logger(
         raise PlumeNavSimError(f"Failed to create component logger: {e}") from e
 
 
-def configure_logging_for_development(  # noqa: C901
+def configure_logging_for_development(
     log_level: str = "DEBUG",
     enable_console_colors: bool = True,
     enable_file_logging: bool = False,
@@ -324,7 +480,6 @@ def configure_logging_for_development(  # noqa: C901
     global _logging_initialized
 
     try:
-        # Check if logging system is already initialized to prevent duplicate configuration
         if _logging_initialized:
             return {
                 "status": "already_initialized",
@@ -334,84 +489,36 @@ def configure_logging_for_development(  # noqa: C901
                 "message": "Logging system already configured",
             }
 
-        # Validate log_level parameter
-        valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        if log_level.upper() not in valid_levels:
-            raise ValidationError(
-                f"Invalid log_level '{log_level}'. Must be one of: {valid_levels}"
-            )
-
-        # Call configure_development_logging from logging.config with enhanced parameters
+        # Validate and configure base logging
+        level_name = _validate_log_level_name(log_level)
         config_result = configure_development_logging(
             enable_verbose_output=True,
             enable_color_console=enable_console_colors,
             log_to_file=enable_file_logging,
-            development_log_level=log_level,
+            development_log_level=level_name,
         )
 
-        # Set global _logging_initialized flag to prevent re-initialization
         _logging_initialized = True
 
-        # Configure console output with colors if enable_console_colors and terminal support available
-        console_config = {
-            "enabled": True,
-            "colors": enable_console_colors,
-            "terminal_support": enable_console_colors,  # Simplified for development
-        }
+        console_config = _build_console_config(enable_console_colors)
+        file_config = _build_file_config(enable_file_logging, log_directory)
 
-        # Set up file logging in log_directory if enable_file_logging is True
-        file_config = {
-            "enabled": enable_file_logging,
-            "directory": log_directory if enable_file_logging else None,
-        }
-
-        # Enable enhanced error logging with stack traces and context information
         error_logging_config = {
             "stack_traces": True,
             "context_capture": True,
             "integration_enabled": True,
         }
-
-        # Configure performance logging with development-appropriate thresholds
         performance_config = {
             "enabled": True,
             "threshold_ms": PERFORMANCE_TARGET_STEP_LATENCY_MS,
             "baseline_tracking": True,
         }
 
-        # Set up component-specific loggers for all COMPONENT_NAMES with development settings
-        component_loggers_initialized = []
-        for component_name in COMPONENT_NAMES:
-            try:
-                # Determine appropriate component type based on component name
-                if "environment" in component_name.lower():
-                    comp_type = ComponentType.ENVIRONMENT
-                elif "plume" in component_name.lower():
-                    comp_type = ComponentType.PLUME_MODEL
-                elif "render" in component_name.lower():
-                    comp_type = ComponentType.RENDERING
-                else:
-                    comp_type = ComponentType.UTILS
+        component_loggers_initialized = _initialize_component_loggers(level_name)
 
-                # Create component logger with development configuration
-                _ = get_component_logger(
-                    component_name=component_name,
-                    component_type=comp_type,
-                    logger_level=log_level,
-                    enable_performance_tracking=True,
-                )
-                component_loggers_initialized.append(component_name)
-
-            except Exception as e:
-                # Log component logger creation failures but continue with others
-                logging.getLogger(PACKAGE_NAME).warning(
-                    f"Failed to initialize component logger for '{component_name}': {e}"
-                )
-
-        # Return configuration status dictionary with enabled features and settings
         return {
             "status": "configured",
-            "log_level": log_level,
+            "log_level": level_name,
             "console_output": console_config,
             "file_logging": file_config,
             "error_logging": error_logging_config,
@@ -426,7 +533,7 @@ def configure_logging_for_development(  # noqa: C901
         raise PlumeNavSimError(f"Development logging configuration failed: {e}") from e
 
 
-def log_performance(  # noqa: C901
+def log_performance(
     logger: Any,
     operation_name: str,
     duration_ms: float,
@@ -451,26 +558,7 @@ def log_performance(  # noqa: C901
         PlumeNavSimError: If performance logging fails
     """
     try:
-        # Validate logger is valid Logger instance and operation_name is non-empty string
-        # Accept ComponentLogger or logging.Logger
-        base_logger: logging.Logger
-        if isinstance(logger, logging.Logger):
-            base_logger = logger
-        elif hasattr(logger, "base_logger"):
-            try:
-                candidate = logger.base_logger  # type: ignore[attr-defined]
-            except AttributeError:
-                candidate = None
-            if isinstance(candidate, logging.Logger):
-                base_logger = candidate
-            else:
-                raise ValidationError(
-                    f"logger.base_logger must be logging.Logger, got {type(candidate)}"
-                )
-        else:
-            raise ValidationError(
-                f"logger must be logging.Logger or ComponentLogger instance, got {type(logger)}"
-            )
+        base_logger = _resolve_base_logger(logger)
 
         if not operation_name or not isinstance(operation_name, str):
             raise ValidationError(
@@ -482,100 +570,75 @@ def log_performance(  # noqa: C901
                 f"duration_ms must be non-negative number, got {duration_ms}"
             )
 
-        # Optionally format timing information using PerformanceFormatter if needed
-
-        # Compare duration_ms against PERFORMANCE_TARGET_STEP_LATENCY_MS and component-specific thresholds
-        target_threshold = (
-            target_ms if target_ms is not None else PERFORMANCE_TARGET_STEP_LATENCY_MS
-        )
-        threshold_status = (
-            "within_target" if duration_ms <= target_threshold else "exceeds_target"
-        )
-        threshold_ratio = (
-            duration_ms / target_threshold if target_threshold > 0 else 1.0
+        threshold_status, threshold_ratio, _ = _performance_thresholds(
+            float(duration_ms), target_ms
         )
 
-        # Include additional_metrics in performance log if provided (memory usage, operation count)
-        metrics_info = ""
-        if additional_metrics:
-            metrics_parts = []
-            for key, value in additional_metrics.items():
-                if key == "memory_mb":
-                    metrics_parts.append(f"memory: {value:.2f}MB")
-                elif key == "operation_count":
-                    metrics_parts.append(f"ops: {value}")
-                else:
-                    metrics_parts.append(f"{key}: {value}")
-            metrics_info = f" [{', '.join(metrics_parts)}]" if metrics_parts else ""
+        metrics_info = _format_metrics(additional_metrics)
 
-        # Perform baseline comparison if compare_to_baseline is True and baseline exists
         baseline_info = ""
         if compare_to_baseline and operation_name in _performance_baselines:
-            baseline_duration = _performance_baselines[operation_name].get(
-                "duration_ms", 0
-            )
-            if baseline_duration > 0:
-                baseline_ratio = duration_ms / baseline_duration
-                if baseline_ratio > 1.2:
-                    baseline_info = f" (SLOWER than baseline: {baseline_ratio:.2f}x)"
-                elif baseline_ratio < 0.8:
-                    baseline_info = f" (FASTER than baseline: {1/baseline_ratio:.2f}x)"
-                else:
-                    baseline_info = f" (similar to baseline: {baseline_ratio:.2f}x)"
+            with suppress(Exception):
+                baseline_duration = _performance_baselines[operation_name].get(
+                    "duration_ms", 0
+                )
+                if baseline_duration > 0:
+                    baseline_ratio = float(duration_ms) / float(baseline_duration)
+                    if baseline_ratio > 1.2:
+                        baseline_info = (
+                            f" (SLOWER than baseline: {baseline_ratio:.2f}x)"
+                        )
+                    elif baseline_ratio < 0.8:
+                        baseline_info = (
+                            f" (FASTER than baseline: {1/baseline_ratio:.2f}x)"
+                        )
+                    else:
+                        baseline_info = f" (similar to baseline: {baseline_ratio:.2f}x)"
 
-        # Determine appropriate log level based on performance threshold comparison (info/warning/error)
-        # Reduce verbosity for within‑target operations to minimize hot‑path overhead.
+        # Choose level; throttle noisier messages
         if threshold_ratio <= 1.0:
-            # Treat within‑target timings as DEBUG to avoid spamming logs in tight loops
             log_level = logging.DEBUG
         elif threshold_ratio <= 2.0:
             log_level = logging.WARNING
         else:
             log_level = logging.ERROR
 
-        # Skip low‑signal log records to further reduce overhead in hot paths:
-        #  - Don’t log minor threshold exceedances (<= 1.2x target)
-        #  - Only format log message if the level is actually enabled
         if threshold_ratio <= 1.2 and log_level == logging.WARNING:
             return
 
         if base_logger.isEnabledFor(log_level):
-            # Create structured log message with timing, metrics, and threshold status
             log_message = (
-                f"PERF [{operation_name}] {duration_ms:.3f}ms "
+                f"PERF [{operation_name}] {float(duration_ms):.3f}ms "
                 f"({threshold_status}: {threshold_ratio:.2f}x target)"
                 f"{metrics_info}{baseline_info}"
             )
-
-            # Log performance information with appropriate level and detailed metrics
             base_logger.log(
                 log_level,
                 log_message,
                 extra={
                     "operation_name": operation_name,
-                    "duration_ms": duration_ms,
+                    "duration_ms": float(duration_ms),
                     "threshold_status": threshold_status,
-                    "threshold_ratio": threshold_ratio,
+                    "threshold_ratio": float(threshold_ratio),
                     "additional_metrics": additional_metrics,
                     "baseline_comparison": baseline_info,
                     "performance_category": "timing",
                 },
             )
 
-        # Update performance baselines in _performance_baselines if this is a new measurement
+        # Maintain a simple running average baseline
         if operation_name not in _performance_baselines:
             _performance_baselines[operation_name] = {
-                "duration_ms": duration_ms,
+                "duration_ms": float(duration_ms),
                 "first_measured": time.time(),
                 "measurement_count": 1,
             }
         else:
-            # Update running average for baseline tracking
             baseline = _performance_baselines[operation_name]
-            count = baseline["measurement_count"]
-            baseline["duration_ms"] = (
-                (baseline["duration_ms"] * count) + duration_ms
-            ) / (count + 1)
+            count = int(baseline.get("measurement_count", 0))
+            prev = float(baseline.get("duration_ms", 0.0))
+            new_avg = (prev * count + float(duration_ms)) / (count + 1)
+            baseline["duration_ms"] = new_avg
             baseline["measurement_count"] = count + 1
             baseline["last_updated"] = time.time()
 
@@ -734,7 +797,7 @@ def log_with_context(
             )
 
 
-def create_performance_logger(  # noqa: C901
+def create_performance_logger(
     logger_name: Optional[str] = None,
     timing_thresholds: Optional[Dict[str, float]] = None,
     enable_memory_tracking: bool = True,
@@ -827,7 +890,7 @@ def create_performance_logger(  # noqa: C901
         raise PlumeNavSimError(f"Failed to create performance logger: {e}") from e
 
 
-def setup_error_logging(  # noqa: C901
+def setup_error_logging(
     logger: Optional[logging.Logger] = None,
     enable_auto_recovery_logging: bool = True,
     exception_types_to_log: List[Type[Exception]] = None,
@@ -847,91 +910,24 @@ def setup_error_logging(  # noqa: C901
         PlumeNavSimError: If error logging setup fails
     """
     try:
-        # Support alt signature using component_name + log_level
         if logger is None:
-            component_name = kwargs.get("component_name", "error_logger")
-            comp_type = kwargs.get("component_type", ComponentType.UTILS)
-            desired_level = kwargs.get("log_level")
-            comp_logger = get_component_logger(
-                component_name=component_name, component_type=comp_type
-            )
-            # Underlying base logger for handler configuration
-            base = getattr(comp_logger, "base_logger", None)
-            logger = (
-                base
-                if isinstance(base, logging.Logger)
-                else logging.getLogger(component_name)
-            )
-            if desired_level:
-                try:
-                    logger.setLevel(getattr(logging, str(desired_level).upper()))
-                except Exception:
-                    pass
+            logger = _resolve_logger_from_kwargs(kwargs)
         if not isinstance(logger, logging.Logger):
             raise ValidationError(
                 f"logger must be logging.Logger instance, got {type(logger)}"
             )
 
-        # Configure logger to automatically capture PlumeNavSimError exceptions
-        if exception_types_to_log is None:
-            exception_types_to_log = [PlumeNavSimError, ValidationError, Exception]
+        exception_types = _ensure_exception_types(exception_types_to_log)
 
-        # Add PlumeNavSimError and ValidationError if not already included
-        if PlumeNavSimError not in exception_types_to_log:
-            exception_types_to_log.append(PlumeNavSimError)
-        if ValidationError not in exception_types_to_log:
-            exception_types_to_log.append(ValidationError)
+        setattr(logger, "error_handling_enabled", True)
+        setattr(logger, "exception_types_to_log", exception_types)
+        setattr(logger, "auto_recovery_logging", enable_auto_recovery_logging)
+        setattr(logger, "monitored_exceptions", set(exception_types))
+        setattr(logger, "error_context_extraction", True)
+        setattr(logger, "capture_stack_traces", True)
+        setattr(logger, "error_escalation_enabled", True)
 
-        # Set up integration with handle_component_error function for automated error handling
-        logger.error_handling_enabled = True
-        logger.exception_types_to_log = exception_types_to_log
-
-        # Enable automatic recovery action logging if enable_auto_recovery_logging is True
-        logger.auto_recovery_logging = enable_auto_recovery_logging
-
-        # Configure exception_types_to_log for specific exception type filtering
-        logger.monitored_exceptions = set(exception_types_to_log)
-
-        # Set up error context extraction from exception instances
-        logger.error_context_extraction = True
-
-        # Configure secure error logging with sensitive information filtering
-        # This is handled by the SecurityFilter in the logging infrastructure
-
-        # Enable stack trace capture for development debugging context
-        logger.capture_stack_traces = True
-
-        # Set up error escalation logging for critical system failures
-        logger.error_escalation_enabled = True
-
-        # Add error logging methods to the logger instance
-        def log_exception(exc: Exception, context: Dict[str, Any] = None):
-            """Log exception with full context and error handling integration."""
-            try:
-                error_details = {
-                    "exception_type": exc.__class__.__name__,
-                    "exception_message": str(exc),
-                    "component_context": context or {},
-                }
-
-                # Use handle_component_error for consistent error processing
-                handle_component_error(exc, logger.name, error_details)
-
-                # Log the error with full context
-                logger.error(
-                    f"Exception in {logger.name}: {exc}",
-                    extra=error_details,
-                    exc_info=True,
-                )
-
-            except Exception as logging_error:
-                # Fallback if error logging itself fails
-                logging.getLogger(PACKAGE_NAME).critical(
-                    f"Error logging failed: {logging_error}. Original exception: {exc}"
-                )
-
-        # Attach the error logging method to the logger
-        logger.log_exception = log_exception
+        _attach_log_exception_method(logger)
 
     except Exception as e:
         handle_component_error(e, "setup_error_logging")

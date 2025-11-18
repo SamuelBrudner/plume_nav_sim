@@ -178,115 +178,138 @@ def _load_hydra_config(
     return cfg_resolved, cfg_hash
 
 
+def _is_flag_provided(argv: Optional[list[str]], flag: str) -> bool:
+    if not argv:
+        return False
+    return any(tok == flag for tok in argv)
+
+
+def _parse_grid_arg(grid: str) -> Tuple[int, int]:
+    try:
+        w, h = (int(p) for p in grid.lower().split("x"))
+        return w, h
+    except Exception:
+        raise SystemExit("--grid must be formatted as WxH, e.g., 64x64")
+
+
+def _env_from_cfg(cfg: dict) -> Tuple[object, int, int]:
+    env_cfg = cfg.get("env", {})
+    plume_mode = env_cfg.get("plume", "static")
+    make_kwargs = {
+        "action_type": env_cfg.get("action_type", "oriented"),
+        "observation_type": env_cfg.get("observation_type", "concentration"),
+        "reward_type": env_cfg.get("reward_type", "step_penalty"),
+        "max_steps": env_cfg.get("max_steps", None) or None,
+    }
+    if plume_mode == "movie":
+        movie_cfg = cfg.get("movie", {})
+        make_kwargs.update(
+            {
+                "plume": "movie",
+                "movie_path": movie_cfg.get("path"),
+                "movie_fps": movie_cfg.get("fps"),
+                "movie_pixel_to_grid": (
+                    tuple(movie_cfg.get("pixel_to_grid"))
+                    if movie_cfg.get("pixel_to_grid")
+                    else None
+                ),
+                "movie_origin": (
+                    tuple(movie_cfg.get("origin")) if movie_cfg.get("origin") else None
+                ),
+                "movie_extent": (
+                    tuple(movie_cfg.get("extent")) if movie_cfg.get("extent") else None
+                ),
+                "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
+            }
+        )
+        env = pns.make_env(**make_kwargs)
+        gs = getattr(env, "grid_size", None)
+        if gs is None:
+            raise SystemExit(
+                "Failed to determine grid size from movie dataset/environment"
+            )
+        w = getattr(gs, "width", None) or int(gs[0])
+        h = getattr(gs, "height", None) or int(gs[1])
+        return env, w, h
+    # static plume: require grid_size
+    grid = env_cfg.get("grid_size", [64, 64])
+    if not isinstance(grid, (list, tuple)) or len(grid) != 2:
+        raise SystemExit("env.grid_size must be a 2-element list or tuple")
+    w, h = int(grid[0]), int(grid[1])
+    make_kwargs.update({"grid_size": (w, h)})
+    env = pns.make_env(**make_kwargs)
+    return env, w, h
+
+
+def _merge_args_from_cfg(
+    args: argparse.Namespace, cfg: dict, argv: Optional[list[str]]
+) -> None:
+    def provided(flag: str) -> bool:
+        return _is_flag_provided(argv, flag)
+
+    args.output = args.output if provided("--output") else cfg.get("output", "results")
+    args.experiment = (
+        args.experiment
+        if provided("--experiment")
+        else cfg.get("experiment", "default")
+    )
+    args.episodes = (
+        args.episodes if provided("--episodes") else int(cfg.get("episodes", 1))
+    )
+    args.seed = args.seed if provided("--seed") else int(cfg.get("seed", 123))
+    args.rotate_size = (
+        args.rotate_size if provided("--rotate-size") else cfg.get("rotate_size", None)
+    )
+    args.parquet = bool(
+        args.parquet if provided("--parquet") else cfg.get("parquet", False)
+    )
+
+
+def _run_capture(
+    env: object, w: int, h: int, *, args: argparse.Namespace, cfg_hash: Optional[str]
+) -> None:
+    rec = RunRecorder(
+        args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
+    )
+    cfg = EnvironmentConfig(
+        grid_size=(int(w), int(h)), source_location=(int(w) // 2, int(h) // 2)
+    )
+    wrapped = DataCaptureWrapper(
+        env, rec, cfg, meta_overrides={"config_hash": cfg_hash} if cfg_hash else None
+    )
+
+    base_seed = int(args.seed)
+    episodes = int(args.episodes)
+    for i in range(episodes):
+        seed = base_seed + i
+        wrapped.reset(seed=seed)
+        while True:
+            _ = wrapped.action_space.sample()
+            _, _, terminated, truncated, _ = wrapped.step(
+                _.item() if hasattr(_, "item") else _
+            )
+            if terminated or truncated:
+                break
+    rec.finalize(export_parquet=bool(args.parquet))
+    wrapped.close()
+
+
 def main(argv: Optional[list[str]] = None) -> int:
-    """Run episodes and capture analysis-ready artifacts via data_capture.
-
-    Args:
-        argv: Optional list of CLI arguments for testing
-
-    Returns:
-        Process exit code (0 on success)
-    """
+    """Run episodes and capture analysis-ready artifacts via data_capture."""
     args, overrides = _parse_args_and_overrides(argv)
-
-    def _is_provided(flag: str) -> bool:
-        """Return True if the given CLI flag was explicitly provided in argv."""
-        if not argv:
-            return False
-        return any(tok == flag for tok in argv)
 
     env = None
     cfg_hash: Optional[str] = None
-    # Hydra-driven configuration if requested
     if args.config_name:
         cfg, cfg_hash = _load_hydra_config(
             config_name=str(args.config_name),
             config_path=args.config_path,
             overrides=overrides,
         )
-        env_cfg = cfg.get("env", {})
-        plume_mode = env_cfg.get("plume", "static")
-
-        # Build kwargs for make_env, handling movie mode specially
-        make_kwargs = {
-            "action_type": env_cfg.get("action_type", "oriented"),
-            "observation_type": env_cfg.get("observation_type", "concentration"),
-            "reward_type": env_cfg.get("reward_type", "step_penalty"),
-            "max_steps": env_cfg.get("max_steps", None) or None,
-        }
-
-        if plume_mode == "movie":
-            movie_cfg = cfg.get("movie", {})
-            make_kwargs.update(
-                {
-                    "plume": "movie",
-                    "movie_path": movie_cfg.get("path"),
-                    "movie_fps": movie_cfg.get("fps"),
-                    "movie_pixel_to_grid": (
-                        tuple(movie_cfg.get("pixel_to_grid"))
-                        if movie_cfg.get("pixel_to_grid")
-                        else None
-                    ),
-                    "movie_origin": (
-                        tuple(movie_cfg.get("origin"))
-                        if movie_cfg.get("origin")
-                        else None
-                    ),
-                    "movie_extent": (
-                        tuple(movie_cfg.get("extent"))
-                        if movie_cfg.get("extent")
-                        else None
-                    ),
-                    "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
-                }
-            )
-            # In movie mode, grid_size derives from dataset; ignore env.grid_size if provided
-            w = h = None  # filled after env constructed
-            env = pns.make_env(**make_kwargs)
-            # Try to discover grid from env for RunMeta
-            gs = getattr(env, "grid_size", None)
-            if gs is not None:
-                # grid_size may be tuple or GridSize
-                w = getattr(gs, "width", None) or int(gs[0])
-                h = getattr(gs, "height", None) or int(gs[1])
-            else:
-                raise SystemExit(
-                    "Failed to determine grid size from movie dataset/environment"
-                )
-        else:
-            grid = env_cfg.get("grid_size", [64, 64])
-            if not isinstance(grid, (list, tuple)) or len(grid) != 2:
-                raise SystemExit("env.grid_size must be a 2-element list or tuple")
-            w, h = int(grid[0]), int(grid[1])
-            make_kwargs.update({"grid_size": (w, h)})
-            env = pns.make_env(**make_kwargs)
-        # Sync top-level controls from cfg unless explicitly overridden via CLI
-        args.output = (
-            args.output if _is_provided("--output") else cfg.get("output", "results")
-        )
-        args.experiment = (
-            args.experiment
-            if _is_provided("--experiment")
-            else cfg.get("experiment", "default")
-        )
-        args.episodes = (
-            args.episodes if _is_provided("--episodes") else int(cfg.get("episodes", 1))
-        )
-        args.seed = args.seed if _is_provided("--seed") else int(cfg.get("seed", 123))
-        args.rotate_size = (
-            args.rotate_size
-            if _is_provided("--rotate-size")
-            else cfg.get("rotate_size", None)
-        )
-        args.parquet = bool(
-            args.parquet if _is_provided("--parquet") else cfg.get("parquet", False)
-        )
+        env, w, h = _env_from_cfg(cfg)
+        _merge_args_from_cfg(args, cfg, argv)
     else:
-        try:
-            w, h = (int(p) for p in args.grid.lower().split("x"))
-        except Exception:
-            raise SystemExit("--grid must be formatted as WxH, e.g., 64x64")
-        # Create env (use oriented+concentration defaults; reward step_penalty)
+        w, h = _parse_grid_arg(args.grid)
         env = pns.make_env(
             grid_size=(w, h),
             action_type="oriented",
@@ -294,39 +317,16 @@ def main(argv: Optional[list[str]] = None) -> int:
             reward_type="step_penalty",
             max_steps=args.max_steps,
         )
-    try:
-        rec = RunRecorder(
-            args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
-        )
-        if w is None or h is None:
-            # Fallback guard, should not happen
-            raise SystemExit("Unable to resolve grid dimensions for EnvironmentConfig")
-        cfg = EnvironmentConfig(
-            grid_size=(int(w), int(h)), source_location=(int(w) // 2, int(h) // 2)
-        )
-        env = DataCaptureWrapper(
-            env,
-            rec,
-            cfg,
-            meta_overrides={"config_hash": cfg_hash} if cfg_hash else None,
-        )
 
-        base_seed = int(args.seed)
-        episodes = int(args.episodes)
-        for i in range(episodes):
-            seed = base_seed + i
-            obs, info = env.reset(seed=seed)
-            step_count = 0
-            while True:
-                action = env.action_space.sample()
-                obs, reward, terminated, truncated, info = env.step(action)
-                step_count += 1
-                if terminated or truncated:
-                    break
-            # next episode
-        rec.finalize(export_parquet=bool(args.parquet))
+    try:
+        if w is None or h is None:  # type: ignore[truthy-bool]
+            raise SystemExit("Unable to resolve grid dimensions for EnvironmentConfig")
+        _run_capture(env, w, h, args=args, cfg_hash=cfg_hash)
     finally:
-        env.close()
+        try:
+            env.close()
+        except Exception:
+            pass
     return 0
 
 

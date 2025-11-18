@@ -98,8 +98,9 @@ class RunRecorder:
         import gzip
         import json
 
-        import pandas as pd  # type: ignore
-
+        # pandas is not required to be imported as a module here; the
+        # flattened DataFrame objects returned by validators expose
+        # .to_parquet(), which will use an available engine.
         # Reuse validation flatteners to maintain parity with schema
         from .validate import _flatten_episodes, _flatten_steps
 
@@ -165,118 +166,117 @@ class RunRecorder:
 
         manifest: Dict[str, Any] = {}
 
-        # Try to read run.json that was written earlier
-        run_meta: Dict[str, Any] = {}
-        try:
-            with open(self._meta_path, "r", encoding="utf-8") as fh:
-                run_meta = json.load(fh)
-        except Exception:
-            run_meta = {}
+        def _read_run_meta() -> Dict[str, Any]:
+            try:
+                with open(self._meta_path, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+            except Exception:
+                return {}
 
-        # Git SHA
-        git_sha = None
-        try:
-            git_sha = (
-                subprocess.check_output(
-                    [
-                        "git",
-                        "rev-parse",
-                        "HEAD",
-                    ],
-                    cwd=str(self.root.parent.parent),
+        def _git_sha() -> Optional[str]:
+            try:
+                return (
+                    subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=str(self.root.parent.parent),
+                    )
+                    .decode("utf-8")
+                    .strip()
                 )
-                .decode("utf-8")
-                .strip()
-            )
-        except Exception:
-            pass
+            except Exception:
+                return None
 
-        # Package version if present via import metadata
-        pkg_version = run_meta.get("package_version")
-        if not pkg_version:
+        def _package_version(run_meta: Dict[str, Any]) -> Optional[str]:
+            pkg_version = run_meta.get("package_version")
+            if pkg_version:
+                return str(pkg_version)
             try:
                 import importlib.metadata as _im
 
-                pkg_version = _im.version("plume_nav_sim")
+                return _im.version("plume_nav_sim")
             except Exception:
-                pkg_version = None
+                return None
 
-        # Config hash (stable JSON of env_config)
-        env_cfg = run_meta.get("env_config")
-        cfg_hash = None
-        if env_cfg is not None:
+        def _config_hash(env_cfg: Any) -> Optional[str]:
+            if env_cfg is None:
+                return None
             try:
                 cfg_bytes = json.dumps(
                     env_cfg, sort_keys=True, separators=(",", ":")
                 ).encode("utf-8")
-                cfg_hash = hashlib.sha256(cfg_bytes).hexdigest()
+                return hashlib.sha256(cfg_bytes).hexdigest()
             except Exception:
-                cfg_hash = None
+                return None
 
-        # Validation report
+        def _file_inventory() -> list[Dict[str, Any]]:
+            def _file_info(name: str) -> Dict[str, Any]:
+                p = self.root / name
+                try:
+                    st = p.stat()
+                    return {"path": name, "bytes": int(st.st_size)}
+                except Exception:
+                    return {"path": name, "bytes": None}
+
+            files: list[Dict[str, Any]] = []
+            for fname in (
+                "run.json",
+                "steps.jsonl.gz",
+                "episodes.jsonl.gz",
+                "steps.parquet",
+                "episodes.parquet",
+            ):
+                if (self.root / fname).exists():
+                    files.append(_file_info(fname))
+            return files
+
+        def _seed_summary() -> Dict[str, Any]:
+            try:
+                import gzip as _gzip
+                import json as _json
+
+                seeds: set[int] = set()
+                jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
+                base = self.root / "steps.jsonl.gz"
+                if base.exists():
+                    jsonl_paths.insert(0, base)
+                for p in jsonl_paths:
+                    with _gzip.open(p, "rt", encoding="utf-8") as fh:
+                        for line in fh:
+                            if not line.strip():
+                                continue
+                            try:
+                                obj = _json.loads(line)
+                                seed = obj.get("seed")
+                                if seed is not None:
+                                    seeds.add(int(seed))
+                            except Exception:
+                                continue
+                if seeds:
+                    return {
+                        "unique_count": len(seeds),
+                        "min": min(seeds),
+                        "max": max(seeds),
+                    }
+            except Exception:
+                pass
+            return {}
+
+        run_meta = _read_run_meta()
+        git_sha = _git_sha()
+        pkg_version = _package_version(run_meta)
+        env_cfg = run_meta.get("env_config")
+        cfg_hash = _config_hash(env_cfg)
+
         try:
             report = validate_run_artifacts(self.root)
         except Exception as e:
             report = {"error": str(e)}
 
-        # Schema version(s)
         schema_version = None
         try:
             schema_version = run_meta.get("schema_version")
         except Exception:
             schema_version = None
-
-        # File inventory
-        def _file_info(name: str) -> Dict[str, Any]:
-            p = self.root / name
-            try:
-                st = p.stat()
-                return {"path": name, "bytes": int(st.st_size)}
-            except Exception:
-                return {"path": name, "bytes": None}
-
-        files = []
-        for fname in (
-            "run.json",
-            "steps.jsonl.gz",
-            "episodes.jsonl.gz",
-            "steps.parquet",
-            "episodes.parquet",
-        ):
-            if (self.root / fname).exists():
-                files.append(_file_info(fname))
-
-        # Seed summary (best-effort: look for step parts and aggregate seeds)
-        seed_summary: Dict[str, Any] = {}
-        try:
-            import gzip as _gzip
-            import json as _json
-
-            seeds = set()
-            # steps may be sharded; include base
-            jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
-            base = self.root / "steps.jsonl.gz"
-            if base.exists():
-                jsonl_paths.insert(0, base)
-            for p in jsonl_paths:
-                with _gzip.open(p, "rt", encoding="utf-8") as fh:
-                    for line in fh:
-                        if not line.strip():
-                            continue
-                        try:
-                            obj = _json.loads(line)
-                            if "seed" in obj and obj["seed"] is not None:
-                                seeds.add(int(obj["seed"]))
-                        except Exception:
-                            continue
-            if seeds:
-                seed_summary = {
-                    "unique_count": len(seeds),
-                    "min": min(seeds),
-                    "max": max(seeds),
-                }
-        except Exception:
-            seed_summary = {}
 
         manifest.update(
             {
@@ -289,8 +289,8 @@ class RunRecorder:
                 "config_hash": cfg_hash,
                 "env_config": env_cfg,
                 "validation": report,
-                "files": files,
-                "seed_summary": seed_summary,
+                "files": _file_inventory(),
+                "seed_summary": _seed_summary(),
             }
         )
 

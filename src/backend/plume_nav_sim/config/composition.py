@@ -240,6 +240,27 @@ def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
 # ===== Builders =====
 
 
+def _import_attr_for_wrapper(dotted: str) -> Any:
+    """Import a class/object specified by a dotted or module:Attr path.
+
+    Supports both "module:Attr.SubAttr" and "module.sub.Attr" forms.
+    """
+    if ":" in dotted:
+        module_name, attr_path = dotted.split(":", 1)
+        mod = import_module(module_name)
+        target = mod
+        for part in attr_path.split("."):
+            target = getattr(target, part)
+        return target
+    parts = dotted.split(".")
+    if len(parts) < 2:
+        raise ValueError(f"Wrapper spec must include module and attribute: {dotted}")
+    module_name = ".".join(parts[:-1])
+    attr = parts[-1]
+    mod = import_module(module_name)
+    return getattr(mod, attr)
+
+
 def build_env(spec: SimulationSpec):
     """Construct an environment from SimulationSpec using pns.make_env.
 
@@ -359,27 +380,8 @@ def prepare(sim: SimulationSpec) -> Tuple[Any, Any]:
     # Apply observation wrappers (ordered), specified via dotted-path classes
     # with signature Wrapper(env, **kwargs) -> gym.Env
     if getattr(sim, "observation_wrappers", None):
-
-        def _import_attr(dotted: str) -> Any:
-            if ":" in dotted:
-                module_name, attr_path = dotted.split(":", 1)
-                mod = import_module(module_name)
-                target = mod
-                for part in attr_path.split("."):
-                    target = getattr(target, part)
-                return target
-            parts = dotted.split(".")
-            if len(parts) < 2:
-                raise ValueError(
-                    f"Wrapper spec must include module and attribute: {dotted}"
-                )
-            module_name = ".".join(parts[:-1])
-            attr = parts[-1]
-            mod = import_module(module_name)
-            return getattr(mod, attr)
-
         for w in sim.observation_wrappers:
-            wrapper_cls = _import_attr(w.spec)
+            wrapper_cls = _import_attr_for_wrapper(w.spec)
             env = wrapper_cls(env, **(w.kwargs or {}))
 
     policy = build_policy(sim.policy, env=env)
