@@ -127,7 +127,6 @@ plume-nav-benchmark = "plume_nav_sim.scripts:run_benchmarks"
 plume-nav-constants-check = "scripts.validate_constants_drift:main"
 plume-nav-capture = "plume_nav_sim.cli.capture:main"
 plume-nav-video-ingest = "plume_nav_sim.cli.video_ingest:main"
-plume-nav-config = "config.__main__:main"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -265,7 +264,7 @@ changelog_file = "src/backend/CHANGELOG.md"
 # Using file paths allows Commitizen to locate and update standard version keys
 version_files = [
   "src/backend/pyproject.toml",
-  "src/backend/config/constants.yaml",
+  "src/backend/conf/constants.yaml",
 ]
 
 # Commit message used for version bumps
