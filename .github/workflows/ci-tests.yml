@@ -143,7 +143,17 @@ jobs:
           import os
           run_dir = os.environ['RUN_DIR']
           out_dir = os.environ.get('OUT_DIR', '.ci-captures')
-          Path('params.yaml').write_text(f"""ingest_capture:\n  run_dir: {run_dir}\n  out_dir: {out_dir}\n\n""")
+          # Write a minimal params.yaml that includes both ingest_capture and
+          # video_ingest so dvc.yaml stages can resolve their params.
+          Path('params.yaml').write_text(
+              f"""ingest_capture:\n  run_dir: {run_dir}\n  out_dir: {out_dir}\n\n"""
+              """video_ingest:\n"""
+              """  input: demo.gif\n"""
+              """  output: data/plumes/demo.zarr\n"""
+              """  fps: 10.0\n"""
+              """  pixel_to_grid: \"1.0 1.0\"\n"""
+              """  origin: \"0.0 0.0\"\n"""
+          )
           print(Path('params.yaml').read_text())
           PY
           dvc init --no-scm
