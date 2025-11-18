@@ -427,15 +427,24 @@ def _initialize_registration_module() -> bool:  # noqa: C901
 
         # Perform initial registration system validation and compatibility checking
         try:
-            # Test basic gymnasium registry access
             envs_mod2 = gymnasium.envs
             registry = getattr(envs_mod2, "registry", None)
-            has_all = bool(
-                registry is not None
-                and hasattr(registry, "all")
-                and callable(getattr(registry, "all"))
-            )
-            if not has_all:
+
+            # Known-good patterns:
+            # - Gymnasium >= 1.x: registry is a dict[str, EnvSpec]
+            # - Gymnasium 0.29.x: registry has an env_specs mapping
+            is_dict_registry = isinstance(registry, dict)
+            has_env_specs_attr = hasattr(registry, "env_specs")
+
+            if registry is None:
+                # Only warn when registry is genuinely unavailable
+                warnings.warn(
+                    "Gymnasium registry may not be fully compatible - some features may be limited",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            elif not (is_dict_registry or has_env_specs_attr):
+                # Unknown/untested registry type: log a soft warning
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
@@ -444,7 +453,13 @@ def _initialize_registration_module() -> bool:  # noqa: C901
 
             _module_logger.debug(
                 "Gymnasium registry access validated",
-                extra={"registry_type": type(registry).__name__},
+                extra={
+                    "registry_type": (
+                        type(registry).__name__ if registry is not None else "None"
+                    ),
+                    "dict_registry": is_dict_registry,
+                    "has_env_specs": has_env_specs_attr,
+                },
             )
 
         except Exception as e:
