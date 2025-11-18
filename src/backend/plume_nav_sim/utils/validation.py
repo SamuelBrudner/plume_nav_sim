@@ -25,8 +25,6 @@ from typing import (  # >=3.10 - Advanced type hints for validation functions, p
 # Third-party imports with version comments
 import numpy as np  # >=2.1.0 - Array validation, dtype checking, mathematical operations, and bounds verification for observation and coordinate validation
 
-from config.default_config import EnvironmentConfig
-
 from ..core.constants import (
     ACTION_SPACE_SIZE,
     CONCENTRATION_RANGE,
@@ -45,7 +43,7 @@ from ..core.constants import (
 from ..core.enums import Action, RenderMode
 from ..core.geometry import Coordinates, GridSize
 from ..core.models import PlumeModel as PlumeParameters
-from ..core.types import ActionType
+from ..core.types import ActionType, EnvironmentConfig, create_environment_config
 
 # Internal imports from utilities
 from .exceptions import ConfigurationError, ResourceError, ValidationError
@@ -825,8 +823,8 @@ def validate_environment_config(  # noqa: C901
                     )
                     return result
 
-                # Create EnvironmentConfig from dict
-                config = EnvironmentConfig(**config)
+                # Create EnvironmentConfig from dict via core factory
+                config = create_environment_config(config)
             except Exception as e:
                 result.add_error(
                     f"Failed to create EnvironmentConfig from dict: {str(e)}",
