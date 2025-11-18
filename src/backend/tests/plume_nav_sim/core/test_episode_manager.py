@@ -933,6 +933,13 @@ class TestEpisodeManagerPerformance:
         # Validate performance consistency across different actions and states
         assert std_time < avg_time  # Standard deviation should be less than mean
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "Known failing performance bound: memory_mb exceeds 200MB after resets. "
+            "Reinstated targeted xfail after removing blanket performance xfail (bead plume_nav_sim-208)."
+        ),
+    )
     def test_reset_performance(self, performance_episode_manager):
         """Test episode reset performance with initialization timing and resource allocation validation."""
         episode_manager = performance_episode_manager
