@@ -558,7 +558,7 @@ class StateSynchronizer:
         self.synchronization_locks: Dict[str, threading.Lock] = {}
 
         # Create component logger for synchronization operation tracking
-        self.logger = get_component_logger("StateSynchronizer")
+        self.logger = get_component_logger("state_manager")
 
         # Initialize synchronization metrics for performance monitoring
         self.synchronization_metrics: Dict[str, Any] = {
@@ -821,7 +821,7 @@ class StateManager:
         self.synchronizer = StateSynchronizer(self, self.boundary_enforcer)
 
         # Create component logger for state management operations
-        self.logger = get_component_logger("StateManager")
+        self.logger = get_component_logger("state_manager")
 
         # Initialize thread safety
         self.state_lock = threading.RLock()
@@ -1749,7 +1749,7 @@ def create_state_manager(
                 operation_name="create_state_manager",
             )
 
-        logger = get_component_logger("StateManagerFactory")
+        logger = get_component_logger("state_manager")
         logger.info("StateManager created successfully with component coordination")
 
         return state_manager

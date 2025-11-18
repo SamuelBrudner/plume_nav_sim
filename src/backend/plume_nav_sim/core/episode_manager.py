@@ -1292,7 +1292,7 @@ class EpisodeManager:
             self.performance_metrics = PerformanceMetrics()
 
             # Initialize component logger for episode management operations and debugging
-            self.logger = get_component_logger("EpisodeManager")
+            self.logger = get_component_logger("episode_manager")
 
             # Set episode_active to False and episode_count to 0 for initial tracking state
             self.episode_active: bool = False
@@ -2096,7 +2096,7 @@ def create_episode_manager(
                 operation_name="create_episode_manager",
             )
 
-        logger = get_component_logger("EpisodeManagerFactory")
+        logger = get_component_logger("episode_manager")
         logger.info("EpisodeManager created successfully with component coordination")
 
         # Return fully configured EpisodeManager ready for Gymnasium environment episode orchestration
