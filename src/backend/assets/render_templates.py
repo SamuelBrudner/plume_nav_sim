@@ -28,20 +28,19 @@ from typing import (  # >=3.10 - Type hints for template methods, configuration 
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive plotting interface for matplotlib template creation, figure management, and real-time visualization updates
 import numpy as np  # >=2.1.0 - Array operations, RGB array generation, mathematical transformations, and performance-optimized template operations for concentration field rendering
 
-from plume_nav_sim.core.enums import RenderMode
-
-# Core types for template sizing and positioning
-from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import RGBArray
-
 # Performance constants and configuration
-from ..plume_nav_sim.core.constants import (
+from plume_nav_sim.core.constants import (
     BACKEND_PRIORITY_LIST,
     MATPLOTLIB_DEFAULT_FIGSIZE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     RGB_DTYPE,
 )
+from plume_nav_sim.core.enums import RenderMode
+
+# Core types for template sizing and positioning
+from plume_nav_sim.core.geometry import Coordinates, GridSize
+from plume_nav_sim.core.types import RGBArray
 
 # Internal imports for color scheme integration and dual-mode optimization
 from .default_colormap import ColorScheme, create_default_scheme

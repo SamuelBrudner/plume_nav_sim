@@ -988,10 +988,8 @@ class BaseRenderer(abc.ABC):
         # Store renderer_options with default values and parameter validation
         self.renderer_options = renderer_options or {}
 
-        # Initialize component logger using get_component_logger for structured logging
-        self.logger = get_component_logger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
+        # Initialize component logger using canonical component identifier
+        self.logger = get_component_logger("render")
 
         # Set _initialized flag to False for lifecycle management and validation
         self._initialized = False
@@ -1999,7 +1997,7 @@ def create_render_context(  # noqa: C901
             context.validate(strict_validation=True, check_performance=True)
 
         # Log context creation with parameters and validation results for debugging
-        logger = get_component_logger(f"{__name__}.create_render_context")
+        logger = get_component_logger("render")
         logger.debug(
             f"RenderContext created: id={context_id[:8]}..., "
             f"grid={grid_size.width}x{grid_size.height}, "
@@ -2385,7 +2383,7 @@ def create_rendering_metrics(
         }
 
         # Log metrics creation for debugging and monitoring
-        logger = get_component_logger(f"{__name__}.create_rendering_metrics")
+        logger = get_component_logger("render")
         logger.debug(
             f"RenderingMetrics created: type={renderer_type}, mode={render_mode}, "
             f"id={operation_id[:8]}..., detailed_tracking={enable_detailed_tracking}"
