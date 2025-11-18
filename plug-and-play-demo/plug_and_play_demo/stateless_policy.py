@@ -12,6 +12,12 @@ from dataclasses import dataclass
 import gymnasium as gym
 import numpy as np
 
+try:
+    # Optional: enable ODC provider discovery via reflection.
+    from .debugger import RunTumbleDemoProvider  # type: ignore
+except Exception:  # pragma: no cover - provider is optional at runtime
+    RunTumbleDemoProvider = None  # type: ignore
+
 
 @dataclass
 class DeltaBasedRunTumblePolicy:
@@ -47,3 +53,10 @@ class DeltaBasedRunTumblePolicy:
         if self.eps > 0.0 and self._rng.random() < self.eps:
             a = int(self._rng.integers(0, 2))
         return a
+
+    # ODC discovery: let the debugger obtain a provider from the policy.
+    def get_debugger_provider(self):  # pragma: no cover - thin hook
+        if RunTumbleDemoProvider is None:
+            return None
+        # Mirror the decision threshold for distribution preview.
+        return RunTumbleDemoProvider(threshold=self.threshold)
