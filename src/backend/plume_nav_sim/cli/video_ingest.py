@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import shlex
@@ -192,7 +191,6 @@ def ingest_video(cfg: IngestConfig) -> Path:
     from plume_nav_sim.storage import CHUNKS_TYX, create_zarr_array
     from plume_nav_sim.video.schema import (
         DIMS_TYX,
-        SCHEMA_VERSION,
         VARIABLE_NAME,
         VideoPlumeAttrs,
         validate_attrs,

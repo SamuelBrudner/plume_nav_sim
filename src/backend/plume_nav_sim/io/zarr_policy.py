@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Sequence
 
 # Canonical Zarr chunks for movie plume concentration fields: (t, y, x)
 CHUNKS_TYX: tuple[int, int, int] = (8, 64, 64)

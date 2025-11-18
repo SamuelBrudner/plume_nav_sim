@@ -14,10 +14,9 @@ metadata and layout.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 # Reuse canonical definitions from the video schema module
 from plume_nav_sim.video.schema import DIMS_TYX, SCHEMA_VERSION
