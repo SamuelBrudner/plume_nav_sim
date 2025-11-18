@@ -146,6 +146,7 @@ jobs:
           Path('params.yaml').write_text(f"""ingest_capture:\n  run_dir: {run_dir}\n  out_dir: {out_dir}\n\n""")
           print(Path('params.yaml').read_text())
           PY
+          dvc init --no-scm
           dvc repro -f capture_ingest
           test -d "$OUT_DIR" || (echo "OUT_DIR missing: $OUT_DIR" >&2; exit 1)
           # Restore original params.yaml
