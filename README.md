@@ -301,6 +301,20 @@ obs, info = env.reset(seed=episode_seed)
 
 See `src/backend/CONTRIBUTING.md` for the full checklist.
 
+### Issue Tracking (bd beads)
+
+Internal task tracking uses `bd` (beads), not GitHub Issues:
+
+- Check ready work: `bd ready --json`
+- Claim/update: `bd update <id> --status in_progress --json`
+- Create: `bd create "Title" -t bug|feature|task -p 0-4 --json`
+- Link discovered work: `bd create "Found bug" -p 1 --deps discovered-from:<parent-id> --json`
+- Close: `bd close <id> --reason "Completed" --json`
+
+Notes:
+- Beads auto-sync to `.beads/issues.jsonl` in the repo.
+- Community users may open GitHub Issues/Discussions; maintainers triage into beads as needed.
+
 ## 9. License
 
 MIT License. See [LICENSE](LICENSE).
