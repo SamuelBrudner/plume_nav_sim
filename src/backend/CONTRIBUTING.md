@@ -229,6 +229,18 @@ We follow a **feature branch workflow** with the following conventions:
    bandit -r src/plume_nav_sim/
    ```
 
+### Internal Task Tracking (bd beads)
+
+Maintainers and internal contributors track work using `bd` (beads):
+
+- Check ready work: `bd ready --json`
+- Claim/update: `bd update <id> --status in_progress --json`
+- Create: `bd create "Title" -t bug|feature|task -p 0-4 --json`
+- Link discovered work: `bd create "Found bug" -p 1 --deps discovered-from:<parent-id> --json`
+- Close: `bd close <id> --reason "Completed" --json`
+
+Beads auto-sync to `.beads/issues.jsonl` alongside the code. External users should continue using GitHub Issues/Discussions; maintainers will mirror/import into beads when appropriate.
+
 #### Pull Request Template
 
 When creating a pull request, please include:

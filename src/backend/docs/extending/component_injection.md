@@ -146,6 +146,12 @@ config = EnvironmentConfig(
 env = create_environment_from_config(config)
 ```
 
+See also (external plug‑and‑play, config‑based DI):
+
+- Demo README section “Config‑based DI via SimulationSpec”: `plug-and-play-demo/README.md`
+- Minimal, runnable spec file: `plug-and-play-demo/configs/simulation_spec.json`
+- Stable notebook showing `SimulationSpec` + Component Env: `notebooks/stable/di_simulation_spec_component_env.ipynb`
+
 ---
 
 ## Writing Custom Components

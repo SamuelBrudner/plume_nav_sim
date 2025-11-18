@@ -232,6 +232,13 @@ Episode = {
    env = make_env(action_type=MyNovelActions(), observation_type=MyNovelSensor())
    ```
 
+**See also (external plug‑and‑play example):**
+
+- The `plug-and-play-demo` demonstrates DI usage from an external project, including applying the core `ConcentrationNBackWrapper(n=2)` via a spec-first flow and running a minimal episode.
+  - Quick run from repo root: `python plug-and-play-demo/main.py`
+  - Details: `plug-and-play-demo/README.md`
+  - Config-based DI via `SimulationSpec`: see README section “Config‑based DI via SimulationSpec”; example spec at `plug-and-play-demo/configs/simulation_spec.json`
+
 **Semantic Invariants:**
 
 - Components MUST implement their Protocol completely

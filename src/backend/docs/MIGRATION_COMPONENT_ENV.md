@@ -313,6 +313,10 @@ The abstraction is zero-cost at runtime!
 - `contracts/observation_model_interface.md` - ObservationModel contract
 - `contracts/reward_function_interface.md` - RewardFunction contract
 - `contracts/gymnasium_api.md` - Gymnasium compatibility
+- External plug‑and‑play, config‑based DI entry points:
+  - `plug-and-play-demo/README.md` ("Config‑based DI via SimulationSpec")
+  - `plug-and-play-demo/configs/simulation_spec.json` (minimal spec)
+  - Stable example notebook: `notebooks/stable/di_simulation_spec_component_env.ipynb`
 
 ---
 

@@ -27,13 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Obsolete `notebooks/runner_demo.ipynb` replaced with parity-aligned demos.
 
-### Todo
-- PyPI distribution and release automation
-- Performance optimization for larger grid sizes (>256×256)
-- Multi-agent environment support
-- Dynamic plume models with temporal evolution
-- FAIR data persistence module
-- Integration with specialized robotics simulation frameworks
+### Planned (tracked in beads)
+- PyPI distribution and release automation — see `plume_nav_sim-255` (release automation) and `plume_nav_sim-219` (wheel packaging config)
+- Performance optimization for larger grid sizes (>256×256) — see `plume_nav_sim-256`
+- Multi-agent environment support — see `plume_nav_sim-257`
+- Dynamic plume models with temporal evolution — see `plume_nav_sim-258`
+- FAIR data persistence module — see `plume_nav_sim-259`
+- Integrations with specialized robotics simulation frameworks — see `plume_nav_sim-260`
 
 ## [0.0.1] - 2024-12-19
 

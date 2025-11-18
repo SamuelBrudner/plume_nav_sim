@@ -1,6 +1,8 @@
 # PlumeNav Roadmap (Phase 3)
 
-This document supersedes historical planning artifacts (`CONTRACTS_V2_PLAN.md`, `REFACTORING_PLAN.md`, `REFACTORING_SUMMARY.md`, `SEMANTIC_AUDIT.md`, `TEST_TAXONOMY.md`). Archived copies now live in `docs/archive/` for reference.
+Note: All concrete work is tracked in beads (bd). This document summarizes themes; see linked bead IDs for actionable items.
+
+This document supersedes historical planning artifacts (`CONTRACTS_V2_PLAN.md`, `REFACTORING_PLAN.md`, `REFACTORING_SUMMARY.md`, `SEMANTIC_AUDIT.md`, `TEST_TAXONOMY.md`). These superseded documents have been removed from the repository; refer to git history if needed.
 
 ## Current Focus
 
@@ -17,10 +19,10 @@ This document supersedes historical planning artifacts (`CONTRACTS_V2_PLAN.md`, 
 
 - **Phase 5 – Release Enablement**
   - Rebuild `CHANGELOG.md` entries toward a 0.1.0 release candidate.
-  - Add packaging automation and publishable wheels.
+  - Add packaging automation and publishable wheels (see `plume_nav_sim-219`, `plume_nav_sim-255`).
 
-## Backlog
+## Backlog (tracked in beads)
 
-- Consolidate performance benchmarking scripts into a dedicated `benchmarks/` package.
-- Introduce reproducibility reports via `examples/reproducibility.py` into CI artifacts.
-- Migrate legacy Gym wrappers once DI becomes default (`DI_DEFAULT_MIGRATION_PLAN.md`).
+- Consolidate performance benchmarking scripts into a dedicated `benchmarks/` package — see `plume_nav_sim-261`.
+- Introduce reproducibility reports via `examples/reproducibility.py` into CI artifacts — see `plume_nav_sim-262`.
+- Migrate legacy Gym wrappers once DI becomes default (`DI_DEFAULT_MIGRATION_PLAN.md`) — see `plume_nav_sim-263`.
