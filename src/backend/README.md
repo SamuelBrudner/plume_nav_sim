@@ -825,6 +825,11 @@ from plume_nav_sim.logging.loguru_bootstrap import setup_logging
 setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
 ```
 
+- By default, the `file_path` above is interpreted **relative to your current working directory**. When running from the
+  project root, this will create `run.log` (or any other log file you choose) in the repo root, which is already
+  ignored by `.gitignore`. There is no requirement for a committed `logs/` directory under `src/backend`; any
+  `logs/` directory you see there is a runtime artifact and can be safely deleted.
+
 - Use the data capture pipeline for analysis-ready data (validated JSONL.gz, optional Parquet export).
 
 Quick start (data capture):
