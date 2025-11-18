@@ -1,0 +1,16 @@
+package:
+  name: plume_nav_sim
+  version: 0.0.1
+  environment_id: PlumeNav-Sim-v0
+
+performance:
+  tracking_enabled: true
+  target_step_latency_ms: 1.0
+  target_rgb_render_ms: 5.0
+  target_human_render_ms: 33.0
+  target_episode_reset_ms: 10.0
+  target_plume_generation_ms: 10.0
+  boundary_enforcement_ms: 0.5
+
+testing:
+  default_seeds: [42, 123, 456, 789, 999]
