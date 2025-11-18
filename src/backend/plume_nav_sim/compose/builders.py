@@ -33,6 +33,20 @@ def build_env(spec: SimulationSpec):
         kwargs["observation_type"] = spec.observation_type
     if spec.reward_type is not None:
         kwargs["reward_type"] = spec.reward_type
+    if spec.plume is not None:
+        kwargs["plume"] = spec.plume
+    if spec.movie_path is not None:
+        kwargs["movie_path"] = spec.movie_path
+    if spec.movie_fps is not None:
+        kwargs["movie_fps"] = float(spec.movie_fps)
+    if spec.movie_pixel_to_grid is not None:
+        kwargs["movie_pixel_to_grid"] = tuple(spec.movie_pixel_to_grid)
+    if spec.movie_origin is not None:
+        kwargs["movie_origin"] = tuple(spec.movie_origin)
+    if spec.movie_extent is not None:
+        kwargs["movie_extent"] = tuple(spec.movie_extent)
+    if spec.movie_step_policy is not None:
+        kwargs["movie_step_policy"] = spec.movie_step_policy
     kwargs["render_mode"] = "rgb_array" if spec.render else None
 
     return pns.make_env(**kwargs)

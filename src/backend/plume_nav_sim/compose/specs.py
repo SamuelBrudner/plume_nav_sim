@@ -48,7 +48,7 @@ class PolicySpec(BaseModel):
     @classmethod
     def _validate_kwargs(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         # Shallow validation: keys must be str
-        if not all(isinstance(k, str) for k in v.keys()):
+        if not all(isinstance(k, str) for k in v):
             raise ValueError("kwargs keys must be strings")
         return v
 
@@ -69,6 +69,13 @@ class SimulationSpec(BaseModel):
     observation_type: Optional[str] = Field(default=None)
     reward_type: Optional[str] = Field(default=None)
     render: bool = Field(default=True)
+    plume: Optional[Literal["static", "movie"]] = Field(default=None)
+    movie_path: Optional[str] = Field(default=None)
+    movie_fps: Optional[float] = Field(default=None, gt=0)
+    movie_pixel_to_grid: Optional[Tuple[float, float]] = Field(default=None)
+    movie_origin: Optional[Tuple[float, float]] = Field(default=None)
+    movie_extent: Optional[Tuple[float, float]] = Field(default=None)
+    movie_step_policy: Optional[Literal["wrap", "clamp"]] = Field(default=None)
 
     # Optional observation wrappers applied after env creation (in order).
     # Each wrapper is specified via dotted path and kwargs; the wrapper class
