@@ -1145,37 +1145,34 @@ class ComponentLogger:
     def handlers(self):  # type: ignore[override]
         return self.base_logger.handlers
 
-    def debug(self, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Enhanced debug logging with automatic context capture and component-specific
-        formatting for detailed development debugging information.
+    def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Debug with standard logging semantics plus component context.
 
-        Args:
-            message: Debug message to log
-            extra: Additional context information
+        Accepts positional *args for %-style formatting and an optional ``extra``
+        dict in **kwargs, matching ``logging.Logger``. The extra context is
+        merged into the component metadata and caller info before being passed to
+        the underlying logger.
         """
+        extra = kwargs.pop("extra", None)
         context = self._extracted_from_warning_11(extra)
-        # Apply security filtering to message and context information
-        # (Handled by the logging infrastructure's SecurityFilter)
 
-        # Format message with component-specific debug formatting
+        # Format message with component-specific debug prefix; defer %-style
+        # interpolation to the underlying logger via *args.
         formatted_message = f"[{self.component_name}] {message}"
 
-        # Log debug message using base_logger with enhanced context
-        self.base_logger.debug(formatted_message, extra=context)
+        self.base_logger.debug(formatted_message, *args, extra=context, **kwargs)
 
-    def info(self, message: str, extra: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Enhanced info logging with component context and automatic performance tracking
-        for operational information and status updates.
+    def info(self, message: str, *args: Any, **kwargs: Any) -> None:
+        """Info with component context and optional extra mapping.
 
-        Args:
-            message: Info message to log
-            extra: Additional context information
+        Behaves like ``logging.Logger.info`` for positional *args while merging any
+        ``extra`` mapping from **kwargs into the component context.
         """
+        extra = kwargs.pop("extra", None)
+
         # Merge extra parameters with component_context for comprehensive logging
         context = {**self.component_context}
-        if extra:
+        if isinstance(extra, dict):
             context |= extra
 
         # Apply security filtering to message content and context data
@@ -1193,13 +1190,13 @@ class ComponentLogger:
         formatted_message = f"[{self.component_name}] {message}"
 
         # Log info message using base_logger with component-enhanced formatting
-        self.base_logger.info(formatted_message, extra=context)
+        self.base_logger.info(formatted_message, *args, extra=context, **kwargs)
 
     def warning(
         self,
         message: str,
-        extra: Optional[Dict[str, Any]] = None,
-        recovery_suggestion: Optional[str] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         """
         Enhanced warning logging with automatic error context capture and recovery
@@ -1207,9 +1204,10 @@ class ComponentLogger:
 
         Args:
             message: Warning message to log
-            extra: Additional context information
-            recovery_suggestion: Optional recovery guidance for the warning
         """
+        recovery_suggestion = kwargs.pop("recovery_suggestion", None)
+        extra = kwargs.pop("extra", None)
+
         context = self._extracted_from_warning_11(extra)
         # Include recovery_suggestion in log message if provided
         if recovery_suggestion:
@@ -1221,22 +1219,26 @@ class ComponentLogger:
 
         # Merge extra context with component metadata and caller information
         # Log warning message with enhanced context and recovery information
-        self.base_logger.warning(formatted_message, extra=context)
+        self.base_logger.warning(formatted_message, *args, extra=context, **kwargs)
 
     # TODO Rename this here and in `debug` and `warning`
-    def _extracted_from_warning_11(self, extra):
+    def _extracted_from_warning_11(self, extra: Optional[Any]) -> Dict[str, Any]:
         caller_info = get_caller_info(stack_depth=2, include_locals=False)
-        result = {**self.component_context, **caller_info}
+        result: Dict[str, Any] = {**self.component_context, **caller_info}
         if extra:
-            result |= extra
+            if isinstance(extra, dict):
+                result |= extra
+            else:
+                # Preserve unexpected extras without breaking logging; attach under
+                # a generic key rather than attempting dict-union on non-mappings.
+                result["extra"] = extra
         return result
 
     def error(
         self,
         message: str,
-        exception: Optional[Exception] = None,
-        extra: Optional[Dict[str, Any]] = None,
-        include_stack_trace: bool = True,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         """
         Enhanced error logging with full context capture, stack trace information,
@@ -1244,10 +1246,11 @@ class ComponentLogger:
 
         Args:
             message: Error message to log
-            exception: Optional exception instance for detailed error information
-            extra: Additional context information
-            include_stack_trace: Whether to include stack trace in the log
         """
+        exception = kwargs.pop("exception", None)
+        extra = kwargs.pop("extra", None)
+        include_stack_trace = kwargs.pop("include_stack_trace", True)
+
         # Capture comprehensive error context including system state and component status
         caller_info = get_caller_info(stack_depth=2, include_locals=True)
         context = {
@@ -1256,8 +1259,10 @@ class ComponentLogger:
             "error_timestamp": time.time(),
             "component_state": "error",
         }
-        if extra:
+        if isinstance(extra, dict):
             context |= extra
+        elif extra is not None:
+            context["extra"] = extra
 
         # Extract exception details if exception parameter provided
         if exception:
@@ -1287,7 +1292,13 @@ class ComponentLogger:
         formatted_message = f"[{self.component_name}] ERROR: {message}"
 
         # Log error with critical level formatting and comprehensive information
-        self.base_logger.error(formatted_message, extra=context, exc_info=exc_info)
+        self.base_logger.error(
+            formatted_message,
+            *args,
+            extra=context,
+            exc_info=exc_info,
+            **kwargs,
+        )
 
     def performance(
         self,
