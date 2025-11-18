@@ -238,6 +238,12 @@ Components derive spaces:
 - `action_space` comes from the ActionProcessor
 - `observation_space` comes from the ObservationModel
 
+See also (external-style DI example):
+
+- The plug‑and‑play demo shows DI assembly from an external project and applies the core `ConcentrationNBackWrapper(n=2)` via `SimulationSpec`.
+  - Quick run from repo root: `python plug-and-play-demo/main.py`
+  - Full walkthrough and options: `plug-and-play-demo/README.md`
+
 See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
 
 ```
@@ -422,6 +428,16 @@ Mathematical implementation of chemical plume distribution:
 - **Configurable Parameters**: Source location and dispersion settings
 - **Normalized Values**: Concentration values in range [0,1] with peak at source
 - **Efficient Sampling**: O(1) concentration lookup for agent positions
+
+### Movie Plume Field (Zarr-backed)
+
+Video-derived concentration field that advances one frame per step:
+
+- **Dataset schema**: `concentration (t, y, x)` with float32 values
+- **Step policy**: `wrap` (loop) or `clamp` (hold last frame)
+- **Metadata**: fps, pixel_to_grid, origin, extent validated via `VideoPlumeAttrs`
+- **Usage**: select with `plume="movie"` and provide `movie_path` to a Zarr dataset
+- Details and examples: `src/backend/docs/plume_types.md`
 
 ### Dual-Mode Rendering
 
