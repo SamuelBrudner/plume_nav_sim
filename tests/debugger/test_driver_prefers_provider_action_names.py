@@ -63,7 +63,7 @@ def test_driver_prefers_provider_action_names_strict_mode():
                 self._update_start_from_info(self._episode_seed or -1, info0)  # type: ignore[attr-defined]
             self._mux = ProviderMux(self._env, self._policy, provider=_Provider())
 
-    # Strict mode enabled should still use provider names (no heuristics)
-    driver = _Driver(DebuggerConfig(strict_provider_only=True))
+    # Strict mode is always enforced; names should come from provider (no heuristics)
+    driver = _Driver(DebuggerConfig())
     driver.initialize()
     assert driver.get_action_names() == ["ZERO", "ONE", "TWO"]

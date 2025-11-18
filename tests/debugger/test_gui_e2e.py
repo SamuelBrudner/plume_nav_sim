@@ -153,7 +153,7 @@ def test_strict_mode_no_fallbacks(monkeypatch):
             # Do not emit provider mux (simulate no provider)
             self._emit_action_space_changed()
 
-    driver = _Driver(DebuggerConfig(strict_provider_only=True))
+    driver = _Driver(DebuggerConfig())
     insp = InspectorWidget()
     insp.set_strict_provider_only(True)
     driver.provider_mux_changed.connect(insp.on_mux_changed)
