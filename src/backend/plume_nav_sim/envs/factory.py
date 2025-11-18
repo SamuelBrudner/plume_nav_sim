@@ -28,7 +28,7 @@ from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..observations import AntennaeArraySensor, ConcentrationSensor
 from ..plume.concentration_field import ConcentrationField
-from ..plume.movie_field import MovieConfig, MoviePlumeField
+from ..plume.movie_field import MovieConfig, MoviePlumeField, resolve_movie_dataset_path
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_env import ComponentBasedEnvironment
 
@@ -160,8 +160,15 @@ def create_component_environment(  # noqa: C901
             raise ValueError(
                 "env.plume=movie requires movie.path to be provided (Hydra key: movie.path)"
             )
+        dataset_path = resolve_movie_dataset_path(
+            movie_path,
+            fps=movie_fps,
+            pixel_to_grid=movie_pixel_to_grid,
+            origin=movie_origin,
+            extent=movie_extent,
+        )
         movie_cfg = MovieConfig(
-            path=str(movie_path),
+            path=str(dataset_path),
             fps=movie_fps,
             pixel_to_grid=movie_pixel_to_grid,
             origin=movie_origin,

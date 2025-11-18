@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 
@@ -52,7 +52,7 @@ class MoviePlumeField:
     """
 
     def __init__(self, cfg: MovieConfig) -> None:
-        self._logger = get_component_logger("MoviePlumeField")
+        self._logger = get_component_logger("concentration_field")
 
         # Resolve and validate dataset path
         path = Path(cfg.path)
@@ -162,4 +162,56 @@ class MoviePlumeField:
         return arr
 
 
-__all__ = ["MoviePlumeField", "MovieConfig"]
+def resolve_movie_dataset_path(
+    source_path: Union[str, Path],
+    *,
+    fps: Optional[float] = None,
+    pixel_to_grid: Optional[Tuple[float, float]] = None,
+    origin: Optional[Tuple[float, float]] = None,
+    extent: Optional[Tuple[float, float]] = None,
+    normalize: bool = True,
+) -> Path:
+    """Resolve a user-facing movie path into a dataset root for MoviePlumeField.
+
+    Accepts either:
+
+    - A directory path (assumed to be a ready-to-use dataset root).
+    - A file path (e.g. .avi, .mp4, or an image-sequence directory), which is
+      ingested on demand into a sibling dataset directory using the
+      ``video_ingest`` implementation.
+    """
+
+    path = Path(source_path)
+
+    # If this already looks like a dataset root, return it directly.
+    if path.is_dir():
+        return path
+
+    # Ingest media file or frames directory into a dataset root next to the input.
+    output = path.with_suffix(".zarr")
+    if output.exists():
+        return output
+
+    # Provide conservative defaults if not specified explicitly.
+    if fps is None:
+        fps = 60.0
+    if pixel_to_grid is None:
+        pixel_to_grid = (1.0, 1.0)
+    if origin is None:
+        origin = (0.0, 0.0)
+
+    from plume_nav_sim.cli.video_ingest import IngestConfig, ingest_video
+
+    cfg = IngestConfig(
+        input=path,
+        output=output,
+        fps=float(fps),
+        pixel_to_grid=pixel_to_grid,
+        origin=origin,
+        extent=extent,
+        normalize=normalize,
+    )
+    return ingest_video(cfg)
+
+
+__all__ = ["MoviePlumeField", "MovieConfig", "resolve_movie_dataset_path"]
