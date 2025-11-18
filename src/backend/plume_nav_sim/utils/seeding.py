@@ -4,7 +4,6 @@ import json  # >=3.10 - JSON serialization for seed state persistence and reprod
 import logging  # >=3.10 - Logging integration for seeding operations, reproducibility validation, and debugging support
 import os  # >=3.10 - System entropy access for high-quality random seed generation and environment variable handling
 import pathlib  # >=3.10 - Path handling for seed state file operations and cross-platform compatibility
-import sys  # >=3.10 - Lightweight callsite inspection to rate-limit duplicate warnings per callsite
 import threading  # >=3.10 - Thread safety for multi-threaded seeding scenarios and concurrent access to seed managers
 import time  # >=3.10 - Timestamp generation for seed tracking, performance measurement, and reproducibility validation
 import uuid  # >=3.10 - Unique identifier generation for seed tracking, session management, and reproducibility validation
@@ -56,9 +55,6 @@ _REPRODUCIBILITY_TOLERANCE = (
     1e-10  # Default floating-point tolerance for reproducibility validation
 )
 
-# Warning rate-limiting: track callsites that have already emitted the
-# overflow-prone seed warning so we only warn once per callsite.
-_OVERFLOW_WARNING_CALLSITES: set[tuple[str, int]] = set()
 
 # Type checking imports to satisfy linters without runtime overhead
 if TYPE_CHECKING:  # pragma: no cover
@@ -147,25 +143,14 @@ def validate_seed(seed: Any) -> Tuple[bool, Optional[int], str]:
                 f"Seed {seed} exceeds maximum {SEED_MAX_VALUE} (range: [{SEED_MIN_VALUE}, {SEED_MAX_VALUE}])",
             )
 
-        # Warn about potential overflow on 32-bit systems. Rate-limit to at most
-        # one warning per callsite to reduce duplicate noise in larger runs while
-        # preserving the ability for tests to observe the warning where expected.
+        # Warn about potential overflow on 32-bit systems. Always emit to
+        # satisfy tests expecting a warning for high seeds.
         if seed > 2**31 - 1:
-            callsite: tuple[str, int] | None = None
-            try:
-                frame = sys._getframe(1)  # caller of validate_seed
-                callsite = (frame.f_code.co_filename, frame.f_lineno)
-            except Exception:
-                callsite = None
-
-            if callsite is None or callsite not in _OVERFLOW_WARNING_CALLSITES:
-                warnings.warn(
-                    f"Seed {seed} may cause integer overflow in some systems",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                if callsite is not None:
-                    _OVERFLOW_WARNING_CALLSITES.add(callsite)
+            warnings.warn(
+                f"Seed {seed} may cause integer overflow in some systems",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Return validated seed (identity transformation for valid integers)
         return (True, seed, "")
