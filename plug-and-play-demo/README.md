@@ -36,7 +36,12 @@ Quick start (how to run)
     - Override dataset path: `--movie-path plug-and-play-demo/assets/gaussian_plume_demo.zarr`
     - Optional playback controls: `--movie-fps 60`, `--movie-step-policy wrap|clamp`
   - Config-based DI via `SimulationSpec` (JSON/TOML/YAML):
-    - Example: `python plug-and-play-demo/main.py --config plug-and-play-demo/configs/simulation_spec.json`
+    - Static plume (JSON): `plug-and-play-demo/configs/simulation_spec.json`
+    - Movie plume (JSON): `plug-and-play-demo/configs/simulation_spec_movie.json`
+    - TOML example: `plug-and-play-demo/configs/simulation_spec.toml`
+    - YAML example: `plug-and-play-demo/configs/simulation_spec.yaml`
+    - Builtin policy (deterministic TD): `plug-and-play-demo/configs/simulation_spec_builtin.json`
+    - Run with a config: `python plug-and-play-demo/main.py --config <path>`
     - CLI flags act as overrides when specified (e.g., `--grid 64x64`, `--policy-spec ...`).
 
 - From this folder:
@@ -55,7 +60,7 @@ Config-based composition
 
 - You can define the entire run via a `SimulationSpec` config file and pass it to `--config`.
 - Supported formats: `.json` (built-in), `.toml` (Python 3.11+), `.yaml` (requires PyYAML).
-- Example config: `plug-and-play-demo/configs/simulation_spec.json`.
+- Example configs: see files under `plug-and-play-demo/configs/` (JSON/TOML/YAML; static/movie; builtin/dotted policy).
 - If wrappers are omitted in the config, the demo applies the default `ConcentrationNBackWrapper(n=2)`.
 
 Policy interface (see inline comments in `plug_and_play_demo/stateless_policy.py`)
@@ -127,7 +132,7 @@ Prerequisites
 
 - Install data extras to enable validation and Parquet:
 
-```
+```bash
 pip install -e src/backend[data]
 ```
 
