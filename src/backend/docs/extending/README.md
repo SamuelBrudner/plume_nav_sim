@@ -2,6 +2,11 @@
 
 PlumeNav’s dependency-injection stack lets you plug in custom components without touching the core environment. Use this guide when you are ready to move beyond `make_env()` and ship research-grade extensions.
 
+For an overview of the public API surface and where code lives in the repository, see:
+
+- `src/backend/README.md` – section "Public API and Repository Layout".
+- `src/backend/CONTRIBUTING.md` – section "Repository Layout and Public API".
+
 ## When to Extend
 
 - **New sensing modalities**: Swap in a custom `ObservationModel` for camera feeds, multi-sensor arrays, or synthetic sensors.

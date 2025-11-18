@@ -279,6 +279,43 @@ providing a foundation for research-grade plume navigation experiments.
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Module Map
+
+The repository is organized to make it clear where public APIs live, where extension points are located, and which modules are internal infrastructure.
+
+- **Top-level public API**: `plume_nav_sim.__init__`
+  - Recommended entrypoint: `make_env(**kwargs)`.
+  - Exposes core types and constants such as `GridSize`, `Coordinates`, `EnvironmentConfig`, `DEFAULT_*`, and `ENVIRONMENT_ID`.
+  - Provides metadata helpers (`get_package_info`, `initialize_package`, `get_conf_dir`).
+
+- **Configuration and composition**: `plume_nav_sim.config`
+  - `plume_nav_sim.config.composition` defines typed specs and composition helpers (e.g., `SimulationSpec`, `PolicySpec`, and `prepare`).
+  - Legacy imports from `plume_nav_sim.compose.*` are maintained as shims but new code should import from `plume_nav_sim.config`.
+
+- **Environment implementations and registration**:
+  - `plume_nav_sim.envs` contains environment classes (e.g., `PlumeSearchEnv`) and component-based envs.
+  - `plume_nav_sim.registration` handles Gymnasium registration (`ENV_ID`, `ensure_registered`, `register_env`).
+
+- **Domain components**:
+  - `plume_nav_sim.plume` – plume models and concentration field logic (e.g., `StaticGaussianPlume`).
+  - `plume_nav_sim.policies` – built-in policies and helpers.
+  - `plume_nav_sim.actions`, `plume_nav_sim.observations`, `plume_nav_sim.rewards` – action/observation/reward components and contracts.
+
+- **Rendering and visualization**: `plume_nav_sim.render`
+  - Rendering pipeline, colormaps, templates, and utilities for `rgb_array` / `human` modes.
+
+- **Data capture and datasets**:
+  - `plume_nav_sim.data_capture` – runtime capture pipeline (JSONL.gz artifacts, validation, optional Parquet export).
+  - `plume_nav_sim.media` – dataset manifests, provenance metadata, and dataset-level validation utilities.
+  - `plume_nav_sim.video` – canonical video plume dataset schema and attribute validation.
+
+- **Support and infrastructure modules** (primarily internal):
+  - `plume_nav_sim.core` – fundamental types, constants, and helper functions shared across components.
+  - `plume_nav_sim.utils`, `plume_nav_sim.io`, `plume_nav_sim.storage`, `plume_nav_sim.data_formats` – utilities, I/O helpers, storage policies, and format adapters.
+  - `plume_nav_sim.logging` – logging configuration and loguru bootstrap.
+
+When adding new functionality intended for reuse by other researchers, prefer to expose it either via the top-level `plume_nav_sim` package (for core functionality) or via the domain-specific subpackages above. Changes to support-only modules should keep their internal nature unless explicitly promoted and documented as part of the public API.
+
 ### Core Components
 
 #### PlumeSearchEnv (Core Layer)
@@ -1583,7 +1620,7 @@ def create_architecture_documentation(
     architecture_sections = []
 
     # Generate architecture overview explaining modular layered design and component-based patterns
-    architecture_sections.append(f"""
+    architecture_sections.append("""
 ## System Architecture Deep Dive
 
 ### Architectural Design Principles
@@ -1806,7 +1843,7 @@ class RenderingPipeline:
     """)
 
     # Document core components including PlumeSearchEnv, StaticGaussianPlume, rendering pipeline, and state management
-    architecture_sections.append(f"""
+    architecture_sections.append("""
 ### Component Interaction Analysis
 
 #### Data Flow Patterns
@@ -1999,7 +2036,7 @@ class ComponentLifecycleManager:
     """)
 
     # Create component interaction analysis showing data flow, method calls, and dependency relationships
-    architecture_sections.append(f"""
+    architecture_sections.append("""
 ### Performance Architecture Analysis
 
 #### Performance-Optimized Design Patterns
@@ -2154,7 +2191,7 @@ class ArchitecturePerformanceMonitor:
 
     # Include component diagrams if include_component_diagrams enabled with visual architecture representation
     if include_component_diagrams:
-        architecture_sections.append(f"""
+        architecture_sections.append("""
 ### Architecture Visualization
 
 #### Component Relationship Diagram
@@ -2290,7 +2327,7 @@ Total Memory Footprint:
         """)
 
     # Generate integration patterns for external framework compatibility and workflow integration
-    architecture_sections.append(f"""
+    architecture_sections.append("""
 ### Integration Architecture Patterns
 
 #### Framework Integration Design
@@ -3341,7 +3378,8 @@ pytest tests/benchmarks/ --benchmark-only --benchmark-compare=baseline
 
     # Add IDE configuration if include_ide_configuration enabled with VSCode, PyCharm, and editor setup
     if include_ide_configuration:
-        setup_sections.append(f"""
+        setup_sections.append(
+            """
 ### IDE Configuration
 
 #### Visual Studio Code Setup
@@ -3376,3 +3414,7 @@ code --install-extension ms-vscode.vscode-json
 ```
 
 **VSCode Configuration**:
+
+Refer to the editor-specific documentation for advanced workspace settings.
+"""
+        )
