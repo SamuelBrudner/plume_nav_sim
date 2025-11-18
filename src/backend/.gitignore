@@ -489,6 +489,10 @@ monitoring/
 *~
 .fuse_hidden*
 
+# Python specific
+.pytest_cache/
+.mpl/
+
 # -----------------------------------------------------------------------------
 # Future Extension Patterns
 # Placeholder patterns for potential future requirements
