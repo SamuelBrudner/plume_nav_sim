@@ -364,3 +364,4 @@ plug-and-play-demo/assets/
 !plug-and-play-demo/assets/gaussian_plume_demo.avi
 !plug-and-play-demo/assets/gaussian_plume_demo.zarr/
 !plug-and-play-demo/assets/gaussian_plume_demo.zarr/**
+*.gif
