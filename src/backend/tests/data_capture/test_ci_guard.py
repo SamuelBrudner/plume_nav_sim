@@ -7,7 +7,7 @@ import pytest
 
 from plume_nav_sim.data_capture.validate import validate_run_artifacts
 
-from .helpers import run_small_capture
+from .test_helpers import run_small_capture
 
 
 def _have(module: str) -> bool:

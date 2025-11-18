@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from .helpers import run_small_capture
+from .test_helpers import run_small_capture
 
 
 def _have(module: str) -> bool:

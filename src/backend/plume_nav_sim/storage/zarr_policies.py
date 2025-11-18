@@ -40,6 +40,8 @@ _ZSTD_FALLBACK_WARNED: bool = False
 
 @dataclass(frozen=True)
 class CompressorInfo:
+    """Summary of the compressor used for a Zarr array."""
+
     kind: str  # e.g., "blosc"
     name: str  # e.g., "zstd" or "lz4"
     clevel: int

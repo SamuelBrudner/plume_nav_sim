@@ -31,6 +31,17 @@ StepPolicy = str  # "wrap" | "clamp"
 
 @dataclass
 class MovieConfig:
+    """Configuration for loading a movie-backed plume dataset.
+
+    Attributes:
+        path: Filesystem path to the Zarr dataset root (directory)
+        fps: Optional override for frames-per-second metadata
+        pixel_to_grid: Optional (y,x) scaling from pixels to grid units
+        origin: Optional (y,x) grid origin
+        extent: Optional (y,x) grid extent; defaults to pixel dims * pixel_to_grid
+        step_policy: Frame stepping policy when advancing time ("wrap" or "clamp")
+    """
+
     path: str
     fps: Optional[float] = None
     pixel_to_grid: Optional[Tuple[float, float]] = None

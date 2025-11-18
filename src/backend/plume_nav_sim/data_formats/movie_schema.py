@@ -33,6 +33,8 @@ ATTR_SOURCE_DTYPE = "source_dtype"
 
 @dataclass(frozen=True)
 class MovieSchemaInfo:
+    """Parsed metadata for a validated movie plume dataset."""
+
     width: int
     height: int
     frames: int

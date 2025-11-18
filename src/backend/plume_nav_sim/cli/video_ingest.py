@@ -157,6 +157,8 @@ def _stack_to_concentration(
 
 @dataclass
 class IngestConfig:
+    """Typed configuration for video→Zarr ingest."""
+
     input: Path
     output: Path
     fps: float
@@ -269,6 +271,7 @@ def _setup_logger(level: str) -> logging.Logger:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Create an argument parser for the video ingest CLI."""
     p = argparse.ArgumentParser(
         description="Ingest video/images into a Zarr plume dataset"
     )
@@ -311,6 +314,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    """Entry point for the video ingest CLI.
+
+    Returns 0 on success, non-zero on failure. When required media dependencies
+    are missing, prints an informational message and exits 0 to allow CI to
+    proceed when media stack is optional.
+    """
     args = build_arg_parser().parse_args(argv)
     logger = _setup_logger(args.log_level)
 
