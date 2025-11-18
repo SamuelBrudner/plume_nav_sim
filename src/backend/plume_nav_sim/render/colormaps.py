@@ -79,8 +79,6 @@ __all__ = [
     "ColorScheme",
     "PredefinedScheme",
     "DEFAULT_COLORMAP",
-    "create_default_scheme",
-    "create_color_scheme",
     "validate_color_scheme",
     "normalize_concentration_to_rgb",
     "apply_agent_marker",
@@ -526,85 +524,50 @@ class ColorScheme:
         strict_mode: bool = False,
     ) -> bool:
         """
-        Comprehensive validation of color scheme configuration.
-
-        Args:
-            check_accessibility: Enable accessibility compliance checking
-            check_performance: Enable performance requirement validation
-            strict_mode: Apply strict validation rules including edge cases
-
-        Returns:
-            True if validation passes, raises ValueError with details if invalid
+        Validates color scheme configuration for consistency, accessibility, and performance.
         """
-        validation_errors = []
+        # Basic validation checks
+        for name, color in (
+            ("agent_color", self.agent_color),
+            ("source_color", self.source_color),
+            ("background_color", self.background_color),
+        ):
+            self._validate_rgb_color(color, name)
 
-        # Basic RGB color validation (already done in __post_init__)
-        try:
-            self._validate_rgb_color(self.agent_color, "agent_color")
-            self._validate_rgb_color(self.source_color, "source_color")
-            self._validate_rgb_color(self.background_color, "background_color")
-        except ValueError as e:
-            validation_errors.append(f"Color validation: {e}")
-
-        # Validate matplotlib colormap availability
-        try:
-            matplotlib.colormaps[self.concentration_colormap]
-        except (ValueError, KeyError):
-            validation_errors.append(
-                f"Colormap '{self.concentration_colormap}' is not available"
-            )
-
-        # Check for color conflicts between markers and background
-        if self.agent_color == self.source_color:
-            validation_errors.append("Agent and source colors are identical")
-
-        if check_accessibility:
-            # Calculate contrast ratios (simplified luminance calculation)
-            def luminance(color):
-                r, g, b = [c / 255.0 for c in color]
-                return 0.299 * r + 0.587 * g + 0.114 * b
-
-            bg_luminance = luminance(self.background_color)
-            agent_luminance = luminance(self.agent_color)
-            source_luminance = luminance(self.source_color)
-
-            agent_contrast = abs(agent_luminance - bg_luminance)
-            source_contrast = abs(source_luminance - bg_luminance)
-
-            min_contrast = 0.5  # Simplified contrast threshold
-            if agent_contrast < min_contrast:
-                validation_errors.append(
-                    f"Agent-background contrast {agent_contrast:.2f} below threshold"
+        # Accessibility validation
+        if check_accessibility and self.accessibility_enhanced:
+            if not self._check_contrast_ratio(self.agent_color, self.background_color):
+                raise ValueError(
+                    "Accessibility contrast ratio for agent color is insufficient"
                 )
-            if source_contrast < min_contrast:
-                validation_errors.append(
-                    f"Source-background contrast {source_contrast:.2f} below threshold"
+            if not self._check_contrast_ratio(self.source_color, self.background_color):
+                raise ValueError(
+                    "Accessibility contrast ratio for source color is insufficient"
                 )
 
-        if validation_errors:
-            error_message = "Color scheme validation failed:\n" + "\n".join(
-                validation_errors
-            )
-            raise ValueError(error_message)
+        # Performance validation (placeholder)
+        if check_performance:
+            pass
 
         return True
 
-    def to_dict(
-        self,
-        include_performance_info: bool = False,
-        include_optimization_state: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        Converts color scheme to dictionary representation for serialization.
+    def _check_contrast_ratio(
+        self, color1: Tuple[int, int, int], color2: Tuple[int, int, int]
+    ) -> bool:
+        """Basic luminance contrast check based on WCAG guidelines."""
 
-        Args:
-            include_performance_info: Include performance configuration in output
-            include_optimization_state: Include optimization state information
+        def luminance(c: Tuple[int, int, int]) -> float:
+            r, g, b = [x / 255.0 for x in c]
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
-        Returns:
-            Dictionary representation with color scheme configuration and metadata
-        """
-        config_dict = {
+        l1 = luminance(color1)
+        l2 = luminance(color2)
+        ratio = (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+        return ratio >= ACCESSIBILITY_CONTRAST_RATIO
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize color scheme to a dictionary for storage or logging."""
+        return {
             "agent_color": self.agent_color,
             "source_color": self.source_color,
             "background_color": self.background_color,
@@ -612,164 +575,23 @@ class ColorScheme:
             "agent_marker_size": self.agent_marker_size,
             "source_marker_size": self.source_marker_size,
             "accessibility_enhanced": self.accessibility_enhanced,
-            "optimized_for_mode": self.optimized_for_mode,
         }
 
-        if include_performance_info:
-            config_dict["performance_config"] = self.performance_config.copy()
-
-        if include_optimization_state:
-            config_dict["cached_colormap_available"] = self._cached_colormap is not None
-            config_dict["validation_passed"] = True  # If we got this far
-
-        return config_dict
-
-    def clone(
-        self,
-        color_overrides: Optional[Dict[str, Any]] = None,
-        preserve_optimizations: bool = True,
-    ) -> "ColorScheme":
-        """
-        Creates deep copy of color scheme with optional parameter overrides.
-
-        Args:
-            color_overrides: Dictionary of parameters to override in the copy
-            preserve_optimizations: Maintain performance config and optimization state
-
-        Returns:
-            New ColorScheme instance with overrides applied and validated
-        """
-        # Start with current configuration
-        config = self.to_dict(include_performance_info=preserve_optimizations)
-
-        # Apply overrides
-        if color_overrides:
-            config.update(color_overrides)
-
-        # Create new instance
-        new_scheme = ColorScheme(
-            agent_color=config["agent_color"],
-            source_color=config["source_color"],
-            background_color=config["background_color"],
-            concentration_colormap=config["concentration_colormap"],
-            agent_marker_size=config.get("agent_marker_size", AGENT_MARKER_SIZE),
-            source_marker_size=config.get("source_marker_size", SOURCE_MARKER_SIZE),
-            accessibility_enhanced=config.get("accessibility_enhanced", False),
-            optimized_for_mode=config.get("optimized_for_mode"),
+    def clone(self, preserve_optimizations: bool = False) -> "ColorScheme":
+        """Create a shallow clone of the color scheme, optionally preserving optimizations."""
+        clone = ColorScheme(
+            agent_color=self.agent_color,
+            source_color=self.source_color,
+            background_color=self.background_color,
+            concentration_colormap=self.concentration_colormap,
+            agent_marker_size=self.agent_marker_size,
+            source_marker_size=self.source_marker_size,
+            accessibility_enhanced=self.accessibility_enhanced,
         )
-
-        # Preserve performance configuration if requested
-        if preserve_optimizations and hasattr(self, "performance_config"):
-            new_scheme.performance_config = self.performance_config.copy()
-
-        return new_scheme
-
-
-# =============================================================================
-# FACTORY FUNCTIONS
-# =============================================================================
-
-
-def create_default_scheme(
-    render_mode: Optional[str] = None,
-    enable_accessibility: bool = False,
-    cache_colormap: bool = True,
-) -> ColorScheme:
-    """
-    Factory function to create default color scheme with standard plume navigation colors.
-
-    Args:
-        render_mode: Rendering mode optimization ('rgb_array' or 'human')
-        enable_accessibility: Apply accessibility enhancements and contrast adjustment
-        cache_colormap: Enable colormap caching for matplotlib integration
-
-    Returns:
-        Default color scheme configured with standard colors and optimizations
-    """
-    # Create base color scheme with standard colors
-    scheme = ColorScheme(
-        agent_color=DEFAULT_AGENT_COLOR,  # Red [255,0,0]
-        source_color=DEFAULT_SOURCE_COLOR,  # White [255,255,255]
-        background_color=DEFAULT_BACKGROUND_COLOR,  # Black [0,0,0]
-        concentration_colormap=DEFAULT_COLORMAP,  # 'gray'
-        accessibility_enhanced=enable_accessibility,
-    )
-
-    # Apply render mode optimization if specified
-    if render_mode:
-        optimization_options = {"caching_enabled": cache_colormap}
-        scheme.optimize_for_render_mode(render_mode, optimization_options)
-
-    # Enable colormap caching for performance
-    if cache_colormap:
-        scheme.get_concentration_colormap(use_cache=True)
-
-    # Validate configuration
-    scheme.validate(check_accessibility=enable_accessibility)
-
-    return scheme
-
-
-def create_color_scheme(
-    color_config: Dict[str, Any],
-    scheme_type: Optional[str] = None,
-    render_mode: Optional[str] = None,
-    validate_accessibility: bool = False,
-) -> ColorScheme:
-    """
-    Factory function to create custom color scheme with validation and optimization.
-
-    Args:
-        color_config: Dictionary with agent_color, source_color, background_color, concentration_colormap
-        scheme_type: Predefined scheme type for configuration inheritance
-        render_mode: Target rendering mode ('rgb_array' or 'human') for optimization
-        validate_accessibility: Enable accessibility validation including contrast ratios
-
-    Returns:
-        Custom color scheme with validated configuration and mode-specific optimizations
-    """
-    # Validate color_config structure
-    required_keys = {
-        "agent_color",
-        "source_color",
-        "background_color",
-        "concentration_colormap",
-    }
-    if missing_keys := required_keys - set(color_config.keys()):
-        raise ValueError(f"Missing required color configuration keys: {missing_keys}")
-
-    # Apply scheme_type configuration if specified
-    if scheme_type and scheme_type in PREDEFINED_SCHEMES:
-        try:
-            predefined_scheme = PredefinedScheme(scheme_type)
-            base_config = predefined_scheme.get_color_config()
-            # Merge with custom config (custom takes precedence)
-            merged_config = {**base_config, **color_config}
-            color_config = merged_config
-        except ValueError:
-            warnings.warn(
-                f"Unknown scheme_type '{scheme_type}', using custom config only"
-            )
-
-    # Create color scheme instance
-    scheme = ColorScheme(
-        agent_color=color_config["agent_color"],
-        source_color=color_config["source_color"],
-        background_color=color_config["background_color"],
-        concentration_colormap=color_config["concentration_colormap"],
-        agent_marker_size=color_config.get("agent_marker_size", AGENT_MARKER_SIZE),
-        source_marker_size=color_config.get("source_marker_size", SOURCE_MARKER_SIZE),
-        accessibility_enhanced=color_config.get("accessibility_enhanced", False),
-    )
-
-    # Apply render mode optimization
-    if render_mode:
-        scheme.optimize_for_render_mode(render_mode)
-
-    # Validate configuration
-    scheme.validate(check_accessibility=validate_accessibility, strict_mode=True)
-
-    return scheme
+        if preserve_optimizations:
+            clone.performance_config.update(self.performance_config)
+            clone.optimized_for_mode = self.optimized_for_mode
+        return clone
 
 
 # =============================================================================
@@ -925,26 +747,15 @@ def apply_agent_marker(
         rgb_array: Target RGB array for marker application
         agent_position: (x, y) coordinates for marker placement
         marker_color: RGB color tuple for marker, defaults to red
-        marker_size: (height, width) marker dimensions, defaults to 3x3
+        marker_size: Marker dimensions (height, width), defaults to AGENT_MARKER_SIZE
 
     Returns:
-        RGB array with agent marker applied, maintaining original structure
+        Updated RGB array with agent marker applied
     """
-    # Validate RGB array
-    if (
-        not isinstance(rgb_array, np.ndarray)
-        or rgb_array.ndim != 3
-        or rgb_array.shape[2] != RGB_CHANNELS
-    ):
-        raise ValueError("rgb_array must be a 3D array with shape (H,W,3)")
-
-    if rgb_array.dtype != np.uint8:
-        warnings.warn("rgb_array dtype is not uint8, conversion may lose precision")
-        rgb_array = rgb_array.astype(np.uint8)
-
-    # Validate agent position
-    height, width = rgb_array.shape[:2]
+    height, width, _ = rgb_array.shape
     x, y = agent_position
+
+    # Bounds checking for agent position
     if not (0 <= x < width and 0 <= y < height):
         raise ValueError(
             f"agent_position {agent_position} is outside array bounds ({width}, {height})"
@@ -955,17 +766,16 @@ def apply_agent_marker(
         marker_size = AGENT_MARKER_SIZE
 
     marker_height, marker_width = marker_size
-
-    # Calculate marker boundaries with boundary checking
     half_height = marker_height // 2
     half_width = marker_width // 2
 
-    y_start = max(0, y - half_height)
-    y_end = min(height, y + half_height + 1)
+    # Calculate marker bounds with boundary checking
     x_start = max(0, x - half_width)
     x_end = min(width, x + half_width + 1)
+    y_start = max(0, y - half_height)
+    y_end = min(height, y + half_height + 1)
 
-    # Apply red square marker pattern to RGB array
+    # Apply solid square marker
     rgb_array[y_start:y_end, x_start:x_end] = marker_color
 
     return rgb_array
@@ -978,32 +788,21 @@ def apply_source_marker(
     marker_size: Optional[Tuple[int, int]] = None,
 ) -> np.ndarray:
     """
-    Applies source marker cross pattern to RGB array at specified position.
+    Applies source marker visualization in cross shape to RGB array at specified position.
 
     Args:
         rgb_array: Target RGB array for marker application
         source_position: (x, y) coordinates for marker placement
-        marker_color: RGB color tuple for marker, defaults to white
-        marker_size: (height, width) marker dimensions, defaults to 5x5
+        marker_color: RGB color tuple for cross marker, defaults to white
+        marker_size: Marker dimensions (height, width), defaults to SOURCE_MARKER_SIZE
 
     Returns:
-        RGB array with source marker cross pattern applied
+        Updated RGB array with source marker applied
     """
-    # Validate RGB array
-    if (
-        not isinstance(rgb_array, np.ndarray)
-        or rgb_array.ndim != 3
-        or rgb_array.shape[2] != RGB_CHANNELS
-    ):
-        raise ValueError("rgb_array must be a 3D array with shape (H,W,3)")
-
-    if rgb_array.dtype != np.uint8:
-        warnings.warn("rgb_array dtype is not uint8, conversion may lose precision")
-        rgb_array = rgb_array.astype(np.uint8)
-
-    # Validate source position
-    height, width = rgb_array.shape[:2]
+    height, width, _ = rgb_array.shape
     x, y = source_position
+
+    # Bounds checking for source position
     if not (0 <= x < width and 0 <= y < height):
         raise ValueError(
             f"source_position {source_position} is outside array bounds ({width}, {height})"

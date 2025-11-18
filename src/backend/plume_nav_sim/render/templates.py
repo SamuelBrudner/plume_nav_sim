@@ -43,7 +43,7 @@ from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.types import RGBArray
 
 # Internal imports for color scheme integration and dual-mode optimization
-from .default_colormap import ColorScheme, create_default_scheme
+from .colormaps import ColorScheme, create_default_scheme
 
 # Global configuration dictionaries for template defaults
 DEFAULT_RGB_TEMPLATE_CONFIG = {
@@ -1260,7 +1260,7 @@ class MatplotlibTemplate(BaseRenderTemplate):
         except Exception as e:
             if "backend" not in str(e).lower() and "display" not in str(e).lower():
                 raise
-            if fallback_success := self._handle_backend_error(e, self.active_backend):
+            if self._handle_backend_error(e, self.active_backend):
                 # Retry render with new backend
                 self._execute_render(
                     concentration_field, agent_position, source_position
@@ -2306,7 +2306,7 @@ def optimize_template(
 
         # Caching optimization based on usage patterns
         if usage_statistics:
-            render_frequency = usage_statistics.get("renders_per_second", 1.0)
+            _ = usage_statistics.get("renders_per_second", 1.0)
             repeat_renders = usage_statistics.get("repeated_renders", 0.1)
 
             if repeat_renders > 0.3 and not optimized_config.caching_enabled:
@@ -2701,7 +2701,7 @@ def _extracted_from_validate_template_performance_199(template, performance_repo
 
     for backend in test_backends:
         try:
-            if backend_compatible := template.configure_backend(backend):
+            if template.configure_backend(backend):
                 # Quick functionality test
                 test_field = np.random.rand(32, 32).astype(np.float32)
                 test_agent = Coordinates(16, 16)
