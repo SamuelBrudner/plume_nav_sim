@@ -148,32 +148,13 @@ except ImportError:
             return {"status": "not_implemented", "category": "plume_generation_suite"}
 
 
-# Graceful handling of missing configuration module with fallback defaults
-try:
-    from config.default_config import get_complete_default_config
-except ImportError:
-    # Fallback implementation for missing default configuration
-    def get_complete_default_config():
-        """Fallback default configuration for benchmarking."""
-        logger = get_component_logger("benchmarks_config", "UTILS")
-        logger.warning(
-            "Default config module not available, using fallback configuration"
-        )
-        return {
-            "benchmark_defaults": {
-                "grid_size": [128, 128],
-                "source_location": [64, 64],
-                "max_steps": 1000,
-                "timeout_minutes": 30,
-            },
-            "performance_targets": {
-                "step_latency_ms": 1.0,
-                "episode_reset_ms": 10.0,
-                "memory_usage_mb": 50.0,
-                "rendering_rgb_ms": 5.0,
-                "rendering_human_ms": 50.0,
-            },
-        }
+# Default benchmark configuration parameters (replaces legacy config import)
+DEFAULT_BENCHMARK_DEFAULTS = {
+    "grid_size": [128, 128],
+    "source_location": [64, 64],
+    "max_steps": 1000,
+    "timeout_minutes": 30,
+}
 
 
 # Global configuration constants for benchmark orchestration and suite coordination
@@ -1811,9 +1792,8 @@ class BenchmarkSuiteOrchestrator:
             # Update execution status with current category
             self.execution_status["current_category"] = benchmark_category
 
-            # Get default configuration for the category
-            default_config = get_complete_default_config()
-            category_defaults = default_config.get("benchmark_defaults", {})
+            # Get default configuration for the category (local defaults)
+            category_defaults = DEFAULT_BENCHMARK_DEFAULTS
 
             # Merge category_config with defaults
             merged_config = {**category_defaults, **category_config}

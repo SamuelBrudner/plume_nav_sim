@@ -2,7 +2,7 @@
 
 Primitive numerical values live directly in this module, while higher level
 metadata (package identifiers, performance thresholds, testing seeds) are
-loaded from `config/constants.yaml` for easier maintenance and reproducibility.
+loaded from `conf/constants.yaml` for easier maintenance and reproducibility.
 
 The factory helpers at the bottom of the file intentionally return minimal
 dictionary payloads because several tests assert their exact shape.
@@ -17,9 +17,7 @@ from typing import Any, Dict
 import numpy as np
 import yaml
 
-CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "config" / "constants.yaml"
-)
+CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "conf" / "constants.yaml"
 
 _DEFAULT_CONFIG: Dict[str, Any] = {
     "package": {
