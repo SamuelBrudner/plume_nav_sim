@@ -1,7 +1,7 @@
 Constants Guide
 
 Scope
-- YAML (config/constants.yaml): User‑tunable identifiers and targets
+- YAML (conf/constants.yaml): User‑tunable identifiers and targets
   - package: name, version, environment_id
   - performance: tracking_enabled, timing targets (step, render, reset, generation), boundary enforcement
   - testing: default_seeds

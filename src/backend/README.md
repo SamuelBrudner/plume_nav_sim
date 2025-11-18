@@ -96,6 +96,34 @@ for step in range(100):
 env.close()
 ```
 
+## 🧭 Public API and Repository Layout
+
+For most users and external researchers, the supported way to interact with the package is:
+
+- **Top-level API**: `import plume_nav_sim as pns`
+  - Use `pns.make_env(...)` as the recommended way to create environments.
+  - Core types, constants, and metadata are exported from `plume_nav_sim.__init__` (e.g., `GridSize`, `EnvironmentConfig`, `DEFAULT_*`, `ENVIRONMENT_ID`).
+- **Configuration and composition**: `plume_nav_sim.config`
+  - Typed specs and composition helpers live under `plume_nav_sim.config` and `plume_nav_sim.config.composition` (e.g., `SimulationSpec`, `PolicySpec`, `prepare`).
+  - Legacy imports from `plume_nav_sim.compose.*` are still supported as shims but new code should prefer `plume_nav_sim.config`.
+
+If you are browsing the source code in this repository:
+
+- Installable package code lives under `src/backend/plume_nav_sim/`.
+- Hydra/YAML configuration files live under `src/backend/conf/`.
+- Built-in scenarios and benchmarks live under `src/backend/scenarios/`.
+- Documentation and design notes live under `src/backend/docs/`.
+- Examples and tutorials live under `src/backend/examples/` and `notebooks/`.
+- Tests live under `src/backend/tests/`.
+
+Contributors extending the library (e.g., new policies, plume models, or data-capture features) should generally add code under the corresponding subpackages:
+
+- `plume_nav_sim.envs` – environment implementations and factories.
+- `plume_nav_sim.policies` – policies and policy helpers.
+- `plume_nav_sim.plume` – plume models and concentration field logic.
+- `plume_nav_sim.render` – rendering utilities, colormaps, and templates.
+- `plume_nav_sim.data_capture`, `plume_nav_sim.media`, `plume_nav_sim.video` – capture pipeline, dataset manifests, and video plume schemas.
+
 ### Quick Start with Factory Function
 
 ```python
@@ -701,6 +729,14 @@ python examples/visualization_demo.py
 python examples/performance_benchmark.py
 ```
 
+### Render Module Structure
+
+- All render-specific Python code and utilities live under `src/backend/plume_nav_sim/render/`.
+- Use `plume_nav_sim.render.*` imports exclusively for rendering utilities.
+- Colormap utilities moved to `plume_nav_sim.render.colormaps` (formerly `assets.default_colormap`).
+- Rendering templates moved to `plume_nav_sim.render.templates` (formerly `assets.render_templates`).
+- The legacy `src/backend/assets/` package has been removed.
+
 ### Contribution Guidelines
 
 1. **Code Standards**: Follow PEP 8 style guidelines
@@ -864,6 +900,17 @@ plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --p
 ```
 
 Note: For manifest usage and an end-to-end reference, see bead plume_nav_sim-152.
+
+### Data Directories
+
+See `src/backend/docs/data_directories_overview.md` for full details.
+
+- `plume_nav_sim/data_capture/` → runtime capture pipeline (JSONL.gz, validation, CLI)
+- `plume_nav_sim/media/` → dataset metadata/manifests and xarray‑like dataset validation
+- `plume_nav_sim/video/` → canonical video plume dataset schema and attrs validation
+
+Contracts:
+- Video plume dataset: `src/backend/docs/contracts/video_plume_dataset.md`
 
 ### Schema Reference
 

@@ -89,7 +89,7 @@
 
 ### Video Plume Dataset Contract (Source of Truth)
 
-See `metadata/video_dataset_contract.md` for the canonical, testable contract for video-backed plume datasets (Zarr + xarray).
+See `src/backend/docs/contracts/video_plume_dataset.md` for the canonical, testable contract for video‑backed plume datasets (Zarr + xarray).
 
 Summary (authoritative details in the contract document):
 

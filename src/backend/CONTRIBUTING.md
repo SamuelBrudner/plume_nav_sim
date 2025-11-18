@@ -6,15 +6,16 @@ Welcome to the **plume-nav-sim** project! We're excited that you're interested i
 
 1. [Welcome and Project Overview](#welcome-and-project-overview)
 2. [Development Environment Setup](#development-environment-setup)
-3. [Contribution Workflow](#contribution-workflow)
-4. [Code Quality Standards](#code-quality-standards)
-5. [Testing Requirements](#testing-requirements)
-6. [Documentation Standards](#documentation-standards)
-7. [Scientific Reproducibility Standards](#scientific-reproducibility-standards)
-8. [Issue Reporting Guidelines](#issue-reporting-guidelines)
-9. [Community Guidelines](#community-guidelines)
-10. [Release Procedures](#release-procedures)
-11. [Troubleshooting](#troubleshooting)
+3. [Repository Layout and Public API](#repository-layout-and-public-api)
+4. [Contribution Workflow](#contribution-workflow)
+5. [Code Quality Standards](#code-quality-standards)
+6. [Testing Requirements](#testing-requirements)
+7. [Documentation Standards](#documentation-standards)
+8. [Scientific Reproducibility Standards](#scientific-reproducibility-standards)
+9. [Issue Reporting Guidelines](#issue-reporting-guidelines)
+10. [Community Guidelines](#community-guidelines)
+11. [Release Procedures](#release-procedures)
+12. [Troubleshooting](#troubleshooting)
 
 ## Welcome and Project Overview
 
@@ -106,6 +107,55 @@ python -m pytest tests/ -x -q --tb=short -m "not slow"
 # Verify environment creation
 python -c "import gymnasium as gym; import plume_nav_sim; env = gym.make('PlumeNav-StaticGaussian-v0'); print('✓ Environment creation successful')"
 ```
+
+## Repository Layout and Public API
+
+Understanding the repository layout and public API surface will help you place new code in the right location and design contributions that are easy for other researchers to use.
+
+### High-level layout
+
+- **Installable package**: `plume_nav_sim` (source under `src/backend/plume_nav_sim`).
+- **Configs**: `src/backend/conf/` for Hydra/YAML configuration files; `plume_nav_sim.config` for typed configuration and composition helpers.
+- **Scenarios and benchmarks**: `src/backend/scenarios/` for built-in scenario and benchmark definitions.
+- **Documentation**: `src/backend/docs/` for user/developer documentation, contracts, and data guides.
+- **Examples and notebooks**: `src/backend/examples/` and `notebooks/` for usage examples and exploratory analysis.
+- **Tests**: `src/backend/tests/` for unit, integration, contract, and performance tests.
+- **Vendored dependencies**: `src/backend/vendor/` for vendored shims (e.g., `gymnasium_vendored`, `psutil`).
+
+### Public API surface
+
+For most users and external researchers, the supported public surface is:
+
+- `plume_nav_sim` package-level API via `plume_nav_sim.__init__`:
+  - `make_env` – recommended way to create environments.
+  - Core types, constants, and metadata exported via `__all__` (e.g., `GridSize`, `EnvironmentConfig`, `DEFAULT_*`, `ENVIRONMENT_ID`).
+  - `get_package_info` and `initialize_package` for metadata and legacy bootstrap.
+- `plume_nav_sim.config` and `plume_nav_sim.config.composition`:
+  - Typed configuration and composition helpers such as `SimulationSpec`, `PolicySpec`, and composition utilities (e.g., `prepare`).
+- `plume_nav_sim.compose.*`:
+  - Backwards-compatibility shim re-exporting the modern configuration/composition API. New code should prefer imports from `plume_nav_sim.config` and `plume_nav_sim.config.composition`.
+
+When you design a new feature that should be usable by downstream researchers, prefer to expose it via these modules or through clearly documented extension points below.
+
+### Extension points for new contributions
+
+Use these namespaces when extending plume-nav-sim:
+
+- **Environment implementations and registration**:
+  - `plume_nav_sim.envs` – environment classes and factories.
+  - `plume_nav_sim.registration` – Gymnasium registration, `ENV_ID`, and helpers like `ensure_registered`.
+- **Policies and control logic**:
+  - `plume_nav_sim.policies` – built-in policies and policy helpers.
+- **Plume models and concentration fields**:
+  - `plume_nav_sim.plume` – plume model implementations (e.g., static Gaussian) and related utilities.
+- **Rendering and visualization**:
+  - `plume_nav_sim.render` – rendering utilities, colormaps, and templates.
+- **Data capture and datasets**:
+  - `plume_nav_sim.data_capture` – runtime capture pipeline, recorders, and validation.
+  - `plume_nav_sim.media` – dataset manifests, metadata, and validation utilities.
+  - `plume_nav_sim.video` – video plume dataset schema and I/O helpers.
+
+Modules outside these areas (`utils`, `io`, `storage`, `data_formats`, `vendor`, etc.) are primarily internal infrastructure. If you are unsure where a new contribution belongs, open an issue or draft PR describing the proposed change and we can help place it appropriately.
 
 ## Contribution Workflow
 
@@ -1726,3 +1776,30 @@ Your contributions help advance scientific research in plume navigation and rein
 For questions about these guidelines or the contribution process, please open a discussion on GitHub or contact the maintainers.
 
 **Happy coding and researching!** 🧪🤖
+
+## Vendored Code Namespace
+
+To keep first-party code clearly separated from copied third-party shims, all
+vendored modules live under a dedicated `vendor/` namespace within the backend
+source tree.
+
+- Location: `src/backend/vendor/`
+- Current entries: `vendor.gymnasium_vendored`, `vendor.psutil` (lightweight, test-only)
+- Rationale: Avoid polluting top-level with third-party names and make policy explicit
+
+Guidelines:
+
+- Prefer real third-party dependencies in application code. Use `vendor.*` shims
+  only when (a) tests require minimal functionality without the dependency, or
+  (b) upstream packaging is unsuitable for our constrained CI environments.
+- When adding/adjusting a shim, place it under `src/backend/vendor/<name>/` and
+  document the subset implemented and intended scope (tests vs. runtime).
+- Backward-compatibility shims may exist at the old import paths (e.g., a minimal
+  `src/backend/psutil/__init__.py` re-exporting `vendor.psutil`) to avoid wide import
+  churn. New code should import from `vendor.<name>` directly.
+- If a shim mirrors a real dependency (e.g., `psutil`), ensure the real package can
+  still be used when installed (typically via optional extras) and that tests behave
+  correctly with either implementation.
+
+This policy was adopted following the evaluation in plume_nav_sim-84 to group and
+minimize shims while preserving test ergonomics.
