@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare
 from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.runner import runner
+
+DEMO_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+DEFAULT_MOVIE_ZARR = DEMO_ASSETS_DIR / "gaussian_plume_demo.zarr"
 
 # Quick reference for demo behavior:
 # - Imports plume_nav_sim as a library only (policy is defined in this demo)
@@ -33,6 +37,32 @@ from plume_nav_sim.runner import runner
 #   installing it (e.g., `pip install -e plug-and-play-demo`).
 
 
+def _build_movie_kwargs(
+    plume: str,
+    movie_path: Optional[str],
+    movie_fps: Optional[float],
+    movie_step_policy: Optional[str],
+) -> Dict[str, Any]:
+    """Resolve movie plume configuration (path, fps, step policy)."""
+
+    if plume != "movie":
+        return {}
+
+    resolved_path = Path(movie_path) if movie_path else DEFAULT_MOVIE_ZARR
+    if not resolved_path.exists():
+        raise SystemExit(
+            "Movie plume requested but dataset not found at "
+            f"{resolved_path}. Regenerate via bead 214 or pass --movie-path."
+        )
+
+    movie_kwargs: Dict[str, Any] = {"movie_path": str(resolved_path)}
+    if movie_fps is not None:
+        movie_kwargs["movie_fps"] = float(movie_fps)
+    if movie_step_policy is not None:
+        movie_kwargs["movie_step_policy"] = movie_step_policy
+    return movie_kwargs
+
+
 def run_demo(
     *,
     seed: Optional[int] = 123,
@@ -41,6 +71,10 @@ def run_demo(
     render: bool = True,
     policy_spec: str = "plug_and_play_demo:DeltaBasedRunTumblePolicy",
     save_gif: Optional[str] = None,
+    plume: str = "static",
+    movie_path: Optional[str] = None,
+    movie_fps: Optional[float] = None,
+    movie_step_policy: Optional[str] = None,
 ) -> None:
     try:
         # Map human-friendly WxH string to SimulationSpec.grid_size=(W, H)
@@ -68,6 +102,13 @@ def run_demo(
         )
     ]
 
+    movie_kwargs = _build_movie_kwargs(
+        plume=plume,
+        movie_path=movie_path,
+        movie_fps=movie_fps,
+        movie_step_policy=movie_step_policy,
+    )
+
     sim = SimulationSpec(
         grid_size=(w, h),
         max_steps=max_steps,
@@ -76,9 +117,11 @@ def run_demo(
         reward_type="step_penalty",
         render=render,  # enable rgb_array frames
         seed=seed,
+        plume=plume,
         # Load policy via dotted path (short form by default).
         policy=PolicySpec(spec=policy_spec),
         observation_wrappers=wrapper_specs,
+        **movie_kwargs,
     )
 
     env, policy = prepare(sim)
@@ -149,6 +192,32 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--plume",
+        choices=["static", "movie"],
+        default="static",
+        help="Select the plume source (static Gaussian or bundled movie)",
+    )
+    parser.add_argument(
+        "--movie-path",
+        type=str,
+        default=None,
+        help=(
+            "Path to movie plume dataset (defaults to bundled assets/gaussian_plume_demo.zarr)."
+        ),
+    )
+    parser.add_argument(
+        "--movie-fps",
+        type=float,
+        default=None,
+        help="Override movie fps metadata when using plume='movie'",
+    )
+    parser.add_argument(
+        "--movie-step-policy",
+        choices=["wrap", "clamp"],
+        default=None,
+        help="Optional MoviePlumeField step policy override",
+    )
+    parser.add_argument(
         "--save-gif",
         type=str,
         default=None,
@@ -212,6 +281,13 @@ def main() -> None:
             kwargs={"n": 2},
         )
     ]
+    movie_kwargs = _build_movie_kwargs(
+        plume=args.plume,
+        movie_path=args.movie_path,
+        movie_fps=args.movie_fps,
+        movie_step_policy=args.movie_step_policy,
+    )
+
     sim = SimulationSpec(
         grid_size=(w, h),
         max_steps=args.max_steps,
@@ -220,8 +296,10 @@ def main() -> None:
         reward_type="step_penalty",
         render=(not args.no_render),
         seed=args.seed,
+        plume=args.plume,
         policy=PolicySpec(spec=args.policy_spec),
         observation_wrappers=wrapper_specs,
+        **movie_kwargs,
     )
 
     # Preserve original behavior unless capture flags are provided
@@ -233,6 +311,10 @@ def main() -> None:
             render=(not args.no_render),
             policy_spec=args.policy_spec,
             save_gif=args.save_gif,
+            plume=args.plume,
+            movie_path=args.movie_path,
+            movie_fps=args.movie_fps,
+            movie_step_policy=args.movie_step_policy,
         )
         return
 

@@ -12,6 +12,9 @@ How to run
   - `python plug-and-play-demo/main.py`
   - With custom policy: `python plug-and-play-demo/main.py --policy-spec my_pkg.mod:MyPolicy`
   - Save frames: `python plug-and-play-demo/main.py --save-gif out.gif`
+  - Run the bundled movie plume: `python plug-and-play-demo/main.py --plume movie`
+    - Override dataset path: `--movie-path plug-and-play-demo/assets/gaussian_plume_demo.zarr`
+    - Optional playback controls: `--movie-fps 60`, `--movie-step-policy wrap|clamp`
 
 - From this folder:
   - `python main.py`
@@ -37,6 +40,27 @@ Files
 - `plug-and-play-demo/main.py` – standalone script importing only `plume_nav_sim`
 - `plug-and-play-demo/plug_and_play_demo/stateless_policy.py` – stateless run–tumble policy (uses [c_prev, c_now])
 - `plug-and-play-demo/plug_and_play_demo.ipynb` – notebook demo (spec-first + frames)
+
+Bundled media assets
+
+- We ship two artifacts for the Gaussian plume demo movie so you can either preview the raw AVI or load the ready-to-use Zarr dataset via `MoviePlumeField`:
+  - Raw movie: `plug-and-play-demo/assets/gaussian_plume_demo.avi`
+  - Zarr dataset: `plug-and-play-demo/assets/gaussian_plume_demo.zarr`
+    - Default `--plume movie` runs point to this dataset automatically.
+    - Schema matches the `MoviePlumeField` contract (`concentration[t,y,x]`, dtype `float32`).
+- Regeneration workflow:
+  1. Generate or refresh the AVI under `src/backend/tests/data/video/gaussian_plume_demo.avi` (bead 214 script).
+  2. Copy it into this demo: `cp src/backend/tests/data/video/gaussian_plume_demo.avi plug-and-play-demo/assets/`.
+  3. Convert to Zarr (from repo root):
+
+     ```bash
+     conda run -n plume-nav-sim python -m plume_nav_sim.cli.video_ingest \
+       --input plug-and-play-demo/assets/gaussian_plume_demo.avi \
+       --output plug-and-play-demo/assets/gaussian_plume_demo.zarr \
+       --fps 60 --pixel-to-grid "1 1" --origin "0 0" --normalize
+     ```
+
+  4. Commit both assets so the demo stays plug-and-play.
 
 Notes
 
