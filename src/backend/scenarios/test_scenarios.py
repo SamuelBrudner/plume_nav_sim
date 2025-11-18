@@ -1,4 +1,5 @@
 # External imports with version comments
+# Moved from backend.data to backend.scenarios
 import copy  # >=3.10 - Deep copying of test scenarios for modification and parallel execution isolation
 import uuid  # >=3.10 - Unique identifier generation for test scenario tracking and execution correlation
 from dataclasses import (  # >=3.10 - Data class decorators for test scenario data structures and metadata containers
@@ -19,7 +20,7 @@ from typing import (  # >=3.10 - Type hints for test scenario management, valida
 )
 
 # Internal imports
-from config.test_configs import (
+from plume_nav_sim.config import (
     REPRODUCIBILITY_SEEDS,
     create_edge_case_test_config,
     create_integration_test_config,
@@ -27,7 +28,6 @@ from config.test_configs import (
     create_reproducibility_test_config,
     create_unit_test_config,
 )
-
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,
     MAX_GRID_SIZE,

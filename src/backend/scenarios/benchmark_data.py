@@ -1,5 +1,5 @@
 """
-Comprehensive benchmark data module providing performance baselines, scalability test scenarios,
+Comprehensive benchmark scenarios module providing performance baselines, scalability test scenarios,
 statistical analysis data, and validation datasets for plume_nav_sim environment performance testing.
 
 Supplies standardized benchmark scenarios, performance targets, baseline measurements, and statistical
@@ -30,9 +30,6 @@ from typing import (  # >=3.10 - Type hints for benchmark data structures, analy
 # External imports with version comments
 import numpy as np  # >=2.1.0 - Statistical analysis, array operations, and mathematical calculations for benchmark data generation and analysis
 
-# Import example configurations for benchmark reference
-from config.default_config import get_complete_default_config
-
 # Internal imports from plume_nav_sim core modules
 from plume_nav_sim.core.constants import (  # PERFORMANCE_TARGET_EPISODE_RESET_MS,  # Not available in constants; omit/reset metric
     DEFAULT_GRID_SIZE,
@@ -41,6 +38,9 @@ from plume_nav_sim.core.constants import (  # PERFORMANCE_TARGET_EPISODE_RESET_M
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
+
+# Import example configurations for benchmark reference
+from .example_configs import get_quick_start_config as _example_quick_start_config
 
 # Global benchmark data constants and configuration
 BENCHMARK_DATA_VERSION = "1.0.0"
@@ -64,9 +64,12 @@ PERFORMANCE_TARGETS = {
 
 
 def get_quick_start_config() -> Any:
-    """Return a default configuration suitable for quick benchmarking."""
+    """Return a default configuration suitable for quick benchmarking.
 
-    return get_complete_default_config()
+    Uses the lightweight examples module to avoid heavy config systems.
+    """
+
+    return _example_quick_start_config()
 
 
 @dataclass
