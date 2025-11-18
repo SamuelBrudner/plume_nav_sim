@@ -22,7 +22,6 @@ class DebuggerConfig:
     max_steps: int = 500
     seed: Optional[int] = 123
     start_location: Optional[tuple[int, int]] = None
-    strict_provider_only: bool = True
 
 
 class EnvDriver(QtCore.QObject):
@@ -649,7 +648,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Load preferences and configure driver
         self.prefs = DebuggerPreferences.initial_load()
         cfg = DebuggerConfig()
-        # Enforce strict provider-only mode via Inspector; DebuggerConfig flag is not user-modifiable
+        # Enforce strict provider-only mode via Inspector (always on; not configurable)
         self.driver = EnvDriver(cfg)
         self.driver.frame_ready.connect(self.frame_view.update_frame)
         self.driver.step_done.connect(self._on_step_event)
@@ -1155,9 +1154,30 @@ class InspectorWidget(QtWidgets.QWidget):
                 self.obs_panel.obs_stats.setText(
                     f"min/mean/max: {s.vmin:.3f}/{s.vmean:.3f}/{s.vmax:.3f}"
                 )
-                # Small preview for tiny vectors
+                # Provider observation metadata (preferred in preview area)
+                meta_shown = False
                 try:
-                    if isinstance(obs, np.ndarray) and obs.size <= 8:
+                    if self._mux is not None and hasattr(
+                        self._mux, "describe_observation"
+                    ):
+                        info = self._mux.describe_observation(obs)  # type: ignore[attr-defined]
+                        if info is not None:
+                            kind = getattr(info, "kind", None)
+                            label = getattr(info, "label", None)
+                            parts = []
+                            if isinstance(kind, str) and kind:
+                                parts.append(f"kind={kind}")
+                            if isinstance(label, str) and label:
+                                parts.append(f"label={label}")
+                            if parts:
+                                self.obs_panel.preview_label.setText("; ".join(parts))
+                                meta_shown = True
+                except Exception:
+                    meta_shown = False
+
+                # Small preview for tiny vectors (only if no provider meta)
+                try:
+                    if not meta_shown and isinstance(obs, np.ndarray) and obs.size <= 8:
                         vals = ", ".join(f"{float(v):.3f}" for v in obs.ravel())
                         self.obs_panel.preview_label.setText(f"values: [{vals}]")
                     else:

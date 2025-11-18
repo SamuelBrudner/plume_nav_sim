@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
+from plume_nav_debugger.odc.models import ActionInfo, ObservationInfo, PipelineInfo
 from plume_nav_debugger.odc.provider import DebuggerProvider
 
 
@@ -27,6 +27,21 @@ class ExampleDebuggerProvider(DebuggerProvider):
         probs = np.zeros(int(n), dtype=float)
         probs[0] = 1.0
         return {"probs": probs.tolist()}
+
+    def describe_observation(self, observation: Any):
+        try:
+            arr = np.asarray(observation)
+            if arr.ndim == 0 or arr.size == 1:
+                kind = "scalar"
+            elif arr.ndim == 1:
+                kind = "vector"
+            elif arr.ndim >= 2:
+                kind = "image"
+            else:
+                kind = "unknown"
+        except Exception:
+            kind = "unknown"
+        return ObservationInfo(kind=kind, label="example")
 
     def get_pipeline(self, env: Any):
         return PipelineInfo(names=[type(env).__name__, "ExampleWrapper", "CoreEnv"])
