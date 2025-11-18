@@ -153,6 +153,78 @@ __all__ = [
 # ------------------------------
 
 
+def _normalized_module_component_name(component_name: str) -> Optional[str]:
+    """Return first segment after package prefix for module-like names.
+
+    Example: 'plume_nav_sim.utils.validation' -> 'utils'. Returns None if the
+    name does not start with the package prefix.
+    """
+    pkg_prefix = f"{PACKAGE_NAME}."
+    if component_name.startswith(pkg_prefix):
+        remainder = component_name[len(pkg_prefix) :]
+        if "." in remainder:
+            return remainder.split(".", 1)[0]
+        return remainder or None
+    return None
+
+
+def _validate_core_component_id_value(core_component_id: Optional[str]) -> None:
+    """Validate provided core_component_id against known COMPONENT_NAMES."""
+    if core_component_id is not None and core_component_id not in COMPONENT_NAMES:
+        raise ValidationError(
+            f"Invalid core_component_id '{core_component_id}'. "
+            f"Valid options: {sorted(COMPONENT_NAMES)}"
+        )
+
+
+def _derive_core_id(
+    core_component_id: Optional[str], normalized_module_component: Optional[str]
+) -> Optional[str]:
+    """Derive resolved core id from explicit id or normalized module token."""
+    if core_component_id is not None:
+        return core_component_id
+    if normalized_module_component and normalized_module_component in COMPONENT_NAMES:
+        return normalized_module_component
+    return None
+
+
+def _extract_underlying_logger(plume_logger: Any) -> Optional[logging.Logger]:
+    """Extract stdlib Logger from a plume/component logger wrapper if needed."""
+    if isinstance(plume_logger, logging.Logger):
+        return plume_logger
+    for attr in ("base_logger", "logger"):
+        candidate = getattr(plume_logger, attr, None)
+        if isinstance(candidate, logging.Logger):
+            return candidate
+    return None
+
+
+def _apply_level_if_requested(
+    underlying_logger: Optional[logging.Logger], logger_level: Optional[str]
+) -> None:
+    if not underlying_logger or logger_level is None:
+        return
+    with suppress(Exception):
+        desired = getattr(logging, str(logger_level).upper())
+        underlying_logger.setLevel(desired)
+
+
+def _attach_core_metadata_if_possible(
+    wrapped: Any, resolved_core_id: Optional[str]
+) -> None:
+    """Attach core_component_id metadata when supported by the logger wrapper."""
+    try:
+        if (
+            resolved_core_id
+            and hasattr(wrapped, "component_context")
+            and isinstance(wrapped.component_context, dict)
+        ):
+            wrapped.component_context["core_component_id"] = resolved_core_id
+    except Exception:
+        # Non-fatal: metadata attachment should never break logger creation
+        pass
+
+
 def _validate_log_level_name(log_level: str) -> str:
     """Return validated, uppercased log level or raise ValidationError."""
     valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -251,6 +323,74 @@ def _performance_thresholds(
     return (status, ratio, target)
 
 
+def _validate_performance_inputs(
+    operation_name: Any, duration_ms: Any
+) -> tuple[str, float]:
+    """Validate performance logging inputs and return normalized values.
+
+    Raises ValidationError when inputs are invalid.
+    """
+    if not operation_name or not isinstance(operation_name, str):
+        raise ValidationError(
+            f"operation_name must be non-empty string, got {operation_name}"
+        )
+    if not isinstance(duration_ms, (int, float)) or float(duration_ms) < 0:
+        raise ValidationError(
+            f"duration_ms must be non-negative number, got {duration_ms}"
+        )
+    return operation_name, float(duration_ms)
+
+
+def _baseline_comparison_info(
+    operation_name: str, duration_ms: float, compare_to_baseline: bool
+) -> str:
+    """Return short human string comparing measurement to stored baseline, if any."""
+    if not compare_to_baseline or operation_name not in _performance_baselines:
+        return ""
+    with suppress(Exception):
+        baseline_duration = _performance_baselines[operation_name].get("duration_ms", 0)
+        if baseline_duration and baseline_duration > 0:
+            ratio = duration_ms / float(baseline_duration)
+            if ratio > 1.2:
+                return f" (SLOWER than baseline: {ratio:.2f}x)"
+            if ratio < 0.8:
+                return f" (FASTER than baseline: {1/ratio:.2f}x)"
+            return f" (similar to baseline: {ratio:.2f}x)"
+    return ""
+
+
+def _select_log_level(threshold_ratio: float) -> Optional[int]:
+    """Map threshold ratio to log level, with throttling for near-threshold warnings.
+
+    Returns None when message should be throttled (i.e., not logged).
+    """
+    if threshold_ratio <= 1.0:
+        return logging.DEBUG
+    if threshold_ratio <= 2.0:
+        # Throttle borderline warnings to reduce noise
+        return None if threshold_ratio <= 1.2 else logging.WARNING
+    return logging.ERROR
+
+
+def _update_running_baseline(operation_name: str, duration_ms: float) -> None:
+    """Maintain a simple running-average baseline for the given operation."""
+    now = time.time()
+    if operation_name not in _performance_baselines:
+        _performance_baselines[operation_name] = {
+            "duration_ms": duration_ms,
+            "first_measured": now,
+            "measurement_count": 1,
+        }
+        return
+    baseline = _performance_baselines[operation_name]
+    count = int(baseline.get("measurement_count", 0))
+    prev = float(baseline.get("duration_ms", 0.0))
+    new_avg = (prev * count + duration_ms) / (count + 1)
+    baseline["duration_ms"] = new_avg
+    baseline["measurement_count"] = count + 1
+    baseline["last_updated"] = now
+
+
 def _resolve_logger_from_kwargs(kwargs: Dict[str, Any]) -> logging.Logger:
     component_name = kwargs.get("component_name", "error_logger")
     comp_type = kwargs.get("component_type", ComponentType.UTILS)
@@ -304,6 +444,72 @@ def _attach_log_exception_method(logger: logging.Logger) -> None:
     setattr(logger, "log_exception", log_exception)
 
 
+def _resolve_perf_logger_name(
+    component_name: Optional[str], logger_name: Optional[str]
+) -> str:
+    return component_name or logger_name or "performance"
+
+
+def _build_performance_formatter(
+    enable_memory_tracking: bool, thresholds: Dict[str, float]
+) -> Any:
+    try:
+        return PerformanceFormatter(
+            enable_memory_tracking=enable_memory_tracking,
+            timing_thresholds=thresholds,
+        )
+    except TypeError:
+        return PerformanceFormatter()
+
+
+def _apply_formatter_to_handlers(base_logger: logging.Logger, formatter: Any) -> None:
+    for handler in getattr(base_logger, "handlers", []) or []:
+        with suppress(Exception):
+            handler.setFormatter(formatter)
+
+
+def _load_performance_baselines_from_file(
+    baseline_file: Optional[str], base_logger: logging.Logger
+) -> None:
+    if not baseline_file:
+        return
+    try:
+        import json
+
+        with open(baseline_file, "r") as f:
+            loaded_baselines = json.load(f)
+            if isinstance(loaded_baselines, dict):
+                _performance_baselines.update(loaded_baselines)
+    except (FileNotFoundError, PermissionError) as e:
+        base_logger.warning(f"Could not load baseline file {baseline_file}: {e}")
+    except Exception as e:  # Malformed or unexpected content
+        base_logger.warning(f"Baseline file error for {baseline_file}: {e}")
+
+
+def _configure_perf_logger_attributes(
+    base_logger: logging.Logger,
+    thresholds: Dict[str, float],
+    enable_memory_tracking: bool,
+) -> None:
+    with suppress(Exception):
+        base_logger.setLevel(logging.DEBUG)
+    # Attach optional attributes for downstream consumers
+    try:
+        if enable_memory_tracking:
+            setattr(base_logger, "memory_tracking", True)  # type: ignore[attr-defined]
+        setattr(base_logger, "timing_thresholds", thresholds)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
+def _add_formatter_baselines(formatter: Any, thresholds: Dict[str, float]) -> None:
+    if not hasattr(formatter, "add_baseline"):
+        return
+    for operation, threshold in thresholds.items():
+        with suppress(Exception):
+            formatter.add_baseline(operation, threshold)
+
+
 def get_component_logger(
     component_name: str,
     component_type: ComponentType = ComponentType.UTILS,
@@ -344,100 +550,40 @@ def get_component_logger(
         PlumeNavSimError: If logger creation or configuration fails.
     """
     try:
-        # Validate component_type eagerly for a clear error path
         if not isinstance(component_type, ComponentType):
             raise ValidationError(
                 f"component_type must be ComponentType enum, got {type(component_type)}"
             )
 
-        # Minimal prefix stripping for module-like names to support __name__ usage.
-        # Example: 'plume_nav_sim.utils.validation' -> 'utils'
-        normalized_module_component = None
-        pkg_prefix = f"{PACKAGE_NAME}."
-        if component_name.startswith(pkg_prefix):
-            remainder = component_name[len(pkg_prefix) :]
-            if "." in remainder:
-                normalized_module_component = remainder.split(".", 1)[0]
-            else:
-                normalized_module_component = remainder
+        normalized = _normalized_module_component_name(component_name)
+        _validate_core_component_id_value(core_component_id)
+        resolved_core_id = _derive_core_id(core_component_id, normalized)
 
-        # If caller opted into core component semantics, validate explicitly.
-        if core_component_id is not None:
-            if core_component_id not in COMPONENT_NAMES:
-                raise ValidationError(
-                    f"Invalid core_component_id '{core_component_id}'. "
-                    f"Valid options: {sorted(COMPONENT_NAMES)}"
-                )
-
-        # Backward-compatible convenience: if no explicit core_component_id provided,
-        # derive it only when the normalized module-derived token is a known core ID.
-        # This is used for metadata only and does not affect naming or caching.
-        resolved_core_id = None
-        if core_component_id is not None:
-            resolved_core_id = core_component_id
-        elif (
-            normalized_module_component
-            and normalized_module_component in COMPONENT_NAMES
-        ):
-            resolved_core_id = normalized_module_component
-
-        # Generate cache key combining component_name and component_type for logger identification
         cache_key = f"{component_name}_{component_type.value}"
-
-        # Check _logger_cache for existing logger instance using cache key with thread-safe access
         with _cache_lock:
             cached = _logger_cache.get(cache_key)
             if cached is not None:
-                return cached  # Return cached plume logger directly
+                return cached
 
             plume_logger = get_logger(
                 name=component_name,
                 component_type=component_type,
                 enable_performance_tracking=enable_performance_tracking,
             )
+            underlying_logger = _extract_underlying_logger(plume_logger)
+            _apply_level_if_requested(underlying_logger, logger_level)
 
-            underlying_logger = None
-            if isinstance(plume_logger, logging.Logger):
-                underlying_logger = plume_logger
-            else:
-                candidate = getattr(plume_logger, "base_logger", None)
-                if isinstance(candidate, logging.Logger):
-                    underlying_logger = candidate
-                else:
-                    candidate = getattr(plume_logger, "logger", None)
-                    if isinstance(candidate, logging.Logger):
-                        underlying_logger = candidate
-
-            # Optional level override
-            if logger_level is not None and underlying_logger is not None:
-                with suppress(Exception):
-                    desired = getattr(logging, logger_level.upper())
-                    underlying_logger.setLevel(desired)
-
-            # Wrap underlying logger into ComponentLogger adapter if needed
-            if underlying_logger is not None:
-                wrapped = ComponentLogger(
+            wrapped = (
+                ComponentLogger(
                     component_name=component_name,
                     component_type=component_type,
                     base_logger=underlying_logger,
                 )
-            else:
-                # Assume plume_logger is already a component-like logger
-                wrapped = plume_logger
+                if underlying_logger is not None
+                else plume_logger
+            )
 
-            # Attach core component metadata when available for downstream consumers
-            try:
-                if resolved_core_id:
-                    if hasattr(wrapped, "component_context") and isinstance(
-                        wrapped.component_context, dict
-                    ):
-                        wrapped.component_context["core_component_id"] = (
-                            resolved_core_id
-                        )
-            except Exception:
-                # Non-fatal: metadata attachment should never break logger creation
-                pass
-
+            _attach_core_metadata_if_possible(wrapped, resolved_core_id)
             _logger_cache[cache_key] = wrapped
             return wrapped
 
@@ -560,55 +706,23 @@ def log_performance(
     try:
         base_logger = _resolve_base_logger(logger)
 
-        if not operation_name or not isinstance(operation_name, str):
-            raise ValidationError(
-                f"operation_name must be non-empty string, got {operation_name}"
-            )
-
-        if not isinstance(duration_ms, (int, float)) or duration_ms < 0:
-            raise ValidationError(
-                f"duration_ms must be non-negative number, got {duration_ms}"
-            )
+        operation_name, duration_ms = _validate_performance_inputs(
+            operation_name, duration_ms
+        )
 
         threshold_status, threshold_ratio, _ = _performance_thresholds(
-            float(duration_ms), target_ms
+            duration_ms, target_ms
         )
 
         metrics_info = _format_metrics(additional_metrics)
+        baseline_info = _baseline_comparison_info(
+            operation_name, duration_ms, compare_to_baseline
+        )
 
-        baseline_info = ""
-        if compare_to_baseline and operation_name in _performance_baselines:
-            with suppress(Exception):
-                baseline_duration = _performance_baselines[operation_name].get(
-                    "duration_ms", 0
-                )
-                if baseline_duration > 0:
-                    baseline_ratio = float(duration_ms) / float(baseline_duration)
-                    if baseline_ratio > 1.2:
-                        baseline_info = (
-                            f" (SLOWER than baseline: {baseline_ratio:.2f}x)"
-                        )
-                    elif baseline_ratio < 0.8:
-                        baseline_info = (
-                            f" (FASTER than baseline: {1/baseline_ratio:.2f}x)"
-                        )
-                    else:
-                        baseline_info = f" (similar to baseline: {baseline_ratio:.2f}x)"
-
-        # Choose level; throttle noisier messages
-        if threshold_ratio <= 1.0:
-            log_level = logging.DEBUG
-        elif threshold_ratio <= 2.0:
-            log_level = logging.WARNING
-        else:
-            log_level = logging.ERROR
-
-        if threshold_ratio <= 1.2 and log_level == logging.WARNING:
-            return
-
-        if base_logger.isEnabledFor(log_level):
+        log_level = _select_log_level(threshold_ratio)
+        if log_level is not None and base_logger.isEnabledFor(log_level):
             log_message = (
-                f"PERF [{operation_name}] {float(duration_ms):.3f}ms "
+                f"PERF [{operation_name}] {duration_ms:.3f}ms "
                 f"({threshold_status}: {threshold_ratio:.2f}x target)"
                 f"{metrics_info}{baseline_info}"
             )
@@ -617,7 +731,7 @@ def log_performance(
                 log_message,
                 extra={
                     "operation_name": operation_name,
-                    "duration_ms": float(duration_ms),
+                    "duration_ms": duration_ms,
                     "threshold_status": threshold_status,
                     "threshold_ratio": float(threshold_ratio),
                     "additional_metrics": additional_metrics,
@@ -626,21 +740,7 @@ def log_performance(
                 },
             )
 
-        # Maintain a simple running average baseline
-        if operation_name not in _performance_baselines:
-            _performance_baselines[operation_name] = {
-                "duration_ms": float(duration_ms),
-                "first_measured": time.time(),
-                "measurement_count": 1,
-            }
-        else:
-            baseline = _performance_baselines[operation_name]
-            count = int(baseline.get("measurement_count", 0))
-            prev = float(baseline.get("duration_ms", 0.0))
-            new_avg = (prev * count + float(duration_ms)) / (count + 1)
-            baseline["duration_ms"] = new_avg
-            baseline["measurement_count"] = count + 1
-            baseline["last_updated"] = time.time()
+        _update_running_baseline(operation_name, duration_ms)
 
     except Exception as e:
         handle_component_error(e, "log_performance")
@@ -823,62 +923,22 @@ def create_performance_logger(
         PlumeNavSimError: If logger creation fails
     """
     try:
-        # Create base logger using get_logger function with performance-specific configuration
-        # Resolve name/component
-        name = component_name or logger_name or "performance"
+        name = _resolve_perf_logger_name(component_name, logger_name)
         base_logger = get_logger(
             name=f"{PACKAGE_NAME}.performance.{name}",
             component_type=ComponentType.UTILS,
         )
 
-        # Configure PerformanceFormatter with timing_thresholds and memory tracking settings
-        thresholds = timing_thresholds or {}
-        try:
-            formatter = PerformanceFormatter(
-                enable_memory_tracking=enable_memory_tracking,
-                timing_thresholds=thresholds,
-            )
-        except TypeError:
-            # Fallback if formatter signature differs
-            formatter = PerformanceFormatter()
+        thresholds: Dict[str, float] = dict(timing_thresholds or {})
+        formatter = _build_performance_formatter(enable_memory_tracking, thresholds)
 
-        # Set logger level to DEBUG for detailed performance information capture
-        base_logger.setLevel(logging.DEBUG)
+        _configure_perf_logger_attributes(
+            base_logger, thresholds, enable_memory_tracking
+        )
+        _apply_formatter_to_handlers(base_logger, formatter)
+        _load_performance_baselines_from_file(baseline_file, base_logger)
+        _add_formatter_baselines(formatter, thresholds)
 
-        # Configure performance-specific handler for specialized output formatting
-        # Add the formatter to existing handlers
-        for handler in base_logger.handlers:
-            handler.setFormatter(formatter)
-
-        # Load existing performance baselines from baseline_file if provided
-        if baseline_file:
-            try:
-                import json
-
-                with open(baseline_file, "r") as f:
-                    loaded_baselines = json.load(f)
-                    _performance_baselines.update(loaded_baselines)
-            except (FileNotFoundError, json.JSONDecodeError) as e:
-                base_logger.warning(
-                    f"Could not load baseline file {baseline_file}: {e}"
-                )
-
-        # Initialize memory tracking capabilities if enable_memory_tracking is True
-        if enable_memory_tracking:
-            base_logger.memory_tracking = True  # type: ignore[attr-defined]
-
-        # Set up threshold alerting for performance degradation detection
-        base_logger.timing_thresholds = thresholds  # type: ignore[attr-defined]
-
-        # Add baseline tracking to the formatter
-        if hasattr(formatter, "add_baseline"):
-            for operation, threshold in thresholds.items():
-                try:
-                    formatter.add_baseline(operation, threshold)
-                except Exception:
-                    pass
-
-        # Return configured performance logger ready for timing measurements
         return ComponentLogger(
             component_name=f"performance.{name}",
             component_type=ComponentType.UTILS,

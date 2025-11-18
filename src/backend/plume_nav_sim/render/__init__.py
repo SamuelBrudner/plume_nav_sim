@@ -43,35 +43,42 @@ import warnings
 from typing import Any, Dict, Optional, Tuple
 
 # Internal imports from core types module
-from ..core.types import GridSize  # noqa: E402
-from ..core.types import RenderMode  # noqa: E402
-from ..utils.exceptions import ValidationError  # noqa: E402
+from ..core.types import GridSize, RenderMode
+from ..utils.exceptions import ValidationError
 
 # Internal imports from base renderer module
-from .base_renderer import BaseRenderer  # noqa: E402
-from .base_renderer import RenderContext  # noqa: E402
-from .base_renderer import RenderingMetrics  # noqa: E402
-from .base_renderer import create_render_context  # noqa: E402
-from .base_renderer import validate_rendering_parameters  # noqa: E402
+from .base_renderer import (
+    BaseRenderer,
+    RenderContext,
+    RenderingMetrics,
+    create_render_context,
+    validate_rendering_parameters,
+)
 
 # Internal imports from color scheme management module
-from .color_schemes import ColorSchemeManager  # noqa: E402
-from .color_schemes import CustomColorScheme  # noqa: E402
-from .color_schemes import PredefinedScheme  # noqa: E402
-from .color_schemes import create_color_scheme  # noqa: E402
-from .color_schemes import get_default_scheme  # noqa: E402
+from .color_schemes import (
+    ColorSchemeManager,
+    CustomColorScheme,
+    PredefinedScheme,
+    create_color_scheme,
+    get_default_scheme,
+)
 
 # Internal imports from matplotlib visualization module
-from .matplotlib_viz import MatplotlibBackendManager  # noqa: E402
-from .matplotlib_viz import MatplotlibRenderer  # noqa: E402
-from .matplotlib_viz import create_matplotlib_renderer  # noqa: E402
-from .matplotlib_viz import detect_matplotlib_capabilities  # noqa: E402
+from .matplotlib_viz import (
+    MatplotlibBackendManager,
+    MatplotlibRenderer,
+    create_matplotlib_renderer,
+    detect_matplotlib_capabilities,
+)
 
 # Internal imports from NumPy RGB renderer module
-from .numpy_rgb import NumpyRGBRenderer  # noqa: E402
-from .numpy_rgb import create_rgb_renderer  # noqa: E402
-from .numpy_rgb import generate_rgb_array_fast  # noqa: E402
-from .numpy_rgb import validate_rgb_array_output  # noqa: E402
+from .numpy_rgb import (
+    NumpyRGBRenderer,
+    create_rgb_renderer,
+    generate_rgb_array_fast,
+    validate_rgb_array_output,
+)
 
 # Module-level logger configuration
 _logger = logging.getLogger("plume_nav_sim.render")

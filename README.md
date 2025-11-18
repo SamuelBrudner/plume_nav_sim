@@ -80,6 +80,30 @@ Validate the install:
 python -c "import plume_nav_sim as pns; pns.make_env()"
 ```
 
+### Local Lint (mirrors CI)
+
+To reproduce CI’s flake8 checks locally, use the provided Makefile target which runs the exact same options as `.github/workflows/ci-lint.yml`:
+
+```bash
+# One-time: create the dev environment with flake8
+make setup-dev ENV_NAME=plume-nav-sim
+
+# Run lint exactly like CI
+make lint ENV_NAME=plume-nav-sim
+```
+
+If you prefer a virtualenv instead of conda, install dev extras and run flake8 directly with the same flags used in CI:
+
+```bash
+pip install -e src/backend[dev]
+flake8 src/backend/plume_nav_sim \
+  --max-line-length=88 \
+  --extend-ignore=E203,W503,E501 \
+  --select=E,W,F,C,N \
+  --max-complexity=10 \
+  --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
+```
+
 ### Debugger (Qt MVP)
 
 A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It now includes a dockable, information-only Inspector.

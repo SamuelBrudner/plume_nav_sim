@@ -728,8 +728,17 @@ black src/
 # Type checking (if using mypy)  
 mypy src/plume_nav_sim/
 
-# Linting (if using flake8)
-flake8 src/plume_nav_sim/
+# Linting (flake8)
+# Recommended: run the Makefile target from repo root, which mirrors CI exactly
+make lint ENV_NAME=plume-nav-sim
+
+# Or run flake8 directly with the same flags as CI
+flake8 src/plume_nav_sim/ \
+  --max-line-length=88 \
+  --extend-ignore=E203,W503,E501 \
+  --select=E,W,F,C,N \
+  --max-complexity=10 \
+  --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
 ```
 
 ### Testing Your Changes

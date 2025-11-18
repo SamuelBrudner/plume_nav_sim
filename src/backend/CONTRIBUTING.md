@@ -307,9 +307,14 @@ All code must pass automated quality checks configured in `.pre-commit-config.ya
   ```
 
 #### Linting and Style
-- **flake8**: Comprehensive linting with plugins
+- Preferred: run CI-equivalent flake8 via Makefile
   ```bash
-  flake8 --max-line-length=88 --extend-ignore=E203,W503,E501 --max-complexity=10 src/
+  make lint ENV_NAME=plume-nav-sim
+  ```
+- Or run flake8 directly with CI flags
+  ```bash
+  flake8 --max-line-length=88 --extend-ignore=E203,W503,E501 --select=E,W,F,C,N --max-complexity=10 src/backend/plume_nav_sim \
+    --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
   ```
   - Enforced rules: PEP 8 compliance, complexity limits, docstring validation
   - Excluded errors: Black-incompatible formatting rules
