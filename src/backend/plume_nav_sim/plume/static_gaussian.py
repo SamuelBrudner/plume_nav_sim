@@ -1060,8 +1060,8 @@ class StaticGaussianPlume(BasePlumeModel):
             "cache_misses": 0,
         }
 
-        # Create component logger for this instance
-        self.logger = get_component_logger(f"static_gaussian_plume_{id(self)}")
+        # Create component logger using canonical component identifier
+        self.logger = get_component_logger("static_gaussian_plume")
 
         # Track global instance creation
         global _MODEL_INSTANCES_CREATED

@@ -360,9 +360,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
 
         # Store validated configuration and initialize component logger
         self.config = config
-        self.logger = get_component_logger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
+        self.logger = get_component_logger("environment")
         # Backward-compat attribute expected by tests
         self._logger = self.logger
 

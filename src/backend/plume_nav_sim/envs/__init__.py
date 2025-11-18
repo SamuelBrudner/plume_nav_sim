@@ -146,7 +146,7 @@ ENVIRONMENT_VERSION = (
 # Also accept the class name for backward compatibility in some helpers.
 SUPPORTED_ENVIRONMENTS = ["plume_search", "component", "PlumeSearchEnv"]
 
-_module_logger = get_component_logger(__name__)
+_module_logger = get_component_logger("envs")
 
 # Comprehensive module exports for external API access
 __all__ = [
