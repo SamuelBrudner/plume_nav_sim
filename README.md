@@ -228,6 +228,10 @@ Troubleshooting “'widget' is not a recognised backend name”:
     - Output: `src/backend/docs/notebooks/capture_end_to_end.html`
   - Related docs: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_catalog_capture.md`
 
+- Stable DI notebook (SimulationSpec + Component Env)
+  - Notebook: `notebooks/stable/di_simulation_spec_component_env.ipynb`
+  - Demonstrates DI factory (`create_component_environment`) and spec‑first composition via `SimulationSpec` + `prepare()`
+
 ### Test and performance requirements
 
 Running the full test matrix (contracts, property-based suites, and performance checks) requires optional packages that are not included in the base install.
