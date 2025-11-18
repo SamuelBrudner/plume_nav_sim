@@ -138,7 +138,7 @@ from .static_gaussian import (  # noqa: E402; noqa: E402; noqa: E402; noqa: E402
 )
 
 # Module version and metadata
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __author__ = "plume_nav_sim development team"
 
 # Module-level constants and configuration

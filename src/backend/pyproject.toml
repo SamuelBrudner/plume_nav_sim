@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "plume-nav-sim"
-version = "0.0.1"
+version = "0.1.0"
 description = "Proof-of-life Gymnasium-compatible reinforcement learning environment for plume navigation research"
 readme = "README.md"
 license = {text = "MIT"}
@@ -249,7 +249,7 @@ no_implicit_optional = true
 name = "cz_conventional_commits"
 
 # Keep this in sync with [project].version; Commitizen updates both via version_files
-version = "0.0.1"
+version = "0.1.0"
 
 # Git tag configuration
 tag_format = "v$version"

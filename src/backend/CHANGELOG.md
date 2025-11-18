@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0 - 2025-11-18
+
+Added
+- Movie plume support and sample Zarr dataset; ingest CLI and schema docs
+- Demo enhancements: config-driven SimulationSpec (JSON/TOML/YAML), GIF artifact
+- Debugger ODC: provider-only inspector, remote provider scaffolding, example provider
+- New docs and notebooks (movie plume overview; DI SimulationSpec walkthrough)
+
+Changed
+- Consolidated config/assets/data under plume_nav_sim.*; removed legacy packages
+- Rendering: safer toolbar/backends; env marker rendering improvements
+- Logging: relaxed logger naming; improved ergonomics; canonical logger IDs
+
+Fixed
+- Robust Gymnasium registry detection across versions
+- Marked flaky performance tests as xfail
+
+
 All notable changes to the `plume_nav_sim` project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -23,7 +23,7 @@ import logging as std_logging
 # Type hints imported for potential future use in __all__ exports
 
 # Package version definition for distribution and compatibility tracking
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 # Comprehensive exception handling system with hierarchical error management
 # Import all exception classes providing structured error handling across components
