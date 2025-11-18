@@ -101,7 +101,7 @@ jobs:
           PYTHONPATH: src/backend
         run: |
           set -euo pipefail
-          RUN_DIR=$(python - <<'PY'
+          python - <<'PY'
           from pathlib import Path
           import os
           from plume_nav_sim.cli import capture
@@ -120,12 +120,15 @@ jobs:
           if rc != 0:
               raise SystemExit(rc)
           exp_dir = out_root / 'ci_ingest'
-          run_dirs = sorted([p for p in exp_dir.iterdir() if p.is_dir() and p.name.startswith('run-')])
-          run_dir = run_dirs[-1]
-          print(run_dir, end='')
-          PY
+          run_dirs = sorted(
+              [p for p in exp_dir.iterdir() if p.is_dir() and p.name.startswith('run-')]
           )
-          echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
+          run_dir = run_dirs[-1]
+          github_output = os.environ.get('GITHUB_OUTPUT')
+          if github_output:
+              with open(github_output, 'a', encoding='utf-8') as f:
+                  print(f"run_dir={run_dir}", file=f)
+          PY
 
       - name: "DVC smoke: reproduce capture_ingest stage"
         env:
