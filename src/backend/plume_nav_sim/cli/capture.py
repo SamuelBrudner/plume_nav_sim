@@ -307,7 +307,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             overrides=overrides,
         )
         env, w, h = _env_from_cfg(cfg)
-        _merge_args_from_cfg(args, cfg, argv)
+        # Ensure flag detection works when invoked via `python -m` (argv is None)
+        from sys import argv as sys_argv
+
+        effective_argv: Optional[list[str]] = (
+            argv if argv is not None else list(sys_argv[1:])
+        )
+        _merge_args_from_cfg(args, cfg, effective_argv)
     else:
         w, h = _parse_grid_arg(args.grid)
         env = pns.make_env(
