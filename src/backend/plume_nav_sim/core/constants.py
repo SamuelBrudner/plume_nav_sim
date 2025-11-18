@@ -223,6 +223,14 @@ COMPONENT_NAMES = [
     "episode_manager",
     "concentration_field",
     "utils",
+    # Extended component groups used by logging/registry subsystems
+    "validation",
+    "registration",
+    "plume",
+    "render",
+    "envs",
+    "plume_model_registry",
+    "static_gaussian_plume",
 ]
 
 

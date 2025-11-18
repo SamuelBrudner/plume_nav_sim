@@ -2267,8 +2267,8 @@ class SpaceValidator:
         # Create validation_cache dictionary for caching validation results
         self.validation_cache = {} if enable_caching else None
 
-        # Initialize component logger using get_component_logger for validation operations
-        self.logger = get_component_logger(f"{__name__}.SpaceValidator")
+        # Initialize component logger using canonical component identifier
+        self.logger = get_component_logger("validation")
 
         # Initialize validation_stats dictionary for operation tracking and analysis
         self.validation_stats = {

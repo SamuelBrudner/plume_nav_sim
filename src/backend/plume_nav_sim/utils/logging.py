@@ -153,37 +153,77 @@ def get_component_logger(
     component_type: ComponentType = ComponentType.UTILS,
     logger_level: Optional[str] = None,
     enable_performance_tracking: bool = True,
+    *,
+    core_component_id: Optional[str] = None,
 ) -> Any:
     """
-    Factory function for creating or retrieving component-specific loggers with automatic
-    configuration, caching, and component-appropriate settings for plume_nav_sim system components.
+    Factory function for creating or retrieving loggers for plume_nav_sim code.
+
+    The first parameter (``component_name``) is a free-form logger name and may be any
+    string, including dotted module paths (e.g., ``__name__``). This value is used to
+    construct the underlying logger name and cache key.
+
+    For core, stable components that participate in package-level logging configuration,
+    callers may optionally pass ``core_component_id``. When provided, it is validated
+    against ``plume_nav_sim.core.constants.COMPONENT_NAMES``. Scripts, benchmarks, and
+    ad-hoc tools should omit this parameter and are not validated or warned on.
+
+    Minimal normalization is applied only for module-like names that start with the
+    package prefix (``PACKAGE_NAME + '.'``) to support ``__name__`` usage. No other
+    heuristics (e.g., CamelCase, instance IDs) are applied.
 
     Args:
-        component_name: Name of the component, must be in COMPONENT_NAMES
-        component_type: ComponentType enumeration for specialized configuration (defaults to UTILS)
-        logger_level: Logging level override, defaults to component-specific level
-        enable_performance_tracking: Enable performance timing and monitoring
+        component_name: Free-form logger name used to create and identify the logger.
+        component_type: ComponentType for specialized configuration (defaults to UTILS).
+        logger_level: Optional logging level override.
+        enable_performance_tracking: Enable performance timing and monitoring.
+        core_component_id: Optional core component identifier; if provided, must be one of
+            ``COMPONENT_NAMES`` and is validated. Omit for ad-hoc/script loggers.
 
     Returns:
-        Configured ComponentLogger with appropriate settings, performance tracking,
-        and security filtering
+        ComponentLogger configured with appropriate settings and performance options.
 
     Raises:
-        ValidationError: If component_name is invalid or component_type is incorrect
-        PlumeNavSimError: If logger creation or configuration fails
+        ValidationError: If ``component_type`` is incorrect or ``core_component_id`` is invalid.
+        PlumeNavSimError: If logger creation or configuration fails.
     """
     try:
-        # Validate component_name against COMPONENT_NAMES and component_type enumeration
-        if component_name not in COMPONENT_NAMES:
-            logging.getLogger(PACKAGE_NAME).warning(
-                "Unknown component name '%s'. Proceeding with default configuration.",
-                component_name,
-            )
-
+        # Validate component_type eagerly for a clear error path
         if not isinstance(component_type, ComponentType):
             raise ValidationError(
                 f"component_type must be ComponentType enum, got {type(component_type)}"
             )
+
+        # Minimal prefix stripping for module-like names to support __name__ usage.
+        # Example: 'plume_nav_sim.utils.validation' -> 'utils'
+        normalized_module_component = None
+        pkg_prefix = f"{PACKAGE_NAME}."
+        if component_name.startswith(pkg_prefix):
+            remainder = component_name[len(pkg_prefix) :]
+            if "." in remainder:
+                normalized_module_component = remainder.split(".", 1)[0]
+            else:
+                normalized_module_component = remainder
+
+        # If caller opted into core component semantics, validate explicitly.
+        if core_component_id is not None:
+            if core_component_id not in COMPONENT_NAMES:
+                raise ValidationError(
+                    f"Invalid core_component_id '{core_component_id}'. "
+                    f"Valid options: {sorted(COMPONENT_NAMES)}"
+                )
+
+        # Backward-compatible convenience: if no explicit core_component_id provided,
+        # derive it only when the normalized module-derived token is a known core ID.
+        # This is used for metadata only and does not affect naming or caching.
+        resolved_core_id = None
+        if core_component_id is not None:
+            resolved_core_id = core_component_id
+        elif (
+            normalized_module_component
+            and normalized_module_component in COMPONENT_NAMES
+        ):
+            resolved_core_id = normalized_module_component
 
         # Generate cache key combining component_name and component_type for logger identification
         cache_key = f"{component_name}_{component_type.value}"
@@ -200,30 +240,53 @@ def get_component_logger(
                 enable_performance_tracking=enable_performance_tracking,
             )
 
+            underlying_logger = None
+            if isinstance(plume_logger, logging.Logger):
+                underlying_logger = plume_logger
+            else:
+                candidate = getattr(plume_logger, "base_logger", None)
+                if isinstance(candidate, logging.Logger):
+                    underlying_logger = candidate
+                else:
+                    candidate = getattr(plume_logger, "logger", None)
+                    if isinstance(candidate, logging.Logger):
+                        underlying_logger = candidate
+
             # Optional level override
-            if logger_level is not None:
+            if logger_level is not None and underlying_logger is not None:
                 with suppress(Exception):
                     desired = getattr(logging, logger_level.upper())
-                    underlying = getattr(plume_logger, "logger", None) or getattr(
-                        plume_logger, "base_logger", None
-                    )
-                    if isinstance(underlying, logging.Logger):
-                        underlying.setLevel(desired)
+                    underlying_logger.setLevel(desired)
 
             # Wrap underlying logger into ComponentLogger adapter if needed
-            if isinstance(plume_logger, logging.Logger):
+            if underlying_logger is not None:
                 wrapped = ComponentLogger(
                     component_name=component_name,
                     component_type=component_type,
-                    base_logger=plume_logger,
+                    base_logger=underlying_logger,
                 )
             else:
                 # Assume plume_logger is already a component-like logger
                 wrapped = plume_logger
 
+            # Attach core component metadata when available for downstream consumers
+            try:
+                if resolved_core_id:
+                    if hasattr(wrapped, "component_context") and isinstance(
+                        wrapped.component_context, dict
+                    ):
+                        wrapped.component_context["core_component_id"] = (
+                            resolved_core_id
+                        )
+            except Exception:
+                # Non-fatal: metadata attachment should never break logger creation
+                pass
+
             _logger_cache[cache_key] = wrapped
             return wrapped
 
+    except ValidationError:
+        raise
     except Exception as e:
         error_details = {
             "component_name": component_name,
