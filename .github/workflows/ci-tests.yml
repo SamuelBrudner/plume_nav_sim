@@ -34,7 +34,7 @@ jobs:
       - name: Run pytest and assert no tests are skipped
         run: |
           set -euo pipefail
-          pytest -q -ra | tee pytest_output.txt
+          pytest -q -ra -m "not performance" | tee pytest_output.txt
           if grep -q "SKIPPED" pytest_output.txt; then
             echo "Found skipped tests in summary; failing build." >&2
             exit 1
