@@ -86,7 +86,9 @@ test = [
 docs = [
     "sphinx>=7.0.0",
     "sphinx-rtd-theme>=2.0.0",
-    "sphinxcontrib-napoleon>=0.7"
+    "sphinxcontrib-napoleon>=0.7",
+    "nbformat>=5.10.0",
+    "nbconvert>=7.0.0",
 ]
 benchmark = [
     "pytest-benchmark>=4.0.0",
@@ -108,6 +110,10 @@ data = [
 ]
 ops = [
     "loguru>=0.7.0",
+]
+
+gui = [
+    "PySide6>=6.7.0",
 ]
 
 # Media / video export (GIF/MP4)

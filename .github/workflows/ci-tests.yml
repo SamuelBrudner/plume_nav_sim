@@ -35,11 +35,19 @@ jobs:
         run: |
           set -euo pipefail
           pytest -q -ra -m "not performance" | tee pytest_output.txt
+
           if grep -q "SKIPPED" pytest_output.txt; then
-            echo "Found skipped tests in summary; failing build." >&2
-            exit 1
+            echo "Found skipped tests in summary; checking for allowed skips..." >&2
+            disallowed_skips=$(grep "SKIPPED" pytest_output.txt | grep -Ev "zarr|xarray|PySide6|nbformat" || true)
+            if [ -n "$disallowed_skips" ]; then
+              echo "Unexpected skipped tests detected:" >&2
+              echo "$disallowed_skips" >&2
+              exit 1
+            fi
+            echo "Only allowed skips (optional heavy dependencies) detected."
+          else
+            echo "No skipped tests detected."
           fi
-          echo "No skipped tests detected."
 
   data-capture-validation:
     runs-on: ubuntu-latest
@@ -204,3 +212,42 @@ jobs:
           test -n "$RUN_DIR" || (echo "No run-* directory found under $EXP_DIR" >&2; exit 1)
           test -f "$RUN_DIR/run.json" || (echo "Missing run.json in $RUN_DIR" >&2; exit 1)
           echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
+
+  gui-docs-media-tests:
+    runs-on: ubuntu-latest
+    name: "GUI + Docs + Media tests"
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+      QT_QPA_PLATFORM: "offscreen"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install package with GUI/docs/media extras
+        run: |
+          python -m pip install -e "src/backend[gui,docs,media,notebooks,test]"
+
+      - name: Run GUI, docs, and media-focused tests
+        run: |
+          set -euo pipefail
+          pytest -q \
+            tests/debugger/test_gui_e2e.py \
+            tests/debugger/test_driver_prefers_provider_action_names.py \
+            src/backend/tests/docs/test_notebooks_smoke.py \
+            tests/test_plug_and_play_capture_docs.py \
+            src/backend/tests/storage/test_zarr_policies.py \
+            src/backend/tests/plume_nav_sim/video/test_schema_validate.py \
+            src/backend/tests/plume_nav_sim/video/test_zarr_fixture_io.py \
+            src/backend/tests/plume_nav_sim/media/test_manifest.py \
+            src/backend/tests/plume_nav_sim/io/test_zarr_policy.py \
+            src/backend/tests/video/test_video_plume_smoke.py \
+            -vv --tb=short
