@@ -13,37 +13,26 @@ def _pyqt5_present() -> bool:
         return False
 
 
-def _pyside6_available() -> bool:
-    """Return True only if a minimal Qt application can be constructed.
-
-    This guards against environments where the PySide6 wheel can be imported
-    but required system libraries (e.g., libEGL.so.1) are missing, which would
-    otherwise raise errors when creating a QApplication on CI runners.
-    """
-    try:
-        from PySide6 import QtWidgets  # type: ignore[import]
-
-        app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        # Immediately shut down to avoid leaking global Qt state
-        app.quit()
-        return True
-    except Exception:
-        return False
-
-
 @pytest.mark.skipif(
-    (not _pyside6_available()) or _pyqt5_present(),
+    _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_provider_mux_integration_sets_source_and_action_names(monkeypatch):
     import numpy as np
-    from PySide6 import QtWidgets
+
+    QtWidgets = pytest.importorskip(
+        "PySide6.QtWidgets",
+        reason="PySide6 not available or Qt stack incomplete",
+    )
 
     # Lazy import after Qt available
-    from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+    try:
+        from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
     from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
 
-    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
     class _Provider:
         def get_action_info(self, env):
@@ -122,16 +111,23 @@ def test_provider_mux_integration_sets_source_and_action_names(monkeypatch):
 
 
 @pytest.mark.skipif(
-    (not _pyside6_available()) or _pyqt5_present(),
+    _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_strict_mode_no_fallbacks(monkeypatch):
     import numpy as np
-    from PySide6 import QtWidgets
 
-    from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+    QtWidgets = pytest.importorskip(
+        "PySide6.QtWidgets",
+        reason="PySide6 not available or Qt stack incomplete",
+    )
 
-    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    try:
+        from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
     class _AS:
         n = 3

@@ -14,23 +14,15 @@ def _pyqt5_present() -> bool:
         return False
 
 
-def _pyside6_available() -> bool:
-    try:
-        from PySide6 import QtWidgets  # type: ignore[import]
-
-        app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        app.quit()
-        return True
-    except Exception:
-        return False
-
-
 @pytest.mark.skipif(
-    (not _pyside6_available()) or _pyqt5_present(),
+    _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_driver_prefers_provider_action_names_strict_mode():
-    from plume_nav_debugger.app import DebuggerConfig, EnvDriver
+    try:
+        from plume_nav_debugger.app import DebuggerConfig, EnvDriver
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
     from plume_nav_debugger.odc.models import ActionInfo
     from plume_nav_debugger.odc.mux import ProviderMux
 
