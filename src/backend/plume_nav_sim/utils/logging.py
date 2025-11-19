@@ -1,17 +1,11 @@
-"""
-Utility logging module for plume_nav_sim package providing simplified logging interfaces,
-component logger factory functions, performance monitoring utilities, and development-focused
-logging configuration. Serves as the primary interface between plume_nav_sim components and
-the centralized logging infrastructure.
+"""Logging utilities for the :mod:`plume_nav_sim` package.
 
-This module provides:
-- Component-specific logger creation with automatic configuration
-- Performance monitoring and timing utilities
-- Development-oriented logging with enhanced debugging
-- Error handling integration with automatic context capture
-- Security-aware logging with sensitive information filtering
-- Convenient mixins for adding logging to component classes
+Provides component-specific logger factories, performance monitoring helpers, and
+development-focused configuration that integrates with (but does not require)
+the optional ``plume_nav_sim.logging`` package.
 """
+
+from __future__ import annotations
 
 import functools  # >=3.10
 import inspect  # >=3.10

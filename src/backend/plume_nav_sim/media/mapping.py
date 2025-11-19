@@ -117,35 +117,67 @@ def map_step_to_frame(
         IndexError: If boundary policy is "index" and the computed index is OOB.
     """
 
+    _validate_step_and_total_frames(step=step, total_frames=total_frames)
+
+    fps = timebase.fps_value
+    hz = _resolve_step_rate(step_hz=step_hz, fps=fps)
+
+    # Compute fractional frame index from time mapping
+    # t_step = step / hz seconds; frames = t_step * fps
+    fractional = _compute_fractional_index(step=step, step_hz=hz, fps=fps)
+
+    idx = _compute_index_with_offset(
+        fractional=fractional,
+        offset_frames=offset_frames,
+        rounding=rounding,
+    )
+
+    return _map_index_to_frame(idx=idx, total_frames=total_frames, boundary=boundary)
+
+
+def _validate_step_and_total_frames(step: int, total_frames: int) -> None:
     if total_frames <= 0:
         raise ValueError("total_frames must be positive")
     if step < 0:
         raise ValueError("step must be non-negative")
 
-    fps = timebase.fps_value
+
+def _resolve_step_rate(step_hz: Optional[float], fps: float) -> float:
     hz = step_hz if step_hz is not None else fps
     if hz <= 0:
         raise ValueError("step_hz must be positive")
+    return hz
 
-    # Compute fractional frame index from time mapping
-    # t_step = step / hz seconds; frames = t_step * fps
-    fractional = (step / hz) * fps
 
+def _compute_fractional_index(step: int, step_hz: float, fps: float) -> float:
+    return (step / step_hz) * fps
+
+
+def _compute_index_with_offset(
+    *, fractional: float, offset_frames: int, rounding: str
+) -> int:
+    base_index = _apply_rounding(fractional, rounding)
+    return base_index + int(offset_frames)
+
+
+def _apply_rounding(fractional: float, rounding: str) -> int:
     if rounding == ROUND_FLOOR:
-        base_index = math.floor(fractional)
+        return math.floor(fractional)
     elif rounding == ROUND_NEAREST:
-        base_index = int(round(fractional))
+        return int(round(fractional))
     elif rounding == ROUND_CEIL:
-        base_index = math.ceil(fractional)
+        return math.ceil(fractional)
     else:
         raise ValueError(f"Unknown rounding policy: {rounding}")
 
-    idx = base_index + int(offset_frames)
 
-    # Apply boundary policy
+def _map_index_to_frame(idx: int, total_frames: int, boundary: str) -> int:
     if 0 <= idx < total_frames:
         return idx
+    return _apply_boundary_policy(idx, total_frames, boundary)
 
+
+def _apply_boundary_policy(idx: int, total_frames: int, boundary: str) -> int:
     if boundary == STEP_POLICY_INDEX:
         raise IndexError(
             f"Frame index out of range (index={idx}, total_frames={total_frames})"

@@ -65,51 +65,79 @@ def _coerce_pixel_to_grid(value: Any) -> Tuple[float, float]:
     )
 
 
+def _validate_fps(v: Any) -> float:
+    try:
+        fps_val = float(v)
+    except Exception as exc:
+        raise ValidationError("fps must be numeric") from exc
+    if fps_val <= 0:
+        raise ValidationError("fps must be positive")
+    return fps_val
+
+
+def _validate_origin(v: Any) -> str:
+    if not isinstance(v, str) or v.lower() not in {"lower", "upper"}:
+        raise ValidationError('origin must be "lower" or "upper"')
+    return v.lower()
+
+
+def _validate_extent(v: Any) -> Tuple[float, float, float, float]:
+    if not isinstance(v, Sequence) or len(v) != 4:
+        raise ValidationError("extent must be a 4-length sequence [x0,x1,y0,y1]")
+    try:
+        x0, x1, y0, y1 = (
+            float(v[0]),
+            float(v[1]),
+            float(v[2]),
+            float(v[3]),
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValidationError("extent entries must be numeric") from exc
+    return (x0, x1, y0, y1)
+
+
+_ATTR_VALIDATORS: Mapping[str, Callable[[Any], Any]] = {
+    ATTR_FPS: _validate_fps,
+    ATTR_ORIGIN: _validate_origin,
+    ATTR_EXTENT: _validate_extent,
+    ATTR_PIXEL_TO_GRID: _coerce_pixel_to_grid,
+}
+
+
+def _get_required_attr(attrs: Mapping[str, Any], key: str, expected: str) -> Any:
+    """Return attribute value or raise ValidationError with context.
+
+    The expected string is surfaced via ``expected_format`` to help callers
+    understand the contract when a required attribute is missing.
+    """
+
+    if key in attrs:
+        return attrs[key]
+    raise ValidationError(
+        f"Missing required attribute: {key}",
+        parameter_name=key,
+        expected_format=expected,
+    )
+
+
+def _apply_attr_validator(key: str, value: Any) -> Any:
+    """Apply a known validator for *key* if one is registered."""
+
+    validator = _ATTR_VALIDATORS.get(key)
+    if validator is None:
+        return value
+    return validator(value)
+
+
 def _require_attr(attrs: Mapping[str, Any], key: str, expected: str) -> Any:
-    if key not in attrs:
-        raise ValidationError(f"Missing required attribute: {key}", parameter_name=key)
+    """Lookup and validate a required attribute from a mapping.
 
-    val = attrs[key]
+    Known keys are validated using dedicated helpers; unknown keys are returned
+    as-is so the caller can handle them.
+    """
 
-    def _validate_fps(v: Any) -> float:
-        try:
-            fps_val = float(v)
-        except Exception as exc:
-            raise ValidationError("fps must be numeric") from exc
-        if fps_val <= 0:
-            raise ValidationError("fps must be positive")
-        return fps_val
-
-    def _validate_origin(v: Any) -> str:
-        if not isinstance(v, str) or v.lower() not in {"lower", "upper"}:
-            raise ValidationError('origin must be "lower" or "upper"')
-        return v.lower()
-
-    def _validate_extent(v: Any) -> Tuple[float, float, float, float]:
-        if not isinstance(v, Sequence) or len(v) != 4:
-            raise ValidationError("extent must be a 4-length sequence [x0,x1,y0,y1]")
-        try:
-            x0, x1, y0, y1 = (
-                float(v[0]),
-                float(v[1]),
-                float(v[2]),
-                float(v[3]),
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            raise ValidationError("extent entries must be numeric") from exc
-        return (x0, x1, y0, y1)
-
-    validators: Mapping[str, Callable[[Any], Any]] = {
-        ATTR_FPS: _validate_fps,
-        ATTR_ORIGIN: _validate_origin,
-        ATTR_EXTENT: _validate_extent,
-        ATTR_PIXEL_TO_GRID: _coerce_pixel_to_grid,
-    }
-
-    if key in validators:
-        return validators[key](val)
-    # Default: return as-is
-    return val
+    val = _get_required_attr(attrs, key, expected)
+    return _apply_attr_validator(key, val)
 
 
 def validate_movie_dataset(ds: Any) -> MovieSchemaInfo:

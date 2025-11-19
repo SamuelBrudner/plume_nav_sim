@@ -239,15 +239,36 @@ class RunRecorder:
 
     def _seed_summary(self) -> Dict[str, Any]:
         try:
-            import gzip as _gzip
-            import json as _json
+            jsonl_paths = self._step_jsonl_paths()
+            seeds = self._extract_seeds_from_files(jsonl_paths)
+            return self._summarize_seeds(seeds)
+        except Exception:
+            return {}
 
-            seeds: set[int] = set()
-            jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
-            base = self.root / "steps.jsonl.gz"
-            if base.exists():
-                jsonl_paths.insert(0, base)
-            for p in jsonl_paths:
+    def _step_jsonl_paths(self) -> list[Path]:
+        jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
+        base = self.root / "steps.jsonl.gz"
+        if base.exists():
+            jsonl_paths.insert(0, base)
+        return jsonl_paths
+
+    @staticmethod
+    def _summarize_seeds(seeds: set[int]) -> Dict[str, Any]:
+        if not seeds:
+            return {}
+        return {
+            "unique_count": len(seeds),
+            "min": min(seeds),
+            "max": max(seeds),
+        }
+
+    def _extract_seeds_from_files(self, paths: list[Path]) -> set[int]:
+        import gzip as _gzip
+        import json as _json
+
+        seeds: set[int] = set()
+        for p in paths:
+            try:
                 with _gzip.open(p, "rt", encoding="utf-8") as fh:
                     for line in fh:
                         if not line.strip():
@@ -259,15 +280,9 @@ class RunRecorder:
                                 seeds.add(int(seed))
                         except Exception:
                             continue
-            if seeds:
-                return {
-                    "unique_count": len(seeds),
-                    "min": min(seeds),
-                    "max": max(seeds),
-                }
-        except Exception:
-            pass
-        return {}
+            except Exception:
+                continue
+        return seeds
 
     def _build_validation_report(self) -> Dict[str, Any]:
         try:

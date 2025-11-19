@@ -1,5 +1,7 @@
 # rendering template system providing reusable, configurable templates for both RGB array generation and matplotlib human mode visualization, with performance optimization, backend compatibility management, and standardized visualization patterns for plume navigation environment rendering.
 
+from __future__ import annotations
+
 import contextlib
 import copy  # >=3.10 - Deep copying of template configurations for modification and customization without affecting base templates
 import functools  # >=3.10 - LRU cache decorator for template caching, performance optimization, and resource management in repeated operations
@@ -766,7 +768,8 @@ class BaseRenderTemplate(ABC):
                 )
                 performance_analysis["meets_targets"] = False
 
-        if successful_tests := [r for r in test_results if r["success"]]:
+        successful_tests = [r for r in test_results if r["success"]]
+        if successful_tests:
             render_times = [r["render_time"] for r in successful_tests]
             performance_analysis["performance_summary"] = {
                 "average_render_time_ms": np.mean(render_times) * 1000,
@@ -1091,58 +1094,68 @@ class RGBTemplate(BaseRenderTemplate):
         for scenario_name, scenario_config in test_scenarios.items():
             grid_sizes = scenario_config.get("grid_sizes", [(64, 64), (128, 128)])
             for grid in grid_sizes:
-                test_field = np.random.rand(*grid).astype(np.float32)
-                test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
-                test_source = Coordinates(grid[1] // 4, grid[0] // 4)
+                result = self._run_single_rgb_scenario(
+                    scenario_name, grid, rgb_target_ms
+                )
+                results.append(result)
 
-                timings: List[float] = []
-                for _ in range(10):
-                    start = time.perf_counter()
-                    try:
-                        result = self.render(test_field, test_agent, test_source)
-                        elapsed = time.perf_counter() - start
-                        timings.append(elapsed)
-
-                        if not isinstance(result, np.ndarray):
-                            raise ValueError("RGB template must return numpy array")
-                        if result.shape != (*grid, 3):
-                            raise ValueError(f"Invalid RGB array shape: {result.shape}")
-                        if result.dtype != RGB_DTYPE:
-                            raise ValueError(f"Invalid RGB array dtype: {result.dtype}")
-                    except Exception as e:
-                        results.append(
-                            {
-                                "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
-                                "success": False,
-                                "error": str(e),
-                            }
-                        )
-                        break
-
-                if timings:
-                    avg = np.mean(timings)
-                    mx = np.max(timings)
-                    meets = avg <= (rgb_target_ms / 1000.0)
-                    results.append(
+                if result["success"] and not result["meets_target"]:
+                    analysis["meets_target"] = False
+                    analysis["target_violations"].append(
                         {
-                            "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
-                            "success": True,
-                            "avg_render_time_ms": avg * 1000,
-                            "max_render_time_ms": mx * 1000,
-                            "meets_target": meets,
+                            "scenario": result["scenario"],
+                            "actual_time_ms": result["avg_render_time_ms"],
+                            "target_time_ms": rgb_target_ms,
+                            "excess_time_ms": result["avg_render_time_ms"]
+                            - rgb_target_ms,
                         }
                     )
-                    if not meets:
-                        analysis["meets_target"] = False
-                        analysis["target_violations"].append(
-                            {
-                                "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
-                                "actual_time_ms": avg * 1000,
-                                "target_time_ms": rgb_target_ms,
-                                "excess_time_ms": (avg * 1000) - rgb_target_ms,
-                            }
-                        )
         return results
+
+    def _run_single_rgb_scenario(
+        self, scenario_name: str, grid: Tuple[int, int], rgb_target_ms: float
+    ) -> Dict[str, Any]:
+        test_field = np.random.rand(*grid).astype(np.float32)
+        test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
+        test_source = Coordinates(grid[1] // 4, grid[0] // 4)
+
+        timings: List[float] = []
+        for _ in range(10):
+            start = time.perf_counter()
+            try:
+                result = self.render(test_field, test_agent, test_source)
+                elapsed = time.perf_counter() - start
+                timings.append(elapsed)
+
+                if not isinstance(result, np.ndarray):
+                    raise ValueError("RGB template must return numpy array")
+                if result.shape != (*grid, 3):
+                    raise ValueError(f"Invalid RGB array shape: {result.shape}")
+                if result.dtype != RGB_DTYPE:
+                    raise ValueError(f"Invalid RGB array dtype: {result.dtype}")
+            except Exception as e:
+                return {
+                    "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
+                    "success": False,
+                    "error": str(e),
+                }
+
+        if timings:
+            avg = np.mean(timings)
+            mx = np.max(timings)
+            meets = avg <= (rgb_target_ms / 1000.0)
+            return {
+                "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
+                "success": True,
+                "avg_render_time_ms": avg * 1000,
+                "max_render_time_ms": mx * 1000,
+                "meets_target": meets,
+            }
+        return {
+            "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
+            "success": False,
+            "error": "No timings collected",
+        }
 
     def _rgb_performance_summary(
         self, successful: List[Dict[str, Any]], total_count: int
@@ -1641,7 +1654,8 @@ class MatplotlibTemplate(BaseRenderTemplate):
                             }
                         )
 
-        if successful_tests := [r for r in test_results if r["success"]]:
+        successful_tests = [r for r in test_results if r["success"]]
+        if successful_tests:
             self._extracted_from_validate_performance_87(
                 successful_tests,
                 test_results,
@@ -1914,7 +1928,8 @@ def create_custom_template(
             warnings.warn(
                 f"Custom template does not meet performance targets: {pdata.get('target_violations', [])}"
             )
-            if recommendations := pdata.get("optimization_recommendations", []):
+            recommendations = pdata.get("optimization_recommendations", [])
+            if recommendations:
                 warnings.warn(
                     f"Performance optimization recommendations: {recommendations}"
                 )
@@ -2566,73 +2581,20 @@ def _run_benchmarks_for_template(
         )
 
         for grid in grid_sizes:
-            test_field = np.random.rand(*grid).astype(np.float32)
-            test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
-            test_source = Coordinates(grid[1] // 4, grid[0] // 4)
-
-            times: List[float] = []
-            mem_use: List[float] = []
-            success = 0
-            for iteration in range(iterations):
-                start = time.perf_counter()
-                try:
-                    try:
-                        import psutil  # type: ignore
-
-                        process = psutil.Process()
-                        mem_before = process.memory_info().rss / 1024 / 1024
-                    except ImportError:
-                        mem_before = None
-
-                    result = template.render(test_field, test_agent, test_source)
-                    elapsed = time.perf_counter() - start
-                    times.append(elapsed)
-                    success += 1
-
-                    if isinstance(template, RGBTemplate):
-                        if not isinstance(result, np.ndarray):
-                            raise ValueError("RGB template must return numpy array")
-                        if result.shape != (*grid, 3):
-                            raise ValueError(f"Invalid RGB shape: {result.shape}")
-                        if result.dtype != RGB_DTYPE:
-                            raise ValueError(f"Invalid RGB dtype: {result.dtype}")
-
-                    if mem_before is not None:
-                        mem_after = process.memory_info().rss / 1024 / 1024
-                        mem_use.append(mem_after - mem_before)
-
-                except Exception as e:
-                    report["validation_passed"] = False
-                    times.append(-1)
-                    if strict_validation:
-                        report["test_results"][
-                            f"{scenario_name}_{grid[0]}x{grid[1]}"
-                        ] = {"success": False, "error": str(e), "iteration": iteration}
-                        break
-
-            if successful_times := [t for t in times if t > 0]:
-                tr = {
-                    "grid_size": f"{grid[0]}x{grid[1]}",
-                    "success_rate": success / iterations,
-                    "average_time_ms": np.mean(successful_times) * 1000,
-                    "max_time_ms": np.max(successful_times) * 1000,
-                    "min_time_ms": np.min(successful_times) * 1000,
-                    "std_time_ms": np.std(successful_times) * 1000,
-                    "meets_target": np.mean(successful_times) * 1000 <= target_ms,
-                    "iterations": iterations,
-                }
-                if mem_use:
-                    tr["memory_analysis"] = {
-                        "average_memory_mb": np.mean(mem_use),
-                        "max_memory_mb": np.max(mem_use),
-                        "memory_efficient": np.mean(mem_use) < 10,
-                    }
+            tr = _run_single_benchmark_scenario(
+                template,
+                scenario_name,
+                grid,
+                iterations,
+                target_ms,
+                strict_validation,
+                report,
+            )
+            if tr:
                 scenario_results["tests"].append(tr)
                 all_results.append(tr)
-                if not tr["meets_target"]:
-                    report["validation_passed"] = False
             else:
-                report["validation_passed"] = False
+                # Failure case handled inside helper (updates report)
                 scenario_results["tests"].append(
                     {
                         "grid_size": f"{grid[0]}x{grid[1]}",
@@ -2662,6 +2624,105 @@ def _run_benchmarks_for_template(
     return all_results
 
 
+def _run_single_benchmark_scenario(
+    template: Union[RGBTemplate, MatplotlibTemplate],
+    scenario_name: str,
+    grid: Tuple[int, int],
+    iterations: int,
+    target_ms: float,
+    strict_validation: bool,
+    report: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    test_field = np.random.rand(*grid).astype(np.float32)
+    test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
+    test_source = Coordinates(grid[1] // 4, grid[0] // 4)
+
+    times: List[float] = []
+    mem_use: List[float] = []
+    success = 0
+
+    for iteration in range(iterations):
+        try:
+            elapsed, mem_diff = _execute_benchmark_iteration(
+                template, test_field, test_agent, test_source, grid
+            )
+            times.append(elapsed)
+            if mem_diff is not None:
+                mem_use.append(mem_diff)
+            success += 1
+
+        except Exception as e:
+            report["validation_passed"] = False
+            times.append(-1)
+            if strict_validation:
+                report["test_results"][f"{scenario_name}_{grid[0]}x{grid[1]}"] = {
+                    "success": False,
+                    "error": str(e),
+                    "iteration": iteration,
+                }
+                break
+
+    successful_times = [t for t in times if t > 0]
+    if not successful_times:
+        report["validation_passed"] = False
+        return None
+
+    tr = {
+        "grid_size": f"{grid[0]}x{grid[1]}",
+        "success_rate": success / iterations,
+        "average_time_ms": np.mean(successful_times) * 1000,
+        "max_time_ms": np.max(successful_times) * 1000,
+        "min_time_ms": np.min(successful_times) * 1000,
+        "std_time_ms": np.std(successful_times) * 1000,
+        "meets_target": np.mean(successful_times) * 1000 <= target_ms,
+        "iterations": iterations,
+    }
+    if mem_use:
+        tr["memory_analysis"] = {
+            "average_memory_mb": np.mean(mem_use),
+            "max_memory_mb": np.max(mem_use),
+            "memory_efficient": np.mean(mem_use) < 10,
+        }
+    if not tr["meets_target"]:
+        report["validation_passed"] = False
+    return tr
+
+
+def _execute_benchmark_iteration(
+    template: Union[RGBTemplate, MatplotlibTemplate],
+    test_field: np.ndarray,
+    test_agent: Coordinates,
+    test_source: Coordinates,
+    grid: Tuple[int, int],
+) -> Tuple[float, Optional[float]]:
+    try:
+        import psutil  # type: ignore
+
+        process = psutil.Process()
+        mem_before = process.memory_info().rss / 1024 / 1024
+    except ImportError:
+        mem_before = None
+
+    start = time.perf_counter()
+    result = template.render(test_field, test_agent, test_source)
+    elapsed = time.perf_counter() - start
+
+    if isinstance(template, RGBTemplate):
+        if not isinstance(result, np.ndarray):
+            raise ValueError("RGB template must return numpy array")
+        if result.shape != (*grid, 3):
+            raise ValueError(f"Invalid RGB shape: {result.shape}")
+        if result.dtype != RGB_DTYPE:
+            raise ValueError(f"Invalid RGB dtype: {result.dtype}")
+
+    mem_diff = None
+    if mem_before is not None:
+        mem_after = process.memory_info().rss / 1024 / 1024
+        mem_diff = mem_after - mem_before
+
+    return elapsed, mem_diff
+
+
 # TODO Rename this here and in `validate_template_performance`
 def _extracted_from_validate_template_performance_(
     performance_report, all_test_results
@@ -2683,11 +2744,12 @@ def _extracted_from_validate_template_performance_(
     if cv > 0.5:  # More than 50% variation
         strict_failures.append(f"High performance variation (CV={cv:.2f})")
 
-    if large_grid_tests := [
+    large_grid_tests = [
         r
         for r in all_test_results
         if "128x128" in r["grid_size"] and "memory_analysis" in r
-    ]:
+    ]
+    if large_grid_tests:
         avg_memory = np.mean(
             [r["memory_analysis"]["average_memory_mb"] for r in large_grid_tests]
         )

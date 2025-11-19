@@ -32,6 +32,7 @@ from typing import (  # >=3.10 - Type hints and annotations
     Union,
 )
 
+import matplotlib  # >=3.9.0 - Top-level matplotlib package for colormap access
 import matplotlib.cm  # >=3.9.0 - Built-in colormap registry and management
 import matplotlib.colors  # >=3.9.0 - Colormap objects and normalization utilities
 import numpy as np  # >=2.1.0 - RGB array operations, mathematical transformations
@@ -74,11 +75,29 @@ PREDEFINED_SCHEMES = [
     "debug",
 ]
 
+
+def create_default_scheme() -> "ColorScheme":
+    """Return the default ColorScheme used by rendering templates.
+
+    This helper centralizes the mapping from module-level defaults to the
+    ColorScheme data class so that callers such as the RGB and Matplotlib
+    templates can obtain a consistent baseline configuration.
+    """
+
+    return ColorScheme(
+        agent_color=DEFAULT_AGENT_COLOR,
+        source_color=DEFAULT_SOURCE_COLOR,
+        background_color=DEFAULT_BACKGROUND_COLOR,
+        concentration_colormap=DEFAULT_COLORMAP,
+    )
+
+
 # Module exports for external access
 __all__ = [
     "ColorScheme",
     "PredefinedScheme",
     "DEFAULT_COLORMAP",
+    "create_default_scheme",
     "validate_color_scheme",
     "normalize_concentration_to_rgb",
     "apply_agent_marker",
@@ -260,9 +279,12 @@ class ColorScheme:
         self._validate_marker_size(self.agent_marker_size, "agent_marker_size")
         self._validate_marker_size(self.source_marker_size, "source_marker_size")
 
-        # Verify matplotlib colormap availability
+        # Verify matplotlib colormap availability in a version-tolerant way
         try:
-            matplotlib.colormaps[self.concentration_colormap]
+            if hasattr(matplotlib, "colormaps"):
+                _ = matplotlib.colormaps[self.concentration_colormap]
+            else:
+                matplotlib.cm.get_cmap(self.concentration_colormap)
         except (ValueError, KeyError):
             warnings.warn(
                 f"Colormap '{self.concentration_colormap}' not found, falling back to 'gray'"

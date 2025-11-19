@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from plume_nav_sim.cli.capture import _load_hydra_config
+from plume_nav_sim.cli.capture import (
+    _load_hydra_config,
+    _manual_compose_for_data_capture,
+)
 from plume_nav_sim.cli.capture import main as capture_main
 
 
@@ -107,3 +110,34 @@ def test_hydra_cli_malformed_grid_fails(tmp_path: Path):
     ]
     with pytest.raises(SystemExit):
         _ = capture_main(bad_argv)
+
+
+def test_manual_compose_matches_hydra(tmp_path: Path):
+    """Manual data_capture composition should match Hydra's resolved config.
+
+    This protects the behavior of _manual_compose_for_data_capture when
+    resolving mixed-group configs such as data_capture/config.
+    """
+    hydra = pytest.importorskip("hydra")
+    omegaconf = pytest.importorskip("omegaconf")
+
+    import plume_nav_sim as pns
+
+    config_name = "data_capture/config"
+    overrides = ["episodes=3", "env.grid_size=[8,8]", "env.max_steps=5"]
+
+    conf_dir = pns.get_conf_dir()
+    assert conf_dir is not None
+    conf_root = Path(conf_dir)
+
+    manual_cfg = _manual_compose_for_data_capture(
+        config_name=config_name,
+        conf_root=conf_root,
+        overrides=list(overrides),
+    )
+
+    with hydra.initialize_config_dir(version_base=None, config_dir=str(conf_root)):
+        cfg = hydra.compose(config_name=config_name, overrides=overrides)
+        hydra_cfg = omegaconf.OmegaConf.to_container(cfg, resolve=True)
+
+    assert manual_cfg == hydra_cfg
