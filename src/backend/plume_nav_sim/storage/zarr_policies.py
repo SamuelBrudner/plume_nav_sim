@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 import warnings
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 # Public policy constants
 CHUNKS_TYX: Tuple[int, int, int] = (8, 64, 64)

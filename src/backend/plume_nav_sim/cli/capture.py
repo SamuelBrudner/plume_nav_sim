@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import plume_nav_sim as pns
@@ -62,6 +63,120 @@ def _parse_args_and_overrides(
     return args, overrides
 
 
+def _resolve_config_dir(config_path: Optional[str]) -> str:
+    """Resolve the Hydra config directory, defaulting to the repo conf/ tree.
+
+    Uses plume_nav_sim.get_conf_dir() when available, falling back to
+    conf/ relative to this file. This mirrors the previous inline logic
+    in _load_hydra_config.
+    """
+    if config_path:
+        return config_path
+
+    conf_dir = pns.get_conf_dir()
+    if conf_dir is None:
+        conf_dir = Path(__file__).resolve().parents[2] / "conf"
+    return str(conf_dir)
+
+
+def _manual_compose_for_data_capture(
+    config_name: str,
+    conf_root: Path,
+    overrides: List[str],
+) -> dict:
+    """Manual composition for data_capture/config to support mixed group locations.
+
+    This handles the case where data_capture/config.yaml references groups
+    that live at the repository conf/ root (e.g., movie/, env/plume/), while
+    the experiment/ group lives under conf/data_capture/.
+    """
+    from hydra.errors import MissingConfigException
+    from omegaconf import OmegaConf
+
+    # Locate the requested YAML file
+    yaml_path = conf_root.joinpath(*config_name.split("/"))
+    if not yaml_path.suffix:
+        yaml_path = yaml_path.with_suffix(".yaml")
+    if not yaml_path.exists():
+        raise MissingConfigException(
+            missing_cfg_file=str(yaml_path),
+            message=f"Could not find config '{config_name}' for data_capture composition",
+            options=None,
+        )
+
+    base_cfg = OmegaConf.load(yaml_path)
+    defaults = list(base_cfg.get("defaults", []))
+
+    composed = OmegaConf.create()
+
+    for item in defaults:
+        if item == "_self_" or (isinstance(item, dict) and "_self_" in item):
+            # Merge base at the end to mirror Hydra's _self_ behavior
+            composed = OmegaConf.merge(composed, base_cfg)
+            continue
+
+        if isinstance(item, dict):
+            # Only single-key mappings are expected in defaults
+            [(group_key, option)] = list(item.items())
+            # Resolve group file path
+            group_parts = str(group_key).split("/") if group_key else []
+            option_name = str(option)
+
+            # experiment group lives under data_capture/, others at root
+            if group_parts and group_parts[0] == "experiment":
+                group_base = conf_root / "data_capture"
+            else:
+                group_base = conf_root
+
+            group_file = group_base.joinpath(*group_parts) / f"{option_name}.yaml"
+            if not group_file.exists():
+                # If not found under root, attempt under data_capture/ as a fallback
+                alt = (conf_root / "data_capture").joinpath(
+                    *group_parts
+                ) / f"{option_name}.yaml"
+                if alt.exists():
+                    group_file = alt
+                else:
+                    raise MissingConfigException(
+                        missing_cfg_file=str(group_file),
+                        message=(
+                            f"Could not find '{group_key}/{option_name}' "
+                            "for data_capture composition"
+                        ),
+                        options=None,
+                    )
+            part_cfg = OmegaConf.load(group_file)
+            composed = OmegaConf.merge(composed, part_cfg)
+        else:
+            # Unsupported defaults entry format; ignore for now
+            continue
+
+    # Apply CLI overrides as a dotlist
+    if overrides:
+        try:
+            composed = OmegaConf.merge(
+                composed, OmegaConf.from_dotlist(list(overrides))
+            )
+        except Exception:
+            # If dotlist parsing fails, re-raise a helpful error
+            raise SystemExit("Failed to parse Hydra overrides: " + ", ".join(overrides))
+
+    return OmegaConf.to_container(composed, resolve=True)  # type: ignore[arg-type]
+
+
+def _stable_cfg_hash(cfg_resolved: dict) -> str:
+    """Compute a stable hash for a resolved config dictionary."""
+    import json
+    from hashlib import sha256
+
+    cfg_bytes = json.dumps(
+        cfg_resolved,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(cfg_bytes).hexdigest()
+
+
 def _load_hydra_config(
     *,
     config_name: str,
@@ -69,97 +184,13 @@ def _load_hydra_config(
     overrides: List[str],
 ) -> Tuple[dict, str]:
     """Load and resolve Hydra config, returning (as_dict, config_hash)."""
-    # Lazy import to avoid imposing Hydra on basic usage
-    from hashlib import sha256
-    from pathlib import Path
-
     from hydra import compose, initialize_config_dir
     from hydra.errors import MissingConfigException
     from omegaconf import OmegaConf
 
-    # Default config path to repository conf/
-    if not config_path:
-        conf_dir = pns.get_conf_dir()
-        if conf_dir is None:
-            # Fallback: relative to this file
-            conf_dir = Path(__file__).resolve().parents[2] / "conf"
-        config_path = str(conf_dir)
+    config_dir = _resolve_config_dir(config_path)
 
-    def _manual_compose_for_data_capture(conf_root: Path) -> dict:
-        """Manual composition for data_capture/config to support mixed group locations.
-
-        This handles the case where data_capture/config.yaml references groups
-        that live at the repository conf/ root (e.g., movie/, env/plume/), while
-        the experiment/ group lives under conf/data_capture/.
-        """
-        from omegaconf import OmegaConf
-
-        # Locate the requested YAML file
-        yaml_path = conf_root.joinpath(*config_name.split("/"))
-        if not yaml_path.suffix:
-            yaml_path = yaml_path.with_suffix(".yaml")
-        if not yaml_path.exists():
-            raise
-
-        base_cfg = OmegaConf.load(yaml_path)
-        defaults = list(base_cfg.get("defaults", []))
-
-        composed = OmegaConf.create()
-
-        for item in defaults:
-            if item == "_self_" or (isinstance(item, dict) and "_self_" in item):
-                # Merge base at the end to mirror Hydra's _self_ behavior
-                composed = OmegaConf.merge(composed, base_cfg)
-                continue
-
-            if isinstance(item, dict):
-                # Only single-key mappings are expected in defaults
-                [(group_key, option)] = list(item.items())
-                # Resolve group file path
-                group_parts = str(group_key).split("/") if group_key else []
-                option_name = str(option)
-
-                # experiment group lives under data_capture/, others at root
-                if group_parts and group_parts[0] == "experiment":
-                    group_base = conf_root / "data_capture"
-                else:
-                    group_base = conf_root
-
-                group_file = group_base.joinpath(*group_parts) / f"{option_name}.yaml"
-                if not group_file.exists():
-                    # If not found under root, attempt under data_capture/ as a fallback
-                    alt = (conf_root / "data_capture").joinpath(
-                        *group_parts
-                    ) / f"{option_name}.yaml"
-                    if alt.exists():
-                        group_file = alt
-                    else:
-                        raise MissingConfigException(
-                            missing_cfg_file=str(group_file),
-                            message=f"Could not find '{group_key}/{option_name}' for data_capture composition",
-                            options=None,
-                        )
-                part_cfg = OmegaConf.load(group_file)
-                composed = OmegaConf.merge(composed, part_cfg)
-            else:
-                # Unsupported defaults entry format
-                continue
-
-        # Apply CLI overrides as a dotlist
-        if overrides:
-            try:
-                composed = OmegaConf.merge(
-                    composed, OmegaConf.from_dotlist(list(overrides))
-                )
-            except Exception:
-                # If dotlist parsing fails, re-raise a helpful error
-                raise SystemExit(
-                    "Failed to parse Hydra overrides: " + ", ".join(overrides)
-                )
-
-        return OmegaConf.to_container(composed, resolve=True)  # type: ignore[arg-type]
-
-    with initialize_config_dir(version_base=None, config_dir=config_path):
+    with initialize_config_dir(version_base=None, config_dir=config_dir):
         try:
             cfg = compose(config_name=config_name, overrides=overrides or [])
             cfg_resolved = OmegaConf.to_container(cfg, resolve=True)  # type: ignore[arg-type]
@@ -167,14 +198,13 @@ def _load_hydra_config(
             # Fallback: manually compose known data_capture config against repo conf/
             # This preserves CLI overrides and enables tests/CI to run regardless of
             # relative-default quirks in nested config directories.
-            cfg_resolved = _manual_compose_for_data_capture(Path(config_path))
-    # Stable hash of resolved config JSON
-    import json
+            cfg_resolved = _manual_compose_for_data_capture(
+                config_name=config_name,
+                conf_root=Path(config_dir),
+                overrides=overrides or [],
+            )
 
-    cfg_bytes = json.dumps(cfg_resolved, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    cfg_hash = sha256(cfg_bytes).hexdigest()
+    cfg_hash = _stable_cfg_hash(cfg_resolved)
     return cfg_resolved, cfg_hash
 
 

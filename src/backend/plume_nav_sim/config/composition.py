@@ -261,44 +261,51 @@ def _import_attr_for_wrapper(dotted: str) -> Any:
     return getattr(mod, attr)
 
 
+def _add_if_not_none(
+    kwargs: dict[str, Any], key: str, value: Any, transform=None
+) -> None:
+    if value is None:
+        return
+    kwargs[key] = transform(value) if transform is not None else value
+
+
 def build_env(spec: SimulationSpec):
     """Construct an environment from SimulationSpec using pns.make_env.
 
     Only forwards parameters explicitly set in the spec; others use defaults.
     """
     kwargs: dict[str, Any] = {}
-    if spec.grid_size is not None:
-        kwargs["grid_size"] = tuple(spec.grid_size)
-    if spec.source_location is not None:
-        kwargs["source_location"] = tuple(spec.source_location)
-    if spec.start_location is not None:
-        kwargs["start_location"] = tuple(spec.start_location)
-    if spec.goal_radius is not None:
-        kwargs["goal_radius"] = float(spec.goal_radius)
-    if spec.plume_sigma is not None:
-        kwargs["plume_sigma"] = float(spec.plume_sigma)
-    if spec.max_steps is not None:
-        kwargs["max_steps"] = int(spec.max_steps)
-    if spec.action_type is not None:
-        kwargs["action_type"] = spec.action_type
-    if spec.observation_type is not None:
-        kwargs["observation_type"] = spec.observation_type
-    if spec.reward_type is not None:
-        kwargs["reward_type"] = spec.reward_type
-    if spec.plume is not None:
-        kwargs["plume"] = spec.plume
-    if spec.movie_path is not None:
-        kwargs["movie_path"] = spec.movie_path
-    if spec.movie_fps is not None:
-        kwargs["movie_fps"] = float(spec.movie_fps)
-    if spec.movie_pixel_to_grid is not None:
-        kwargs["movie_pixel_to_grid"] = tuple(spec.movie_pixel_to_grid)
-    if spec.movie_origin is not None:
-        kwargs["movie_origin"] = tuple(spec.movie_origin)
-    if spec.movie_extent is not None:
-        kwargs["movie_extent"] = tuple(spec.movie_extent)
-    if spec.movie_step_policy is not None:
-        kwargs["movie_step_policy"] = spec.movie_step_policy
+    _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
+    _add_if_not_none(kwargs, "source_location", spec.source_location, tuple)
+    _add_if_not_none(kwargs, "start_location", spec.start_location, tuple)
+    _add_if_not_none(kwargs, "goal_radius", spec.goal_radius, float)
+    _add_if_not_none(kwargs, "plume_sigma", spec.plume_sigma, float)
+    _add_if_not_none(kwargs, "max_steps", spec.max_steps, int)
+    _add_if_not_none(kwargs, "action_type", spec.action_type)
+    _add_if_not_none(kwargs, "observation_type", spec.observation_type)
+    _add_if_not_none(kwargs, "reward_type", spec.reward_type)
+    _add_if_not_none(kwargs, "plume", spec.plume)
+    _add_if_not_none(kwargs, "movie_path", spec.movie_path)
+    _add_if_not_none(kwargs, "movie_fps", spec.movie_fps, float)
+    _add_if_not_none(
+        kwargs,
+        "movie_pixel_to_grid",
+        spec.movie_pixel_to_grid,
+        lambda v: tuple(v),
+    )
+    _add_if_not_none(
+        kwargs,
+        "movie_origin",
+        spec.movie_origin,
+        lambda v: tuple(v),
+    )
+    _add_if_not_none(
+        kwargs,
+        "movie_extent",
+        spec.movie_extent,
+        lambda v: tuple(v),
+    )
+    _add_if_not_none(kwargs, "movie_step_policy", spec.movie_step_policy)
     kwargs["render_mode"] = "rgb_array" if spec.render else None
 
     return pns.make_env(**kwargs)

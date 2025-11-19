@@ -408,16 +408,45 @@ class EpisodeManagerConfig:
             # Add custom component parameters from component_configs if specified
             for component_name, custom_config in self.component_configs.items():
                 if not isinstance(custom_config, dict):
-                    continue
+                    raise ValidationError(
+                        message=(
+                            "Custom component configuration overrides must be provided as "
+                            "dictionaries of field names to values"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=type(custom_config).__name__,
+                        expected_format=(
+                            "dict mapping component names to dicts of dataclass field overrides"
+                        ),
+                    )
 
-                target_config = component_configs.get(component_name)
+                target_config = component_configs.get(
+                    component_name
+                ) or component_configs.get(str(component_name).lower())
+
                 if target_config is None:
-                    target_config = component_configs.get(component_name.lower())
+                    raise ValidationError(
+                        message=(
+                            f"Unknown component configuration override: {component_name}"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=str(component_name),
+                        expected_format=(
+                            "known component names such as 'state_manager', "
+                            "'reward_calculator', or 'action_processor'"
+                        ),
+                    )
 
-                if target_config is None or not hasattr(
-                    target_config, "__dataclass_fields__"
-                ):
-                    continue
+                if not hasattr(target_config, "__dataclass_fields__"):
+                    raise ValidationError(
+                        message=(
+                            f"Target configuration for component '{component_name}' is not a "
+                            "dataclass-based config"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=type(target_config).__name__,
+                        expected_format="dataclass-based component configuration object",
+                    )
 
                 for key, value in custom_config.items():
                     if hasattr(target_config, key):
@@ -610,6 +639,9 @@ class EpisodeManagerConfig:
             # Return new EpisodeManagerConfig instance with overrides applied and validation completed
             return cloned_config
 
+        except ValidationError:
+            # Surface configuration validation issues directly to the caller
+            raise
         except Exception as e:
             raise ComponentError(
                 message=f"Failed to clone episode manager configuration: {str(e)}",
@@ -1313,11 +1345,15 @@ class EpisodeManager:
                 f"EpisodeManager initialized successfully with {len(component_configs)} components"
             )
 
+        except (ValidationError, StateError, ComponentError, ResourceError):
+            # Preserve structured plume_nav_sim exceptions for callers handling
+            raise
         except Exception as e:
             raise ComponentError(
                 message=f"EpisodeManager initialization failed: {str(e)}",
                 component_name="EpisodeManager",
                 operation_name="__init__",
+                underlying_error=e,
             ) from e
 
     def _validate_component_integration(self) -> None:
@@ -2102,6 +2138,9 @@ def create_episode_manager(
         # Return fully configured EpisodeManager ready for Gymnasium environment episode orchestration
         return episode_manager
 
+    except ValidationError:
+        # Surface configuration validation issues directly to the caller
+        raise
     except Exception as e:
         raise ComponentError(
             message=f"EpisodeManager creation failed: {str(e)}",

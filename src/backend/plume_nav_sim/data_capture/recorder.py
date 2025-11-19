@@ -160,139 +160,148 @@ class RunRecorder:
         - validation report from validate_run_artifacts
         - file inventory (names, sizes if accessible)
         """
-        import hashlib
         import json
-        import subprocess
 
-        manifest: Dict[str, Any] = {}
-
-        def _read_run_meta() -> Dict[str, Any]:
-            try:
-                with open(self._meta_path, "r", encoding="utf-8") as fh:
-                    return json.load(fh)
-            except Exception:
-                return {}
-
-        def _git_sha() -> Optional[str]:
-            try:
-                return (
-                    subprocess.check_output(
-                        ["git", "rev-parse", "HEAD"],
-                        cwd=str(self.root.parent.parent),
-                    )
-                    .decode("utf-8")
-                    .strip()
-                )
-            except Exception:
-                return None
-
-        def _package_version(run_meta: Dict[str, Any]) -> Optional[str]:
-            pkg_version = run_meta.get("package_version")
-            if pkg_version:
-                return str(pkg_version)
-            try:
-                import importlib.metadata as _im
-
-                return _im.version("plume_nav_sim")
-            except Exception:
-                return None
-
-        def _config_hash(env_cfg: Any) -> Optional[str]:
-            if env_cfg is None:
-                return None
-            try:
-                cfg_bytes = json.dumps(
-                    env_cfg, sort_keys=True, separators=(",", ":")
-                ).encode("utf-8")
-                return hashlib.sha256(cfg_bytes).hexdigest()
-            except Exception:
-                return None
-
-        def _file_inventory() -> list[Dict[str, Any]]:
-            def _file_info(name: str) -> Dict[str, Any]:
-                p = self.root / name
-                try:
-                    st = p.stat()
-                    return {"path": name, "bytes": int(st.st_size)}
-                except Exception:
-                    return {"path": name, "bytes": None}
-
-            files: list[Dict[str, Any]] = []
-            for fname in (
-                "run.json",
-                "steps.jsonl.gz",
-                "episodes.jsonl.gz",
-                "steps.parquet",
-                "episodes.parquet",
-            ):
-                if (self.root / fname).exists():
-                    files.append(_file_info(fname))
-            return files
-
-        def _seed_summary() -> Dict[str, Any]:
-            try:
-                import gzip as _gzip
-                import json as _json
-
-                seeds: set[int] = set()
-                jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
-                base = self.root / "steps.jsonl.gz"
-                if base.exists():
-                    jsonl_paths.insert(0, base)
-                for p in jsonl_paths:
-                    with _gzip.open(p, "rt", encoding="utf-8") as fh:
-                        for line in fh:
-                            if not line.strip():
-                                continue
-                            try:
-                                obj = _json.loads(line)
-                                seed = obj.get("seed")
-                                if seed is not None:
-                                    seeds.add(int(seed))
-                            except Exception:
-                                continue
-                if seeds:
-                    return {
-                        "unique_count": len(seeds),
-                        "min": min(seeds),
-                        "max": max(seeds),
-                    }
-            except Exception:
-                pass
-            return {}
-
-        run_meta = _read_run_meta()
-        git_sha = _git_sha()
-        pkg_version = _package_version(run_meta)
-        env_cfg = run_meta.get("env_config")
-        cfg_hash = _config_hash(env_cfg)
-
-        try:
-            report = validate_run_artifacts(self.root)
-        except Exception as e:
-            report = {"error": str(e)}
-
-        schema_version = None
-        try:
-            schema_version = run_meta.get("schema_version")
-        except Exception:
-            schema_version = None
-
-        manifest.update(
-            {
-                "run_id": self.run_id,
-                "experiment": self.experiment,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "git_sha": git_sha,
-                "package_version": pkg_version,
-                "schema_version": schema_version,
-                "config_hash": cfg_hash,
-                "env_config": env_cfg,
-                "validation": report,
-                "files": _file_inventory(),
-                "seed_summary": _seed_summary(),
-            }
-        )
+        manifest = self._build_manifest_payload()
 
         with open(self.root / "manifest.json", "w", encoding="utf-8") as fh:
             json.dump(manifest, fh, indent=2, ensure_ascii=False)
+
+    def _read_run_meta(self) -> Dict[str, Any]:
+        import json
+
+        try:
+            with open(self._meta_path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            return {}
+
+    def _git_sha(self) -> Optional[str]:
+        import subprocess
+
+        try:
+            return (
+                subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=str(self.root.parent.parent),
+                )
+                .decode("utf-8")
+                .strip()
+            )
+        except Exception:
+            return None
+
+    def _package_version(self, run_meta: Dict[str, Any]) -> Optional[str]:
+        pkg_version = run_meta.get("package_version")
+        if pkg_version:
+            return str(pkg_version)
+        try:
+            import importlib.metadata as _im
+
+            return _im.version("plume_nav_sim")
+        except Exception:
+            return None
+
+    def _config_hash(self, env_cfg: Any) -> Optional[str]:
+        import hashlib
+        import json
+
+        if env_cfg is None:
+            return None
+        try:
+            cfg_bytes = json.dumps(
+                env_cfg, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            return hashlib.sha256(cfg_bytes).hexdigest()
+        except Exception:
+            return None
+
+    def _file_inventory(self) -> list[Dict[str, Any]]:
+        def _file_info(name: str) -> Dict[str, Any]:
+            p = self.root / name
+            try:
+                st = p.stat()
+                return {"path": name, "bytes": int(st.st_size)}
+            except Exception:
+                return {"path": name, "bytes": None}
+
+        files: list[Dict[str, Any]] = []
+        for fname in (
+            "run.json",
+            "steps.jsonl.gz",
+            "episodes.jsonl.gz",
+            "steps.parquet",
+            "episodes.parquet",
+        ):
+            if (self.root / fname).exists():
+                files.append(_file_info(fname))
+        return files
+
+    def _seed_summary(self) -> Dict[str, Any]:
+        try:
+            import gzip as _gzip
+            import json as _json
+
+            seeds: set[int] = set()
+            jsonl_paths = sorted(self.root.glob("steps.part*.jsonl.gz"))
+            base = self.root / "steps.jsonl.gz"
+            if base.exists():
+                jsonl_paths.insert(0, base)
+            for p in jsonl_paths:
+                with _gzip.open(p, "rt", encoding="utf-8") as fh:
+                    for line in fh:
+                        if not line.strip():
+                            continue
+                        try:
+                            obj = _json.loads(line)
+                            seed = obj.get("seed")
+                            if seed is not None:
+                                seeds.add(int(seed))
+                        except Exception:
+                            continue
+            if seeds:
+                return {
+                    "unique_count": len(seeds),
+                    "min": min(seeds),
+                    "max": max(seeds),
+                }
+        except Exception:
+            pass
+        return {}
+
+    def _build_validation_report(self) -> Dict[str, Any]:
+        try:
+            return validate_run_artifacts(self.root)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _schema_version(self, run_meta: Dict[str, Any]) -> Optional[str]:
+        try:
+            return run_meta.get("schema_version")
+        except Exception:
+            return None
+
+    def _build_manifest_payload(self) -> Dict[str, Any]:
+        run_meta = self._read_run_meta()
+        git_sha = self._git_sha()
+        pkg_version = self._package_version(run_meta)
+        env_cfg = run_meta.get("env_config")
+        cfg_hash = self._config_hash(env_cfg)
+        report = self._build_validation_report()
+        schema_version = self._schema_version(run_meta)
+
+        manifest: Dict[str, Any] = {
+            "run_id": self.run_id,
+            "experiment": self.experiment,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "git_sha": git_sha,
+            "package_version": pkg_version,
+            "schema_version": schema_version,
+            "config_hash": cfg_hash,
+            "env_config": env_cfg,
+            "validation": report,
+            "files": self._file_inventory(),
+            "seed_summary": self._seed_summary(),
+        }
+
+        return manifest

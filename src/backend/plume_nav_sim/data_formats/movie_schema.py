@@ -14,7 +14,7 @@ Notes
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence, Tuple
 
 from ..utils.exceptions import ValidationError
 
@@ -68,35 +68,46 @@ def _coerce_pixel_to_grid(value: Any) -> Tuple[float, float]:
 def _require_attr(attrs: Mapping[str, Any], key: str, expected: str) -> Any:
     if key not in attrs:
         raise ValidationError(f"Missing required attribute: {key}", parameter_name=key)
+
     val = attrs[key]
-    # Simple type checks where helpful
-    if key == ATTR_FPS:
+
+    def _validate_fps(v: Any) -> float:
         try:
-            fps = float(val)
+            fps_val = float(v)
         except Exception as exc:
             raise ValidationError("fps must be numeric") from exc
-        if fps <= 0:
+        if fps_val <= 0:
             raise ValidationError("fps must be positive")
-        return fps
-    if key == ATTR_ORIGIN:
-        if not isinstance(val, str) or val.lower() not in {"lower", "upper"}:
+        return fps_val
+
+    def _validate_origin(v: Any) -> str:
+        if not isinstance(v, str) or v.lower() not in {"lower", "upper"}:
             raise ValidationError('origin must be "lower" or "upper"')
-        return val.lower()
-    if key == ATTR_EXTENT:
-        if not isinstance(val, Sequence) or len(val) != 4:
+        return v.lower()
+
+    def _validate_extent(v: Any) -> Tuple[float, float, float, float]:
+        if not isinstance(v, Sequence) or len(v) != 4:
             raise ValidationError("extent must be a 4-length sequence [x0,x1,y0,y1]")
         try:
             x0, x1, y0, y1 = (
-                float(val[0]),
-                float(val[1]),
-                float(val[2]),
-                float(val[3]),
+                float(v[0]),
+                float(v[1]),
+                float(v[2]),
+                float(v[3]),
             )
         except Exception as exc:  # pragma: no cover - defensive
             raise ValidationError("extent entries must be numeric") from exc
         return (x0, x1, y0, y1)
-    if key == ATTR_PIXEL_TO_GRID:
-        return _coerce_pixel_to_grid(val)
+
+    validators: Mapping[str, Callable[[Any], Any]] = {
+        ATTR_FPS: _validate_fps,
+        ATTR_ORIGIN: _validate_origin,
+        ATTR_EXTENT: _validate_extent,
+        ATTR_PIXEL_TO_GRID: _coerce_pixel_to_grid,
+    }
+
+    if key in validators:
+        return validators[key](val)
     # Default: return as-is
     return val
 

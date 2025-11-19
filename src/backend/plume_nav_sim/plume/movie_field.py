@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 

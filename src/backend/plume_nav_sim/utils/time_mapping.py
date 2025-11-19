@@ -147,6 +147,65 @@ class FrameSelectorConfig:
     policy: FrameMappingPolicy = DEFAULT_FRAME_MAPPING_POLICY
 
 
+def _validate_step_and_total_frames(step: int, total_frames: Optional[int]) -> None:
+    if step < 0:
+        raise ValueError("step must be non-negative")
+    if total_frames is not None and total_frames <= 0:
+        raise ValueError("total_frames must be positive when provided")
+
+
+def _compute_floating_index(
+    step: int,
+    fps_val: float,
+    steps_per_second: Optional[float],
+    offset_frames: float,
+) -> float:
+    if steps_per_second is not None:
+        if steps_per_second <= 0:
+            raise ValueError("steps_per_second must be positive when provided")
+        return (step * fps_val) / steps_per_second + offset_frames
+    return step + offset_frames
+
+
+def _round_index(f_float: float, rounding: str) -> int:
+    if rounding == "nearest":
+        return _round_half_up(f_float)
+    if rounding == "floor":
+        return int(math.floor(f_float))
+    if rounding == "ceil":
+        return int(math.ceil(f_float))
+    raise ValueError("rounding must be one of: 'nearest', 'floor', 'ceil'")
+
+
+def _ensure_non_negative(idx: int) -> int:
+    if idx < 0:
+        return 0
+    return idx
+
+
+def _apply_frame_policy(
+    idx: int,
+    total_frames: Optional[int],
+    policy: FrameMappingPolicy,
+) -> int:
+    if total_frames is None:
+        return idx
+
+    if policy == FrameMappingPolicy.INDEX:
+        if idx < 0 or idx >= total_frames:
+            raise IndexError(
+                f"Frame index {idx} out of range for total_frames={total_frames}"
+            )
+        return idx
+    if policy == FrameMappingPolicy.CLAMP:
+        return max(0, min(idx, total_frames - 1))
+    if policy == FrameMappingPolicy.WRAP:
+        # Modulo wrap for any idx; total_frames > 0 validated above
+        return idx % total_frames
+    else:  # pragma: no cover - defensive path
+        raise ValueError(f"Unknown policy: {policy}")
+
+
 def map_step_to_frame(
     step: int,
     *,
@@ -188,49 +247,25 @@ def map_step_to_frame(
         Selected frame index (0-based).
     """
 
-    if step < 0:
-        raise ValueError("step must be non-negative")
-    if total_frames is not None and total_frames <= 0:
-        raise ValueError("total_frames must be positive when provided")
+    _validate_step_and_total_frames(step, total_frames)
 
     fps_val = resolve_fps(fps=fps, timebase=timebase)
+    f_float = _compute_floating_index(
+        step=step,
+        fps_val=fps_val,
+        steps_per_second=steps_per_second,
+        offset_frames=offset_frames,
+    )
+    idx = _round_index(f_float, rounding)
 
-    if steps_per_second is not None:
-        if steps_per_second <= 0:
-            raise ValueError("steps_per_second must be positive when provided")
-        f_float = (step * fps_val) / steps_per_second + offset_frames
-    else:
-        f_float = step + offset_frames
-
-    if rounding == "nearest":
-        idx = _round_half_up(f_float)
-    elif rounding == "floor":
-        idx = int(math.floor(f_float))
-    elif rounding == "ceil":
-        idx = int(math.ceil(f_float))
-    else:
-        raise ValueError("rounding must be one of: 'nearest', 'floor', 'ceil'")
-
-    if idx < 0:
-        # Maintain non-negativity post rounding
-        idx = 0
-
+    # When total_frames is not known, we clamp negative indices to zero to
+    # avoid surprising negative frame indices. When total_frames is known,
+    # the policy is responsible for handling out-of-range indices, including
+    # negative values.
     if total_frames is None:
-        return idx
+        idx = _ensure_non_negative(idx)
 
-    if policy == FrameMappingPolicy.INDEX:
-        if idx >= total_frames:
-            raise IndexError(
-                f"Frame index {idx} out of range for total_frames={total_frames}"
-            )
-        return idx
-    elif policy == FrameMappingPolicy.CLAMP:
-        return max(0, min(idx, total_frames - 1))
-    elif policy == FrameMappingPolicy.WRAP:
-        # Modulo wrap for any idx; total_frames > 0 validated above
-        return idx % total_frames
-    else:  # pragma: no cover - defensive path
-        raise ValueError(f"Unknown policy: {policy}")
+    return _apply_frame_policy(idx, total_frames, policy)
 
 
 __all__ = [

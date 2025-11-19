@@ -270,66 +270,65 @@ class TemplateConfig:
         Validates template configuration completeness, consistency, and performance
         feasibility with detailed error reporting.
         """
-        validation_errors = []
+        errors: List[str] = []
 
-        # Validate grid_size dimensions and reasonable limits
+        self._validate_grid_ranges(errors)
+        self._validate_color_scheme(errors)
+        self._validate_marker_config(errors)
+        self._validate_performance_options(errors)
+
+        if strict_mode:
+            self._strict_validation(errors)
+
+        return (len(errors) == 0), errors
+
+    # --- TemplateConfig validation helpers (reduce complexity of validate) ---
+    def _validate_grid_ranges(self, errors: List[str]) -> None:
         if not (8 <= self.grid_size.width <= 2048):
-            validation_errors.append(
+            errors.append(
                 f"Grid width {self.grid_size.width} outside reasonable range [8, 2048]"
             )
-
         if not (8 <= self.grid_size.height <= 2048):
-            validation_errors.append(
+            errors.append(
                 f"Grid height {self.grid_size.height} outside reasonable range [8, 2048]"
             )
 
-        # Validate color_scheme if provided
-        if self.color_scheme is not None:
-            try:
-                # Test colormap availability
-                self.color_scheme.get_concentration_colormap()
-            except Exception as e:
-                validation_errors.append(f"Color scheme validation failed: {e}")
+    def _validate_color_scheme(self, errors: List[str]) -> None:
+        if self.color_scheme is None:
+            return
+        try:
+            self.color_scheme.get_concentration_colormap()
+        except Exception as e:
+            errors.append(f"Color scheme validation failed: {e}")
 
-        # Check marker_config parameters
+    def _validate_marker_config(self, errors: List[str]) -> None:
         agent_size = self.marker_config.get("agent_size", (3, 3))
         if not isinstance(agent_size, (tuple, list)) or len(agent_size) != 2:
-            validation_errors.append("Agent marker size must be (width, height) tuple")
+            errors.append("Agent marker size must be (width, height) tuple")
 
-        # Validate performance_options consistency
+    def _validate_performance_options(self, errors: List[str]) -> None:
         if (
             self.performance_options.get("enable_caching", True)
             and not self.caching_enabled
         ):
-            validation_errors.append(
-                "Performance caching enabled but template caching disabled"
+            errors.append("Performance caching enabled but template caching disabled")
+
+    def _strict_validation(self, errors: List[str]) -> None:
+        memory_estimate = (self.grid_size.width * self.grid_size.height * 4) / (
+            1024 * 1024
+        )  # MB
+        if memory_estimate > 100:
+            errors.append(
+                f"Estimated memory usage {memory_estimate:.1f}MB exceeds strict limit"
             )
 
-        # Apply strict validation if requested
-        if strict_mode:
-            # Check memory requirements
-            memory_estimate = (self.grid_size.width * self.grid_size.height * 4) / (
-                1024 * 1024
-            )  # MB
-            if memory_estimate > 100:
-                validation_errors.append(
-                    f"Estimated memory usage {memory_estimate:.1f}MB exceeds strict limit"
-                )
+        preferred_backend = self.backend_preferences.get("preferred_backend")
+        with contextlib.suppress(Exception):
+            import matplotlib
 
-            # Validate backend availability
-            preferred_backend = self.backend_preferences.get("preferred_backend")
-            with contextlib.suppress(Exception):
-                import matplotlib
-
-                available_backends = (
-                    matplotlib.backend_bases.Backend._backend_map.keys()
-                )
-                if preferred_backend not in available_backends:
-                    validation_errors.append(
-                        f"Preferred backend '{preferred_backend}' not available"
-                    )
-        is_valid = not validation_errors
-        return is_valid, validation_errors
+            available_backends = matplotlib.backend_bases.Backend._backend_map.keys()
+            if preferred_backend not in available_backends:
+                errors.append(f"Preferred backend '{preferred_backend}' not available")
 
     def optimize_for_system(self, system_info: Dict[str, Any]) -> "TemplateConfig":
         """
@@ -1055,119 +1054,125 @@ class RGBTemplate(BaseRenderTemplate):
         Validates RGB template performance against <5ms generation target with
         comprehensive analysis.
         """
-        # Override target time for RGB template (5ms target)
         rgb_target_ms = PERFORMANCE_TARGET_RGB_RENDER_MS
-        performance_analysis = {
+
+        analysis = {
             "meets_target": True,
             "target_violations": [],
             "performance_data": {},
             "optimization_recommendations": [],
         }
 
-        test_results = []
+        results = self._rgb_collect_test_results(
+            test_scenarios, rgb_target_ms, analysis
+        )
+        successful = [r for r in results if r.get("success")] if results else []
 
+        if successful:
+            analysis["performance_data"] = self._rgb_performance_summary(
+                successful, len(results)
+            )
+
+            if not analysis["meets_target"]:
+                analysis["optimization_recommendations"] = self._rgb_recommendations(
+                    successful, rgb_target_ms
+                )
+
+        return analysis["meets_target"], analysis
+
+    # --- RGBTemplate performance helpers ---
+    def _rgb_collect_test_results(
+        self,
+        test_scenarios: Dict[str, Any],
+        rgb_target_ms: float,
+        analysis: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
         for scenario_name, scenario_config in test_scenarios.items():
-            # Create test data with various grid sizes
             grid_sizes = scenario_config.get("grid_sizes", [(64, 64), (128, 128)])
+            for grid in grid_sizes:
+                test_field = np.random.rand(*grid).astype(np.float32)
+                test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
+                test_source = Coordinates(grid[1] // 4, grid[0] // 4)
 
-            for grid_size in grid_sizes:
-                test_field = np.random.rand(*grid_size).astype(np.float32)
-                test_agent = Coordinates(grid_size[1] // 2, grid_size[0] // 2)
-                test_source = Coordinates(grid_size[1] // 4, grid_size[0] // 4)
-
-                # Multiple timing measurements for accuracy
-                render_times = []
+                timings: List[float] = []
                 for _ in range(10):
-                    start_time = time.perf_counter()
+                    start = time.perf_counter()
                     try:
                         result = self.render(test_field, test_agent, test_source)
-                        render_time = time.perf_counter() - start_time
-                        render_times.append(render_time)
+                        elapsed = time.perf_counter() - start
+                        timings.append(elapsed)
 
-                        # Validate result format
                         if not isinstance(result, np.ndarray):
                             raise ValueError("RGB template must return numpy array")
-                        if result.shape != (*grid_size, 3):
+                        if result.shape != (*grid, 3):
                             raise ValueError(f"Invalid RGB array shape: {result.shape}")
                         if result.dtype != RGB_DTYPE:
                             raise ValueError(f"Invalid RGB array dtype: {result.dtype}")
-
                     except Exception as e:
-                        test_results.append(
+                        results.append(
                             {
-                                "scenario": f"{scenario_name}_{grid_size[0]}x{grid_size[1]}",
+                                "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
                                 "success": False,
                                 "error": str(e),
                             }
                         )
                         break
 
-                if render_times:
-                    avg_time = np.mean(render_times)
-                    max_time = np.max(render_times)
-
-                    meets_target = avg_time <= (rgb_target_ms / 1000.0)
-
-                    test_results.append(
+                if timings:
+                    avg = np.mean(timings)
+                    mx = np.max(timings)
+                    meets = avg <= (rgb_target_ms / 1000.0)
+                    results.append(
                         {
-                            "scenario": f"{scenario_name}_{grid_size[0]}x{grid_size[1]}",
+                            "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
                             "success": True,
-                            "avg_render_time_ms": avg_time * 1000,
-                            "max_render_time_ms": max_time * 1000,
-                            "meets_target": meets_target,
+                            "avg_render_time_ms": avg * 1000,
+                            "max_render_time_ms": mx * 1000,
+                            "meets_target": meets,
                         }
                     )
-
-                    if not meets_target:
-                        performance_analysis["meets_target"] = False
-                        performance_analysis["target_violations"].append(
+                    if not meets:
+                        analysis["meets_target"] = False
+                        analysis["target_violations"].append(
                             {
-                                "scenario": f"{scenario_name}_{grid_size[0]}x{grid_size[1]}",
-                                "actual_time_ms": avg_time * 1000,
+                                "scenario": f"{scenario_name}_{grid[0]}x{grid[1]}",
+                                "actual_time_ms": avg * 1000,
                                 "target_time_ms": rgb_target_ms,
-                                "excess_time_ms": (avg_time * 1000) - rgb_target_ms,
+                                "excess_time_ms": (avg * 1000) - rgb_target_ms,
                             }
                         )
+        return results
 
-        if successful_tests := [r for r in test_results if r["success"]]:
-            all_times = [r["avg_render_time_ms"] for r in successful_tests]
-            performance_analysis["performance_data"] = {
-                "overall_average_ms": np.mean(all_times),
-                "overall_max_ms": np.max(all_times),
-                "success_rate": len(successful_tests) / len(test_results),
-                "target_compliance_rate": sum(
-                    bool(r["meets_target"]) for r in successful_tests
-                )
-                / len(successful_tests),
-            }
+    def _rgb_performance_summary(
+        self, successful: List[Dict[str, Any]], total_count: int
+    ) -> Dict[str, Any]:
+        times = [r["avg_render_time_ms"] for r in successful]
+        return {
+            "overall_average_ms": float(np.mean(times)),
+            "overall_max_ms": float(np.max(times)),
+            "success_rate": len(successful) / total_count if total_count else 0.0,
+            "target_compliance_rate": sum(bool(r["meets_target"]) for r in successful)
+            / len(successful),
+        }
 
-            # Generate optimization recommendations
-            if not performance_analysis["meets_target"]:
-                recommendations = [
-                    "Enable template caching to reduce repeated computation",
-                    "Use ULTRA_FAST or FAST quality levels for maximum performance",
-                    "Enable vectorized operations in performance options",
-                    "Consider reducing marker sizes for faster rendering",
-                ]
-
-                # Add memory-specific recommendations for large grids
-                large_grid_tests = [
-                    r
-                    for r in successful_tests
-                    if "128x128" in r["scenario"] or "256x256" in r["scenario"]
-                ]
-                if (
-                    large_grid_tests
-                    and np.mean([r["avg_render_time_ms"] for r in large_grid_tests])
-                    > rgb_target_ms
-                ):
-                    recommendations.append(
-                        "Consider grid size optimization for large environments"
-                    )
-
-                performance_analysis["optimization_recommendations"] = recommendations
-
-        return performance_analysis["meets_target"], performance_analysis
+    def _rgb_recommendations(
+        self, successful: List[Dict[str, Any]], rgb_target_ms: float
+    ) -> List[str]:
+        recs = [
+            "Enable template caching to reduce repeated computation",
+            "Use ULTRA_FAST or FAST quality levels for maximum performance",
+            "Enable vectorized operations in performance options",
+            "Consider reducing marker sizes for faster rendering",
+        ]
+        large = [
+            r
+            for r in successful
+            if "128x128" in r["scenario"] or "256x256" in r["scenario"]
+        ]
+        if large and np.mean([r["avg_render_time_ms"] for r in large]) > rgb_target_ms:
+            recs.append("Consider grid size optimization for large environments")
+        return recs
 
 
 class MatplotlibTemplate(BaseRenderTemplate):
@@ -1885,44 +1890,18 @@ def create_custom_template(
     user-defined configurations, validation, and performance optimization for
     specialized visualization requirements.
     """
-    # Validate template_type against supported types
-    supported_types = ["rgb", "matplotlib", "hybrid"]
-    if template_type not in supported_types:
-        raise ValueError(
-            f"Template type '{template_type}' not supported. Use one of: {supported_types}"
-        )
-
-    # Parse and validate TemplateConfig for consistency
-    is_valid, validation_errors = config.validate(strict_mode=True)
-    if not is_valid:
-        raise ValueError(f"Invalid template configuration: {validation_errors}")
-
-    # Apply custom_parameters with validation against template type requirements
+    # Validate inputs and apply custom parameters
+    _validate_template_type(template_type)
+    _validate_template_config(config)
     if custom_parameters:
         _validate_custom_parameters(template_type, custom_parameters)
         config.custom_parameters.update(custom_parameters)
 
-    # Create template instance using appropriate factory based on template_type
-    if template_type == "hybrid":
-        # Hybrid template implementation - for future extension
-        raise NotImplementedError(
-            "Hybrid templates not implemented in proof-of-life version"
-        )
-    elif template_type == "matplotlib":
-        template = MatplotlibTemplate(config)
-    elif template_type == "rgb":
-        template = RGBTemplate(config)
-    else:
-        raise ValueError(f"Unknown template type: {template_type}")
+    # Instantiate and initialize
+    template = _instantiate_template_from_type(config, template_type)
+    _initialize_or_raise(template, template_type)
 
-    # Apply custom configuration and specialized settings
-    try:
-        if not template.initialize():
-            raise RuntimeError(f"Custom {template_type} template initialization failed")
-    except Exception as e:
-        raise RuntimeError(f"Custom template creation failed: {e}") from e
-
-    # Perform performance validation if requested
+    # Optional performance validation
     if validate_performance:
         test_scenarios = {
             "basic_test": {"grid_sizes": [(32, 32), (64, 64)]},
@@ -1930,22 +1909,55 @@ def create_custom_template(
                 "grid_sizes": [(config.grid_size.width, config.grid_size.height)]
             },
         }
-
-        meets_targets, performance_data = template.validate_performance(test_scenarios)
-
-        if not meets_targets:
+        meets, pdata = template.validate_performance(test_scenarios)
+        if not meets:
             warnings.warn(
-                f"Custom template does not meet performance targets: {performance_data.get('target_violations', [])}"
+                f"Custom template does not meet performance targets: {pdata.get('target_violations', [])}"
             )
-
-            if recommendations := performance_data.get(
-                "optimization_recommendations", []
-            ):
+            if recommendations := pdata.get("optimization_recommendations", []):
                 warnings.warn(
                     f"Performance optimization recommendations: {recommendations}"
                 )
 
     return template
+
+
+def _validate_template_type(template_type: str) -> None:
+    supported_types = ["rgb", "matplotlib", "hybrid"]
+    if template_type not in supported_types:
+        raise ValueError(
+            f"Template type '{template_type}' not supported. Use one of: {supported_types}"
+        )
+
+
+def _validate_template_config(config: TemplateConfig) -> None:
+    ok, errs = config.validate(strict_mode=True)
+    if not ok:
+        raise ValueError(f"Invalid template configuration: {errs}")
+
+
+def _instantiate_template_from_type(
+    config: TemplateConfig, template_type: str
+) -> Union[RGBTemplate, MatplotlibTemplate]:
+    if template_type == "hybrid":
+        raise NotImplementedError(
+            "Hybrid templates not implemented in proof-of-life version"
+        )
+    if template_type == "matplotlib":
+        return MatplotlibTemplate(config)
+    if template_type == "rgb":
+        return RGBTemplate(config)
+    raise ValueError(f"Unknown template type: {template_type}")
+
+
+def _initialize_or_raise(
+    template: Union[RGBTemplate, MatplotlibTemplate], template_type: str
+) -> None:
+    try:
+        if not template.initialize():
+            raise RuntimeError(f"Custom {template_type} template initialization failed")
+    except Exception as e:
+        raise RuntimeError(f"Custom template creation failed: {e}") from e
 
 
 def _validate_custom_parameters(template_type: str, params: Dict[str, Any]) -> None:
@@ -1983,80 +1995,93 @@ def register_template(
     Registers custom rendering template in global registry with validation,
     conflict checking, and metadata management for template discovery and reuse.
     """
-    # Validate template_name uniqueness and naming convention
-    if not isinstance(template_name, str) or len(template_name) < 3:
-        raise ValueError("Template name must be a string with at least 3 characters")
+    _assert_valid_template_name(template_name)
 
-    if not template_name.replace("_", "").replace("-", "").isalnum():
-        raise ValueError(
-            "Template name must contain only alphanumeric characters, hyphens, and underscores"
-        )
-
-    # Check for existing template
+    # Check for existing template when override not allowed
     if template_name in TEMPLATE_REGISTRY and not allow_override:
         warnings.warn(
             f"Template '{template_name}' already registered. Use allow_override=True to replace."
         )
         return False
 
-    # Validate template instance completeness and performance
     if not isinstance(template, (RGBTemplate, MatplotlibTemplate)):
         raise TypeError(
             "Template must be an instance of RGBTemplate or MatplotlibTemplate"
         )
 
-    # Ensure template is properly initialized
-    if not template._initialized:
-        try:
-            if not template.initialize():
-                raise RuntimeError("Template initialization failed during registration")
-        except Exception as e:
-            warnings.warn(f"Template validation failed: {e}")
-            return False
+    if not _ensure_initialized_for_registration(template):
+        return False
 
-    # Check metadata completeness
-    if metadata is None:
-        metadata = {}
+    metadata = metadata or {}
+    _warn_on_missing_metadata(metadata)
 
-    required_metadata = ["description", "performance_targets", "compatibility"]
-    missing_metadata = [field for field in required_metadata if field not in metadata]
-    if missing_metadata:
-        warnings.warn(f"Missing recommended metadata fields: {missing_metadata}")
+    if not _smoke_test_template_result(template):
+        return False
 
-    # Test template functionality with sample rendering
+    # Handle naming conflicts with override checking
+    if template_name in TEMPLATE_REGISTRY and allow_override:
+        old_template = TEMPLATE_REGISTRY[template_name]["template"]
+        with contextlib.suppress(Exception):
+            old_template.cleanup()
+
+    # Add/replace template entry
+    TEMPLATE_REGISTRY[template_name] = _build_registry_entry(template, metadata)
+    return True
+
+
+def _assert_valid_template_name(name: str) -> None:
+    if not isinstance(name, str) or len(name) < 3:
+        raise ValueError("Template name must be a string with at least 3 characters")
+    if not name.replace("_", "").replace("-", "").isalnum():
+        raise ValueError(
+            "Template name must contain only alphanumeric characters, hyphens, and underscores"
+        )
+
+
+def _ensure_initialized_for_registration(
+    template: Union[RGBTemplate, MatplotlibTemplate]
+) -> bool:
+    if template._initialized:
+        return True
+    try:
+        return bool(template.initialize())
+    except Exception as e:
+        warnings.warn(f"Template validation failed: {e}")
+        return False
+
+
+def _warn_on_missing_metadata(metadata: Dict[str, Any]) -> None:
+    required = ["description", "performance_targets", "compatibility"]
+    missing = [field for field in required if field not in metadata]
+    if missing:
+        warnings.warn(f"Missing recommended metadata fields: {missing}")
+
+
+def _smoke_test_template_result(
+    template: Union[RGBTemplate, MatplotlibTemplate]
+) -> bool:
     try:
         test_field = np.random.rand(32, 32).astype(np.float32)
         test_agent = Coordinates(16, 16)
         test_source = Coordinates(8, 8)
-
         result = template.render(test_field, test_agent, test_source)
 
-        # Validate result based on template type
         if isinstance(template, RGBTemplate):
             if not isinstance(result, np.ndarray) or result.shape != (32, 32, 3):
                 raise ValueError("RGB template test failed - invalid result format")
         elif isinstance(template, MatplotlibTemplate):
             if result is not None:
                 warnings.warn("Matplotlib template returned non-None result")
-
+        return True
     except Exception as e:
         warnings.warn(f"Template functionality test failed: {e}")
         return False
 
-    # Handle naming conflicts with override checking
-    if template_name in TEMPLATE_REGISTRY:
-        if allow_override:
-            # Clean up old template
-            old_template = TEMPLATE_REGISTRY[template_name]["template"]
-            try:
-                old_template.cleanup()
-            except Exception:
-                pass
-        else:
-            return False
 
-    # Add template to registry with metadata
-    registry_entry = {
+def _build_registry_entry(
+    template: Union[RGBTemplate, MatplotlibTemplate], metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    return {
         "template": template,
         "metadata": {
             "description": metadata.get(
@@ -2078,11 +2103,6 @@ def register_template(
         },
     }
 
-    # Update registration
-    TEMPLATE_REGISTRY[template_name] = registry_entry
-
-    return True
-
 
 def get_template_registry(
     template_type_filter: Optional[str] = None,
@@ -2093,7 +2113,7 @@ def get_template_registry(
     Returns comprehensive template registry with filtering capabilities, performance
     characteristics, and usage recommendations for template discovery and selection.
     """
-    # Retrieve all registered templates
+    # Retrieve and filter
     if not TEMPLATE_REGISTRY:
         return {
             "templates": {},
@@ -2104,78 +2124,18 @@ def get_template_registry(
             },
         }
 
-    filtered_templates = {}
+    filtered = _filter_registry_items(
+        TEMPLATE_REGISTRY,
+        template_type_filter=template_type_filter,
+        quality_filter=quality_filter,
+        include_performance_data=include_performance_data,
+    )
 
-    # Apply filters
-    for template_name, entry in TEMPLATE_REGISTRY.items():
-        template = entry["template"]
-        metadata = entry["metadata"]
-
-        # Apply template_type_filter
-        if template_type_filter:
-            valid_types = ["rgb", "matplotlib", "custom"]
-            if template_type_filter not in valid_types:
-                warnings.warn(
-                    f"Invalid template type filter '{template_type_filter}'. Valid options: {valid_types}"
-                )
-                continue
-
-            if template_type_filter == "rgb" and not isinstance(template, RGBTemplate):
-                continue
-            elif template_type_filter == "matplotlib" and not isinstance(
-                template, MatplotlibTemplate
-            ):
-                continue
-        # Apply quality_filter
-        if quality_filter:
-            valid_qualities = [q.value for q in TemplateQuality]
-            if quality_filter not in valid_qualities:
-                warnings.warn(
-                    f"Invalid quality filter '{quality_filter}'. Valid options: {valid_qualities}"
-                )
-                continue
-
-            if metadata.get("quality_level") != quality_filter:
-                continue
-
-        # Include template in filtered results
-        template_info = {
-            "template_type": metadata["template_type"],
-            "description": metadata["description"],
-            "grid_size": metadata["grid_size"],
-            "quality_level": metadata["quality_level"],
-            "compatibility": metadata["compatibility"],
-            "usage_count": metadata["usage_count"],
-            "registration_time": metadata["registration_time"],
-        }
-
-        # Include performance data if requested
-        if include_performance_data:
-            performance_metrics = template.get_performance_metrics()
-            template_info["performance_data"] = {
-                "average_render_time_ms": performance_metrics.get(
-                    "average_render_time", 0.0
-                )
-                * 1000,
-                "total_renders": performance_metrics.get("total_renders", 0),
-                "cache_hit_rate": 0.0,
-            }
-
-            # Add cache statistics if available
-            cache_stats = performance_metrics.get("cache_stats")
-            if cache_stats:
-                template_info["performance_data"]["cache_hit_rate"] = cache_stats.get(
-                    "hit_rate", 0.0
-                )
-
-        filtered_templates[template_name] = template_info
-
-    # Generate summary statistics
-    all_types = [entry["template_type"] for entry in filtered_templates.values()]
-    all_qualities = [entry["quality_level"] for entry in filtered_templates.values()]
-
+    # Summary and ordering
+    all_types = [entry["template_type"] for entry in filtered.values()]
+    all_qualities = [entry["quality_level"] for entry in filtered.values()]
     summary = {
-        "total_templates": len(filtered_templates),
+        "total_templates": len(filtered),
         "available_types": list(set(all_types)),
         "quality_levels": list(set(all_qualities)),
         "filters_applied": {
@@ -2185,10 +2145,9 @@ def get_template_registry(
         },
     }
 
-    # Sort templates by performance and popularity
     sorted_templates = dict(
         sorted(
-            filtered_templates.items(),
+            filtered.items(),
             key=lambda item: (item[1]["usage_count"], -item[1]["registration_time"]),
             reverse=True,
         )
@@ -2199,6 +2158,79 @@ def get_template_registry(
         "summary": summary,
         "recommendations": _generate_template_recommendations(sorted_templates),
     }
+
+
+def _filter_registry_items(
+    registry: Dict[str, Any],
+    *,
+    template_type_filter: Optional[str],
+    quality_filter: Optional[str],
+    include_performance_data: bool,
+) -> Dict[str, Any]:
+    filtered: Dict[str, Any] = {}
+    for name, entry in registry.items():
+        template = entry["template"]
+        metadata = entry["metadata"]
+
+        if template_type_filter:
+            valid_types = ["rgb", "matplotlib", "custom"]
+            if template_type_filter not in valid_types:
+                warnings.warn(
+                    f"Invalid template type filter '{template_type_filter}'. Valid options: {valid_types}"
+                )
+                continue
+            if template_type_filter == "rgb" and not isinstance(template, RGBTemplate):
+                continue
+            if template_type_filter == "matplotlib" and not isinstance(
+                template, MatplotlibTemplate
+            ):
+                continue
+
+        if quality_filter:
+            valid_qualities = [q.value for q in TemplateQuality]
+            if quality_filter not in valid_qualities:
+                warnings.warn(
+                    f"Invalid quality filter '{quality_filter}'. Valid options: {valid_qualities}"
+                )
+                continue
+            if metadata.get("quality_level") != quality_filter:
+                continue
+
+        info = _build_template_info(template, metadata, include_performance_data)
+        filtered[name] = info
+
+    return filtered
+
+
+def _build_template_info(
+    template: Union[RGBTemplate, MatplotlibTemplate],
+    metadata: Dict[str, Any],
+    include_performance_data: bool,
+) -> Dict[str, Any]:
+    info = {
+        "template_type": metadata["template_type"],
+        "description": metadata["description"],
+        "grid_size": metadata["grid_size"],
+        "quality_level": metadata["quality_level"],
+        "compatibility": metadata["compatibility"],
+        "usage_count": metadata["usage_count"],
+        "registration_time": metadata["registration_time"],
+    }
+
+    if include_performance_data:
+        metrics = template.get_performance_metrics()
+        info["performance_data"] = {
+            "average_render_time_ms": metrics.get("average_render_time", 0.0) * 1000,
+            "total_renders": metrics.get("total_renders", 0),
+            "cache_hit_rate": 0.0,
+        }
+        cache_stats = metrics.get("cache_stats")
+        if cache_stats:
+            info["performance_data"]["cache_hit_rate"] = cache_stats.get(
+                "hit_rate", 0.0
+            )
+
+    return info
 
 
 def _generate_template_recommendations(templates: Dict[str, Any]) -> List[str]:
@@ -2261,9 +2293,8 @@ def optimize_template(
     Optimizes existing rendering template based on usage patterns, system performance
     characteristics, and target requirements for maximum efficiency.
     """
-    # Analyze current template performance characteristics
     current_metrics = template.get_performance_metrics()
-    optimization_report = {
+    report = {
         "original_performance": current_metrics.copy(),
         "optimizations_applied": [],
         "performance_improvements": {},
@@ -2271,140 +2302,50 @@ def optimize_template(
         "configuration_changes": {},
     }
 
-    # Create optimized configuration copy
     optimized_config = template.config.clone()
-
-    # Identify optimization opportunities from targets
     target_render_time_ms = optimization_targets.get("target_render_time_ms", 5.0)
     target_memory_mb = optimization_targets.get("target_memory_mb", 50.0)
-    optimization_targets.get("target_cache_hit_rate", 0.8)
+    current_rt_ms = current_metrics.get("average_render_time", 0.0) * 1000
 
-    current_render_time = (
-        current_metrics.get("average_render_time", 0.0) * 1000
-    )  # Convert to ms
+    # Apply quality/caching/perf options
+    _apply_quality_and_caching_optimizations(
+        optimized_config,
+        report,
+        target_render_time_ms,
+        usage_statistics or {},
+        current_rt_ms,
+    )
+    _memory_recommendations(optimized_config, report, target_memory_mb)
 
-    # Apply optimization targets and strategies
-    optimizations_needed = current_render_time > target_render_time_ms
-
-    if optimizations_needed:
-        # Quality level optimization
-        current_quality = optimized_config.quality_level
-        if current_quality != TemplateQuality.ULTRA_FAST:
-            if target_render_time_ms <= 1.0:
-                optimized_config.quality_level = TemplateQuality.ULTRA_FAST
-                optimization_report["optimizations_applied"].append(
-                    f"Reduced quality from {current_quality.value} to ultra_fast for <1ms target"
-                )
-            elif target_render_time_ms <= 3.0:
-                optimized_config.quality_level = TemplateQuality.FAST
-                optimization_report["optimizations_applied"].append(
-                    f"Reduced quality from {current_quality.value} to fast for <3ms target"
-                )
-
-        # Caching optimization based on usage patterns
-        if usage_statistics:
-            _ = usage_statistics.get("renders_per_second", 1.0)
-            repeat_renders = usage_statistics.get("repeated_renders", 0.1)
-
-            if repeat_renders > 0.3 and not optimized_config.caching_enabled:
-                optimized_config.caching_enabled = True
-                optimization_report["optimizations_applied"].append(
-                    "Enabled caching due to high repeat render rate"
-                )
-
-        # Performance options optimization
-        if not optimized_config.performance_options.get("vectorized_operations", True):
-            optimized_config.performance_options["vectorized_operations"] = True
-            optimization_report["optimizations_applied"].append(
-                "Enabled vectorized operations"
-            )
-
-        if not optimized_config.performance_options.get("memory_optimization", False):
-            optimized_config.performance_options["memory_optimization"] = True
-            optimization_report["optimizations_applied"].append(
-                "Enabled memory optimization"
-            )
-
-    # Memory optimization
-    estimated_memory = (
-        optimized_config.grid_size.width * optimized_config.grid_size.height * 3
-    ) / (1024 * 1024)
-    if estimated_memory > target_memory_mb:
-        # Suggest grid size reduction
-        reduction_factor = target_memory_mb / estimated_memory
-        suggested_width = int(
-            optimized_config.grid_size.width * np.sqrt(reduction_factor)
-        )
-        suggested_height = int(
-            optimized_config.grid_size.height * np.sqrt(reduction_factor)
-        )
-
-        optimization_report["recommendations"].append(
-            f"Consider reducing grid size to {suggested_width}x{suggested_height} to meet {target_memory_mb}MB target"
-        )
-
-    # Configure caching strategies based on usage patterns
+    # Cache tuning suggestions
     if usage_statistics and optimized_config.caching_enabled:
         access_pattern = usage_statistics.get("access_pattern", "random")
-        if access_pattern == "sequential":
-            # Sequential access benefits less from caching
-            cache_size = min(TEMPLATE_CACHE_SIZE, 5)
-        elif access_pattern == "repetitive":
-            # Repetitive access benefits greatly from caching
-            cache_size = TEMPLATE_CACHE_SIZE
-        else:
-            cache_size = TEMPLATE_CACHE_SIZE // 2
-
-        # Note: Cache size adjustment would need to be implemented in template initialization
-        optimization_report["configuration_changes"]["cache_size"] = cache_size
-
-    # Create optimized template instance
-    try:
-        if isinstance(template, RGBTemplate):
-            optimized_template = RGBTemplate(optimized_config)
-        else:
-            optimized_template = MatplotlibTemplate(optimized_config)
-
-        # Initialize optimized template
-        if not optimized_template.initialize():
-            raise RuntimeError("Optimized template initialization failed")
-
-        # Test optimized template performance
-        test_field = np.random.rand(64, 64).astype(np.float32)
-        test_agent = Coordinates(32, 32)
-        test_source = Coordinates(16, 16)
-
-        # Measure optimization improvement
-        start_time = time.perf_counter()
-        optimized_template.render(test_field, test_agent, test_source)
-        optimized_render_time = time.perf_counter() - start_time
-
-        # Calculate improvement
-        if current_render_time > 0:
-            improvement_percent = (
-                (current_render_time / 1000 - optimized_render_time)
-                / (current_render_time / 1000)
-            ) * 100
-            optimization_report["performance_improvements"][
-                "render_time_improvement_percent"
-            ] = improvement_percent
-            optimization_report["performance_improvements"]["new_render_time_ms"] = (
-                optimized_render_time * 1000
+        cache_size = (
+            min(TEMPLATE_CACHE_SIZE, 5)
+            if access_pattern == "sequential"
+            else (
+                TEMPLATE_CACHE_SIZE
+                if access_pattern == "repetitive"
+                else TEMPLATE_CACHE_SIZE // 2
             )
+        )
+        report["configuration_changes"]["cache_size"] = cache_size
 
+    # Build optimized instance and measure
+    try:
+        optimized_template = _instantiate_and_measure_optimized(
+            template, optimized_config, current_rt_ms, report
+        )
     except Exception as e:
         warnings.warn(f"Template optimization failed: {e}")
-        # Return original template with report
-        return template, optimization_report
+        return template, report
 
-    # Generate comprehensive optimization report
-    if not optimization_report["optimizations_applied"]:
-        optimization_report["recommendations"].append(
+    if not report["optimizations_applied"]:
+        report["recommendations"].append(
             "Template already well-optimized for current targets"
         )
 
-    # Add general recommendations
-    optimization_report["recommendations"].extend(
+    report["recommendations"].extend(
         [
             "Monitor performance metrics regularly to identify optimization opportunities",
             "Adjust quality levels based on use case requirements",
@@ -2412,8 +2353,94 @@ def optimize_template(
             "Consider template-specific optimizations based on usage patterns",
         ]
     )
+    return optimized_template, report
 
-    return optimized_template, optimization_report
+
+def _apply_quality_and_caching_optimizations(
+    config: TemplateConfig,
+    report: Dict[str, Any],
+    target_render_time_ms: float,
+    usage_stats: Dict[str, Any],
+    current_rt_ms: float,
+) -> None:
+    if current_rt_ms <= target_render_time_ms:
+        return
+
+    current_quality = config.quality_level
+    if current_quality != TemplateQuality.ULTRA_FAST:
+        if target_render_time_ms <= 1.0:
+            config.quality_level = TemplateQuality.ULTRA_FAST
+            report["optimizations_applied"].append(
+                f"Reduced quality from {current_quality.value} to ultra_fast for <1ms target"
+            )
+        elif target_render_time_ms <= 3.0:
+            config.quality_level = TemplateQuality.FAST
+            report["optimizations_applied"].append(
+                f"Reduced quality from {current_quality.value} to fast for <3ms target"
+            )
+
+    if usage_stats:
+        repeat = usage_stats.get("repeated_renders", 0.1)
+        if repeat > 0.3 and not config.caching_enabled:
+            config.caching_enabled = True
+            report["optimizations_applied"].append(
+                "Enabled caching due to high repeat render rate"
+            )
+
+    if not config.performance_options.get("vectorized_operations", True):
+        config.performance_options["vectorized_operations"] = True
+        report["optimizations_applied"].append("Enabled vectorized operations")
+
+    if not config.performance_options.get("memory_optimization", False):
+        config.performance_options["memory_optimization"] = True
+        report["optimizations_applied"].append("Enabled memory optimization")
+
+
+def _memory_recommendations(
+    config: TemplateConfig, report: Dict[str, Any], target_memory_mb: float
+) -> None:
+    est = (config.grid_size.width * config.grid_size.height * 3) / (1024 * 1024)
+    if est <= target_memory_mb:
+        return
+    factor = target_memory_mb / est
+    suggested_width = int(config.grid_size.width * np.sqrt(factor))
+    suggested_height = int(config.grid_size.height * np.sqrt(factor))
+    report["recommendations"].append(
+        f"Consider reducing grid size to {suggested_width}x{suggested_height} to meet {target_memory_mb}MB target"
+    )
+
+
+def _instantiate_and_measure_optimized(
+    template: Union[RGBTemplate, MatplotlibTemplate],
+    config: TemplateConfig,
+    current_rt_ms: float,
+    report: Dict[str, Any],
+) -> Union[RGBTemplate, MatplotlibTemplate]:
+    optimized = (
+        RGBTemplate(config)
+        if isinstance(template, RGBTemplate)
+        else MatplotlibTemplate(config)
+    )
+    if not optimized.initialize():
+        raise RuntimeError("Optimized template initialization failed")
+
+    test_field = np.random.rand(64, 64).astype(np.float32)
+    test_agent = Coordinates(32, 32)
+    test_source = Coordinates(16, 16)
+    start = time.perf_counter()
+    optimized.render(test_field, test_agent, test_source)
+    opt_time = time.perf_counter() - start
+
+    if current_rt_ms > 0:
+        improvement_percent = (
+            (current_rt_ms / 1000 - opt_time) / (current_rt_ms / 1000)
+        ) * 100
+        report["performance_improvements"][
+            "render_time_improvement_percent"
+        ] = improvement_percent
+        report["performance_improvements"]["new_render_time_ms"] = opt_time * 1000
+
+    return optimized
 
 
 def validate_template_performance(
@@ -2425,8 +2452,8 @@ def validate_template_performance(
     Comprehensive performance validation function for rendering templates including
     timing benchmarks, memory usage analysis, and compatibility testing.
     """
-    # Initialize validation report
-    performance_report = {
+    # Initialize report and targets
+    report = {
         "validation_passed": True,
         "template_info": {
             "type": type(template).__name__,
@@ -2440,89 +2467,153 @@ def validate_template_performance(
         "recommendations": [],
     }
 
-    # Determine performance targets based on template type
+    target_ms, template_kind = _determine_targets_for_template(template)
+    report["performance_analysis"]["target_time_ms"] = target_ms
+
+    # Benchmarks
+    all_results = _run_benchmarks_for_template(
+        template, test_scenarios, target_ms, strict_validation, report
+    )
+
+    # Aggregate
+    if all_results:
+        successful = [r for r in all_results if r.get("success_rate", 0) > 0.8]
+        if successful:
+            report["performance_analysis"].update(
+                {
+                    "overall_average_time_ms": np.mean(
+                        [r["average_time_ms"] for r in successful]
+                    ),
+                    "overall_max_time_ms": np.max(
+                        [r["max_time_ms"] for r in successful]
+                    ),
+                    "overall_success_rate": np.mean(
+                        [r["success_rate"] for r in successful]
+                    ),
+                    "target_compliance_rate": np.mean(
+                        [r["meets_target"] for r in successful]
+                    ),
+                    "performance_consistency": {
+                        "std_deviation_ms": np.std(
+                            [r["average_time_ms"] for r in successful]
+                        ),
+                        "coefficient_of_variation": np.std(
+                            [r["average_time_ms"] for r in successful]
+                        )
+                        / np.mean([r["average_time_ms"] for r in successful]),
+                    },
+                }
+            )
+
+    # Compatibility and strict checks
+    if isinstance(template, MatplotlibTemplate):
+        _extracted_from_validate_template_performance_199(template, report)
+    if strict_validation:
+        _extracted_from_validate_template_performance_(report, all_results)
+
+    # Recommendations
+    recs: List[str] = []
+    if not report["validation_passed"]:
+        recs.extend(
+            [
+                f"Template does not meet {template_kind} performance targets (<{target_ms}ms)",
+                "Consider reducing quality level for better performance",
+                "Enable caching if not already enabled for repetitive operations",
+                "Optimize grid sizes based on use case requirements",
+            ]
+        )
+
+    avg_time = report["performance_analysis"].get("overall_average_time_ms", 0)
+    if avg_time > target_ms * 1.5:
+        recs.append(
+            "Significant performance optimization needed - consider ULTRA_FAST quality level"
+        )
+    elif avg_time > target_ms * 1.2:
+        recs.append("Minor performance optimization recommended")
+
     if isinstance(template, RGBTemplate):
-        target_ms = PERFORMANCE_TARGET_RGB_RENDER_MS
-        template_type = "RGB"
-    else:
-        target_ms = PERFORMANCE_TARGET_HUMAN_RENDER_MS
-        template_type = "Matplotlib"
+        grid_area = template.config.grid_size.width * template.config.grid_size.height
+        if grid_area > 128 * 128:
+            recs.append(
+                "Large grid sizes may impact performance - consider optimization"
+            )
 
-    performance_report["performance_analysis"]["target_time_ms"] = target_ms
+    report["recommendations"] = recs
+    return report["validation_passed"], report
 
-    # Execute template rendering benchmarks across test scenarios
-    all_test_results = []
 
+def _determine_targets_for_template(
+    template: Union[RGBTemplate, MatplotlibTemplate]
+) -> Tuple[float, str]:
+    if isinstance(template, RGBTemplate):
+        return PERFORMANCE_TARGET_RGB_RENDER_MS, "RGB"
+    return PERFORMANCE_TARGET_HUMAN_RENDER_MS, "Matplotlib"
+
+
+def _run_benchmarks_for_template(
+    template: Union[RGBTemplate, MatplotlibTemplate],
+    test_scenarios: Dict[str, Any],
+    target_ms: float,
+    strict_validation: bool,
+    report: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    all_results: List[Dict[str, Any]] = []
     for scenario_name, scenario_config in test_scenarios.items():
         scenario_results = {"scenario_name": scenario_name, "tests": [], "summary": {}}
-
-        # Get grid sizes for testing
         grid_sizes = scenario_config.get("grid_sizes", [(64, 64), (128, 128)])
         iterations = scenario_config.get(
             "iterations", 10 if isinstance(template, RGBTemplate) else 5
         )
 
-        for grid_size in grid_sizes:
-            # Create test data
-            test_field = np.random.rand(*grid_size).astype(np.float32)
-            test_agent = Coordinates(grid_size[1] // 2, grid_size[0] // 2)
-            test_source = Coordinates(grid_size[1] // 4, grid_size[0] // 4)
+        for grid in grid_sizes:
+            test_field = np.random.rand(*grid).astype(np.float32)
+            test_agent = Coordinates(grid[1] // 2, grid[0] // 2)
+            test_source = Coordinates(grid[1] // 4, grid[0] // 4)
 
-            # Execute multiple iterations for statistical accuracy
-            render_times = []
-            memory_usage = []
-            success_count = 0
-
+            times: List[float] = []
+            mem_use: List[float] = []
+            success = 0
             for iteration in range(iterations):
-                start_time = time.perf_counter()
+                start = time.perf_counter()
                 try:
-                    # Measure memory usage if possible
-                    import psutil
+                    try:
+                        import psutil  # type: ignore
 
-                    process = psutil.Process()
-                    memory_before = process.memory_info().rss / 1024 / 1024  # MB
+                        process = psutil.Process()
+                        mem_before = process.memory_info().rss / 1024 / 1024
+                    except ImportError:
+                        mem_before = None
 
-                    # Execute render
                     result = template.render(test_field, test_agent, test_source)
+                    elapsed = time.perf_counter() - start
+                    times.append(elapsed)
+                    success += 1
 
-                    # Measure timing and memory
-                    render_time = time.perf_counter() - start_time
-                    memory_after = process.memory_info().rss / 1024 / 1024  # MB
-
-                    render_times.append(render_time)
-                    memory_usage.append(memory_after - memory_before)
-                    success_count += 1
-
-                    # Validate result format and quality
                     if isinstance(template, RGBTemplate):
                         if not isinstance(result, np.ndarray):
                             raise ValueError("RGB template must return numpy array")
-                        if result.shape != (*grid_size, 3):
+                        if result.shape != (*grid, 3):
                             raise ValueError(f"Invalid RGB shape: {result.shape}")
                         if result.dtype != RGB_DTYPE:
                             raise ValueError(f"Invalid RGB dtype: {result.dtype}")
 
-                except ImportError:
-                    # psutil not available, skip memory measurement
-                    render_time = time.perf_counter() - start_time
-                    render_times.append(render_time)
-                    success_count += 1
+                    if mem_before is not None:
+                        mem_after = process.memory_info().rss / 1024 / 1024
+                        mem_use.append(mem_after - mem_before)
 
                 except Exception as e:
-                    # Test failed
-                    performance_report["validation_passed"] = False
-                    render_times.append(-1)  # Mark as failed
-
+                    report["validation_passed"] = False
+                    times.append(-1)
                     if strict_validation:
-                        performance_report["test_results"][
-                            f"{scenario_name}_{grid_size[0]}x{grid_size[1]}"
+                        report["test_results"][
+                            f"{scenario_name}_{grid[0]}x{grid[1]}"
                         ] = {"success": False, "error": str(e), "iteration": iteration}
                         break
 
-            if successful_times := [t for t in render_times if t > 0]:
-                test_result = {
-                    "grid_size": f"{grid_size[0]}x{grid_size[1]}",
-                    "success_rate": success_count / iterations,
+            if successful_times := [t for t in times if t > 0]:
+                tr = {
+                    "grid_size": f"{grid[0]}x{grid[1]}",
+                    "success_rate": success / iterations,
                     "average_time_ms": np.mean(successful_times) * 1000,
                     "max_time_ms": np.max(successful_times) * 1000,
                     "min_time_ms": np.min(successful_times) * 1000,
@@ -2530,36 +2621,30 @@ def validate_template_performance(
                     "meets_target": np.mean(successful_times) * 1000 <= target_ms,
                     "iterations": iterations,
                 }
-
-                # Add memory analysis if available
-                if memory_usage:
-                    test_result["memory_analysis"] = {
-                        "average_memory_mb": np.mean(memory_usage),
-                        "max_memory_mb": np.max(memory_usage),
-                        "memory_efficient": np.mean(memory_usage)
-                        < 10,  # Reasonable threshold
+                if mem_use:
+                    tr["memory_analysis"] = {
+                        "average_memory_mb": np.mean(mem_use),
+                        "max_memory_mb": np.max(mem_use),
+                        "memory_efficient": np.mean(mem_use) < 10,
                     }
-
-                scenario_results["tests"].append(test_result)
-                all_test_results.append(test_result)
-
-                # Check performance against targets
-                if not test_result["meets_target"]:
-                    performance_report["validation_passed"] = False
+                scenario_results["tests"].append(tr)
+                all_results.append(tr)
+                if not tr["meets_target"]:
+                    report["validation_passed"] = False
             else:
-                # All tests failed for this grid size
-                performance_report["validation_passed"] = False
+                report["validation_passed"] = False
                 scenario_results["tests"].append(
                     {
-                        "grid_size": f"{grid_size[0]}x{grid_size[1]}",
+                        "grid_size": f"{grid[0]}x{grid[1]}",
                         "success_rate": 0.0,
                         "error": "All iterations failed",
                     }
                 )
 
-        if successful_tests := [
+        successful_tests = [
             t for t in scenario_results["tests"] if t.get("success_rate", 0) > 0.5
-        ]:
+        ]
+        if successful_tests:
             scenario_results["summary"] = {
                 "overall_success_rate": np.mean(
                     [t["success_rate"] for t in successful_tests]
@@ -2572,82 +2657,9 @@ def validate_template_performance(
                 ),
             }
 
-        performance_report["test_results"][scenario_name] = scenario_results
+        report["test_results"][scenario_name] = scenario_results
 
-    # Generate comprehensive performance analysis
-    if all_test_results:
-        if successful_results := [
-            r for r in all_test_results if r.get("success_rate", 0) > 0.8
-        ]:
-            performance_report["performance_analysis"].update(
-                {
-                    "overall_average_time_ms": np.mean(
-                        [r["average_time_ms"] for r in successful_results]
-                    ),
-                    "overall_max_time_ms": np.max(
-                        [r["max_time_ms"] for r in successful_results]
-                    ),
-                    "overall_success_rate": np.mean(
-                        [r["success_rate"] for r in successful_results]
-                    ),
-                    "target_compliance_rate": np.mean(
-                        [r["meets_target"] for r in successful_results]
-                    ),
-                    "performance_consistency": {
-                        "std_deviation_ms": np.std(
-                            [r["average_time_ms"] for r in successful_results]
-                        ),
-                        "coefficient_of_variation": np.std(
-                            [r["average_time_ms"] for r in successful_results]
-                        )
-                        / np.mean([r["average_time_ms"] for r in successful_results]),
-                    },
-                }
-            )
-
-    # Test backend compatibility for matplotlib templates
-    if isinstance(template, MatplotlibTemplate):
-        _extracted_from_validate_template_performance_199(template, performance_report)
-    # Apply strict validation rules if enabled
-    if strict_validation:
-        _extracted_from_validate_template_performance_(
-            performance_report, all_test_results
-        )
-    # Generate optimization recommendations based on results
-    recommendations = []
-
-    if not performance_report["validation_passed"]:
-        recommendations.extend(
-            [
-                f"Template does not meet {template_type} performance targets (<{target_ms}ms)",
-                "Consider reducing quality level for better performance",
-                "Enable caching if not already enabled for repetitive operations",
-                "Optimize grid sizes based on use case requirements",
-            ]
-        )
-
-    # Performance-specific recommendations
-    avg_time = performance_report["performance_analysis"].get(
-        "overall_average_time_ms", 0
-    )
-    if avg_time > target_ms * 1.5:
-        recommendations.append(
-            "Significant performance optimization needed - consider ULTRA_FAST quality level"
-        )
-    elif avg_time > target_ms * 1.2:
-        recommendations.append("Minor performance optimization recommended")
-
-    # Memory recommendations
-    if isinstance(template, RGBTemplate):
-        grid_area = template.config.grid_size.width * template.config.grid_size.height
-        if grid_area > 128 * 128:
-            recommendations.append(
-                "Large grid sizes may impact performance - consider optimization"
-            )
-
-    performance_report["recommendations"] = recommendations
-
-    return performance_report["validation_passed"], performance_report
+    return all_results
 
 
 # TODO Rename this here and in `validate_template_performance`

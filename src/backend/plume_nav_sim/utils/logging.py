@@ -424,11 +424,29 @@ def _ensure_exception_types(
 def _attach_log_exception_method(logger: logging.Logger) -> None:
     def log_exception(exc: Exception, context: Dict[str, Any] | None = None) -> None:
         try:
-            error_details = {
+            component_context: Dict[str, Any] = {
+                "logger_name": logger.name,
+                "component": (
+                    logger.name.split(".")[-1] if "." in logger.name else logger.name
+                ),
+            }
+            if context:
+                if isinstance(context, dict):
+                    component_context |= context
+                else:
+                    component_context["raw_context"] = context
+
+            error_details: Dict[str, Any] = {
                 "exception_type": exc.__class__.__name__,
                 "exception_message": str(exc),
-                "component_context": context or {},
+                "component_context": component_context,
             }
+            if isinstance(context, dict):
+                # Preserve original caller-supplied context for debugging while
+                # allowing handle_component_error/sanitize_error_context to
+                # perform any necessary redaction.
+                error_details["raw_context"] = dict(context)
+
             handle_component_error(exc, logger.name, error_details)
             logger.error(
                 f"Exception in {logger.name}: {exc}",
@@ -675,7 +693,14 @@ def configure_logging_for_development(
         }
 
     except Exception as e:
-        handle_component_error(e, "configure_logging_for_development")
+        error_context = {
+            "log_level": log_level,
+            "enable_console_colors": enable_console_colors,
+            "enable_file_logging": enable_file_logging,
+            "log_directory": log_directory,
+            "log_file_path": log_file_path,
+        }
+        handle_component_error(e, "configure_logging_for_development", error_context)
         raise PlumeNavSimError(f"Development logging configuration failed: {e}") from e
 
 
@@ -743,7 +768,14 @@ def log_performance(
         _update_running_baseline(operation_name, duration_ms)
 
     except Exception as e:
-        handle_component_error(e, "log_performance")
+        error_context = {
+            "operation_name": operation_name,
+            "duration_ms": duration_ms,
+            "additional_metrics": additional_metrics,
+            "compare_to_baseline": compare_to_baseline,
+            "target_ms": target_ms,
+        }
+        handle_component_error(e, "log_performance", error_context)
         # Don't re-raise to prevent logging failures from breaking application flow
         logging.getLogger(PACKAGE_NAME).error(f"Performance logging failed: {e}")
 
@@ -946,7 +978,16 @@ def create_performance_logger(
         )
 
     except Exception as e:
-        handle_component_error(e, "create_performance_logger")
+        error_context = {
+            "logger_name": logger_name,
+            "component_name": component_name,
+            "timing_thresholds": (
+                dict(timing_thresholds or {}) if timing_thresholds else {}
+            ),
+            "enable_memory_tracking": enable_memory_tracking,
+            "baseline_file": baseline_file,
+        }
+        handle_component_error(e, "create_performance_logger", error_context)
         raise PlumeNavSimError(f"Failed to create performance logger: {e}") from e
 
 
@@ -990,7 +1031,15 @@ def setup_error_logging(
         _attach_log_exception_method(logger)
 
     except Exception as e:
-        handle_component_error(e, "setup_error_logging")
+        error_context = {
+            "logger_name": getattr(logger, "name", None),
+            "enable_auto_recovery_logging": enable_auto_recovery_logging,
+            "exception_types_to_log": [
+                getattr(exc_type, "__name__", str(exc_type))
+                for exc_type in (exception_types_to_log or [])
+            ],
+        }
+        handle_component_error(e, "setup_error_logging", error_context)
         raise PlumeNavSimError(f"Failed to setup error logging: {e}") from e
 
 

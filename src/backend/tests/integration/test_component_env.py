@@ -194,14 +194,18 @@ class TestComponentBasedEnvironment:
             goal_location.x + 2, goal_location.y
         )
 
-        # Move towards goal
+        # Move towards goal and capture terminal-step reward
         terminated = False
+        final_reward = None
         for _ in range(10):
-            _, _, terminated, _, _ = component_env.step(3)  # LEFT
+            _, reward, terminated, _, _ = component_env.step(3)  # LEFT
             if terminated:
+                final_reward = reward
                 break
 
         assert terminated
+        # Reward delegation invariant: terminal step yields 1.0 for SparseGoalReward
+        assert final_reward == 1.0
         assert component_env._state == EnvironmentState.TERMINATED
         assert component_env._agent_state.goal_reached
 

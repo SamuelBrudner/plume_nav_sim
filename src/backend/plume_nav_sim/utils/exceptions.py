@@ -1320,7 +1320,8 @@ def handle_component_error(
     error_context: Optional[dict] = None,
     recovery_action: Optional[str] = None,
 ) -> str:
-    """Centralized error handling function with component-specific recovery strategies, logging integration, and secure error reporting for all plume_nav_sim components.
+    """Centralized error handling function with component-specific recovery strategies,
+    logging integration, and secure error reporting for all plume_nav_sim components.
 
     Args:
         error (Exception): Exception that occurred
@@ -1329,7 +1330,8 @@ def handle_component_error(
         recovery_action (Optional[str]): Suggested recovery action
 
     Returns:
-        str: Recovery strategy identifier or error escalation status for automated error handling
+        str: Recovery strategy identifier or error escalation status for automated
+            error handling
     """
     # Validate error is Exception instance and component_name is non-empty string
     if not isinstance(error, Exception):
@@ -1337,8 +1339,13 @@ def handle_component_error(
     if not component_name or not isinstance(component_name, str):
         raise ValueError("Component name must be a non-empty string")
 
-    # Get logger for component-specific logging
-    logger = logging.getLogger(f"plume_nav_sim.{component_name}")
+    # Get logger for component-specific logging. Accept either a bare component
+    # name ("renderer") or a fully-qualified logger name ("plume_nav_sim.renderer").
+    if component_name.startswith("plume_nav_sim."):
+        logger_name = component_name
+    else:
+        logger_name = f"plume_nav_sim.{component_name}"
+    logger = logging.getLogger(logger_name)
 
     # Classify error type using isinstance checks for plume_nav_sim exception hierarchy
     if isinstance(error, ValidationError):

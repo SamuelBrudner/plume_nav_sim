@@ -874,8 +874,12 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
     def _canonicalize_action(self, action: ActionType) -> ActionType:
         try:
             return validate_action_parameter(action, allow_enum_types=True)
-        except ValidationError as ve:
-            raise ValueError(str(ve))
+        except ValidationError as exc:
+            raise ValidationError(
+                str(exc),
+                parameter_name="action",
+                parameter_value=action,
+            ) from exc
 
     def _update_step_metrics(self, step_time_ms: float) -> None:
         self.performance_metrics["step_times"].append(step_time_ms)

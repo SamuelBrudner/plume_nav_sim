@@ -119,7 +119,17 @@ class _AttributeForwardingTimeLimit(TimeLimit):
 
 
 class PlumeSearchEnv(gym.Env):
-    """Compatibility wrapper exposing the DI-backed component environment."""
+    """Compatibility wrapper exposing the DI-backed component environment.
+
+    Delegation contract (stabilized by tests):
+    - Seeding: reset(seed=...) produces reproducible trajectories across
+      instances with identical configuration; wrapper forwards the seed to the
+      underlying environment and tracks the latest seed in info.
+    - Attributes: grid_size, source_location, max_steps, goal_radius reflect
+      the normalized constructor arguments for registration and docs stability.
+    - Rewards: step returns the immediate reward while maintaining an internal
+      cumulative reward that is exposed via info["total_reward"].
+    """
 
     metadata = ComponentBasedEnvironment.metadata
 

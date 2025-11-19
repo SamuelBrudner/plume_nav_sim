@@ -24,6 +24,7 @@ from unittest.mock import Mock, patch  # >=3.10
 import numpy as np  # >=2.1.0
 import pytest  # >=8.0.0
 
+import plume_nav_sim.utils.logging as plume_logging
 from plume_nav_sim.core.types import Action
 
 # Internal imports for comprehensive error testing
@@ -97,6 +98,76 @@ RECOVERY_STRATEGIES = [
     "degraded_mode",
     "graceful_shutdown",
 ]
+
+
+@pytest.mark.integration
+def test_logging_log_exception_uses_handle_component_error_with_structured_context():
+    """Verify setup_error_logging attaches a log_exception helper that
+    forwards exceptions to handle_component_error with structured context.
+    """
+
+    test_logger = logging.getLogger("plume_nav_sim.test_logging_integration")
+    test_logger.setLevel(logging.DEBUG)
+
+    with patch("plume_nav_sim.utils.logging.handle_component_error") as mock_handle:
+        plume_logging.setup_error_logging(logger=test_logger)
+
+        assert hasattr(test_logger, "log_exception")
+
+        test_exception = Exception("log_exception integration failure")
+        context = {"operation": "test_logging", "component": "integration_test"}
+
+        # type: ignore[attr-defined] - attached dynamically by setup_error_logging
+        test_logger.log_exception(test_exception, context)  # noqa: E1101
+
+    mock_handle.assert_called_once()
+    called_error, called_component, called_context = mock_handle.call_args[0]
+
+    assert called_error is test_exception
+    assert called_component == test_logger.name
+    assert isinstance(called_context, dict)
+    assert called_context.get("exception_type") == type(test_exception).__name__
+
+    component_context = called_context.get("component_context", {})
+    assert component_context.get("operation") == "test_logging"
+    assert component_context.get("component") == "integration_test"
+
+
+@pytest.mark.performance
+def test_log_performance_failure_path_calls_handle_component_error(monkeypatch):
+    """Ensure log_performance uses handle_component_error on failure without
+    propagating the exception to callers and passes useful context."""
+
+    test_logger = logging.getLogger("plume_nav_sim.test_performance_logging")
+
+    def failing_validate(operation_name: Any, duration_ms: Any) -> tuple[str, float]:
+        raise ValidationError(
+            "invalid performance input", "operation_name", operation_name
+        )
+
+    with patch("plume_nav_sim.utils.logging.handle_component_error") as mock_handle:
+        monkeypatch.setattr(
+            plume_logging,
+            "_validate_performance_inputs",
+            failing_validate,
+        )
+
+        plume_logging.log_performance(
+            test_logger,
+            "test_operation",
+            1.23,
+            additional_metrics={"password": "secret"},
+            compare_to_baseline=True,
+        )
+
+    mock_handle.assert_called_once()
+    error_arg, component_name_arg, error_context_arg = mock_handle.call_args[0]
+
+    assert isinstance(error_arg, ValidationError)
+    assert component_name_arg == "log_performance"
+    assert isinstance(error_context_arg, dict)
+    assert error_context_arg.get("operation_name") == "test_operation"
+    assert error_context_arg.get("duration_ms") == 1.23
 
 
 def create_invalid_environment_configs(

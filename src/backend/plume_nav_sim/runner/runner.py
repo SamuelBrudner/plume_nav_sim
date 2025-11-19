@@ -65,6 +65,27 @@ class EpisodeResult:
     metrics: dict[str, Any]
 
 
+@dataclass
+class _RenderContext:
+    """Internal bookkeeping for render-related state and counters."""
+
+    enabled: bool
+    warned_missing: bool = False
+    fallback_successes: int = 0
+    fallback_failures: int = 0
+    frames_captured: int = 0
+
+
+def _reset_env_and_policy(env: Any, policy: Any, *, seed: Optional[int]) -> np.ndarray:
+    if seed is not None:
+        obs, _ = env.reset(seed=seed)
+        _maybe_policy_reset(policy, seed=seed)
+    else:
+        obs, _ = env.reset()
+        _maybe_policy_reset(policy, seed=None)
+    return obs
+
+
 def _maybe_policy_reset(policy: Any, *, seed: Optional[int]) -> None:
     try:
         policy.reset(seed=seed)  # type: ignore[attr-defined]
@@ -141,6 +162,96 @@ def _render_with_fallback(env: Any) -> tuple[Optional[np.ndarray], bool, bool]:
     )
 
 
+def _maybe_render_frame(
+    env: Any, *, t: int, ctx: _RenderContext
+) -> Optional[np.ndarray]:
+    if not ctx.enabled:
+        return None
+
+    frame, succ, fail = _render_with_fallback(env)
+    if succ:
+        ctx.fallback_successes += 1
+    if fail:
+        ctx.fallback_failures += 1
+
+    if frame is not None:
+        ctx.frames_captured += 1
+        try:
+            logger.debug(
+                "Captured frame at step %d: shape=%s dtype=%s",
+                t,
+                getattr(frame, "shape", None),
+                getattr(frame, "dtype", None),
+            )
+        except Exception:
+            logger.debug("Captured frame at step %d", t)
+        return frame
+
+    if (
+        ctx.fallback_failures > 0 or ctx.fallback_successes > 0
+    ) and not ctx.warned_missing:
+        logger.warning(
+            "No frame after fallback at step %d (successes=%d failures=%d)",
+            t,
+            ctx.fallback_successes,
+            ctx.fallback_failures,
+        )
+        ctx.warned_missing = True
+    return None
+
+
+def _build_event(
+    *,
+    t: int,
+    obs: np.ndarray,
+    action: Any,
+    reward: Any,
+    terminated: Any,
+    truncated: Any,
+    info: Any,
+    frame: Optional[np.ndarray],
+    render_enabled: bool,
+) -> StepEvent:
+    return StepEvent(
+        t=t,
+        obs=obs,
+        action=action,
+        reward=float(reward),
+        terminated=bool(terminated),
+        truncated=bool(truncated),
+        info=dict(info) if isinstance(info, dict) else {},
+        frame=frame if (render_enabled and isinstance(frame, np.ndarray)) else None,
+    )
+
+
+def _step_once(
+    env: Any,
+    policy: Any,
+    *,
+    obs: np.ndarray,
+    t: int,
+    render_ctx: _RenderContext,
+) -> tuple[StepEvent, np.ndarray, bool]:
+    action = _select_action(policy, obs)
+    next_obs, reward, term, trunc, info = env.step(action)
+    frame = _maybe_render_frame(env, t=t, ctx=render_ctx)
+
+    ev = _build_event(
+        t=t,
+        obs=obs,
+        action=action,
+        reward=reward,
+        terminated=term,
+        truncated=trunc,
+        info=info,
+        frame=frame,
+        render_enabled=render_ctx.enabled,
+    )
+
+    done = ev.terminated or ev.truncated
+    return ev, next_obs, done
+
+
 def run_episode(
     env: Any,
     policy: Any,
@@ -156,82 +267,34 @@ def run_episode(
     Deterministic when given the same (seed, env, policy) triplet.
     """
     # Reset env and policy deterministically when seed provided
-    if seed is not None:
-        obs, _ = env.reset(seed=seed)
-        _maybe_policy_reset(policy, seed=seed)
-    else:
-        obs, _ = env.reset()
-        _maybe_policy_reset(policy, seed=None)
+    obs = _reset_env_and_policy(env, policy, seed=seed)
     _ensure_action_space_compat(env, policy)
 
     steps = 0
     total_reward = 0.0
     terminated = False
     truncated = False
-    frames_captured = 0
-    fallback_successes = 0
-    fallback_failures = 0
-    warned_missing = False
+    render_ctx = _RenderContext(enabled=bool(render))
 
     while True:
         if max_steps is not None and steps >= max_steps:
-            # Respect soft cap through truncation semantics if env didn't enforce
             truncated = True
             break
 
-        action = _select_action(policy, obs)
-        next_obs, reward, term, trunc, info = env.step(action)
-        frame = None
-        if render:
-            frame, succ, fail = _render_with_fallback(env)
-            if succ:
-                fallback_successes += 1
-            if fail:
-                fallback_failures += 1
-
-            if frame is not None:
-                frames_captured += 1
-                try:
-                    logger.debug(
-                        "Captured frame at step %d: shape=%s dtype=%s",
-                        steps,
-                        getattr(frame, "shape", None),
-                        getattr(frame, "dtype", None),
-                    )
-                except Exception:
-                    logger.debug("Captured frame at step %d", steps)
-            elif (
-                fallback_failures > 0 or fallback_successes > 0
-            ) and not warned_missing:
-                logger.warning(
-                    "No frame after fallback at step %d (successes=%d failures=%d)",
-                    steps,
-                    fallback_successes,
-                    fallback_failures,
-                )
-                warned_missing = True
-
-        ev = StepEvent(
-            t=steps,
-            obs=obs,
-            action=action,
-            reward=float(reward),
-            terminated=bool(term),
-            truncated=bool(trunc),
-            info=dict(info) if isinstance(info, dict) else {},
-            frame=frame if (render and isinstance(frame, np.ndarray)) else None,
+        ev, next_obs, done = _step_once(
+            env, policy, obs=obs, t=steps, render_ctx=render_ctx
         )
 
         if on_step is not None:
             on_step(ev)
 
         steps += 1
-        total_reward += float(reward)
+        total_reward += float(ev.reward)
         obs = next_obs
-        terminated = bool(term)
-        truncated = bool(trunc)
+        terminated = ev.terminated
+        truncated = ev.truncated
 
-        if terminated or truncated:
+        if done:
             break
 
     result = EpisodeResult(
@@ -246,9 +309,9 @@ def run_episode(
     logger.info(
         "Episode finished: steps=%d frames_captured=%d fallback_successes=%d fallback_failures=%d",
         steps,
-        frames_captured,
-        fallback_successes,
-        fallback_failures,
+        render_ctx.frames_captured,
+        render_ctx.fallback_successes,
+        render_ctx.fallback_failures,
     )
 
     if on_episode_end is not None:
@@ -269,59 +332,14 @@ def stream(
 
     If seed is provided, resets env and policy deterministically.
     """
-    if seed is not None:
-        obs, _ = env.reset(seed=seed)
-        _maybe_policy_reset(policy, seed=seed)
-    else:
-        obs, _ = env.reset()
-        _maybe_policy_reset(policy, seed=None)
+    obs = _reset_env_and_policy(env, policy, seed=seed)
     _ensure_action_space_compat(env, policy)
 
     t = 0
-    warned_missing = False
-    fallback_successes = 0
-    fallback_failures = 0
+    render_ctx = _RenderContext(enabled=bool(render))
     while True:
-        action = _select_action(policy, obs)
-        next_obs, reward, term, trunc, info = env.step(action)
-        frame = None
-        if render:
-            frame, succ, fail = _render_with_fallback(env)
-            if succ:
-                fallback_successes += 1
-            if fail:
-                fallback_failures += 1
-
-            if frame is not None:
-                try:
-                    logger.debug(
-                        "Captured frame at step %d: shape=%s dtype=%s",
-                        t,
-                        getattr(frame, "shape", None),
-                        getattr(frame, "dtype", None),
-                    )
-                except Exception:
-                    logger.debug("Captured frame at step %d", t)
-            elif (
-                fallback_failures > 0 or fallback_successes > 0
-            ) and not warned_missing:
-                logger.warning(
-                    "No frame after fallback at step %d (successes=%d failures=%d)",
-                    t,
-                    fallback_successes,
-                    fallback_failures,
-                )
-                warned_missing = True
-
-        ev = StepEvent(
-            t=t,
-            obs=obs,
-            action=action,
-            reward=float(reward),
-            terminated=bool(term),
-            truncated=bool(trunc),
-            info=dict(info) if isinstance(info, dict) else {},
-            frame=frame if (render and isinstance(frame, np.ndarray)) else None,
+        ev, next_obs, done = _step_once(
+            env, policy, obs=obs, t=t, render_ctx=render_ctx
         )
 
         if on_step is not None:
@@ -329,7 +347,7 @@ def stream(
 
         yield ev
 
-        if ev.terminated or ev.truncated:
+        if done:
             break
 
         obs = next_obs

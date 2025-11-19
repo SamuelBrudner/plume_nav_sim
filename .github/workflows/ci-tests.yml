@@ -213,6 +213,53 @@ jobs:
           test -f "$RUN_DIR/run.json" || (echo "Missing run.json in $RUN_DIR" >&2; exit 1)
           echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
 
+  plug-and-play-demo-smoke:
+    runs-on: ubuntu-latest
+    name: "Plug-and-play demo smoke"
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install plume-nav-sim backend (editable)
+        run: python -m pip install -e "src/backend"
+
+      - name: Install plug-and-play demo (editable)
+        run: python -m pip install -e "plug-and-play-demo"
+
+      - name: "Quickstart smoke: run plug-and-play main.py"
+        run: |
+          set -euo pipefail
+          # Static plume, small grid, no capture flags
+          python plug-and-play-demo/main.py \
+            --grid 8x8 \
+            --max-steps 10 \
+            --plume static
+
+      - name: "Headless check: debugger plugin entry point"
+        run: |
+          set -euo pipefail
+          python - << 'PY'
+          from importlib.metadata import entry_points
+
+          eps = entry_points(group="plume_nav_sim.debugger_plugins")
+          names = {ep.name for ep in eps}
+          if "plug_and_play_demo" not in names:
+              raise SystemExit("plug_and_play_demo debugger plugin entry point not found")
+
+          print("Discovered debugger plugins:", sorted(names))
+          PY
+
   gui-docs-media-tests:
     runs-on: ubuntu-latest
     name: "GUI + Docs + Media tests"
