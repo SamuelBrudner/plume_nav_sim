@@ -14,17 +14,18 @@ def _pyqt5_present() -> bool:
 
 
 def _pyside6_available() -> bool:
-    """Return True only if PySide6 and QtWidgets can be imported.
+    """Return True only if a minimal Qt application can be constructed.
 
-    This guards against environments where the PySide6 wheel is present but
-    required system libraries (e.g., libEGL.so.1) are missing, which would
-    otherwise raise ImportError at import time.
+    This guards against environments where the PySide6 wheel can be imported
+    but required system libraries (e.g., libEGL.so.1) are missing, which would
+    otherwise raise errors when creating a QApplication on CI runners.
     """
     try:
-        import PySide6  # type: ignore[import]
         from PySide6 import QtWidgets  # type: ignore[import]
 
-        _ = QtWidgets.QApplication  # noqa: F841
+        app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        # Immediately shut down to avoid leaking global Qt state
+        app.quit()
         return True
     except Exception:
         return False

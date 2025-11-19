@@ -16,10 +16,10 @@ def _pyqt5_present() -> bool:
 
 def _pyside6_available() -> bool:
     try:
-        import PySide6  # type: ignore[import]
         from PySide6 import QtWidgets  # type: ignore[import]
 
-        _ = QtWidgets.QApplication  # noqa: F841
+        app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        app.quit()
         return True
     except Exception:
         return False
