@@ -121,11 +121,7 @@ def test_provider_mux_integration_sets_source_and_action_names(monkeypatch):
 
 
 @pytest.mark.skipif(
-    (
-        "PySide6" not in __import__("sys").modules
-        and __import__("importlib").util.find_spec("PySide6") is None
-    )
-    or _pyqt5_present(),
+    (not _pyside6_available()) or _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_strict_mode_no_fallbacks(monkeypatch):
