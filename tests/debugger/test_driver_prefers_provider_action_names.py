@@ -14,12 +14,19 @@ def _pyqt5_present() -> bool:
         return False
 
 
+def _pyside6_available() -> bool:
+    try:
+        import PySide6  # type: ignore[import]
+        from PySide6 import QtWidgets  # type: ignore[import]
+
+        _ = QtWidgets.QApplication  # noqa: F841
+        return True
+    except Exception:
+        return False
+
+
 @pytest.mark.skipif(
-    (
-        "PySide6" not in __import__("sys").modules
-        and __import__("importlib").util.find_spec("PySide6") is None
-    )
-    or _pyqt5_present(),
+    (not _pyside6_available()) or _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_driver_prefers_provider_action_names_strict_mode():

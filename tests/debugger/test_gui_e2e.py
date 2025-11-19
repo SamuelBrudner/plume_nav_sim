@@ -13,12 +13,25 @@ def _pyqt5_present() -> bool:
         return False
 
 
+def _pyside6_available() -> bool:
+    """Return True only if PySide6 and QtWidgets can be imported.
+
+    This guards against environments where the PySide6 wheel is present but
+    required system libraries (e.g., libEGL.so.1) are missing, which would
+    otherwise raise ImportError at import time.
+    """
+    try:
+        import PySide6  # type: ignore[import]
+        from PySide6 import QtWidgets  # type: ignore[import]
+
+        _ = QtWidgets.QApplication  # noqa: F841
+        return True
+    except Exception:
+        return False
+
+
 @pytest.mark.skipif(
-    (
-        "PySide6" not in __import__("sys").modules
-        and __import__("importlib").util.find_spec("PySide6") is None
-    )
-    or _pyqt5_present(),
+    (not _pyside6_available()) or _pyqt5_present(),
     reason="PySide6 not available or PyQt5 present (binding conflict)",
 )
 def test_provider_mux_integration_sets_source_and_action_names(monkeypatch):
