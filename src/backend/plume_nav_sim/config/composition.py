@@ -19,6 +19,7 @@ Contributor guide
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from importlib import import_module
 from types import ModuleType
@@ -165,7 +166,7 @@ def _import_longest_prefix(dotted: str) -> tuple[ModuleType, Optional[str]]:
         try:
             mod = _import_module(mod_name)
             remainder = ".".join(parts[i:]) if i < len(parts) else None
-            return mod, (remainder if remainder else None)
+            return mod, (remainder or None)
         except ModuleNotFoundError:
             continue
     # Fall back to plain import error
@@ -197,11 +198,7 @@ def load_policy(spec: str, *, kwargs: Optional[dict] = None) -> LoadedPolicy:
         mod, attr_path = _import_longest_prefix(spec)
 
     target: Any
-    if attr_path:
-        target = _resolve_attr(mod, attr_path)
-    else:
-        target = mod
-
+    target = _resolve_attr(mod, attr_path) if attr_path else mod
     # If target is a class, instantiate (passing kwargs if provided); otherwise return as-is
     try:
         if isinstance(target, type):
@@ -231,10 +228,8 @@ def reset_policy_if_possible(obj: Any, *, seed: Optional[int]) -> None:
     seed
         Seed to pass to the reset method.
     """
-    try:
+    with contextlib.suppress(Exception):
         obj.reset(seed=seed)  # type: ignore[attr-defined]
-    except Exception:
-        pass
 
 
 # ===== Builders =====

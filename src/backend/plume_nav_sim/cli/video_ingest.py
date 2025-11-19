@@ -83,8 +83,7 @@ def _iter_frames_from_dir(iio, directory: Path) -> Iterator[np.ndarray]:
     exts = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"}
     files = sorted([p for p in directory.iterdir() if p.suffix.lower() in exts])
     for fp in files:
-        arr = iio.imread(fp)
-        yield arr
+        yield iio.imread(fp)
 
 
 def _iter_frames(iio, input_path: Path) -> Iterator[np.ndarray]:
@@ -99,8 +98,7 @@ def _iter_frames(iio, input_path: Path) -> Iterator[np.ndarray]:
         # Fallback: read into array, then split on first axis if multi-frame
         arr = iio.imread(str(input_path))
         if arr.ndim >= 4:  # e.g., (T, H, W, C)
-            for f in arr:
-                yield f
+            yield from arr
         else:
             yield arr
 
@@ -142,15 +140,11 @@ def _stack_to_concentration(
             data = (stack.astype(np.float32) / float(maxv)).astype(np.float32)
         else:
             data = stack.astype(np.float32)
-        src_dtype_str = str(
-            src_dtype.name if isinstance(src_dtype, np.dtype) else src_dtype
-        )
     else:
         data = stack.astype(np.float32)
-        src_dtype_str = str(
-            src_dtype.name if isinstance(src_dtype, np.dtype) else src_dtype
-        )
-
+    src_dtype_str = str(
+        src_dtype.name if isinstance(src_dtype, np.dtype) else src_dtype
+    )
     return data, src_dtype_str
 
 

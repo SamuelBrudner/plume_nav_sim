@@ -15,11 +15,10 @@ import sys  # standard library - System interaction for exit code management and
 import threading  # standard library - Background input handling and non-blocking keyboard input processing for smooth manual control
 import time  # standard library - High-precision timing for manual control performance tracking and session duration analysis
 
-import matplotlib.pyplot as plt  # >=3.9.0 - Interactive visualization framework for real-time manual control display with keyboard event handling
-import numpy as np  # >=2.1.0 - Array operations for manual control statistics, position tracking, and performance analysis
-
 # External imports with version comments
 import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for manual control environment instantiation and step processing
+import matplotlib.pyplot as plt  # >=3.9.0 - Interactive visualization framework for real-time manual control display with keyboard event handling
+import numpy as np  # >=2.1.0 - Array operations for manual control statistics, position tracking, and performance analysis
 
 from ..plume_nav_sim.core.constants import (
     CONTROL_INSTRUCTIONS,
@@ -773,18 +772,16 @@ def update_session_statistics(
         position_history = session_stats.get("position_history", [])
 
         movement_efficiency = 0.0
-        if total_actions > 0 and position_history:
-            # Calculate straight-line distance vs actual path length
-            if len(position_history) >= 2:
-                start_pos = position_history[0]
-                current_pos = position_history[-1]
-                straight_distance = np.sqrt(
-                    (current_pos[0] - start_pos[0]) ** 2
-                    + (current_pos[1] - start_pos[1]) ** 2
-                )
+        if total_actions > 0 and position_history and len(position_history) >= 2:
+            start_pos = position_history[0]
+            current_pos = position_history[-1]
+            straight_distance = np.sqrt(
+                (current_pos[0] - start_pos[0]) ** 2
+                + (current_pos[1] - start_pos[1]) ** 2
+            )
 
-                if total_actions > 0:
-                    movement_efficiency = straight_distance / total_actions
+            if total_actions > 0:
+                movement_efficiency = straight_distance / total_actions
 
         session_stats["movement_efficiency"] = movement_efficiency
 

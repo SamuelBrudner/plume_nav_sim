@@ -290,18 +290,16 @@ class EpisodeManagerConfig:
                         )
 
             # Validate performance monitoring and state validation configuration consistency
-            if strict_mode:
-                if (
-                    not self.enable_state_validation
-                    and self.enable_reproducibility_validation
-                ):
-                    raise ValidationError(
-                        message="reproducibility validation requires state validation",
-                        parameter_name="validation_configuration",
-                        parameter_value="enable_state_validation=False with enable_reproducibility_validation=True",
-                        expected_format="consistent validation settings",
-                    )
-
+            if strict_mode and (
+                not self.enable_state_validation
+                and self.enable_reproducibility_validation
+            ):
+                raise ValidationError(
+                    message="reproducibility validation requires state validation",
+                    parameter_name="validation_configuration",
+                    parameter_value="enable_state_validation=False with enable_reproducibility_validation=True",
+                    expected_format="consistent validation settings",
+                )
             # Ensure component integration settings are compatible with system architecture requirements
             if self.enable_component_integration and not self.enable_state_validation:
                 raise ValidationError(
@@ -468,7 +466,11 @@ class EpisodeManagerConfig:
 
             return component_configs
 
+        except ValidationError:
+            # Surface structured validation errors directly to callers and tests
+            raise
         except Exception as e:
+            # Wrap unexpected internal failures in ComponentError for clearer diagnostics
             raise ComponentError(
                 message=f"Failed to derive component configurations: {str(e)}",
                 component_name="EpisodeManagerConfig",

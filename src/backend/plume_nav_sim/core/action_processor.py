@@ -679,12 +679,12 @@ class ActionProcessor:
                     "median_processing_time_ms": np.median(processing_times),
                     "max_processing_time_ms": np.max(processing_times),
                     "min_processing_time_ms": np.min(processing_times),
-                    "target_compliance_rate": sum(
-                        1
-                        for t in processing_times
-                        if t <= self.config.performance_target_ms
-                    )
-                    / len(processing_times),
+                    "target_compliance_rate": np.mean(
+                        [
+                            t <= self.config.performance_target_ms
+                            for t in processing_times
+                        ]
+                    ),
                 }
 
             # Add cache analysis
@@ -934,12 +934,7 @@ def calculate_movement_delta(
         if validate_action and not validate_action_bounds(action):
             raise ValidationError(f"Invalid action for movement calculation: {action}")
 
-        # Convert Action enum to integer
-        if isinstance(action, Action):
-            action_int = int(action)
-        else:
-            action_int = int(action)
-
+        action_int = int(action)
         # Lookup movement vector from MOVEMENT_VECTORS
         if action_int in MOVEMENT_VECTORS:
             return MOVEMENT_VECTORS[action_int]
