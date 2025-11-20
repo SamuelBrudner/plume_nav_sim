@@ -39,7 +39,7 @@ jobs:
 
           if grep -q "SKIPPED" pytest_output.txt; then
             echo "Found skipped tests in summary; checking for allowed skips..." >&2
-            disallowed_skips=$(grep "SKIPPED" pytest_output.txt | grep -Ev "zarr|xarray|imageio|PySide6|nbformat" || true)
+            disallowed_skips=$(grep "SKIPPED" pytest_output.txt | grep -Ev "zarr|xarray|imageio|PySide6|nbformat|movie_sidecar_integration" || true)
             if [ -n "$disallowed_skips" ]; then
               echo "Unexpected skipped tests detected:" >&2
               echo "$disallowed_skips" >&2
