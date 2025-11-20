@@ -29,7 +29,7 @@ from typing_extensions import TypedDict
 try:  # pragma: no cover - Protocol is present on supported runtimes
     from typing import Protocol
 except ImportError:  # pragma: no cover - fallback for older Python in trimmed envs
-    from typing_extensions import Protocol  # type: ignore[misc]
+    from typing_extensions import Protocol
 
 
 # External imports with version comments for dependency management and compatibility tracking
