@@ -100,6 +100,10 @@ def test_resolve_movie_dataset_path_hdf5_sidecar_integration(tmp_path: Path) -> 
     try:
         import h5py  # type: ignore
 
+        # Hard skip when optional media deps missing
+        zarr = pytest.importorskip("zarr")
+        numcodecs = pytest.importorskip("numcodecs")  # noqa: F401
+
         from plume_nav_sim.media import (
             MANIFEST_FILENAME,
             get_default_manifest_path,
