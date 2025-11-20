@@ -245,6 +245,11 @@ Troubleshooting “'widget' is not a recognised backend name”:
   - Quick run from repo root: `python plug-and-play-demo/main.py`
   - Notebook: `plug-and-play-demo/plug_and_play_demo.ipynb`
   - Details and options: `plug-and-play-demo/README.md`
+  - Movie plumes use a per-movie YAML sidecar `<movie>.<ext>.plume-movie.yaml` as
+    the canonical source of movie metadata. In this regime, `fps` is always
+    interpreted as frames per second (time unit = seconds) and spatial
+    calibration (`pixel_to_grid` and the physical spatial unit of the plume
+    field) is derived from the sidecar's `spatial_unit` and `pixels_per_unit`.
 
 - Capture workflow notebook (stable)
   - Notebook: `notebooks/stable/capture_end_to_end.ipynb`

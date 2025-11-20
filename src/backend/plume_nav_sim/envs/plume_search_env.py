@@ -184,6 +184,7 @@ class PlumeSearchEnv(gym.Env):
             "movie_origin",
             "movie_extent",
             "movie_step_policy",
+            "movie_h5_dataset",
         ):
             if key in env_options:
                 factory_kwargs[key] = env_options[key]

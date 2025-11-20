@@ -77,6 +77,7 @@ Create a dataset from a video
 
 - The resulting dataset must contain `concentration (t,y,x)` as float32 and a `manifest.json` with CLI args for provenance.
 - Contract reference: `src/backend/docs/contracts/video_plume_dataset.md`.
+- For workflows that start from a raw movie file at runtime (for example, `movie_path="my_movie.avi"` or `movie_path="my_movie.h5"` passed into `create_component_environment`), movie metadata such as `fps` and spatial calibration MUST be provided via the per‑movie YAML sidecar (`*.plume-movie.yaml`); see `src/backend/SEMANTIC_MODEL.md` for the "Movie metadata sidecar (canonical movie metadata)" section.
 
 Quick demo with the bundled movie plume
 
@@ -97,3 +98,4 @@ Further reading
 - Schema + validator: `src/backend/plume_nav_sim/video/schema.py`
 - xarray-like dataset validation: `src/backend/plume_nav_sim/media/schema.py`
 - Ingest CLI: `src/backend/plume_nav_sim/cli/video_ingest.py`
+- Movie metadata sidecar (canonical movie metadata → `VideoPlumeAttrs`): `src/backend/SEMANTIC_MODEL.md`, `src/backend/docs/contracts/video_plume_dataset.md`

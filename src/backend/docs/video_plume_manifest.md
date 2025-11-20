@@ -36,3 +36,4 @@ Notes:
 - Avoid secrets; environment metadata is intentionally minimal.
 - Optional: record a simple "git dirty" flag in your own pipeline if you need to distinguish uncommitted changes when producing datasets. The core manifest focuses on stable identifiers (`git_sha`, `package_version`).
 - DVC: track the dataset directory as an `outs` and parametrize the ingest stage so `cli_args` reflect the same arguments used by `dvc repro`.
+- Movie metadata (fps, spatial calibration, and HDF5 dataset selection) for movie‑backed plume fields is modeled separately in the per‑movie YAML sidecar; see `src/backend/SEMANTIC_MODEL.md` and `src/backend/docs/contracts/video_plume_dataset.md` for the sidecar schema and its mapping into the dataset attrs.

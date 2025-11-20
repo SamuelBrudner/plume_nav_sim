@@ -190,3 +190,22 @@ def test_determinism_across_calls():
     seq1 = [map_step_to_frame(k, fps=24.0, total_frames=5) for k in range(20)]
     seq2 = [map_step_to_frame(k, fps=24.0, total_frames=5) for k in range(20)]
     assert seq1 == seq2
+
+
+def test_non_integer_fps_with_steps_per_second():
+    fps = 2.5
+    steps_per_second = 2.0
+    total_frames = 8
+
+    idxs = [
+        map_step_to_frame(
+            k,
+            fps=fps,
+            steps_per_second=steps_per_second,
+            total_frames=total_frames,
+            rounding="nearest",
+            policy=FrameMappingPolicy.CLAMP,
+        )
+        for k in range(6)
+    ]
+    assert idxs == [0, 1, 3, 4, 5, 6]

@@ -13,7 +13,7 @@ This guide clarifies the roles of the data‑related packages and where to make 
   - Purpose: Dataset metadata and utilities for video‑derived datasets (provenance manifest, dataset validation, time mapping).
   - Contents: `manifest.py` (ProvenanceManifest), `schema.py` (xarray‑like dataset validation reusing canonical constants), `mapping.py` (simulation step ↔ video frame mapping).
   - Note: Name retained as `media` for backward‑compatibility; it represents dataset metadata/manifests. Future rename to `datasets/` may add an alias if needed.
-  - Docs: `src/backend/docs/video_plume_manifest.md`.
+  - Docs: `src/backend/docs/video_plume_manifest.md` (provenance manifest), `src/backend/docs/contracts/video_plume_dataset.md` (dataset and movie sidecar contract).
 
 - `src/backend/plume_nav_sim/video/`
   - Purpose: Canonical schema for video plume datasets (constants and Pydantic model) and attribute validation with minimal dependencies.
@@ -30,7 +30,7 @@ This guide clarifies the roles of the data‑related packages and where to make 
 
 ## Contracts
 
-- Video plume dataset contract: `src/backend/docs/contracts/video_plume_dataset.md`
+- Video plume dataset + movie metadata sidecar contract: `src/backend/docs/contracts/video_plume_dataset.md`
 - Capture schemas and versioning: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_capture_versioning.md`
 
 For a higher-level overview of the repository layout and public API (including where `plume_nav_sim` exports its main entrypoints and where to add new components), see:

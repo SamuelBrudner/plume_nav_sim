@@ -42,8 +42,18 @@ def _build_movie_kwargs(
     movie_path: Optional[str],
     movie_fps: Optional[float],
     movie_step_policy: Optional[str],
+    movie_h5_dataset: Optional[str],
 ) -> Dict[str, Any]:
-    """Resolve movie plume configuration (path, fps, step policy)."""
+    """Resolve movie plume configuration (path, fps, step policy).
+
+    Unit conventions
+    ----------------
+
+    - ``movie_fps`` is interpreted as frames per second (time unit = seconds).
+    - Spatial calibration and physical spatial units for movie plumes are
+      derived from the movie metadata sidecar (``spatial_unit`` and
+      ``pixels_per_unit``); there are no separate CLI flags for spatial units.
+    """
 
     if plume != "movie":
         return {}
@@ -56,6 +66,13 @@ def _build_movie_kwargs(
         )
 
     movie_kwargs: Dict[str, Any] = {"movie_path": str(resolved_path)}
+    suffix = resolved_path.suffix.lower()
+    if suffix in {".h5", ".hdf5"}:
+        if not movie_h5_dataset:
+            raise SystemExit(
+                "HDF5 movie plume requires --movie-h5-dataset to specify the dataset within the file"
+            )
+        movie_kwargs["movie_h5_dataset"] = movie_h5_dataset
     if movie_fps is not None:
         movie_kwargs["movie_fps"] = float(movie_fps)
     if movie_step_policy is not None:
@@ -123,6 +140,7 @@ def run_demo(
     movie_path: Optional[str] = None,
     movie_fps: Optional[float] = None,
     movie_step_policy: Optional[str] = None,
+    movie_h5_dataset: Optional[str] = None,
 ) -> None:
     try:
         # Map human-friendly WxH string to SimulationSpec.grid_size=(W, H)
@@ -155,6 +173,7 @@ def run_demo(
         movie_path=movie_path,
         movie_fps=movie_fps,
         movie_step_policy=movie_step_policy,
+        movie_h5_dataset=movie_h5_dataset,
     )
 
     sim = SimulationSpec(
@@ -266,13 +285,28 @@ def main() -> None:
         "--movie-fps",
         type=float,
         default=None,
-        help="Override movie fps metadata when using plume='movie'",
+        help=(
+            "Expected movie fps (frames per second) when using plume='movie'. "
+            "For raw media sources with a metadata sidecar this is a "
+            "validation alias and must match the sidecar; it does not "
+            "override sidecar-derived metadata."
+        ),
     )
     parser.add_argument(
         "--movie-step-policy",
         choices=["wrap", "clamp"],
         default=None,
         help="Optional MoviePlumeField step policy override",
+    )
+    parser.add_argument(
+        "--movie-h5-dataset",
+        type=str,
+        default=None,
+        help=(
+            "Required for this CLI when --movie-path points to an HDF5 file; "
+            "gives the dataset path within the file (e.g., 'Plume Data/dataset_001') "
+            "and must match the h5_dataset field in the movie metadata sidecar."
+        ),
     )
     parser.add_argument(
         "--save-gif",
@@ -359,6 +393,8 @@ def main() -> None:
             cfg["movie_fps"] = args.movie_fps
         if _flag_provided("--movie-step-policy"):
             cfg["movie_step_policy"] = args.movie_step_policy
+        if _flag_provided("--movie-h5-dataset"):
+            cfg["movie_h5_dataset"] = args.movie_h5_dataset
         # Policy override
         if _flag_provided("--policy-spec"):
             cfg["policy"] = {"spec": args.policy_spec}
@@ -395,6 +431,7 @@ def main() -> None:
             movie_path=args.movie_path,
             movie_fps=args.movie_fps,
             movie_step_policy=args.movie_step_policy,
+            movie_h5_dataset=args.movie_h5_dataset,
         )
 
         sim = SimulationSpec(

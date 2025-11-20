@@ -1,4 +1,4 @@
-grid_size: [128, 128]
+grid_size: [128, 128] # if you load a movie, this will be overridden by the movie dimensions
 max_steps: 500
 action_type: run_tumble
 observation_type: concentration

@@ -26,6 +26,7 @@ from .mapping import (
     map_step_to_frame,
     video_timebase_from_attrs,
 )
+from .sidecar import MovieMetadataSidecar, get_default_sidecar_path, load_movie_sidecar
 
 __all__ = [
     "MANIFEST_FILENAME",
@@ -46,4 +47,7 @@ __all__ = [
     "ROUND_NEAREST",
     "ROUND_CEIL",
     "DEFAULT_ROUNDING",
+    "MovieMetadataSidecar",
+    "get_default_sidecar_path",
+    "load_movie_sidecar",
 ]

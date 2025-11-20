@@ -310,6 +310,7 @@ def _extracted_from__env_from_cfg_11(cfg, make_kwargs):
                 tuple(movie_cfg.get("extent")) if movie_cfg.get("extent") else None
             ),
             "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
+            "movie_h5_dataset": movie_cfg.get("h5_dataset"),
         }
     )
     env = pns.make_env(**make_kwargs)

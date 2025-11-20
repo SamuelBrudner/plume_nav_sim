@@ -1,0 +1,8 @@
+version: 1
+path: plug-and-play-demo/assets/demo_10s.h5
+fps: 15.0
+spatial_unit: mm
+pixels_per_unit:
+  - 1.351351351351351
+  - 1.351351351351351
+h5_dataset: 'Plume Data/dataset_001'
