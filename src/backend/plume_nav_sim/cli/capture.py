@@ -158,9 +158,11 @@ def _apply_overrides_for_data_capture(composed: Any, overrides: List[str]) -> An
 
     try:
         return OmegaConf.merge(composed, OmegaConf.from_dotlist(list(overrides)))
-    except Exception:
+    except Exception as e:
         # If dotlist parsing fails, re-raise a helpful error
-        raise SystemExit("Failed to parse Hydra overrides: " + ", ".join(overrides))
+        raise SystemExit(
+            "Failed to parse Hydra overrides: " + ", ".join(overrides)
+        ) from e
 
 
 def _process_default_item(item: dict, conf_root: Path) -> Any:
@@ -197,8 +199,7 @@ def _process_default_item(item: dict, conf_root: Path) -> Any:
                 ),
                 options=None,
             )
-    part_cfg = OmegaConf.load(group_file)
-    return part_cfg
+    return OmegaConf.load(group_file)
 
 
 def _stable_cfg_hash(cfg_resolved: dict) -> str:

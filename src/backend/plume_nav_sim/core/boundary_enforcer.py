@@ -429,55 +429,18 @@ class BoundaryEnforcer:
         try:
             coords = create_coordinates(position)
 
-            cache_key = None
-            if self.enable_caching:
-                cache_key = (
-                    f"validate_{coords.x}_{coords.y}_"
-                    f"{self.grid_size.width}_{self.grid_size.height}"
-                )
-                cached = self.validation_cache.get(cache_key)
-                if cached is not None:
-                    self.cache_metrics["hits"] += 1
-                    return cached
-                self.cache_metrics["misses"] += 1
+            cache_key, cached = self._get_cached_position_validation(coords)
+            if cached is not None:
+                return cached
 
             is_valid = coords.is_within_bounds(self.grid_size)
+            is_valid = self._apply_strict_position_validation(coords, is_valid)
 
-            if self.constraint_config.strict_validation and is_valid:
-                tol = max(self.constraint_config.tolerance, 0.0)
-                near_edge = (
-                    coords.x < tol
-                    or coords.x >= self.grid_size.width - tol
-                    or coords.y < tol
-                    or coords.y >= self.grid_size.height - tol
-                )
-                if near_edge:
-                    is_valid = False
-
-            if self.enable_caching and cache_key is not None:
-                self.validation_cache[cache_key] = is_valid
-                if len(self.validation_cache) > BOUNDARY_VALIDATION_CACHE_SIZE:
-                    first_key = next(iter(self.validation_cache))
-                    self.validation_cache.pop(first_key, None)
-                    self.cache_metrics["evictions"] += 1
-
-            self.performance_metrics["validation_times"].append(
-                (time.perf_counter() - start_time) * 1000
-            )
+            self._update_position_validation_cache(cache_key, is_valid)
+            self._record_position_validation_time(start_time)
 
             if not is_valid and raise_on_invalid:
-                message = f"Position {coords} outside grid bounds {self.grid_size}"
-                if context_info:
-                    message += f" (Context: {context_info})"
-                raise ValidationError(
-                    message,
-                    parameter_name="position",
-                    parameter_value=(coords.x, coords.y),
-                    expected_format=(
-                        f"coordinates within bounds (0, 0) to "
-                        f"({self.grid_size.width - 1}, {self.grid_size.height - 1})"
-                    ),
-                )
+                self._raise_position_out_of_bounds(coords, context_info)
 
             if context_info and not is_valid:
                 self.logger.debug(
@@ -500,6 +463,77 @@ class BoundaryEnforcer:
                     parameter_value=str(position),
                 ) from exc
             return False
+
+    def _get_cached_position_validation(
+        self, coords: Coordinates
+    ) -> Tuple[Optional[str], Optional[bool]]:
+        """Return cache key and cached result (if any) for a position validation."""
+        if not self.enable_caching:
+            return None, None
+
+        cache_key = (
+            f"validate_{coords.x}_{coords.y}_"
+            f"{self.grid_size.width}_{self.grid_size.height}"
+        )
+        cached = self.validation_cache.get(cache_key)
+        if cached is not None:
+            self.cache_metrics["hits"] += 1
+            return cache_key, cached
+
+        self.cache_metrics["misses"] += 1
+        return cache_key, None
+
+    def _apply_strict_position_validation(
+        self, coords: Coordinates, is_valid: bool
+    ) -> bool:
+        """Apply strict edge tolerance rules when strict_validation is enabled."""
+        if not (self.constraint_config.strict_validation and is_valid):
+            return is_valid
+
+        tol = max(self.constraint_config.tolerance, 0.0)
+        near_edge = (
+            coords.x < tol
+            or coords.x >= self.grid_size.width - tol
+            or coords.y < tol
+            or coords.y >= self.grid_size.height - tol
+        )
+        return not near_edge
+
+    def _update_position_validation_cache(
+        self, cache_key: Optional[str], is_valid: bool
+    ) -> None:
+        """Update the position validation cache and eviction metrics."""
+        if not (self.enable_caching and cache_key is not None):
+            return
+
+        self.validation_cache[cache_key] = is_valid
+        if len(self.validation_cache) > BOUNDARY_VALIDATION_CACHE_SIZE:
+            first_key = next(iter(self.validation_cache))
+            self.validation_cache.pop(first_key, None)
+            self.cache_metrics["evictions"] += 1
+
+    def _record_position_validation_time(self, start_time: float) -> None:
+        """Record the elapsed validation time in milliseconds."""
+        self.performance_metrics["validation_times"].append(
+            (time.perf_counter() - start_time) * 1000
+        )
+
+    def _raise_position_out_of_bounds(
+        self, coords: Coordinates, context_info: Optional[str]
+    ) -> None:
+        """Raise a ValidationError for an out-of-bounds position."""
+        message = f"Position {coords} outside grid bounds {self.grid_size}"
+        if context_info:
+            message += f" (Context: {context_info})"
+        raise ValidationError(
+            message,
+            parameter_name="position",
+            parameter_value=(coords.x, coords.y),
+            expected_format=(
+                f"coordinates within bounds (0, 0) to "
+                f"({self.grid_size.width - 1}, {self.grid_size.height - 1})"
+            ),
+        )
 
     @monitor_performance("movement_validation", 0.05, False)
     def is_movement_valid(
@@ -908,26 +942,12 @@ def validate_movement_bounds(
         new_y = coords.y + movement_vector[1]
 
         # Check if proposed position is within grid bounds using bounds checking
-        if (
-            new_x < 0
-            or new_x >= grid_bounds.width
-            or new_y < 0
-            or new_y >= grid_bounds.height
-        ):
-            return False
-
-        # Apply strict validation rules if strict_validation enabled including edge case testing
-        if strict_validation and (
-            new_x == 0
-            or new_x == grid_bounds.width - 1
-            or new_y == 0
-            or new_y == grid_bounds.height - 1
-        ):
-            pass
-
-        # Return boolean result indicating movement validity without raising exceptions for performance
-        return True
-
+        return (
+            new_x >= 0
+            and new_x < grid_bounds.width
+            and new_y >= 0
+            and new_y < grid_bounds.height
+        )
     except Exception:
         # Return False for any validation errors to maintain performance
         return False
@@ -1011,12 +1031,7 @@ def is_position_within_bounds(position: CoordinateType, grid_bounds: GridSize) -
             return False
 
         # Check y-coordinate is within range [0, grid_bounds.height - 1] using integer comparison
-        if coords.y < 0 or coords.y >= grid_bounds.height:
-            return False
-
-        # Return boolean result using logical AND of both coordinate range checks
-        return True
-
+        return coords.y >= 0 and coords.y < grid_bounds.height
     except Exception:
         # Return False for any conversion or validation errors
         return False

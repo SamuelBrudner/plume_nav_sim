@@ -62,8 +62,4 @@ class StateSnapshot:
         except Exception as exc:  # Defensive: never raise from validation
             warnings.append(f"validation_exception: {exc}")
 
-        return {
-            "is_consistent": len(errors) == 0,
-            "errors": errors,
-            "warnings": warnings,
-        }
+        return {"is_consistent": not errors, "errors": errors, "warnings": warnings}

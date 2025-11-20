@@ -75,10 +75,7 @@ def _round_half_up(x: float) -> int:
     floor(x + 0.5). Defined explicitly to avoid Python's bankers' rounding.
     """
 
-    if x >= 0:
-        return int(math.floor(x + 0.5))
-    # For completeness, support negative values deterministically
-    return int(math.ceil(x - 0.5))
+    return int(math.floor(x + 0.5)) if x >= 0 else int(math.ceil(x - 0.5))
 
 
 def resolve_fps(
