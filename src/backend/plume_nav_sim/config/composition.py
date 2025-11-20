@@ -82,7 +82,40 @@ class PolicySpec(BaseModel):
 
 
 class SimulationSpec(BaseModel):
-    """Specification for constructing an environment and policy."""
+    """Specification for constructing an environment and policy.
+
+    Movie plume configuration
+    -------------------------
+
+    The ``plume`` and ``movie_*`` fields provide a lightweight front-end to
+    the component-based environment factory used by :func:`prepare`.
+
+    Under the movie metadata sidecar regime:
+
+    - ``movie_path`` selects the recording to use.
+    - ``movie_step_policy`` controls how environment steps map to frames.
+    - ``movie_fps``, ``movie_pixel_to_grid``, ``movie_origin``,
+      ``movie_extent`` and ``movie_h5_dataset`` are treated as validation
+      aliases:
+
+        * For raw media sources (files that will be ingested), these values
+          are forwarded to :func:`plume_nav_sim.plume.movie_field.resolve_movie_dataset_path`
+          and must agree with the movie metadata sidecar; they do not
+          override sidecar metadata.
+        * For already-ingested dataset directories (for example, ``*.zarr``),
+          the same fields remain optional overrides for the dataset's own
+          attrs and behave as before.
+
+    Unit conventions
+    ----------------
+
+    - Time is measured in seconds: ``movie_fps`` is always interpreted as
+      frames per second, and there is currently no separate ``time_unit``
+      field.
+    - For movie plumes, the physical spatial unit of the plume field is
+      determined by the movie metadata sidecar's ``spatial_unit``; there is
+      currently no separate ``SimulationSpec.spatial_unit`` override.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -104,6 +137,7 @@ class SimulationSpec(BaseModel):
     movie_origin: Optional[Tuple[float, float]] = Field(default=None)
     movie_extent: Optional[Tuple[float, float]] = Field(default=None)
     movie_step_policy: Optional[Literal["wrap", "clamp"]] = Field(default=None)
+    movie_h5_dataset: Optional[str] = Field(default=None)
 
     # Optional observation wrappers applied after env creation (in order).
     # Each wrapper is specified via dotted path and kwargs; the wrapper class
@@ -264,21 +298,30 @@ def _add_if_not_none(
     kwargs[key] = transform(value) if transform is not None else value
 
 
-def build_env(spec: SimulationSpec):
-    """Construct an environment from SimulationSpec using pns.make_env.
+def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
+    """Translate SimulationSpec into kwargs for pns.make_env.
 
-    Only forwards parameters explicitly set in the spec; others use defaults.
+    Only forwards parameters explicitly set on the spec so that
+    make_env/env factories can apply their own defaults. For plume
+    parameters, this helper maps ``plume_sigma`` onto the modern
+    ``plume_params.sigma`` configuration expected by PlumeSearchEnv.
     """
+
     kwargs: dict[str, Any] = {}
     _add_if_not_none(kwargs, "grid_size", spec.grid_size, tuple)
     _add_if_not_none(kwargs, "source_location", spec.source_location, tuple)
     _add_if_not_none(kwargs, "start_location", spec.start_location, tuple)
     _add_if_not_none(kwargs, "goal_radius", spec.goal_radius, float)
-    _add_if_not_none(kwargs, "plume_sigma", spec.plume_sigma, float)
     _add_if_not_none(kwargs, "max_steps", spec.max_steps, int)
     _add_if_not_none(kwargs, "action_type", spec.action_type)
     _add_if_not_none(kwargs, "observation_type", spec.observation_type)
     _add_if_not_none(kwargs, "reward_type", spec.reward_type)
+
+    # Plume configuration: SimulationSpec exposes plume_sigma directly,
+    # but the PlumeSearchEnv wrapper expects plume_params.sigma.
+    if spec.plume_sigma is not None:
+        kwargs["plume_params"] = {"sigma": float(spec.plume_sigma)}
+
     _add_if_not_none(kwargs, "plume", spec.plume)
     _add_if_not_none(kwargs, "movie_path", spec.movie_path)
     _add_if_not_none(kwargs, "movie_fps", spec.movie_fps, float)
@@ -301,8 +344,22 @@ def build_env(spec: SimulationSpec):
         lambda v: tuple(v),
     )
     _add_if_not_none(kwargs, "movie_step_policy", spec.movie_step_policy)
-    kwargs["render_mode"] = "rgb_array" if spec.render else None
+    _add_if_not_none(kwargs, "movie_h5_dataset", spec.movie_h5_dataset)
 
+    if spec.render:
+        kwargs["render_mode"] = "rgb_array"
+
+    return kwargs
+
+
+def build_env(spec: SimulationSpec):
+    """Construct an environment from SimulationSpec using pns.make_env.
+
+    This is a thin adapter that converts the high-level SimulationSpec into
+    the kwargs expected by the underlying PlumeSearchEnv/DI stack while
+    leaving defaults to the factory.
+    """
+    kwargs = _build_env_kwargs_from_spec(spec)
     return pns.make_env(**kwargs)
 
 

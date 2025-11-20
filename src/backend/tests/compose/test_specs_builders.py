@@ -4,6 +4,8 @@ import sys
 
 import numpy as np
 
+import plume_nav_sim as pns
+
 
 def _ensure_src_on_path():
     import pathlib
@@ -70,3 +72,40 @@ def test_build_policy_custom_dotted_class_with_kwargs():
     policy = build_policy(ps)
     a = policy.select_action(np.array([0.5]), explore=False)
     assert a in (0, 1)
+
+
+def test_build_env_forwards_plume_sigma_via_plume_params(monkeypatch):
+    """SimulationSpec.plume_sigma should populate plume_params['sigma'] for make_env.
+
+    This verifies that the spec-level plume_sigma dial is wired through the
+    composition layer into the modern PlumeSearchEnv configuration, which
+    expects plume_params.sigma.
+    """
+
+    captured: dict = {}
+
+    def _fake_make_env(**kwargs):  # type: ignore[no-untyped-def]
+        captured["kwargs"] = kwargs
+
+        class _DummyEnv:
+            # Minimal surface so callers that expect an env object do not fail.
+            action_space = None
+
+        return _DummyEnv()
+
+    monkeypatch.setattr(pns, "make_env", _fake_make_env)
+
+    sim = SimulationSpec(
+        grid_size=(16, 16),
+        plume_sigma=12.5,
+        render=False,
+        action_type="oriented",
+        observation_type="concentration",
+        reward_type="step_penalty",
+    )
+
+    _ = build_env(sim)
+
+    assert "kwargs" in captured
+    kwargs = captured["kwargs"]
+    assert kwargs.get("plume_params") == {"sigma": 12.5}

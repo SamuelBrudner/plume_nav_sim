@@ -101,6 +101,61 @@ Summary (authoritative details in the contract document):
 
 Validators and writers in `plume_nav_sim` must conform to that contract; this semantic model references it as the source of truth.
 
+#### Movie metadata sidecar (canonical movie metadata)
+
+Movie‑backed plume fields created from raw movies (e.g., `.avi`, `.mp4`, `.h5`) use a **per‑movie YAML sidecar** as the *single* source of truth for movie metadata. The sidecar is loaded by `plume_nav_sim.media.sidecar.load_movie_sidecar` and drives ingest via `plume_nav_sim.plume.movie_field.resolve_movie_dataset_path`.
+
+- Location: for a movie at `path/to/movie.ext`, the sidecar lives at `path/to/movie.ext.plume-movie.yaml` (see `get_default_sidecar_path`).
+- Role: define canonical `fps` and spatial calibration for the movie; these are then transformed into `VideoPlumeAttrs` on the Zarr dataset.
+
+**v1 sidecar schema and invariants** (see `MovieMetadataSidecar`):
+
+- `version: int` – schema version (currently `1`); reserved for future changes.
+- `path: Optional[str]` – optional original media path for provenance; does *not* affect ingest semantics.
+- `fps: PositiveFloat` – frames per second of the movie; always interpreted as
+  *frames per second* (time unit = seconds, no separate `time_unit` field).
+- `spatial_unit: str` – unit label for the movie’s spatial coordinate system:
+  - `"pixel"` → movie is in pixel space; `pixels_per_unit` **must be omitted**.
+  - any other unit (e.g., `"mm"`, `"cm"`) → movie is in a physical unit; `pixels_per_unit` **must be provided**.
+- `pixels_per_unit: Optional[Tuple[float, float]]` – number of pixels per one spatial unit `(y, x)`:
+  - required and strictly positive when `spatial_unit` is not `"pixel"`.
+  - must be omitted when `spatial_unit == "pixel"`.
+- `h5_dataset: Optional[str]` – dataset path inside an HDF5 container:
+  - required for `.h5` / `.hdf5` sources.
+  - must be *absent* for non‑HDF5 sources (AVI/MP4/image directories, etc.).
+
+**Mapping: sidecar → `VideoPlumeAttrs`** (applied by `resolve_movie_dataset_path`):
+
+- `attrs.fps = sidecar.fps`.
+- `attrs.pixel_to_grid` encodes grid units per pixel `(y, x)`:
+  - if `spatial_unit == "pixel"`: `pixel_to_grid = (1.0, 1.0)` (one grid unit per pixel; grid
+    units are pixels).
+  - otherwise: `pixel_to_grid = (1.0 / pixels_per_unit_y, 1.0 / pixels_per_unit_x)`.
+- `attrs.origin = (0.0, 0.0)` – the grid origin is fixed at the top‑left corner of the movie.
+- `attrs.extent` is derived from array shape and `pixel_to_grid` (see `_resolve_extent`):
+  - `extent_y = height * pixel_to_grid_y`
+  - `extent_x = width * pixel_to_grid_x`
+
+At the configuration level (e.g., `SimulationSpec`), movie plumes inherit these
+units:
+
+- The temporal unit is seconds via `fps` (frames per second); there is no
+  separate `time_unit` field.
+- The physical spatial unit of the plume field is determined by the
+  sidecar’s `spatial_unit`; there is currently no separate
+  `SimulationSpec.spatial_unit` override.
+
+Once written, the dataset’s `VideoPlumeAttrs` are the canonical metadata used at runtime by `MoviePlumeField`. The sidecar is authoritative *only at ingest time*; after ingest, the semantic model for the movie plume is fully captured by the dataset attrs.
+
+**Container metadata vs. sidecar:**
+
+- Format‑specific metadata (e.g., `imagingParameters/frameRate` inside certain HDF5 files) may be consulted by ingestion utilities as a *validation* or best‑effort fallback when no sidecar is used directly.
+- When a movie metadata sidecar is present (the default for `resolve_movie_dataset_path`), container metadata MUST NOT override sidecar values. Any discrepancies are treated as validation errors rather than alternative sources of truth.
+
+In effect, there is a single canonical chain for movie‑backed plume fields:
+
+`MovieMetadataSidecar` → `VideoPlumeAttrs` on the Zarr dataset → runtime `MoviePlumeField` behavior.
+
 ### 4. **Observation**
 
 **Semantic Meaning:** What the agent perceives at current position.
@@ -867,7 +922,3 @@ raise Exception("Something broke")
 - Parametric tests of same logic with different values
 - Performance tests in unit test suite (separate suite)
 - Exhaustive combination testing (combinatorial explosion)
-
----
-
-**END OF SEMANTIC_MODEL.MD**

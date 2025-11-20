@@ -327,3 +327,21 @@ def test_near_boundary_fractional_index_triggers_boundary_policy_for_ceil():
             rounding=ROUND_CEIL,
             boundary=STEP_POLICY_INDEX,
         )
+
+
+def test_non_integer_fps_with_step_rate_media_mapping():
+    tb = VideoTimebase(fps=2.5)
+    T = 8
+
+    idxs = [
+        map_step_to_frame(
+            step=k,
+            total_frames=T,
+            timebase=tb,
+            step_hz=2.0,
+            rounding=ROUND_NEAREST,
+            boundary=STEP_POLICY_CLAMP,
+        )
+        for k in range(6)
+    ]
+    assert idxs == [0, 1, 2, 4, 5, 6]

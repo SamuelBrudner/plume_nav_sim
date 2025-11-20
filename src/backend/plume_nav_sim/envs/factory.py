@@ -1,5 +1,4 @@
-"""
-Factory functions for creating component-based environments.
+"""Factory functions for creating component-based environments.
 
 This module provides convenience functions for assembling environments
 from components without manually wiring dependencies.
@@ -19,6 +18,7 @@ Example:
     >>> obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 """
 
+from pathlib import Path
 from typing import Optional, Union
 
 try:
@@ -60,6 +60,7 @@ def create_component_environment(  # noqa: C901
     movie_pixel_to_grid: Optional[tuple[float, float]] = None,
     movie_origin: Optional[tuple[float, float]] = None,
     movie_extent: Optional[tuple[float, float]] = None,
+    movie_h5_dataset: Optional[str] = None,
     movie_step_policy: Literal["wrap", "clamp"] = "wrap",
 ) -> ComponentBasedEnvironment:
     """
@@ -165,19 +166,44 @@ def create_component_environment(  # noqa: C901
             raise ValueError(
                 "env.plume=movie requires movie.path to be provided (Hydra key: movie.path)"
             )
+
+        # Resolve the movie dataset path. For already-ingested Zarr directories
+        # (e.g., *.zarr), resolve_movie_dataset_path returns the directory as-is
+        # and does not require a sidecar. For raw media sources (HDF5, video
+        # files, etc.), it ingests using sidecar-provided metadata and enforces
+        # that any explicit overrides match the sidecar.
         dataset_path = resolve_movie_dataset_path(
             movie_path,
             fps=movie_fps,
             pixel_to_grid=movie_pixel_to_grid,
             origin=movie_origin,
             extent=movie_extent,
+            movie_h5_dataset=movie_h5_dataset,
         )
+
+        # For raw media sources (non-directory movie_path values), treat the
+        # sidecar as the single source of truth for movie-level metadata. Once
+        # ingestion has produced a dataset, rely on its attrs instead of
+        # overriding via MovieConfig. For existing dataset directories, preserve
+        # the prior behavior and allow explicit overrides.
+        source_is_dir = Path(movie_path).is_dir()
+        if source_is_dir:
+            cfg_fps = movie_fps
+            cfg_pixel_to_grid = movie_pixel_to_grid
+            cfg_origin = movie_origin
+            cfg_extent = movie_extent
+        else:
+            cfg_fps = None
+            cfg_pixel_to_grid = None
+            cfg_origin = None
+            cfg_extent = None
+
         movie_cfg = MovieConfig(
             path=str(dataset_path),
-            fps=movie_fps,
-            pixel_to_grid=movie_pixel_to_grid,
-            origin=movie_origin,
-            extent=movie_extent,
+            fps=cfg_fps,
+            pixel_to_grid=cfg_pixel_to_grid,
+            origin=cfg_origin,
+            extent=cfg_extent,
             step_policy=movie_step_policy,
         )
         movie_field = MoviePlumeField(movie_cfg)
