@@ -167,8 +167,7 @@ class BoundaryEnforcementResult:
             else:
                 constraint_strength = "corrective"  # Position corrected
 
-        # Compile constraint analysis with enforcement reasoning and metrics
-        analysis = {
+        return {
             "position_delta": position_delta,
             "constraint_direction": self.constraint_direction,
             "constraint_type": constraint_type,
@@ -184,9 +183,6 @@ class BoundaryEnforcementResult:
             ),
             "final_coordinates": (self.final_position.x, self.final_position.y),
         }
-
-        # Return comprehensive constraint analysis dictionary for debugging
-        return analysis
 
     def was_movement_constrained(self) -> bool:
         """
@@ -218,22 +214,19 @@ class BoundaryEnforcementResult:
         Returns:
             dict: Dictionary representation of boundary enforcement result with analysis data
         """
-        # Include original_position and final_position as coordinate tuples
-        result_dict = {
-            "original_position": (self.original_position.x, self.original_position.y),
+        return {
+            "original_position": (
+                self.original_position.x,
+                self.original_position.y,
+            ),
             "final_position": (self.final_position.x, self.final_position.y),
             "position_modified": self.position_modified,
             "boundary_hit": self.boundary_hit,
             "constraint_direction": self.constraint_direction,
             "enforcement_time_ms": self.enforcement_time,
             "constraint_reason": self.constraint_reason,
+            "constraint_analysis": self.get_constraint_analysis(),
         }
-
-        # Add constraint analysis for comprehensive debugging information
-        result_dict["constraint_analysis"] = self.get_constraint_analysis()
-
-        # Return complete boundary enforcement result dictionary
-        return result_dict
 
 
 @dataclass
@@ -301,11 +294,6 @@ class MovementConstraint:
                         f"Custom boundary key must be string, got {type(key).__name__}",
                         parameter_name=f"custom_boundaries[{key}]",
                     )
-
-        # Ensure configuration parameters are logically consistent
-        if self.strict_validation and not self.enable_clamping:
-            # This combination might be valid but worth noting
-            pass  # Allow this combination with potential warning
 
         # Return True if all constraint configuration validations pass
         return True
@@ -409,7 +397,7 @@ class BoundaryEnforcer:
         )
 
         # Initialize validation_cache dictionary for position validation results
-        self.validation_cache: Dict[str, Any] = {} if enable_caching else {}
+        self.validation_cache: Dict[str, Any] = {}
 
         # Initialize performance metrics tracking dictionary for boundary operations
         self.performance_metrics: Dict[str, List[float]] = {
@@ -441,55 +429,18 @@ class BoundaryEnforcer:
         try:
             coords = create_coordinates(position)
 
-            cache_key = None
-            if self.enable_caching:
-                cache_key = (
-                    f"validate_{coords.x}_{coords.y}_"
-                    f"{self.grid_size.width}_{self.grid_size.height}"
-                )
-                cached = self.validation_cache.get(cache_key)
-                if cached is not None:
-                    self.cache_metrics["hits"] += 1
-                    return cached
-                self.cache_metrics["misses"] += 1
+            cache_key, cached = self._get_cached_position_validation(coords)
+            if cached is not None:
+                return cached
 
             is_valid = coords.is_within_bounds(self.grid_size)
+            is_valid = self._apply_strict_position_validation(coords, is_valid)
 
-            if self.constraint_config.strict_validation and is_valid:
-                tol = max(self.constraint_config.tolerance, 0.0)
-                near_edge = (
-                    coords.x < tol
-                    or coords.x >= self.grid_size.width - tol
-                    or coords.y < tol
-                    or coords.y >= self.grid_size.height - tol
-                )
-                if near_edge:
-                    is_valid = False
-
-            if self.enable_caching and cache_key is not None:
-                self.validation_cache[cache_key] = is_valid
-                if len(self.validation_cache) > BOUNDARY_VALIDATION_CACHE_SIZE:
-                    first_key = next(iter(self.validation_cache))
-                    self.validation_cache.pop(first_key, None)
-                    self.cache_metrics["evictions"] += 1
-
-            self.performance_metrics["validation_times"].append(
-                (time.perf_counter() - start_time) * 1000
-            )
+            self._update_position_validation_cache(cache_key, is_valid)
+            self._record_position_validation_time(start_time)
 
             if not is_valid and raise_on_invalid:
-                message = f"Position {coords} outside grid bounds {self.grid_size}"
-                if context_info:
-                    message += f" (Context: {context_info})"
-                raise ValidationError(
-                    message,
-                    parameter_name="position",
-                    parameter_value=(coords.x, coords.y),
-                    expected_format=(
-                        f"coordinates within bounds (0, 0) to "
-                        f"({self.grid_size.width - 1}, {self.grid_size.height - 1})"
-                    ),
-                )
+                self._raise_position_out_of_bounds(coords, context_info)
 
             if context_info and not is_valid:
                 self.logger.debug(
@@ -512,6 +463,77 @@ class BoundaryEnforcer:
                     parameter_value=str(position),
                 ) from exc
             return False
+
+    def _get_cached_position_validation(
+        self, coords: Coordinates
+    ) -> Tuple[Optional[str], Optional[bool]]:
+        """Return cache key and cached result (if any) for a position validation."""
+        if not self.enable_caching:
+            return None, None
+
+        cache_key = (
+            f"validate_{coords.x}_{coords.y}_"
+            f"{self.grid_size.width}_{self.grid_size.height}"
+        )
+        cached = self.validation_cache.get(cache_key)
+        if cached is not None:
+            self.cache_metrics["hits"] += 1
+            return cache_key, cached
+
+        self.cache_metrics["misses"] += 1
+        return cache_key, None
+
+    def _apply_strict_position_validation(
+        self, coords: Coordinates, is_valid: bool
+    ) -> bool:
+        """Apply strict edge tolerance rules when strict_validation is enabled."""
+        if not (self.constraint_config.strict_validation and is_valid):
+            return is_valid
+
+        tol = max(self.constraint_config.tolerance, 0.0)
+        near_edge = (
+            coords.x < tol
+            or coords.x >= self.grid_size.width - tol
+            or coords.y < tol
+            or coords.y >= self.grid_size.height - tol
+        )
+        return not near_edge
+
+    def _update_position_validation_cache(
+        self, cache_key: Optional[str], is_valid: bool
+    ) -> None:
+        """Update the position validation cache and eviction metrics."""
+        if not (self.enable_caching and cache_key is not None):
+            return
+
+        self.validation_cache[cache_key] = is_valid
+        if len(self.validation_cache) > BOUNDARY_VALIDATION_CACHE_SIZE:
+            first_key = next(iter(self.validation_cache))
+            self.validation_cache.pop(first_key, None)
+            self.cache_metrics["evictions"] += 1
+
+    def _record_position_validation_time(self, start_time: float) -> None:
+        """Record the elapsed validation time in milliseconds."""
+        self.performance_metrics["validation_times"].append(
+            (time.perf_counter() - start_time) * 1000
+        )
+
+    def _raise_position_out_of_bounds(
+        self, coords: Coordinates, context_info: Optional[str]
+    ) -> None:
+        """Raise a ValidationError for an out-of-bounds position."""
+        message = f"Position {coords} outside grid bounds {self.grid_size}"
+        if context_info:
+            message += f" (Context: {context_info})"
+        raise ValidationError(
+            message,
+            parameter_name="position",
+            parameter_value=(coords.x, coords.y),
+            expected_format=(
+                f"coordinates within bounds (0, 0) to "
+                f"({self.grid_size.width - 1}, {self.grid_size.height - 1})"
+            ),
+        )
 
     @monitor_performance("movement_validation", 0.05, False)
     def is_movement_valid(
@@ -757,7 +779,7 @@ class BoundaryEnforcer:
 
             # Include performance target compliance
             target_time = BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS
-            compliant_operations = sum(1 for t in enforcement_times if t <= target_time)
+            compliant_operations = sum(t <= target_time for t in enforcement_times)
             stats["performance_metrics"]["target_compliance_rate"] = (
                 compliant_operations / len(enforcement_times)
             )
@@ -835,19 +857,17 @@ class BoundaryEnforcer:
                     )
 
             # Apply strict validation rules if strict_mode enabled
-            if strict_mode:
-                # Additional strict validation checks
-                if self.constraint_config.custom_boundaries:
-                    for (
-                        boundary_name,
-                        boundary_config,
-                    ) in self.constraint_config.custom_boundaries.items():
-                        if not isinstance(boundary_config, (dict, bool, float, int)):
-                            raise ValidationError(
-                                f"Invalid custom boundary configuration for {boundary_name}",
-                                parameter_name="custom_boundaries",
-                                parameter_value=type(boundary_config).__name__,
-                            )
+            if strict_mode and self.constraint_config.custom_boundaries:
+                for (
+                    boundary_name,
+                    boundary_config,
+                ) in self.constraint_config.custom_boundaries.items():
+                    if not isinstance(boundary_config, (dict, bool, float, int)):
+                        raise ValidationError(
+                            f"Invalid custom boundary configuration for {boundary_name}",
+                            parameter_name="custom_boundaries",
+                            parameter_value=type(boundary_config).__name__,
+                        )
 
             # Log successful configuration validation
             self.logger.debug("Constraint configuration validation passed")
@@ -922,29 +942,12 @@ def validate_movement_bounds(
         new_y = coords.y + movement_vector[1]
 
         # Check if proposed position is within grid bounds using bounds checking
-        if (
-            new_x < 0
-            or new_x >= grid_bounds.width
-            or new_y < 0
-            or new_y >= grid_bounds.height
-        ):
-            return False
-
-        # Apply strict validation rules if strict_validation enabled including edge case testing
-        if strict_validation:
-            # Additional validation for edge cases and boundary proximity
-            if (
-                new_x == 0
-                or new_x == grid_bounds.width - 1
-                or new_y == 0
-                or new_y == grid_bounds.height - 1
-            ):
-                # Position is on grid boundary - still valid but worth noting
-                pass
-
-        # Return boolean result indicating movement validity without raising exceptions for performance
-        return True
-
+        return (
+            new_x >= 0
+            and new_x < grid_bounds.width
+            and new_y >= 0
+            and new_y < grid_bounds.height
+        )
     except Exception:
         # Return False for any validation errors to maintain performance
         return False
@@ -1028,12 +1031,7 @@ def is_position_within_bounds(position: CoordinateType, grid_bounds: GridSize) -
             return False
 
         # Check y-coordinate is within range [0, grid_bounds.height - 1] using integer comparison
-        if coords.y < 0 or coords.y >= grid_bounds.height:
-            return False
-
-        # Return boolean result using logical AND of both coordinate range checks
-        return True
-
+        return coords.y >= 0 and coords.y < grid_bounds.height
     except Exception:
         # Return False for any conversion or validation errors
         return False
@@ -1062,11 +1060,7 @@ def clamp_coordinates_to_bounds(
     # Clamp y-coordinate using max(0, min(coordinates.y, grid_bounds.height - 1))
     clamped_y = max(0, min(coords.y, grid_bounds.height - 1))
 
-    # Create new Coordinates object with clamped values
-    clamped_coords = Coordinates(clamped_x, clamped_y)
-
-    # Return clamped Coordinates ready for safe position usage
-    return clamped_coords
+    return Coordinates(clamped_x, clamped_y)
 
 
 def calculate_bounded_movement(
@@ -1113,25 +1107,21 @@ def calculate_bounded_movement(
         if is_within_bounds:
             # If movement is valid, return proposed position with movement_successful=True
             return proposed_position, True, False
+        # Movement exceeds bounds
+        boundary_hit = True
+
+        if allow_boundary_clamping:
+            # If movement exceeds bounds and allow_boundary_clamping is True, clamp position to bounds
+            final_position = clamp_coordinates_to_bounds(proposed_position, grid_bounds)
+            movement_successful = True  # Movement succeeded with clamping
         else:
-            # Movement exceeds bounds
-            boundary_hit = True
+            # If movement exceeds bounds and clamping disabled, keep current position
+            final_position = coords
+            movement_successful = False  # Movement failed
 
-            if allow_boundary_clamping:
-                # If movement exceeds bounds and allow_boundary_clamping is True, clamp position to bounds
-                final_position = clamp_coordinates_to_bounds(
-                    proposed_position, grid_bounds
-                )
-                movement_successful = True  # Movement succeeded with clamping
-            else:
-                # If movement exceeds bounds and clamping disabled, keep current position
-                final_position = coords
-                movement_successful = False  # Movement failed
-
-            # Return tuple with final position, movement success status, and boundary hit indication
-            return final_position, movement_successful, boundary_hit
+        # Return tuple with final position, movement success status, and boundary hit indication
+        return final_position, movement_successful, boundary_hit
 
     except Exception:
         # Handle errors by returning safe defaults
-        safe_coords = create_coordinates(current_position)
-        return safe_coords, False, True
+        return create_coordinates(current_position), False, True

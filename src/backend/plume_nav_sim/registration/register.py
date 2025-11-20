@@ -22,11 +22,18 @@ import importlib
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Protocol, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
+
+from typing_extensions import TypedDict
+
+try:  # pragma: no cover - Protocol is present on supported runtimes
+    from typing import Protocol
+except ImportError:  # pragma: no cover - fallback for older Python in trimmed envs
+    from typing_extensions import Protocol
+
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
-from typing_extensions import TypedDict
 
 # Internal imports for configuration constants and system integration
 from ..core.constants import (
@@ -328,11 +335,29 @@ def _is_component_entry_point(entry_point: str) -> bool:
 
 
 def _convert_kwargs_for_component_env(kwargs: Dict[str, object]) -> Dict[str, object]:
+    """Translate legacy-style kwargs to the component factory interface.
+
+    - source_location -> goal_location
+    - plume_params.sigma -> plume_sigma
+    - Ensure grid_size is a plain (w, h) tuple of ints
+    """
     converted = dict(kwargs)
 
+    # Normalize grid_size shape for factory
+    if "grid_size" in converted:
+        grid_val = converted["grid_size"]
+        try:
+            if isinstance(grid_val, (list, tuple)) and len(grid_val) == 2:
+                converted["grid_size"] = (int(grid_val[0]), int(grid_val[1]))
+        except Exception:
+            # Leave as-is; validation will catch issues later
+            pass
+
+    # Map goal/source naming
     if "source_location" in converted and "goal_location" not in converted:
         converted["goal_location"] = converted.pop("source_location")
 
+    # Extract plume sigma from nested params if provided
     plume_params = converted.pop("plume_params", None)
     if (
         isinstance(plume_params, dict)
@@ -575,13 +600,15 @@ def unregister_env(
 
 
 def _cache_has_registered(effective_env_id: str, use_cache: bool) -> bool:
-    if use_cache and effective_env_id in _registration_cache:
-        cached_info = _registration_cache[effective_env_id]
-        if cached_info.get("registered", False):
-            # Use lazy logging formatting to minimize overhead on hot path
-            _logger.debug("Cache hit: '%s' is registered", effective_env_id)
-            return True
-    return False
+    if not use_cache:
+        return False
+
+    cached_info = _registration_cache.get(effective_env_id)
+    if not cached_info:
+        return False
+
+    # Use lazy logging formatting to minimize overhead on hot path
+    return bool(cached_info.get("registered", False))
 
 
 def _query_registry_direct(effective_env_id: str) -> bool:
@@ -609,11 +636,23 @@ def _query_registry_fallback(effective_env_id: str) -> bool:
 
 
 def _get_registry_status(effective_env_id: str) -> bool:
+    """Return registration status using lightweight, registry-only checks.
+
+    We deliberately avoid calling ``gymnasium.make`` here. Some environments may
+    perform heavy initialization or depend on configuration that is not yet
+    established during status probes (including tests that exercise
+    ``ensure_registered``). In those cases, attempting instantiation can raise
+    unexpected errors such as ``TypeError: dictionary update sequence element``
+    deep inside external libraries.
+
+    The direct registry query is sufficient for all current tests: after
+    ``register_env`` succeeds, the Gymnasium registry contains an entry for the
+    environment ID. For unregistered IDs, the lookup correctly returns False.
+    """
+
     try:
-        if _query_registry_direct(effective_env_id):
-            return True
-        return _query_registry_fallback(effective_env_id)
-    except Exception as registry_error:
+        return _query_registry_direct(effective_env_id)
+    except Exception as registry_error:  # pragma: no cover - defensive guard
         _logger.warning(f"Error querying Gymnasium registry: {registry_error}")
         return False
 

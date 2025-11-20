@@ -11,6 +11,7 @@ one step in the specified direction, with boundary clamping.
 from typing import Any, Dict
 
 import gymnasium as gym
+
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 
@@ -124,17 +125,13 @@ class DiscreteGridActions:
         clamped_x = max(0, min(new_x, grid_size.width - 1))
         clamped_y = max(0, min(new_y, grid_size.height - 1))
 
-        # Create new AgentState with updated position
-        # Orientation unchanged for absolute movement
-        new_state = AgentState(
+        return AgentState(
             position=Coordinates(clamped_x, clamped_y),
             orientation=current_state.orientation,
             step_count=current_state.step_count,
             total_reward=current_state.total_reward,
             goal_reached=current_state.goal_reached,
         )
-
-        return new_state
 
     def validate_action(self, action: int) -> bool:
         """Check if action is valid for this processor.
@@ -150,9 +147,7 @@ class DiscreteGridActions:
         import numpy as np
 
         # Accept both Python int and numpy integer types
-        if isinstance(action, (int, np.integer)):
-            return 0 <= action < 4
-        return False
+        return 0 <= action < 4 if isinstance(action, (int, np.integer)) else False
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return action processor metadata.

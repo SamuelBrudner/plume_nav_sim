@@ -2,7 +2,7 @@
 
 🧪 Proof-of-Life Gymnasium Environment for Plume Navigation Research
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 A minimal Gymnasium-compatible reinforcement learning environment for plume navigation research, providing a standard API to communicate between learning algorithms and chemical plume environments. Designed specifically for researchers, educators, and students developing autonomous agents that navigate chemical plumes to locate their sources.
 
@@ -78,21 +78,17 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
 ### Basic Usage
 
 ```python
+from plume_nav_sim.registration import ensure_registered, ENV_ID
+ensure_registered()  # make ENV_ID available to gym.make()
+
 import gymnasium as gym
-import plume_nav_sim
-
-# Register environment with Gymnasium
-plume_nav_sim.register_env()
-
-# Create environment instance
-env = gym.make('PlumeNav-StaticGaussian-v0')
+env = gym.make(ENV_ID)
 
 # Basic episode execution
 obs, info = env.reset(seed=42)
 for step in range(100):
     action = env.action_space.sample()  # Random action
     obs, reward, terminated, truncated, info = env.step(action)
-    
     if terminated or truncated:
         print(f"Episode completed in {step + 1} steps")
         break
@@ -100,13 +96,41 @@ for step in range(100):
 env.close()
 ```
 
-### Quick Start with Convenience Function
+## 🧭 Public API and Repository Layout
+
+For most users and external researchers, the supported way to interact with the package is:
+
+- **Top-level API**: `import plume_nav_sim as pns`
+  - Use `pns.make_env(...)` as the recommended way to create environments.
+  - Core types, constants, and metadata are exported from `plume_nav_sim.__init__` (e.g., `GridSize`, `EnvironmentConfig`, `DEFAULT_*`, `ENVIRONMENT_ID`).
+- **Configuration and composition**: `plume_nav_sim.config`
+  - Typed specs and composition helpers live under `plume_nav_sim.config` and `plume_nav_sim.config.composition` (e.g., `SimulationSpec`, `PolicySpec`, `prepare`).
+  - Legacy imports from `plume_nav_sim.compose.*` are still supported as shims but new code should prefer `plume_nav_sim.config`.
+
+If you are browsing the source code in this repository:
+
+- Installable package code lives under `src/backend/plume_nav_sim/`.
+- Hydra/YAML configuration files live under `src/backend/conf/`.
+- Built-in scenarios and benchmarks live under `src/backend/scenarios/`.
+- Documentation and design notes live under `src/backend/docs/`.
+- Examples and tutorials live under `src/backend/examples/` and `notebooks/`.
+- Tests live under `src/backend/tests/`.
+
+Contributors extending the library (e.g., new policies, plume models, or data-capture features) should generally add code under the corresponding subpackages:
+
+- `plume_nav_sim.envs` – environment implementations and factories.
+- `plume_nav_sim.policies` – policies and policy helpers.
+- `plume_nav_sim.plume` – plume models and concentration field logic.
+- `plume_nav_sim.render` – rendering utilities, colormaps, and templates.
+- `plume_nav_sim.data_capture`, `plume_nav_sim.media`, `plume_nav_sim.video` – capture pipeline, dataset manifests, and video plume schemas.
+
+### Quick Start with Factory Function
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 
-# Streamlined environment setup
-env = plume_nav_sim.quick_start()
+# Streamlined environment setup using the factory
+env = pns.make_env()
 obs, info = env.reset()
 
 # Run single step
@@ -214,6 +238,12 @@ Components derive spaces:
 - `action_space` comes from the ActionProcessor
 - `observation_space` comes from the ObservationModel
 
+See also (external-style DI example):
+
+- The plug‑and‑play demo shows DI assembly from an external project and applies the core `ConcentrationNBackWrapper(n=2)` via `SimulationSpec`.
+  - Quick run from repo root: `python plug-and-play-demo/main.py`
+  - Full walkthrough and options: `plug-and-play-demo/README.md`
+
 See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
 
 ```
@@ -221,16 +251,16 @@ See `plume_nav_sim/config/factories.py` for config-driven creation (Hydra/YAML).
 ### Registration System
 
 ```python
-import plume_nav_sim
+from plume_nav_sim.registration import ensure_registered, is_registered, register_env, ENV_ID
 
-# Register with default parameters
-plume_nav_sim.register_env()
+# Register with default parameters (idempotent)
+ensure_registered()
 
 # Register with custom configuration
-plume_nav_sim.register_env(kwargs=custom_config)
+register_env(kwargs=custom_config)
 
 # Check registration status
-if plume_nav_sim.is_registered('PlumeNav-StaticGaussian-v0'):
+if is_registered():
     print("Environment registered successfully")
 ```
 
@@ -286,14 +316,11 @@ env.close()
 ### Visualization Demo
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 import matplotlib.pyplot as plt
 
-# Create environment with visualization enabled
-env = plume_nav_sim.quick_start(
-    env_config={'grid_size': (64, 64)},
-    auto_register=True
-)
+# Create environment with visualization in mind
+env = pns.make_env(grid_size=(64, 64))
 
 # Run episode with human rendering
 obs, info = env.reset(seed=123)
@@ -314,13 +341,51 @@ for step in range(50):
 env.close()
 ```
 
+### Compose: Applying observation wrappers via SimulationSpec
+
+Use SimulationSpec to declare observation adapters (wrappers) so the full runtime
+behavior is defined in one place. Each wrapper is specified with a dotted path
+and kwargs and applied in order by `compose.prepare()`.
+
+```python
+from plume_nav_sim.compose import SimulationSpec, PolicySpec, WrapperSpec, prepare
+
+sim = SimulationSpec(
+    grid_size=(64, 64),
+    max_steps=200,
+    action_type="run_tumble",           # Discrete(2): 0=RUN, 1=TUMBLE
+    observation_type="concentration",    # Box(1,): odor at agent position
+    reward_type="step_penalty",
+    render=False,
+    seed=123,
+    policy=PolicySpec(spec="my_project.policies:MyRunTumblePolicy"),
+    observation_wrappers=[
+        # Core 1‑back odor history: transforms Box(1,) → Box(2,) [c_prev, c_now]
+        WrapperSpec(
+            spec="plume_nav_sim.observations.history_wrappers:ConcentrationNBackWrapper",
+            kwargs={"n": 2},
+        ),
+    ],
+)
+
+env, policy = prepare(sim)
+obs, info = env.reset(seed=sim.seed)
+print(env.observation_space.shape)  # (2,)
+```
+
+Notes:
+- Wrapper targets accept `(env, **kwargs)` and return a Gymnasium `Env`.
+- Dotted path can be `"module:Attr"` or `"module.sub.Attr"`.
+- Wrappers are applied before policy subset validation so the policy can target
+  the adapted observation space.
+
 ### Reproducibility Demo
 
 ```python
-import plume_nav_sim
+import plume_nav_sim as pns
 
 def run_deterministic_episode(seed=42):
-    env = plume_nav_sim.quick_start()
+    env = pns.make_env()
     obs, info = env.reset(seed=seed)
     
     trajectory = [info['agent_position']]
@@ -363,6 +428,16 @@ Mathematical implementation of chemical plume distribution:
 - **Configurable Parameters**: Source location and dispersion settings
 - **Normalized Values**: Concentration values in range [0,1] with peak at source
 - **Efficient Sampling**: O(1) concentration lookup for agent positions
+
+### Movie Plume Field (Zarr-backed)
+
+Video-derived concentration field that advances one frame per step:
+
+- **Dataset schema**: `concentration (t, y, x)` with float32 values
+- **Step policy**: `wrap` (loop) or `clamp` (hold last frame)
+- **Metadata**: fps, pixel_to_grid, origin, extent validated via `VideoPlumeAttrs`
+- **Usage**: select with `plume="movie"` and provide `movie_path` to a Zarr dataset
+- Details and examples: `src/backend/docs/plume_types.md`
 
 ### Dual-Mode Rendering
 
@@ -433,7 +508,8 @@ performance_configs = {
 }
 
 # Apply configuration
-env = plume_nav_sim.quick_start(env_config=performance_configs['fast_training'])
+import plume_nav_sim as pns
+env = pns.make_env(**performance_configs['fast_training'])
 ```
 
 ### Custom Environment Creation
@@ -507,8 +583,8 @@ python --version
 import matplotlib
 matplotlib.use('Agg')  # Set backend before importing plume_nav_sim
 
-import plume_nav_sim
-env = plume_nav_sim.quick_start()
+import plume_nav_sim as pns
+env = pns.make_env()
 ```
 
 **Problem: Interactive rendering not working**
@@ -532,7 +608,7 @@ pip install -e .[notebooks]
 In a Jupyter notebook cell, enable the widget backend before plotting:
 
 ```python
-%matplotlib widget
+    %matplotlib widget
 ```
 
 If you see “'widget' is not a recognised backend name”:
@@ -547,11 +623,12 @@ If you see “'widget' is not a recognised backend name”:
 
 ```python
 # Use smaller grid sizes for faster performance
+import plume_nav_sim as pns
 config = {
     'grid_size': (64, 64),    # Instead of (128, 128)
     'max_steps': 500,         # Shorter episodes
 }
-env = plume_nav_sim.quick_start(env_config=config)
+env = pns.make_env(**config)
 ```
 
 **Problem: Memory usage too high**
@@ -577,18 +654,19 @@ config = {
 
 ```python
 # Ensure registration before gym.make()
-import plume_nav_sim
-plume_nav_sim.register_env()
+from plume_nav_sim.registration import ensure_registered, ENV_ID
+ensure_registered()
 
 import gymnasium as gym
-env = gym.make('PlumeNav-StaticGaussian-v0')
+env = gym.make(ENV_ID)
 ```
 
 **Problem: Inconsistent reproducibility**
 
 ```python
 # Proper seeding approach
-env = plume_nav_sim.quick_start()
+import plume_nav_sim as pns
+env = pns.make_env()
 
 # Always pass seed to reset()
 obs, info = env.reset(seed=42)
@@ -650,8 +728,17 @@ black src/
 # Type checking (if using mypy)  
 mypy src/plume_nav_sim/
 
-# Linting (if using flake8)
-flake8 src/plume_nav_sim/
+# Linting (flake8)
+# Recommended: run the Makefile target from repo root, which mirrors CI exactly
+make lint ENV_NAME=plume-nav-sim
+
+# Or run flake8 directly with the same flags as CI
+flake8 src/plume_nav_sim/ \
+  --max-line-length=88 \
+  --extend-ignore=E203,W503,E501 \
+  --select=E,W,F,C,N \
+  --max-complexity=10 \
+  --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
 ```
 
 ### Testing Your Changes
@@ -667,6 +754,14 @@ python examples/visualization_demo.py
 python examples/performance_benchmark.py
 ```
 
+### Render Module Structure
+
+- All render-specific Python code and utilities live under `src/backend/plume_nav_sim/render/`.
+- Use `plume_nav_sim.render.*` imports exclusively for rendering utilities.
+- Colormap utilities moved to `plume_nav_sim.render.colormaps` (formerly `assets.default_colormap`).
+- Rendering templates moved to `plume_nav_sim.render.templates` (formerly `assets.render_templates`).
+- The legacy `src/backend/assets/` package has been removed.
+
 ### Contribution Guidelines
 
 1. **Code Standards**: Follow PEP 8 style guidelines
@@ -674,6 +769,15 @@ python examples/performance_benchmark.py
 3. **Documentation**: Update docstrings and README
 4. **Backwards Compatibility**: Maintain API compatibility
 5. **Performance**: Ensure changes don't degrade performance
+
+#### Pre-commit Hooks
+
+- Install hooks (from repo root using backend config):
+  - `pre-commit install -c src/backend/.pre-commit-config.yaml`
+- Run all hooks (from repo root):
+  - `pre-commit run -c src/backend/.pre-commit-config.yaml --all-files`
+- Alternative (from backend directory):
+  - `(cd src/backend && pre-commit install && pre-commit run --all-files)`
 
 ### Development Workflow
 
@@ -687,7 +791,7 @@ python examples/performance_benchmark.py
 
 ### License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
 
 ```
 MIT License
@@ -710,11 +814,11 @@ copies or substantial portions of the Software.
 If you use plume-nav-sim in your research, please cite:
 
 ```bibtex
-@software{plume_nav_sim2024,
+@software{plume_nav_sim_2025,
   title={plume-nav-sim: Gymnasium Environment for Plume Navigation Research},
   author={plume_nav_sim Development Team},
-  year={2024},
-  url={https://github.com/your-org/plume-nav-sim},
+  year={2025},
+  url={https://github.com/SamuelBrudner/plume_nav_sim},
   version={0.0.1}
 }
 ```
@@ -731,11 +835,124 @@ This project builds upon the excellent work of the scientific Python ecosystem:
 ### Contact & Support
 
 - **Documentation**: [Link to full documentation]
-- **Issues**: [GitHub Issues](https://github.com/your-org/plume-nav-sim/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/plume-nav-sim/discussions)
+- **Issues**: [GitHub Issues](https://github.com/SamuelBrudner/plume_nav_sim/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/SamuelBrudner/plume_nav_sim/discussions)
 - **Email**: <plume-nav-sim@example.com>
 
 ---
+
+## 📑 Operational Logging vs Data Capture
+
+- Use loguru for operational, human-readable logs (console/file). Configure it independently of data capture.
+
+```python
+from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
+```
+
+- By default, the `file_path` above is interpreted **relative to your current working directory**. When running from the
+  project root, this will create `run.log` (or any other log file you choose) in the repo root, which is already
+  ignored by `.gitignore`. There is no requirement for a committed `logs/` directory under `src/backend`; any
+  `logs/` directory you see there is a runtime artifact and can be safely deleted.
+
+- Use the data capture pipeline for analysis-ready data (validated JSONL.gz, optional Parquet export).
+
+Quick start (data capture):
+
+```python
+from plume_nav_sim.data_capture import RunRecorder
+from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.core.types import EnvironmentConfig
+
+env = plume_nav_sim.make_env(action_type="oriented", observation_type="concentration")
+rec = RunRecorder("results", experiment="demo")
+cfg = EnvironmentConfig()
+env = DataCaptureWrapper(env, rec, cfg)
+
+obs, info = env.reset(seed=123)
+for _ in range(100):
+    obs, r, term, trunc, info = env.step(env.action_space.sample())
+    if term or trunc:
+        break
+rec.finalize(export_parquet=False)
+```
+
+### Data Capture Dependencies
+
+- Install optional extras for analysis workflows:
+
+```bash
+pip install -e .[data]
+```
+
+Includes:
+- orjson: fast JSON serialization for JSONL.gz
+- pandas + pandera: DataFrame operations and batch validation
+- pyarrow: Parquet export (optional)
+
+Operational logging extras (separate):
+
+```bash
+pip install -e .[ops]
+```
+
+Parquet export and Pandera validation require the `[data]` extra; JSONL.gz capture works without it.
+
+### Validation and Parquet Examples
+
+- Validate a run’s artifacts:
+
+```python
+from pathlib import Path
+from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+run_dir = Path("results/demo/<run_id>")
+report = validate_run_artifacts(run_dir)
+print(report)
+```
+
+- Load JSONL.gz and export Parquet:
+
+```python
+import pandas as pd
+
+steps_df = pd.read_json(run_dir / "steps.jsonl.gz", lines=True, compression="gzip")
+episodes_df = pd.read_json(run_dir / "episodes.jsonl.gz", lines=True, compression="gzip")
+
+steps_df.to_parquet(run_dir / "steps.parquet", index=False)
+episodes_df.to_parquet(run_dir / "episodes.parquet", index=False)
+```
+
+- Or export Parquet automatically using the CLI:
+
+```bash
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
+```
+
+Note: For manifest usage and an end-to-end reference, see bead plume_nav_sim-152.
+
+### Data Directories
+
+See `src/backend/docs/data_directories_overview.md` for full details.
+
+- `plume_nav_sim/data_capture/` → runtime capture pipeline (JSONL.gz, validation, CLI)
+- `plume_nav_sim/media/` → dataset metadata/manifests and xarray‑like dataset validation
+- `plume_nav_sim/video/` → canonical video plume dataset schema and attrs validation
+
+Contracts:
+- Video plume dataset: `src/backend/docs/contracts/video_plume_dataset.md`
+
+### Schema Reference
+
+See the detailed field definitions and evolution policy:
+
+- `src/backend/docs/data_capture_schemas.md`
+
+### Data Catalog
+
+For a consolidated overview of artifacts, DVC workflow, and consumer loading/validation examples, see:
+
+- `src/backend/docs/data_catalog_capture.md`
 
 **Ready to start your plume navigation research?** 🧪
 
@@ -745,3 +962,6 @@ python examples/basic_usage.py
 ```
 
 Happy researching! 🚀
+- Exploration notebook (capture end‑to‑end): notebooks/stable/capture_end_to_end.ipynb
+  - Render to HTML for docs with nbconvert:
+    - `make nb-render` (outputs to `src/backend/docs/notebooks/capture_end_to_end.html`)

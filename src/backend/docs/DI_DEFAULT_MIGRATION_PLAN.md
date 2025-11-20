@@ -17,19 +17,25 @@ This document outlines the plan to make the component-based (DI) environment the
 
 ## Current Status (Baseline)
 
-- DI env id: `COMPONENT_ENV_ID` → `plume_nav_sim.envs.factory:create_component_environment`.
-- Registration mapping for DI: `source_location` → `goal_location`; unknown/private kwargs dropped.
-- Opt‑in default toggle: `PLUMENAV_DEFAULT=components` (or `PLUMENAV_USE_COMPONENTS=1`).
-- Helper: `ensure_component_env_registered()`.
-- Deprecation warnings: legacy entry path and direct `PlumeSearchEnv` instantiation (suppress via
-  `PLUMENAV_DEPRECATION_SILENCE=1`).
-- Docs/examples updated to recommend DI and provide a runnable DI example.
-- Tests updated:
+- DI env id is available: `COMPONENT_ENV_ID` resolves to
+  `plume_nav_sim.envs.factory:create_component_environment` via the registration module
+  at src/backend/plume_nav_sim/registration/register.py:51.
+- Registration mapping for DI is implemented: legacy kwargs are converted for the DI factory
+  (`source_location` → `goal_location`, `plume_params.sigma` → `plume_sigma`). Unknown/private
+  kwargs are dropped. See `_convert_kwargs_for_component_env()` in
+  src/backend/plume_nav_sim/registration/register.py:332.
+- Helper is available: `ensure_component_env_registered()` registers the DI env id if missing.
+- Legacy remains the default entry point for `ENV_ID`. There is no env‑var switch wired into
+  the code yet; any `PLUMENAV_DEFAULT=components` mention in examples is aspirational and does
+  not affect behavior today.
+- Docs and examples recommend DI and include runnable DI examples.
+- Tests:
   - Registration suite: green.
   - Unit suites (actions/observations/rewards): green; abstract contract bases are not collected
     directly; concrete tests are collected via `__test__=True`.
-  - DI vs legacy parity integration test added.
-  - Legacy dict-only observation assumptions relaxed in representative tests.
+  - DI vs legacy parity integration test present at
+    src/backend/tests/integration/test_di_legacy_parity.py:1.
+  - Legacy dict‑only observation assumptions relaxed where needed.
 
 ## Timeline
 
@@ -41,8 +47,8 @@ This document outlines the plan to make the component-based (DI) environment the
 ### Phase 1 (Next minor)
 
 - Keep legacy as default; introduce DeprecationWarning on legacy implicit usage.
-- Update examples/docs to recommend DI; provide env-var opt‑in.
-- Relax dict-only assumptions where they cause failures.
+- Update examples/docs to recommend DI; optional env‑var opt‑in wiring (if implemented).
+- Relax dict‑only assumptions where they cause failures.
 
 ### Phase 2 (Major)
 
@@ -58,8 +64,9 @@ This document outlines the plan to make the component-based (DI) environment the
 ## Actions to Flip Default and Remove Legacy
 
 1. Flip default to DI (new PR):
-   - `register_env()` uses DI entry point for `ENV_ID` by default (no env-var gate).
-   - Preserve `COMPONENT_ENV_ID` behavior.
+   - In registration, choose `COMPONENT_ENTRY_POINT` when `effective_env_id == ENV_ID`.
+   - Avoid env‑var gates for the permanent flip; keep behavior deterministic.
+   - Preserve the dedicated `COMPONENT_ENV_ID`.
 
 2. Update tests to DI explicitly:
    - Replace direct `PlumeSearchEnv` instantiation with DI factory or DI env id usage.
@@ -86,10 +93,9 @@ This document outlines the plan to make the component-based (DI) environment the
 
 ## Rollout Safeguards
 
-- Feature flags allow opt‑in/out during migration:
-  - `PLUMENAV_DEFAULT=components` (opt‑in to DI)
-  - (Optional) `PLUMENAV_DEFAULT=legacy` for one release after flipping default.
-- Suppress warnings in CI: `PLUMENAV_DEPRECATION_SILENCE=1` while refactoring tests.
+- Optional feature flags (if implemented) can allow opt‑in/out during migration. Until then,
+  use explicit `env_id` selection to avoid ambiguity.
+- Suppress deprecation warnings in CI if needed (policy‑dependent).
 
 ## References
 

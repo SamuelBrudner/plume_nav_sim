@@ -263,8 +263,8 @@ class BasePlumeModel(abc.ABC):
         # Note: Do not bound sigma by grid size here; mathematical consistency checks are
         # handled in validate_gaussian_parameters for specific models and via warnings.
 
-        # Initialize component logger using get_component_logger for plume model operations
-        self.logger = get_component_logger(f"{self.__class__.__name__}")
+        # Initialize component logger using canonical component identifier
+        self.logger = get_component_logger("plume_model")
 
         # Store model_options with defaults and validate option compatibility
         self.model_options = model_options or {}
@@ -1060,8 +1060,8 @@ class PlumeModelRegistry:
         # Store default_options for model creation and merge with model-specific options
         self.default_options = default_options or {}
 
-        # Initialize component logger using get_component_logger for registry operations
-        self.logger = get_component_logger(f"{self.__class__.__name__}")
+        # Initialize component logger using canonical component identifier
+        self.logger = get_component_logger("plume_model_registry")
 
         # Initialize empty model_metadata dictionary for model capability information
         self.model_metadata: Dict[str, Dict] = {}
@@ -2369,7 +2369,7 @@ def create_plume_model(
         return model_instance
 
     except Exception as e:
-        logger = get_component_logger("create_plume_model")
+        logger = get_component_logger("plume_model_registry")
         logger.error(f"Model creation failed: {e}")
         raise PlumeModelError(
             f"Failed to create plume model: {e}",
@@ -2470,7 +2470,7 @@ def get_supported_plume_types(
         return supported_types
 
     except Exception as e:
-        logger = get_component_logger("get_supported_plume_types")
+        logger = get_component_logger("plume_model_registry")
         logger.error(f"Failed to get supported plume types: {e}")
         return {}
 
@@ -2502,13 +2502,13 @@ def register_plume_model(
         with _REGISTRY_LOCK:
             # Validate model_type follows naming conventions and is unique identifier
             if not model_type or not isinstance(model_type, str):
-                logger = get_component_logger("register_plume_model")
+                logger = get_component_logger("plume_model_registry")
                 logger.error("Invalid model_type: must be non-empty string")
                 return False
 
             # Check if model_type already exists in global registry
             if model_type in _PLUME_MODEL_REGISTRY and not override_existing:
-                logger = get_component_logger("register_plume_model")
+                logger = get_component_logger("plume_model_registry")
                 logger.warning(f"Model type '{model_type}' already registered")
                 return False
 
@@ -2521,7 +2521,7 @@ def register_plume_model(
                 )
 
                 if not validation_result[0]:  # is_valid is False
-                    logger = get_component_logger("register_plume_model")
+                    logger = get_component_logger("plume_model_registry")
                     logger.error(
                         f"Model interface validation failed: {validation_result[1]}"
                     )
@@ -2536,7 +2536,7 @@ def register_plume_model(
                 pass
 
             # Log model registration with class details, capabilities, and registry status
-            logger = get_component_logger("register_plume_model")
+            logger = get_component_logger("plume_model_registry")
             logger.info(
                 f"Model type '{model_type}' registered successfully - "
                 f"class: {model_class.__name__}, module: {model_class.__module__}"
@@ -2545,7 +2545,7 @@ def register_plume_model(
             return True
 
     except Exception as e:
-        logger = get_component_logger("register_plume_model")
+        logger = get_component_logger("plume_model_registry")
         logger.error(f"Model registration failed: {e}")
         return False
 

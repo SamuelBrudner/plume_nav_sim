@@ -448,7 +448,6 @@ monitoring/
 !LICENSE*
 !MANIFEST.in
 !pyproject.toml
-!setup.py
 !setup.cfg
 !requirements*.txt
 !environment.yml
@@ -489,6 +488,10 @@ monitoring/
 # Linux specific
 *~
 .fuse_hidden*
+
+# Python specific
+.pytest_cache/
+.mpl/
 
 # -----------------------------------------------------------------------------
 # Future Extension Patterns

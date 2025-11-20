@@ -1,0 +1,29 @@
+# Base Hydra config for the data capture pipeline
+
+defaults:
+  - experiment: default
+  - /env/plume: static
+  - /movie: default
+  - _self_
+
+# Output + run control
+output: results
+experiment: default
+episodes: 1
+seed: 123
+rotate_size: null  # bytes; rotate JSONL.gz after N bytes
+parquet: false     # export parquet at finalize if available
+
+# Environment settings used to create the env and to populate RunMeta.env_config
+env:
+  grid_size: [64, 64]
+  max_steps: null  # if null, env default is used
+  goal_radius: null
+  action_type: oriented
+  observation_type: concentration
+  reward_type: step_penalty
+  render: false
+
+# When env.plume=movie, the 'movie' group provides dataset configuration.
+# Example overrides:
+#   env.plume=movie movie.path=/path/to/ds.zarr movie.step_policy=clamp

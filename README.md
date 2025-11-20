@@ -7,7 +7,7 @@ Gymnasium-compatible plume navigation environments engineered for reproducible r
 
 ## 1. What You Get
 
-- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with metrics, logging, and sensible defaults.
+- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.loguru_bootstrap.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
 - **Deterministic runs** – Centralized seeding utilities keep experiments reproducible across machines and CI.
 - **Pluggable architecture** – Swap observation, reward, action, or plume components via dependency injection.
 - **Research data workflow** – Built-in metadata export and curated examples accelerate analysis pipelines.
@@ -22,9 +22,28 @@ obs, info = env.reset(seed=42)
 print(info["agent_xy"])  # starting position
 ```
 
-- **Gymnasium integration**: `gym.make("PlumeNav-v0", action_type="oriented")`
+- Visible artifact out-of-the-box:
+  - Run the bundled example to generate a short GIF (falls back to PNG if media extras are not installed):
+
+    ```bash
+    # From repo root
+    cd src/backend
+    python -m examples.quickstart
+    # -> writes quickstart.gif (or quickstart.png without media extras)
+    ```
+
+- **Gymnasium integration**:
+
+  ```python
+  from plume_nav_sim.registration import ensure_registered, ENV_ID
+  ensure_registered()  # make ENV_ID available to gym.make()
+
+  import gymnasium as gym
+  env = gym.make(ENV_ID, action_type="oriented")
+  ```
+
 - **Component knobs**: pass string options such as `observation_type="antennae"`
-- **See also**: `src/backend/examples/quickstart.py`
+- **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
 
 ## 3. Progressive Customization
 
@@ -40,10 +59,15 @@ All examples live in `src/backend/examples/`. Run one from the backend root:
 python -m examples.custom_components
 ```
 
+### Spec-driven observation wrappers
+
+- You can declare observation adapters (wrappers) directly in a `SimulationSpec` so that the full runtime behavior is defined in one place. See the backend guide for a concrete example using the core 1‑back concentration history wrapper:
+  - `src/backend/README.md` (section: "Compose: Applying observation wrappers via SimulationSpec")
+
 ## 4. Installation
 
 ```bash
-git clone https://github.com/plume-nav-sim/plume_nav_sim.git
+git clone https://github.com/SamuelBrudner/plume_nav_sim.git
 cd plume_nav_sim/src/backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -55,6 +79,120 @@ Validate the install:
 ```bash
 python -c "import plume_nav_sim as pns; pns.make_env()"
 ```
+
+### Local Lint (mirrors CI)
+
+To reproduce CI’s flake8 checks locally, use the provided Makefile target which runs the exact same options as `.github/workflows/ci-lint.yml`:
+
+```bash
+# One-time: create the dev environment with flake8
+make setup-dev ENV_NAME=plume-nav-sim
+
+# Run lint exactly like CI
+make lint ENV_NAME=plume-nav-sim
+```
+
+If you prefer a virtualenv instead of conda, install dev extras and run flake8 directly with the same flags used in CI:
+
+```bash
+pip install -e src/backend[dev]
+flake8 src/backend/plume_nav_sim \
+  --max-line-length=88 \
+  --extend-ignore=E203,W503,E501 \
+  --select=E,W,F,C,N \
+  --max-complexity=10 \
+  --per-file-ignores="src/backend/plume_nav_sim/__init__.py:F401,F403,F405,src/backend/plume_nav_sim/envs/base_env.py:C901,src/backend/plume_nav_sim/core/episode_manager.py:C901"
+```
+
+### Debugger (Qt MVP)
+
+A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It now includes a dockable, information-only Inspector.
+
+- Install Qt toolkit into your conda env:
+
+```bash
+make install-qt ENV_NAME=plume-nav-sim
+```
+
+- Run the debugger from source (uses `PYTHONPATH=src`):
+
+```bash
+make debugger ENV_NAME=plume-nav-sim
+```
+
+Controls:
+
+- Start/Pause, Step, Reset with seed; adjust interval (ms)
+- Keyboard: Space (toggle run), N (step), R (reset)
+
+Policies:
+
+- Built-ins: Stochastic TD, Deterministic TD, Random Sampler
+- Custom: enter `module:ClassOrCallable` (or `module.sub.Class`) and click Load
+  - Contract: either implement `select_action(obs, explore=False)` (preferred) or be a simple callable `policy(obs) -> action`
+  - Optional: `reset(seed=...)` will be called if provided
+
+Inspector (information-only):
+
+- Dockable window (View → Inspector) with tabs:
+  - Action: shows the expected action for the current frame and, when an ODC provider supplies it, an action distribution preview.
+    - Provider‑only: labels and distributions are displayed only when a DebuggerProvider (ODC) is detected.
+    - No side effects: the inspector never calls `select_action` and never influences the simulation.
+  - Observation: shows observation shape and min/mean/max summary.
+- The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
+
+Provider Plugins (ODC):
+
+- The debugger auto-detects application-specific actions/observations/pipeline via the Opinionated Debugger Contract (ODC).
+- Preferred integration is an entry-point plugin:
+  - `pyproject.toml`:
+
+    ```toml
+    [project.entry-points."plume_nav_sim.debugger_plugins"]
+    my_app = "my_app.debugger:provider_factory"
+    ```
+
+  - `my_app/debugger.py`:
+
+    ```python
+    from plume_nav_debugger.odc.provider import DebuggerProvider
+    from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
+
+    class MyProvider(DebuggerProvider):
+        def get_action_info(self, env):
+            return ActionInfo(names=["RUN", "TUMBLE"])  # len == action_space.n
+        def policy_distribution(self, policy, observation):
+            return {"probs": [0.8, 0.2]}  # side-effect free
+        def get_pipeline(self, env):
+            return PipelineInfo(names=[type(env).__name__, "MyWrapper", "CoreEnv"])
+
+    def provider_factory(env, policy):
+        return MyProvider()
+    ```
+
+- Strict provider‑only mode is always enabled. If no provider is detected, a banner appears and the inspector shows limited information. Heuristic fallbacks are removed and there is no CLI or preference to disable strict mode.
+
+ODC Provider Contract (Developer Guide):
+
+- Purpose: let the debugger introspect your app (action names, observation kind/label, policy distribution preview, pipeline) with zero debugger changes and no side effects.
+- Implement `plume_nav_debugger.odc.provider.DebuggerProvider` with optional, side‑effect‑free methods:
+  - `get_action_info(env) -> ActionInfo` — returns `names: list[str]` aligned to action indices `0..n-1`.
+  - `describe_observation(observation, *, context=None) -> ObservationInfo | None` — returns `kind ∈ {"vector","image","scalar","unknown"}` and optional `label` for UI.
+  - `policy_distribution(policy, observation) -> dict | None` — exactly one of `{ "probs" | "q_values" | "logits" }: list[float]`; must not call `select_action`.
+  - `get_pipeline(env) -> PipelineInfo | None` — ordered wrapper/component names from outermost to core.
+- Data models: `ActionInfo`, `ObservationInfo`, `PipelineInfo` live in `plume_nav_debugger.odc.models`.
+- Discovery order: entry‑point plugin (recommended) → reflection on `env`/`policy` (`get_debugger_provider()`, `__debugger_provider__`, `debugger_provider`).
+- Strict mode: labels, distributions, and pipeline appear only when a provider is detected; no heuristics.
+- Examples and tests:
+  - Minimal provider: `src/examples/odc_provider_example.py`
+  - Discovery and mux behavior: `tests/debugger/test_odc_discovery.py`, `tests/debugger/test_odc_provider_mux.py`, `tests/debugger/test_odc_example_provider.py`
+- Full specification: see `src/plume_nav_debugger/odc/SPEC.md`.
+
+Preferences & Config:
+
+- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
+- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json` if present.
+- Strict provider-only mode is not configurable.
 
 ### Jupyter notebooks (interactive plots)
 
@@ -84,10 +222,13 @@ jupyter nbextension enable --py widgetsnbextension
 ```
 
 Troubleshooting “'widget' is not a recognised backend name”:
+
 - Ensure `ipympl` and `ipywidgets` are installed in the kernel, then restart it.
 - Clear any forced backend: `import os; os.environ.pop('MPLBACKEND', None)` in the first cell.
-- Fallback safely when ipympl is missing:
+
+- Fallback safely when ipympl is missing
   -
+
   ```python
   import matplotlib as mpl
   try:
@@ -97,6 +238,23 @@ Troubleshooting “'widget' is not a recognised backend name”:
       %matplotlib inline
   print("Backend:", mpl.get_backend())
   ```
+
+### Plug-and-play demo and capture notebooks
+
+- Plug-and-play demo (external-style usage)
+  - Quick run from repo root: `python plug-and-play-demo/main.py`
+  - Notebook: `plug-and-play-demo/plug_and_play_demo.ipynb`
+  - Details and options: `plug-and-play-demo/README.md`
+
+- Capture workflow notebook (stable)
+  - Notebook: `notebooks/stable/capture_end_to_end.ipynb`
+  - Render to HTML into backend docs: `make nb-render`
+    - Output: `src/backend/docs/notebooks/capture_end_to_end.html`
+  - Related docs: `src/backend/docs/data_capture_schemas.md`, `src/backend/docs/data_catalog_capture.md`
+
+- Stable DI notebook (SimulationSpec + Component Env)
+  - Notebook: `notebooks/stable/di_simulation_spec_component_env.ipynb`
+  - Demonstrates DI factory (`create_component_environment`) and spec‑first composition via `SimulationSpec` + `prepare()`
 
 ### Test and performance requirements
 
@@ -109,9 +267,20 @@ pip install -e .[test,benchmark]
 
 This installs `hypothesis` (for property/contract suites) and `psutil` (for performance benchmarks). Without them, `pytest` will report import-time failures.
 
+### Zarr storage policy (chunks + compression)
+
+- Default chunks for time-indexed video/plume tensors follow `CHUNKS_TYX = (8, 64, 64)`.
+- Compression uses Blosc with Zstandard at `clevel=5` when available; otherwise falls back to Blosc LZ4 with a warning while preserving the same interface.
+- Helper API and constants live in `plume_nav_sim/storage/zarr_policies.py`:
+  - `create_blosc_compressor()` → returns a configured numcodecs compressor
+  - `create_zarr_array(path, name, shape, dtype, ...)` → creates a Zarr dataset and records policy attrs
+
+These policies are referenced by dataset ingest and loader components to ensure consistent on-disk formats across tools and CI.
+
 ## 5. Architecture Overview
 
-- `plume_nav_sim.make_env()` → default environment (auto-registered as `PlumeNav-v0`)
+- `plume_nav_sim.make_env()` → default environment
+- For `gym.make()`, call `ensure_registered()` and use `ENV_ID`.
 - `ComponentBasedEnvironment` → DI-powered core that consumes protocol-compliant components (`plume_nav_sim.interfaces`)
 - `plume_nav_sim.envs.factory.create_component_environment()` → factory with validation and curated defaults
 - `docs/extending/` → deep dives on protocols, wiring, and testing
@@ -124,7 +293,9 @@ from plume_nav_sim.utils.seeding import SeedManager
 
 manager = SeedManager()
 base_seed = 2025
-episode_seed = manager.derive_seed(base_seed, "episode-0")
+episode_seed = manager.generate_episode_seed(
+    base_seed, episode_number=0, experiment_id="repro"
+)
 
 env = pns.make_env()
 obs, info = env.reset(seed=episode_seed)
@@ -143,11 +314,31 @@ obs, info = env.reset(seed=episode_seed)
 
 ## 8. Contributing
 
-- Run `pre-commit run --all-files`
+- Pre-commit hooks
+  - From repo root (uses backend config):
+    - `pre-commit install -c src/backend/.pre-commit-config.yaml`
+    - `pre-commit run -c src/backend/.pre-commit-config.yaml --all-files`
+  - Or from backend directory:
+    - `(cd src/backend && pre-commit install && pre-commit run --all-files)`
 - Execute targeted tests: `conda run -n plume-nav-sim pytest src/backend/tests/plume_nav_sim/registration/ -q`
 - Update docs/examples for user-facing changes
 
 See `src/backend/CONTRIBUTING.md` for the full checklist.
+
+### Issue Tracking (bd beads)
+
+Internal task tracking uses `bd` (beads), not GitHub Issues:
+
+- Check ready work: `bd ready --json`
+- Claim/update: `bd update <id> --status in_progress --json`
+- Create: `bd create "Title" -t bug|feature|task -p 0-4 --json`
+- Link discovered work: `bd create "Found bug" -p 1 --deps discovered-from:<parent-id> --json`
+- Close: `bd close <id> --reason "Completed" --json`
+
+Notes:
+
+- Beads auto-sync to `.beads/issues.jsonl` in the repo.
+- Community users may open GitHub Issues/Discussions; maintainers triage into beads as needed.
 
 ## 9. License
 
@@ -156,15 +347,92 @@ MIT License. See [LICENSE](LICENSE).
 ## 10. Citation
 
 ```bibtex
-@software{plume_nav_sim_2024,
+@software{plume_nav_sim_2025,
   title        = {plume-nav-sim: Gymnasium-compatible reinforcement learning environment for plume navigation},
-  author       = {Sam Brudner},
-  year         = {2024},
+  author       = {plume_nav_sim Development Team},
+  year         = {2025},
   version      = {0.0.1},
-  url          = {https://github.com/plume-nav-sim/plume_nav_sim}
+  url          = {https://github.com/SamuelBrudner/plume_nav_sim}
 }
 ```
 
 ---
 
-Questions or ideas? Open an issue or start a discussion at <https://github.com/plume-nav-sim/plume_nav_sim>.
+### Operational logging vs. data capture
+
+- Use loguru for operational, human-readable logs (console/file). Keep it separate from analysis data capture.
+- Enable loguru sinks and stdlib bridge:
+
+```python
+from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+
+# Minimal ops logging setup
+setup_logging(level="INFO", console=True)
+```
+
+- Use the data capture pipeline for analysis-ready data (JSONL.gz schemas, optional Parquet export). See backend README for details.
+
+### Data capture dependencies
+
+- Install the optional data extras to enable fast JSONL, Pandera validation, and Parquet export:
+
+```bash
+pip install -e .[data]
+```
+
+This pulls in:
+
+- orjson (faster JSON serialization for JSONL)
+- pandas + pandera (batch validation of captured data)
+- pyarrow (optional Parquet export)
+
+Notes:
+
+- JSONL.gz capture works without extras; extras are needed for validation/parquet.
+- Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
+
+### Validation and Parquet examples
+
+- Validate captured artifacts with Pandera (end-of-run):
+
+```python
+from pathlib import Path
+from plume_nav_sim.data_capture.validate import validate_run_artifacts
+
+run_dir = Path("results/demo/<run_id>")
+report = validate_run_artifacts(run_dir)
+print(report)  # {"steps": {"ok": True, "rows": N}, "episodes": {"ok": True, "rows": M}}
+```
+
+- Load JSONL.gz into pandas and export to Parquet:
+
+```python
+import pandas as pd
+
+# Read JSONL.gz (newline-delimited JSON)
+steps_df = pd.read_json(run_dir / "steps.jsonl.gz", lines=True, compression="gzip")
+episodes_df = pd.read_json(run_dir / "episodes.jsonl.gz", lines=True, compression="gzip")
+
+# Export to Parquet (requires pyarrow)
+steps_df.to_parquet(run_dir / "steps.parquet", index=False)
+episodes_df.to_parquet(run_dir / "episodes.parquet", index=False)
+
+# Read Parquet back
+df = pd.read_parquet(run_dir / "steps.parquet")
+```
+
+- Or let the recorder/CLI write Parquet at end-of-run:
+
+```bash
+plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
+```
+
+### Schema reference
+
+- See detailed field definitions and evolution policy in `src/backend/docs/data_capture_schemas.md`.
+
+### Data catalog
+
+- See consolidated consumer docs and loading examples in `src/backend/docs/data_catalog_capture.md`.
+
+Questions or ideas? Open an issue or start a discussion at <https://github.com/SamuelBrudner/plume_nav_sim>.

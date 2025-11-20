@@ -178,3 +178,6 @@ python train.py -m experiment=sparse_simple action.step_size=1,2,3 plume.sigma=1
 - [OmegaConf Documentation](https://omegaconf.readthedocs.io/)
 - `plume_nav_sim/config/component_configs.py` - Pydantic model definitions
 - `docs/MIGRATION_COMPONENT_ENV.md` - Component-based environment guide
+- External plug‑and‑play, config‑based DI:
+  - `plug-and-play-demo/README.md` (section: "Config‑based DI via SimulationSpec")
+  - `plug-and-play-demo/configs/simulation_spec.json` (example spec)

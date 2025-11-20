@@ -28,8 +28,6 @@ import matplotlib.colors  # >=3.9.0 - Colormap objects, normalization utilities,
 # External imports - Third-party libraries with version requirements
 import numpy as np  # >=2.1.0 - Array operations, RGB color manipulation, concentration field processing
 
-from assets.default_colormap import DEFAULT_COLORMAP, PredefinedScheme
-
 from ..core.constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
@@ -44,6 +42,7 @@ from ..core.constants import (
 from ..core.types import Coordinates, RenderMode
 from ..utils.exceptions import RenderingError, ValidationError
 from ..utils.validation import sanitize_parameters, validate_render_mode
+from .colormaps import DEFAULT_COLORMAP, PredefinedScheme
 
 # Module-level configuration and constants
 __all__ = [

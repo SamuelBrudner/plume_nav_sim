@@ -23,7 +23,7 @@ import logging as std_logging
 # Type hints imported for potential future use in __all__ exports
 
 # Package version definition for distribution and compatibility tracking
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 # Comprehensive exception handling system with hierarchical error management
 # Import all exception classes providing structured error handling across components
@@ -91,7 +91,7 @@ _logger = std_logging.getLogger(__name__)
 # Initialize module-level logging for package lifecycle tracking and debugging
 try:
     # Attempt to get component-specific logger with automatic configuration
-    _package_logger = get_component_logger("plume_nav_sim.utils")
+    _package_logger = get_component_logger("utils")
     _package_logger.debug("Utility package initialization completed successfully")
 
     # Log imported component summary for debugging and system verification

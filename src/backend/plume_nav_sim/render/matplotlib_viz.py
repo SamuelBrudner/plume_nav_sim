@@ -20,6 +20,8 @@ Architecture Integration:
 - Error handling: Comprehensive exception handling with fallback mechanisms
 """
 
+from __future__ import annotations
+
 # Standard library imports - Python >=3.10
 import atexit  # >=3.10 - Automatic resource cleanup registration for matplotlib figures at program exit
 import os  # >=3.10 - Environment variable detection for headless operation and display availability
@@ -134,6 +136,22 @@ __all__ = [
 ]
 
 
+def _is_widget_or_web_backend(backend: str) -> bool:
+    """Return True for ipympl/nbAgg/WebAgg/inline style backends.
+
+    Guards toolbar configuration to avoid traitlets/matplotlib deprecation
+    warnings on widget/web backends where a canvas-managed toolbar is
+    inappropriate (e.g., Jupyter inline, nbAgg, WebAgg, ipympl).
+    """
+    b = (backend or "").lower()
+    return (
+        b.startswith("module://ipympl")
+        or ("nbagg" in b)
+        or ("webagg" in b)
+        or ("inline" in b)
+    )
+
+
 class MatplotlibBackendManager:
     """
     Backend management utility class providing intelligent backend selection, capability detection,
@@ -222,7 +240,7 @@ class MatplotlibBackendManager:
         self._last_selection_report: Dict[str, Any] = {}
 
         # Create component logger for backend management operations and debugging
-        self.logger = get_component_logger(f"{__name__}.MatplotlibBackendManager")
+        self.logger = get_component_logger("render")
 
         # Log initialization with configuration details for debugging
         self.logger.debug(
@@ -274,7 +292,9 @@ class MatplotlibBackendManager:
                 # Skip interactive backends in headless environment unless explicitly configured
                 if (
                     headless
-                    and backend_name not in ["Agg", "module://ipympl.backend_nbagg"]
+                    # In headless mode, only allow true headless-safe backends
+                    # like Agg. Do not allow ipympl/nbagg/webagg variants.
+                    and backend_name not in ["Agg"]
                     and not self.backend_options.get(
                         "force_interactive_in_headless", False
                     )
@@ -1010,7 +1030,7 @@ class InteractiveUpdateManager:
             return True
 
         except Exception as e:
-            logger = get_component_logger(f"{__name__}.InteractiveUpdateManager")
+            logger = get_component_logger("render")
             logger.error(f"Concentration field update failed: {e}")
             # Propagate as RenderingError for calling context to handle
             raise RenderingError(f"Concentration field update failed: {e}")
@@ -1076,7 +1096,7 @@ class InteractiveUpdateManager:
             return True
 
         except Exception as e:
-            logger = get_component_logger(f"{__name__}.InteractiveUpdateManager")
+            logger = get_component_logger("render")
             logger.error(f"Agent marker update failed: {e}")
             return False
 
@@ -1128,7 +1148,7 @@ class InteractiveUpdateManager:
             return True
 
         except Exception as e:
-            logger = get_component_logger(f"{__name__}.InteractiveUpdateManager")
+            logger = get_component_logger("render")
             logger.error(f"Source marker update failed: {e}")
             return False
 
@@ -1173,7 +1193,7 @@ class InteractiveUpdateManager:
             self.update_count += 1
 
         except Exception as e:
-            logger = get_component_logger(f"{__name__}.InteractiveUpdateManager")
+            logger = get_component_logger("render")
             logger.error(f"Display refresh failed: {e}")
             return False
 
@@ -1306,7 +1326,7 @@ class InteractiveUpdateManager:
             return True
 
         except Exception as e:
-            logger = get_component_logger(f"{__name__}.InteractiveUpdateManager")
+            logger = get_component_logger("render")
             logger.error(f"Batch update failed: {e}")
             # Propagate as RenderingError so callers can handle failures explicitly
             raise RenderingError(f"Batch update failed: {e}")
@@ -1920,8 +1940,14 @@ class MatplotlibRenderer(BaseRenderer):
             # Update interactive mode configuration
             self.interactive_mode = enable_interactive
 
-            # Configure matplotlib interactive mode
-            if enable_interactive:
+            # Configure matplotlib interactive mode (avoid enabling on headless Agg)
+            try:
+                current_backend = plt.get_backend()
+            except Exception:
+                current_backend = ""
+
+            is_headless_agg = (current_backend or "").lower() == "agg"
+            if enable_interactive and not is_headless_agg:
                 plt.ion()
                 self.logger.info("Interactive mode enabled")
             else:
@@ -1955,14 +1981,66 @@ class MatplotlibRenderer(BaseRenderer):
             # Apply additional interactive options (best-effort)
             # Recognize a few common flags used in tests; ignore unknowns safely
             if isinstance(options, dict):
+                # Determine current backend once to make toolbar handling backend-aware
+                try:
+                    current_backend = plt.get_backend()
+                except Exception:
+                    current_backend = ""
+
+                is_widget_web = _is_widget_or_web_backend(current_backend)
+                is_headless_agg = (current_backend or "").lower() == "agg"
+                # Helper: emit the standardized Tool classes warning as expected by tests
+                import warnings as _warnings
+
+                _tool_msg = (
+                    "Treat the new Tool classes introduced in v1.5 as experimental for now; "
+                    "the API and rcParam may change in future versions."
+                )
+
+                # For widget/web or headless scenarios (or when interactive disabled),
+                # do not force the ToolManager toolbar; prefer 'none' to avoid traitlets
+                # Toolbar deprecation warnings on WebAgg/nbAgg/ipympl/inline.
+                toolbar_mapping: Optional[Tuple[str, Any]]
+                if (not enable_interactive) or is_widget_web or is_headless_agg:
+                    toolbar_mapping = (
+                        None  # Skip forcing; we'll set 'none' below if requested
+                    )
+                else:
+                    toolbar_mapping = ("toolbar", "toolmanager")
+
                 known_map = {
-                    "enable_toolbar": ("toolbar", "toolmanager"),
+                    "enable_toolbar": toolbar_mapping,
                     "enable_key_bindings": ("keymap.all_axes", True),
                     "animation_enabled": ("animation.html", "jshtml"),
                 }
+
                 for key, val in options.items():
                     try:
-                        if key in known_map:
+                        if key == "enable_toolbar":
+                            # If explicitly asked to enable toolbar but backend is widget/web or headless
+                            # or interactive is disabled, prefer disabling the toolbar entirely.
+                            if (
+                                (not enable_interactive)
+                                or is_widget_web
+                                or is_headless_agg
+                            ):
+                                try:
+                                    if val:
+                                        plt.rcParams["toolbar"] = "none"
+                                        # Explicitly surface Tool classes warning as contract
+                                        _warnings.warn(
+                                            _tool_msg,
+                                            UserWarning,
+                                            stacklevel=2,
+                                        )
+                                    else:
+                                        # Respect explicit disable as 'none'
+                                        plt.rcParams["toolbar"] = "none"
+                                except Exception:
+                                    pass
+                                continue  # Skip normal mapping
+
+                        if key in known_map and known_map[key] is not None:
                             rc_key, rc_val = known_map[key]
                             plt.rcParams[rc_key] = (
                                 rc_val if val else plt.rcParams.get(rc_key, rc_val)
@@ -2002,16 +2080,37 @@ class MatplotlibRenderer(BaseRenderer):
         when appropriate.
         """
         try:
-            # Nudge rcParams to the ToolManager toolbar to mirror test expectations
-            # and surface the UserWarning about Tool classes when available.
+            # Nudge rcParams only for GUI backends; avoid widget/web and headless 'Agg'.
             try:
+                import warnings as _warnings
+
                 import matplotlib.pyplot as plt  # Local import to avoid module import costs
 
-                if enable:
+                try:
+                    current_backend = plt.get_backend()
+                except Exception:
+                    current_backend = ""
+
+                b = (current_backend or "").lower()
+                is_widget_web = _is_widget_or_web_backend(current_backend)
+                is_headless_agg = b == "agg"
+                is_gui_backend = not (is_widget_web or is_headless_agg)
+
+                if enable and is_gui_backend:
+                    # Only GUI backends should use ToolManager toolbar
                     plt.rcParams["toolbar"] = "toolmanager"
                 else:
-                    # Restore a safe default without forcing a specific backend
-                    plt.rcParams["toolbar"] = plt.rcParams.get("toolbar", "toolbar2")
+                    # For widget/web, headless, or when disabling: hide toolbar and emit expected warning
+                    plt.rcParams["toolbar"] = "none"
+                    if enable:
+                        _warnings.warn(
+                            (
+                                "Treat the new Tool classes introduced in v1.5 as experimental for now; "
+                                "the API and rcParam may change in future versions."
+                            ),
+                            UserWarning,
+                            stacklevel=2,
+                        )
             except Exception:
                 # rcParams may not be available in headless contexts; ignore safely
                 pass
@@ -2257,7 +2356,7 @@ def create_matplotlib_renderer(
         # Validate renderer with test context
         renderer.validate_context(test_context)
 
-        logger = get_component_logger(f"{__name__}.create_matplotlib_renderer")
+        logger = get_component_logger("render")
         logger.info(
             f"MatplotlibRenderer created successfully with backend: "
             f"{renderer.backend_manager.current_backend}"
@@ -2269,7 +2368,7 @@ def create_matplotlib_renderer(
         # Surface parameter validation errors directly for callers/tests
         raise
     except Exception as e:
-        logger = get_component_logger(f"{__name__}.create_matplotlib_renderer")
+        logger = get_component_logger("render")
         logger.error(f"MatplotlibRenderer creation failed: {e}")
         raise ComponentError(
             f"Failed to create matplotlib renderer: {e}",

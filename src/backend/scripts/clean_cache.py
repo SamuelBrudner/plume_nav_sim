@@ -1200,7 +1200,6 @@ def clean_temporary_files(
         for temp_item in items_to_remove:
             try:
                 # Validate item is safe to remove (not in excluded patterns)
-                item_path_str = str(temp_item)
                 is_excluded = any(
                     temp_item.match(pattern) for pattern in EXCLUDED_PATTERNS
                 )
@@ -1717,7 +1716,6 @@ def validate_cleanup_safety(
 
     try:
         # Check target path against EXCLUDED_PATTERNS to prevent important file removal
-        target_str = str(target_path)
         for excluded_pattern in EXCLUDED_PATTERNS:
             if target_path.match(excluded_pattern):
                 warnings.append(
@@ -1728,8 +1726,6 @@ def validate_cleanup_safety(
         # Validate patterns don't match critical system or project files
         critical_files = [
             "pyproject.toml",
-            "setup.py",
-            "requirements.txt",
             "Pipfile",
             "setup.cfg",
             "tox.ini",

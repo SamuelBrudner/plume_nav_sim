@@ -32,7 +32,8 @@ from typing import (  # >=3.10 - Type hints for comprehensive annotation
     Optional,
 )
 
-from config.test_configs import (
+from plume_nav_sim.__init__ import get_package_info, initialize_package
+from plume_nav_sim.config import (
     TestConfigFactory,
     create_edge_case_test_config,
     create_integration_test_config,
@@ -40,7 +41,6 @@ from config.test_configs import (
     create_reproducibility_test_config,
     create_unit_test_config,
 )
-from plume_nav_sim.__init__ import get_package_info, initialize_package
 from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Internal imports

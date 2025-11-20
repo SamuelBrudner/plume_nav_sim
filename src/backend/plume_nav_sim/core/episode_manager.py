@@ -9,6 +9,7 @@ optimization targeting <1ms step latency, comprehensive component coordination, 
 handling for production-ready reinforcement learning environments.
 """
 
+import contextlib
 import copy
 import time
 from dataclasses import dataclass, field, replace
@@ -290,18 +291,16 @@ class EpisodeManagerConfig:
                         )
 
             # Validate performance monitoring and state validation configuration consistency
-            if strict_mode:
-                if (
-                    not self.enable_state_validation
-                    and self.enable_reproducibility_validation
-                ):
-                    raise ValidationError(
-                        message="reproducibility validation requires state validation",
-                        parameter_name="validation_configuration",
-                        parameter_value="enable_state_validation=False with enable_reproducibility_validation=True",
-                        expected_format="consistent validation settings",
-                    )
-
+            if strict_mode and (
+                not self.enable_state_validation
+                and self.enable_reproducibility_validation
+            ):
+                raise ValidationError(
+                    message="reproducibility validation requires state validation",
+                    parameter_name="validation_configuration",
+                    parameter_value="enable_state_validation=False with enable_reproducibility_validation=True",
+                    expected_format="consistent validation settings",
+                )
             # Ensure component integration settings are compatible with system architecture requirements
             if self.enable_component_integration and not self.enable_state_validation:
                 raise ValidationError(
@@ -398,26 +397,53 @@ class EpisodeManagerConfig:
                 "state_manager": state_manager_config,
                 "reward_calculator": reward_calculator_config,
                 "action_processor": action_processor_config,
+                "StateManager": state_manager_config,
+                "RewardCalculator": reward_calculator_config,
+                "ActionProcessor": action_processor_config,
             }
-
-            # Backward compatibility aliases using legacy capitalized keys
-            component_configs["StateManager"] = state_manager_config
-            component_configs["RewardCalculator"] = reward_calculator_config
-            component_configs["ActionProcessor"] = action_processor_config
 
             # Add custom component parameters from component_configs if specified
             for component_name, custom_config in self.component_configs.items():
                 if not isinstance(custom_config, dict):
-                    continue
+                    raise ValidationError(
+                        message=(
+                            "Custom component configuration overrides must be provided as "
+                            "dictionaries of field names to values"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=type(custom_config).__name__,
+                        expected_format=(
+                            "dict mapping component names to dicts of dataclass field overrides"
+                        ),
+                    )
 
-                target_config = component_configs.get(component_name)
+                target_config = component_configs.get(
+                    component_name
+                ) or component_configs.get(str(component_name).lower())
+
                 if target_config is None:
-                    target_config = component_configs.get(component_name.lower())
+                    raise ValidationError(
+                        message=(
+                            f"Unknown component configuration override: {component_name}"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=str(component_name),
+                        expected_format=(
+                            "known component names such as 'state_manager', "
+                            "'reward_calculator', or 'action_processor'"
+                        ),
+                    )
 
-                if target_config is None or not hasattr(
-                    target_config, "__dataclass_fields__"
-                ):
-                    continue
+                if not hasattr(target_config, "__dataclass_fields__"):
+                    raise ValidationError(
+                        message=(
+                            f"Target configuration for component '{component_name}' is not a "
+                            "dataclass-based config"
+                        ),
+                        parameter_name="component_configs",
+                        parameter_value=type(target_config).__name__,
+                        expected_format="dataclass-based component configuration object",
+                    )
 
                 for key, value in custom_config.items():
                     if hasattr(target_config, key):
@@ -439,7 +465,11 @@ class EpisodeManagerConfig:
 
             return component_configs
 
+        except ValidationError:
+            # Surface structured validation errors directly to callers and tests
+            raise
         except Exception as e:
+            # Wrap unexpected internal failures in ComponentError for clearer diagnostics
             raise ComponentError(
                 message=f"Failed to derive component configurations: {str(e)}",
                 component_name="EpisodeManagerConfig",
@@ -471,23 +501,13 @@ class EpisodeManagerConfig:
             )  # Convert to seconds
             estimated_episode_duration_s = expected_episode_length * target_step_latency
 
-            # Include component coordination overhead if include_component_overhead is True
-            component_overhead_mb = 0
-            if include_component_overhead:
-                component_overhead_mb = (
-                    10.0  # StateManager, RewardCalculator, ActionProcessor
-                )
-
+            component_overhead_mb = 10.0 if include_component_overhead else 0
             # Estimate memory usage for state management, caching, and component coordination
             cache_memory_mb = (
                 self.episode_cache_size * 1
             ) / 1024  # 1KB per cached item estimate
 
-            # Calculate performance monitoring overhead if enable_performance_monitoring is True
-            monitoring_overhead_mb = 0
-            if self.enable_performance_monitoring:
-                monitoring_overhead_mb = 2.0  # PerformanceMetrics storage
-
+            monitoring_overhead_mb = 2.0 if self.enable_performance_monitoring else 0
             total_memory_mb = (
                 base_overhead_mb
                 + grid_memory_mb
@@ -531,7 +551,7 @@ class EpisodeManagerConfig:
                 "resource_feasibility": {
                     "memory_reasonable": total_memory_mb < 500,
                     "performance_achievable": estimated_episode_duration_s < 60,
-                    "configuration_optimal": len(recommendations) == 0,
+                    "configuration_optimal": not recommendations,
                 },
             }
 
@@ -610,6 +630,9 @@ class EpisodeManagerConfig:
             # Return new EpisodeManagerConfig instance with overrides applied and validation completed
             return cloned_config
 
+        except ValidationError:
+            # Surface configuration validation issues directly to the caller
+            raise
         except Exception as e:
             raise ComponentError(
                 message=f"Failed to clone episode manager configuration: {str(e)}",
@@ -656,10 +679,8 @@ class EpisodeResult:
 
         # Set terminated and truncated flags for episode completion analysis
         # Clamp invalid numeric values to safe defaults
-        if self.total_steps < 0:
-            self.total_steps = 0
-        if self.episode_duration_ms < 0:
-            self.episode_duration_ms = 0.0
+        self.total_steps = max(self.total_steps, 0)
+        self.episode_duration_ms = max(self.episode_duration_ms, 0.0)
 
         # Initialize final_agent_position to None for later population with episode end state
         # Already handled by field default
@@ -702,11 +723,7 @@ class EpisodeResult:
                 self.total_reward = float(final_agent_state.total_reward)
 
             # Store final_distance_to_goal for goal achievement and performance evaluation
-            if distance_to_goal is None:
-                candidate = final_distance
-            else:
-                candidate = distance_to_goal
-
+            candidate = final_distance if distance_to_goal is None else distance_to_goal
             if isinstance(candidate, (int, float)) and candidate >= 0:
                 self.final_distance_to_goal = float(candidate)
 
@@ -714,8 +731,8 @@ class EpisodeResult:
             if isinstance(termination_reason, str) and termination_reason.strip():
                 self.termination_reason = termination_reason
 
-            # Update episode result with comprehensive final state information for analysis
-            # All updates completed above
+                # Update episode result with comprehensive final state information for analysis
+                # All updates completed above
 
         except Exception as e:
             raise ComponentError(
@@ -740,7 +757,7 @@ class EpisodeResult:
         """
         Add performance metrics from episode execution including timing analysis and resource usage.
         """
-        try:
+        with contextlib.suppress(Exception):
             # Merge episode_metrics into performance_metrics with timing and resource data
             if isinstance(episode_metrics, dict):
                 self.performance_metrics.update(episode_metrics)
@@ -769,18 +786,13 @@ class EpisodeResult:
                 )
 
             # Generate performance summary and optimization recommendations
-            if "average_step_time_ms" in self.performance_metrics:
-                if (
-                    self.performance_metrics["average_step_time_ms"]
-                    > PERFORMANCE_TARGET_STEP_LATENCY_MS
-                ):
-                    self.performance_metrics["performance_warning"] = (
-                        "Step latency exceeded target"
-                    )
-
-        except Exception:
-            # Log error but don't raise to avoid disrupting episode completion
-            pass
+            if "average_step_time_ms" in self.performance_metrics and (
+                self.performance_metrics["average_step_time_ms"]
+                > PERFORMANCE_TARGET_STEP_LATENCY_MS
+            ):
+                self.performance_metrics["performance_warning"] = (
+                    "Step latency exceeded target"
+                )
 
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Return collected performance metrics and component statistics.
@@ -845,7 +857,7 @@ class EpisodeResult:
         """
         Add state snapshot to episode result for replay and debugging support.
         """
-        try:
+        with contextlib.suppress(Exception):
             # Validate snapshot is proper StateSnapshot with timestamp and state information
             if not isinstance(snapshot, StateSnapshot):
                 raise ValidationError(
@@ -865,21 +877,12 @@ class EpisodeResult:
                     -500:
                 ]  # Keep most recent 500
 
-        except Exception:
-            # Log error but don't raise to avoid disrupting episode execution
-            pass
-
     def _calculate_efficiency_score(self) -> float:
         """Calculate episode efficiency score based on goal achievement and step count."""
         try:
-            if self.terminated:  # Goal achieved
-                # Lower step count = higher efficiency
-                return max(
-                    0.0, 1.0 - (self.total_steps / 10000)
-                )  # Normalize by reasonable max steps
-            else:
-                # Episode failed or truncated
-                return 0.0
+            return (
+                max(0.0, 1.0 - (self.total_steps / 10000)) if self.terminated else 0.0
+            )
         except Exception:
             return 0.0
 
@@ -1002,7 +1005,7 @@ class EpisodeStatistics:
 
     def _update_performance_trends(self, episode_result: EpisodeResult) -> None:
         """Update performance trends with episode data."""
-        try:
+        with contextlib.suppress(Exception):
             if not self.performance_trends.get("step_times"):
                 self.performance_trends["step_times"] = []
             if not self.performance_trends.get("episode_durations"):
@@ -1023,12 +1026,10 @@ class EpisodeStatistics:
             for key in ["step_times", "episode_durations"]:
                 if len(self.performance_trends[key]) > 100:
                     self.performance_trends[key] = self.performance_trends[key][-50:]
-        except Exception:
-            pass  # Don't fail statistics on performance trend errors
 
     def _update_component_efficiency(self, episode_result: EpisodeResult) -> None:
         """Update component efficiency metrics."""
-        try:
+        with contextlib.suppress(Exception):
             if episode_result.component_statistics:
                 for component, stats in episode_result.component_statistics.items():
                     if component not in self.component_efficiency:
@@ -1044,8 +1045,6 @@ class EpisodeStatistics:
                         self.component_efficiency[component]["total_time"] += stats.get(
                             "time", 0.0
                         )
-        except Exception:
-            pass  # Don't fail statistics on component efficiency errors
 
     def calculate_success_rate(self) -> float:
         """
@@ -1056,12 +1055,7 @@ class EpisodeStatistics:
             if self.episodes_completed == 0:
                 return 0.0
 
-            # Handle division by zero case when no episodes completed
-            success_rate = self.episodes_terminated / self.episodes_completed
-
-            # Return success percentage for goal achievement analysis
-            return success_rate
-
+            return self.episodes_terminated / self.episodes_completed
         except Exception:
             # Return 0.0 on any calculation errors
             return 0.0
@@ -1116,12 +1110,13 @@ class EpisodeStatistics:
                         ),
                         "performance_improving": len(step_times) > 1
                         and step_times[-1] < step_times[0],
-                        "target_compliance_rate": sum(
-                            1
-                            for t in step_times
-                            if t <= PERFORMANCE_TARGET_STEP_LATENCY_MS
-                        )
-                        / len(step_times),
+                        "target_compliance_rate": (
+                            sum(
+                                t <= PERFORMANCE_TARGET_STEP_LATENCY_MS
+                                for t in step_times
+                            )
+                            / len(step_times)
+                        ),
                     }
 
                 summary["trend_analysis"] = trend_analysis
@@ -1144,40 +1139,7 @@ class EpisodeStatistics:
 
             # Generate optimization recommendations if include_optimization_recommendations is True
             if include_optimization_recommendations:
-                recommendations = []
-
-                # Performance-based recommendations
-                avg_step_time = summary["performance_indicators"][
-                    "average_step_latency_ms"
-                ]
-                if avg_step_time > PERFORMANCE_TARGET_STEP_LATENCY_MS:
-                    recommendations.append(
-                        f"Step latency ({avg_step_time:.2f}ms) exceeds target ({PERFORMANCE_TARGET_STEP_LATENCY_MS}ms)"
-                    )
-
-                # Success rate recommendations
-                success_rate = summary["episode_counts"]["success_rate"]
-                if success_rate < 0.1:
-                    recommendations.append(
-                        "Low success rate suggests difficulty tuning needed"
-                    )
-                elif success_rate > 0.9:
-                    recommendations.append(
-                        "High success rate suggests environment may be too easy"
-                    )
-
-                # Episode length recommendations
-                if self.average_episode_length < 10:
-                    recommendations.append(
-                        "Very short episodes may indicate premature termination"
-                    )
-                elif self.average_episode_length > 5000:
-                    recommendations.append(
-                        "Long episodes may impact training efficiency"
-                    )
-
-                summary["optimization_recommendations"] = recommendations
-
+                self._extracted_from_get_performance_summary_79(summary)
             # Return comprehensive performance summary for system monitoring and improvement
             return summary
 
@@ -1191,6 +1153,36 @@ class EpisodeStatistics:
                 },
             }
 
+    # TODO Rename this here and in `get_performance_summary`
+    def _extracted_from_get_performance_summary_79(self, summary):
+        recommendations = []
+
+        # Performance-based recommendations
+        avg_step_time = summary["performance_indicators"]["average_step_latency_ms"]
+        if avg_step_time > PERFORMANCE_TARGET_STEP_LATENCY_MS:
+            recommendations.append(
+                f"Step latency ({avg_step_time:.2f}ms) exceeds target ({PERFORMANCE_TARGET_STEP_LATENCY_MS}ms)"
+            )
+
+        # Success rate recommendations
+        success_rate = summary["episode_counts"]["success_rate"]
+        if success_rate < 0.1:
+            recommendations.append("Low success rate suggests difficulty tuning needed")
+        elif success_rate > 0.9:
+            recommendations.append(
+                "High success rate suggests environment may be too easy"
+            )
+
+        # Episode length recommendations
+        if self.average_episode_length < 10:
+            recommendations.append(
+                "Very short episodes may indicate premature termination"
+            )
+        elif self.average_episode_length > 5000:
+            recommendations.append("Long episodes may impact training efficiency")
+
+        summary["optimization_recommendations"] = recommendations
+
     def get_optimization_recommendations(self) -> List[str]:
         """Return optimization recommendations from the latest performance summary."""
         summary = self.get_performance_summary(
@@ -1199,9 +1191,7 @@ class EpisodeStatistics:
         )
 
         recommendations = summary.get("optimization_recommendations")
-        if isinstance(recommendations, list):
-            return list(recommendations)
-        return []
+        return list(recommendations) if isinstance(recommendations, list) else []
 
 
 class EpisodeManager:
@@ -1292,7 +1282,7 @@ class EpisodeManager:
             self.performance_metrics = PerformanceMetrics()
 
             # Initialize component logger for episode management operations and debugging
-            self.logger = get_component_logger("EpisodeManager")
+            self.logger = get_component_logger("episode_manager")
 
             # Set episode_active to False and episode_count to 0 for initial tracking state
             self.episode_active: bool = False
@@ -1313,59 +1303,21 @@ class EpisodeManager:
                 f"EpisodeManager initialized successfully with {len(component_configs)} components"
             )
 
+        except (ValidationError, StateError, ComponentError, ResourceError):
+            # Preserve structured plume_nav_sim exceptions for callers handling
+            raise
         except Exception as e:
             raise ComponentError(
                 message=f"EpisodeManager initialization failed: {str(e)}",
                 component_name="EpisodeManager",
                 operation_name="__init__",
+                underlying_error=e,
             ) from e
 
     def _validate_component_integration(self) -> None:
         """Validate that all components are properly integrated and compatible."""
         try:
-            # Check that all components are initialized
-            if not self.state_manager:
-                raise ComponentError(
-                    "StateManager not initialized",
-                    "EpisodeManager",
-                    "component_validation",
-                )
-            if not self.reward_calculator:
-                raise ComponentError(
-                    "RewardCalculator not initialized",
-                    "EpisodeManager",
-                    "component_validation",
-                )
-            if not self.action_processor:
-                raise ComponentError(
-                    "ActionProcessor not initialized",
-                    "EpisodeManager",
-                    "component_validation",
-                )
-
-            # Validate component configuration compatibility
-            state_config = self.state_manager.config
-
-            # Check grid size consistency between components
-            if (
-                state_config.grid_size.width != self.action_processor.grid_size.width
-                or state_config.grid_size.height
-                != self.action_processor.grid_size.height
-            ):
-                raise ComponentError(
-                    "Grid size mismatch between StateManager and ActionProcessor",
-                    "EpisodeManager",
-                    "component_validation",
-                )
-
-            # Check goal radius consistency
-            if state_config.goal_radius != self.reward_calculator.config.goal_radius:
-                raise ComponentError(
-                    "Goal radius mismatch between StateManager and RewardCalculator",
-                    "EpisodeManager",
-                    "component_validation",
-                )
-
+            self._extracted_from__validate_component_integration_5()
         except Exception as e:
             if isinstance(e, ComponentError):
                 raise
@@ -1374,6 +1326,50 @@ class EpisodeManager:
                 "EpisodeManager",
                 "component_validation",
             ) from e
+
+    # TODO Rename this here and in `_validate_component_integration`
+    def _extracted_from__validate_component_integration_5(self):
+        # Check that all components are initialized
+        if not self.state_manager:
+            raise ComponentError(
+                "StateManager not initialized",
+                "EpisodeManager",
+                "component_validation",
+            )
+        if not self.reward_calculator:
+            raise ComponentError(
+                "RewardCalculator not initialized",
+                "EpisodeManager",
+                "component_validation",
+            )
+        if not self.action_processor:
+            raise ComponentError(
+                "ActionProcessor not initialized",
+                "EpisodeManager",
+                "component_validation",
+            )
+
+        # Validate component configuration compatibility
+        state_config = self.state_manager.config
+
+        # Check grid size consistency between components
+        if (
+            state_config.grid_size.width != self.action_processor.grid_size.width
+            or state_config.grid_size.height != self.action_processor.grid_size.height
+        ):
+            raise ComponentError(
+                "Grid size mismatch between StateManager and ActionProcessor",
+                "EpisodeManager",
+                "component_validation",
+            )
+
+        # Check goal radius consistency
+        if state_config.goal_radius != self.reward_calculator.config.goal_radius:
+            raise ComponentError(
+                "Goal radius mismatch between StateManager and RewardCalculator",
+                "EpisodeManager",
+                "component_validation",
+            )
 
     @monitor_performance("episode_reset", PERFORMANCE_TARGET_STEP_LATENCY_MS * 10, True)
     def reset_episode(
@@ -1458,8 +1454,10 @@ class EpisodeManager:
 
             # Create initial state snapshot for reproducibility and debugging support
             if self.config.enable_state_validation:
+                # Collect a lightweight snapshot without full consistency validation to avoid
+                # adding overhead to reset in performance-sensitive contexts.
                 initial_snapshot = self.state_manager.create_state_snapshot(
-                    snapshot_name=f"{episode_id}_initial", validate_consistency=True
+                    snapshot_name=f"{episode_id}_initial", validate_consistency=False
                 )
 
                 # Store snapshot in component cache
@@ -1470,7 +1468,7 @@ class EpisodeManager:
             self.performance_metrics.record_timing("episode_reset", reset_duration_ms)
 
             # Log episode reset completion with performance context and episode identification
-            self.logger.info(
+            self.logger.debug(
                 f"Episode {self.episode_count} reset completed in {reset_duration_ms:.2f}ms"
             )
 
@@ -1644,111 +1642,7 @@ class EpisodeManager:
         component cleanup for episode conclusion.
         """
         try:
-            # Validate episode is complete with proper termination or truncation status
-            if self.current_episode_state is None:
-                raise StateError(
-                    message="Cannot finalize episode: no episode state available",
-                    current_state="no_episode",
-                    expected_state="finalize_episode",
-                )
-
-            if not (
-                self.current_episode_state.terminated
-                or self.current_episode_state.truncated
-            ):
-                self.logger.warning(
-                    "Finalizing episode that is not terminated or truncated"
-                )
-
-            # Get final state from state_manager with complete agent and episode information
-            self.state_manager.get_current_state(
-                include_performance_data=True,
-                include_component_details=collect_detailed_statistics,
-            )
-
-            # Calculate final performance metrics; convert seconds -> milliseconds
-            episode_duration_ms = (
-                self.current_episode_state.get_episode_duration() * 1000.0
-            )
-
-            # Collect component statistics from state_manager, reward_calculator, and action_processor
-            component_stats = {}
-            if collect_detailed_statistics:
-                component_stats["state_manager"] = (
-                    self.state_manager.get_performance_metrics()
-                )
-                component_stats["reward_calculator"] = (
-                    self.reward_calculator.get_reward_statistics()
-                )
-                component_stats["action_processor"] = (
-                    self.action_processor.get_processing_statistics()
-                )
-
-            # Create comprehensive EpisodeResult with final states and performance analysis
-            # Guard and snapshot current episode/agent states for typing
-            episode_state = self.current_episode_state
-            agent_state = self.state_manager.current_agent_state
-            if agent_state is None:
-                raise StateError(
-                    message="Cannot finalize episode: missing agent state",
-                    current_state="finalize",
-                    expected_state="finalize_episode",
-                )
-
-            episode_result = EpisodeResult(
-                episode_id=episode_state.episode_id,
-                terminated=episode_state.terminated,
-                truncated=episode_state.truncated,
-                total_steps=agent_state.step_count,
-                total_reward=agent_state.total_reward,
-                episode_duration_ms=episode_duration_ms,
-            )
-
-            # Set final state information
-            final_distance = None
-            if agent_state:
-                source_location = cast(
-                    Coordinates, self.config.env_config.source_location
-                )
-                final_distance = agent_state.position.distance_to(source_location)
-
-            episode_result.set_final_state(
-                final_agent_state=self.state_manager.current_agent_state,
-                final_distance=final_distance or 0.0,
-                termination_reason=getattr(
-                    self.current_episode_state, "termination_reason", "unknown"
-                ),
-            )
-
-            # Add performance metrics
-            performance_metrics = self.performance_metrics.get_performance_summary()
-            episode_result.add_performance_metrics(performance_metrics, component_stats)
-
-            # Add episode result to episode_statistics for multi-episode trend analysis
-            self.episode_statistics.add_episode_result(episode_result)
-
-            # Create final state snapshot for episode completion analysis and debugging
-            if self.config.enable_state_validation:
-                final_snapshot = self.state_manager.create_state_snapshot(
-                    snapshot_name=f"{episode_result.episode_id}_final",
-                    validate_consistency=True,
-                )
-                episode_result.add_state_snapshot(final_snapshot)
-
-            # Set episode_active to False and update current_episode_state for cleanup
-            self.episode_active = False
-
-            # Log episode completion with comprehensive statistics and performance summary
-            self.logger.info(
-                f"Episode {episode_result.episode_id} finalized: "
-                f"{'TERMINATED' if episode_result.terminated else 'TRUNCATED'} "
-                f"after {episode_result.total_steps} steps "
-                f"({episode_duration_ms:.2f}ms, reward={episode_result.total_reward})"
-            )
-
-            # Return EpisodeResult for analysis, storage, and research evaluation
-            return episode_result
-
+            return self._extracted_from_finalize_episode_10(collect_detailed_statistics)
         except (StateError, ComponentError, ValidationError, ResourceError):
             raise
         except Exception as e:
@@ -1758,6 +1652,109 @@ class EpisodeManager:
                 component_name="EpisodeManager",
                 operation_name="finalize_episode",
             ) from e
+
+    # TODO Rename this here and in `finalize_episode`
+    def _extracted_from_finalize_episode_10(self, collect_detailed_statistics):
+        # Validate episode is complete with proper termination or truncation status
+        if self.current_episode_state is None:
+            raise StateError(
+                message="Cannot finalize episode: no episode state available",
+                current_state="no_episode",
+                expected_state="finalize_episode",
+            )
+
+        if not (
+            self.current_episode_state.terminated
+            or self.current_episode_state.truncated
+        ):
+            self.logger.warning(
+                "Finalizing episode that is not terminated or truncated"
+            )
+
+        # Get final state from state_manager with complete agent and episode information
+        self.state_manager.get_current_state(
+            include_performance_data=True,
+            include_component_details=collect_detailed_statistics,
+        )
+
+        # Calculate final performance metrics; convert seconds -> milliseconds
+        episode_duration_ms = self.current_episode_state.get_episode_duration() * 1000.0
+
+        # Collect component statistics from state_manager, reward_calculator, and action_processor
+        component_stats = {}
+        if collect_detailed_statistics:
+            component_stats["state_manager"] = (
+                self.state_manager.get_performance_metrics()
+            )
+            component_stats["reward_calculator"] = (
+                self.reward_calculator.get_reward_statistics()
+            )
+            component_stats["action_processor"] = (
+                self.action_processor.get_processing_statistics()
+            )
+
+        # Create comprehensive EpisodeResult with final states and performance analysis
+        # Guard and snapshot current episode/agent states for typing
+        episode_state = self.current_episode_state
+        agent_state = self.state_manager.current_agent_state
+        if agent_state is None:
+            raise StateError(
+                message="Cannot finalize episode: missing agent state",
+                current_state="finalize",
+                expected_state="finalize_episode",
+            )
+
+        episode_result = EpisodeResult(
+            episode_id=episode_state.episode_id,
+            terminated=episode_state.terminated,
+            truncated=episode_state.truncated,
+            total_steps=agent_state.step_count,
+            total_reward=agent_state.total_reward,
+            episode_duration_ms=episode_duration_ms,
+        )
+
+        # Set final state information
+        final_distance = None
+        if agent_state:
+            source_location = cast(Coordinates, self.config.env_config.source_location)
+            final_distance = agent_state.position.distance_to(source_location)
+
+        episode_result.set_final_state(
+            final_agent_state=self.state_manager.current_agent_state,
+            final_distance=final_distance or 0.0,
+            termination_reason=getattr(
+                self.current_episode_state, "termination_reason", "unknown"
+            ),
+        )
+
+        # Add performance metrics
+        performance_metrics = self.performance_metrics.get_performance_summary()
+        episode_result.add_performance_metrics(performance_metrics, component_stats)
+
+        # Add episode result to episode_statistics for multi-episode trend analysis
+        self.episode_statistics.add_episode_result(episode_result)
+
+        # Create final state snapshot for episode completion analysis and debugging
+        if self.config.enable_state_validation:
+            final_snapshot = self.state_manager.create_state_snapshot(
+                snapshot_name=f"{episode_result.episode_id}_final",
+                validate_consistency=True,
+            )
+            episode_result.add_state_snapshot(final_snapshot)
+
+        # Set episode_active to False and update current_episode_state for cleanup
+        self.episode_active = False
+
+        # Log episode completion with comprehensive statistics and performance summary
+        self.logger.info(
+            f"Episode {episode_result.episode_id} finalized: "
+            f"{'TERMINATED' if episode_result.terminated else 'TRUNCATED'} "
+            f"after {episode_result.total_steps} steps "
+            f"({episode_duration_ms:.2f}ms, reward={episode_result.total_reward})"
+        )
+
+        # Return EpisodeResult for analysis, storage, and research evaluation
+        return episode_result
 
     def get_episode_statistics(self):
         """Return the aggregated EpisodeStatistics object used by the manager."""
@@ -1771,10 +1768,7 @@ class EpisodeManager:
             "total_processing_time_ms": sum(metrics.step_durations_ms),
         }
         resets = metrics.other_timings_ms.get("episode_reset")
-        if resets:
-            data["reset_time_ms"] = resets[-1]
-        else:
-            data["reset_time_ms"] = 0.0
+        data["reset_time_ms"] = resets[-1] if resets else 0.0
         return data
 
     def get_current_state(
@@ -1787,53 +1781,9 @@ class EpisodeManager:
         component states, and performance metrics for external monitoring.
         """
         try:
-            # Validate current episode is active with proper state initialization
-            if not self.episode_active or self.current_episode_state is None:
-                raise StateError(
-                    message="Cannot get current state: episode is not active",
-                    current_state="inactive",
-                    expected_state="get_current_state",
-                )
-
-            # Prefer returning attribute-accessible structure used by tests
-            from types import SimpleNamespace
-
-            agent_state_obj = self.state_manager.current_agent_state
-            episode_state_obj = self.current_episode_state
-
-            current_state = SimpleNamespace(
-                episode_active=self.episode_active,
-                episode_count=self.episode_count,
-                episode_id=episode_state_obj.episode_id,
-                agent_state=agent_state_obj,
-                episode_state=episode_state_obj,
-                timestamp=time.time(),
+            return self._extracted_from_get_current_state_12(
+                include_performance_data, include_component_details
             )
-
-            # Add performance data from performance_metrics if include_performance_data is True
-            if include_performance_data:
-                current_state.performance_data = (
-                    self.performance_metrics.get_performance_summary()
-                )
-
-            # Include detailed component states if include_component_details is True
-            if include_component_details:
-                current_state.component_details = {
-                    "reward_calculator": self.reward_calculator.get_reward_statistics(),
-                    "action_processor": self.action_processor.get_processing_statistics(),
-                    "component_cache_size": len(self.component_cache),
-                }
-
-            # Add episode identification and tracking information for external coordination
-            current_state.tracking_info = {
-                "episode_id": self.current_episode_state.episode_id,
-                "episode_count": self.episode_count,
-                "step_count": agent_state_obj.step_count if agent_state_obj else 0,
-            }
-
-            # Return comprehensive current state dictionary for monitoring and analysis
-            return current_state
-
         except StateError:
             raise
         except Exception as e:
@@ -1844,6 +1794,57 @@ class EpisodeManager:
                 "error": f"State retrieval failed: {str(e)}",
                 "timestamp": time.time(),
             }
+
+    # TODO Rename this here and in `get_current_state`
+    def _extracted_from_get_current_state_12(
+        self, include_performance_data, include_component_details
+    ):
+        # Validate current episode is active with proper state initialization
+        if not self.episode_active or self.current_episode_state is None:
+            raise StateError(
+                message="Cannot get current state: episode is not active",
+                current_state="inactive",
+                expected_state="get_current_state",
+            )
+
+        # Prefer returning attribute-accessible structure used by tests
+        from types import SimpleNamespace
+
+        agent_state_obj = self.state_manager.current_agent_state
+        episode_state_obj = self.current_episode_state
+
+        current_state = SimpleNamespace(
+            episode_active=self.episode_active,
+            episode_count=self.episode_count,
+            episode_id=episode_state_obj.episode_id,
+            agent_state=agent_state_obj,
+            episode_state=episode_state_obj,
+            timestamp=time.time(),
+        )
+
+        # Add performance data from performance_metrics if include_performance_data is True
+        if include_performance_data:
+            current_state.performance_data = (
+                self.performance_metrics.get_performance_summary()
+            )
+
+        # Include detailed component states if include_component_details is True
+        if include_component_details:
+            current_state.component_details = {
+                "reward_calculator": self.reward_calculator.get_reward_statistics(),
+                "action_processor": self.action_processor.get_processing_statistics(),
+                "component_cache_size": len(self.component_cache),
+            }
+
+        # Add episode identification and tracking information for external coordination
+        current_state.tracking_info = {
+            "episode_id": self.current_episode_state.episode_id,
+            "episode_count": self.episode_count,
+            "step_count": agent_state_obj.step_count if agent_state_obj else 0,
+        }
+
+        # Return comprehensive current state dictionary for monitoring and analysis
+        return current_state
 
     def validate_episode_consistency(  # noqa: C901
         self,
@@ -2094,12 +2095,15 @@ def create_episode_manager(
                 operation_name="create_episode_manager",
             )
 
-        logger = get_component_logger("EpisodeManagerFactory")
+        logger = get_component_logger("episode_manager")
         logger.info("EpisodeManager created successfully with component coordination")
 
         # Return fully configured EpisodeManager ready for Gymnasium environment episode orchestration
         return episode_manager
 
+    except ValidationError:
+        # Surface configuration validation issues directly to the caller
+        raise
     except Exception as e:
         raise ComponentError(
             message=f"EpisodeManager creation failed: {str(e)}",

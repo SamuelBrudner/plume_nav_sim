@@ -109,6 +109,7 @@ class _AttributeForwardingTimeLimit(TimeLimit):
         "action_space",
         "observation_space",
         "metadata",
+        "render_mode",
     )
 
     def __getattr__(self, name: str):
@@ -118,7 +119,17 @@ class _AttributeForwardingTimeLimit(TimeLimit):
 
 
 class PlumeSearchEnv(gym.Env):
-    """Compatibility wrapper exposing the DI-backed component environment."""
+    """Compatibility wrapper exposing the DI-backed component environment.
+
+    Delegation contract (stabilized by tests):
+    - Seeding: reset(seed=...) produces reproducible trajectories across
+      instances with identical configuration; wrapper forwards the seed to the
+      underlying environment and tracks the latest seed in info.
+    - Attributes: grid_size, source_location, max_steps, goal_radius reflect
+      the normalized constructor arguments for registration and docs stability.
+    - Rewards: step returns the immediate reward while maintaining an internal
+      cumulative reward that is exposed via info["total_reward"].
+    """
 
     metadata = ComponentBasedEnvironment.metadata
 
@@ -164,10 +175,46 @@ class PlumeSearchEnv(gym.Env):
             elif key in kwargs:
                 factory_kwargs[key] = kwargs[key]
 
+        # Forward optional plume selection and movie configuration if provided
+        for key in (
+            "plume",
+            "movie_path",
+            "movie_fps",
+            "movie_pixel_to_grid",
+            "movie_origin",
+            "movie_extent",
+            "movie_step_policy",
+        ):
+            if key in env_options:
+                factory_kwargs[key] = env_options[key]
+            elif key in kwargs:
+                factory_kwargs[key] = kwargs[key]
+
         self._core_env = create_component_environment(**factory_kwargs)
 
         # Legacy attribute compatibility expected by registration tests
-        self.grid_size = normalized_grid
+        # Ensure grid_size exposed here is always a plain (width, height) tuple
+        # matching the constructor/config values used during registration.
+        # Some underlying component envs may expose a dataclass or override
+        # dimensions (e.g., movie plumes); tests expect tuple equality to the
+        # provided config for registration scenarios.
+        core_grid = getattr(self._core_env, "grid_size", None)
+        if core_grid is not None:
+            try:
+                # Coerce possible dataclass/tuple into a plain tuple[int, int]
+                w = getattr(core_grid, "width", None)
+                h = getattr(core_grid, "height", None)
+                if w is not None and h is not None:
+                    self.grid_size = (int(w), int(h))
+                else:
+                    cw0 = int(core_grid[0])  # type: ignore[index]
+                    cw1 = int(core_grid[1])  # type: ignore[index]
+                    self.grid_size = (cw0, cw1)
+            except Exception:
+                # Fall back to normalized constructor value on any mismatch
+                self.grid_size = (int(normalized_grid[0]), int(normalized_grid[1]))
+        else:
+            self.grid_size = (int(normalized_grid[0]), int(normalized_grid[1]))
         self.source_location = goal_position
         self.max_steps = max_steps_value
         self.goal_radius = goal_radius_value
@@ -314,9 +361,18 @@ class PlumeSearchEnv(gym.Env):
             augmented_info,
         )
 
-    def render(self, mode: str = "human") -> Any:
-        if mode not in {"human", "rgb_array"}:
-            raise ValueError(f"Unsupported render mode: {mode}")
+    def render(self, mode: Optional[str] = None) -> Any:
+        """Render with Gymnasium-compatible semantics.
+
+        - If no mode is provided, respect the wrapped env's configured render_mode.
+        - For 'rgb_array', return an ndarray frame; fall back to core env or zeros.
+        - For 'human', return None (side-effects may occur in wrapped envs).
+        """
+        effective_mode = (
+            mode if mode is not None else getattr(self._env, "render_mode", None)
+        )
+        if effective_mode not in {None, "human", "rgb_array"}:
+            raise ValueError(f"Unsupported render mode: {effective_mode}")
 
         grid_size = getattr(self._env, "grid_size", None)
         if grid_size is not None:
@@ -325,13 +381,25 @@ class PlumeSearchEnv(gym.Env):
         else:
             width = height = 1
 
+        # First attempt: delegate to wrapped env in its configured mode
         result = self._env.render()
-        if mode == "rgb_array":
-            if result is not None:
+
+        # Effective behavior depends on resolved mode
+        if (effective_mode or "human") == "rgb_array":
+            if isinstance(result, np.ndarray):
                 return result
+            # Avoid wrapper kwarg signature issues by calling core env directly
+            try:
+                core = getattr(self, "_core_env", None)
+                if core is not None:
+                    alt = core.render()
+                    if isinstance(alt, np.ndarray):
+                        return alt
+            except Exception:
+                pass
             return np.zeros((height, width, 3), dtype=np.uint8)
 
-        # human mode: per Gymnasium convention, return None regardless of backend
+        # human mode: per Gymnasium convention, return None (ignore ndarray result)
         return None
 
     def close(self) -> None:

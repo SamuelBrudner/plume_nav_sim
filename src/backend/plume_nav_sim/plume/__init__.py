@@ -10,19 +10,43 @@ abstract frameworks, factory functions, specialized exceptions, and utility func
 gymnasium-compatible reinforcement learning environments with performance targets and extensibility.
 """
 
-# External imports with version comments
-import logging  # >=3.10 - Logging integration for module initialization and error reporting
-import threading  # >=3.10 - Thread-safe module initialization and registry operations
-import time  # >=3.10 - Timestamp generation for performance monitoring and module tracking
-from typing import (  # >=3.10 - Type hints for comprehensive type safety
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    cast,
-)
+# Standard library imports
+import logging
+import threading
+import time
+from typing import Dict, List, Mapping, Optional, cast
 
-from typing_extensions import NotRequired, TypedDict  # 3.10 compatible TypedDict extras
+from typing_extensions import NotRequired, TypedDict
+
+# Public types re-exported from core
+from ..core.types import Coordinates, CoordinateType, GridDimensions, GridSize
+
+# Public API imports from submodules
+from .concentration_field import (
+    ConcentrationField,
+    FieldGenerationError,
+    FieldSamplingError,
+    create_concentration_field,
+    validate_field_parameters,
+)
+from .movie_field import MoviePlumeField
+from .plume_model import (
+    BasePlumeModel,
+    ModelRegistrationError,
+    PlumeModelError,
+    PlumeModelInterface,
+    PlumeModelRegistry,
+    create_plume_model,
+    get_supported_plume_types,
+    register_plume_model,
+)
+from .static_gaussian import (
+    GaussianPlumeError,
+    StaticGaussianPlume,
+    calculate_gaussian_concentration,
+    create_static_gaussian_plume,
+    validate_gaussian_parameters,
+)
 
 
 # Typed structures for performance and cache reporting
@@ -60,82 +84,8 @@ class CacheReport(TypedDict, total=False):
     summary: CacheSummary
 
 
-# Core type system imports from shared types module
-from ..core.types import (  # noqa: E402
-    Coordinates,  # 2D coordinate representation for type annotations and parameter validation
-)
-from ..core.types import (  # noqa: E402
-    CoordinateType,  # Type alias for flexible coordinate parameter validation
-)
-from ..core.types import (  # noqa: E402
-    GridDimensions,  # Type alias for grid size parameters in factory functions
-)
-from ..core.types import (  # noqa: E402; noqa: E402; noqa: E402; Core data structures for coordinate and grid management; Grid dimension representation for type annotations and factory functions
-    GridSize,
-)
-
-# Concentration field data structure imports
-from .concentration_field import (  # noqa: E402
-    ConcentrationField,  # Core data structure for efficient 2D field management and sampling
-)
-from .concentration_field import (  # noqa: E402
-    FieldGenerationError,  # Specialized exception for concentration field generation failures
-)
-from .concentration_field import (  # noqa: E402
-    FieldSamplingError,  # Specialized exception for field sampling errors with position analysis
-)
-from .concentration_field import (  # noqa: E402
-    create_concentration_field,  # Factory function for creating validated concentration field instances
-)
-from .concentration_field import (  # noqa: E402; noqa: E402; noqa: E402; Core concentration field class for efficient 2D field management; Factory and utility functions for concentration field operations; Specialized exceptions for concentration field operations; Comprehensive parameter validation for concentration field initialization
-    validate_field_parameters,
-)
-
-# Abstract plume model framework imports for extensibility
-from .plume_model import (  # noqa: E402
-    BasePlumeModel,  # Abstract base class providing common functionality for plume implementations
-)
-from .plume_model import (  # noqa: E402
-    ModelRegistrationError,  # Exception for plume model registration failures with detailed context
-)
-from .plume_model import (  # noqa: E402
-    PlumeModelError,  # General exception for plume model operation failures
-)
-from .plume_model import (  # noqa: E402
-    PlumeModelInterface,  # Protocol interface for structural typing and duck typing compatibility
-)
-from .plume_model import (  # noqa: E402
-    PlumeModelRegistry,  # Registry manager for plume model types with factory functionality
-)
-from .plume_model import (  # noqa: E402
-    create_plume_model,  # Factory function for creating plume model instances with parameter validation
-)
-from .plume_model import (  # noqa: E402
-    get_supported_plume_types,  # Utility function returning comprehensive information about supported plume types
-)
-from .plume_model import (  # noqa: E402; noqa: E402; noqa: E402; Abstract base classes and interfaces for plume model implementations; Registry system for plume model management and extensibility; Factory and utility functions for plume model operations; Specialized exceptions for plume model operations; Register custom plume model class with global registry
-    register_plume_model,
-)
-
-# Static Gaussian plume model implementation imports
-from .static_gaussian import (  # noqa: E402
-    GaussianPlumeError,  # Exception with mathematical analysis and recovery guidance
-)
-from .static_gaussian import (  # noqa: E402
-    StaticGaussianPlume,  # Mathematical implementation providing concentration field calculations
-)
-from .static_gaussian import (  # noqa: E402
-    calculate_gaussian_concentration,  # Pure mathematical function for Gaussian concentration calculations
-)
-from .static_gaussian import (  # noqa: E402
-    create_static_gaussian_plume,  # Factory function for creating validated StaticGaussianPlume instances
-)
-from .static_gaussian import (  # noqa: E402; noqa: E402; noqa: E402; Main static Gaussian plume model class with mathematical implementation; Factory and utility functions for Gaussian plume operations; Specialized exception for StaticGaussianPlume-specific errors; Comprehensive parameter validation for static Gaussian plume model
-    validate_gaussian_parameters,
-)
-
 # Module version and metadata
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __author__ = "plume_nav_sim development team"
 
 # Module-level constants and configuration
@@ -195,7 +145,7 @@ def initialize_plume_module(  # noqa: C901
                 try:
                     pass  # Type checking satisfied by earlier imports
 
-                    import numpy  # noqa: E402  # >=2.1.0 - Mathematical operations
+                    import numpy  # >=2.1.0 - Mathematical operations
 
                     _logger.debug(
                         f"Dependencies validated - NumPy: {numpy.__version__}"
@@ -513,7 +463,7 @@ def clear_plume_caches(  # noqa: C901
         # Force garbage collection if force_gc enabled for complete memory cleanup
         if force_gc:
             try:
-                import gc  # noqa: E402
+                import gc
 
                 collected_objects = gc.collect()
                 cache_report["garbage_collection"] = {
@@ -602,6 +552,7 @@ __all__ = [
     "BasePlumeModel",  # Abstract base class providing common functionality
     "PlumeModelInterface",  # Protocol interface defining structural contract
     "ConcentrationField",  # Core concentration field data structure
+    "MoviePlumeField",  # Zarr-backed movie field loader (read-only)
     # Factory functions for creating validated instances with optimized configuration
     "create_static_gaussian_plume",  # Factory function for StaticGaussianPlume instances
     "create_plume_model",  # Generic factory function for plume model instances

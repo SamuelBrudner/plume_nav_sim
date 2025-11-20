@@ -1,0 +1,19 @@
+ingest_capture:
+  # Set this to the path of a completed run directory containing
+  # run.json, steps.jsonl.gz, episodes.jsonl.gz (e.g., results/demo/run-20251106-120000)
+  run_dir: results/demo/<run_id>
+  # Root output directory where the dataset hierarchy will be written as
+  # data/captures/<experiment>/<run_id>
+  out_dir: data/captures
+video_ingest:
+  # Example inputs for local reproduction; update as needed.
+  # Can be a media file (mp4/gif) or a directory of images.
+  input: demo.gif
+  # Output Zarr store path
+  output: data/plumes/demo.zarr
+  # Frames per second if not present in metadata
+  fps: 10.0
+  # Pixel-to-grid mapping (y x)
+  pixel_to_grid: "1.0 1.0"
+  # Grid origin (y x)
+  origin: "0.0 0.0"

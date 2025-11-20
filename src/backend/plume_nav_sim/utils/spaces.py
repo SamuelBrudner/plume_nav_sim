@@ -68,6 +68,7 @@ __all__ = [
     "sample_valid_observation",
     "check_space_compatibility",
     "optimize_space_operations",
+    "is_space_subset",
 ]
 
 # Initialize component logger for space operations and validation monitoring
@@ -99,6 +100,95 @@ def create_action_space(
         return _create_action_space_impl(num_actions, validate_actions, space_config)
 
     return _create_action_space_cached(num_actions, validate_actions)
+
+
+def _subset_discrete(
+    policy_space: gymnasium.spaces.Discrete, env_space: gymnasium.spaces.Discrete
+) -> bool:
+    return int(policy_space.n) <= int(env_space.n)
+
+
+def _subset_multidiscrete(
+    policy_space: gymnasium.spaces.MultiDiscrete,
+    env_space: gymnasium.spaces.MultiDiscrete,
+) -> bool:
+    p = np.asarray(policy_space.nvec, dtype=np.int64)
+    e = np.asarray(env_space.nvec, dtype=np.int64)
+    return p.shape == e.shape and np.all(p <= e)
+
+
+def _subset_multibinary(
+    policy_space: gymnasium.spaces.MultiBinary, env_space: gymnasium.spaces.MultiBinary
+) -> bool:
+    return int(policy_space.n) <= int(env_space.n)
+
+
+def _subset_box(
+    policy_space: gymnasium.spaces.Box, env_space: gymnasium.spaces.Box
+) -> bool:
+    if tuple(policy_space.shape) != tuple(env_space.shape):
+        return False
+    p_low = np.asarray(policy_space.low)
+    p_high = np.asarray(policy_space.high)
+    e_low = np.asarray(env_space.low)
+    e_high = np.asarray(env_space.high)
+    return bool(np.all(p_low >= e_low) and np.all(p_high <= e_high))
+
+
+def _subset_tuple(
+    policy_space: gymnasium.spaces.Tuple, env_space: gymnasium.spaces.Tuple
+) -> bool:
+    if len(policy_space.spaces) != len(env_space.spaces):
+        return False
+    return all(
+        is_space_subset(ps, es) for ps, es in zip(policy_space.spaces, env_space.spaces)
+    )
+
+
+def _subset_dict(
+    policy_space: gymnasium.spaces.Dict, env_space: gymnasium.spaces.Dict
+) -> bool:
+    p_keys = set(policy_space.spaces.keys())
+    e_keys = set(env_space.spaces.keys())
+    if not p_keys.issubset(e_keys):
+        return False
+    return all(
+        is_space_subset(policy_space.spaces[k], env_space.spaces[k]) for k in p_keys
+    )
+
+
+_SUBSET_DISPATCH = {
+    (gymnasium.spaces.Discrete, gymnasium.spaces.Discrete): _subset_discrete,
+    (
+        gymnasium.spaces.MultiDiscrete,
+        gymnasium.spaces.MultiDiscrete,
+    ): _subset_multidiscrete,
+    (gymnasium.spaces.MultiBinary, gymnasium.spaces.MultiBinary): _subset_multibinary,
+    (gymnasium.spaces.Box, gymnasium.spaces.Box): _subset_box,
+    (gymnasium.spaces.Tuple, gymnasium.spaces.Tuple): _subset_tuple,
+    (gymnasium.spaces.Dict, gymnasium.spaces.Dict): _subset_dict,
+}
+
+
+def is_space_subset(
+    policy_space: gymnasium.spaces.Space, env_space: gymnasium.spaces.Space
+) -> bool:
+    """Return True if ``policy_space`` is a subset of ``env_space``.
+
+    Subset is defined structurally per common Gymnasium spaces without sampling:
+    - Discrete/MultiBinary: policy.n <= env.n
+    - MultiDiscrete: elementwise policy.nvec <= env.nvec
+    - Box: identical shape and policy bounds within env bounds
+    - Tuple: same length and pairwise subset
+    - Dict: policy keys subset of env keys and pairwise subset per key
+    """
+    if policy_space is env_space:
+        return True
+
+    handler = _SUBSET_DISPATCH.get((type(policy_space), type(env_space)))
+    if handler is None:
+        return False
+    return handler(policy_space, env_space)
 
 
 @functools.lru_cache(maxsize=SPACE_CREATION_CACHE_SIZE)
@@ -717,6 +807,8 @@ def validate_action_space(  # noqa: C901
         TypeError: If action_space is not Discrete
     """
     try:
+        # Collect non-strict warnings to emit once per call
+        non_strict_notes: List[str] = []
         # Validate action_space is instance of gymnasium.spaces.Discrete
         if not isinstance(action_space, gymnasium.spaces.Discrete):
             raise ValidationError(
@@ -735,10 +827,8 @@ def validate_action_space(  # noqa: C901
                     },
                 )
             else:
-                warnings.warn(
-                    f"Action space size {action_space.n} differs from standard {ACTION_SPACE_SIZE}",
-                    UserWarning,
-                    stacklevel=2,
+                non_strict_notes.append(
+                    f"size {action_space.n} differs from standard {ACTION_SPACE_SIZE}"
                 )
 
         # Validate action space sample() method produces valid actions in expected range
@@ -813,10 +903,8 @@ def validate_action_space(  # noqa: C901
                             },
                         )
                     else:
-                        warnings.warn(
-                            f"Action space metadata missing optional keys: {missing_keys}",
-                            UserWarning,
-                            stacklevel=2,
+                        non_strict_notes.append(
+                            f"metadata missing optional keys: {missing_keys}"
                         )
 
         # Apply strict validation including performance testing if strict_validation enabled
@@ -833,6 +921,15 @@ def validate_action_space(  # noqa: C901
                     UserWarning,
                     stacklevel=2,
                 )
+
+        # Emit consolidated non-strict warning once per validation call
+        if non_strict_notes and not strict_validation:
+            warnings.warn(
+                "Action space: non-strict validation notes: "
+                + "; ".join(non_strict_notes),
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Test action space compatibility with Action enum values
         for action_enum in Action:
@@ -898,6 +995,8 @@ def validate_observation_space(  # noqa: C901
         TypeError: If observation_space is not Box
     """
     try:
+        # Collect non-strict warnings to emit once per call
+        non_strict_notes: List[str] = []
         # Validate observation_space is instance of gymnasium.spaces.Box
         if not isinstance(observation_space, gymnasium.spaces.Box):
             raise ValidationError(
@@ -917,10 +1016,8 @@ def validate_observation_space(  # noqa: C901
                     },
                 )
             else:
-                warnings.warn(
-                    f"Observation space shape {observation_space.shape} differs from standard {expected_shape}",
-                    UserWarning,
-                    stacklevel=2,
+                non_strict_notes.append(
+                    f"shape {observation_space.shape} differs from standard {expected_shape}"
                 )
 
         # Validate observation space bounds match CONCENTRATION_RANGE [0.0, 1.0] if check_bounds enabled
@@ -928,7 +1025,10 @@ def validate_observation_space(  # noqa: C901
             expected_low, expected_high = CONCENTRATION_RANGE
 
             # Check low bounds
-            if not np.allclose(observation_space.low, expected_low, rtol=1e-6):
+            low_mismatch = not np.allclose(
+                observation_space.low, expected_low, rtol=1e-6
+            )
+            if low_mismatch:
                 if strict_validation:
                     raise ValidationError(
                         f"Observation space low bounds {observation_space.low} do not match expected {expected_low}",
@@ -938,14 +1038,14 @@ def validate_observation_space(  # noqa: C901
                         },
                     )
                 else:
-                    warnings.warn(
-                        "Observation space low bounds differ from standard concentration range",
-                        UserWarning,
-                        stacklevel=2,
-                    )
+                    # defer to consolidated message
+                    non_strict_notes.append("low bounds differ from standard range")
 
             # Check high bounds
-            if not np.allclose(observation_space.high, expected_high, rtol=1e-6):
+            high_mismatch = not np.allclose(
+                observation_space.high, expected_high, rtol=1e-6
+            )
+            if high_mismatch:
                 if strict_validation:
                     raise ValidationError(
                         f"Observation space high bounds {observation_space.high} do not match expected {expected_high}",
@@ -955,11 +1055,8 @@ def validate_observation_space(  # noqa: C901
                         },
                     )
                 else:
-                    warnings.warn(
-                        "Observation space high bounds differ from standard concentration range",
-                        UserWarning,
-                        stacklevel=2,
-                    )
+                    # defer to consolidated message
+                    non_strict_notes.append("high bounds differ from standard range")
 
         # Check observation space dtype matches OBSERVATION_DTYPE (float32) if check_dtype enabled
         if check_dtype:
@@ -974,10 +1071,8 @@ def validate_observation_space(  # noqa: C901
                         },
                     )
                 else:
-                    warnings.warn(
-                        f"Observation space dtype {observation_space.dtype} differs from expected {expected_dtype}",
-                        UserWarning,
-                        stacklevel=2,
+                    non_strict_notes.append(
+                        f"dtype {observation_space.dtype} differs from expected {expected_dtype}"
                     )
 
         # Validate observation space sample() method produces valid observations in expected range
@@ -1081,6 +1176,7 @@ def validate_observation_space(  # noqa: C901
         # Test observation space compatibility with plume concentration values
         try:
             concentration_values = [0.0, 0.25, 0.5, 0.75, 1.0]
+            incompatible_values: List[float] = []
             for conc_val in concentration_values:
                 test_obs = np.array([conc_val], dtype=observation_space.dtype)
                 if not observation_space.contains(test_obs):
@@ -1090,16 +1186,30 @@ def validate_observation_space(  # noqa: C901
                             context={"concentration_value": conc_val},
                         )
                     else:
-                        warnings.warn(
-                            f"Observation space may not be compatible with concentration value {conc_val}",
-                            UserWarning,
-                            stacklevel=2,
-                        )
+                        incompatible_values.append(float(conc_val))
+            if incompatible_values and not strict_validation:
+                non_strict_notes.append(
+                    f"may not be compatible with concentration values {incompatible_values}"
+                )
         except ValidationError:
             raise
         except Exception as e:
+            if strict_validation:
+                warnings.warn(
+                    f"Could not test concentration compatibility: {e}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            else:
+                non_strict_notes.append(
+                    f"could not test concentration compatibility: {e}"
+                )
+
+        # Emit consolidated non-strict warning once per validation call
+        if non_strict_notes and not strict_validation:
             warnings.warn(
-                f"Could not test concentration compatibility: {e}",
+                "Observation space: non-strict validation notes: "
+                + "; ".join(non_strict_notes),
                 UserWarning,
                 stacklevel=2,
             )
@@ -2170,8 +2280,8 @@ class SpaceValidator:
         # Create validation_cache dictionary for caching validation results
         self.validation_cache = {} if enable_caching else None
 
-        # Initialize component logger using get_component_logger for validation operations
-        self.logger = get_component_logger(f"{__name__}.SpaceValidator")
+        # Initialize component logger using canonical component identifier
+        self.logger = get_component_logger("validation")
 
         # Initialize validation_stats dictionary for operation tracking and analysis
         self.validation_stats = {

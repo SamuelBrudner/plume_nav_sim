@@ -13,12 +13,32 @@ from .component_configs import (
     PlumeConfig,
     RewardConfig,
 )
+from .composition import (
+    BuiltinPolicyName,
+    LoadedPolicy,
+    PolicySpec,
+    SimulationSpec,
+    build_env,
+    build_policy,
+    load_policy,
+    prepare,
+    reset_policy_if_possible,
+)
+from .defaults import get_complete_default_config, get_default_environment_config
 from .factories import (
     create_action_processor,
     create_concentration_field,
     create_environment_from_config,
     create_observation_model,
     create_reward_function,
+)
+from .registration import (
+    COMPONENT_ENV_ID,
+    ENV_ID,
+    ensure_registered,
+    is_registered,
+    register_env,
+    unregister_env,
 )
 from .test_configs import (
     REPRODUCIBILITY_SEEDS,
@@ -43,6 +63,26 @@ __all__ = [
     "create_reward_function",
     "create_concentration_field",
     "create_environment_from_config",
+    # Defaults
+    "get_complete_default_config",
+    "get_default_environment_config",
+    # Composition helpers and specs
+    "BuiltinPolicyName",
+    "LoadedPolicy",
+    "PolicySpec",
+    "SimulationSpec",
+    "load_policy",
+    "reset_policy_if_possible",
+    "build_env",
+    "build_policy",
+    "prepare",
+    # Registration (unified surface)
+    "register_env",
+    "unregister_env",
+    "is_registered",
+    "ensure_registered",
+    "ENV_ID",
+    "COMPONENT_ENV_ID",
     # Test configs
     "REPRODUCIBILITY_SEEDS",
     "TestConfigFactory",

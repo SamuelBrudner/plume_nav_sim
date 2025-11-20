@@ -7,11 +7,12 @@ This sensor samples the plume concentration at the agent's current position,
 providing a scalar observation in [0, 1].
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict
 
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
 
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0 - 2025-11-18
+
+Added
+- Movie plume support and sample Zarr dataset; ingest CLI and schema docs
+- Demo enhancements: config-driven SimulationSpec (JSON/TOML/YAML), GIF artifact
+- Debugger ODC: provider-only inspector, remote provider scaffolding, example provider
+- New docs and notebooks (movie plume overview; DI SimulationSpec walkthrough)
+
+Changed
+- Consolidated config/assets/data under plume_nav_sim.*; removed legacy packages
+- Rendering: safer toolbar/backends; env marker rendering improvements
+- Logging: relaxed logger naming; improved ergonomics; canonical logger IDs
+
+Fixed
+- Robust Gymnasium registry detection across versions
+- Marked flaky performance tests as xfail
+
+
 All notable changes to the `plume_nav_sim` project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -12,17 +30,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Env-var opt-in to make DI the default for the legacy env id: set `PLUMENAV_DEFAULT=components` (or `PLUMENAV_USE_COMPONENTS=1`).
 - Helper `ensure_component_env_registered()` to register the DI environment id programmatically.
 - Registration tests covering DI mappings, combinations, and gym.make() smoke checks.
+- Backend simulation runner (UI-agnostic): `run_episode`, `stream` events, callback hooks.
+- Run/Tumble action processor (`oriented_run_tumble`) and `RunTumbleTemporalDerivativePolicy`.
+- Temporal-derivative (TD) runner tests and demo notebooks (manual and via runner).
+- Parity tests verifying runner semantics match manual stepping (with/without render).
+- Optional dependency: `seaborn>=0.13.0` in `[project.optional-dependencies].notebooks`.
+- Pre-commit notebook hygiene: local hook and script to strip `.ipynb` outputs.
 
 ### Changed
 - Legacy `PlumeSearchEnv` remains the default, but registration now logs an INFO hint about upcoming deprecation and DI opt-in options.
+- TD policies refactored to probe-after-turn gating and unified `dC` computation.
+- Compose builders/specs extended for new builtin policies (`run_tumble_td`, `stochastic_run_tumble_td`) and mappings (e.g., `greedy_td`).
 
-### Todo
-- PyPI distribution and release automation
-- Performance optimization for larger grid sizes (>256×256)
-- Multi-agent environment support
-- Dynamic plume models with temporal evolution
-- FAIR data persistence module
-- Integration with specialized robotics simulation frameworks
+### Removed
+- Obsolete `notebooks/runner_demo.ipynb` replaced with parity-aligned demos.
+
+### Planned (tracked in beads)
+- PyPI distribution and release automation — see `plume_nav_sim-255` (release automation) and `plume_nav_sim-219` (wheel packaging config)
+- Performance optimization for larger grid sizes (>256×256) — see `plume_nav_sim-256`
+- Multi-agent environment support — see `plume_nav_sim-257`
+- Dynamic plume models with temporal evolution — see `plume_nav_sim-258`
+- FAIR data persistence module — see `plume_nav_sim-259`
+- Integrations with specialized robotics simulation frameworks — see `plume_nav_sim-260`
 
 ## [0.0.1] - 2024-12-19
 
@@ -171,17 +200,17 @@ MIT License (see LICENSE file for details)
 
 ### Citation
 ```bibtex
-@software{plume_nav_sim_2024,
+@software{plume_nav_sim_2025,
   title={plume-nav-sim: Gymnasium Environment for Plume Navigation Research},
   author={plume_nav_sim Development Team},
-  year={2024},
+  year={2025},
   version={0.0.1},
-  url={https://github.com/plume-nav-sim/plume_nav_sim}
+  url={https://github.com/SamuelBrudner/plume_nav_sim}
 }
 ```
 
 ### Contact
-For questions, bug reports, or feature requests, please visit the GitHub Issues page: https://github.com/plume-nav-sim/plume_nav_sim/issues
+For questions, bug reports, or feature requests, please visit the GitHub Issues page: https://github.com/SamuelBrudner/plume_nav_sim/issues
 
 ---
 

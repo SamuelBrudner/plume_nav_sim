@@ -1,7 +1,7 @@
 """
 Constants drift validator for plume_nav_sim.
 
-Checks that YAML-configured constants (config/constants.yaml) match the
+Checks that YAML-configured constants (conf/constants.yaml) match the
 corresponding Python constants in plume_nav_sim.core.constants and that
 expected keys are present. Exits with code 1 on mismatch.
 

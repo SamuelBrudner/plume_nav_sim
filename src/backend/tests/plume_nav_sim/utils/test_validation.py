@@ -537,6 +537,14 @@ class TestEnvironmentConfigValidation:
             # Also acceptable - strict validation
             pass
 
+    def test_validate_environment_config_with_instance(self):
+        """Validate using an EnvironmentConfig instance (no config.* coupling)."""
+        from plume_nav_sim.core.types import EnvironmentConfig as CoreEnvConfig
+
+        cfg = CoreEnvConfig(grid_size=(32, 32), source_location=(16, 16))
+        result = validate_environment_config(cfg)
+        assert result is not None
+
 
 class TestUtilityFunctions:
     """Essential utility function tests."""

@@ -19,14 +19,21 @@ Example:
     >>> obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 """
 
-from typing import Literal, Optional, Union
+from typing import Optional, Union
+
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 import numpy as np
 
 from ..actions import DiscreteGridActions, OrientedGridActions
+from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..observations import AntennaeArraySensor, ConcentrationSensor
 from ..plume.concentration_field import ConcentrationField
+from ..plume.movie_field import MovieConfig, MoviePlumeField, resolve_movie_dataset_path
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_env import ComponentBasedEnvironment
 
@@ -46,6 +53,14 @@ def create_component_environment(  # noqa: C901
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
+    # New: select plume source and optional movie configuration
+    plume: Literal["static", "movie"] = "static",
+    movie_path: Optional[str] = None,
+    movie_fps: Optional[float] = None,
+    movie_pixel_to_grid: Optional[tuple[float, float]] = None,
+    movie_origin: Optional[tuple[float, float]] = None,
+    movie_extent: Optional[tuple[float, float]] = None,
+    movie_step_policy: Literal["wrap", "clamp"] = "wrap",
 ) -> ComponentBasedEnvironment:
     """
     Create a fully-configured component-based environment.
@@ -109,6 +124,8 @@ def create_component_environment(  # noqa: C901
         action_processor = DiscreteGridActions(step_size=step_size)
     elif action_type == "oriented":
         action_processor = OrientedGridActions(step_size=step_size)
+    elif action_type == "run_tumble":
+        action_processor = OrientedRunTumbleActions(step_size=step_size)
     else:
         raise ValueError(
             f"Invalid action_type: {action_type}. Must be 'discrete' or 'oriented'."
@@ -142,18 +159,45 @@ def create_component_environment(  # noqa: C901
             f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
         )
 
-    # Create concentration field
-    concentration_field = ConcentrationField(grid_size=grid_size, enable_caching=True)
-    # Manually create Gaussian field (generate_field has signature issues)
+    # Create plume/concentration field
+    if plume == "movie":
+        if not movie_path:
+            raise ValueError(
+                "env.plume=movie requires movie.path to be provided (Hydra key: movie.path)"
+            )
+        dataset_path = resolve_movie_dataset_path(
+            movie_path,
+            fps=movie_fps,
+            pixel_to_grid=movie_pixel_to_grid,
+            origin=movie_origin,
+            extent=movie_extent,
+        )
+        movie_cfg = MovieConfig(
+            path=str(dataset_path),
+            fps=movie_fps,
+            pixel_to_grid=movie_pixel_to_grid,
+            origin=movie_origin,
+            extent=movie_extent,
+            step_policy=movie_step_policy,
+        )
+        movie_field = MoviePlumeField(movie_cfg)
+        concentration_field = movie_field  # type: ignore[assignment]
 
-    x = np.arange(grid_size.width)
-    y = np.arange(grid_size.height)
-    xx, yy = np.meshgrid(x, y)
-    dx = xx - goal_location.x
-    dy = yy - goal_location.y
-    field_array = np.exp(-(dx**2 + dy**2) / (2 * plume_sigma**2))
-    concentration_field.field_array = field_array.astype(np.float32)
-    concentration_field.is_generated = True
+        # Override grid_size based on dataset to avoid mismatches
+        grid_size = movie_field.grid_size
+    else:
+        concentration_field = ConcentrationField(
+            grid_size=grid_size, enable_caching=True
+        )
+        # Manually create Gaussian field (generate_field has signature issues)
+        x = np.arange(grid_size.width)
+        y = np.arange(grid_size.height)
+        xx, yy = np.meshgrid(x, y)
+        dx = xx - goal_location.x
+        dy = yy - goal_location.y
+        field_array = np.exp(-(dx**2 + dy**2) / (2 * plume_sigma**2))
+        concentration_field.field_array = field_array.astype(np.float32)
+        concentration_field.is_generated = True
 
     # Assemble environment
     return ComponentBasedEnvironment(

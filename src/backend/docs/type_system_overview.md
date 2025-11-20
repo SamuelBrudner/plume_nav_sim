@@ -1,45 +1,84 @@
-# Core Type System Harmonization
+# Core Type System Overview
 
-## Goal
-Establish a single, authoritative set of core types for `plume_nav_sim` so that every
-component—environments, plume models, utilities, and configuration helpers—shares the same
-vocabulary. The objective is high impact: type mismatches currently break imports, make the
-public API unusable, and leave tests unable to guard against regressions.
+This page describes the canonical core types implemented in `plume_nav_sim.core.types` and
+how to use them consistently across the codebase.
 
-## Architecture Analysis
-- `plume_nav_sim.core.__init__` advertises a rich type system (`Action`, `Coordinates`,
-  `EnvironmentConfig`, `PlumeParameters`, factory helpers, validation utilities), but the
-  referenced `core.types` module does not exist. Any consumer that relies on the documented
-  API fails at import time.
-- Multiple modules fill the void with ad-hoc aliases. For example,
-  `config.environment_configs` renames `PlumeModel` to `PlumeParameters`, creating redundant
-  semantics for the same entity. This redundancy cascades through the architecture because
-  plume components depend on consistent parameter definitions.
-- Tests such as `tests/plume_nav_sim/core/test_types.py` are empty, so there is no contractual
-  protection ensuring that the public API remains synchronized with the actual
-  implementations. As a result, data-model inconsistencies slip through silently.
+## What Exists (Single Source of Truth)
+- Module: `plume_nav_sim.core.types` (implemented)
+  - Data classes: `Coordinates`, `GridSize`, `AgentState`, `EpisodeState`
+  - Config: `EnvironmentConfig` (validated, frozen semantics via normalization)
+  - Enums (re-exported): `Action`, `RenderMode`
+  - Aliases: `PlumeParameters = PlumeModel` (canonical plume parameter carrier)
+  - Type aliases: `ActionType`, `CoordinateType`, `GridDimensions`, `MovementVector`
+  - Factories: `create_coordinates`, `create_grid_size`, `create_agent_state`,
+    `create_episode_state`, `create_environment_config`, `create_step_info`
+  - Utilities: `validate_action`, `get_movement_vector`, `calculate_euclidean_distance`
+  - Error model: `ValidationError` is lazily exposed from `plume_nav_sim.utils.exceptions`
 
-## Conceptual Plan
-- Introduce a concrete `plume_nav_sim.core.types` module that imports canonical dataclasses
-  (`Coordinates`, `GridSize`, `AgentState`, `EpisodeState`, `PlumeModel`) and exposes them
-  under stable names.
-- Provide type aliases for frequently used unions (e.g., `ActionType`, `CoordinateType`) and
-  tuples (e.g., `MovementVector`, `GridDimensions`) so the rest of the codebase can share a
-  unified vocabulary.
-- Implement factory helpers (`create_coordinates`, `create_grid_size`, `create_agent_state`)
-  that centralize validation and conversion logic, ensuring every component constructs data
-  in the same way.
-- Define a validated `EnvironmentConfig` dataclass within `core.types` and update
-  configuration utilities to rely on it instead of duplicating configuration models.
-- Re-export `PlumeModel` as `PlumeParameters` within the new module, eliminating ad-hoc
-  aliases and guaranteeing that plume-specific components refer to a single canonical type.
-- Augment the test suite so that it codifies the new contracts, preventing future divergence
-  between documentation and implementation.
+All of the above are live in code at src/backend/plume_nav_sim/core/types.py:1.
 
-## Canonical Validation Semantics
-- Centralize validation failures on the shared `plume_nav_sim.utils.exceptions.ValidationError`
-  so every subsystem, including rendering, surfaces identical error metadata (parameter names,
-  expected formats, recovery suggestions).
-- Re-export the shared exception via `plume_nav_sim.core.types` and
-  `plume_nav_sim.render` to maintain backwards compatibility while preventing redundant
-  subclass definitions that fragment error handling logic.
+## Usage Examples
+Create validated coordinates and grid sizes:
+
+```python
+from plume_nav_sim.core.types import create_coordinates, create_grid_size
+
+pos = create_coordinates(5, 10)           # Coordinates(x=5, y=10)
+grid = create_grid_size((128, 128))       # GridSize(width=128, height=128)
+```
+
+Build environment configuration (with normalized plume parameters):
+
+```python
+from plume_nav_sim.core.types import EnvironmentConfig, create_environment_config
+
+cfg = create_environment_config(
+    {
+        "grid_size": (64, 64),
+        "source_location": (32, 32),
+        "max_steps": 500,
+        "goal_radius": 2.0,
+        "plume_params": {"sigma": 12.0},
+    }
+)
+
+assert isinstance(cfg.grid_size, type(create_grid_size((1,1))))
+```
+
+Work with agent and episode state:
+
+```python
+from plume_nav_sim.core.types import create_agent_state, create_episode_state
+
+agent = create_agent_state((10, 10), orientation=90.0)
+episode = create_episode_state(agent)
+```
+
+Validate and interpret actions:
+
+```python
+from plume_nav_sim.core.types import validate_action, get_movement_vector
+
+action = validate_action(1)        # -> Action enum
+dx, dy = get_movement_vector(action)
+```
+
+## Error Model
+- All validation routes through the shared `ValidationError` in
+  `plume_nav_sim.utils.exceptions`.
+- The class is lazily exposed via attribute access on `core.types` so imports do not
+  create circular dependencies. Catch it directly from `plume_nav_sim.core.types`:
+
+```python
+from plume_nav_sim.core.types import ValidationError
+```
+
+## Tests and Contracts
+- Contract tests exercise invariants for these types in
+  `src/backend/tests/contracts/test_semantic_invariants.py:1` and related suites.
+- Formal contracts are documented in `src/backend/CONTRACTS.md:751` (see Core Types).
+
+## Migration Notes
+- Older, ad‑hoc aliases have been consolidated under `core.types`.
+- `PlumeParameters` is an alias for `PlumeModel` to standardize terminology across
+  environment configuration and plume components.

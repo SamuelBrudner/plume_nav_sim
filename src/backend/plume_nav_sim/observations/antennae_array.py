@@ -7,11 +7,12 @@ This sensor models an array of concentration sensors positioned at specified
 angles and distances relative to the agent's heading, similar to insect antennae.
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict, List
 
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
 
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray

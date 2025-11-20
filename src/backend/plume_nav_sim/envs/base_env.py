@@ -360,9 +360,7 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
 
         # Store validated configuration and initialize component logger
         self.config = config
-        self.logger = get_component_logger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
+        self.logger = get_component_logger("environment")
         # Backward-compat attribute expected by tests
         self._logger = self.logger
 
@@ -673,111 +671,114 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
                 raise StateError(f"Environment step failed: {e}")
 
     @monitor_performance("base_render", 50.0, False)
-    def render(  # noqa: C901
-        self, mode: Optional[str] = None
-    ) -> Union[np.ndarray, None]:
+    def render(self, mode: Optional[str] = None) -> Union[np.ndarray, None]:
         """
-        Render environment visualization in specified mode with lazy renderer initialization, performance
-        monitoring, error handling, and fallback strategies following Gymnasium render specification.
+        Render a frame in the configured mode with minimal orchestration logic.
 
-        Returns:
-            RGB array for rgb_array mode, None for human mode following Gymnasium render API
+        Returns an RGB array for "rgb_array" mode, or None for "human".
         """
-        render_start_time = time.perf_counter()
-
+        start = time.perf_counter()
         try:
-            # Optionally apply per-call render mode override
-            if mode is not None:
-                self.render_mode = mode
+            self._apply_render_mode_override(mode)
+            if not self._is_ready_to_render():
+                return None
+            self._validate_render_mode_or_raise()
 
-            # Validate environment is initialized
-            if not self._environment_initialized:
-                self.logger.warning("Render called on uninitialized environment")
+            renderer = self._safe_get_renderer()
+            if renderer is None:
                 return None
 
-            # Validate render_mode using validate_render_mode
-            if not validate_render_mode(self.render_mode):
-                raise ValidationError(
-                    f"Invalid render mode: {self.render_mode}",
-                    context={"supported_modes": SUPPORTED_RENDER_MODES},
-                )
+            context = self._safe_create_render_context()
+            result = self._dispatch_render(renderer, context)
 
-            # Get or create appropriate renderer using _get_or_create_renderer()
-            try:
-                renderer = self._get_or_create_renderer()
-            except Exception as e:
-                self.logger.error(f"Rendering failed to initialize renderer: {e}")
-                return None
-
-            # Create render context using abstract _create_render_context() method
-            try:
-                render_context = self._create_render_context()
-            except NotImplementedError:
-                raise AbstractEnvironmentError(
-                    "_create_render_context",
-                    self.__class__.__name__,
-                    "Create RenderContext with current environment state and visualization data",
-                )
-
-            # Execute rendering operation using renderer method based on mode
-            try:
-                if self.render_mode == "rgb_array":
-                    if hasattr(renderer, "render_rgb_array"):
-                        result = renderer.render_rgb_array(render_context)
-                    else:
-                        raise RenderingError("Renderer missing render_rgb_array")
-                else:
-                    if hasattr(renderer, "render_human"):
-                        renderer.render_human(render_context)
-                        result = None
-                    else:
-                        raise RenderingError("Renderer missing render_human")
-            except Exception as e:
-                # Handle rendering errors with fallback
-                self.logger.error(f"Rendering failed: {e}")
-                if hasattr(e, "get_fallback_suggestions"):
-                    suggestions = e.get_fallback_suggestions()
-                    self.logger.info(f"Fallback suggestions: {suggestions}")
-                return None
-
-            # Record rendering timing
-            render_time_ms = (time.perf_counter() - render_start_time) * 1000
-            self.performance_metrics["render_times"].append(render_time_ms)
-
-            # Check performance against target
-            target_ms = PERFORMANCE_TARGET_RGB_RENDER_MS
-            if render_time_ms > target_ms * PERFORMANCE_WARNING_THRESHOLD:
-                self.logger.warning(
-                    f"Rendering exceeded performance target: {render_time_ms:.2f}ms > {target_ms:.2f}ms"
-                )
-
-            # Log rendering completion
-            self.logger.debug(
-                f"Rendering completed: mode={self.render_mode}, time={render_time_ms:.2f}ms"
-            )
-
-            # Performance monitor hook
-            if hasattr(self, "_performance_monitor"):
-                try:
-                    self._performance_monitor.record_timing(
-                        f"render_{self.render_mode}", render_time_ms
-                    )
-                except Exception:
-                    pass
-
+            self._record_render_metrics(start)
             return result
-
         except Exception as e:
-            # Handle rendering errors gracefully
-            render_time_ms = (time.perf_counter() - render_start_time) * 1000
-            self.logger.error(
-                f"Rendering failed: {e}, render_time={render_time_ms:.2f}ms"
-            )
-
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            self.logger.error(f"Rendering failed: {e}, render_time={elapsed_ms:.2f}ms")
             if isinstance(e, (RenderingError, AbstractEnvironmentError)):
                 raise
-            else:
-                raise RenderingError(f"Rendering operation failed: {e}")
+            raise RenderingError(f"Rendering operation failed: {e}")
+
+    # --- Render helpers (extracted to reduce cyclomatic complexity) ---
+    def _apply_render_mode_override(self, mode: Optional[str]) -> None:
+        if mode is not None:
+            self.render_mode = mode
+
+    def _is_ready_to_render(self) -> bool:
+        if not getattr(self, "_environment_initialized", False):
+            self.logger.warning("Render called on uninitialized environment")
+            return False
+        return True
+
+    def _validate_render_mode_or_raise(self) -> None:
+        if not validate_render_mode(self.render_mode):
+            raise ValidationError(
+                f"Invalid render mode: {self.render_mode}",
+                context={"supported_modes": SUPPORTED_RENDER_MODES},
+            )
+
+    def _safe_get_renderer(self) -> Optional["BaseRenderer"]:
+        try:
+            return self._get_or_create_renderer()
+        except Exception as e:
+            self.logger.error(f"Rendering failed to initialize renderer: {e}")
+            return None
+
+    def _safe_create_render_context(self):
+        try:
+            return self._create_render_context()
+        except NotImplementedError:
+            raise AbstractEnvironmentError(
+                "_create_render_context",
+                self.__class__.__name__,
+                "Create RenderContext with current environment state and visualization data",
+            )
+
+    def _dispatch_render(
+        self, renderer: "BaseRenderer", context
+    ) -> Optional[np.ndarray]:
+        try:
+            if self.render_mode == "rgb_array":
+                if hasattr(renderer, "render_rgb_array"):
+                    return renderer.render_rgb_array(context)
+                raise RenderingError("Renderer missing render_rgb_array")
+            # human mode
+            if hasattr(renderer, "render_human"):
+                renderer.render_human(context)
+                return None
+            raise RenderingError("Renderer missing render_human")
+        except Exception as e:
+            self.logger.error(f"Rendering failed: {e}")
+            if hasattr(e, "get_fallback_suggestions"):
+                try:
+                    suggestions = e.get_fallback_suggestions()
+                    self.logger.info(f"Fallback suggestions: {suggestions}")
+                except Exception:
+                    pass
+            return None
+
+    def _record_render_metrics(self, start_time: float) -> None:
+        render_time_ms = (time.perf_counter() - start_time) * 1000
+        self.performance_metrics["render_times"].append(render_time_ms)
+
+        target_ms = PERFORMANCE_TARGET_RGB_RENDER_MS
+        if render_time_ms > target_ms * PERFORMANCE_WARNING_THRESHOLD:
+            self.logger.warning(
+                f"Rendering exceeded performance target: {render_time_ms:.2f}ms > {target_ms:.2f}ms"
+            )
+
+        self.logger.debug(
+            f"Rendering completed: mode={self.render_mode}, time={render_time_ms:.2f}ms"
+        )
+
+        if hasattr(self, "_performance_monitor"):
+            try:
+                self._performance_monitor.record_timing(
+                    f"render_{self.render_mode}", render_time_ms
+                )
+            except Exception:
+                pass
 
     def seed(self, seed: Optional[int] = None) -> list:
         """
@@ -873,8 +874,12 @@ class BaseEnvironment(gymnasium.Env, abc.ABC):
     def _canonicalize_action(self, action: ActionType) -> ActionType:
         try:
             return validate_action_parameter(action, allow_enum_types=True)
-        except ValidationError as ve:
-            raise ValueError(str(ve))
+        except ValidationError as exc:
+            raise ValidationError(
+                str(exc),
+                parameter_name="action",
+                parameter_value=action,
+            ) from exc
 
     def _update_step_metrics(self, step_time_ms: float) -> None:
         self.performance_metrics["step_times"].append(step_time_ms)

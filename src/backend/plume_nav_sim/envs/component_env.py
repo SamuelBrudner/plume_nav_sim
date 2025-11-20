@@ -30,7 +30,12 @@ from typing import TYPE_CHECKING, Any, Optional
 import gymnasium as gym
 import numpy as np
 
-from ..core.constants import AGENT_MARKER_COLOR, SOURCE_MARKER_COLOR
+from ..core.constants import (
+    AGENT_MARKER_COLOR,
+    AGENT_MARKER_SIZE,
+    SOURCE_MARKER_COLOR,
+    SOURCE_MARKER_SIZE,
+)
 from ..core.geometry import Coordinates, GridSize
 from ..core.state import AgentState
 from ..utils.exceptions import StateError, ValidationError
@@ -212,56 +217,20 @@ class ComponentBasedEnvironment(gym.Env):
         if self._state == EnvironmentState.CLOSED:
             raise StateError("Cannot reset closed environment")
 
-        # Seed RNG if provided
-        if seed is not None:
-            if not isinstance(seed, int) or seed < 0:
-                raise ValidationError(f"Seed must be non-negative int, got {seed}")
-            self._seed = seed
-            self._rng = np.random.default_rng(seed)
-            logger.debug(f"Environment seeded: {seed}")
-        elif not hasattr(self, "_rng"):
-            self._rng = np.random.default_rng()
+        # Seed RNG and init counters
+        self._handle_seed(seed)
+        self._reset_episode_counters()
 
-        # Reset episode counters
-        # Contract: environment_state_machine.md - C2, C3
-        self._step_count = 0
-        self._episode_count += 1
+        # Initialize agent state at chosen start position
+        start_position = self._choose_start_position()
+        self._init_agent_state(start_position)
 
-        # Select start location for this episode
-        if self._user_start_location is not None:
-            start_position = self._user_start_location
-        else:
-            start_position = self._sample_random_start_location()
+        # Transition to READY and propagate RNG to components
+        self._activate_ready_state()
+        self._reset_concentration_dynamic_state()
 
-        self.start_location = start_position
-
-        # Initialize agent state
-        # Contract: environment_state_machine.md - C4
-        self._agent_state = AgentState(
-            position=self.start_location,
-            orientation=0.0,
-            step_count=0,
-            total_reward=0.0,
-        )
-
-        # Transition to READY
-        # Contract: environment_state_machine.md - C1
-        self._state = EnvironmentState.READY
-
-        # Generate initial observation
-        env_state = self._build_env_state_dict()
-        observation = self._observation_model.get_observation(env_state)
-
-        # Build info dict
-        # Contract: environment_state_machine.md - C6
-        info = {
-            "seed": self._seed,
-            "agent_position": (
-                self._agent_state.position.x,
-                self._agent_state.position.y,
-            ),
-            "goal_location": (self.goal_location.x, self.goal_location.y),
-        }
+        # Initial observation and info
+        observation, info = self._initial_observation_and_info()
 
         logger.debug(
             f"Episode {self._episode_count} reset: agent at {self._agent_state.position}"
@@ -315,6 +284,15 @@ class ComponentBasedEnvironment(gym.Env):
         # Update step count
         new_agent_state.step_count = self._step_count + 1
         self._step_count += 1
+
+        # Advance dynamic plume state for this step if supported
+        try:
+            adv = getattr(self._concentration_field, "advance_to_step", None)
+            if callable(adv):
+                adv(self._step_count)
+        except Exception:
+            # Defensive: optional dynamic hook
+            pass
 
         # Compute reward
         # Delegation to RewardFunction
@@ -415,42 +393,175 @@ class ComponentBasedEnvironment(gym.Env):
         height, width = self.grid_size.height, self.grid_size.width
         canvas = np.zeros((height, width, 3), dtype=np.uint8)
 
-        # Base grayscale from concentration field to provide gradient variation
+        # Compose layers
+        self._render_field_grayscale(canvas, height, width)
+        self._draw_source_marker(canvas, height, width)
+
+        ax, ay = self._agent_position_xy(height, width)
+        self._draw_agent_marker(canvas, height, width, ax, ay)
+
+        return canvas
+
+    # Private helper methods
+
+    # ---- Episode helpers ----
+
+    def _handle_seed(self, seed: Optional[int]) -> None:
+        """Initialize RNG from seed or ensure RNG exists."""
+        if seed is None:
+            if not hasattr(self, "_rng"):
+                self._rng = np.random.default_rng()
+            return
+        if not isinstance(seed, int) or seed < 0:
+            raise ValidationError(f"Seed must be non-negative int, got {seed}")
+        self._seed = seed
+        self._rng = np.random.default_rng(seed)
+        logger.debug(f"Environment seeded: {seed}")
+
+    def _reset_episode_counters(self) -> None:
+        """Reset per-episode counters."""
+        self._step_count = 0
+        self._episode_count += 1
+
+    def _choose_start_position(self) -> Coordinates:
+        """Choose start position from user override or random sampling."""
+        if self._user_start_location is not None:
+            return self._user_start_location
+        return self._sample_random_start_location()
+
+    def _init_agent_state(self, start_position: Coordinates) -> None:
+        """Initialize agent state for the episode."""
+        self.start_location = start_position
+        self._agent_state = AgentState(
+            position=self.start_location,
+            orientation=0.0,
+            step_count=0,
+            total_reward=0.0,
+        )
+
+    def _activate_ready_state(self) -> None:
+        """Transition to READY and propagate RNG to action processor if supported."""
+        self._state = EnvironmentState.READY
+        if hasattr(self._action_processor, "set_rng"):
+            try:
+                self._action_processor.set_rng(self._rng)
+            except Exception:
+                # Optional integration; swallow to keep behaviour identical
+                pass
+
+    def _reset_concentration_dynamic_state(self) -> None:
+        """Allow concentration field to reset any dynamic state."""
+        try:
+            on_reset = getattr(self._concentration_field, "on_reset", None)
+            if callable(on_reset):
+                on_reset()
+        except Exception:
+            # Defensive: dynamic hooks are optional
+            pass
+
+    def _initial_observation_and_info(self) -> tuple[Any, dict]:
+        """Generate initial observation and info dict."""
+        env_state = self._build_env_state_dict()
+        observation = self._observation_model.get_observation(env_state)
+        info = {
+            "seed": self._seed,
+            "agent_position": (
+                self._agent_state.position.x,
+                self._agent_state.position.y,
+            ),
+            "goal_location": (self.goal_location.x, self.goal_location.y),
+        }
+        return observation, info
+
+    # ---- Rendering helpers ----
+
+    def _render_field_grayscale(
+        self, canvas: np.ndarray, height: int, width: int
+    ) -> None:
+        """Render the concentration field as grayscale onto the canvas."""
         field = getattr(self, "_concentration_field", None)
         field_array = getattr(field, "field_array", None)
         if isinstance(field_array, np.ndarray) and field_array.size == height * width:
-            field_min = float(field_array.min()) if field_array.size else 0.0
-            field_max = float(field_array.max()) if field_array.size else 0.0
-            if field_max > field_min:
-                normalized = (field_array - field_min) / (field_max - field_min)
+            flat = field_array.reshape(-1)
+            finite_mask = np.isfinite(flat)
+            if finite_mask.any():
+                finite_vals = flat[finite_mask]
+                field_min = float(finite_vals.min())
+                field_max = float(finite_vals.max())
+                normalized = np.zeros_like(flat, dtype=np.float32)
+                if field_max > field_min:
+                    span = field_max - field_min
+                    normalized[finite_mask] = (finite_vals - field_min) / span
+                normalized_2d = normalized.reshape(field_array.shape)
             else:
-                normalized = field_array * 0.0
-            grayscale = (normalized * 255.0).astype(np.uint8)
+                normalized_2d = np.zeros_like(field_array, dtype=np.float32)
+
+            grayscale = (normalized_2d * 255.0).astype(np.uint8)
             canvas[:, :, :] = grayscale[:, :, None]
 
-        # Apply source marker (goal position)
+    def _draw_source_marker(self, canvas: np.ndarray, height: int, width: int) -> None:
+        """Draw source marker and optional dashed goal radius."""
         source = getattr(self, "goal_location", None)
-        if source is not None:
-            sx, sy = int(source.x), int(source.y)
-            if 0 <= sy < height and 0 <= sx < width:
-                canvas[sy, sx] = np.array(SOURCE_MARKER_COLOR, dtype=np.uint8)
+        if source is None:
+            return
+        sx, sy = int(source.x), int(source.y)
+        if not (0 <= sy < height and 0 <= sx < width):
+            return
 
-        # Apply agent marker
+        sw, sh = SOURCE_MARKER_SIZE
+        half_sw = max(int(sw) // 2, 0)
+        half_sh = max(int(sh) // 2, 0)
+        y0 = max(0, sy - half_sh)
+        y1 = min(height, sy + half_sh + 1)
+        x0 = max(0, sx - half_sw)
+        x1 = min(width, sx + half_sw + 1)
+        color_arr = np.array(SOURCE_MARKER_COLOR, dtype=np.uint8)
+        canvas[y0:y1, x0:x1] = color_arr
+
+        goal_radius = getattr(self, "goal_radius", None)
+        if not (isinstance(goal_radius, (int, float)) and goal_radius > 0):
+            return
+        radius = float(goal_radius)
+        max_dim = max(width, height)
+        if radius >= max_dim * 2:
+            return
+
+        num_steps = max(int(2.0 * np.pi * radius), 16)
+        angles = np.linspace(0.0, 2.0 * np.pi, num_steps, endpoint=False)
+        dash_period = 8
+        dash_on = 4
+        for idx, theta in enumerate(angles):
+            if (idx % dash_period) >= dash_on:
+                continue
+            cx = int(round(sx + radius * np.cos(theta)))
+            cy = int(round(sy + radius * np.sin(theta)))
+            if 0 <= cy < height and 0 <= cx < width:
+                canvas[cy, cx] = color_arr
+
+    def _agent_position_xy(self, height: int, width: int) -> tuple[int, int]:
+        """Compute current agent pixel position with fallback to start/center."""
         agent_state = getattr(self, "_agent_state", None)
         if agent_state is not None and agent_state.position is not None:
-            ax, ay = int(agent_state.position.x), int(agent_state.position.y)
-        else:
-            start = getattr(self, "start_location", None)
-            ax, ay = (
-                (int(start.x), int(start.y))
-                if start is not None
-                else (width // 2, height // 2)
-            )
+            return int(agent_state.position.x), int(agent_state.position.y)
+        start = getattr(self, "start_location", None)
+        if start is not None:
+            return int(start.x), int(start.y)
+        return width // 2, height // 2
 
-        if 0 <= ay < height and 0 <= ax < width:
-            canvas[ay, ax] = np.array(AGENT_MARKER_COLOR, dtype=np.uint8)
-
-        return canvas
+    def _draw_agent_marker(
+        self, canvas: np.ndarray, height: int, width: int, ax: int, ay: int
+    ) -> None:
+        """Draw the agent marker if within bounds."""
+        if not (0 <= ay < height and 0 <= ax < width):
+            return
+        aw, ah = AGENT_MARKER_SIZE
+        half_aw = max(int(aw) // 2, 0)
+        half_ah = max(int(ah) // 2, 0)
+        y0 = max(0, ay - half_ah)
+        y1 = min(height, ay + half_ah + 1)
+        x0 = max(0, ax - half_aw)
+        x1 = min(width, ax + half_aw + 1)
+        canvas[y0:y1, x0:x1] = np.array(AGENT_MARKER_COLOR, dtype=np.uint8)
 
     # Private helper methods
 

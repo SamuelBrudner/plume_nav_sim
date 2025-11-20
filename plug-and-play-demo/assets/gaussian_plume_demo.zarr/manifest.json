@@ -1,0 +1,16 @@
+{
+  "created_at": "2025-11-18T01:52:45.133520Z",
+  "git_sha": "06355addf83d6df1fde2491836b9befda56fdecc",
+  "package_version": "0.0.1",
+  "config_hash": null,
+  "cli_args": [
+    "/Users/samuelbrudner/opt/anaconda3/envs/plume-nav-sim/lib/python3.10/site-packages/ipykernel_launcher.py",
+    "--f=/Users/samuelbrudner/Library/Jupyter/runtime/kernel-v3ae1c5993a180e0b004e421990d2c4e05d8fc40cd.json"
+  ],
+  "source_dtype": "uint8",
+  "env": {
+    "hostname": null,
+    "platform": null,
+    "python_version": null
+  }
+}

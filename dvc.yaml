@@ -1,0 +1,37 @@
+stages:
+  capture_ingest:
+    cmd: >-
+      python src/backend/scripts/ingest_capture.py
+      --run-dir ${ingest_capture.run_dir}
+      --out-dir ${ingest_capture.out_dir}
+    deps:
+      - src/backend/scripts/ingest_capture.py
+      - ${ingest_capture.run_dir}
+    params:
+      - ingest_capture.run_dir
+      - ingest_capture.out_dir
+    outs:
+      - ${ingest_capture.out_dir}:
+          cache: true
+          persist: true
+  video_ingest:
+    cmd: >-
+      plume-nav-video-ingest
+      --input ${video_ingest.input}
+      --output ${video_ingest.output}
+      --fps ${video_ingest.fps}
+      --pixel-to-grid "${video_ingest.pixel_to_grid}"
+      --origin "${video_ingest.origin}"
+    deps:
+      - src/backend/plume_nav_sim/cli/video_ingest.py
+      - ${video_ingest.input}
+    params:
+      - video_ingest.input
+      - video_ingest.output
+      - video_ingest.fps
+      - video_ingest.pixel_to_grid
+      - video_ingest.origin
+    outs:
+      - ${video_ingest.output}:
+          cache: true
+          persist: true

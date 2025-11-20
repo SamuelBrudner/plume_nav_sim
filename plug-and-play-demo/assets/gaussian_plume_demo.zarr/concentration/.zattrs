@@ -1,0 +1,15 @@
+{
+    "_ARRAY_DIMENSIONS": [
+        "t",
+        "y",
+        "x"
+    ],
+    "plume_nav_sim:chunks": [
+        8,
+        64,
+        64
+    ],
+    "plume_nav_sim:compressor": "blosc:zstd",
+    "plume_nav_sim:compressor_clevel": 5,
+    "plume_nav_sim:compressor_shuffle": 1
+}
