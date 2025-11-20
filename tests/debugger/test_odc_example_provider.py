@@ -1,4 +1,10 @@
 import numpy as np
+import pytest
+
+pytest.importorskip(
+    "plume_nav_debugger",
+    reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
+)
 
 from plume_nav_debugger.odc.mux import ProviderMux
 from plume_nav_debugger.odc.provider import DebuggerProvider

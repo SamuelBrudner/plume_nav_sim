@@ -1,5 +1,12 @@
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip(
+    "plume_nav_debugger",
+    reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
+)
+
 from plume_nav_debugger.config import DebuggerPreferences
 
 

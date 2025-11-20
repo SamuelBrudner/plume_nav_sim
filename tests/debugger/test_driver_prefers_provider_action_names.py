@@ -4,6 +4,11 @@ import sys
 import numpy as np
 import pytest
 
+pytest.importorskip(
+    "plume_nav_debugger",
+    reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
+)
+
 
 def _pyqt5_present() -> bool:
     try:

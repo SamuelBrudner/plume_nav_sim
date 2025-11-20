@@ -221,25 +221,36 @@ def _load_hydra_config(
     overrides: List[str],
 ) -> Tuple[dict, str]:
     """Load and resolve Hydra config, returning (as_dict, config_hash)."""
-    from hydra import compose, initialize_config_dir
-    from hydra.errors import MissingConfigException
-    from omegaconf import OmegaConf
-
     config_dir = _resolve_config_dir(config_path)
+    # For the data_capture pipeline, always normalize via the same manual
+    # composition helper used as a fallback. This keeps the CLI and tests
+    # aligned even when Hydra's packaging semantics (`@package _global_`,
+    # nested groups) would otherwise produce a different structure.
+    if config_name == "data_capture/config":
+        cfg_resolved = _manual_compose_for_data_capture(
+            config_name=config_name,
+            conf_root=Path(config_dir),
+            overrides=overrides or [],
+        )
+    else:
+        from hydra import compose, initialize_config_dir
+        from hydra.errors import MissingConfigException
+        from omegaconf import OmegaConf
 
-    with initialize_config_dir(version_base=None, config_dir=config_dir):
-        try:
-            cfg = compose(config_name=config_name, overrides=overrides or [])
-            cfg_resolved = OmegaConf.to_container(cfg, resolve=True)  # type: ignore[arg-type]
-        except MissingConfigException:
-            # Fallback: manually compose known data_capture config against repo conf/
-            # This preserves CLI overrides and enables tests/CI to run regardless of
-            # relative-default quirks in nested config directories.
-            cfg_resolved = _manual_compose_for_data_capture(
-                config_name=config_name,
-                conf_root=Path(config_dir),
-                overrides=overrides or [],
-            )
+        with initialize_config_dir(version_base=None, config_dir=config_dir):
+            try:
+                cfg = compose(config_name=config_name, overrides=overrides or [])
+                cfg_resolved = OmegaConf.to_container(cfg, resolve=True)  # type: ignore[arg-type]
+            except MissingConfigException:
+                # Fallback: manually compose known data_capture config against
+                # repo conf/. This preserves CLI overrides and enables
+                # tests/CI to run regardless of relative-default quirks in
+                # nested config directories.
+                cfg_resolved = _manual_compose_for_data_capture(
+                    config_name=config_name,
+                    conf_root=Path(config_dir),
+                    overrides=overrides or [],
+                )
 
     cfg_hash = _stable_cfg_hash(cfg_resolved)
     return cfg_resolved, cfg_hash

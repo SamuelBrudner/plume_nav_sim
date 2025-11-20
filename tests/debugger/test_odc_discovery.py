@@ -1,5 +1,12 @@
 import types
 
+import pytest
+
+pytest.importorskip(
+    "plume_nav_debugger",
+    reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
+)
+
 
 def test_entry_point_provider_precedence(monkeypatch):
     # Fake entry point structure

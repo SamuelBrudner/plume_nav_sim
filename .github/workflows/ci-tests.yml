@@ -16,6 +16,7 @@ jobs:
       MPLBACKEND: Agg
       PYTHONUNBUFFERED: "1"
       PLUME_CI_PERF_SCALE: "1.15"
+      PYTHONPATH: src
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -267,6 +268,7 @@ jobs:
       MPLBACKEND: Agg
       PYTHONUNBUFFERED: "1"
       QT_QPA_PLATFORM: "offscreen"
+      PYTHONPATH: src
     steps:
       - name: Checkout
         uses: actions/checkout@v4
