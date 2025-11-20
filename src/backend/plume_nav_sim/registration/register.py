@@ -24,17 +24,16 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, cast
 
-try:
-    from typing import Protocol
-except ImportError:
+from typing_extensions import TypedDict
 
-    class Protocol:
-        pass
+try:  # pragma: no cover - Protocol is present on supported runtimes
+    from typing import Protocol
+except ImportError:  # pragma: no cover - fallback for older Python in trimmed envs
+    from typing_extensions import Protocol  # type: ignore[misc]
 
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
-from typing_extensions import TypedDict
 
 # Internal imports for configuration constants and system integration
 from ..core.constants import (
