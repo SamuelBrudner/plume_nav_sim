@@ -22,99 +22,42 @@ import numpy  # >=2.1.0 - Random number generation, array operations, and mathem
 
 try:
     import gymnasium.utils.seeding  # type: ignore[import-not-found]
-except Exception:
+except Exception:  # pragma: no cover - minimal stub for trimmed environments
     import sys
     import types
 
-    gymnasium = sys.modules.get("gymnasium")
-    if gymnasium is None:
-        gymnasium = types.ModuleType("gymnasium")
-        gymnasium.__path__ = []
-        gymnasium.__version__ = "0.0.0"
-        sys.modules["gymnasium"] = gymnasium
+    def _install_minimal_gymnasium_seeding_stub() -> None:
+        """Install a minimal gymnasium.utils.seeding stub.
 
-    utils_module = sys.modules.get("gymnasium.utils")
-    if utils_module is None:
-        utils_module = types.ModuleType("gymnasium.utils")
-        sys.modules["gymnasium.utils"] = utils_module
-        setattr(gymnasium, "utils", utils_module)
+        This keeps seeding utilities importable in environments where
+        Gymnasium is not installed (e.g., trimmed test containers) without
+        pulling in the full dependency. Only the np_random API is provided.
+        """
 
-    spaces_module = sys.modules.get("gymnasium.spaces")
-    if spaces_module is None:
-        spaces_module = types.ModuleType("gymnasium.spaces")
+        gym_module = sys.modules.get("gymnasium")
+        if gym_module is None:
+            gym_module = types.ModuleType("gymnasium")
+            gym_module.__path__ = []  # type: ignore[attr-defined]
+            sys.modules["gymnasium"] = gym_module
 
-        class _BaseSpace:
-            def __init__(self, *args, **kwargs):
-                return
+        utils_module = sys.modules.get("gymnasium.utils")
+        if utils_module is None:
+            utils_module = types.ModuleType("gymnasium.utils")
+            sys.modules["gymnasium.utils"] = utils_module
+            gym_module.utils = utils_module  # type: ignore[attr-defined]
 
-        class _StubSpace(_BaseSpace):
-            pass
+        seeding_module = types.ModuleType("gymnasium.utils.seeding")
 
-        class _StubDiscrete(_StubSpace):
-            def __init__(self, n=0, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.n = int(n)
+        def np_random(seed=None):  # type: ignore[override]
+            rng = numpy.random.default_rng(seed)
+            used_seed = 0 if seed is None else int(seed)
+            return rng, used_seed
 
-        class _StubBox(_StubSpace):
-            def __init__(
-                self, low=0.0, high=1.0, shape=None, dtype=None, *args, **kwargs
-            ):
-                super().__init__(*args, **kwargs)
-                self.low = low
-                self.high = high
-                self.shape = tuple(shape) if shape is not None else ()
-                self.dtype = dtype
+        seeding_module.np_random = np_random  # type: ignore[attr-defined]
+        sys.modules["gymnasium.utils.seeding"] = seeding_module
+        utils_module.seeding = seeding_module  # type: ignore[attr-defined]
 
-        class _StubMultiDiscrete(_StubSpace):
-            def __init__(self, nvec, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.nvec = nvec
-
-        class _StubMultiBinary(_StubSpace):
-            def __init__(self, n=0, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.n = int(n)
-
-        class _StubTuple(_StubSpace):
-            def __init__(self, spaces, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.spaces = list(spaces)
-
-        class _StubDict(_StubSpace):
-            def __init__(self, spaces, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.spaces = dict(spaces)
-
-        spaces_module.Space = _StubSpace
-        spaces_module.Discrete = _StubDiscrete
-        spaces_module.Box = _StubBox
-        spaces_module.MultiDiscrete = _StubMultiDiscrete
-        spaces_module.MultiBinary = _StubMultiBinary
-        spaces_module.Tuple = _StubTuple
-        spaces_module.Dict = _StubDict
-        sys.modules["gymnasium.spaces"] = spaces_module
-        setattr(gymnasium, "spaces", spaces_module)
-
-    if not hasattr(gymnasium, "Env"):
-
-        class _StubEnv(object):
-            pass
-
-        setattr(gymnasium, "Env", _StubEnv)
-
-    if not hasattr(gymnasium, "Space"):
-        setattr(gymnasium, "Space", _StubSpace)
-
-    seeding_module = types.ModuleType("gymnasium.utils.seeding")
-
-    def np_random(seed=None):
-        rng = numpy.random.default_rng(seed)
-        used_seed = 0 if seed is None else int(seed)
-        return rng, used_seed
-
-    seeding_module.np_random = np_random  # type: ignore[attr-defined]
-    sys.modules["gymnasium.utils.seeding"] = seeding_module
-    setattr(utils_module, "seeding", seeding_module)
+    _install_minimal_gymnasium_seeding_stub()
 
 # Internal imports from core constants and utility exceptions
 from ..core.constants import (
