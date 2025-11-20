@@ -196,84 +196,136 @@ def resolve_movie_dataset_path(
 
     path = Path(source_path)
 
-    # If this already looks like a dataset root, return it directly.
     if path.is_dir():
         return path
 
-    # Ingest media file into a dataset root next to the input.
     output = path.with_suffix(".zarr")
     if output.exists():
         return output
 
-    # For non-directory movie sources (HDF5, video files, image sequences),
-    # require a sidecar as the single source of truth for fps and spatial
-    # calibration. Any explicit overrides must not conflict with the sidecar.
     sidecar: MovieMetadataSidecar = load_movie_sidecar(path)
-
     sidecar_fps = float(sidecar.fps)
+    sidecar_pixel_to_grid = _sidecar_pixel_to_grid(sidecar)
+    sidecar_origin: Tuple[float, float] = (0.0, 0.0)
+
+    _validate_movie_overrides(
+        sidecar_fps,
+        sidecar_pixel_to_grid,
+        sidecar_origin,
+        fps,
+        pixel_to_grid,
+        origin,
+        extent,
+    )
+
+    suffix = path.suffix.lower()
+    if suffix in {".h5", ".hdf5"}:
+        return _ingest_hdf5_from_sidecar(
+            path,
+            output,
+            sidecar,
+            sidecar_fps,
+            sidecar_pixel_to_grid,
+            sidecar_origin,
+            normalize,
+            movie_h5_dataset,
+        )
+
+    return _ingest_video_from_sidecar(
+        path,
+        output,
+        sidecar_fps,
+        sidecar_pixel_to_grid,
+        sidecar_origin,
+        normalize,
+    )
+
+
+def _sidecar_pixel_to_grid(sidecar: MovieMetadataSidecar) -> Tuple[float, float]:
+    if sidecar.spatial_unit == "pixel":
+        return (1.0, 1.0)
+    if sidecar.pixels_per_unit is None:
+        raise ValidationError(
+            "pixels_per_unit must be provided in movie sidecar when spatial_unit is not 'pixel'"
+        )
+    py, px = sidecar.pixels_per_unit
+    if py <= 0.0 or px <= 0.0:
+        raise ValidationError("pixels_per_unit entries must be positive")
+    return (1.0 / py, 1.0 / px)
+
+
+def _validate_movie_overrides(
+    sidecar_fps: float,
+    sidecar_pixel_to_grid: Tuple[float, float],
+    sidecar_origin: Tuple[float, float],
+    fps: Optional[float],
+    pixel_to_grid: Optional[Tuple[float, float]],
+    origin: Optional[Tuple[float, float]],
+    extent: Optional[Tuple[float, float]],
+) -> None:
     if fps is not None and float(fps) != sidecar_fps:
         raise ValidationError(
             "movie_fps must match sidecar.fps when a movie metadata sidecar is present"
         )
-
-    if sidecar.spatial_unit == "pixel":
-        sidecar_pixel_to_grid: Tuple[float, float] = (1.0, 1.0)
-    else:
-        if sidecar.pixels_per_unit is None:
-            raise ValidationError(
-                "pixels_per_unit must be provided in movie sidecar when spatial_unit is not 'pixel'"
-            )
-        py, px = sidecar.pixels_per_unit
-        if py <= 0.0 or px <= 0.0:
-            raise ValidationError("pixels_per_unit entries must be positive")
-        sidecar_pixel_to_grid = (1.0 / py, 1.0 / px)
-
     if pixel_to_grid is not None and pixel_to_grid != sidecar_pixel_to_grid:
         raise ValidationError(
             "movie_pixel_to_grid must match sidecar-derived pixel_to_grid when a movie metadata sidecar is present"
         )
-
-    sidecar_origin: Tuple[float, float] = (0.0, 0.0)
     if origin is not None and origin != sidecar_origin:
         raise ValidationError(
             "movie_origin must match the fixed origin (0,0) implied by the movie metadata sidecar"
         )
-
     if extent is not None:
         raise ValidationError(
             "movie_extent overrides are not supported when using a movie metadata sidecar; extent is derived from data shape and sidecar calibration"
         )
 
-    suffix = path.suffix.lower()
-    if suffix in {".h5", ".hdf5"}:
-        # HDF5 sources require an explicit dataset path in the sidecar; an
-        # explicit movie_h5_dataset argument may be provided but must agree.
-        if sidecar.h5_dataset is None:
-            raise ValidationError(
-                "h5_dataset must be provided in the movie metadata sidecar for HDF5 sources"
-            )
-        if movie_h5_dataset is not None and movie_h5_dataset != sidecar.h5_dataset:
-            raise ValidationError(
-                "movie_h5_dataset must match h5_dataset in the movie metadata sidecar for HDF5 sources"
-            )
 
-        from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
-
-        cfg_h5 = H5MovieIngestConfig(
-            input=path,
-            dataset=sidecar.h5_dataset,
-            output=output,
-            t_start=0,
-            t_stop=None,
-            fps=sidecar_fps,
-            pixel_to_grid=sidecar_pixel_to_grid,
-            origin=sidecar_origin,
-            extent=None,
-            normalize=normalize,
-            chunk_t=None,
+def _ingest_hdf5_from_sidecar(
+    path: Path,
+    output: Path,
+    sidecar: MovieMetadataSidecar,
+    sidecar_fps: float,
+    sidecar_pixel_to_grid: Tuple[float, float],
+    sidecar_origin: Tuple[float, float],
+    normalize: bool,
+    movie_h5_dataset: Optional[str],
+) -> Path:
+    if sidecar.h5_dataset is None:
+        raise ValidationError(
+            "h5_dataset must be provided in the movie metadata sidecar for HDF5 sources"
         )
-        return ingest_h5_movie(cfg_h5)
+    if movie_h5_dataset is not None and movie_h5_dataset != sidecar.h5_dataset:
+        raise ValidationError(
+            "movie_h5_dataset must match h5_dataset in the movie metadata sidecar for HDF5 sources"
+        )
 
+    from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
+
+    cfg_h5 = H5MovieIngestConfig(
+        input=path,
+        dataset=sidecar.h5_dataset,
+        output=output,
+        t_start=0,
+        t_stop=None,
+        fps=sidecar_fps,
+        pixel_to_grid=sidecar_pixel_to_grid,
+        origin=sidecar_origin,
+        extent=None,
+        normalize=normalize,
+        chunk_t=None,
+    )
+    return ingest_h5_movie(cfg_h5)
+
+
+def _ingest_video_from_sidecar(
+    path: Path,
+    output: Path,
+    sidecar_fps: float,
+    sidecar_pixel_to_grid: Tuple[float, float],
+    sidecar_origin: Tuple[float, float],
+    normalize: bool,
+) -> Path:
     from plume_nav_sim.cli.video_ingest import IngestConfig, ingest_video
 
     cfg = IngestConfig(
