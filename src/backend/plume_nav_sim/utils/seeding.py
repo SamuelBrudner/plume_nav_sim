@@ -18,8 +18,103 @@ from typing import (  # >=3.10 - Type hints for comprehensive type safety
     Union,
 )
 
-import gymnasium.utils.seeding  # >=0.29.0 - Gymnasium-compatible random number generator creation using np_random function for RL environment integration
 import numpy  # >=2.1.0 - Random number generation, array operations, and mathematical functions for deterministic seeding
+
+try:
+    import gymnasium.utils.seeding  # type: ignore[import-not-found]
+except Exception:
+    import sys
+    import types
+
+    gymnasium = sys.modules.get("gymnasium")
+    if gymnasium is None:
+        gymnasium = types.ModuleType("gymnasium")
+        gymnasium.__path__ = []
+        gymnasium.__version__ = "0.0.0"
+        sys.modules["gymnasium"] = gymnasium
+
+    utils_module = sys.modules.get("gymnasium.utils")
+    if utils_module is None:
+        utils_module = types.ModuleType("gymnasium.utils")
+        sys.modules["gymnasium.utils"] = utils_module
+        setattr(gymnasium, "utils", utils_module)
+
+    spaces_module = sys.modules.get("gymnasium.spaces")
+    if spaces_module is None:
+        spaces_module = types.ModuleType("gymnasium.spaces")
+
+        class _BaseSpace:
+            def __init__(self, *args, **kwargs):
+                return
+
+        class _StubSpace(_BaseSpace):
+            pass
+
+        class _StubDiscrete(_StubSpace):
+            def __init__(self, n=0, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.n = int(n)
+
+        class _StubBox(_StubSpace):
+            def __init__(
+                self, low=0.0, high=1.0, shape=None, dtype=None, *args, **kwargs
+            ):
+                super().__init__(*args, **kwargs)
+                self.low = low
+                self.high = high
+                self.shape = tuple(shape) if shape is not None else ()
+                self.dtype = dtype
+
+        class _StubMultiDiscrete(_StubSpace):
+            def __init__(self, nvec, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.nvec = nvec
+
+        class _StubMultiBinary(_StubSpace):
+            def __init__(self, n=0, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.n = int(n)
+
+        class _StubTuple(_StubSpace):
+            def __init__(self, spaces, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.spaces = list(spaces)
+
+        class _StubDict(_StubSpace):
+            def __init__(self, spaces, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.spaces = dict(spaces)
+
+        spaces_module.Space = _StubSpace
+        spaces_module.Discrete = _StubDiscrete
+        spaces_module.Box = _StubBox
+        spaces_module.MultiDiscrete = _StubMultiDiscrete
+        spaces_module.MultiBinary = _StubMultiBinary
+        spaces_module.Tuple = _StubTuple
+        spaces_module.Dict = _StubDict
+        sys.modules["gymnasium.spaces"] = spaces_module
+        setattr(gymnasium, "spaces", spaces_module)
+
+    if not hasattr(gymnasium, "Env"):
+
+        class _StubEnv(object):
+            pass
+
+        setattr(gymnasium, "Env", _StubEnv)
+
+    if not hasattr(gymnasium, "Space"):
+        setattr(gymnasium, "Space", _StubSpace)
+
+    seeding_module = types.ModuleType("gymnasium.utils.seeding")
+
+    def np_random(seed=None):
+        rng = numpy.random.default_rng(seed)
+        used_seed = 0 if seed is None else int(seed)
+        return rng, used_seed
+
+    seeding_module.np_random = np_random  # type: ignore[attr-defined]
+    sys.modules["gymnasium.utils.seeding"] = seeding_module
+    setattr(utils_module, "seeding", seeding_module)
 
 # Internal imports from core constants and utility exceptions
 from ..core.constants import (

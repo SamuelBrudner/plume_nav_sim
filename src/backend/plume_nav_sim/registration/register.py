@@ -22,7 +22,15 @@ import importlib
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Protocol, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
+
+try:
+    from typing import Protocol
+except ImportError:
+
+    class Protocol:
+        pass
+
 
 # External imports with version comments for dependency management and compatibility tracking
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework

@@ -220,17 +220,21 @@ class PredefinedScheme(Enum):
 
         # Adjust profile based on scheme complexity
         if self == PredefinedScheme.DEBUG:
-            base_profile |= {
-                "target_rgb_latency_ms": 10.0,  # Relaxed for debugging
-                "target_human_latency_ms": 100.0,
-                "memory_usage_estimate_mb": 10,
-                "optimization_level": "debug",
-            }
+            base_profile.update(
+                {
+                    "target_rgb_latency_ms": 10.0,  # Relaxed for debugging
+                    "target_human_latency_ms": 100.0,
+                    "memory_usage_estimate_mb": 10,
+                    "optimization_level": "debug",
+                }
+            )
         elif self == PredefinedScheme.HIGH_CONTRAST:
-            base_profile |= {
-                "memory_usage_estimate_mb": 7,  # Larger markers
-                "optimization_level": "accessibility",
-            }
+            base_profile.update(
+                {
+                    "memory_usage_estimate_mb": 7,  # Larger markers
+                    "optimization_level": "accessibility",
+                }
+            )
 
         return base_profile
 
@@ -928,20 +932,22 @@ def optimize_for_performance(
 
     # Add specific optimization flags based on render mode
     if render_mode == "rgb_array":
-        # Pre-compute color tables for fast array operations
-        optimization_options |= {
-            "precompute_agent_color_array": True,
-            "precompute_source_color_array": True,
-            "use_vectorized_operations": True,
-        }
+        optimization_options.update(
+            {
+                "precompute_agent_color_array": True,
+                "precompute_source_color_array": True,
+                "use_vectorized_operations": True,
+            }
+        )
 
     elif render_mode == "human":
-        # Enable matplotlib-specific optimizations
-        optimization_options |= {
-            "enable_figure_caching": True,
-            "optimize_colormap_updates": True,
-            "reduce_rendering_calls": True,
-        }
+        optimization_options.update(
+            {
+                "enable_figure_caching": True,
+                "optimize_colormap_updates": True,
+                "reduce_rendering_calls": True,
+            }
+        )
 
         # Pre-load and cache colormap
         optimized_scheme.get_concentration_colormap(use_cache=True)

@@ -2,8 +2,8 @@
 
 defaults:
   - experiment: default
-  - env/plume: static
-  - movie: default
+  - /env/plume: static
+  - /movie: default
   - _self_
 
 # Output + run control

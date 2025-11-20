@@ -109,10 +109,12 @@ def setup_manual_control(
         register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
         logger.info(f"Successfully registered environment: {COMPONENT_ENV_ID}")
 
+        # Determine current matplotlib backend once so it is always defined
+        current_backend = plt.get_backend()
+
         # Check matplotlib backend compatibility for interactive keyboard input handling
         if check_backend_compatibility:
             logger.debug("Checking matplotlib backend compatibility...")
-            current_backend = plt.get_backend()
             logger.info(f"Current matplotlib backend: {current_backend}")
 
             # Switch to interactive backend if available or warn about limitations
@@ -121,6 +123,7 @@ def setup_manual_control(
                 for backend in interactive_backends:
                     try:
                         plt.switch_backend(backend)
+                        current_backend = backend
                         logger.info(f"Switched to interactive backend: {backend}")
                         break
                     except Exception as e:
@@ -780,8 +783,7 @@ def update_session_statistics(
                 + (current_pos[1] - start_pos[1]) ** 2
             )
 
-            if total_actions > 0:
-                movement_efficiency = straight_distance / total_actions
+            movement_efficiency = straight_distance / total_actions
 
         session_stats["movement_efficiency"] = movement_efficiency
 
@@ -1027,11 +1029,8 @@ def display_session_summary(
 
             # Action distribution insights
             if action_distribution:
-                movement_bias = (
-                    max(action_distribution.values())
-                    / sum(action_distribution.values())
-                    if action_distribution
-                    else 0
+                movement_bias = max(action_distribution.values()) / sum(
+                    action_distribution.values()
                 )
                 if movement_bias > 0.6:
                     recommendations.append(
@@ -1059,11 +1058,6 @@ def display_session_summary(
         # Show comparison with theoretical optimal paths and algorithmic approaches
         if include_performance_analysis:
             print(f"\n🤖 ALGORITHMIC COMPARISON:")
-            theoretical_optimal = (
-                np.sqrt((64 - 64) ** 2 + (64 - 64) ** 2)
-                if current_distance != "unknown"
-                else None
-            )
 
             if goal_reached and duration > 0:
                 human_efficiency = total_actions / max(

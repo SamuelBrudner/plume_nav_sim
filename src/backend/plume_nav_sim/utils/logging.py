@@ -426,7 +426,7 @@ def _attach_log_exception_method(logger: logging.Logger) -> None:
             }
             if context:
                 if isinstance(context, dict):
-                    component_context |= context
+                    component_context.update(context)
                 else:
                     component_context["raw_context"] = context
 
@@ -900,7 +900,7 @@ def log_with_context(
         }
 
         if extra_context:
-            context |= extra_context
+            context.update(extra_context)
 
         # Apply security filtering to context and message content
         # Security filtering is handled by the logging infrastructure's SecurityFilter
@@ -1272,7 +1272,7 @@ class ComponentLogger:
         # Merge extra parameters with component_context for comprehensive logging
         context = {**self.component_context}
         if isinstance(extra, dict):
-            context |= extra
+            context.update(extra)
 
         # Apply security filtering to message content and context data
         # (Handled by the logging infrastructure)
@@ -1326,7 +1326,7 @@ class ComponentLogger:
         result: Dict[str, Any] = {**self.component_context, **caller_info}
         if extra:
             if isinstance(extra, dict):
-                result |= extra
+                result.update(extra)
             else:
                 # Preserve unexpected extras without breaking logging; attach under
                 # a generic key rather than attempting dict-union on non-mappings.
@@ -1359,7 +1359,7 @@ class ComponentLogger:
             "component_state": "error",
         }
         if isinstance(extra, dict):
-            context |= extra
+            context.update(extra)
         elif extra is not None:
             context["extra"] = extra
 

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Optional
+
+try:  # Python 3.8+ provides Literal in typing
+    from typing import Literal  # type: ignore[attr-defined]
+except ImportError:  # Fallback for Python 3.7 runtimes
+    from typing_extensions import Literal  # type: ignore[assignment]
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 

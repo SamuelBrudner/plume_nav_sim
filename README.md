@@ -59,7 +59,7 @@ All examples live in `src/backend/examples/`. Run one from the backend root:
 python -m examples.custom_components
 ```
 
-Spec-driven observation wrappers
+### Spec-driven observation wrappers
 
 - You can declare observation adapters (wrappers) directly in a `SimulationSpec` so that the full runtime behavior is defined in one place. See the backend guide for a concrete example using the core 1‑back concentration history wrapper:
   - `src/backend/README.md` (section: "Compose: Applying observation wrappers via SimulationSpec")
@@ -336,6 +336,7 @@ Internal task tracking uses `bd` (beads), not GitHub Issues:
 - Close: `bd close <id> --reason "Completed" --json`
 
 Notes:
+
 - Beads auto-sync to `.beads/issues.jsonl` in the repo.
 - Community users may open GitHub Issues/Discussions; maintainers triage into beads as needed.
 
@@ -357,7 +358,7 @@ MIT License. See [LICENSE](LICENSE).
 
 ---
 
-Operational logging vs. data capture
+### Operational logging vs. data capture
 
 - Use loguru for operational, human-readable logs (console/file). Keep it separate from analysis data capture.
 - Enable loguru sinks and stdlib bridge:
@@ -371,7 +372,7 @@ setup_logging(level="INFO", console=True)
 
 - Use the data capture pipeline for analysis-ready data (JSONL.gz schemas, optional Parquet export). See backend README for details.
 
-Data capture dependencies
+### Data capture dependencies
 
 - Install the optional data extras to enable fast JSONL, Pandera validation, and Parquet export:
 
@@ -390,7 +391,7 @@ Notes:
 - JSONL.gz capture works without extras; extras are needed for validation/parquet.
 - Operational logging (loguru) is a separate optional extra: `pip install -e .[ops]`.
 
-Validation and Parquet examples
+### Validation and Parquet examples
 
 - Validate captured artifacts with Pandera (end-of-run):
 
@@ -426,11 +427,11 @@ df = pd.read_parquet(run_dir / "steps.parquet")
 plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
 ```
 
-Schema reference
+### Schema reference
 
 - See detailed field definitions and evolution policy in `src/backend/docs/data_capture_schemas.md`.
 
-Data catalog
+### Data catalog
 
 - See consolidated consumer docs and loading examples in `src/backend/docs/data_catalog_capture.md`.
 

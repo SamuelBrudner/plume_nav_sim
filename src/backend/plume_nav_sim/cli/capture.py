@@ -134,10 +134,12 @@ def _compose_data_capture_defaults(
     from omegaconf import OmegaConf
 
     composed = OmegaConf.create()
+    # Start from the base config, then overlay defaults entries in order.
+    composed = OmegaConf.merge(composed, base_cfg)
 
     for item in defaults:
+        # _self_ represents the base config, which is already merged above.
         if item == "_self_" or (isinstance(item, dict) and "_self_" in item):
-            composed = OmegaConf.merge(composed, base_cfg)
             continue
 
         if isinstance(item, dict):

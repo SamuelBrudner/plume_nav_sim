@@ -690,10 +690,8 @@ class EpisodeResult:
 
         # Set terminated and truncated flags for episode completion analysis
         # Clamp invalid numeric values to safe defaults
-        if self.total_steps < 0:
-            self.total_steps = 0
-        if self.episode_duration_ms < 0:
-            self.episode_duration_ms = 0.0
+        self.total_steps = max(self.total_steps, 0)
+        self.episode_duration_ms = max(self.episode_duration_ms, 0.0)
 
         # Initialize final_agent_position to None for later population with episode end state
         # Already handled by field default

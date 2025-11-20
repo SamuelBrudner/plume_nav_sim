@@ -20,6 +20,8 @@ Architecture Integration:
 - Error handling: Comprehensive exception handling with fallback mechanisms
 """
 
+from __future__ import annotations
+
 # Standard library imports - Python >=3.10
 import atexit  # >=3.10 - Automatic resource cleanup registration for matplotlib figures at program exit
 import os  # >=3.10 - Environment variable detection for headless operation and display availability

@@ -1109,5 +1109,4 @@ def calculate_bounded_movement(
 
     except Exception:
         # Handle errors by returning safe defaults
-        safe_coords = create_coordinates(current_position)
-        return safe_coords, False, True
+        return create_coordinates(current_position), False, True

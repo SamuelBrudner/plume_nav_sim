@@ -125,15 +125,17 @@ def resolve_fps(
     if fps <= 0:
         raise ValueError("fps must be positive")
 
+    fps_value = float(fps)
+
     if fps_from_tb is None:
-        return float(fps)
+        return fps_value
 
     # Both provided: require consistency
-    if abs(float(fps) - fps_from_tb) > tol:
+    if abs(fps_value - fps_from_tb) > tol:
         raise ValueError(
             f"Inconsistent fps ({fps}) and timebase-derived fps ({fps_from_tb})"
         )
-    return float(fps)
+    return fps_value
 
 
 @dataclass(frozen=True)
@@ -178,9 +180,7 @@ def _round_index(f_float: float, rounding: str) -> int:
 
 
 def _ensure_non_negative(idx: int) -> int:
-    if idx < 0:
-        return 0
-    return idx
+    return max(idx, 0)
 
 
 def _apply_frame_policy(

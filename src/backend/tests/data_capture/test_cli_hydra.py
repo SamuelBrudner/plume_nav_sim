@@ -135,9 +135,16 @@ def test_manual_compose_matches_hydra(tmp_path: Path):
         conf_root=conf_root,
         overrides=list(overrides),
     )
+    hydra_cfg, _ = _load_hydra_config(
+        config_name=config_name,
+        config_path=None,
+        overrides=list(overrides),
+    )
 
-    with hydra.initialize_config_dir(version_base=None, config_dir=str(conf_root)):
-        cfg = hydra.compose(config_name=config_name, overrides=overrides)
-        hydra_cfg = omegaconf.OmegaConf.to_container(cfg, resolve=True)
-
-    assert manual_cfg == hydra_cfg
+    # On failure, show the full resolved configs for manual vs Hydra
+    assert manual_cfg == hydra_cfg, (
+        "\nmanual_cfg="
+        + json.dumps(manual_cfg, sort_keys=True, indent=2)
+        + "\nhydra_cfg="
+        + json.dumps(hydra_cfg, sort_keys=True, indent=2)
+    )
