@@ -298,5 +298,6 @@ jobs:
             src/backend/tests/plume_nav_sim/video/test_zarr_fixture_io.py \
             src/backend/tests/plume_nav_sim/media/test_manifest.py \
             src/backend/tests/plume_nav_sim/io/test_zarr_policy.py \
+            src/backend/tests/plume_nav_sim/plume/test_movie_sidecar_integration.py \
             src/backend/tests/video/test_video_plume_smoke.py \
             -vv --tb=short
