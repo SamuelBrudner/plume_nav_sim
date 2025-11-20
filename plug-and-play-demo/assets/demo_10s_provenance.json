@@ -1,0 +1,79 @@
+{
+  "source_file": "a0004_air_stationarySource_isokineticNearbedRelease_10cm_s.h5",
+  "original_publication_citation": "Connor, E. G., McHugh, M. K., & Crimaldi, J. P. (2018). Quantification of airborne odor plumes using planar laser-induced fluorescence. Experiments in Fluids, 59(9), 137. Springer.",
+  "original_publication_DOI": "10.1007/s00348-018-2591-3",
+  "original_provenance_metadata": {
+    "dataGroupIdentifier": "a0004",
+    "dataOriginationDate": "30-Oct-2017",
+    "dataOriginator": "Erin Connor, PhD Student, CEAE, CU Boulder",
+    "h5originationDate": "21-Dec-2020 13:58:27",
+    "h5originator": "Dr. Aaron True, Research Fellow, CEAE, CU Boulder, aaron.true@colorado.edu",
+    "principalInvestigator": "Professor John Crimaldi, CEAE, CU Boulder, crimaldi@colorado.edu",
+    "fundingSources": "NSF IdeasLab PHY 1555862 to JPC, NSF NeuroNex DBI 2014217 to JPC",
+    "flow_conditions": {
+      "flowFacilityDims": [
+        [
+          30.0
+        ],
+        [
+          30.0
+        ]
+      ],
+      "flowSpeed": 10.0,
+      "workingFluid": {
+        "Type": "air",
+        "Density": 1.204,
+        "kinematicViscosity": 1.506e-05
+      }
+    },
+    "odor_release": {
+      "Conditions": "stationary isokinetic near-bed",
+      "releaseHeight": 0.6,
+      "releaseSpeed": 10.0,
+      "sourceLengthscale": 9.53,
+      "sourceLocation": [
+        [
+          1.0
+        ],
+        [
+          108.0
+        ],
+        [
+          0.0
+        ],
+        [
+          0.0
+        ]
+      ],
+      "odorant": {
+        "Type": "acetone vapor",
+        "molecularDiffusivity": 1.05e-05
+      }
+    },
+    "imaging_parameters": {
+      "durationPerDataset": 4.0,
+      "fieldOfView": [
+        [
+          406.0
+        ],
+        [
+          216.0
+        ],
+        [
+          300.44
+        ],
+        [
+          159.84
+        ]
+      ],
+      "frameRate": 15.0,
+      "imageMagnification": 0.74,
+      "noiseFloor": 0.005,
+      "numberOfDatasets": 10.0,
+      "timeResolution": 66.66666666666667
+    }
+  },
+  "public_release_citation": "\u00c1lvarez-Salvado, E., Licata, A. M., Connor, E. G., McHugh, M. K., King, B. M. N., Stavropoulos, N., Victor, J. D., Crimaldi, J. P., & Nagel, K. I. (2018). Elementary sensory-motor transformations underlying olfactory navigation in walking fruit-flies. eLife, 7, e37815. https://doi.org/10.7554/eLife.37815",
+  "public_release_DOI": "10.7554/eLife.37815",
+  "notes": "All possible provenance included here. Original and public release publications both cited."
+}
