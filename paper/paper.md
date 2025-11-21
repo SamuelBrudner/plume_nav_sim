@@ -1,13 +1,13 @@
 ---
 title: "plume-nav-sim: Gymnasium-compatible plume navigation environments for reproducible reinforcement-learning research"
 
-authors:  # Placeholder metadata; update authors/ORCIDs/affiliations before submission
-  - name: "Samuel Brudner"
-    orcid: "0000-0000-0000-0000"
+authors:
+  - name: Samuel N. Brudner
+    orcid: 0000-0002-6043-9328
     affiliation: 1
 
 affiliations:
-  - name: "To be completed"
+  - name: Molecular, Cellular, and Developmental Biology, Yale University, USA
     index: 1
 
 date: 2025-11-20
