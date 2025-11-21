@@ -27,33 +27,46 @@ tags:
 
 # Summary
 
-`plume-nav-sim` is a Gymnasium-compatible reinforcement learning environment for navigation in chemical plumes. It provides a configurable grid world with static and video-derived concentration fields, deterministic seeding utilities, and a pluggable architecture for observations, rewards, and policies.
+`plume-nav-sim` is a Gymnasium-compatible environment library for simulating odor plume navigation tasks. It provides simple plume fields (analytical Gaussian and a short plume movie) and chemosensory observation and reward models tailored to odor source-finding problems. The library is built around explicit abstractions for plume fields, sensor models, and experiment configuration, together with a schema-validated data capture pipeline for recording trajectories and metadata.
 
-The package targets researchers and educators building agents that must localize a plume source under uncertainty. It emphasizes:
+The package targets researchers building agents that must localize a plume source using smell. It emphasizes:
 
-- Deterministic seeding and reproducible workflows.
-- A clear separation between core environment logic, data capture, and visualization.
-- Extensibility via typed configuration and dependency injection.
+- **Plume Semantics:** A clean separation between spatial domains, plume fields, and sensor models.
+- **Workflow Reproducibility:** Deterministic seeding, typed configuration, and validated data capture.
+- **Data-Driven Environments:** A schema-based architecture for loading external plume datasets (Zarr/xarray).
 
 ## Statement of need
 
-    Chemical plume navigation is a canonical problem in computational/theoretical ethology, behavioral neuroscience, and robotics [@vergassola2007infotaxis; @carde2008navigational; @reddy2016learning]. Simulation has become a primary methodology for dissecting the algorithmic basis of odor tracking, allowing researchers to isolate variables that are conflated in biological experiments and to train reinforcement learning agents in controlled environments [cite cite cite]. Conducting this research usually requires developing a custom simulation environment, built specifically as a tool for a single research question. However, many of these bespoke tools recreate shared conceptual components from one to the next. This redundant work across projects adds unnecessary overhead to the research process. The approach also makes it more difficult to compare work across projects. The requirement to build these shared components increases the latency between identifying a research question and testing it in simulation. In this approach, software development is directly and exclusively tied to specific research questions, limiting the bandwidth to focus on general tooling conveniences or best practices in data management and software design. These codebases often lack integrated graphical user interfaces for real-time debugging and visualization, modern data management practices, or modular architecture designs. While the Gymnasium API provides a standard interface for RL agents, it does not provide the domain-specific spatial logic or sensor models required for plume navigation research. Researchers are often left to implement these complex dynamics themselves, leading to fragmentation.
+Chemical plume navigation is a canonical problem in computational ethology, behavioral neuroscience, and robotics [@vergassola2007infotaxis; @carde2008navigational; @reddy2016learning]. Existing Gymnasium-compatible navigation tasks—including classic gridworlds, Minigrid-style environments, and 3D point-goal benchmarks—are designed as general-purpose control problems: they describe abstract states, obstacles, and goals, but they do not model odor concentration fields or chemosensory observations. In these tasks, each grid cell or pixel is simply a symbolic tile or rendered surface, and auxiliary information (such as episode configuration) is typically stored in unstructured `info` dictionaries.
 
-`plume-nav-sim` fills this gap by providing a well-scoped environment that can serve as:
+Gymnasium’s gridworld families, such as Minigrid and its derivatives, provide rich goal-directed tasks but treat observations as symbolic grids or rendered images with no special semantics for scalar fields such as odor concentration. Furthermore, they do not define schemas for plugging in external datasets or for capturing experiment artifacts.
 
-- A research testbed for new RL algorithms in plume navigation settings.
-- A reusable backend for higher-level applications (e.g., the included Qt debugger and plug-and-play demo).
+By contrast, plume navigation experiments in ethology and robotics are organized around odor fields and local sensors: agents must move through a concentration landscape and make decisions based on noisy scalar measurements. Implementations of such experiments often re-create this logic from scratch, with bespoke code for concentration fields, observation models, seeding, and logging. As a result, plume datasets and trajectories are hard to reuse across projects, and reproducing prior simulation results requires reconstructing one-off codebases rather than reusing a shared environment.
+
+`plume-nav-sim` targets this gap by providing a small but focused Gymnasium-compatible environment in which the central objects are odor concentration fields (analytic Gaussian or short plume movies), chemosensory observation models, and experiment specifications. Environments and policies are constructed from typed configuration objects, and each run produces schema-validated artifacts that record trajectories, configuration, seeds, and plume dataset identifiers. This design makes it straightforward to reproduce, share, and analyze plume navigation experiments without re-implementing the scaffold around each new research question.
 
 ## Software description
 
+### Design goals: beyond a toy gridworld
+
+The current release of `plume-nav-sim` uses deliberately simple plume models: a static Gaussian plane and a short example plume movie. From the agent’s perspective, these are scalar-valued fields discretized on a grid and rendered into observations. The goal of the library is not to provide high-fidelity fluid dynamics, but to standardize how such fields, chemosensory observations, experiment configurations, and logged artifacts are represented in a Gymnasium-compatible environment.
+
+In contrast to general-purpose gridworld libraries such as Minigrid, which encode symbolic tile types and tasks (walls, goals, doors, keys) in small discrete arrays or RGB images, `plume-nav-sim` is organized around odor concentration fields and chemosensory sensing. Even when instantiated with simple plumes, the library provides:
+
+1. **A first-class PlumeField abstraction** (analytic or movie-based) that decouples the odor landscape from the spatial grid.
+2. **Observation models** built around local concentration (with optional short histories), rather than agent coordinates or symbolic maps.
+3. **A schema-validated data capture pipeline** that records trajectories, environment configuration, seeds, and plume dataset identifiers.
+
+This makes the environment a small but reusable substrate for plume-navigation experiments, rather than a generic gridworld benchmark.
+
 ### Functionality
 
-`plume-nav-sim` exposes a Gymnasium environment with:
+`plume-nav-sim` exposes a Gymnasium environment designed to simulate olfactory search tasks. A key design goal is to standardize the interface between plume datasets and RL environments.
 
-- A 2D grid and plume source defined by a static Gaussian plume model or a video-backed plume field.
-- Discrete and oriented action spaces (e.g., run/tumble policies).
-- Observation models ranging from scalar concentration at the agent to history-based wrappers.
-- Reward models capturing source discovery, penalties, and step costs.
+- **Plume Dynamics as Data Interface:** A pluggable backend supporting both analytical models (e.g., Gaussian with turbulence) and empirical fields. Although the example plume movie shipped with `plume-nav-sim` is intentionally short and simple, the underlying movie interface is designed around an explicit xarray/Zarr schema for plume datasets. This makes it possible to plug in richer experimental or simulated plumes without changing the environment code, and to record which dataset and version were used in each experiment artifact.
+- **Sensor Models:** Configurable agent sensors that expose local concentration at the agent and optional short histories, without revealing the agent’s absolute position or the full plume field.
+- **Navigation:** Discrete action spaces tailored for bio-inspired locomotion (e.g., run-and-tumble, surge-and-cast).
+- **Reward Structures:** Flexible reward functions for source discovery (reward on entering a neighborhood around the source) with optional penalties per step or for leaving the domain.
 
 The public API centers on:
 
