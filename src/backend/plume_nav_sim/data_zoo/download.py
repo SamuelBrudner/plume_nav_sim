@@ -34,6 +34,8 @@ class DatasetDownloadError(RuntimeError):
 
 @dataclass
 class ChecksumMismatchError(DatasetDownloadError):
+    """Raised when a downloaded artifact fails checksum validation."""
+
     expected: str
     actual: str
     path: Path
@@ -167,23 +169,13 @@ def _unpack_artifact(
 
     if archive_type == "zip":
         with zipfile.ZipFile(artifact_path, "r") as zf:
-            if entry.artifact.archive_member:
-                member = entry.artifact.archive_member
-                zf.extract(member, path=cache_dir)
-                extracted = cache_dir / member
-                extracted.rename(target_path)
-            else:
-                zf.extractall(path=cache_dir)
+            _safe_extract_zip(zf, cache_dir, entry.artifact.archive_member)
+            _maybe_rename_member(cache_dir, entry.artifact.archive_member, target_path)
     elif archive_type in ("tar.gz", "tgz", "tar"):
         mode = "r:gz" if archive_type in ("tar.gz", "tgz") else "r:"
         with tarfile.open(artifact_path, mode) as tf:
-            if entry.artifact.archive_member:
-                member = entry.artifact.archive_member
-                tf.extract(member, path=cache_dir)
-                extracted = cache_dir / member
-                extracted.rename(target_path)
-            else:
-                tf.extractall(path=cache_dir)
+            _safe_extract_tar(tf, cache_dir, entry.artifact.archive_member)
+            _maybe_rename_member(cache_dir, entry.artifact.archive_member, target_path)
     else:
         raise DatasetDownloadError(f"Unsupported archive type: {archive_type}")
 
@@ -193,6 +185,35 @@ def _unpack_artifact(
         )
 
     return target_path
+
+
+def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path, member: Optional[str]) -> None:
+    members = [member] if member else zf.namelist()
+    _validate_archive_members(members, dest)
+    if member:
+        zf.extract(member, path=dest)
+    else:
+        zf.extractall(path=dest)
+
+
+def _safe_extract_tar(tf: tarfile.TarFile, dest: Path, member: Optional[str]) -> None:
+    members = [m for m in tf.getmembers() if member is None or m.name == member]
+    _validate_archive_members([m.name for m in members], dest)
+    tf.extractall(path=dest, members=members)
+
+
+def _validate_archive_members(members: list[str], dest: Path) -> None:
+    base = dest.resolve()
+    for name in members:
+        resolved = (base / name).resolve()
+        if base not in resolved.parents and resolved != base:
+            raise DatasetDownloadError(f"Unsafe archive member path: {name}")
+
+
+def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -> None:
+    if member:
+        extracted = dest / member
+        extracted.rename(target_path)
 
 
 def _validate_layout(target_path: Path, entry: DatasetRegistryEntry) -> None:
