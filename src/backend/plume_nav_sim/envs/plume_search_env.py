@@ -179,6 +179,9 @@ class PlumeSearchEnv(gym.Env):
         for key in (
             "plume",
             "movie_path",
+            "movie_dataset_id",
+            "movie_auto_download",
+            "movie_cache_root",
             "movie_fps",
             "movie_pixel_to_grid",
             "movie_origin",

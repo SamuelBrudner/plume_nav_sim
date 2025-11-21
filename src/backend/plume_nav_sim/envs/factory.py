@@ -31,9 +31,11 @@ import numpy as np
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
-from ..observations import AntennaeArraySensor, ConcentrationSensor
+from ..data_zoo import DEFAULT_CACHE_ROOT, ensure_dataset_available
+from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.concentration_field import ConcentrationField
 from ..plume.movie_field import MovieConfig, MoviePlumeField, resolve_movie_dataset_path
+from ..plume.wind_field import ConstantWindField
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_env import ComponentBasedEnvironment
 
@@ -48,7 +50,9 @@ def create_component_environment(  # noqa: C901
     max_steps: int = 1000,
     goal_radius: float = 5.0,
     action_type: Literal["discrete", "oriented"] = "discrete",
-    observation_type: Literal["concentration", "antennae"] = "concentration",
+    observation_type: Literal[
+        "concentration", "antennae", "wind_vector"
+    ] = "concentration",
     reward_type: Literal["sparse", "step_penalty"] = "sparse",
     plume_sigma: float = 20.0,
     step_size: int = 1,
@@ -56,12 +60,20 @@ def create_component_environment(  # noqa: C901
     # New: select plume source and optional movie configuration
     plume: Literal["static", "movie"] = "static",
     movie_path: Optional[str] = None,
+    movie_dataset_id: Optional[str] = None,
+    movie_auto_download: bool = False,
+    movie_cache_root: Optional[Union[str, Path]] = None,
     movie_fps: Optional[float] = None,
     movie_pixel_to_grid: Optional[tuple[float, float]] = None,
     movie_origin: Optional[tuple[float, float]] = None,
     movie_extent: Optional[tuple[float, float]] = None,
     movie_h5_dataset: Optional[str] = None,
     movie_step_policy: Literal["wrap", "clamp"] = "wrap",
+    enable_wind: bool = False,
+    wind_direction_deg: float = 0.0,
+    wind_speed: float = 1.0,
+    wind_vector: Optional[tuple[float, float]] = None,
+    wind_noise_std: float = 0.0,
 ) -> ComponentBasedEnvironment:
     """
     Create a fully-configured component-based environment.
@@ -77,11 +89,20 @@ def create_component_environment(  # noqa: C901
         max_steps: Episode step limit
         goal_radius: Success threshold distance
         action_type: Action processor type ('discrete' or 'oriented')
-        observation_type: Observation model type ('concentration' or 'antennae')
+        observation_type: Observation model type ('concentration', 'antennae', or 'wind_vector')
         reward_type: Reward function type ('sparse' or 'step_penalty')
         plume_sigma: Gaussian plume dispersion parameter
         step_size: Movement step size in grid cells
         render_mode: Rendering mode ('rgb_array' or 'human')
+        movie_dataset_id: Registry id for curated plume datasets; when set,
+            movie_path is optional and will be resolved via the data zoo cache.
+        movie_auto_download: Allow registry downloads when cache is missing.
+        movie_cache_root: Override cache root for registry-backed datasets.
+        enable_wind: Whether to instantiate a wind field (also enabled automatically when observation_type='wind_vector')
+        wind_direction_deg: Wind direction in degrees when using constant wind
+        wind_speed: Wind speed magnitude when using constant wind
+        wind_vector: Optional explicit wind vector (overrides direction/speed)
+        wind_noise_std: Gaussian noise stddev applied by WindVectorSensor
 
     Returns:
         Configured ComponentBasedEnvironment ready to use
@@ -137,10 +158,12 @@ def create_component_environment(  # noqa: C901
         observation_model = ConcentrationSensor()
     elif observation_type == "antennae":
         observation_model = AntennaeArraySensor(n_sensors=2, sensor_distance=2.0)
+    elif observation_type == "wind_vector":
+        observation_model = WindVectorSensor(noise_std=wind_noise_std)
     else:
         raise ValueError(
             f"Invalid observation_type: {observation_type}. "
-            f"Must be 'concentration' or 'antennae'."
+            f"Must be 'concentration', 'antennae', or 'wind_vector'."
         )
 
     # Create reward function
@@ -162,22 +185,20 @@ def create_component_environment(  # noqa: C901
 
     # Create plume/concentration field
     if plume == "movie":
-        if not movie_path:
+        if not movie_path and not movie_dataset_id:
             raise ValueError(
-                "env.plume=movie requires movie.path to be provided (Hydra key: movie.path)"
+                "env.plume=movie requires movie.path or movie.dataset_id to be provided"
             )
 
-        # Resolve the movie dataset path. For already-ingested Zarr directories
-        # (e.g., *.zarr), resolve_movie_dataset_path returns the directory as-is
-        # and does not require a sidecar. For raw media sources (HDF5, video
-        # files, etc.), it ingests using sidecar-provided metadata and enforces
-        # that any explicit overrides match the sidecar.
-        dataset_path = resolve_movie_dataset_path(
-            movie_path,
-            fps=movie_fps,
-            pixel_to_grid=movie_pixel_to_grid,
-            origin=movie_origin,
-            extent=movie_extent,
+        dataset_path = _resolve_movie_dataset(
+            movie_path=movie_path,
+            movie_dataset_id=movie_dataset_id,
+            movie_auto_download=movie_auto_download,
+            movie_cache_root=movie_cache_root,
+            movie_fps=movie_fps,
+            movie_pixel_to_grid=movie_pixel_to_grid,
+            movie_origin=movie_origin,
+            movie_extent=movie_extent,
             movie_h5_dataset=movie_h5_dataset,
         )
 
@@ -225,16 +246,63 @@ def create_component_environment(  # noqa: C901
         concentration_field.field_array = field_array.astype(np.float32)
         concentration_field.is_generated = True
 
+    wind_field = None
+    if enable_wind or observation_type == "wind_vector":
+        wind_field = ConstantWindField(
+            direction_deg=wind_direction_deg,
+            speed=wind_speed,
+            vector=wind_vector,
+        )
+
     # Assemble environment
     return ComponentBasedEnvironment(
         action_processor=action_processor,
         observation_model=observation_model,
         reward_function=reward_function,
         concentration_field=concentration_field,
+        wind_field=wind_field,
         grid_size=grid_size,
         max_steps=max_steps,
         goal_location=goal_location,
         goal_radius=goal_radius,
         start_location=start_location,
         render_mode=render_mode,
+    )
+
+
+def _resolve_movie_dataset(
+    *,
+    movie_path: Optional[str],
+    movie_dataset_id: Optional[str],
+    movie_auto_download: bool,
+    movie_cache_root: Optional[Union[str, Path]],
+    movie_fps: Optional[float],
+    movie_pixel_to_grid: Optional[tuple[float, float]],
+    movie_origin: Optional[tuple[float, float]],
+    movie_extent: Optional[tuple[float, float]],
+    movie_h5_dataset: Optional[str],
+) -> Path:
+    """Resolve dataset path via registry or direct path/ingest."""
+
+    if movie_dataset_id:
+        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
+        return ensure_dataset_available(
+            movie_dataset_id,
+            cache_root=cache_root,
+            auto_download=movie_auto_download,
+            verify_checksum=True,
+        )
+
+    if not movie_path:
+        raise ValueError(
+            "env.plume=movie requires movie.path when movie.dataset_id is not set"
+        )
+
+    return resolve_movie_dataset_path(
+        movie_path,
+        fps=movie_fps,
+        pixel_to_grid=movie_pixel_to_grid,
+        origin=movie_origin,
+        extent=movie_extent,
+        movie_h5_dataset=movie_h5_dataset,
     )

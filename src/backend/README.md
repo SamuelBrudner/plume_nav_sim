@@ -436,7 +436,8 @@ Video-derived concentration field that advances one frame per step:
 - **Dataset schema**: `concentration (t, y, x)` with float32 values
 - **Step policy**: `wrap` (loop) or `clamp` (hold last frame)
 - **Metadata**: fps, pixel_to_grid, origin, extent validated via `VideoPlumeAttrs`
-- **Usage**: select with `plume="movie"` and provide `movie_path` to a Zarr dataset
+- **Usage**: `plume="movie"` with either a curated registry id (`movie_dataset_id="colorado_jet_v1"`) that resolves via the data zoo cache, or a direct path (`movie_path`) to a Zarr dataset/raw movie + sidecar
+- **Cache**: registry downloads default to `~/.cache/plume_nav_sim/data_zoo`; override with `movie_cache_root` (e.g., HPC scratch) and set `movie_auto_download=True` to fetch when missing
 - Details and examples: `src/backend/docs/plume_types.md`
 
 ### Dual-Mode Rendering

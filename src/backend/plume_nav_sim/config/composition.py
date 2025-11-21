@@ -92,7 +92,9 @@ class SimulationSpec(BaseModel):
 
     Under the movie metadata sidecar regime:
 
-    - ``movie_path`` selects the recording to use.
+    - ``movie_dataset_id`` selects a curated registry dataset; when set,
+      ``movie_path`` is optional and resolved via the data zoo cache.
+    - ``movie_path`` selects the recording to use (local/raw dataset).
     - ``movie_step_policy`` controls how environment steps map to frames.
     - ``movie_fps``, ``movie_pixel_to_grid``, ``movie_origin``,
       ``movie_extent`` and ``movie_h5_dataset`` are treated as validation
@@ -132,6 +134,9 @@ class SimulationSpec(BaseModel):
     render: bool = Field(default=True)
     plume: Optional[Literal["static", "movie"]] = Field(default=None)
     movie_path: Optional[str] = Field(default=None)
+    movie_dataset_id: Optional[str] = Field(default=None)
+    movie_auto_download: bool = Field(default=False)
+    movie_cache_root: Optional[str] = Field(default=None)
     movie_fps: Optional[float] = Field(default=None, gt=0)
     movie_pixel_to_grid: Optional[Tuple[float, float]] = Field(default=None)
     movie_origin: Optional[Tuple[float, float]] = Field(default=None)
@@ -324,6 +329,9 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
 
     _add_if_not_none(kwargs, "plume", spec.plume)
     _add_if_not_none(kwargs, "movie_path", spec.movie_path)
+    _add_if_not_none(kwargs, "movie_dataset_id", spec.movie_dataset_id)
+    kwargs["movie_auto_download"] = bool(spec.movie_auto_download)
+    _add_if_not_none(kwargs, "movie_cache_root", spec.movie_cache_root)
     _add_if_not_none(kwargs, "movie_fps", spec.movie_fps, float)
     _add_if_not_none(
         kwargs,
