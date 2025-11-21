@@ -190,16 +190,15 @@ def _unpack_artifact(
 def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path, member: Optional[str]) -> None:
     members = [member] if member else zf.namelist()
     _validate_archive_members(members, dest)
-    if member:
-        zf.extract(member, path=dest)
-    else:
-        zf.extractall(path=dest)
+    for name in members:
+        zf.extract(name, path=dest)
 
 
 def _safe_extract_tar(tf: tarfile.TarFile, dest: Path, member: Optional[str]) -> None:
     members = [m for m in tf.getmembers() if member is None or m.name == member]
     _validate_archive_members([m.name for m in members], dest)
-    tf.extractall(path=dest, members=members)
+    for tar_member in members:
+        tf.extract(tar_member, path=dest)
 
 
 def _validate_archive_members(members: list[str], dest: Path) -> None:
