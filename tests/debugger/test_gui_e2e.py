@@ -32,7 +32,8 @@ def test_provider_mux_integration_sets_source_and_action_names(monkeypatch):
 
     # Lazy import after Qt available
     try:
-        from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+        from plume_nav_debugger.env_driver import DebuggerConfig, EnvDriver
+        from plume_nav_debugger.main_window import InspectorWidget
     except RuntimeError as exc:
         pytest.skip(str(exc))
     from plume_nav_debugger.odc.models import ActionInfo, PipelineInfo
@@ -128,7 +129,8 @@ def test_strict_mode_no_fallbacks(monkeypatch):
     )
 
     try:
-        from plume_nav_debugger.app import DebuggerConfig, EnvDriver, InspectorWidget
+        from plume_nav_debugger.env_driver import DebuggerConfig, EnvDriver
+        from plume_nav_debugger.main_window import InspectorWidget
     except RuntimeError as exc:
         pytest.skip(str(exc))
 

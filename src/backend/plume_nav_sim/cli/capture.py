@@ -33,6 +33,13 @@ def _parse_args_and_overrides(
         "--grid", type=str, default="64x64", help="Grid size WxH, e.g., 64x64"
     )
     p.add_argument(
+        "--action-type",
+        type=str,
+        choices=["discrete", "oriented", "run_tumble"],
+        default=None,
+        help="Action processor ('discrete', 'oriented', 'run_tumble'). Defaults to config or 'oriented'.",
+    )
+    p.add_argument(
         "--max-steps", type=int, default=None, help="Max steps per episode (override)"
     )
     p.add_argument(
@@ -269,11 +276,13 @@ def _parse_grid_arg(grid: str) -> Tuple[int, int]:
         raise SystemExit("--grid must be formatted as WxH, e.g., 64x64") from e
 
 
-def _env_from_cfg(cfg: dict) -> Tuple[object, int, int]:
+def _env_from_cfg(
+    cfg: dict, action_type_override: Optional[str] = None
+) -> Tuple[object, int, int]:
     env_cfg = cfg.get("env", {})
     plume_mode = env_cfg.get("plume", "static")
     make_kwargs = {
-        "action_type": env_cfg.get("action_type", "oriented"),
+        "action_type": action_type_override or env_cfg.get("action_type", "oriented"),
         "observation_type": env_cfg.get("observation_type", "concentration"),
         "reward_type": env_cfg.get("reward_type", "step_penalty"),
         "max_steps": env_cfg.get("max_steps", None) or None,
@@ -338,6 +347,12 @@ def _merge_args_from_cfg(
         args.episodes if provided("--episodes") else int(cfg.get("episodes", 1))
     )
     args.seed = args.seed if provided("--seed") else int(cfg.get("seed", 123))
+    env_cfg = cfg.get("env", {})
+    args.action_type = (
+        args.action_type
+        if provided("--action-type")
+        else env_cfg.get("action_type", "oriented")
+    )
     args.rotate_size = (
         args.rotate_size if provided("--rotate-size") else cfg.get("rotate_size")
     )
@@ -385,7 +400,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             config_path=args.config_path,
             overrides=overrides,
         )
-        env, w, h = _env_from_cfg(cfg)
+        env, w, h = _env_from_cfg(cfg, action_type_override=args.action_type)
         # Ensure flag detection works when invoked via `python -m` (argv is None)
         from sys import argv as sys_argv
 
@@ -397,7 +412,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         w, h = _parse_grid_arg(args.grid)
         env = pns.make_env(
             grid_size=(w, h),
-            action_type="oriented",
+            action_type=args.action_type or "oriented",
             observation_type="concentration",
             reward_type="step_penalty",
             max_steps=args.max_steps,

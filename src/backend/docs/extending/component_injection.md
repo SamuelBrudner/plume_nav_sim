@@ -45,7 +45,7 @@ from plume_nav_sim.envs.factory import create_component_environment
 env = create_component_environment(
     grid_size=(128, 128),
     goal_location=(64, 64),
-    action_type='oriented',        # 'discrete' or 'oriented'
+    action_type='oriented',        # 'discrete', 'oriented', or 'run_tumble'
     observation_type='antennae',   # 'concentration' or 'antennae'
     reward_type='step_penalty',    # 'sparse' or 'step_penalty'
     goal_radius=2.0,
@@ -160,12 +160,16 @@ You can satisfy protocols by shape (duck typing) without subclassing.
 
 ### RewardFunction
 
+Use `ActionType` from `plume_nav_sim.interfaces` (discrete int or Box vector)
+to stay aligned with your action processor.
+
 ```python
 from typing import Any, Dict
 from plume_nav_sim.core.state import AgentState
+from plume_nav_sim.interfaces import ActionType
 
 class MyReward:
-    def compute_reward(self, prev_state: AgentState, action: int, next_state: AgentState, plume_field: Any) -> float:
+    def compute_reward(self, prev_state: AgentState, action: ActionType, next_state: AgentState, plume_field: Any) -> float:
         return 1.0 if next_state.position == prev_state.position else 0.0
 
     def get_metadata(self) -> Dict[str, Any]:

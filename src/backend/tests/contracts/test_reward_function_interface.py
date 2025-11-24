@@ -19,13 +19,21 @@ import copy
 import numpy as np
 import pytest
 from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.interfaces import RewardFunction
+from plume_nav_sim.plume.concentration_field import ConcentrationField
 from tests.strategies import (
     agent_state_strategy,
+    continuous_action_strategy,
     discrete_action_strategy,
     grid_size_strategy,
+)
+
+ACTION_STRATEGY = st.one_of(
+    discrete_action_strategy(n_actions=4),
+    continuous_action_strategy(),
 )
 
 
@@ -73,7 +81,7 @@ class TestRewardFunctionInterface:
 
     @given(
         prev_state=agent_state_strategy(),
-        action=discrete_action_strategy(n_actions=4),
+        action=ACTION_STRATEGY,
         next_state=agent_state_strategy(),
     )
     @settings(
@@ -152,7 +160,7 @@ class TestRewardFunctionInterface:
 
     @given(
         prev_state=agent_state_strategy(),
-        action=discrete_action_strategy(n_actions=4),
+        action=ACTION_STRATEGY,
         next_state=agent_state_strategy(),
         grid=grid_size_strategy(
             min_width=16, max_width=64, min_height=16, max_height=64
@@ -183,6 +191,32 @@ class TestRewardFunctionInterface:
         assert np.isfinite(reward), f"Reward is not finite: {reward}"
         assert not np.isnan(reward), f"Reward is NaN: {reward}"
         assert not np.isinf(reward), f"Reward is infinite: {reward}"
+
+    @given(
+        prev_state=agent_state_strategy(),
+        action=continuous_action_strategy(dims=3, min_value=-1.0, max_value=1.0),
+        next_state=agent_state_strategy(),
+        grid=grid_size_strategy(min_width=8, max_width=24, min_height=8, max_height=24),
+    )
+    @settings(
+        deadline=None,
+        max_examples=30,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+    )
+    def test_accepts_box_action(
+        self, reward_function, prev_state, action, next_state, grid
+    ):
+        """Property: Reward functions accept Box (vector) actions."""
+        plume_field = np.random.rand(grid.height, grid.width).astype(np.float32)
+
+        reward = reward_function.compute_reward(
+            prev_state, action, next_state, plume_field
+        )
+
+        assert np.isfinite(reward), "Reward must handle vector actions"
 
     # ==============================================================================
     # Return Type Validation
@@ -229,6 +263,28 @@ class TestRewardFunctionInterface:
         assert (
             np.ndim(reward) == 0
         ), f"Reward is not scalar, has shape: {np.shape(reward)}"
+
+    def test_accepts_concentration_field(self, reward_function, grid_size):
+        """Test: Reward implementations accept ConcentrationField input."""
+        from plume_nav_sim.core.state import AgentState
+
+        prev_state = AgentState(position=Coordinates(10, 10))
+        next_state = AgentState(position=Coordinates(11, 10))
+        action = 0
+
+        plume_field = ConcentrationField(grid_size=grid_size, enable_caching=False)
+        plume_field.field_array = np.zeros(
+            (grid_size.height, grid_size.width), dtype=np.float32
+        )
+        plume_field.is_generated = True
+
+        reward = reward_function.compute_reward(
+            prev_state, action, next_state, plume_field
+        )
+
+        assert isinstance(
+            reward, (int, float, np.integer, np.floating)
+        ), f"Reward has invalid type: {type(reward)}"
 
     # ==============================================================================
     # Metadata Tests

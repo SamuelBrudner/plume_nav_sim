@@ -137,6 +137,7 @@ All ObservationModel implementations consume a dictionary `env_state` assembled 
 - `grid_size`: GridSize (width, height) for bounds checks
 - `time_step`: int (optional) current step index
 - `goal_location`: Coordinates (optional) if relevant to sensors
+- `wind_field`: WindField (optional) when wind is configured; may be absent for odor-only simulations
 
 Implementations may ignore unused keys. Custom environments or wrappers may extend `env_state` by overriding `_get_env_state()` while preserving these core keys for compatibility.
 

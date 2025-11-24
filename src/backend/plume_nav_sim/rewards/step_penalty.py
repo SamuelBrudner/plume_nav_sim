@@ -15,6 +15,8 @@ except ImportError:  # pragma: no cover
 
 from plume_nav_sim.core.geometry import Coordinates
 from plume_nav_sim.core.state import AgentState
+from plume_nav_sim.interfaces.action import ActionType
+from plume_nav_sim.plume.concentration_field import ConcentrationField
 
 
 class StepPenaltyReward:
@@ -81,9 +83,9 @@ class StepPenaltyReward:
     def compute_reward(
         self,
         prev_state: AgentState,
-        action: int,
+        action: ActionType,
         next_state: AgentState,
-        plume_field: NDArray[np.floating],
+        plume_field: ConcentrationField | NDArray[np.floating],
     ) -> float:
         """Compute step penalty reward.
 
@@ -94,7 +96,7 @@ class StepPenaltyReward:
             prev_state: AgentState before action (unused, for protocol compliance)
             action: Action taken (unused, for protocol compliance)
             next_state: AgentState after action (determines reward)
-            plume_field: Concentration field (unused, for protocol compliance)
+            plume_field: Concentration field (supports ConcentrationField or raw ndarray)
 
         Returns:
             goal_reward if at goal, -step_penalty otherwise

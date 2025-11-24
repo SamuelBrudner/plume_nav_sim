@@ -106,3 +106,18 @@ def test_provider_invalid_distribution_length_returns_none():
     mux = ProviderMux(env, pol, provider=_BadProvider())
     obs = np.array([0.0])
     assert mux.get_policy_distribution(obs) is None
+
+
+def test_provider_errors_are_exposed_via_mux():
+    class _ErrorProvider(_Provider):
+        def policy_distribution(self, policy, observation):  # type: ignore[override]
+            # Wrong length triggers provider error tracking
+            return {"probs": [0.5, 0.5]}
+
+    env = _Env()
+    pol = _PolicyHeuristic()
+    mux = ProviderMux(env, pol, provider=_ErrorProvider())
+    mux.get_policy_distribution(np.array([0.0]))
+    errors = mux.get_errors()
+    assert errors, "expected provider errors to be recorded"
+    assert any("policy_distribution" in e for e in errors)

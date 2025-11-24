@@ -42,7 +42,8 @@ print(info["agent_xy"])  # starting position
   env = gym.make(ENV_ID, action_type="oriented")
   ```
 
-- **Component knobs**: pass string options such as `observation_type="antennae"`
+- **Component knobs**: pass string options such as `action_type="run_tumble"` or `observation_type="antennae"`
+- **Wind sensing (optional)**: request `observation_type="wind_vector"` and either set `enable_wind=True` or pass `wind_direction_deg`/`wind_speed`/`wind_vector`; omit to keep odor-only behavior unchanged.
 - **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
 
 ## 3. Progressive Customization

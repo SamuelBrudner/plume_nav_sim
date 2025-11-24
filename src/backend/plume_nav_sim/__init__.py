@@ -212,7 +212,7 @@ def make_env(**kwargs):
             - source_location: tuple[int, int] = grid center
             - max_steps: int = 1000
             - goal_radius: float = 5.0
-            - action_type: str = 'discrete'  # or 'oriented'
+            - action_type: str = 'discrete'  # or 'oriented' / 'run_tumble'
             - observation_type: str = 'concentration'  # or 'antennae'
             - reward_type: str = 'sparse'  # or 'step_penalty'
             - plume_sigma: float = 20.0

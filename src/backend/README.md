@@ -141,6 +141,27 @@ print(f"Reward: {reward}, Position: {info['agent_position']}")
 env.close()
 ```
 
+### Runner utilities (stream/episode)
+
+The UI-agnostic runner helpers expose callback-friendly iteration while preserving
+whatever observation structure your environment emits (arrays, Dict, Tuple). If a policy
+expects a different format, pass a `policy_obs_adapter` to transform observations for the
+policy without altering `StepEvent.obs`.
+
+```python
+import numpy as np
+from plume_nav_sim.runner import runner
+
+events = []
+result = runner.run_episode(
+    env,
+    policy,
+    seed=0,
+    policy_obs_adapter=lambda obs: np.asarray(obs["vec"]),
+    on_step=events.append,
+)
+```
+
 ## 📖 API Reference
 
 ### Environment Class: `PlumeSearchEnv`
@@ -202,7 +223,7 @@ Two ways to use components:
   env = create_component_environment(
       grid_size=(128, 128),
       goal_location=(64, 64),
-      action_type='oriented',           # 'discrete' or 'oriented'
+      action_type='oriented',           # 'discrete', 'oriented', or 'run_tumble'
       observation_type='antennae',      # 'concentration' or 'antennae'
       reward_type='step_penalty',       # 'sparse' or 'step_penalty'
       goal_radius=2.0,
@@ -378,6 +399,26 @@ Notes:
 - Dotted path can be `"module:Attr"` or `"module.sub.Attr"`.
 - Wrappers are applied before policy subset validation so the policy can target
   the adapted observation space.
+
+#### Temporal-derivative policy observations
+
+The builtin `deterministic_td` and `stochastic_td` policies operate on a **scalar**
+concentration signal. When working with dict or multi-modal observations, specify
+which field and element to use:
+
+```python
+policy=PolicySpec(
+    builtin="stochastic_td",
+    kwargs={
+        "concentration_key": "sensor_reading",  # pick the odor modality from a dict
+        "modality_index": 0,                    # select the odor entry from a tuple/list
+        "sensor_index": 0,                      # pick one sensor from a vector observation
+    },
+)
+```
+
+If no scalar concentration can be found, the policy raises a descriptive error so
+you can add a wrapper or choose the right sensor explicitly.
 
 ### Reproducibility Demo
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import numpy as np
+from plume_nav_sim.core.types import ActionType, ObservationType
 
 
 class ControllablePolicy:
@@ -17,8 +17,8 @@ class ControllablePolicy:
 
     def __init__(self, base_policy: Any) -> None:
         self._base = base_policy
-        self._next_action: Optional[int] = None
-        self._sticky_action: Optional[int] = None
+        self._next_action: Optional[ActionType] = None
+        self._sticky_action: Optional[ActionType] = None
 
     # Policy protocol ---------------------------------------------------------
     @property
@@ -35,36 +35,38 @@ class ControllablePolicy:
             # Best-effort reset; ignore if base doesn't support it
             pass
 
-    def select_action(self, observation: np.ndarray, *, explore: bool = False) -> int:  # type: ignore[override]
+    def select_action(
+        self, observation: ObservationType, *, explore: bool = False
+    ) -> ActionType:  # type: ignore[override]
         # Highest priority: sticky override
         if self._sticky_action is not None:
-            return int(self._sticky_action)
+            return self._sticky_action
 
         # Next priority: one-shot override
         if self._next_action is not None:
-            a = int(self._next_action)
+            a = self._next_action
             self._next_action = None
             return a
 
         # Delegate to base policy
         if hasattr(self._base, "select_action"):
             try:
-                return int(self._base.select_action(observation, explore=explore))  # type: ignore[attr-defined]
+                return self._base.select_action(observation, explore=explore)  # type: ignore[attr-defined]
             except TypeError:
-                return int(self._base.select_action(observation))  # type: ignore[misc]
+                return self._base.select_action(observation)  # type: ignore[misc]
 
         if callable(self._base):
-            return int(self._base(observation))
+            return self._base(observation)
 
         raise TypeError("Base policy must implement select_action() or be callable")
 
     # Controls ----------------------------------------------------------------
-    def set_next_action(self, action: int, *, sticky: bool = False) -> None:
+    def set_next_action(self, action: ActionType, *, sticky: bool = False) -> None:
         if sticky:
-            self._sticky_action = int(action)
+            self._sticky_action = action
             self._next_action = None
         else:
-            self._next_action = int(action)
+            self._next_action = action
 
     def clear_sticky(self) -> None:
         self._sticky_action = None

@@ -688,7 +688,7 @@ env = plume_nav_sim.make_env()  # Uses sensible defaults
 
 ```python
 env = plume_nav_sim.make_env(
-    action_type='oriented',       # Choose from: 'discrete', 'oriented'
+    action_type='oriented',       # Choose from: 'discrete', 'oriented', 'run_tumble'
     observation_type='antennae',  # Choose from: 'concentration', 'antennae'
     reward_type='step_penalty'    # Choose from: 'sparse', 'step_penalty'
 )

@@ -7,7 +7,7 @@
 ## Quick Start
 
 ```python
-from plume_nav_sim.interfaces import RewardFunction
+from plume_nav_sim.interfaces import ActionType, RewardFunction
 from plume_nav_sim.core.state import AgentState
 
 class MyReward:
@@ -51,13 +51,16 @@ env = ComponentBasedEnvironment(
 
 ## The RewardFunction Protocol
 
+`ActionType` matches your `ActionProcessor` interface (discrete `int` or Box
+`np.ndarray`) and is available from `plume_nav_sim.interfaces`.
+
 ### Required Methods
 
 ```python
 def compute_reward(
     self,
     prev_state: AgentState,
-    action: int,
+    action: ActionType,
     next_state: AgentState,
     plume_field: ConcentrationField
 ) -> float:
@@ -65,7 +68,7 @@ def compute_reward(
     
     Args:
         prev_state: State before action
-        action: Action taken (integer from action_space)
+        action: Action taken (discrete int or continuous vector from action_space)
         next_state: State after action
         plume_field: Concentration field for context
     

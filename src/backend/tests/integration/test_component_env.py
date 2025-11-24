@@ -7,12 +7,14 @@ to ensure proper integration and contract compliance.
 Contract: environment_state_machine.md
 """
 
+import gymnasium as gym
 import numpy as np
 import pytest
 
 from plume_nav_sim.actions import DiscreteGridActions
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.envs import ComponentBasedEnvironment, EnvironmentState
+from plume_nav_sim.interfaces.action import ActionType
 from plume_nav_sim.observations import ConcentrationSensor
 from plume_nav_sim.plume.concentration_field import ConcentrationField
 from plume_nav_sim.rewards import SparseGoalReward
@@ -75,6 +77,56 @@ def reward_function(goal_location):
 
 
 @pytest.fixture
+def vector_action_processor():
+    """Action processor with Box action space for integration smoke testing."""
+
+    from plume_nav_sim.core.state import AgentState
+
+    class VectorBoxActions:
+        def __init__(self, step_size: float = 1.0):
+            self.step_size = step_size
+            self._action_space = gym.spaces.Box(
+                low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+            )
+
+        @property
+        def action_space(self) -> gym.Space:
+            return self._action_space
+
+        def process_action(
+            self, action: ActionType, current_state: AgentState, grid_size: GridSize
+        ) -> AgentState:
+            if not self.validate_action(action):
+                raise ValueError(f"Invalid action for Box space: {action}")
+
+            # Interpret action as delta scaled by step_size and clamp to grid
+            dx = int(np.round(float(action[0]) * self.step_size))
+            dy = int(np.round(float(action[1]) * self.step_size))
+
+            new_x = int(np.clip(current_state.position.x + dx, 0, grid_size.width - 1))
+            new_y = int(np.clip(current_state.position.y + dy, 0, grid_size.height - 1))
+
+            return AgentState(
+                position=Coordinates(new_x, new_y),
+                orientation=current_state.orientation,
+                step_count=current_state.step_count,
+                total_reward=current_state.total_reward,
+                goal_reached=current_state.goal_reached,
+            )
+
+        def validate_action(self, action: ActionType) -> bool:
+            return self._action_space.contains(action)
+
+        def get_metadata(self):
+            return {
+                "type": "vector_box_actions",
+                "parameters": {"step_size": self.step_size, "shape": (2,)},
+            }
+
+    return VectorBoxActions(step_size=1.0)
+
+
+@pytest.fixture
 def component_env(
     action_processor,
     observation_model,
@@ -91,6 +143,29 @@ def component_env(
         concentration_field=concentration_field,
         grid_size=grid_size,
         max_steps=100,
+        goal_location=goal_location,
+        goal_radius=5.0,
+        start_location=Coordinates(0, 0),
+    )
+
+
+@pytest.fixture
+def vector_component_env(
+    vector_action_processor,
+    observation_model,
+    reward_function,
+    concentration_field,
+    grid_size,
+    goal_location,
+):
+    """Component environment configured for continuous Box actions."""
+    return ComponentBasedEnvironment(
+        action_processor=vector_action_processor,
+        observation_model=observation_model,
+        reward_function=reward_function,
+        concentration_field=concentration_field,
+        grid_size=grid_size,
+        max_steps=25,
         goal_location=goal_location,
         goal_radius=5.0,
         start_location=Coordinates(0, 0),
@@ -208,6 +283,21 @@ class TestComponentBasedEnvironment:
         assert final_reward == 1.0
         assert component_env._state == EnvironmentState.TERMINATED
         assert component_env._agent_state.goal_reached
+
+    def test_step_with_vector_action(self, vector_component_env, grid_size):
+        """Smoke test: Environment handles Box action processor + reward."""
+        vector_component_env.reset()
+
+        action = vector_component_env.action_space.sample()
+        obs, reward, terminated, truncated, info = vector_component_env.step(action)
+
+        assert isinstance(obs, np.ndarray)
+        assert isinstance(reward, (int, float))
+        assert 0 <= vector_component_env._agent_state.position.x < grid_size.width
+        assert 0 <= vector_component_env._agent_state.position.y < grid_size.height
+        assert isinstance(terminated, bool)
+        assert isinstance(truncated, bool)
+        assert isinstance(info, dict)
 
     def test_reset_after_termination(self, component_env, goal_location):
         """Test: Can reset() after termination."""

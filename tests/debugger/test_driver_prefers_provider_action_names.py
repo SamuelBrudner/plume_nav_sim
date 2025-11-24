@@ -25,7 +25,7 @@ def _pyqt5_present() -> bool:
 )
 def test_driver_prefers_provider_action_names_strict_mode():
     try:
-        from plume_nav_debugger.app import DebuggerConfig, EnvDriver
+        from plume_nav_debugger.env_driver import DebuggerConfig, EnvDriver
     except RuntimeError as exc:
         pytest.skip(str(exc))
     from plume_nav_debugger.odc.models import ActionInfo
