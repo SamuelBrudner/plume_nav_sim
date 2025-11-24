@@ -16,7 +16,7 @@ import numpy as np
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..core.geometry import Coordinates, GridSize
 from ..envs import ComponentBasedEnvironment
-from ..observations import AntennaeArraySensor, ConcentrationSensor
+from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.concentration_field import ConcentrationField
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_configs import (
@@ -69,7 +69,7 @@ def create_observation_model(config: ObservationConfig):
         config: ObservationConfig with type and parameters
 
     Returns:
-        ObservationModel instance (ConcentrationSensor or AntennaeArraySensor)
+        ObservationModel instance (ConcentrationSensor, AntennaeArraySensor, or WindVectorSensor)
 
     Raises:
         ValueError: If config.type is invalid
@@ -86,10 +86,12 @@ def create_observation_model(config: ObservationConfig):
             sensor_angles=config.sensor_angles,
             sensor_distance=config.sensor_distance,
         )
+    elif config.type == "wind_vector":
+        return WindVectorSensor(noise_std=float(config.noise_std))
     else:
         raise ValueError(
             f"Invalid observation type: {config.type}. "
-            f"Must be 'concentration' or 'antennae'."
+            f"Must be 'concentration', 'antennae', or 'wind_vector'."
         )
 
 
@@ -101,7 +103,7 @@ def create_reward_function(config: RewardConfig, goal_location: Coordinates):
         goal_location: Goal position (required for reward calculation)
 
     Returns:
-        RewardFunction instance (SparseGoalReward or DenseNavigationReward)
+        RewardFunction instance (SparseGoalReward or StepPenaltyReward)
 
     Raises:
         ValueError: If config.type is invalid
@@ -116,13 +118,11 @@ def create_reward_function(config: RewardConfig, goal_location: Coordinates):
             goal_radius=config.goal_radius,
         )
     elif config.type == "step_penalty":
-        goal_reward = config.parameters.get("goal_reward", 1.0)
-        step_penalty = config.parameters.get("step_penalty", 0.01)
         return StepPenaltyReward(
             goal_position=goal_location,
             goal_radius=config.goal_radius,
-            goal_reward=goal_reward,
-            step_penalty=step_penalty,
+            goal_reward=config.goal_reward,
+            step_penalty=config.step_penalty,
         )
     else:
         raise ValueError(

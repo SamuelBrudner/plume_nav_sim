@@ -56,11 +56,11 @@ class ObservationConfig(BaseModel):
     """Configuration for observation models.
 
     Attributes:
-        type: Observation model type ('concentration' or 'antennae')
+        type: Observation model type ('concentration', 'antennae', or 'wind_vector')
         n_sensors: Number of sensors (for 'antennae' type)
         sensor_distance: Distance from agent to sensors (for 'antennae')
         sensor_angles: Custom sensor angles (optional, for 'antennae')
-        parameters: Additional model-specific parameters
+        noise_std: WindVectorSensor noise standard deviation (for 'wind_vector')
 
     Example:
         >>> config = ObservationConfig(type="concentration")
@@ -71,9 +71,12 @@ class ObservationConfig(BaseModel):
         ... )
     """
 
-    type: Literal["concentration", "antennae"] = Field(
+    type: Literal["concentration", "antennae", "wind_vector"] = Field(
         default="concentration",
-        description="Observation model type: 'concentration' (single) or 'antennae' (array)",
+        description=(
+            "Observation model type: 'concentration' (single), 'antennae' (array), "
+            "or 'wind_vector' (mechanosensory wind)"
+        ),
     )
     n_sensors: int = Field(
         default=2, ge=1, description="Number of sensors (for antennae array)"
@@ -84,8 +87,10 @@ class ObservationConfig(BaseModel):
     sensor_angles: Optional[list[float]] = Field(
         default=None, description="Custom sensor angles in degrees (optional)"
     )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional model-specific parameters"
+    noise_std: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Gaussian noise stddev for wind_vector observations",
     )
 
     @field_validator("sensor_angles")
@@ -107,12 +112,10 @@ class RewardConfig(BaseModel):
     """Configuration for reward functions.
 
     Attributes:
-        type: Reward function type ('sparse' or 'dense')
+        type: Reward function type ('sparse' or 'step_penalty')
         goal_radius: Success threshold distance from goal
-        max_distance: Maximum distance for normalization (dense reward)
-        distance_weight: Weight for distance term (dense reward)
-        concentration_weight: Weight for concentration term (dense reward)
-        parameters: Additional function-specific parameters
+        goal_reward: Reward at goal (step_penalty reward only)
+        step_penalty: Penalty per step away from goal (step_penalty reward only)
 
     Example:
         >>> config = RewardConfig(type="sparse", goal_radius=5.0)
@@ -130,18 +133,14 @@ class RewardConfig(BaseModel):
     goal_radius: float = Field(
         default=5.0, gt=0.0, description="Success threshold distance from goal"
     )
-    max_distance: Optional[float] = Field(
-        default=None,
-        description="Maximum distance for normalization (dense reward only)",
+    goal_reward: float = Field(
+        default=1.0,
+        description="Reward granted upon reaching the goal (step_penalty reward)",
     )
-    distance_weight: float = Field(
-        default=0.1, description="Weight for distance term (dense reward)"
-    )
-    concentration_weight: float = Field(
-        default=0.1, description="Weight for concentration term (dense reward)"
-    )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional function-specific parameters"
+    step_penalty: float = Field(
+        default=0.01,
+        ge=0.0,
+        description="Penalty applied each step until goal (step_penalty reward)",
     )
 
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
