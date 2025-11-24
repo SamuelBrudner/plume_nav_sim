@@ -12,6 +12,7 @@ from .component_configs import (
     ObservationConfig,
     PlumeConfig,
     RewardConfig,
+    WindConfig,
 )
 from .composition import (
     BuiltinPolicyName,
@@ -31,6 +32,7 @@ from .factories import (
     create_environment_from_config,
     create_observation_model,
     create_reward_function,
+    create_wind_field,
 )
 from .registration import (
     COMPONENT_ENV_ID,
@@ -56,12 +58,14 @@ __all__ = [
     "ObservationConfig",
     "RewardConfig",
     "PlumeConfig",
+    "WindConfig",
     "EnvironmentConfig",
     # Factory functions
     "create_action_processor",
     "create_observation_model",
     "create_reward_function",
     "create_concentration_field",
+    "create_wind_field",
     "create_environment_from_config",
     # Defaults
     "get_complete_default_config",

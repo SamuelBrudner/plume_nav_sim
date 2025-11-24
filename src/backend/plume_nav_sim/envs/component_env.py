@@ -41,7 +41,12 @@ from ..core.state import AgentState
 from ..utils.exceptions import StateError, ValidationError
 
 if TYPE_CHECKING:
-    from ..interfaces import ActionProcessor, ObservationModel, RewardFunction
+    from ..interfaces import (
+        ActionProcessor,
+        ObservationModel,
+        RewardFunction,
+        VectorField,
+    )
     from ..plume.concentration_field import ConcentrationField
 
 __all__ = ["ComponentBasedEnvironment", "EnvironmentState"]
@@ -76,6 +81,7 @@ class ComponentBasedEnvironment(gym.Env):
         observation_model: Generates observations from environment state
         reward_function: Computes rewards based on state transitions
         concentration_field: Plume model for odor concentration
+        wind_field: Wind model providing velocity vectors (optional)
 
     Attributes:
         action_space: From action_processor.action_space
@@ -100,6 +106,7 @@ class ComponentBasedEnvironment(gym.Env):
         observation_model: ObservationModel,
         reward_function: RewardFunction,
         concentration_field: ConcentrationField,
+        wind_field: Optional[VectorField] = None,
         grid_size: GridSize,
         max_steps: int = 1000,
         goal_location: Coordinates,
@@ -117,6 +124,7 @@ class ComponentBasedEnvironment(gym.Env):
             observation_model: Component for observation generation
             reward_function: Component for reward calculation
             concentration_field: Plume model for odor
+            wind_field: Wind model providing velocity vectors (optional)
             grid_size: Spatial bounds (width, height)
             max_steps: Episode step limit
             goal_location: Target position
@@ -152,6 +160,7 @@ class ComponentBasedEnvironment(gym.Env):
         self._observation_model = observation_model
         self._reward_function = reward_function
         self._concentration_field = concentration_field
+        self._wind_field = wind_field
 
         # Gymnasium spaces from components
         # Contract: environment_state_machine.md - C5, C6
@@ -290,6 +299,14 @@ class ComponentBasedEnvironment(gym.Env):
             adv = getattr(self._concentration_field, "advance_to_step", None)
             if callable(adv):
                 adv(self._step_count)
+        except Exception:
+            # Defensive: optional dynamic hook
+            pass
+
+        try:
+            wind_adv = getattr(self._wind_field, "advance_to_step", None)
+            if callable(wind_adv):
+                wind_adv(self._step_count)
         except Exception:
             # Defensive: optional dynamic hook
             pass
@@ -450,9 +467,18 @@ class ComponentBasedEnvironment(gym.Env):
                 pass
 
     def _reset_concentration_dynamic_state(self) -> None:
-        """Allow concentration field to reset any dynamic state."""
+        """Allow concentration and wind fields to reset any dynamic state."""
         try:
             on_reset = getattr(self._concentration_field, "on_reset", None)
+            if callable(on_reset):
+                on_reset()
+        except Exception:
+            # Defensive: dynamic hooks are optional
+            pass
+
+        try:
+            wind_reset = getattr(self, "_wind_field", None)
+            on_reset = getattr(wind_reset, "on_reset", None)
             if callable(on_reset):
                 on_reset()
         except Exception:
@@ -585,10 +611,12 @@ class ComponentBasedEnvironment(gym.Env):
             "agent_state": state,
             "plume_field": self._concentration_field.field_array,  # Numpy array for ObservationModel
             "concentration_field": self._concentration_field,  # Full object (if needed)
+            "wind_field": self._wind_field,
             "goal_location": self.goal_location,
             "grid_size": self.grid_size,
             "step_count": self._step_count,
             "max_steps": self.max_steps,
+            "rng": getattr(self, "_rng", None),
         }
 
     def _check_goal_reached(self, position: Coordinates) -> bool:

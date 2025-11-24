@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from ..core.state import AgentState
     from ..plume.concentration_field import ConcentrationField
+    from .action import ActionType
 
 
 @runtime_checkable
@@ -28,7 +29,8 @@ class RewardFunction(Protocol):
         3. Finiteness: Result is always finite (not NaN, not inf)
 
     Type Signature:
-        RewardFunction: (AgentState, Action, AgentState, ConcentrationField) → ℝ
+        RewardFunction: (AgentState, ActionType, AgentState, ConcentrationField) → ℝ
+        where ActionType matches ActionProcessor.ActionType (Discrete int or Box vector)
 
     All implementations must satisfy:
         - Deterministic (same inputs → same output)
@@ -40,7 +42,7 @@ class RewardFunction(Protocol):
     def compute_reward(
         self,
         prev_state: "AgentState",
-        action: int,
+        action: "ActionType",
         next_state: "AgentState",
         plume_field: "ConcentrationField",
     ) -> float:
@@ -48,7 +50,7 @@ class RewardFunction(Protocol):
 
         Args:
             prev_state: AgentState before action
-            action: Action taken (integer from action space)
+            action: Action taken (discrete int or continuous vector from action space)
             next_state: AgentState after action
             plume_field: ConcentrationField for context
 

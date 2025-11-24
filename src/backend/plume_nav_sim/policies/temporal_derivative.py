@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import gymnasium as gym
 import numpy as np
 
 from ..actions.oriented_grid import OrientedGridActions
 from ..interfaces import Policy
+from ._concentration_extractor import extract_concentration
 
 
 @dataclass
@@ -18,6 +19,12 @@ class TemporalDerivativePolicy(Policy):
     - Surges FORWARD on non-decreasing concentration (dC >= eps)
     - Otherwise casts by turning; enforces a FORWARD probe right after any TURN
     - Adds epsilon-greedy exploration for RL preparation
+
+    Observation handling:
+    - Expects a scalar concentration value; will raise a descriptive error if
+      given multi-sensor arrays unless ``sensor_index`` is provided.
+    - For dict/tuple observations, use ``concentration_key``/``modality_index`` to
+      locate the concentration modality.
     """
 
     eps: float = 0.05  # exploration rate
@@ -33,6 +40,10 @@ class TemporalDerivativePolicy(Policy):
     # rather than only turning. This models bacterial-like random tumbles that
     # can include a forward step even without improvement.
     uniform_random_on_non_increase: bool = False
+    # Optional adapters for multi-modal observations
+    concentration_key: Optional[str] = None  # key to pull concentration from dict obs
+    modality_index: int = 0  # index when observation is a tuple/list of modalities
+    sensor_index: Optional[int] = None  # index when observation is a 1D vector >1
 
     def __post_init__(self) -> None:
         self._rng = np.random.default_rng(self.eps_seed)
@@ -51,8 +62,14 @@ class TemporalDerivativePolicy(Policy):
         self._last_c = None
         self._last_action = None
 
-    def select_action(self, observation: np.ndarray, *, explore: bool = True) -> int:
-        c = float(observation[0])
+    def select_action(self, observation: Any, *, explore: bool = True) -> int:
+        c = extract_concentration(
+            observation,
+            policy_name=self.__class__.__name__,
+            concentration_key=self.concentration_key,
+            modality_index=self.modality_index,
+            sensor_index=self.sensor_index,
+        )
 
         # Initialize reference on first call
         if self._last_c is None:

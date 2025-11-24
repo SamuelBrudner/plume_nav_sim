@@ -13,11 +13,12 @@ Example:
 
 import numpy as np
 
-from ..actions import DiscreteGridActions, OrientedGridActions
+from ..actions import DiscreteGridActions, OrientedGridActions, OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..envs import ComponentBasedEnvironment
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.concentration_field import ConcentrationField
+from ..plume.wind_field import ConstantWindField
 from ..rewards import SparseGoalReward, StepPenaltyReward
 from .component_configs import (
     ActionConfig,
@@ -25,6 +26,7 @@ from .component_configs import (
     ObservationConfig,
     PlumeConfig,
     RewardConfig,
+    WindConfig,
 )
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
     "create_observation_model",
     "create_reward_function",
     "create_concentration_field",
+    "create_wind_field",
     "create_environment_from_config",
 ]
 
@@ -43,7 +46,7 @@ def create_action_processor(config: ActionConfig):
         config: ActionConfig with type and parameters
 
     Returns:
-        ActionProcessor instance (DiscreteGridActions or OrientedGridActions)
+        ActionProcessor instance (DiscreteGridActions, OrientedGridActions, or OrientedRunTumbleActions)
 
     Raises:
         ValueError: If config.type is invalid
@@ -56,9 +59,11 @@ def create_action_processor(config: ActionConfig):
         return DiscreteGridActions(step_size=config.step_size)
     elif config.type == "oriented":
         return OrientedGridActions(step_size=config.step_size)
+    elif config.type == "run_tumble":
+        return OrientedRunTumbleActions(step_size=config.step_size)
     else:
         raise ValueError(
-            f"Invalid action type: {config.type}. Must be 'discrete' or 'oriented'."
+            f"Invalid action type: {config.type}. Must be 'discrete', 'oriented', or 'run_tumble'."
         )
 
 
@@ -173,6 +178,31 @@ def create_concentration_field(
     return field
 
 
+def create_wind_field(config: WindConfig | None):
+    """Create wind field from configuration.
+
+    Args:
+        config: Optional WindConfig. If None, wind is disabled.
+
+    Returns:
+        ConstantWindField instance or None if no wind configured.
+    """
+
+    if config is None:
+        return None
+
+    if config.type != "constant":
+        raise ValueError(
+            f"Invalid wind type: {config.type}. Only 'constant' is supported."
+        )
+
+    return ConstantWindField(
+        direction_deg=config.direction_deg,
+        speed=config.speed,
+        vector=config.vector,
+    )
+
+
 def create_environment_from_config(
     config: EnvironmentConfig,
 ) -> ComponentBasedEnvironment:
@@ -219,6 +249,7 @@ def create_environment_from_config(
     concentration_field = create_concentration_field(
         config.plume, grid_size, goal_location
     )
+    wind_field = create_wind_field(config.wind)
 
     # Assemble environment
     return ComponentBasedEnvironment(
@@ -226,6 +257,7 @@ def create_environment_from_config(
         observation_model=observation_model,
         reward_function=reward_function,
         concentration_field=concentration_field,
+        wind_field=wind_field,
         grid_size=grid_size,
         max_steps=config.max_steps,
         goal_location=goal_location,

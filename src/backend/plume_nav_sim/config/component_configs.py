@@ -21,6 +21,7 @@ __all__ = [
     "ObservationConfig",
     "RewardConfig",
     "PlumeConfig",
+    "WindConfig",
     "EnvironmentConfig",
 ]
 
@@ -29,26 +30,25 @@ class ActionConfig(BaseModel):
     """Configuration for action processors.
 
     Attributes:
-        type: Action processor type ('discrete' or 'oriented')
+        type: Action processor type ('discrete', 'oriented', or 'run_tumble')
         step_size: Movement step size in grid cells (default: 1)
-        parameters: Additional processor-specific parameters
 
     Example:
         >>> config = ActionConfig(type="discrete", step_size=2)
         >>> config = ActionConfig(type="oriented", step_size=1)
+        >>> config = ActionConfig(type="run_tumble", step_size=1)
     """
 
-    type: Literal["discrete", "oriented"] = Field(
+    type: Literal["discrete", "oriented", "run_tumble"] = Field(
         default="discrete",
-        description="Action processor type: 'discrete' (4-dir) or 'oriented' (3-action)",
+        description=(
+            "Action processor type: 'discrete' (4-dir), 'oriented' (3-action), "
+            "or 'run_tumble' (2-action)."
+        ),
     )
     step_size: int = Field(
         default=1, ge=1, description="Movement step size in grid cells"
     )
-    parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional processor-specific parameters"
-    )
-
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
@@ -108,6 +108,43 @@ class ObservationConfig(BaseModel):
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
 
+class WindConfig(BaseModel):
+    """Configuration for wind models.
+
+    Attributes:
+        type: Wind model type ('constant' only for now)
+        direction_deg: Wind direction in degrees (0°=East, 90°=North)
+        speed: Wind speed magnitude
+        vector: Optional explicit vector override (vx, vy)
+    """
+
+    type: Literal["constant"] = Field(
+        default="constant", description="Wind model type (constant vector)"
+    )
+    direction_deg: float = Field(
+        default=0.0, description="Wind direction in degrees (0°=East, 90°=North)"
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Wind speed magnitude; ignored if vector provided",
+    )
+    vector: Optional[tuple[float, float]] = Field(
+        default=None, description="Optional explicit wind vector (vx, vy)"
+    )
+
+    @field_validator("vector")
+    @classmethod
+    def validate_vector(cls, v):
+        if v is None:
+            return v
+        if len(v) != 2:
+            raise ValueError("vector must have length 2 (vx, vy)")
+        return v
+
+    model_config = ConfigDict(validate_assignment=True, extra="forbid")
+
+
 class RewardConfig(BaseModel):
     """Configuration for reward functions.
 
@@ -120,9 +157,10 @@ class RewardConfig(BaseModel):
     Example:
         >>> config = RewardConfig(type="sparse", goal_radius=5.0)
         >>> config = RewardConfig(
-        ...     type="dense",
+        ...     type="step_penalty",
         ...     goal_radius=5.0,
-        ...     distance_weight=0.1
+        ...     goal_reward=1.0,
+        ...     step_penalty=0.01
         ... )
     """
 
@@ -153,7 +191,7 @@ class PlumeConfig(BaseModel):
         sigma: Gaussian dispersion parameter (standard deviation)
         normalize: Whether to normalize field values to [0, 1]
         enable_caching: Whether to enable field value caching
-        parameters: Additional plume-specific parameters
+        parameters: Deprecated placeholder for plume-specific parameters
 
     Example:
         >>> config = PlumeConfig(sigma=20.0, normalize=True)
@@ -169,8 +207,18 @@ class PlumeConfig(BaseModel):
         default=True, description="Enable concentration field caching"
     )
     parameters: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional plume-specific parameters"
+        default_factory=dict,
+        description="Deprecated; no custom plume parameters are currently supported",
     )
+
+    @field_validator("parameters")
+    @classmethod
+    def _reject_plume_parameters(cls, v):
+        if v:
+            raise ValueError(
+                "PlumeConfig.parameters is deprecated; no parameters are used"
+            )
+        return v
 
     model_config = ConfigDict(validate_assignment=True, extra="forbid")
 
@@ -191,6 +239,7 @@ class EnvironmentConfig(BaseModel):
         observation: Observation model configuration
         reward: Reward function configuration
         plume: Plume field configuration
+        wind: Optional wind model configuration
 
     Example:
         >>> config = EnvironmentConfig(
@@ -231,6 +280,9 @@ class EnvironmentConfig(BaseModel):
     plume: PlumeConfig = Field(
         default_factory=PlumeConfig, description="Plume field configuration"
     )
+    wind: Optional[WindConfig] = Field(
+        default=None, description="Wind model configuration (None disables wind)"
+    )
 
     @field_validator("grid_size")
     @classmethod
@@ -265,6 +317,7 @@ class EnvironmentConfig(BaseModel):
                 "observation": {"type": "concentration"},
                 "reward": {"type": "sparse", "goal_radius": 5.0},
                 "plume": {"sigma": 20.0, "normalize": True},
+                "wind": {"type": "constant", "direction_deg": 0.0, "speed": 1.0},
             }
         },
     )

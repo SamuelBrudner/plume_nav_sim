@@ -49,7 +49,7 @@ def create_component_environment(  # noqa: C901
     start_location: Optional[Union[tuple[int, int], Coordinates]] = None,
     max_steps: int = 1000,
     goal_radius: float = 5.0,
-    action_type: Literal["discrete", "oriented"] = "discrete",
+    action_type: Literal["discrete", "oriented", "run_tumble"] = "discrete",
     observation_type: Literal[
         "concentration", "antennae", "wind_vector"
     ] = "concentration",
@@ -88,7 +88,7 @@ def create_component_environment(  # noqa: C901
         start_location: Initial agent position (default: grid center)
         max_steps: Episode step limit
         goal_radius: Success threshold distance
-        action_type: Action processor type ('discrete' or 'oriented')
+        action_type: Action processor type ('discrete', 'oriented', or 'run_tumble')
         observation_type: Observation model type ('concentration', 'antennae', or 'wind_vector')
         reward_type: Reward function type ('sparse' or 'step_penalty')
         plume_sigma: Gaussian plume dispersion parameter
@@ -150,7 +150,7 @@ def create_component_environment(  # noqa: C901
         action_processor = OrientedRunTumbleActions(step_size=step_size)
     else:
         raise ValueError(
-            f"Invalid action_type: {action_type}. Must be 'discrete' or 'oriented'."
+            f"Invalid action_type: {action_type}. Must be 'discrete', 'oriented', or 'run_tumble'."
         )
 
     # Create observation model

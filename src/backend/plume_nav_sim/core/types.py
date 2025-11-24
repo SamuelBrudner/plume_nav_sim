@@ -10,7 +10,7 @@ import numpy as np
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
-    NDArray = None  # type: ignore[assignment]
+    NDArray = np.ndarray  # type: ignore[assignment]
 
 from .constants import (
     DEFAULT_GOAL_RADIUS,
@@ -46,8 +46,10 @@ def _raise_validation_error(message: str, **kwargs: Any) -> None:
 CoordinateType = Union[Coordinates, Tuple[int, int], Sequence[int]]
 GridDimensions = Union[GridSize, Tuple[int, int], Sequence[int]]
 MovementVector = Tuple[int, int]
-ActionType = Union[Action, int]
-ObservationType = np.ndarray
+ActionType = Union[
+    Action, int, np.ndarray, NDArray[Any], Dict[str, Any], tuple[Any, ...]
+]
+ObservationType = Union[NDArray[np.floating], Dict[str, Any], tuple[Any, ...]]
 RewardType = float
 InfoType = Dict[str, Any]
 
