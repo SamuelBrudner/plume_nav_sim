@@ -16,6 +16,10 @@ REGISTRY_SCHEMA_VERSION = "1.0.0"
 DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "plume_nav_sim" / "data_zoo"
 
 
+class RegistryValidationError(ValueError):
+    """Raised when the registry contains invalid or incomplete entries."""
+
+
 @dataclass(frozen=True)
 class DatasetArtifact:
     """Source artifact details for a dataset entry."""
@@ -122,3 +126,59 @@ def describe_dataset(dataset_id: str) -> DatasetRegistryEntry:
     if dataset_id not in DATASET_REGISTRY:
         raise KeyError(f"Unknown dataset id: {dataset_id}")
     return DATASET_REGISTRY[dataset_id]
+
+
+def validate_registry(
+    registry: Optional[Dict[str, DatasetRegistryEntry]] = None,
+) -> None:
+    """Validate registry entries for completeness and internal consistency."""
+
+    entries = registry or DATASET_REGISTRY
+    if not isinstance(entries, dict):
+        raise RegistryValidationError("Registry must be a mapping of dataset entries")
+
+    for key, entry in entries.items():
+        if not isinstance(entry, DatasetRegistryEntry):
+            raise RegistryValidationError(
+                f"Registry entry for '{key}' is not a DatasetRegistryEntry"
+            )
+        if not entry.dataset_id or key != entry.dataset_id:
+            raise RegistryValidationError(
+                f"Registry key '{key}' must match entry dataset_id '{entry.dataset_id}'"
+            )
+        if not entry.version:
+            raise RegistryValidationError(f"Dataset '{key}' is missing a version")
+        if not entry.cache_subdir:
+            raise RegistryValidationError(f"Dataset '{key}' is missing cache_subdir")
+        if not entry.expected_root:
+            raise RegistryValidationError(f"Dataset '{key}' is missing expected_root")
+
+        artifact = entry.artifact
+        if not artifact.url:
+            raise RegistryValidationError(f"Dataset '{key}' is missing artifact.url")
+        if not artifact.checksum:
+            raise RegistryValidationError(
+                f"Dataset '{key}' is missing artifact.checksum"
+            )
+        if not artifact.archive_type:
+            raise RegistryValidationError(
+                f"Dataset '{key}' is missing artifact.archive_type"
+            )
+        if not artifact.layout:
+            raise RegistryValidationError(f"Dataset '{key}' is missing artifact.layout")
+
+        metadata = entry.metadata
+        if not metadata.title.strip():
+            raise RegistryValidationError(f"Dataset '{key}' is missing metadata.title")
+        if not metadata.description.strip():
+            raise RegistryValidationError(
+                f"Dataset '{key}' is missing metadata.description"
+            )
+        if not metadata.citation.strip():
+            raise RegistryValidationError(
+                f"Dataset '{key}' is missing metadata.citation"
+            )
+        if not metadata.license.strip():
+            raise RegistryValidationError(
+                f"Dataset '{key}' is missing metadata.license"
+            )

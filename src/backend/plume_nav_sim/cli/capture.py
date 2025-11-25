@@ -302,10 +302,14 @@ def _env_from_cfg(
 # TODO Rename this here and in `_env_from_cfg`
 def _extracted_from__env_from_cfg_11(cfg, make_kwargs):
     movie_cfg = cfg.get("movie", {})
+    movie_dataset_id = movie_cfg.get("dataset_id")
     make_kwargs.update(
         {
             "plume": "movie",
             "movie_path": movie_cfg.get("path"),
+            "movie_dataset_id": movie_dataset_id,
+            "movie_auto_download": bool(movie_cfg.get("auto_download", False)),
+            "movie_cache_root": movie_cfg.get("cache_root"),
             "movie_fps": movie_cfg.get("fps"),
             "movie_pixel_to_grid": (
                 tuple(movie_cfg.get("pixel_to_grid"))
@@ -400,7 +404,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             config_path=args.config_path,
             overrides=overrides,
         )
-        env, w, h = _env_from_cfg(cfg, action_type_override=args.action_type)
+        try:
+            env, w, h = _env_from_cfg(cfg, action_type_override=args.action_type)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         # Ensure flag detection works when invoked via `python -m` (argv is None)
         from sys import argv as sys_argv
 

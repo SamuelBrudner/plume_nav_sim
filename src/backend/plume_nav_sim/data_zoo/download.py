@@ -11,12 +11,13 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
+import sys
 import tarfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from .registry import (
     DATASET_REGISTRY,
@@ -58,6 +59,7 @@ def ensure_dataset_available(
     auto_download: bool = False,
     force_download: bool = False,
     verify_checksum: bool = True,
+    confirm_download: Optional[Callable[[DatasetRegistryEntry], bool]] = None,
 ) -> Path:
     """Ensure a dataset is present locally and return the resolved path.
 
@@ -66,11 +68,14 @@ def ensure_dataset_available(
         cache_root: Base cache directory for artifacts and unpacked data.
         auto_download: When True, download the artifact if it is missing or the
             existing checksum fails validation. When False, raises if download is
-            required.
+            required unless the caller confirms via confirm_download.
         force_download: When True, re-download and re-unpack even if the cache
             appears valid.
         verify_checksum: When True, validate the downloaded artifact against the
             registry checksum before unpacking.
+        confirm_download: Optional callable that returns True when the user
+            approves a download. If omitted, an interactive prompt is used when
+            auto_download is False and a download is required in a TTY context.
 
     Returns:
         Path to the unpacked dataset root (e.g., Zarr store directory or HDF5
@@ -89,22 +94,44 @@ def ensure_dataset_available(
 
     # Fast path: already unpacked and checksum (if available) is trusted
     if expected_path.exists() and not force_download:
+        _validate_layout(expected_path, entry)
         if verify_checksum and artifact_path.exists():
-            _verify_checksum(artifact_path, entry)
-        return expected_path
+            try:
+                _verify_checksum(artifact_path, entry)
+                return expected_path
+            except ChecksumMismatchError:
+                if not auto_download:
+                    raise
+                LOG.warning(
+                    "Checksum mismatch for cached %s; purging cache and re-downloading",
+                    dataset_id,
+                )
+                _purge_cached(artifact_path, expected_path, cache_dir)
+        else:
+            if verify_checksum and not artifact_path.exists():
+                LOG.info(
+                    "Skipping checksum verification for %s; cached data present but "
+                    "artifact %s is missing",
+                    dataset_id,
+                    artifact_path,
+                )
+            return expected_path
 
     if not artifact_path.exists() and not auto_download:
-        raise DatasetDownloadError(
-            f"Dataset '{dataset_id}' missing from cache; set auto_download=True "
-            "to fetch from registry."
+        should_download = (
+            confirm_download(entry)
+            if confirm_download is not None
+            else _default_confirm_download(entry)
         )
+        if not should_download:
+            raise DatasetDownloadError(
+                f"Dataset '{dataset_id}' missing from cache; set auto_download=True "
+                "or approve the download to fetch from registry."
+            )
+        LOG.info("User approved download for %s", dataset_id)
 
-    if auto_download:
+    if auto_download or not artifact_path.exists():
         _download_artifact(entry, artifact_path)
-    elif not artifact_path.exists():
-        raise DatasetDownloadError(
-            f"Dataset '{dataset_id}' artifact not found at {artifact_path}"  # pragma: no cover - guarded above
-        )
 
     if verify_checksum:
         _verify_checksum(artifact_path, entry)
@@ -245,6 +272,28 @@ def _purge_cached(artifact_path: Path, expected_path: Path, cache_dir: Path) -> 
         else:
             expected_path.unlink()
     cache_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _default_confirm_download(entry: DatasetRegistryEntry) -> bool:
+    """Default confirmation handler that prompts when interactive."""
+
+    if not sys.stdin.isatty():
+        LOG.info(
+            "Cannot prompt for download of %s in non-interactive context",
+            entry.dataset_id,
+        )
+        return False
+
+    prompt = (
+        f"Dataset '{entry.dataset_id}' ({entry.metadata.title}) is not cached.\n"
+        f"Download from {entry.artifact.url} into {entry.cache_subdir}/{entry.version}? [y/N]: "
+    )
+    try:
+        answer = input(prompt)
+    except EOFError:
+        return False
+
+    return answer.strip().lower() in {"y", "yes"}
 
 
 __all__ = [

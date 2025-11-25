@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 def _ensure_src_on_path() -> None:
@@ -250,3 +251,62 @@ def test_simulation_spec_movie_plume_round_trip(tmp_path, monkeypatch):
     width = getattr(gs, "width", None) or int(gs[0])
     height = getattr(gs, "height", None) or int(gs[1])
     assert (width, height) == (40, 24)
+
+
+def test_resolve_movie_dataset_prefers_local_override(monkeypatch, tmp_path):
+    override = tmp_path / "local_override.zarr"
+    override.mkdir()
+
+    download_calls = {"count": 0}
+
+    def fake_ensure_dataset_available(*args, **kwargs):
+        download_calls["count"] += 1
+        return tmp_path / "registry" / "downloaded"
+
+    monkeypatch.setattr(
+        env_factory, "ensure_dataset_available", fake_ensure_dataset_available
+    )
+
+    resolved = env_factory._resolve_movie_dataset(
+        movie_path=str(override),
+        movie_dataset_id="registry_id",
+        movie_auto_download=False,
+        movie_cache_root=None,
+        movie_fps=None,
+        movie_pixel_to_grid=None,
+        movie_origin=None,
+        movie_extent=None,
+        movie_h5_dataset=None,
+    )
+
+    assert resolved == override
+    assert download_calls["count"] == 0
+
+
+def test_resolve_movie_dataset_unknown_id_has_clear_error(monkeypatch):
+    def fake_ensure_dataset_available(*args, **kwargs):
+        raise KeyError("missing")
+
+    monkeypatch.setattr(
+        env_factory, "ensure_dataset_available", fake_ensure_dataset_available
+    )
+    monkeypatch.setattr(
+        env_factory, "get_dataset_registry", lambda: {"known_dataset": object()}
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        env_factory._resolve_movie_dataset(
+            movie_path=None,
+            movie_dataset_id="missing_id",
+            movie_auto_download=False,
+            movie_cache_root=None,
+            movie_fps=None,
+            movie_pixel_to_grid=None,
+            movie_origin=None,
+            movie_extent=None,
+            movie_h5_dataset=None,
+        )
+
+    msg = str(excinfo.value)
+    assert "missing_id" in msg
+    assert "known_dataset" in msg

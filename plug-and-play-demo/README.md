@@ -33,6 +33,7 @@ Quick start (how to run)
   - With custom policy: `python plug-and-play-demo/main.py --policy-spec my_pkg.mod:MyPolicy`
   - Save frames: `python plug-and-play-demo/main.py --save-gif out.gif`
   - Run the bundled movie plume: `python plug-and-play-demo/main.py --plume movie`
+    - Registry-backed dataset: `--movie-dataset-id colorado_jet_v1 [--movie-auto-download] [--movie-cache-root <path>]`
     - Override dataset path: `--movie-path plug-and-play-demo/assets/gaussian_plume_demo.zarr`
     - Optional playback controls: `--movie-fps 60`, `--movie-step-policy wrap|clamp`
   - Config-based DI via `SimulationSpec` (JSON/TOML/YAML):
@@ -111,6 +112,7 @@ Plume types (static vs movie)
     - Defaults to the bundled dataset: `plug-and-play-demo/assets/gaussian_plume_demo.zarr`.
     - Options:
       - `--movie-path <path>` – target a specific dataset
+      - `--movie-dataset-id <id>` – fetch a curated registry dataset (use `--movie-auto-download` to pull if missing; `--movie-cache-root` to override cache location)
       - `--movie-fps <float>` – override frames‑per‑second metadata for playback
       - `--movie-step-policy wrap|clamp` – control how time advances at the end of the clip
     - Grid size is inferred from the dataset; if the dataset is missing, see "Bundled media assets" above for regeneration steps.

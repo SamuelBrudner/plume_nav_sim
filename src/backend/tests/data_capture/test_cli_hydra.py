@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from plume_nav_sim.cli.capture import (
+    _env_from_cfg,
     _load_hydra_config,
     _manual_compose_for_data_capture,
 )
@@ -110,6 +111,43 @@ def test_hydra_cli_malformed_grid_fails(tmp_path: Path):
     ]
     with pytest.raises(SystemExit):
         _ = capture_main(bad_argv)
+
+
+def test_env_from_cfg_wires_dataset_registry(monkeypatch, tmp_path: Path):
+    import plume_nav_sim as pns
+
+    captured: dict[str, object] = {}
+
+    class DummyEnv:
+        def __init__(self) -> None:
+            self.grid_size = (12, 10)
+
+    monkeypatch.setattr(
+        pns, "make_env", lambda **kwargs: captured.update(kwargs) or DummyEnv()
+    )
+
+    cfg = {
+        "env": {
+            "plume": "movie",
+        },
+        "movie": {
+            "dataset_id": "colorado_jet_v1",
+            "auto_download": True,
+            "cache_root": str(tmp_path / "cache"),
+            "path": str(tmp_path / "override.zarr"),
+            "fps": 9.5,
+        },
+    }
+
+    env, w, h = _env_from_cfg(cfg, action_type_override=None)
+
+    assert isinstance(env, DummyEnv)
+    assert (w, h) == (12, 10)
+    assert captured.get("movie_dataset_id") == "colorado_jet_v1"
+    assert captured.get("movie_auto_download") is True
+    assert captured.get("movie_cache_root") == str(tmp_path / "cache")
+    assert captured.get("movie_path") == str(tmp_path / "override.zarr")
+    assert captured.get("movie_fps") == 9.5
 
 
 def test_manual_compose_matches_hydra(tmp_path: Path):

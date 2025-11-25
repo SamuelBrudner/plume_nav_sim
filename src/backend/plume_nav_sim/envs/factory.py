@@ -31,7 +31,11 @@ import numpy as np
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
-from ..data_zoo import DEFAULT_CACHE_ROOT, ensure_dataset_available
+from ..data_zoo import (
+    DEFAULT_CACHE_ROOT,
+    ensure_dataset_available,
+    get_dataset_registry,
+)
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.concentration_field import ConcentrationField
 from ..plume.movie_field import MovieConfig, MoviePlumeField, resolve_movie_dataset_path
@@ -284,25 +288,34 @@ def _resolve_movie_dataset(
 ) -> Path:
     """Resolve dataset path via registry or direct path/ingest."""
 
+    # Explicit paths (including raw media) take precedence over registry ids so
+    # callers can override a curated dataset with a local copy.
+    if movie_path:
+        return resolve_movie_dataset_path(
+            movie_path,
+            fps=movie_fps,
+            pixel_to_grid=movie_pixel_to_grid,
+            origin=movie_origin,
+            extent=movie_extent,
+            movie_h5_dataset=movie_h5_dataset,
+        )
+
     if movie_dataset_id:
         cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
-        return ensure_dataset_available(
-            movie_dataset_id,
-            cache_root=cache_root,
-            auto_download=movie_auto_download,
-            verify_checksum=True,
-        )
+        try:
+            return ensure_dataset_available(
+                movie_dataset_id,
+                cache_root=cache_root,
+                auto_download=movie_auto_download,
+                verify_checksum=True,
+            )
+        except KeyError as exc:
+            known = sorted(get_dataset_registry().keys())
+            known_hint = f" Known ids: {', '.join(known)}." if known else ""
+            raise ValueError(
+                f"Unknown movie dataset id '{movie_dataset_id}'.{known_hint}"
+            ) from exc
 
-    if not movie_path:
-        raise ValueError(
-            "env.plume=movie requires movie.path when movie.dataset_id is not set"
-        )
-
-    return resolve_movie_dataset_path(
-        movie_path,
-        fps=movie_fps,
-        pixel_to_grid=movie_pixel_to_grid,
-        origin=movie_origin,
-        extent=movie_extent,
-        movie_h5_dataset=movie_h5_dataset,
+    raise ValueError(
+        "env.plume=movie requires movie.path or movie.dataset_id to be provided"
     )

@@ -33,12 +33,12 @@ The package targets researchers building agents that must localize a plume sourc
 
 - **Plume Semantics:** A clean separation between spatial domains, plume fields, and sensor models.
 - **Workflow Reproducibility:** Deterministic seeding, typed configuration, and validated data capture.
-- **Interactive Inspection:** A dedicated Qt-based debugger that allows researchers to step through simulations and inspect agent decisions and sensory inputs via a standardized, side-effect-free interface.
+- **Interactive Inspection:** A dedicated Qt-based debugger that allows researchers to step through simulations frame-by-frame. This tool is designed to be pluggable: users can visualize their own agent's internal state (e.g., belief maps, memory) alongside the ground-truth plume and sensor readings via a standardized, side-effect-free interface.
 - **Data-Driven Environments:** A schema-based architecture for loading external plume datasets (Zarr/xarray).
 
 ## Statement of need
 
-Chemical plume navigation is a canonical problem in computational ethology, behavioral neuroscience, and robotics [@vergassola2007infotaxis; @carde2008navigational; @reddy2016learning]. Existing Gymnasium-compatible navigation tasks—including classic gridworlds, Minigrid-style environments, and 3D point-goal benchmarks—are designed as general-purpose control problems. They cannot be used out of the box to simulate plume navigation. 
+Chemical plume navigation is a canonical problem in computational ethology, behavioral neuroscience, and robotics [@vergassola2007infotaxis; @carde2008navigational; @reddy2016learning]. Existing Gymnasium-compatible navigation tasks—including classic gridworlds, Minigrid-style environments, and 3D point-goal benchmarks—are designed as general-purpose control problems. They cannot be used out of the box to simulate plume navigation.
 
 Gymnasium’s gridworld families, such as Minigrid and its derivatives, provide rich goal-directed tasks but treat observations as symbolic grids or rendered images with no special semantics for scalar fields such as odor concentration. Furthermore, they do not define schemas for plugging in external datasets or for capturing experiment artifacts.
 
@@ -54,9 +54,9 @@ The current release of `plume-nav-sim` uses deliberately simple plume models: a 
 
 In contrast to general-purpose gridworld libraries such as Minigrid, where the environment state is typically a direct arrangement of symbolic tiles (walls, goals, doors), `plume-nav-sim` treats the odor field as a distinct, continuous-time or continuous-space entity that is projected onto the agent's sensors. Even when instantiated with simple plumes, the library provides:
 
-1.  **A first-class PlumeField abstraction** that decouples the underlying odor landscape (which may be continuous, high-resolution, or temporally evolving) from the agent's spatial grid.
-2.  **Sensor models** that query this field based on agent morphology (e.g., point vs. stereo antennae) rather than simply reading a grid cell value.
-3.  **A schema-validated data capture pipeline** that records trajectories, environment configuration, seeds, and plume dataset identifiers.
+1. **A first-class PlumeField abstraction** that decouples the underlying odor landscape (which may be continuous, high-resolution, or temporally evolving) from the agent's spatial grid.
+2. **Sensor models** that query this field based on agent morphology (e.g., point vs. stereo antennae) rather than simply reading a grid cell value.
+3. **A schema-validated data capture pipeline** that records trajectories, environment configuration, seeds, and plume dataset identifiers.
 
 This design ensures that the agent's interaction with the odor field remains consistent whether the underlying plume is a simple analytical function or a high-fidelity fluid dynamics simulation.
 

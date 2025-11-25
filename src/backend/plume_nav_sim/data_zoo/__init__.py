@@ -15,8 +15,10 @@ from .registry import (
     DatasetArtifact,
     DatasetMetadata,
     DatasetRegistryEntry,
+    RegistryValidationError,
     describe_dataset,
     get_dataset_registry,
+    validate_registry,
 )
 
 __all__ = [
@@ -26,10 +28,12 @@ __all__ = [
     "DatasetArtifact",
     "DatasetMetadata",
     "DatasetRegistryEntry",
+    "RegistryValidationError",
     "ChecksumMismatchError",
     "DatasetDownloadError",
     "LayoutValidationError",
     "ensure_dataset_available",
     "describe_dataset",
     "get_dataset_registry",
+    "validate_registry",
 ]
