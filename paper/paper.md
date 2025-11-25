@@ -27,7 +27,7 @@ tags:
 
 # Summary
 
-`plume-nav-sim` is a Gymnasium-compatible environment library designed to standardize the simulation of odor plume navigation. Unlike general-purpose gridworlds, it treats odor fields as first-class scientific objects, providing a rigorous interface between fluid dynamics data (analytical or empirical) and navigating agents, including reinforcement learning agents. The library is built around explicit abstractions for plume fields, sensor models, and experiment configuration, ensuring that every simulation run is reproducible and self-describing.
+`plume-nav-sim` is a Gymnasium-compatible environment library designed to standardize the simulation of odor plume navigation. It treats odor fields as first-class scientific objects, providing a rigorous interface between fluid dynamics data (analytical or empirical) and navigating agents. Beyond simulation, the library provides a pluggable, interactive inspection suite that allows researchers to visualize agent decisions and internal belief states alongside ground-truth physics, ensuring that complex behaviors can be debugged and validated frame-by-frame. The library is built around explicit abstractions for plume fields, sensor models, and experiment configuration, ensuring that every simulation run is reproducible and self-describing.
 
 The package targets researchers building agents that must localize a plume source using smell. It emphasizes:
 
