@@ -365,13 +365,68 @@ def _merge_args_from_cfg(
     )
 
 
+def _capture_env_config(
+    env: object, default_grid: tuple[int, int]
+) -> EnvironmentConfig:
+    """Extract the effective environment configuration for run metadata."""
+
+    def _pair(value: object) -> tuple[int, int] | None:
+        try:
+            first = getattr(value, "x", None)
+            second = getattr(value, "y", None)
+            if first is not None and second is not None:
+                return int(first), int(second)
+            if isinstance(value, (list, tuple)) and len(value) == 2:
+                return int(value[0]), int(value[1])
+        except Exception:
+            return None
+        return None
+
+    grid = _pair(getattr(env, "grid_size", None)) or default_grid
+    src = _pair(getattr(env, "source_location", None))
+    if src is None:
+        src = (grid[0] // 2, grid[1] // 2)
+
+    cfg_kwargs: dict[str, object] = {
+        "grid_size": grid,
+        "source_location": src,
+    }
+
+    max_steps = getattr(env, "max_steps", None)
+    if max_steps is not None:
+        try:
+            cfg_kwargs["max_steps"] = int(max_steps)
+        except Exception:
+            pass
+
+    goal_radius = getattr(env, "goal_radius", None)
+    if goal_radius is not None:
+        try:
+            cfg_kwargs["goal_radius"] = float(goal_radius)
+        except Exception:
+            pass
+
+    plume_params = getattr(env, "plume_params", None)
+    if plume_params is not None:
+        cfg_kwargs["plume_params"] = plume_params
+
+    render_mode = getattr(env, "render_mode", None)
+    enable_rendering = getattr(env, "enable_rendering", None)
+    if enable_rendering is not None:
+        cfg_kwargs["enable_rendering"] = bool(enable_rendering)
+    elif render_mode is not None:
+        cfg_kwargs["enable_rendering"] = True
+
+    return EnvironmentConfig(**cfg_kwargs)
+
+
 def _run_capture(
     env: object, w: int, h: int, *, args: argparse.Namespace, cfg_hash: Optional[str]
 ) -> None:
     rec = RunRecorder(
         args.output, experiment=args.experiment, rotate_size_bytes=args.rotate_size
     )
-    cfg = EnvironmentConfig(grid_size=(w, h), source_location=(w // 2, h // 2))
+    cfg = _capture_env_config(env, default_grid=(w, h))
     wrapped = DataCaptureWrapper(
         env, rec, cfg, meta_overrides={"config_hash": cfg_hash} if cfg_hash else None
     )

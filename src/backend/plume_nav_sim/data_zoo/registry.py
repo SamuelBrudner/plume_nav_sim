@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 # Schema and registry bookkeeping
 REGISTRY_SCHEMA_VERSION = "1.0.0"
@@ -54,6 +54,7 @@ class DatasetRegistryEntry:
     cache_subdir: str
     expected_root: str
     metadata: DatasetMetadata
+    ingest: Optional["H5ToZarrSpec"] = None
 
     def cache_path(self, cache_root: Path = DEFAULT_CACHE_ROOT) -> Path:
         """Return the canonical cache path for this dataset version."""
@@ -61,29 +62,61 @@ class DatasetRegistryEntry:
         return cache_root / self.cache_subdir / self.version
 
 
+@dataclass(frozen=True)
+class H5ToZarrSpec:
+    """Optional post-processing hook for HDF5 → Zarr ingestion."""
+
+    dataset: str
+    fps: float
+    pixel_to_grid: Tuple[float, float]
+    origin: Tuple[float, float]
+    extent: Tuple[float, float]
+    normalize: bool = True
+    chunk_t: Optional[int] = None
+    output_layout: str = "zarr"
+
+
 DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
     "colorado_jet_v1": DatasetRegistryEntry(
         dataset_id="colorado_jet_v1",
         version="1.0.0",
-        cache_subdir="colorado_jet",
-        expected_root="colorado_jet_v1.zarr",
+        cache_subdir="zenodo_6538177",
+        expected_root="a0004_nearbed_10cm_s.zarr",
         artifact=DatasetArtifact(
-            url="https://zenodo.org/record/1234567/files/colorado_jet_v1.zarr.zip",
-            checksum="4c1ba02f650b40d58c8d0edb2ed7c2f8b2e74c6a7a7c316a987f3ab5c2c7e428",
-            archive_type="zip",
-            layout="zarr",
+            url=(
+                "https://zenodo.org/records/6538177/files/"
+                "a0004_air_stationarySource_isokineticNearbedRelease_10cm_s.h5"
+            ),
+            checksum="0d712585798102e49b49fe9bcf41da33222fff1b889f4b772c038086eb171512",
+            archive_type="none",
+            layout="hdf5",
         ),
         metadata=DatasetMetadata(
-            title="Colorado wind-tunnel jet plume (baseline)",
+            title="CU Boulder PLIF odor plume (a0004 near-bed, 10 cm/s)",
             description=(
-                "Steady jet dispersion with laminar inflow boundary conditions, "
-                "128x128 spatial grid, 2000 time steps; emitted as a consolidated "
-                "Zarr store."
+                "150-frame acetone vapor plume measured via planar laser-induced "
+                "fluorescence (PLIF) at 15 FPS. Near-bed isokinetic release at "
+                "0.10 m/s with 406x216 px field of view (~300x160 mm), normalized "
+                "concentration values, and embedded experiment metadata."
             ),
-            citation="Doe et al. 2023, Journal of Field Robotics (supplemental plume dataset)",
-            doi="10.1234/zenodo.1234567",
+            citation=(
+                "Connor, E. G., McHugh, M. K., & Crimaldi, J. P. (2018). "
+                "Quantification of airborne odor plumes using planar laser-induced "
+                "fluorescence. Experiments in Fluids, 59(9), 137. "
+                "Data from Zenodo record 6538177."
+            ),
+            doi="10.5281/zenodo.6538177",
             license="CC-BY-4.0",
-            contact="data-curation@example.org",
+            contact="Prof. John Crimaldi <crimaldi@colorado.edu>",
+        ),
+        ingest=H5ToZarrSpec(
+            dataset="/Plume Data/dataset_001",
+            fps=15.0,
+            pixel_to_grid=(159.84 / 216.0, 300.44 / 406.0),
+            origin=(0.0, 0.0),
+            extent=(159.84, 300.44),
+            normalize=False,
+            chunk_t=50,
         ),
     ),
     "moffett_field_dispersion_v0": DatasetRegistryEntry(
@@ -182,3 +215,33 @@ def validate_registry(
             raise RegistryValidationError(
                 f"Dataset '{key}' is missing metadata.license"
             )
+
+        ingest = entry.ingest
+        if ingest:
+            if not ingest.dataset:
+                raise RegistryValidationError(
+                    f"Dataset '{key}' has an ingest spec but no source dataset path"
+                )
+            if ingest.fps <= 0:
+                raise RegistryValidationError(
+                    f"Dataset '{key}' ingest fps must be positive"
+                )
+            py, px = ingest.pixel_to_grid
+            if py <= 0 or px <= 0:
+                raise RegistryValidationError(
+                    f"Dataset '{key}' ingest pixel_to_grid entries must be positive"
+                )
+            ey, ex = ingest.extent
+            if ey <= 0 or ex <= 0:
+                raise RegistryValidationError(
+                    f"Dataset '{key}' ingest extent entries must be positive"
+                )
+            if not ingest.output_layout.strip():
+                raise RegistryValidationError(
+                    f"Dataset '{key}' ingest output_layout must be provided"
+                )
+            if ingest.output_layout.lower() not in {"zarr", "hdf5", "h5"}:
+                raise RegistryValidationError(
+                    f"Dataset '{key}' ingest output_layout '{ingest.output_layout}' "
+                    "is not supported"
+                )

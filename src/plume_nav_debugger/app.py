@@ -19,6 +19,7 @@ from plume_nav_debugger.main_window import (
     ObservationPanelWidget,
     PreferencesDialog,
 )
+from plume_nav_debugger.replay_driver import ReplayDriver
 
 __all__ = [
     "ActionPanelWidget",
@@ -29,6 +30,7 @@ __all__ = [
     "InspectorWidget",
     "MainWindow",
     "ObservationPanelWidget",
+    "ReplayDriver",
     "PreferencesDialog",
     "main",
 ]

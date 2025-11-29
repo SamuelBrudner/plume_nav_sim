@@ -16,6 +16,7 @@ from plume_nav_sim.data_zoo.registry import (
     DatasetArtifact,
     DatasetMetadata,
     DatasetRegistryEntry,
+    H5ToZarrSpec,
 )
 
 
@@ -342,3 +343,102 @@ def test_hdf5_layout_rejects_wrong_extension(
         ensure_dataset_available(
             entry.dataset_id, cache_root=cache_root, auto_download=True
         )
+
+
+def test_direct_file_downloads_without_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_root = tmp_path / "cache"
+    payload = tmp_path / "movie.h5"
+    payload.write_bytes(b"real h5 payload")
+    checksum = hashlib.sha256(payload.read_bytes()).hexdigest()
+
+    entry = DatasetRegistryEntry(
+        dataset_id="direct_h5",
+        version="0.0.1",
+        cache_subdir="direct",
+        expected_root="movie.h5",
+        artifact=DatasetArtifact(
+            url=payload.as_uri(),
+            checksum=checksum,
+            archive_type="none",
+            layout="hdf5",
+        ),
+        metadata=DatasetMetadata(
+            title="Direct file download",
+            description="No archive wrapper",
+            citation="N/A",
+            license="MIT",
+        ),
+    )
+    monkeypatch.setitem(DATASET_REGISTRY, entry.dataset_id, entry)
+
+    resolved = ensure_dataset_available(
+        entry.dataset_id, cache_root=cache_root, auto_download=True
+    )
+
+    assert (
+        resolved
+        == cache_root / entry.cache_subdir / entry.version / entry.expected_root
+    )
+    assert resolved.read_bytes() == payload.read_bytes()
+
+
+def test_ingest_spec_invokes_postprocessing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_root = tmp_path / "cache"
+    payload = tmp_path / "movie.h5"
+    payload.write_bytes(b"hdf5 bytes")
+    checksum = hashlib.sha256(payload.read_bytes()).hexdigest()
+
+    entry = DatasetRegistryEntry(
+        dataset_id="ingest_h5",
+        version="0.0.2",
+        cache_subdir="ingest",
+        expected_root="movie.zarr",
+        artifact=DatasetArtifact(
+            url=payload.as_uri(),
+            checksum=checksum,
+            archive_type="none",
+            layout="hdf5",
+        ),
+        metadata=DatasetMetadata(
+            title="Ingest example",
+            description="Checks ingest hook",
+            citation="N/A",
+            license="MIT",
+        ),
+        ingest=H5ToZarrSpec(
+            dataset="/Plume Data/dataset_001",
+            fps=10.0,
+            pixel_to_grid=(1.0, 1.0),
+            origin=(0.0, 0.0),
+            extent=(1.0, 1.0),
+            normalize=False,
+            chunk_t=None,
+        ),
+    )
+    monkeypatch.setitem(DATASET_REGISTRY, entry.dataset_id, entry)
+
+    calls: dict[str, tuple[H5ToZarrSpec, Path, Path]] = {}
+
+    def _fake_ingest(spec: H5ToZarrSpec, source: Path, output: Path) -> Path:
+        calls["args"] = (spec, source, output)
+        output.mkdir(parents=True, exist_ok=True)
+        (output / ".zattrs").write_text("{}", encoding="utf-8")
+        return output
+
+    monkeypatch.setattr(download_module, "_ingest_hdf5_to_zarr", _fake_ingest)
+
+    resolved = ensure_dataset_available(
+        entry.dataset_id, cache_root=cache_root, auto_download=True
+    )
+
+    assert (
+        resolved
+        == cache_root / entry.cache_subdir / entry.version / entry.expected_root
+    )
+    assert "args" in calls
+    assert calls["args"][1].name == "movie.h5"
+    assert (resolved / ".zattrs").exists()

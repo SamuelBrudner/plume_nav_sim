@@ -9,7 +9,9 @@ This package provides:
 Note: Logging (loguru) is intentionally orthogonal and not used for data writing.
 """
 
+from .loader import ReplayArtifacts, ReplayLoadError, load_replay_artifacts
 from .recorder import RunRecorder
+from .replay import ReplayConsistencyError, ReplayEngine, ReplayEnvFactory
 from .schemas import SCHEMA_VERSION, EpisodeRecord, RunMeta, StepRecord
 from .writer import JSONLGzWriter
 
@@ -20,4 +22,10 @@ __all__ = [
     "SCHEMA_VERSION",
     "JSONLGzWriter",
     "RunRecorder",
+    "ReplayArtifacts",
+    "ReplayLoadError",
+    "ReplayConsistencyError",
+    "ReplayEngine",
+    "ReplayEnvFactory",
+    "load_replay_artifacts",
 ]

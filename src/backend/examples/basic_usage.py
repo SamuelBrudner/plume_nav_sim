@@ -15,10 +15,10 @@ import logging  # >=3.10 - Example logging setup and operation tracking for educ
 import sys  # >=3.10 - System interface for exit handling and error status reporting in example scripts
 import time  # >=3.10 - Performance timing measurements and demonstration of step latency monitoring
 
-import numpy as np  # >=2.1.0 - Array operations and random number generation for action selection and data analysis
-
 # External imports with version comments
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for gym.make() calls and standard RL API usage
+import numpy as np  # >=2.1.0 - Array operations and random number generation for action selection and data analysis
+
 from plume_nav_sim.core.enums import (  # Action enumeration for demonstrating discrete action space usage and movement directions
     Action,
 )

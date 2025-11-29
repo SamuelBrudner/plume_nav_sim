@@ -46,6 +46,36 @@ print(info["agent_xy"])  # starting position
 - **Wind sensing (optional)**: request `observation_type="wind_vector"` and either set `enable_wind=True` or pass `wind_direction_deg`/`wind_speed`/`wind_vector`; omit to keep odor-only behavior unchanged.
 - **See also**: `src/backend/examples/quickstart.py` (writes `quickstart.gif` by default)
 
+### Data zoo (registry-backed movie plumes)
+
+- Curated datasets:
+  - `colorado_jet_v1` v1.0.0 → Zenodo 6538177 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids, DOI 10.5281/zenodo.6538177).
+  - `moffett_field_dispersion_v0` v0.9.0 → open-air dispersion subset (`moffett_field_dispersion.h5`), license `CC-BY-NC-4.0`, cite “Acme Environmental Lab 2022, Internal field release report.”
+- Cache root defaults to `~/.cache/plume_nav_sim/data_zoo/<cache_subdir>/<version>/<expected_root>`; override with `movie_cache_root` or CLI `--movie-cache-root`.
+- Config usage (registry resolves path and verifies checksum):
+
+  ```python
+  from plume_nav_sim.compose import SimulationSpec, prepare
+
+  sim = SimulationSpec(
+      plume="movie",
+      movie_dataset_id="colorado_jet_v1",
+      movie_auto_download=True,
+  )
+  env, _ = prepare(sim)
+  ```
+
+- CLI usage (plug-and-play demo):
+
+  ```bash
+  python plug-and-play-demo/main.py \
+    --plume movie \
+    --movie-dataset-id colorado_jet_v1 \
+    --movie-auto-download
+  ```
+
+- Attribution and new-entry workflow (checksums, ingest specs) are documented in `src/backend/docs/plume_types.md`.
+
 ## 3. Progressive Customization
 
 | Stage | Goal | Example |
@@ -141,6 +171,14 @@ Inspector (information-only):
     - No side effects: the inspector never calls `select_action` and never influences the simulation.
   - Observation: shows observation shape and min/mean/max summary.
 - The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
+
+#### Replay captured runs
+
+- Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz` shards and/or `steps/episodes.parquet` alongside `episodes*.jsonl.gz`).
+- Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
+- Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
+- Headless regression coverage lives in `tests/debugger/test_replay_loader_engine.py` (gz/multipart/Parquet loader paths plus ReplayEngine reward/position/done parity and rendering). Qt-driven UI coverage remains in `tests/debugger/test_replay_driver.py` and skips when bindings are absent.
+- Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 
 Provider Plugins (ODC):
 

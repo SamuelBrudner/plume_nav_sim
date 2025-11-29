@@ -7,6 +7,7 @@ Gymnasium registry state to avoid Phase C runtime dependency issues.
 """
 
 import gymnasium as gym
+
 from plume_nav_sim.registration import ENV_ID, register_env, unregister_env
 
 

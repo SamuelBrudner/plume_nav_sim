@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run-20251127-014505",
+  "experiment": "replay_fixture",
+  "package_version": null,
+  "git_sha": null,
+  "start_time": "2025-11-27T01:45:05Z",
+  "env_config": {
+    "grid_size": [
+      8,
+      8
+    ],
+    "source_location": [
+      4,
+      4
+    ],
+    "max_steps": 3,
+    "goal_radius": 1.1920928955078125e-07,
+    "enable_rendering": true,
+    "plume_params": {
+      "source_location": [
+        4,
+        4
+      ],
+      "sigma": 12.0
+    }
+  },
+  "config_hash": null,
+  "base_seed": null,
+  "episode_seeds": null,
+  "system": {
+    "hostname": "MWPF4JYXQM.yu.yale.edu",
+    "platform": "macOS-15.3.1-arm64-arm-64bit",
+    "python_version": "3.10.19",
+    "pid": 99148,
+    "user": "samuelbrudner"
+  }
+}

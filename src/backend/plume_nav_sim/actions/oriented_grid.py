@@ -10,9 +10,9 @@ current heading direction, turns rotate the heading without moving.
 
 from typing import Any, Dict
 
+import gymnasium as gym
 import numpy as np
 
-import gymnasium as gym
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
 

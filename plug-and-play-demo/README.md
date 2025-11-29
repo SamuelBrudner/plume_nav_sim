@@ -33,7 +33,7 @@ Quick start (how to run)
   - With custom policy: `python plug-and-play-demo/main.py --policy-spec my_pkg.mod:MyPolicy`
   - Save frames: `python plug-and-play-demo/main.py --save-gif out.gif`
   - Run the bundled movie plume: `python plug-and-play-demo/main.py --plume movie`
-    - Registry-backed dataset: `--movie-dataset-id colorado_jet_v1 [--movie-auto-download] [--movie-cache-root <path>]`
+    - Registry-backed dataset: `--movie-dataset-id colorado_jet_v1 [--movie-auto-download] [--movie-cache-root <path>]` (Zenodo 6538177 near-bed PLIF plume, 150 frames @ 15 FPS)
     - Override dataset path: `--movie-path plug-and-play-demo/assets/gaussian_plume_demo.zarr`
     - Optional playback controls: `--movie-fps 60`, `--movie-step-policy wrap|clamp`
   - Config-based DI via `SimulationSpec` (JSON/TOML/YAML):

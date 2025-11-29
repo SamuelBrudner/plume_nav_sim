@@ -48,6 +48,7 @@ from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # System constants for environment configuration and performance validation
 )
 from plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION
+from plume_nav_sim.envs import EnvironmentState
 from plume_nav_sim.envs.base_env import (  # Base environment class for inheritance testing and abstract method validation
     BaseEnvironment,
 )
@@ -1109,18 +1110,43 @@ def test_step_method_functionality():
 
         try:
             test_env_short.reset()
+            assert (
+                getattr(test_env_short, "_core_env", None) is not None
+            ), "Core environment should be available for state validation"
+            core_env = test_env_short._core_env
+            assert (
+                getattr(core_env, "_state", None) == EnvironmentState.READY
+            ), "Environment should be READY after reset"
 
-            # Take enough steps to trigger truncation
+            terminated = False
+            truncated = False
+
+            # Take enough steps to trigger termination or truncation, then stop stepping
             for i in range(10):
                 obs, reward, terminated, truncated, info = test_env_short.step(0)
 
-                if truncated:
-                    assert i >= 4, "Truncation should occur after max_steps"
-                    assert info["step_count"] >= 5, "Step count should reach max_steps"
+                if terminated or truncated:
+                    assert core_env._state in (
+                        EnvironmentState.TERMINATED,
+                        EnvironmentState.TRUNCATED,
+                    ), "Environment should enter a terminal state before requiring reset"
+                    if truncated:
+                        assert i >= 4, "Truncation should occur after max_steps"
+                        assert (
+                            info["step_count"] >= 5
+                        ), "Step count should reach max_steps"
                     break
-            else:
-                # If no truncation occurred, that's also valid depending on implementation
-                pass
+            else:  # pragma: no cover - guard for unexpected state machine regressions
+                pytest.fail("Episode should terminate or truncate within 10 steps")
+
+            # Reset to return to READY before any further steps
+            test_env_short.reset()
+            assert core_env._state == EnvironmentState.READY
+
+            # Verify step works again after reset and counter restarts
+            obs, reward, terminated, truncated, info = test_env_short.step(0)
+            _validate_dict_observation(obs)
+            assert info["step_count"] == 1, "Step count should restart after reset"
         finally:
             test_env_short.close()
 

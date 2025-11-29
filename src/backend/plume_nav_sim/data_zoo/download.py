@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import shutil
 import sys
 import tarfile
@@ -23,6 +24,7 @@ from .registry import (
     DATASET_REGISTRY,
     DEFAULT_CACHE_ROOT,
     DatasetRegistryEntry,
+    H5ToZarrSpec,
     describe_dataset,
 )
 
@@ -50,6 +52,14 @@ class ChecksumMismatchError(DatasetDownloadError):
 
 class LayoutValidationError(DatasetDownloadError):
     """Raised when unpacked data does not match expected layout."""
+
+
+def _dataset_layout(entry: DatasetRegistryEntry) -> str:
+    """Return expected layout after any post-download processing."""
+
+    if entry.ingest:
+        return entry.ingest.output_layout
+    return entry.artifact.layout
 
 
 def ensure_dataset_available(
@@ -88,13 +98,21 @@ def ensure_dataset_available(
 
     expected_path = cache_dir / entry.expected_root
     artifact_path = cache_dir / _artifact_filename(entry)
+    layout = _dataset_layout(entry)
 
     if force_download:
         _purge_cached(artifact_path, expected_path, cache_dir)
+        if entry.ingest and entry.artifact.archive_member:
+            stale_source = cache_dir / entry.artifact.archive_member
+            if stale_source.exists():
+                if stale_source.is_dir():
+                    shutil.rmtree(stale_source)
+                else:
+                    stale_source.unlink()
 
     # Fast path: already unpacked and checksum (if available) is trusted
     if expected_path.exists() and not force_download:
-        _validate_layout(expected_path, entry)
+        _validate_layout(expected_path, layout)
         if verify_checksum and artifact_path.exists():
             try:
                 _verify_checksum(artifact_path, entry)
@@ -136,9 +154,59 @@ def ensure_dataset_available(
     if verify_checksum:
         _verify_checksum(artifact_path, entry)
 
-    target_path = _unpack_artifact(entry, artifact_path, cache_dir)
-    _validate_layout(target_path, entry)
-    return target_path
+    source_path = _unpack_artifact(
+        entry,
+        artifact_path,
+        cache_dir,
+        _ingest_source_target(entry, cache_dir, artifact_path, expected_path),
+    )
+    final_path = _maybe_run_ingest(entry, source_path, expected_path)
+    _validate_layout(final_path, layout)
+    return final_path
+
+
+def _ingest_source_target(
+    entry: DatasetRegistryEntry,
+    cache_dir: Path,
+    artifact_path: Path,
+    expected_path: Path,
+) -> Path:
+    """Determine where the unpacked artifact should live before ingest."""
+
+    if entry.ingest is None:
+        return expected_path
+
+    archive_type = entry.artifact.archive_type.lower()
+    if archive_type in ("none", "file", "raw"):
+        return artifact_path
+    if entry.artifact.archive_member:
+        return cache_dir / entry.artifact.archive_member
+    raise DatasetDownloadError(
+        f"Dataset '{entry.dataset_id}' requires an archive_member to ingest "
+        f"{entry.artifact.archive_type} payloads"
+    )
+
+
+def _maybe_run_ingest(
+    entry: DatasetRegistryEntry, source_path: Path, expected_path: Path
+) -> Path:
+    """Optionally ingest an intermediate artifact into the final layout."""
+
+    if entry.ingest is None:
+        return source_path
+
+    target_layout = entry.ingest.output_layout.lower()
+    if target_layout in ("hdf5", "h5"):
+        return source_path
+    if target_layout != "zarr":
+        raise DatasetDownloadError(
+            f"Unsupported ingest output layout: {entry.ingest.output_layout}"
+        )
+
+    if expected_path.exists():
+        return expected_path
+
+    return _ingest_hdf5_to_zarr(entry.ingest, source_path, expected_path)
 
 
 def _artifact_filename(entry: DatasetRegistryEntry) -> str:
@@ -150,17 +218,28 @@ def _artifact_filename(entry: DatasetRegistryEntry) -> str:
 
 
 def _download_artifact(entry: DatasetRegistryEntry, dest: Path) -> None:
+    env_override = os.environ.get(f"PLUME_DATA_ZOO_URL_OVERRIDE_{entry.dataset_id}")
+    url = env_override or os.environ.get("PLUME_DATA_ZOO_URL_OVERRIDE")
+    if url:
+        LOG.info(
+            "Using override URL for %s via PLUME_DATA_ZOO_URL_OVERRIDE%s",
+            entry.dataset_id,
+            f"_{entry.dataset_id}" if env_override else "",
+        )
+    else:
+        url = entry.artifact.url
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     LOG.info("Downloading %s -> %s", entry.dataset_id, dest)
     try:
         with (
-            urllib.request.urlopen(entry.artifact.url) as response,
+            urllib.request.urlopen(url) as response,
             dest.open("wb") as fh,
         ):
             shutil.copyfileobj(response, fh)
     except Exception as exc:
         raise DatasetDownloadError(
-            f"Failed to download {entry.dataset_id} from {entry.artifact.url}: {exc}"
+            f"Failed to download {entry.dataset_id} from {url}: {exc}"
         ) from exc
 
 
@@ -183,10 +262,12 @@ def _verify_checksum(artifact_path: Path, entry: DatasetRegistryEntry) -> None:
 
 
 def _unpack_artifact(
-    entry: DatasetRegistryEntry, artifact_path: Path, cache_dir: Path
+    entry: DatasetRegistryEntry,
+    artifact_path: Path,
+    cache_dir: Path,
+    target_path: Path,
 ) -> Path:
     archive_type = entry.artifact.archive_type.lower()
-    target_path = cache_dir / entry.expected_root
 
     if target_path.exists():
         if target_path.is_dir():
@@ -194,6 +275,11 @@ def _unpack_artifact(
         else:
             target_path.unlink()
 
+    if archive_type in ("none", "file", "raw"):
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if artifact_path != target_path:
+            shutil.copy2(artifact_path, target_path)
+        return target_path
     if archive_type == "zip":
         with zipfile.ZipFile(artifact_path, "r") as zf:
             _safe_extract_zip(zf, cache_dir, entry.artifact.archive_member)
@@ -242,8 +328,43 @@ def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -
         extracted.rename(target_path)
 
 
-def _validate_layout(target_path: Path, entry: DatasetRegistryEntry) -> None:
-    layout = entry.artifact.layout.lower()
+def _ingest_hdf5_to_zarr(
+    spec: H5ToZarrSpec, source_path: Path, output_path: Path
+) -> Path:
+    """Convert an HDF5 plume movie into a Zarr dataset."""
+
+    try:
+        from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise DatasetDownloadError(
+            "HDF5 ingest requires optional dependencies (h5py, zarr, numcodecs). "
+            "Install media extras or provide a pre-ingested dataset."
+        ) from exc
+
+    cfg = H5MovieIngestConfig(
+        input=source_path,
+        dataset=spec.dataset,
+        output=output_path,
+        t_start=0,
+        t_stop=None,
+        fps=spec.fps,
+        pixel_to_grid=spec.pixel_to_grid,
+        origin=spec.origin,
+        extent=spec.extent,
+        normalize=spec.normalize,
+        chunk_t=spec.chunk_t,
+    )
+
+    try:
+        return ingest_h5_movie(cfg)
+    except Exception as exc:  # pragma: no cover - ingestion errors bubble up
+        raise DatasetDownloadError(
+            f"Failed to ingest HDF5 movie {source_path} into Zarr: {exc}"
+        ) from exc
+
+
+def _validate_layout(target_path: Path, layout: str) -> None:
+    layout = layout.lower()
     if layout == "zarr":
         if not target_path.is_dir():
             raise LayoutValidationError(f"Expected Zarr directory at {target_path}")

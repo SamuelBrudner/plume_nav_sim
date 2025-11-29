@@ -14,6 +14,7 @@ Supported plume sources
   - Advances one frame per env step with configurable step policy (`wrap` or `clamp`).
   - Validates dataset metadata via `VideoPlumeAttrs` (fps, pixel_to_grid, origin, extent).
   - Requires optional dependencies: `xarray`, `zarr`, `numcodecs`.
+  - Curated registry dataset: `colorado_jet_v1` (Zenodo 6538177 near-bed acetone plume, 150 frames @ 15 FPS, 406x216 px, normalized concentrations).
 
 Select a plume source
 
@@ -99,6 +100,57 @@ Quick demo with the bundled movie plume
 Dependencies
 
 - Movie plume requires media extras: `pip install xarray zarr numcodecs` (or install backend extras if available).
+
+Curated data zoo (registry-backed datasets)
+
+- Where the cache lives: registry datasets unpack to `~/.cache/plume_nav_sim/data_zoo/<cache_subdir>/<version>/<expected_root>` by default. Override with `movie_cache_root=/scratch/pns` (CLI `--movie-cache-root`).
+- Ready-to-use datasets:
+  - `colorado_jet_v1` v1.0.0 → Zenodo 6538177 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids, DOI 10.5281/zenodo.6538177).
+  - `moffett_field_dispersion_v0` v0.9.0 → open-air dispersion subset (`moffett_field_dispersion.h5`), license `CC-BY-NC-4.0`, cite “Acme Environmental Lab 2022, Internal field release report.”
+- Configuration usage:
+
+  ```python
+  # Spec-first (prepare handles registry lookup + download/cache)
+  sim = SimulationSpec(
+      plume="movie",
+      movie_dataset_id="colorado_jet_v1",
+      movie_auto_download=True,            # fetch if cache missing
+      movie_cache_root="~/scratch/data",   # optional override
+  )
+  env, _ = prepare(sim)
+  ```
+
+- CLI usage (plug-and-play demo):
+
+  ```bash
+  python plug-and-play-demo/main.py \
+    --plume movie \
+    --movie-dataset-id colorado_jet_v1 \
+    --movie-auto-download \
+    --movie-cache-root ~/scratch/data
+  ```
+
+- Pre-fetch from the shell without starting an env:
+
+  ```bash
+  python - <<'PY'
+  from pathlib import Path
+  from plume_nav_sim.data_zoo.download import ensure_dataset_available
+
+  path = ensure_dataset_available(
+      "colorado_jet_v1",
+      cache_root=Path("~/scratch/data").expanduser(),
+      auto_download=True,
+  )
+  print(f"Dataset ready at: {path}")
+  PY
+  ```
+
+- Adding a new registry entry (checksum workflow):
+  - Compute the archive checksum: `python - <<'PY'\nfrom hashlib import sha256\nfrom pathlib import Path\np = Path('path/to/archive.zip')\nprint(sha256(p.read_bytes()).hexdigest())\nPY`
+  - Add a `DatasetRegistryEntry` in `plume_nav_sim/data_zoo/registry.py` with `dataset_id`, `version`, `cache_subdir`, `expected_root`, `artifact` (url, checksum, archive_type, archive_member when needed), `metadata` (title, description, license, citation, doi/contact as available), and optional `ingest` for HDF5→Zarr.
+  - Validate layout expectations and checksum handling with `pytest src/backend/tests/plume_nav_sim/data_zoo`.
+  - For offline testing, stage the unpacked payload at `<cache_root>/<cache_subdir>/<version>/<expected_root>` and rerun `ensure_dataset_available(..., auto_download=False)` to confirm it is accepted without network access.
 
 Further reading
 

@@ -28,12 +28,12 @@ import os  # >=3.10 - Environment variable access for headless detection and dis
 import sys  # >=3.10 - System interface for exit handling and platform-specific visualization capability detection
 import time  # >=3.10 - Performance timing measurements and interactive demonstration pacing control
 
+# Third-party imports - External dependencies with version requirements
+import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for visualization demo environment creation and management
 import matplotlib.animation  # >=3.9.0 - Animation capabilities for dynamic visualization demonstration and real-time update showcase
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive plotting interface for advanced visualization demonstration and figure customization
 import numpy as np  # >=2.1.0 - Array operations for RGB array analysis, pixel manipulation, and mathematical visualization processing
 
-# Third-party imports - External dependencies with version requirements
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for visualization demo environment creation and management
 from plume_nav_sim.core.enums import Action, RenderMode
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env

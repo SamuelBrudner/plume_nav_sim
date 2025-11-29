@@ -27,7 +27,7 @@ tags:
 
 # Summary
 
-`plume-nav-sim` is a Gymnasium-compatible environment library designed to standardize the simulation of odor plume navigation. It treats odor fields as first-class scientific objects, providing a rigorous interface between fluid dynamics data (analytical or empirical) and navigating agents. Beyond simulation, the library provides a pluggable, interactive inspection suite that allows researchers to visualize agent decisions and internal belief states alongside ground-truth physics, ensuring that complex behaviors can be debugged and validated frame-by-frame. The library is built around explicit abstractions for plume fields, sensor models, and experiment configuration, ensuring that every simulation run is reproducible and self-describing.
+`plume-nav-sim` is a Gymnasium-compatible environment library designed to standardize the simulation of odor plume navigation. It prioritizes reproducibility and ease of use through a decoupled architecture that supports config-driven injection of custom plume sources, sensor configurations, action models, and policies, while providing a schema-driven data system out of the box. To facilitate quick prototyping, the library features a curated 'Data Zoo' for effortless access to plume datasets, a library of common bio-inspired sensor and action models, and a pluggable, interactive inspection suite that allows researchers to visualize the behavior and performance of their simulations easily. By building on rigorous testing and explicit abstractions, `plume-nav-sim` ensures that every simulation run is reproducible, self-describing, and easy to debug.
 
 The package targets researchers building agents that must localize a plume source using smell. It emphasizes:
 
@@ -47,18 +47,6 @@ By contrast, plume navigation experiments in ethology and robotics are organized
 `plume-nav-sim` targets this gap by providing a small but focused Gymnasium-compatible environment in which the central objects are odor concentration fields (analytic Gaussian or short plume movies), chemosensory observation models, and experiment specifications. Environments and policies are constructed from typed configuration objects, and each run produces schema-validated artifacts that record trajectories, configuration, seeds, and plume dataset identifiers. This design makes it straightforward to reproduce, share, and analyze plume navigation experiments without re-implementing the scaffold around each new research question.
 
 ## Software description
-
-### Design goals: beyond a toy gridworld
-
-The current release of `plume-nav-sim` uses deliberately simple plume models: a static Gaussian plane and a short example plume movie. However, the library's core contribution is the architectural separation between the environmental dynamics and the agent's discrete world.
-
-In contrast to general-purpose gridworld libraries such as Minigrid, where the environment state is typically a direct arrangement of symbolic tiles (walls, goals, doors), `plume-nav-sim` treats the odor field as a distinct, continuous-time or continuous-space entity that is projected onto the agent's sensors. Even when instantiated with simple plumes, the library provides:
-
-1. **A first-class PlumeField abstraction** that decouples the underlying odor landscape (which may be continuous, high-resolution, or temporally evolving) from the agent's spatial grid.
-2. **Sensor models** that query this field based on agent morphology (e.g., point vs. stereo antennae) rather than simply reading a grid cell value.
-3. **A schema-validated data capture pipeline** that records trajectories, environment configuration, seeds, and plume dataset identifiers.
-
-This design ensures that the agent's interaction with the odor field remains consistent whether the underlying plume is a simple analytical function or a high-fidelity fluid dynamics simulation.
 
 ### Functionality
 

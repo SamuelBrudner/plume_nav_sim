@@ -14,12 +14,12 @@ from unittest.mock import (  # >=3.10 - Mock object creation for testing abstrac
     patch,
 )
 
+import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for API compliance testing, action space validation, and observation space specification testing
 import numpy as np  # >=2.1.0 - Array operations, mathematical testing utilities, observation data validation, and numerical precision testing for environment operations
 
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixture management, parameterized testing, and comprehensive test execution with assertion capabilities
 
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for API compliance testing, action space validation, and observation space specification testing
 from plume_nav_sim.core.constants import DEFAULT_PLUME_SIGMA, STATIC_GAUSSIAN_MODEL_TYPE
 
 # Core types and data structures for testing

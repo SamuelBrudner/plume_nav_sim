@@ -12,6 +12,7 @@ import os
 import warnings
 
 import gymnasium as gym
+
 from plume_nav_sim.registration import (
     COMPONENT_ENV_ID,
     ENV_ID,

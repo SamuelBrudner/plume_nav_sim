@@ -10,9 +10,8 @@ diverse action spaces without environment modification.
 # Use forward references to avoid circular imports
 from typing import TYPE_CHECKING, Any, Dict, Protocol, Union, runtime_checkable
 
-import numpy as np
-
 import gymnasium as gym
+import numpy as np
 
 try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray

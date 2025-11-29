@@ -27,12 +27,11 @@ from typing import (  # >=3.10 - Advanced type hints for comprehensive type safe
     Union,
 )
 
+# External imports with version comments
+import gymnasium as gym  # >=0.29.0 - Advanced Gymnasium framework usage including registry inspection, environment wrapping, and vectorization patterns
 import matplotlib  # >=3.9.0 - Backend management and configuration for cross-platform compatibility
 import matplotlib.pyplot as plt  # >=3.9.0 - Advanced visualization including performance plots, trajectory analysis, and multi-panel figures for comprehensive demonstration
 import numpy as np  # >=2.1.0 - Statistical analysis, trajectory comparison, and advanced numerical computing for reproducibility validation
-
-# External imports with version comments
-import gymnasium as gym  # >=0.29.0 - Advanced Gymnasium framework usage including registry inspection, environment wrapping, and vectorization patterns
 
 # Internal imports from configuration management
 from ..config.environment_configs import (

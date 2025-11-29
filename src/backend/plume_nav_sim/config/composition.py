@@ -37,6 +37,7 @@ BuiltinPolicyName = Literal[
     "stochastic_td",
     "greedy_td",
     "random",
+    "surge_and_cast",
 ]
 
 
@@ -409,6 +410,10 @@ def build_policy(policy_spec: PolicySpec, *, env: Optional[Any] = None) -> Any:
             return TemporalDerivativePolicy(**policy_spec.kwargs)
         if name == "greedy_td":
             return _extracted_from_build_policy_23(policy_spec)
+        if name == "surge_and_cast":
+            from plume_nav_sim.policies import SurgeAndCastPolicy
+
+            return SurgeAndCastPolicy(**policy_spec.kwargs)
         # Note: run–tumble TD policy is intentionally not a builtin here.
         # External projects (or the demo package) should provide it via dotted-path.
         if name == "random":
