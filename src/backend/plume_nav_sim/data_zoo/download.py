@@ -437,7 +437,7 @@ def _ingest_mat_to_zarr(
             ) from exc
 
         # Verify coordinates checksum
-        hasher = hashlib.md5()
+        hasher = hashlib.md5(usedforsecurity=False)
         with coords_path.open("rb") as fh:
             for chunk in iter(lambda: fh.read(1024 * 1024), b""):
                 hasher.update(chunk)
