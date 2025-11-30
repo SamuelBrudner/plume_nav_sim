@@ -1,6 +1,7 @@
 import hashlib
 import shutil
 import tarfile
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -167,7 +168,11 @@ def test_checksum_mismatch_triggers_redownload(
     )
 
     assert resolved.exists()
-    assert artifact_path.read_bytes() == Path(entry.artifact.url).read_bytes()
+    # Parse file:// URL to get the actual filesystem path
+    source_path = Path(
+        urllib.parse.unquote(urllib.parse.urlparse(entry.artifact.url).path)
+    )
+    assert artifact_path.read_bytes() == source_path.read_bytes()
 
 
 def test_download_decline_raises_error(

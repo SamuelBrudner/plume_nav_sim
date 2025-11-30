@@ -23,8 +23,10 @@ from typing import Callable, Optional
 from .registry import (
     DATASET_REGISTRY,
     DEFAULT_CACHE_ROOT,
+    CrimaldiFluorescenceIngest,
     DatasetRegistryEntry,
-    H5ToZarrSpec,
+    EmonetSmokeIngest,
+    RigolliDNSIngest,
     describe_dataset,
 )
 
@@ -206,7 +208,17 @@ def _maybe_run_ingest(
     if expected_path.exists():
         return expected_path
 
-    return _ingest_hdf5_to_zarr(entry.ingest, source_path, expected_path)
+    # Dispatch to appropriate ingest handler
+    if isinstance(entry.ingest, CrimaldiFluorescenceIngest):
+        return _ingest_hdf5_to_zarr(entry.ingest, source_path, expected_path)
+    elif isinstance(entry.ingest, RigolliDNSIngest):
+        return _ingest_mat_to_zarr(entry.ingest, source_path, expected_path)
+    elif isinstance(entry.ingest, EmonetSmokeIngest):
+        return _ingest_emonet_to_zarr(entry.ingest, source_path, expected_path)
+    else:
+        raise DatasetDownloadError(
+            f"Unknown ingest spec type: {type(entry.ingest).__name__}"
+        )
 
 
 def _artifact_filename(entry: DatasetRegistryEntry) -> str:
@@ -269,17 +281,23 @@ def _unpack_artifact(
 ) -> Path:
     archive_type = entry.artifact.archive_type.lower()
 
+    # For non-archive types, handle the case where artifact_path == target_path
+    # (the downloaded file IS the final target, so don't delete it)
+    if archive_type in ("none", "file", "raw"):
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        # Use resolve() for robust path comparison
+        if artifact_path.resolve() != target_path.resolve():
+            if target_path.exists():
+                target_path.unlink()
+            shutil.copy2(artifact_path, target_path)
+        return target_path
+
+    # For archives, clean up any stale target before extraction
     if target_path.exists():
         if target_path.is_dir():
             shutil.rmtree(target_path)
         else:
             target_path.unlink()
-
-    if archive_type in ("none", "file", "raw"):
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        if artifact_path != target_path:
-            shutil.copy2(artifact_path, target_path)
-        return target_path
     if archive_type == "zip":
         with zipfile.ZipFile(artifact_path, "r") as zf:
             _safe_extract_zip(zf, cache_dir, entry.artifact.archive_member)
@@ -301,7 +319,21 @@ def _unpack_artifact(
 
 
 def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path, member: Optional[str]) -> None:
-    members = [member] if member else zf.namelist()
+    if member:
+        # Extract all members matching the prefix (handles directories stored with trailing slash)
+        prefix = member.rstrip("/")
+        members = [
+            n
+            for n in zf.namelist()
+            if n == prefix or n.rstrip("/") == prefix or n.startswith(prefix + "/")
+        ]
+        if not members:
+            raise DatasetDownloadError(
+                f"Archive member '{member}' not found in archive. "
+                f"Available members: {zf.namelist()[:10]}..."
+            )
+    else:
+        members = zf.namelist()
     _validate_archive_members(members, dest)
     for name in members:
         zf.extract(name, path=dest)
@@ -324,12 +356,18 @@ def _validate_archive_members(members: list[str], dest: Path) -> None:
 
 def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -> None:
     if member:
-        extracted = dest / member
-        extracted.rename(target_path)
+        extracted = dest / member.rstrip("/")
+        if extracted != target_path and extracted.exists():
+            if target_path.exists():
+                if target_path.is_dir():
+                    shutil.rmtree(target_path)
+                else:
+                    target_path.unlink()
+            extracted.rename(target_path)
 
 
 def _ingest_hdf5_to_zarr(
-    spec: H5ToZarrSpec, source_path: Path, output_path: Path
+    spec: CrimaldiFluorescenceIngest, source_path: Path, output_path: Path
 ) -> Path:
     """Convert an HDF5 plume movie into a Zarr dataset."""
 
@@ -360,6 +398,255 @@ def _ingest_hdf5_to_zarr(
     except Exception as exc:  # pragma: no cover - ingestion errors bubble up
         raise DatasetDownloadError(
             f"Failed to ingest HDF5 movie {source_path} into Zarr: {exc}"
+        ) from exc
+
+
+def _ingest_mat_to_zarr(
+    spec: RigolliDNSIngest, source_path: Path, output_path: Path
+) -> Path:
+    """Convert a MATLAB v7.3 plume dataset with separate coordinates into Zarr.
+
+    Downloads the coordinates file, loads both files using h5py (for MATLAB v7.3
+    HDF5 format), and creates a standardized Zarr dataset with proper spatial
+    dimension coordinates.
+    """
+    try:
+        import h5py
+        import numpy as np
+        import zarr
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise DatasetDownloadError(
+            "MATLAB ingest requires optional dependencies (h5py, zarr, numpy). "
+            "Install media extras or provide a pre-ingested dataset."
+        ) from exc
+
+    # Download coordinates file to cache directory
+    coords_path = source_path.parent / "coordinates.mat"
+    if not coords_path.exists():
+        LOG.info("Downloading coordinates file for %s", source_path.name)
+        coords_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with (
+                urllib.request.urlopen(spec.coords_url) as response,
+                coords_path.open("wb") as fh,
+            ):
+                shutil.copyfileobj(response, fh)
+        except Exception as exc:
+            raise DatasetDownloadError(
+                f"Failed to download coordinates from {spec.coords_url}: {exc}"
+            ) from exc
+
+        # Verify coordinates checksum
+        hasher = hashlib.md5()
+        with coords_path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        if hasher.hexdigest().lower() != spec.coords_checksum.lower():
+            coords_path.unlink()
+            raise DatasetDownloadError(
+                f"Coordinates file checksum mismatch for {spec.coords_url}"
+            )
+
+    try:
+        # Load coordinates from MATLAB v7.3 (HDF5) file
+        with h5py.File(coords_path, "r") as coords_file:
+            # MATLAB stores arrays transposed; handle both formats
+            x_data = coords_file[spec.x_key][:]
+            y_data = coords_file[spec.y_key][:]
+            # Flatten if needed (MATLAB often stores as column vectors)
+            x_coords = np.asarray(x_data).flatten().astype(np.float32)
+            y_coords = np.asarray(y_data).flatten().astype(np.float32)
+
+        # Load concentration data from source MATLAB file
+        with h5py.File(source_path, "r") as mat_file:
+            conc_data = mat_file[spec.concentration_key][:]
+            # MATLAB stores as (x, y, t) or transposed; normalize to (t, y, x)
+            conc_array = np.asarray(conc_data)
+            # Assume data is (t, y, x) or needs transposition
+            if conc_array.ndim == 3:
+                # Common MATLAB convention: (x, y, t) -> (t, y, x)
+                if conc_array.shape[2] < conc_array.shape[0]:
+                    conc_array = np.transpose(conc_array, (2, 1, 0))
+            conc_array = conc_array.astype(np.float32)
+
+        if spec.normalize:
+            cmin, cmax = conc_array.min(), conc_array.max()
+            if cmax > cmin:
+                conc_array = (conc_array - cmin) / (cmax - cmin)
+
+        # Create Zarr store with standardized structure
+        n_frames = conc_array.shape[0]
+        chunk_t = spec.chunk_t or min(100, n_frames)
+
+        store = zarr.DirectoryStore(str(output_path))
+        root = zarr.group(store, overwrite=True)
+
+        # Store concentration with chunking
+        root.create_dataset(
+            "concentration",
+            data=conc_array,
+            chunks=(chunk_t, conc_array.shape[1], conc_array.shape[2]),
+            dtype=np.float32,
+        )
+
+        # Store coordinate arrays
+        root.create_dataset("x", data=x_coords, dtype=np.float32)
+        root.create_dataset("y", data=y_coords, dtype=np.float32)
+
+        # Store metadata in .zattrs
+        root.attrs["fps"] = spec.fps if spec.fps else 0.0
+        root.attrs["n_frames"] = n_frames
+        root.attrs["shape"] = list(conc_array.shape)
+        root.attrs["source_format"] = "matlab_v73"
+        root.attrs["normalized"] = spec.normalize
+
+        LOG.info(
+            "Ingested MATLAB file to Zarr: %s -> %s (shape=%s)",
+            source_path.name,
+            output_path.name,
+            conc_array.shape,
+        )
+
+        return output_path
+
+    except Exception as exc:
+        # Clean up partial output on failure
+        if output_path.exists():
+            shutil.rmtree(output_path)
+        raise DatasetDownloadError(
+            f"Failed to ingest MATLAB file {source_path} into Zarr: {exc}"
+        ) from exc
+
+
+def _ingest_emonet_to_zarr(
+    spec: EmonetSmokeIngest, source_path: Path, output_path: Path
+) -> Path:
+    """Convert Emonet lab flyWalk video frames into standardized Zarr.
+
+    Downloads optional metadata file, loads video frames from MATLAB format,
+    and creates a Zarr dataset with spatial coordinates derived from arena size.
+    """
+    try:
+        import h5py
+        import numpy as np
+        import zarr
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise DatasetDownloadError(
+            "Emonet ingest requires optional dependencies (h5py, zarr, numpy). "
+            "Install media extras or provide a pre-ingested dataset."
+        ) from exc
+
+    # Optionally download metadata file
+    metadata = {}
+    if spec.metadata_url:
+        meta_path = source_path.parent / "metadata.mat"
+        if not meta_path.exists():
+            LOG.info("Downloading metadata file for %s", source_path.name)
+            try:
+                with (
+                    urllib.request.urlopen(spec.metadata_url) as response,
+                    meta_path.open("wb") as fh,
+                ):
+                    shutil.copyfileobj(response, fh)
+            except Exception as exc:
+                LOG.warning("Failed to download metadata: %s (continuing without)", exc)
+
+        if meta_path.exists():
+            try:
+                with h5py.File(meta_path, "r") as mf:
+                    # Extract any useful metadata (fps, px_per_mm, etc.)
+                    for key in mf.keys():
+                        try:
+                            metadata[key] = np.asarray(mf[key]).item()
+                        except (ValueError, TypeError):
+                            pass
+            except Exception as exc:
+                LOG.warning("Failed to parse metadata file: %s", exc)
+
+    try:
+        # Load video frames from MATLAB file
+        with h5py.File(source_path, "r") as mat_file:
+            # Try common keys for video frames
+            frames_key = spec.frames_key
+            if frames_key not in mat_file:
+                # Try to find the frames array
+                for key in mat_file.keys():
+                    if "frame" in key.lower() or mat_file[key].ndim == 3:
+                        frames_key = key
+                        break
+
+            if frames_key not in mat_file:
+                raise DatasetDownloadError(
+                    f"Could not find frames array in {source_path}. "
+                    f"Available keys: {list(mat_file.keys())}"
+                )
+
+            LOG.info(
+                "Loading frames from key '%s' (this may take a while for large files)",
+                frames_key,
+            )
+            frames_data = mat_file[frames_key][:]
+            frames_array = np.asarray(frames_data)
+
+            # Normalize to (t, y, x) format
+            if frames_array.ndim == 3:
+                # MATLAB often stores as (x, y, t) - check if last dim is smallest (likely time)
+                if frames_array.shape[2] > frames_array.shape[0]:
+                    # Looks like (t, y, x) already or (t, x, y)
+                    pass
+                else:
+                    # Likely (x, y, t) -> transpose to (t, y, x)
+                    frames_array = np.transpose(frames_array, (2, 1, 0))
+
+            frames_array = frames_array.astype(np.float32)
+
+        if spec.normalize:
+            fmin, fmax = frames_array.min(), frames_array.max()
+            if fmax > fmin:
+                frames_array = (frames_array - fmin) / (fmax - fmin)
+
+        # Generate spatial coordinates from arena size
+        n_frames, n_y, n_x = frames_array.shape
+        arena_x, arena_y = spec.arena_size_mm
+        x_coords = np.linspace(0, arena_x, n_x, dtype=np.float32)
+        y_coords = np.linspace(0, arena_y, n_y, dtype=np.float32)
+
+        # Create Zarr store
+        chunk_t = spec.chunk_t or min(100, n_frames)
+        store = zarr.DirectoryStore(str(output_path))
+        root = zarr.group(store, overwrite=True)
+
+        root.create_dataset(
+            "concentration",
+            data=frames_array,
+            chunks=(chunk_t, n_y, n_x),
+            dtype=np.float32,
+        )
+        root.create_dataset("x", data=x_coords, dtype=np.float32)
+        root.create_dataset("y", data=y_coords, dtype=np.float32)
+
+        # Store metadata
+        root.attrs["fps"] = metadata.get("fps", spec.fps)
+        root.attrs["n_frames"] = n_frames
+        root.attrs["shape"] = list(frames_array.shape)
+        root.attrs["arena_size_mm"] = list(spec.arena_size_mm)
+        root.attrs["source_format"] = "emonet_flywalk"
+        root.attrs["normalized"] = spec.normalize
+
+        LOG.info(
+            "Ingested Emonet smoke video to Zarr: %s -> %s (shape=%s)",
+            source_path.name,
+            output_path.name,
+            frames_array.shape,
+        )
+
+        return output_path
+
+    except Exception as exc:
+        if output_path.exists():
+            shutil.rmtree(output_path)
+        raise DatasetDownloadError(
+            f"Failed to ingest Emonet video {source_path} into Zarr: {exc}"
         ) from exc
 
 
