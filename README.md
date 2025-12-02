@@ -76,6 +76,39 @@ print(info["agent_xy"])  # starting position
 
 - Attribution and new-entry workflow (checksums, ingest specs) are documented in `src/backend/docs/plume_types.md`.
 
+#### DataCite-compliant metadata
+
+All Data Zoo entries include [DataCite 4.5](https://schema.datacite.org/)-compliant metadata for interoperability with Zenodo, Figshare, and other DOI registries:
+
+```python
+from plume_nav_sim.data_zoo import DATASET_REGISTRY
+
+entry = DATASET_REGISTRY["emonet_smoke_v1"]
+
+# Structured creators with ORCIDs
+for creator in entry.metadata.creators:
+    print(f"{creator.name} ({creator.orcid})")
+
+# Export for Zenodo upload
+datacite_json = entry.metadata.to_datacite()
+```
+
+For simulation-generated datasets, use `SimulationMetadata`:
+
+```python
+from plume_nav_sim.data_zoo import SimulationMetadata
+
+meta = SimulationMetadata.from_config(
+    title="My Plume Simulation (1000 episodes)",
+    creator_name="Your Name",
+    config=hydra_cfg,  # auto-hashed for reproducibility
+    seed=42,
+    software_version="0.1.0",
+)
+```
+
+This captures software provenance, config hash, random seed, and parameters — ready for publication to Zenodo with proper citation metadata.
+
 ## 3. Progressive Customization
 
 | Stage | Goal | Example |

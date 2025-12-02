@@ -122,6 +122,46 @@ Notes
 - This demo intentionally stays minimal to highlight the plug‑and‑play flow.
 - Determinism, subset checks, and other deeper features are covered by tests and docs in `src/backend/`.
 
+## DataCite-Compliant Metadata
+
+All Data Zoo datasets include [DataCite 4.5](https://schema.datacite.org/)-compliant metadata for interoperability with Zenodo and other DOI registries:
+
+```python
+from plume_nav_sim.data_zoo import DATASET_REGISTRY, describe_dataset
+
+# Access structured metadata
+entry = describe_dataset("colorado_jet_v1")
+print(entry.metadata.title)
+print(entry.metadata.doi)
+
+# Creators with ORCIDs
+for creator in entry.metadata.creators:
+    print(f"  {creator.name} - {creator.affiliation}")
+
+# Export for Zenodo/repository upload
+datacite_json = entry.metadata.to_datacite()
+```
+
+For publishing your own simulation results:
+
+```python
+from plume_nav_sim.data_zoo import SimulationMetadata
+
+meta = SimulationMetadata.from_config(
+    title="My Navigation Experiment",
+    creator_name="Your Name",
+    config={"plume": "movie", "grid": "64x64"},
+    seed=42,
+    description="Benchmark run with run-tumble policy",
+    license="CC-BY-4.0",
+)
+
+# Ready for Zenodo with software provenance + config hash
+print(meta.to_datacite())
+```
+
+This ensures your datasets are FAIR (Findable, Accessible, Interoperable, Reusable) and can be properly cited.
+
  Capture Workflow (optional)
 
  Why capture?
