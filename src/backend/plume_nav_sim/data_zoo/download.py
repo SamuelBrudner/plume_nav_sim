@@ -9,6 +9,7 @@ an offline mode when the cache already satisfies integrity checks.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -16,9 +17,10 @@ import sys
 import tarfile
 import urllib.request
 import zipfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .registry import (
     DATASET_REGISTRY,
@@ -54,6 +56,224 @@ class ChecksumMismatchError(DatasetDownloadError):
 
 class LayoutValidationError(DatasetDownloadError):
     """Raised when unpacked data does not match expected layout."""
+
+
+try:
+    from pydantic import BaseModel, Field
+
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AVAILABLE = False
+    BaseModel = object  # type: ignore[misc,assignment]
+
+    def Field(**kwargs: Any) -> Any:  # type: ignore[misc]  # noqa: N802
+        """Stub for pydantic.Field when pydantic is not available."""
+        return kwargs.get("default")
+
+
+class ProvenanceSidecar(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
+    """Provenance metadata for a processed dataset.
+
+    This sidecar documents the full lineage from raw source to processed Zarr,
+    enabling reproducibility and citation tracking.
+    """
+
+    # Dataset identification
+    dataset_id: str
+    version: str
+    processed_at: str  # ISO 8601 timestamp
+
+    # Processing info
+    processor: str = "plume_nav_sim"
+    processor_version: str
+
+    # Source information
+    source_url: str
+    source_doi: Optional[str] = None
+    source_filename: str
+    source_checksum_md5: str
+    source_size_bytes: Optional[int] = None
+
+    # Ingest parameters (serialized from spec)
+    ingest_spec_type: str
+    ingest_params: Dict[str, Any] = Field(default_factory=dict)
+
+    # Output information
+    output_format: str
+    output_shape: List[int] = Field(default_factory=list)
+    output_dtype: str = "float32"
+    output_checksum_md5: Optional[str] = None
+
+    # Citation
+    citation: Optional[str] = None
+    citation_doi: Optional[str] = None
+
+    if PYDANTIC_AVAILABLE:
+        model_config = {"extra": "forbid"}
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize to JSON format."""
+        if PYDANTIC_AVAILABLE:
+            return self.model_dump_json(indent=indent)
+        return json.dumps(self.__dict__, indent=indent)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        if PYDANTIC_AVAILABLE:
+            return self.model_dump()
+        return dict(self.__dict__)
+
+    def write(self, output_path: Path, format: str = "json") -> Path:
+        """Write sidecar to file next to the dataset.
+
+        Args:
+            output_path: Path to the Zarr directory or output file
+            format: 'json' (recommended) or 'yaml'
+
+        Returns:
+            Path to the written sidecar file
+        """
+        sidecar_path = output_path.parent / f"{output_path.name}.provenance.{format}"
+
+        if format == "json":
+            content = self.to_json(indent=2)
+        else:
+            # Simple YAML-like output for human readability
+            content = self._to_yaml()
+
+        sidecar_path.write_text(content)
+        LOG.info("Wrote provenance sidecar: %s", sidecar_path)
+        return sidecar_path
+
+    def _to_yaml(self) -> str:
+        """Simple YAML serialization without pyyaml dependency."""
+        lines = ["# Provenance sidecar for plume_nav_sim Data Zoo", ""]
+        data = self.to_dict()
+
+        def _format_value(v: Any, indent: int = 0) -> str:
+            prefix = "  " * indent
+            if v is None:
+                return "null"
+            elif isinstance(v, bool):
+                return "true" if v else "false"
+            elif isinstance(v, (int, float)):
+                return str(v)
+            elif isinstance(v, str):
+                if "\n" in v or ":" in v or '"' in v:
+                    return f'"{v}"'
+                return v
+            elif isinstance(v, list):
+                if not v:
+                    return "[]"
+                return "".join(
+                    f"\n{prefix}  - {_format_value(item, indent + 1)}" for item in v
+                )
+            elif isinstance(v, dict):
+                if not v:
+                    return "{}"
+                return "".join(
+                    f"\n{prefix}  {k}: {_format_value(val, indent + 1)}"
+                    for k, val in v.items()
+                )
+            return str(v)
+
+        for key, value in data.items():
+            formatted = _format_value(value)
+            lines.append(
+                f"{key}:{formatted}" if "\n" in formatted else f"{key}: {formatted}"
+            )
+
+        return "\n".join(lines) + "\n"
+
+    @classmethod
+    def json_schema(cls) -> Dict[str, Any]:
+        """Get JSON Schema for validation."""
+        if PYDANTIC_AVAILABLE:
+            return cls.model_json_schema()
+        return {
+            "type": "object",
+            "description": "Provenance sidecar (schema unavailable)",
+        }
+
+
+def _get_version() -> str:
+    """Get plume_nav_sim version string."""
+    try:
+        from plume_nav_sim import __version__
+
+        return __version__
+    except (ImportError, AttributeError):
+        return "unknown"
+
+
+def _compute_zarr_checksum(zarr_path: Path) -> str:
+    """Compute a checksum for a Zarr directory by hashing .zarray and .zattrs files."""
+    hasher = hashlib.md5(usedforsecurity=False)
+    # Hash metadata files in sorted order for reproducibility
+    for meta_file in sorted(zarr_path.rglob(".z*")):
+        if meta_file.is_file():
+            hasher.update(meta_file.read_bytes())
+    return hasher.hexdigest()
+
+
+def generate_provenance(
+    entry: DatasetRegistryEntry,
+    source_path: Path,
+    output_path: Path,
+    output_shape: List[int],
+    output_dtype: str = "float32",
+) -> ProvenanceSidecar:
+    """Generate a provenance sidecar for a processed dataset.
+
+    Args:
+        entry: The registry entry for the dataset
+        source_path: Path to the downloaded source file
+        output_path: Path to the output Zarr directory
+        output_shape: Shape of the main data array
+        output_dtype: Data type of the main array
+
+    Returns:
+        ProvenanceSidecar instance (also writes to disk)
+    """
+    # Get source file size
+    source_size = source_path.stat().st_size if source_path.exists() else None
+
+    # Serialize ingest params
+    ingest_params: Dict[str, Any] = {}
+    ingest_type = "none"
+    if entry.ingest:
+        ingest_type = type(entry.ingest).__name__
+        ingest_params = asdict(entry.ingest)
+
+    sidecar = ProvenanceSidecar(
+        dataset_id=entry.dataset_id,
+        version=entry.version,
+        processed_at=datetime.now(timezone.utc).isoformat(),
+        processor="plume_nav_sim",
+        processor_version=_get_version(),
+        source_url=entry.artifact.url,
+        source_doi=entry.metadata.doi if entry.metadata.doi else None,
+        source_filename=source_path.name,
+        source_checksum_md5=entry.artifact.checksum,
+        source_size_bytes=source_size,
+        ingest_spec_type=ingest_type,
+        ingest_params=ingest_params,
+        output_format=(
+            entry.ingest.output_layout if entry.ingest else entry.artifact.layout
+        ),
+        output_shape=output_shape,
+        output_dtype=output_dtype,
+        output_checksum_md5=(
+            _compute_zarr_checksum(output_path) if output_path.is_dir() else None
+        ),
+        citation=entry.metadata.citation if entry.metadata else None,
+        citation_doi=entry.metadata.doi if entry.metadata else None,
+    )
+
+    # Write sidecar (JSON preferred for Pydantic schema compatibility)
+    sidecar.write(output_path, format="json")
+
+    return sidecar
 
 
 def _dataset_layout(entry: DatasetRegistryEntry) -> str:
@@ -210,15 +430,51 @@ def _maybe_run_ingest(
 
     # Dispatch to appropriate ingest handler
     if isinstance(entry.ingest, CrimaldiFluorescenceIngest):
-        return _ingest_hdf5_to_zarr(entry.ingest, source_path, expected_path)
+        result = _ingest_hdf5_to_zarr(entry.ingest, source_path, expected_path)
     elif isinstance(entry.ingest, RigolliDNSIngest):
-        return _ingest_mat_to_zarr(entry.ingest, source_path, expected_path)
+        result = _ingest_mat_to_zarr(entry.ingest, source_path, expected_path)
     elif isinstance(entry.ingest, EmonetSmokeIngest):
-        return _ingest_emonet_to_zarr(entry.ingest, source_path, expected_path)
+        result = _ingest_emonet_to_zarr(entry.ingest, source_path, expected_path)
     else:
         raise DatasetDownloadError(
             f"Unknown ingest spec type: {type(entry.ingest).__name__}"
         )
+
+    # Generate provenance sidecar after successful ingest
+    _generate_provenance_for_zarr(entry, source_path, result)
+
+    return result
+
+
+def _generate_provenance_for_zarr(
+    entry: DatasetRegistryEntry, source_path: Path, output_path: Path
+) -> None:
+    """Generate provenance sidecar for an ingested Zarr dataset."""
+    try:
+        import zarr
+
+        store = zarr.open(str(output_path), mode="r")
+        # Get shape from the main data array (concentration or similar)
+        if "concentration" in store:
+            shape = list(store["concentration"].shape)
+            dtype = str(store["concentration"].dtype)
+        else:
+            # Fallback: use first array found
+            for key in store.keys():
+                arr = store[key]
+                if hasattr(arr, "shape") and len(arr.shape) >= 2:
+                    shape = list(arr.shape)
+                    dtype = str(arr.dtype)
+                    break
+            else:
+                shape = []
+                dtype = "unknown"
+
+        generate_provenance(entry, source_path, output_path, shape, dtype)
+
+    except Exception as exc:
+        # Don't fail the ingest if provenance generation fails
+        LOG.warning("Failed to generate provenance sidecar: %s", exc)
 
 
 def _artifact_filename(entry: DatasetRegistryEntry) -> str:

@@ -7,13 +7,21 @@ resolve cache locations, integrity expectations, and citation metadata.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 
 # Schema and registry bookkeeping
 REGISTRY_SCHEMA_VERSION = "1.0.0"
-DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "plume_nav_sim" / "data_zoo"
+
+# Cache root: configurable via environment variable for external storage
+_ENV_CACHE_ROOT = os.environ.get("PLUME_DATA_ZOO_CACHE")
+DEFAULT_CACHE_ROOT = (
+    Path(_ENV_CACHE_ROOT)
+    if _ENV_CACHE_ROOT
+    else Path.home() / ".cache" / "plume_nav_sim" / "data_zoo"
+)
 
 
 class RegistryValidationError(ValueError):
@@ -33,15 +41,259 @@ class DatasetArtifact:
 
 
 @dataclass(frozen=True)
-class DatasetMetadata:
-    """Human-facing metadata used for attribution and documentation."""
+class Creator:
+    """DataCite-compatible creator/author information."""
 
+    name: str  # Format: "Family, Given" or organization name
+    name_type: str = "Personal"  # "Personal" or "Organizational"
+    orcid: Optional[str] = None
+    affiliation: Optional[str] = None
+
+    def to_datacite(self) -> Dict:
+        """Export to DataCite JSON format."""
+        result: Dict = {"name": self.name, "nameType": self.name_type}
+        if self.orcid:
+            result["nameIdentifiers"] = [
+                {"nameIdentifier": self.orcid, "nameIdentifierScheme": "ORCID"}
+            ]
+        if self.affiliation:
+            result["affiliation"] = [{"name": self.affiliation}]
+        return result
+
+
+@dataclass(frozen=True)
+class RelatedIdentifier:
+    """DataCite-compatible related identifier for provenance tracking."""
+
+    identifier: str
+    relation_type: str  # e.g., "IsDerivedFrom", "IsSupplementTo", "Cites"
+    identifier_type: str = "DOI"  # "DOI", "URL", "ARK", etc.
+
+    def to_datacite(self) -> Dict:
+        """Export to DataCite JSON format."""
+        return {
+            "relatedIdentifier": self.identifier,
+            "relatedIdentifierType": self.identifier_type,
+            "relationType": self.relation_type,
+        }
+
+
+@dataclass(frozen=True)
+class DatasetMetadata:
+    """DataCite-compatible metadata for attribution and documentation.
+
+    Follows DataCite Metadata Schema 4.5 for compatibility with Zenodo,
+    Figshare, and other DOI registries.
+
+    Required fields (DataCite): title, creators, publisher, publication_year, resource_type
+    Recommended fields: description, license, subjects, related_identifiers
+    """
+
+    # DataCite required fields
     title: str
-    description: str
-    citation: str
-    license: str
+    creators: Tuple[Creator, ...] = ()
+    publisher: str = "plume-nav-sim Data Zoo"
+    publication_year: Optional[int] = None
+    resource_type: str = "Dataset"
+
+    # DataCite recommended fields
+    description: str = ""
+    license: str = ""  # Maps to DataCite "rights"
+    subjects: Tuple[str, ...] = ()  # Keywords
+    related_identifiers: Tuple[RelatedIdentifier, ...] = ()
+
+    # DataCite optional fields
     doi: Optional[str] = None
+    version: Optional[str] = None
+    language: str = "en"
+    formats: Tuple[str, ...] = ("application/x-zarr",)
+
+    # Legacy / convenience fields
+    citation: str = ""  # Human-readable citation string
     contact: Optional[str] = None
+
+    def to_datacite(self) -> Dict:
+        """Export to DataCite JSON format for Zenodo/repository upload."""
+        result: Dict = {
+            "titles": [{"title": self.title}],
+            "publisher": self.publisher,
+            "resourceType": {"resourceTypeGeneral": self.resource_type},
+            "language": self.language,
+        }
+
+        if self.creators:
+            result["creators"] = [c.to_datacite() for c in self.creators]
+
+        if self.publication_year:
+            result["publicationYear"] = self.publication_year
+
+        if self.description:
+            result["descriptions"] = [
+                {"description": self.description, "descriptionType": "Abstract"}
+            ]
+
+        if self.license:
+            result["rightsList"] = [{"rights": self.license}]
+
+        if self.subjects:
+            result["subjects"] = [{"subject": s} for s in self.subjects]
+
+        if self.related_identifiers:
+            result["relatedIdentifiers"] = [
+                ri.to_datacite() for ri in self.related_identifiers
+            ]
+
+        if self.doi:
+            result["identifiers"] = [{"identifier": self.doi, "identifierType": "DOI"}]
+
+        if self.version:
+            result["version"] = self.version
+
+        if self.formats:
+            result["formats"] = list(self.formats)
+
+        return result
+
+    def generate_citation(self) -> str:
+        """Generate a citation string from structured metadata."""
+        if self.citation:
+            return self.citation
+        if not self.creators:
+            return f"{self.title}. {self.publisher}."
+
+        # Format authors
+        if len(self.creators) == 1:
+            authors = self.creators[0].name
+        elif len(self.creators) == 2:
+            authors = f"{self.creators[0].name} & {self.creators[1].name}"
+        else:
+            authors = f"{self.creators[0].name} et al."
+
+        year = f" ({self.publication_year})" if self.publication_year else ""
+        doi_str = f" https://doi.org/{self.doi}" if self.doi else ""
+
+        return f"{authors}{year}. {self.title}. {self.publisher}.{doi_str}"
+
+
+@dataclass(frozen=True)
+class SimulationMetadata(DatasetMetadata):
+    """DataCite-compatible metadata for simulation-generated datasets.
+
+    Extends DatasetMetadata with fields specific to computational outputs:
+    software provenance, configuration parameters, and reproducibility info.
+    """
+
+    # Software provenance
+    software_name: str = "plume-nav-sim"
+    software_version: Optional[str] = None
+    software_doi: Optional[str] = None  # e.g., Zenodo DOI for the software release
+
+    # Simulation parameters
+    config_hash: Optional[str] = None  # Hash of Hydra/config used
+    random_seed: Optional[int] = None
+    parameters: Tuple[Tuple[str, str], ...] = ()  # Key-value pairs
+
+    # Computational context
+    runtime_seconds: Optional[float] = None
+    platform: Optional[str] = None  # e.g., "Linux-5.4.0-x86_64"
+    generated_at: Optional[str] = None  # ISO 8601 timestamp
+
+    def __post_init__(self) -> None:
+        # Override resource_type for simulations
+        if self.resource_type == "Dataset":
+            object.__setattr__(self, "resource_type", "Dataset/Simulation")
+
+    def to_datacite(self) -> Dict:
+        """Export to DataCite JSON with simulation-specific extensions."""
+        result = super().to_datacite()
+
+        # Add software as contributor
+        if self.software_name:
+            result.setdefault("contributors", []).append(
+                {
+                    "name": self.software_name,
+                    "nameType": "Organizational",
+                    "contributorType": "Producer",
+                }
+            )
+
+        # Add software DOI as related identifier
+        if self.software_doi:
+            result.setdefault("relatedIdentifiers", []).append(
+                {
+                    "relatedIdentifier": self.software_doi,
+                    "relatedIdentifierType": "DOI",
+                    "relationType": "IsCompiledBy",
+                }
+            )
+
+        # Add simulation parameters as additional descriptions
+        if self.parameters or self.random_seed is not None or self.config_hash:
+            param_lines = []
+            if self.config_hash:
+                param_lines.append(f"config_hash: {self.config_hash}")
+            if self.random_seed is not None:
+                param_lines.append(f"random_seed: {self.random_seed}")
+            for key, val in self.parameters:
+                param_lines.append(f"{key}: {val}")
+
+            result.setdefault("descriptions", []).append(
+                {
+                    "description": "Simulation parameters:\n" + "\n".join(param_lines),
+                    "descriptionType": "TechnicalInfo",
+                }
+            )
+
+        return result
+
+    @classmethod
+    def from_config(
+        cls,
+        title: str,
+        creator_name: str,
+        config: Dict,
+        seed: Optional[int] = None,
+        software_version: Optional[str] = None,
+        **kwargs,
+    ) -> "SimulationMetadata":
+        """Create simulation metadata from a Hydra/dict config.
+
+        Args:
+            title: Dataset title
+            creator_name: Your name in "Family, Given" format
+            config: Configuration dict (will be hashed and key params extracted)
+            seed: Random seed used
+            software_version: Version of plume-nav-sim used
+            **kwargs: Additional DatasetMetadata fields
+        """
+        import hashlib
+        import json
+        from datetime import datetime, timezone
+
+        # Hash the config
+        config_str = json.dumps(config, sort_keys=True, default=str)
+        config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+
+        # Extract key parameters (flatten top-level)
+        params = tuple(
+            (str(k), str(v))
+            for k, v in config.items()
+            if not isinstance(v, dict) and v is not None
+        )
+
+        return cls(
+            title=title,
+            creators=(Creator(name=creator_name),),
+            publisher="plume-nav-sim",
+            publication_year=datetime.now().year,
+            resource_type="Dataset/Simulation",
+            software_version=software_version,
+            config_hash=config_hash,
+            random_seed=seed,
+            parameters=params,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            **kwargs,
+        )
 
 
 @dataclass(frozen=True)
@@ -143,20 +395,44 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         ),
         metadata=DatasetMetadata(
             title="CU Boulder PLIF odor plume (a0004 near-bed, 10 cm/s)",
+            creators=(
+                Creator(
+                    name="Connor, Esteban G.",
+                    affiliation="University of Colorado Boulder",
+                ),
+                Creator(
+                    name="McHugh, Matthew K.",
+                    affiliation="University of Colorado Boulder",
+                ),
+                Creator(
+                    name="Crimaldi, John P.",
+                    orcid="https://orcid.org/0000-0002-5731-792X",
+                    affiliation="University of Colorado Boulder",
+                ),
+            ),
+            publisher="Zenodo",
+            publication_year=2018,
             description=(
                 "150-frame acetone vapor plume measured via planar laser-induced "
                 "fluorescence (PLIF) at 15 FPS. Near-bed isokinetic release at "
                 "0.10 m/s with 406x216 px field of view (~300x160 mm), normalized "
                 "concentration values, and embedded experiment metadata."
             ),
+            subjects=("plume", "PLIF", "odor", "turbulence", "fluorescence"),
+            related_identifiers=(
+                RelatedIdentifier(
+                    identifier="10.1007/s00348-018-2591-3",
+                    relation_type="IsSupplementTo",
+                ),
+            ),
+            doi="10.5281/zenodo.6538177",
+            license="CC-BY-4.0",
             citation=(
                 "Connor, E. G., McHugh, M. K., & Crimaldi, J. P. (2018). "
                 "Quantification of airborne odor plumes using planar laser-induced "
                 "fluorescence. Experiments in Fluids, 59(9), 137. "
                 "Data from Zenodo record 6538177."
             ),
-            doi="10.5281/zenodo.6538177",
-            license="CC-BY-4.0",
             contact="Prof. John Crimaldi <crimaldi@colorado.edu>",
         ),
         ingest=CrimaldiFluorescenceIngest(
@@ -183,19 +459,49 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         ),
         metadata=DatasetMetadata(
             title="Rigolli et al. DNS turbulent plume - nose level (z~50cm)",
+            creators=(
+                Creator(
+                    name="Rigolli, Nicola",
+                    affiliation="University of Genoa",
+                ),
+                Creator(
+                    name="Reddy, Gautam",
+                    orcid="https://orcid.org/0000-0002-8254-9034",
+                    affiliation="Harvard University",
+                ),
+                Creator(
+                    name="Seminara, Agnese",
+                    orcid="https://orcid.org/0000-0002-6966-1032",
+                    affiliation="University of Genoa",
+                ),
+                Creator(
+                    name="Vergassola, Massimo",
+                    orcid="https://orcid.org/0000-0002-4163-1090",
+                    affiliation="École Normale Supérieure",
+                ),
+            ),
+            publisher="Zenodo",
+            publication_year=2022,
             description=(
                 "2D time-series of odor concentration at nose height (~50 cm) from 3D "
                 "direct numerical simulation of turbulent channel flow. Auto-ingested "
                 "from MATLAB v7.3 format with spatial coordinates into standardized Zarr. "
                 "Source: ~6.8 GB .mat file."
             ),
+            subjects=("DNS", "turbulence", "odor", "plume", "navigation", "simulation"),
+            related_identifiers=(
+                RelatedIdentifier(
+                    identifier="10.7554/eLife.76989",
+                    relation_type="IsSupplementTo",
+                ),
+            ),
+            doi="10.5281/zenodo.15469831",
+            license="CC-BY-4.0",
             citation=(
                 "Rigolli, N., Reddy, G., Seminara, A., & Vergassola, M. (2022). "
                 "Alternation emerges as a multi-modal strategy for turbulent odor "
                 "navigation. eLife, 11, e76989. https://doi.org/10.7554/eLife.76989"
             ),
-            doi="10.5281/zenodo.15469831",
-            license="CC-BY-4.0",
             contact="Nicola Rigolli <nicola.rigolli@edu.unige.it>",
         ),
         ingest=RigolliDNSIngest(
@@ -222,19 +528,49 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         ),
         metadata=DatasetMetadata(
             title="Rigolli et al. DNS turbulent plume - ground level (z=0)",
+            creators=(
+                Creator(
+                    name="Rigolli, Nicola",
+                    affiliation="University of Genoa",
+                ),
+                Creator(
+                    name="Reddy, Gautam",
+                    orcid="https://orcid.org/0000-0002-8254-9034",
+                    affiliation="Harvard University",
+                ),
+                Creator(
+                    name="Seminara, Agnese",
+                    orcid="https://orcid.org/0000-0002-6966-1032",
+                    affiliation="University of Genoa",
+                ),
+                Creator(
+                    name="Vergassola, Massimo",
+                    orcid="https://orcid.org/0000-0002-4163-1090",
+                    affiliation="École Normale Supérieure",
+                ),
+            ),
+            publisher="Zenodo",
+            publication_year=2022,
             description=(
                 "2D time-series of odor concentration at ground level (z=0) from 3D "
                 "direct numerical simulation of turbulent channel flow. Auto-ingested "
                 "from MATLAB v7.3 format with spatial coordinates into standardized Zarr. "
                 "Source: ~6.8 GB .mat file."
             ),
+            subjects=("DNS", "turbulence", "odor", "plume", "navigation", "simulation"),
+            related_identifiers=(
+                RelatedIdentifier(
+                    identifier="10.7554/eLife.76989",
+                    relation_type="IsSupplementTo",
+                ),
+            ),
+            doi="10.5281/zenodo.15469831",
+            license="CC-BY-4.0",
             citation=(
                 "Rigolli, N., Reddy, G., Seminara, A., & Vergassola, M. (2022). "
                 "Alternation emerges as a multi-modal strategy for turbulent odor "
                 "navigation. eLife, 11, e76989. https://doi.org/10.7554/eLife.76989"
             ),
-            doi="10.5281/zenodo.15469831",
-            license="CC-BY-4.0",
             contact="Nicola Rigolli <nicola.rigolli@edu.unige.it>",
         ),
         ingest=RigolliDNSIngest(
@@ -254,36 +590,77 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         expected_root="emonet_smoke.zarr",
         artifact=DatasetArtifact(
             url="https://datadryad.org/stash/downloads/file_stream/852661",
-            # NOTE: Checksum needs verification - file is 28.73 GB
-            checksum="placeholder_needs_computation",
+            checksum="6f87df24e4a5146c49c56979aca0fd78",
             checksum_type="md5",
             archive_type="none",
             layout="hdf5",
         ),
         metadata=DatasetMetadata(
             title="Emonet lab smoke plume video (walking Drosophila study)",
+            creators=(
+                Creator(
+                    name="Demir, Mahmut",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Kadakia, Nirag",
+                    orcid="https://orcid.org/0000-0003-0538-7539",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Anderson, Hope D.",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Clark, Damon A.",
+                    orcid="https://orcid.org/0000-0001-5698-9094",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Emonet, Thierry",
+                    orcid="https://orcid.org/0000-0002-7746-3527",
+                    affiliation="Yale University",
+                ),
+            ),
+            publisher="Dryad",
+            publication_year=2020,
             description=(
                 "High-speed (90 Hz) smoke plume video from wind tunnel walking arena. "
                 "Smoke intensity serves as proxy for odor concentration. 300×180 mm arena, "
                 "~29 GB raw frames. Auto-ingested to standardized Zarr. "
                 "WARNING: Large download!"
             ),
+            subjects=(
+                "Drosophila",
+                "plume",
+                "navigation",
+                "smoke",
+                "olfaction",
+                "behavior",
+            ),
+            related_identifiers=(
+                RelatedIdentifier(
+                    identifier="10.7554/eLife.57524",
+                    relation_type="IsSupplementTo",
+                ),
+            ),
+            doi="10.5061/dryad.4j0zpc87z",
+            license="CC0-1.0",
             citation=(
                 "Demir, M., Kadakia, N., Anderson, H. D., Clark, D. A., & Emonet, T. (2020). "
                 "Walking Drosophila navigate complex plumes using stochastic decisions "
                 "biased by the timing of odor encounters. eLife, 9, e57524. "
                 "https://doi.org/10.7554/eLife.57524"
             ),
-            doi="10.5061/dryad.4j0zpc87z",
-            license="CC0-1.0",
             contact="Thierry Emonet <thierry.emonet@yale.edu>",
         ),
         ingest=EmonetSmokeIngest(
             frames_key="frames",
             metadata_url="https://datadryad.org/stash/downloads/file_stream/852662",
-            metadata_checksum="placeholder_needs_computation",
-            fps=90.0,
-            arena_size_mm=(300.0, 180.0),
+            metadata_checksum="",  # Optional - metadata parsing is best-effort
+            fps=90.0,  # 90 Hz camera (can be refined from metadata.p.framerate)
+            px_per_mm=2048.0 / 300.0,  # ~6.83 px/mm based on 300mm arena width
+            arena_size_mm=(300.0, 180.0),  # 2048x1200 px arena
             normalize=True,
             chunk_t=100,
         ),
@@ -351,14 +728,21 @@ def validate_registry(
             raise RegistryValidationError(
                 f"Dataset '{key}' is missing metadata.description"
             )
-        if not metadata.citation.strip():
+        # DataCite requires either structured creators OR legacy citation
+        if not metadata.creators and not metadata.citation.strip():
             raise RegistryValidationError(
-                f"Dataset '{key}' is missing metadata.citation"
+                f"Dataset '{key}' must have either creators or citation"
             )
         if not metadata.license.strip():
             raise RegistryValidationError(
                 f"Dataset '{key}' is missing metadata.license"
             )
+        # Validate Creator entries
+        for i, creator in enumerate(metadata.creators):
+            if not creator.name.strip():
+                raise RegistryValidationError(
+                    f"Dataset '{key}' creator {i} has empty name"
+                )
 
         ingest = entry.ingest
         if ingest:
