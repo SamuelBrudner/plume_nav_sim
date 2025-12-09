@@ -11,3 +11,5 @@ movie:
   origin: null         # [y0, x0] in grid units
   extent: null         # [height, width] in grid units
   step_policy: wrap    # wrap|clamp
+  normalize: null      # Optional normalization method (minmax|robust|zscore)
+  chunks: auto         # Chunking passed to loader ("auto", None, or explicit)

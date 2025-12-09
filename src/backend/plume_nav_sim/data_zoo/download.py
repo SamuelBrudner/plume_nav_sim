@@ -31,6 +31,7 @@ from .registry import (
     RigolliDNSIngest,
     describe_dataset,
 )
+from .stats import compute_concentration_stats, store_stats_in_zarr
 
 LOG = logging.getLogger(__name__)
 
@@ -478,7 +479,11 @@ def _generate_provenance_for_zarr(
 
 
 def _artifact_filename(entry: DatasetRegistryEntry) -> str:
-    name = Path(entry.artifact.url).name
+    """Extract clean filename from artifact URL, stripping query parameters."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(entry.artifact.url)
+    name = Path(parsed.path).name
     if name:
         return name
     sanitized = entry.artifact.archive_type.replace(".", "_")
@@ -623,10 +628,22 @@ def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -
 
 
 def _ingest_hdf5_to_zarr(
-    spec: CrimaldiFluorescenceIngest, source_path: Path, output_path: Path
+    spec: CrimaldiFluorescenceIngest,
+    source_path: Path,
+    output_path: Path,
+    compute_stats: bool = True,
 ) -> Path:
-    """Convert an HDF5 plume movie into a Zarr dataset."""
+    """Convert an HDF5 plume movie into a Zarr dataset.
 
+    Args:
+        spec: Ingestion specification from registry.
+        source_path: Path to source HDF5 file.
+        output_path: Path for output Zarr store.
+        compute_stats: If True, compute and store concentration statistics.
+
+    Returns:
+        Path to the created Zarr store.
+    """
     try:
         from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
     except ImportError as exc:  # pragma: no cover - optional dependency
@@ -650,7 +667,14 @@ def _ingest_hdf5_to_zarr(
     )
 
     try:
-        return ingest_h5_movie(cfg)
+        result_path = ingest_h5_movie(cfg)
+        if compute_stats:
+            LOG.info("Computing concentration stats for %s...", output_path.name)
+            stats = compute_concentration_stats(result_path)
+            if spec.normalize:
+                stats["normalized_during_ingest"] = True
+            store_stats_in_zarr(result_path, stats)
+        return result_path
     except Exception as exc:  # pragma: no cover - ingestion errors bubble up
         raise DatasetDownloadError(
             f"Failed to ingest HDF5 movie {source_path} into Zarr: {exc}"
@@ -658,13 +682,25 @@ def _ingest_hdf5_to_zarr(
 
 
 def _ingest_mat_to_zarr(
-    spec: RigolliDNSIngest, source_path: Path, output_path: Path
+    spec: RigolliDNSIngest,
+    source_path: Path,
+    output_path: Path,
+    compute_stats: bool = True,
 ) -> Path:
     """Convert a MATLAB v7.3 plume dataset with separate coordinates into Zarr.
 
     Downloads the coordinates file, loads both files using h5py (for MATLAB v7.3
     HDF5 format), and creates a standardized Zarr dataset with proper spatial
     dimension coordinates.
+
+    Args:
+        spec: Ingestion specification from registry.
+        source_path: Path to source MATLAB file.
+        output_path: Path for output Zarr store.
+        compute_stats: If True, compute and store concentration statistics.
+
+    Returns:
+        Path to the created Zarr store.
     """
     try:
         import h5py
@@ -704,14 +740,20 @@ def _ingest_mat_to_zarr(
             )
 
     try:
-        # Load coordinates from MATLAB v7.3 (HDF5) file
-        with h5py.File(coords_path, "r") as coords_file:
-            # MATLAB stores arrays transposed; handle both formats
-            x_data = coords_file[spec.x_key][:]
-            y_data = coords_file[spec.y_key][:]
-            # Flatten if needed (MATLAB often stores as column vectors)
-            x_coords = np.asarray(x_data).flatten().astype(np.float32)
-            y_coords = np.asarray(y_data).flatten().astype(np.float32)
+        # Load coordinates - try scipy first (v5), fall back to h5py (v7.3)
+        try:
+            from scipy.io import loadmat
+
+            coords_mat = loadmat(str(coords_path))
+            x_coords = np.asarray(coords_mat[spec.x_key]).flatten().astype(np.float32)
+            y_coords = np.asarray(coords_mat[spec.y_key]).flatten().astype(np.float32)
+        except NotImplementedError:
+            # MATLAB v7.3 format - use h5py
+            with h5py.File(coords_path, "r") as coords_file:
+                x_data = coords_file[spec.x_key][:]
+                y_data = coords_file[spec.y_key][:]
+                x_coords = np.asarray(x_data).flatten().astype(np.float32)
+                y_coords = np.asarray(y_data).flatten().astype(np.float32)
 
         # Load concentration data from source MATLAB file
         with h5py.File(source_path, "r") as mat_file:
@@ -763,6 +805,14 @@ def _ingest_mat_to_zarr(
             conc_array.shape,
         )
 
+        # Compute and store concentration statistics
+        if compute_stats:
+            LOG.info("Computing concentration stats for %s...", output_path.name)
+            stats = compute_concentration_stats(output_path)
+            if spec.normalize:
+                stats["normalized_during_ingest"] = True
+            store_stats_in_zarr(output_path, stats)
+
         return output_path
 
     except Exception as exc:
@@ -775,12 +825,25 @@ def _ingest_mat_to_zarr(
 
 
 def _ingest_emonet_to_zarr(
-    spec: EmonetSmokeIngest, source_path: Path, output_path: Path
+    spec: EmonetSmokeIngest,
+    source_path: Path,
+    output_path: Path,
+    compute_stats: bool = True,
 ) -> Path:
     """Convert Emonet lab flyWalk video frames into standardized Zarr.
 
     Downloads optional metadata file, loads video frames from MATLAB format,
     and creates a Zarr dataset with spatial coordinates derived from arena size.
+
+    Args:
+        spec: Ingestion specification from registry.
+        source_path: Path to source MATLAB file.
+        output_path: Path for output Zarr store.
+        compute_stats: If True, compute and store concentration statistics.
+            For large datasets, set to False and compute stats separately.
+
+    Returns:
+        Path to the created Zarr store.
     """
     try:
         import h5py
@@ -820,7 +883,7 @@ def _ingest_emonet_to_zarr(
                 LOG.warning("Failed to parse metadata file: %s", exc)
 
     try:
-        # Load video frames from MATLAB file
+        # Open HDF5 file and get shape without loading data
         with h5py.File(source_path, "r") as mat_file:
             # Try common keys for video frames
             frames_key = spec.frames_key
@@ -837,64 +900,118 @@ def _ingest_emonet_to_zarr(
                     f"Available keys: {list(mat_file.keys())}"
                 )
 
+            frames_dataset = mat_file[frames_key]
+            src_shape = frames_dataset.shape
             LOG.info(
-                "Loading frames from key '%s' (this may take a while for large files)",
+                "Found frames at key '%s' with shape %s, processing in chunks...",
                 frames_key,
+                src_shape,
             )
-            frames_data = mat_file[frames_key][:]
-            frames_array = np.asarray(frames_data)
 
-            # Normalize to (t, y, x) format
-            if frames_array.ndim == 3:
-                # MATLAB often stores as (x, y, t) - check if last dim is smallest (likely time)
-                if frames_array.shape[2] > frames_array.shape[0]:
-                    # Looks like (t, y, x) already or (t, x, y)
-                    pass
-                else:
-                    # Likely (x, y, t) -> transpose to (t, y, x)
-                    frames_array = np.transpose(frames_array, (2, 1, 0))
+            # Emonet format per README: (Height x Width x n_frames) = (H, W, T)
+            # But actual file has (T, X, Y) = (n_frames, Width, Height)
+            # Arena: 300mm x 180mm, px_per_mm ~6.83
+            # 300mm * 6.83 = 2048px (X/Width), 180mm * 6.83 ≈ 1200px (Y/Height)
+            # We want (T, Y, X) -> swap axes 1 and 2 during chunk processing
+            n_frames, n_x, n_y = src_shape
 
-            frames_array = frames_array.astype(np.float32)
+            # Generate spatial coordinates from arena size
+            arena_x, arena_y = spec.arena_size_mm
+            x_coords = np.linspace(0, arena_x, n_x, dtype=np.float32)
+            y_coords = np.linspace(0, arena_y, n_y, dtype=np.float32)
 
-        if spec.normalize:
-            fmin, fmax = frames_array.min(), frames_array.max()
-            if fmax > fmin:
-                frames_array = (frames_array - fmin) / (fmax - fmin)
+            # Create Zarr store with pre-allocated empty array
+            # Use smaller time chunks to stay under 2GB codec limit
+            # Each frame is n_y * n_x * 4 bytes = ~10 MB for Emonet
+            bytes_per_frame = n_y * n_x * 4
+            max_chunk_bytes = 500 * 1024 * 1024  # 500 MB target
+            chunk_t = min(
+                spec.chunk_t or 100, max(1, max_chunk_bytes // bytes_per_frame)
+            )
 
-        # Generate spatial coordinates from arena size
-        n_frames, n_y, n_x = frames_array.shape
-        arena_x, arena_y = spec.arena_size_mm
-        x_coords = np.linspace(0, arena_x, n_x, dtype=np.float32)
-        y_coords = np.linspace(0, arena_y, n_y, dtype=np.float32)
+            LOG.info(
+                "Using chunks: (%d, %d, %d) for shape (%d, %d, %d), ~%.0f MB/chunk",
+                chunk_t,
+                n_y,
+                n_x,
+                n_frames,
+                n_y,
+                n_x,
+                chunk_t * bytes_per_frame / 1e6,
+            )
 
-        # Create Zarr store
-        chunk_t = spec.chunk_t or min(100, n_frames)
-        store = zarr.DirectoryStore(str(output_path))
-        root = zarr.group(store, overwrite=True)
+            store = zarr.DirectoryStore(str(output_path))
+            root = zarr.group(store, overwrite=True)
 
-        root.create_dataset(
-            "concentration",
-            data=frames_array,
-            chunks=(chunk_t, n_y, n_x),
-            dtype=np.float32,
-        )
-        root.create_dataset("x", data=x_coords, dtype=np.float32)
-        root.create_dataset("y", data=y_coords, dtype=np.float32)
+            conc = root.create_dataset(
+                "concentration",
+                shape=(n_frames, n_y, n_x),
+                chunks=(chunk_t, n_y, n_x),
+                dtype=np.float32,
+            )
+            root.create_dataset("x", data=x_coords, dtype=np.float32)
+            root.create_dataset("y", data=y_coords, dtype=np.float32)
+
+            # Process in chunks to avoid memory issues
+            # Source is (T, X, Y), we need (T, Y, X) - swap spatial axes
+            batch_size = chunk_t
+            global_min, global_max = np.inf, -np.inf
+
+            for t_start in range(0, n_frames, batch_size):
+                t_end = min(t_start + batch_size, n_frames)
+                # Read time slice: (batch, X, Y)
+                chunk = frames_dataset[t_start:t_end]
+                # Transpose to (batch, Y, X) - swap axes 1 and 2
+                chunk = np.transpose(chunk, (0, 2, 1)).astype(np.float32)
+                conc[t_start:t_end] = chunk
+
+                if spec.normalize:
+                    global_min = min(global_min, chunk.min())
+                    global_max = max(global_max, chunk.max())
+
+                if (t_start // batch_size) % 10 == 0:
+                    LOG.info("  Processed %d / %d frames...", t_end, n_frames)
+
+        # Normalize in a second pass if needed
+        if spec.normalize and global_max > global_min:
+            LOG.info("Normalizing data (min=%.2f, max=%.2f)...", global_min, global_max)
+            for t_start in range(0, n_frames, batch_size):
+                t_end = min(t_start + batch_size, n_frames)
+                chunk = conc[t_start:t_end]
+                conc[t_start:t_end] = (chunk - global_min) / (global_max - global_min)
 
         # Store metadata
         root.attrs["fps"] = metadata.get("fps", spec.fps)
         root.attrs["n_frames"] = n_frames
-        root.attrs["shape"] = list(frames_array.shape)
+        root.attrs["shape"] = [n_frames, n_y, n_x]
         root.attrs["arena_size_mm"] = list(spec.arena_size_mm)
         root.attrs["source_format"] = "emonet_flywalk"
         root.attrs["normalized"] = spec.normalize
 
         LOG.info(
-            "Ingested Emonet smoke video to Zarr: %s -> %s (shape=%s)",
+            "Ingested Emonet smoke video to Zarr: %s -> %s (shape=[%d, %d, %d])",
             source_path.name,
             output_path.name,
-            frames_array.shape,
+            n_frames,
+            n_y,
+            n_x,
         )
+
+        # Compute and store concentration statistics
+        # For large Emonet datasets, consider compute_stats=False and run separately
+        if compute_stats:
+            LOG.info("Computing concentration stats for %s...", output_path.name)
+            stats = compute_concentration_stats(output_path)
+            if spec.normalize:
+                stats["normalized_during_ingest"] = True
+                # Store original range for reference
+                stats["original_min"] = (
+                    float(global_min) if global_max > global_min else None
+                )
+                stats["original_max"] = (
+                    float(global_max) if global_max > global_min else None
+                )
+            store_stats_in_zarr(output_path, stats)
 
         return output_path
 

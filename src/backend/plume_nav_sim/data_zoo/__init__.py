@@ -10,6 +10,8 @@ from .download import (
     ensure_dataset_available,
     generate_provenance,
 )
+from .loader import load_plume
+from .movie_plume import MoviePlume
 from .registry import (
     DATASET_REGISTRY,
     DEFAULT_CACHE_ROOT,
@@ -60,4 +62,7 @@ __all__ = [
     "describe_dataset",
     "get_dataset_registry",
     "validate_registry",
+    # Loader
+    "load_plume",
+    "MoviePlume",
 ]

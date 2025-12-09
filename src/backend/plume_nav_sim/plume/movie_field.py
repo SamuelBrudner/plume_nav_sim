@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 
@@ -41,6 +41,7 @@ class MovieConfig:
         origin: Optional (y,x) grid origin
         extent: Optional (y,x) grid extent; defaults to pixel dims * pixel_to_grid
         step_policy: Frame stepping policy when advancing time ("wrap" or "clamp")
+        data_array: Optional preloaded xarray.DataArray (t,y,x) to use instead of opening from path
     """
 
     path: str
@@ -49,6 +50,7 @@ class MovieConfig:
     origin: Optional[Tuple[float, float]] = None
     extent: Optional[Tuple[float, float]] = None
     step_policy: StepPolicy = "wrap"
+    data_array: Any | None = None
 
 
 class MoviePlumeField:
@@ -66,32 +68,51 @@ class MoviePlumeField:
     def __init__(self, cfg: MovieConfig) -> None:
         self._logger = get_component_logger("concentration_field")
 
-        # Resolve and validate dataset path
-        path = Path(cfg.path)
-        if not path.exists():
-            raise ValidationError(f"movie.path not found: {cfg.path}")
-        if not path.is_dir():
-            # Zarr stores are directories; support file-backed stores via xarray if possible
-            # but fail fast for obviously wrong inputs
-            pass
+        data_array: Any = getattr(cfg, "data_array", None)
+        path = Path(cfg.path) if cfg.path else None
 
-        # Lazy import optional deps with helpful errors
-        try:
-            import xarray as xr  # type: ignore
-        except Exception as exc:  # pragma: no cover - optional dependency
-            raise ImportError(
-                "Movie plume requires optional dependency 'xarray'. "
-                "Install extras: pip install xarray zarr numcodecs"
-            ) from exc
+        if data_array is None:
+            if path is None:
+                raise ValidationError("movie.path must be provided")
+            if not path.exists():
+                raise ValidationError(f"movie.path not found: {cfg.path}")
+            if not path.is_dir():
+                # Zarr stores are directories; support file-backed stores via xarray if possible
+                # but fail fast for obviously wrong inputs
+                pass
 
-        # Open dataset and validate schema
-        try:
-            ds = xr.open_zarr(str(path), consolidated=True)  # type: ignore[attr-defined]
-        except Exception:
-            # Fallback to non-consolidated stores
-            ds = xr.open_zarr(str(path))  # type: ignore[attr-defined]
+            # Lazy import optional deps with helpful errors
+            try:
+                import xarray as xr  # type: ignore
+            except Exception as exc:  # pragma: no cover - optional dependency
+                raise ImportError(
+                    "Movie plume requires optional dependency 'xarray'. "
+                    "Install extras: pip install xarray zarr numcodecs"
+                ) from exc
 
-        attrs = validate_xarray_like(ds)
+            # Open dataset and validate schema
+            try:
+                ds = xr.open_zarr(  # type: ignore[attr-defined]
+                    str(path), consolidated=True
+                )
+            except Exception:
+                # Fallback to non-consolidated stores
+                ds = xr.open_zarr(str(path))  # type: ignore[attr-defined]
+
+            attrs_source = ds
+            var = ds[VARIABLE_CONCENTRATION]
+            dataset_path = str(path)
+        else:
+            # When a preloaded DataArray is provided (e.g., via load_plume),
+            # validate using an xarray.Dataset view to satisfy the schema helper.
+            try:
+                attrs_source = data_array.to_dataset(name=VARIABLE_CONCENTRATION)
+            except Exception:
+                attrs_source = {VARIABLE_CONCENTRATION: data_array}
+            var = data_array
+            dataset_path = str(path) if path is not None else "<in-memory>"
+
+        attrs = validate_xarray_like(attrs_source)
 
         # Apply overrides from cfg when provided
         attrs_overrides = {
@@ -109,7 +130,6 @@ class MoviePlumeField:
         self.attrs: VideoPlumeAttrs = VideoPlumeAttrs(**attrs_overrides)  # type: ignore[arg-type]
 
         # Resolve dims and sizes
-        var = ds[VARIABLE_CONCENTRATION]
         dims = tuple(getattr(var, "dims"))
         if dims != DIMS_TYX:
             raise ValidationError(f"Movie variable dims must be {DIMS_TYX}, got {dims}")
@@ -119,7 +139,7 @@ class MoviePlumeField:
 
         # Backing handle for lazy frame selection
         self._data_array = var
-        self._dataset_path = str(path)
+        self._dataset_path = dataset_path
         self.step_policy: StepPolicy = cfg.step_policy or "wrap"
         if self.step_policy not in ("wrap", "clamp"):
             raise ValidationError(

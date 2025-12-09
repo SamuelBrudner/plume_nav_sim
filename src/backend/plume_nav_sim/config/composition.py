@@ -144,6 +144,8 @@ class SimulationSpec(BaseModel):
     movie_extent: Optional[Tuple[float, float]] = Field(default=None)
     movie_step_policy: Optional[Literal["wrap", "clamp"]] = Field(default=None)
     movie_h5_dataset: Optional[str] = Field(default=None)
+    movie_normalize: Optional[str] = Field(default=None)
+    movie_chunks: Optional[Any] = Field(default=None)
 
     # Optional observation wrappers applied after env creation (in order).
     # Each wrapper is specified via dotted path and kwargs; the wrapper class
@@ -354,6 +356,8 @@ def _build_env_kwargs_from_spec(spec: SimulationSpec) -> dict[str, Any]:
     )
     _add_if_not_none(kwargs, "movie_step_policy", spec.movie_step_policy)
     _add_if_not_none(kwargs, "movie_h5_dataset", spec.movie_h5_dataset)
+    _add_if_not_none(kwargs, "movie_normalize", spec.movie_normalize)
+    _add_if_not_none(kwargs, "movie_chunks", spec.movie_chunks)
 
     if spec.render:
         kwargs["render_mode"] = "rgb_array"

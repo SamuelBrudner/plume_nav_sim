@@ -19,7 +19,7 @@ Example:
 """
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 try:
     from typing import Literal
@@ -35,6 +35,7 @@ from ..data_zoo import (
     DEFAULT_CACHE_ROOT,
     ensure_dataset_available,
     get_dataset_registry,
+    load_plume,
 )
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.concentration_field import ConcentrationField
@@ -73,6 +74,9 @@ def create_component_environment(  # noqa: C901
     movie_extent: Optional[tuple[float, float]] = None,
     movie_h5_dataset: Optional[str] = None,
     movie_step_policy: Literal["wrap", "clamp"] = "wrap",
+    movie_normalize: str | None = None,
+    movie_chunks: Any = "auto",
+    movie_data: Any = None,
     enable_wind: bool = False,
     wind_direction_deg: float = 0.0,
     wind_speed: float = 1.0,
@@ -194,11 +198,12 @@ def create_component_environment(  # noqa: C901
                 "env.plume=movie requires movie.path or movie.dataset_id to be provided"
             )
 
+        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
         dataset_path = _resolve_movie_dataset(
             movie_path=movie_path,
             movie_dataset_id=movie_dataset_id,
             movie_auto_download=movie_auto_download,
-            movie_cache_root=movie_cache_root,
+            movie_cache_root=cache_root,
             movie_fps=movie_fps,
             movie_pixel_to_grid=movie_pixel_to_grid,
             movie_origin=movie_origin,
@@ -206,12 +211,23 @@ def create_component_environment(  # noqa: C901
             movie_h5_dataset=movie_h5_dataset,
         )
 
+        data_array = movie_data
+        if data_array is None and movie_dataset_id:
+            data_array = load_plume(
+                movie_dataset_id,
+                normalize=movie_normalize,
+                cache_root=cache_root,
+                auto_download=movie_auto_download,
+                chunks=movie_chunks,
+            )
+
         # For raw media sources (non-directory movie_path values), treat the
         # sidecar as the single source of truth for movie-level metadata. Once
         # ingestion has produced a dataset, rely on its attrs instead of
         # overriding via MovieConfig. For existing dataset directories, preserve
         # the prior behavior and allow explicit overrides.
-        source_is_dir = Path(movie_path).is_dir()
+        source_root = Path(movie_path) if movie_path else Path(dataset_path)
+        source_is_dir = source_root.is_dir()
         if source_is_dir:
             cfg_fps = movie_fps
             cfg_pixel_to_grid = movie_pixel_to_grid
@@ -230,6 +246,7 @@ def create_component_environment(  # noqa: C901
             origin=cfg_origin,
             extent=cfg_extent,
             step_policy=movie_step_policy,
+            data_array=data_array,
         )
         movie_field = MoviePlumeField(movie_cfg)
         concentration_field = movie_field  # type: ignore[assignment]

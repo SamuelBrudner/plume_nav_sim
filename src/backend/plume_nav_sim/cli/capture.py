@@ -324,6 +324,8 @@ def _extracted_from__env_from_cfg_11(cfg, make_kwargs):
             ),
             "movie_step_policy": movie_cfg.get("step_policy", "wrap"),
             "movie_h5_dataset": movie_cfg.get("h5_dataset"),
+            "movie_normalize": movie_cfg.get("normalize"),
+            "movie_chunks": movie_cfg.get("chunks"),
         }
     )
     env = pns.make_env(**make_kwargs)
