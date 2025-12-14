@@ -2,7 +2,7 @@
 
 🧪 Proof-of-Life Gymnasium Environment for Plume Navigation Research
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/plume-nav-sim.svg)](https://pypi.org/project/plume-nav-sim/) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Gymnasium](https://img.shields.io/badge/gymnasium-0.29%2B-green.svg)](https://gymnasium.farama.org/) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 A minimal Gymnasium-compatible reinforcement learning environment for plume navigation research, providing a standard API to communicate between learning algorithms and chemical plume environments. Designed specifically for researchers, educators, and students developing autonomous agents that navigate chemical plumes to locate their sources.
 
@@ -37,41 +37,49 @@ A minimal Gymnasium-compatible reinforcement learning environment for plume navi
 - Optional for notebooks: **ipympl ≥0.9** (Interactive Matplotlib widgets in Jupyter)
   - Also install: **ipywidgets ≥8.0.0** (widget support)
 
-### Installation Steps
+### Quick Install (PyPI)
 
-1. **Create Virtual Environment** (Recommended):
+```bash
+pip install plume-nav-sim
+```
+
+With optional extras:
+
+```bash
+# For Jupyter notebooks with interactive plots
+pip install plume-nav-sim[notebooks]
+
+# For video/movie plume support
+pip install plume-nav-sim[media]
+
+# For data capture and analysis
+pip install plume-nav-sim[data]
+```
+
+### Development Installation
+
+For contributors or researchers who want to modify the source:
+
+1. **Clone and create environment**:
 
    ```bash
-   python -m venv plume-nav-env
-   source plume-nav-env/bin/activate  # Linux/macOS
-   plume-nav-env\Scripts\activate     # Windows
+   git clone https://github.com/SamuelBrudner/plume_nav_sim.git
+   cd plume_nav_sim/src/backend
+   python -m venv .venv
+   source .venv/bin/activate  # Linux/macOS
    ```
 
-2. **Install Package**:
+2. **Install in editable mode**:
 
    ```bash
-   # Development installation (recommended for research)
-   pip install -e .
-   
-   # With development dependencies
    pip install -e .[dev]
-
-   # For Jupyter notebooks with interactive plots (includes ipympl)
-   pip install -e .[notebooks]
-
-   # If '%matplotlib widget' is not recognized, install runtime deps to the kernel
-   # pip
-   %pip install -U ipympl ipywidgets matplotlib ipykernel
-   # conda
-   # conda install -c conda-forge ipympl ipywidgets matplotlib ipykernel
-   # Then restart the kernel
    ```
 
-3. **Verify Installation**:
+### Verify Installation
 
-   ```bash
-   python -c "import plume_nav_sim; print(f'Version: {plume_nav_sim.get_version()}')"
-   ```
+```bash
+python -c "import plume_nav_sim; print(f'Version: {plume_nav_sim.PACKAGE_VERSION}')"
+```
 
 ## ⚡ Quick Start
 
