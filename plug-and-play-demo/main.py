@@ -46,6 +46,8 @@ def _build_movie_kwargs(
     movie_fps: Optional[float],
     movie_step_policy: Optional[str],
     movie_h5_dataset: Optional[str],
+    movie_normalize: Optional[str],
+    movie_chunks: Optional[str],
 ) -> Dict[str, Any]:
     """Resolve movie plume configuration (registry id or path + overrides).
 
@@ -60,6 +62,11 @@ def _build_movie_kwargs(
 
     if plume != "movie":
         return {}
+
+    if movie_path and movie_dataset_id:
+        raise SystemExit(
+            "Specify only one of --movie-path or --movie-dataset-id (not both)."
+        )
 
     movie_kwargs: Dict[str, Any] = {}
 
@@ -90,6 +97,12 @@ def _build_movie_kwargs(
         movie_kwargs["movie_auto_download"] = bool(movie_auto_download)
         if movie_cache_root:
             movie_kwargs["movie_cache_root"] = movie_cache_root
+        if movie_normalize is not None:
+            movie_kwargs["movie_normalize"] = movie_normalize
+        if movie_chunks is not None:
+            movie_kwargs["movie_chunks"] = (
+                None if movie_chunks == "none" else movie_chunks
+            )
 
     if movie_fps is not None:
         movie_kwargs["movie_fps"] = float(movie_fps)
@@ -158,9 +171,14 @@ def run_demo(
     save_gif: Optional[str] = None,
     plume: str = "static",
     movie_path: Optional[str] = None,
+    movie_dataset_id: Optional[str] = None,
+    movie_auto_download: bool = False,
+    movie_cache_root: Optional[str] = None,
     movie_fps: Optional[float] = None,
     movie_step_policy: Optional[str] = None,
     movie_h5_dataset: Optional[str] = None,
+    movie_normalize: Optional[str] = None,
+    movie_chunks: Optional[str] = None,
 ) -> None:
     try:
         # Map human-friendly WxH string to SimulationSpec.grid_size=(W, H)
@@ -191,9 +209,14 @@ def run_demo(
     movie_kwargs = _build_movie_kwargs(
         plume=plume,
         movie_path=movie_path,
+        movie_dataset_id=movie_dataset_id,
+        movie_auto_download=bool(movie_auto_download),
+        movie_cache_root=movie_cache_root,
         movie_fps=movie_fps,
         movie_step_policy=movie_step_policy,
         movie_h5_dataset=movie_h5_dataset,
+        movie_normalize=movie_normalize,
+        movie_chunks=movie_chunks,
     )
 
     sim = SimulationSpec(
@@ -346,6 +369,24 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--movie-normalize",
+        choices=["minmax", "robust", "zscore"],
+        default=None,
+        help=(
+            "Optional normalization method for registry-backed datasets loaded via --movie-dataset-id. "
+            "Requires precomputed concentration_stats in the Zarr store."
+        ),
+    )
+    parser.add_argument(
+        "--movie-chunks",
+        choices=["auto", "none"],
+        default=None,
+        help=(
+            "Chunking strategy for registry-backed datasets loaded via --movie-dataset-id. "
+            "Use 'none' to disable dask-backed chunking."
+        ),
+    )
+    parser.add_argument(
         "--save-gif",
         type=str,
         default=None,
@@ -438,6 +479,12 @@ def main() -> None:
             cfg["movie_step_policy"] = args.movie_step_policy
         if _flag_provided("--movie-h5-dataset"):
             cfg["movie_h5_dataset"] = args.movie_h5_dataset
+        if _flag_provided("--movie-normalize"):
+            cfg["movie_normalize"] = args.movie_normalize
+        if _flag_provided("--movie-chunks"):
+            cfg["movie_chunks"] = (
+                None if args.movie_chunks == "none" else args.movie_chunks
+            )
         # Policy override
         if _flag_provided("--policy-spec"):
             cfg["policy"] = {"spec": args.policy_spec}
@@ -478,6 +525,8 @@ def main() -> None:
             movie_fps=args.movie_fps,
             movie_step_policy=args.movie_step_policy,
             movie_h5_dataset=args.movie_h5_dataset,
+            movie_normalize=args.movie_normalize,
+            movie_chunks=args.movie_chunks,
         )
 
         sim = SimulationSpec(
@@ -499,7 +548,7 @@ def main() -> None:
         # Non-capture: execute a single episode using the composed spec
         try:
             env, policy = prepare(sim)
-        except ValueError as exc:
+        except (ValueError, RuntimeError, ImportError) as exc:
             raise SystemExit(str(exc)) from exc
 
         frames: List[np.ndarray] = []
@@ -543,7 +592,7 @@ def main() -> None:
     # Capture mode: wrap env and record
     try:
         env, policy = prepare(sim)
-    except ValueError as exc:
+    except (ValueError, RuntimeError, ImportError) as exc:
         raise SystemExit(str(exc)) from exc
     from plume_nav_sim.data_capture import RunRecorder  # lazy import
     from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper  # lazy import
