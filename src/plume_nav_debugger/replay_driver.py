@@ -65,7 +65,8 @@ def _infer_max_steps_from_artifacts(artifacts: ReplayArtifacts) -> int | None:
 def _env_kwargs_from_meta(
     meta: RunMeta, *, render: bool, recorded_max_steps: int | None
 ) -> dict[str, Any]:
-    cfg = _flatten_env_config(meta.env_config)
+    raw_cfg = dict(meta.env_config or {})
+    cfg = _flatten_env_config(raw_cfg)
     kwargs: dict[str, Any] = {}
 
     grid = cfg.get("grid_size")
@@ -118,6 +119,102 @@ def _env_kwargs_from_meta(
     enable_rendering = bool(cfg.get("enable_rendering", True))
     if render and enable_rendering:
         kwargs["render_mode"] = "rgb_array"
+
+    plume = cfg.get("plume")
+    if isinstance(plume, str) and plume.strip().lower() == "movie":
+        kwargs["plume"] = "movie"
+
+        movie_group = raw_cfg.get("movie")
+        movie_cfg = movie_group if isinstance(movie_group, dict) else {}
+
+        movie_path = cfg.get("movie_path")
+        if movie_path is None:
+            movie_path = movie_cfg.get("path")
+        if isinstance(movie_path, str) and movie_path.strip():
+            kwargs["movie_path"] = movie_path
+
+        movie_dataset_id = cfg.get("movie_dataset_id")
+        if movie_dataset_id is None:
+            movie_dataset_id = movie_cfg.get("dataset_id")
+        if isinstance(movie_dataset_id, str) and movie_dataset_id.strip():
+            kwargs["movie_dataset_id"] = movie_dataset_id
+
+        movie_auto_download = cfg.get("movie_auto_download")
+        if movie_auto_download is None:
+            movie_auto_download = movie_cfg.get("auto_download")
+        if movie_auto_download is not None:
+            kwargs["movie_auto_download"] = bool(movie_auto_download)
+
+        movie_cache_root = cfg.get("movie_cache_root")
+        if movie_cache_root is None:
+            movie_cache_root = movie_cfg.get("cache_root")
+        if isinstance(movie_cache_root, str) and movie_cache_root.strip():
+            kwargs["movie_cache_root"] = movie_cache_root
+
+        movie_fps = cfg.get("movie_fps")
+        if movie_fps is None:
+            movie_fps = movie_cfg.get("fps")
+        if movie_fps is not None:
+            try:
+                kwargs["movie_fps"] = float(movie_fps)
+            except Exception:
+                pass
+
+        movie_step_policy = cfg.get("movie_step_policy")
+        if movie_step_policy is None:
+            movie_step_policy = movie_cfg.get("step_policy")
+        if isinstance(movie_step_policy, str) and movie_step_policy.strip():
+            kwargs["movie_step_policy"] = movie_step_policy
+
+        movie_h5_dataset = cfg.get("movie_h5_dataset")
+        if movie_h5_dataset is None:
+            movie_h5_dataset = movie_cfg.get("h5_dataset")
+        if isinstance(movie_h5_dataset, str) and movie_h5_dataset.strip():
+            kwargs["movie_h5_dataset"] = movie_h5_dataset
+
+        movie_normalize = cfg.get("movie_normalize")
+        if movie_normalize is None:
+            movie_normalize = movie_cfg.get("normalize")
+        if movie_normalize is not None:
+            kwargs["movie_normalize"] = movie_normalize
+
+        movie_chunks = cfg.get("movie_chunks")
+        if movie_chunks is None:
+            movie_chunks = movie_cfg.get("chunks")
+        if isinstance(movie_chunks, str) and movie_chunks.strip().lower() == "none":
+            movie_chunks = None
+        if movie_chunks is not None:
+            kwargs["movie_chunks"] = movie_chunks
+
+        pixel_to_grid = cfg.get("movie_pixel_to_grid")
+        if pixel_to_grid is None:
+            pixel_to_grid = movie_cfg.get("pixel_to_grid")
+        if isinstance(pixel_to_grid, (list, tuple)) and len(pixel_to_grid) == 2:
+            try:
+                kwargs["movie_pixel_to_grid"] = (
+                    float(pixel_to_grid[0]),
+                    float(pixel_to_grid[1]),
+                )
+            except Exception:
+                pass
+
+        origin = cfg.get("movie_origin")
+        if origin is None:
+            origin = movie_cfg.get("origin")
+        if isinstance(origin, (list, tuple)) and len(origin) == 2:
+            try:
+                kwargs["movie_origin"] = (float(origin[0]), float(origin[1]))
+            except Exception:
+                pass
+
+        extent = cfg.get("movie_extent")
+        if extent is None:
+            extent = movie_cfg.get("extent")
+        if isinstance(extent, (list, tuple)) and len(extent) == 2:
+            try:
+                kwargs["movie_extent"] = (float(extent[0]), float(extent[1]))
+            except Exception:
+                pass
 
     defaults = {
         "action_type": "oriented",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -21,6 +22,72 @@ class DebuggerConfig:
     max_steps: int = 500
     seed: Optional[int] = 123
     start_location: Optional[tuple[int, int]] = None
+    plume: str = "static"
+    movie_path: Optional[str] = None
+    movie_dataset_id: Optional[str] = None
+    movie_auto_download: bool = False
+    movie_cache_root: Optional[str] = None
+    movie_fps: Optional[float] = None
+    movie_step_policy: str = "wrap"
+    movie_h5_dataset: Optional[str] = None
+    movie_normalize: Optional[str] = None
+    movie_chunks: Optional[str] = None
+
+    @classmethod
+    def from_env(cls) -> "DebuggerConfig":
+        def _get_str(key: str) -> Optional[str]:
+            raw = os.environ.get(key)
+            if raw is None:
+                return None
+            val = str(raw).strip()
+            return val if val else None
+
+        def _get_bool(key: str, default: bool) -> bool:
+            raw = os.environ.get(key)
+            if raw is None:
+                return bool(default)
+            val = str(raw).strip().lower()
+            return val in {"1", "true", "yes", "y", "on"}
+
+        def _get_float(key: str) -> Optional[float]:
+            raw = os.environ.get(key)
+            if raw is None:
+                return None
+            txt = str(raw).strip()
+            if not txt:
+                return None
+            try:
+                return float(txt)
+            except Exception:
+                return None
+
+        plume = (_get_str("PLUME_DEBUGGER_PLUME") or "static").strip().lower()
+        if plume not in {"static", "movie"}:
+            plume = "static"
+
+        movie_chunks = _get_str("PLUME_DEBUGGER_MOVIE_CHUNKS")
+        if movie_chunks is not None and movie_chunks.strip().lower() == "none":
+            movie_chunks = None
+
+        step_policy = _get_str("PLUME_DEBUGGER_MOVIE_STEP_POLICY")
+        if step_policy is None:
+            step_policy = "wrap"
+        step_policy = step_policy.strip().lower()
+        if step_policy not in {"wrap", "clamp"}:
+            step_policy = "wrap"
+
+        return cls(
+            plume=plume,
+            movie_path=_get_str("PLUME_DEBUGGER_MOVIE_PATH"),
+            movie_dataset_id=_get_str("PLUME_DEBUGGER_MOVIE_DATASET_ID"),
+            movie_auto_download=_get_bool("PLUME_DEBUGGER_MOVIE_AUTO_DOWNLOAD", False),
+            movie_cache_root=_get_str("PLUME_DEBUGGER_MOVIE_CACHE_ROOT"),
+            movie_fps=_get_float("PLUME_DEBUGGER_MOVIE_FPS"),
+            movie_step_policy=step_policy,
+            movie_h5_dataset=_get_str("PLUME_DEBUGGER_MOVIE_H5_DATASET"),
+            movie_normalize=_get_str("PLUME_DEBUGGER_MOVIE_NORMALIZE"),
+            movie_chunks=movie_chunks,
+        )
 
 
 class EnvDriver(QtCore.QObject):
@@ -31,6 +98,7 @@ class EnvDriver(QtCore.QObject):
     policy_changed = QtCore.Signal(object)  # emits base policy for probing
     provider_mux_changed = QtCore.Signal(object)  # emits ProviderMux for introspection
     run_meta_changed = QtCore.Signal(int, object)  # (seed, start_xy tuple)
+    error_occurred = QtCore.Signal(str)
 
     def __init__(self, config: DebuggerConfig) -> None:
         super().__init__()
@@ -76,7 +144,43 @@ class EnvDriver(QtCore.QObject):
         )
         if self.config.start_location is not None:
             kwargs["start_location"] = tuple(self.config.start_location)
-        self._env = pns.make_env(**kwargs)
+
+        if (
+            str(getattr(self.config, "plume", "static")).lower() == "movie"
+            or self.config.movie_path
+            or self.config.movie_dataset_id
+        ):
+            kwargs["plume"] = "movie"
+            if self.config.movie_path:
+                kwargs["movie_path"] = self.config.movie_path
+            if self.config.movie_dataset_id:
+                kwargs["movie_dataset_id"] = self.config.movie_dataset_id
+            kwargs["movie_auto_download"] = bool(self.config.movie_auto_download)
+            if self.config.movie_cache_root:
+                kwargs["movie_cache_root"] = self.config.movie_cache_root
+            if self.config.movie_fps is not None:
+                kwargs["movie_fps"] = float(self.config.movie_fps)
+            if self.config.movie_step_policy:
+                kwargs["movie_step_policy"] = str(self.config.movie_step_policy)
+            if self.config.movie_h5_dataset:
+                kwargs["movie_h5_dataset"] = self.config.movie_h5_dataset
+            if self.config.movie_normalize is not None:
+                kwargs["movie_normalize"] = self.config.movie_normalize
+            if self.config.movie_chunks is not None:
+                kwargs["movie_chunks"] = self.config.movie_chunks
+
+        try:
+            self._env = pns.make_env(**kwargs)
+        except Exception as exc:
+            self._env = None
+            self._policy = None
+            self._controller = None
+            self._iter = None
+            try:
+                self.error_occurred.emit(f"Env init failed: {exc}")
+            except Exception:
+                pass
+            return
 
         # Choose a policy if available; otherwise fallback to sampler
         try:
@@ -153,6 +257,9 @@ class EnvDriver(QtCore.QObject):
     def start(self, interval_ms: int = 50) -> None:
         if self._env is None:
             self.initialize()
+        if self._env is None or self._iter is None:
+            self._running = False
+            return
         self._timer.start(max(1, int(interval_ms)))
         self._running = True
 
@@ -360,7 +467,40 @@ class EnvDriver(QtCore.QObject):
         else:
             self.config.start_location = None
 
-        self._env = pns.make_env(**kwargs)
+        if (
+            str(getattr(self.config, "plume", "static")).lower() == "movie"
+            or self.config.movie_path
+            or self.config.movie_dataset_id
+        ):
+            kwargs["plume"] = "movie"
+            if self.config.movie_path:
+                kwargs["movie_path"] = self.config.movie_path
+            if self.config.movie_dataset_id:
+                kwargs["movie_dataset_id"] = self.config.movie_dataset_id
+            kwargs["movie_auto_download"] = bool(self.config.movie_auto_download)
+            if self.config.movie_cache_root:
+                kwargs["movie_cache_root"] = self.config.movie_cache_root
+            if self.config.movie_fps is not None:
+                kwargs["movie_fps"] = float(self.config.movie_fps)
+            if self.config.movie_step_policy:
+                kwargs["movie_step_policy"] = str(self.config.movie_step_policy)
+            if self.config.movie_h5_dataset:
+                kwargs["movie_h5_dataset"] = self.config.movie_h5_dataset
+            if self.config.movie_normalize is not None:
+                kwargs["movie_normalize"] = self.config.movie_normalize
+            if self.config.movie_chunks is not None:
+                kwargs["movie_chunks"] = self.config.movie_chunks
+
+        try:
+            self._env = pns.make_env(**kwargs)
+        except Exception as exc:
+            self._env = None
+            self._iter = None
+            try:
+                self.error_occurred.emit(f"Env recreation failed: {exc}")
+            except Exception:
+                pass
+            return
 
         # Reset controller/base policy deterministically and env
         eff_seed = (

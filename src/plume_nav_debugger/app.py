@@ -6,7 +6,7 @@ try:
     from PySide6 import QtCore, QtWidgets
 except Exception as e:  # pragma: no cover - GUI import guard
     raise RuntimeError(
-        "PySide6 is required for the debugger app. Install it in your env (e.g., conda run -n plume-nav-sim pip install PySide6)."
+        "PySide6 is required for the debugger app. Install it in your env (e.g., conda run -n plume_nav_sim pip install PySide6)."
     ) from e
 
 from plume_nav_debugger.env_driver import DebuggerConfig, EnvDriver
@@ -44,7 +44,7 @@ def main() -> None:  # pragma: no cover - UI entry point
         os.environ.setdefault("QT_MAC_WANTS_LAYER", "1")
     app = QtWidgets.QApplication(sys.argv)
     # QSettings identifiers for layout persistence
-    QtCore.QCoreApplication.setOrganizationName("plume-nav-sim")
+    QtCore.QCoreApplication.setOrganizationName("plume_nav_sim")
     QtCore.QCoreApplication.setApplicationName("Debugger")
     win = MainWindow()
     win.show()

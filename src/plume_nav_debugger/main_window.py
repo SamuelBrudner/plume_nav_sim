@@ -12,7 +12,12 @@ except Exception as e:  # pragma: no cover - GUI import guard
         "PySide6 is required for the debugger app. Install it in your env (e.g., conda run -n plume-nav-sim pip install PySide6)."
     ) from e
 
-from plume_nav_debugger.config import DebuggerPreferences
+from plume_nav_debugger.config import (
+    LEGACY_QSETTINGS_ORG,
+    QSETTINGS_APP,
+    QSETTINGS_ORG,
+    DebuggerPreferences,
+)
 from plume_nav_debugger.env_driver import DebuggerConfig, EnvDriver
 from plume_nav_debugger.inspector.introspection import format_pipeline
 from plume_nav_debugger.inspector.models import ActionPanelModel, ObservationPanelModel
@@ -300,7 +305,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Load preferences and configure driver
         self.prefs = DebuggerPreferences.initial_load()
-        cfg = DebuggerConfig()
+        cfg = DebuggerConfig.from_env()
         # Enforce strict provider-only mode via Inspector (always on; not configurable)
         self.live_driver = EnvDriver(cfg)
         self.replay_driver = ReplayDriver()
@@ -358,7 +363,7 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             from PySide6 import QtCore as _QtCore
 
-            settings = _QtCore.QSettings("plume-nav-sim", "Debugger")
+            settings = _QtCore.QSettings(QSETTINGS_ORG, QSETTINGS_APP)
             settings.setValue("geometry", self.saveGeometry())
             settings.setValue("windowState", self.saveState())
         except Exception:
@@ -369,11 +374,17 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             from PySide6 import QtCore as _QtCore
 
-            settings = _QtCore.QSettings("plume-nav-sim", "Debugger")
+            settings = _QtCore.QSettings(QSETTINGS_ORG, QSETTINGS_APP)
             geom = settings.value("geometry")
+            if geom is None:
+                legacy = _QtCore.QSettings(LEGACY_QSETTINGS_ORG, QSETTINGS_APP)
+                geom = legacy.value("geometry")
             if geom is not None:
                 self.restoreGeometry(geom)
             st = settings.value("windowState")
+            if st is None:
+                legacy = _QtCore.QSettings(LEGACY_QSETTINGS_ORG, QSETTINGS_APP)
+                st = legacy.value("windowState")
             if st is not None:
                 self.restoreState(st)
         except Exception:
@@ -409,6 +420,11 @@ class MainWindow(QtWidgets.QMainWindow):
             driver.run_meta_changed.connect(self._on_run_meta)  # type: ignore[attr-defined]
         except Exception:
             pass
+        if hasattr(driver, "error_occurred"):
+            try:
+                driver.error_occurred.connect(self._on_driver_error)  # type: ignore[attr-defined]
+            except Exception:
+                pass
         if hasattr(driver, "timeline_changed"):
             try:
                 driver.timeline_changed.connect(self._on_timeline_changed)  # type: ignore[attr-defined]
@@ -445,6 +461,11 @@ class MainWindow(QtWidgets.QMainWindow):
             driver.run_meta_changed.disconnect(self._on_run_meta)  # type: ignore[attr-defined]
         except Exception:
             pass
+        if hasattr(driver, "error_occurred"):
+            try:
+                driver.error_occurred.disconnect(self._on_driver_error)  # type: ignore[attr-defined]
+            except Exception:
+                pass
         if hasattr(driver, "timeline_changed"):
             try:
                 driver.timeline_changed.disconnect(self._on_timeline_changed)  # type: ignore[attr-defined]
@@ -601,6 +622,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._run_meta.setText(f"seed={seed_val}")
         except Exception:
             self._run_meta.setText("")
+
+    @QtCore.Slot(str)
+    def _on_driver_error(self, message: str) -> None:
+        try:
+            msg = str(message).strip()
+            if not msg:
+                msg = "Error"
+            self.statusBar().showMessage(msg, 6000)
+        except Exception:
+            pass
 
     @QtCore.Slot(str)
     def _on_mode_changed(self, mode: str) -> None:
