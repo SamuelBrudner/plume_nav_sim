@@ -26,7 +26,7 @@ Quick start (how to run)
 
 - Prerequisite: install `plume_nav_sim` in your environment.
   - One‑liner (from repo root): `pip install -e src/backend`
-  - Once published: `pip install plume_nav_sim`
+  - Once published: `pip install plume-nav-sim`
 
 - From repo root:
   - `python plug-and-play-demo/main.py`
@@ -182,13 +182,13 @@ Quick start (CLI)
 
 - Capture one or more episodes to a capture root (`results/` by default):
 
-```
+```bash
 plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8
 ```
 
 - Export Parquet at end of run (requires `pyarrow`):
 
-```
+```bash
 plume-nav-capture --output results --experiment demo --episodes 2 --grid 8x8 --parquet
 ```
 
@@ -226,7 +226,7 @@ Notes
 
 - The demo script can capture runs directly without the separate CLI. From repo root:
 
-```
+```bash
 python plug-and-play-demo/main.py \
   --grid 8x8 \
   --capture-root results \
@@ -255,7 +255,7 @@ Setup
 
 - Install backend and Qt in your env (from repo root):
 
-```
+```bash
 make dev-core ENV_NAME=plume-nav-sim
 make install-qt ENV_NAME=plume-nav-sim
 ```
@@ -282,6 +282,9 @@ Run the debugger
 - Open View → Inspector:
   - Action tab shows RUN/TUMBLE labels and a live probability preview derived from dC (side‑effect free; the inspector never calls `select_action`).
   - When available, the Pipeline view lists wrappers from outermost to core (e.g., `ConcentrationNBackWrapper(n=2)` → core env).
+- Optional: open View → Live Config to apply presets and edit key fields (seed, plume/movie settings, action_type, max_steps) without restarting the app.
+- Optional: open View → Replay Config to see the resolved replay environment settings for a loaded run.
+- Optional: toggle View → Frame overlays for on-frame annotations (agent/source markers, action/reward text). Purely visual; does not affect determinism.
 
 Notes
 

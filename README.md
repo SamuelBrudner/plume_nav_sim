@@ -57,7 +57,9 @@ print(info["agent_xy"])  # starting position
 
 - Curated datasets:
   - `colorado_jet_v1` v1.0.0 → Zenodo 6538177 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids, DOI 10.5281/zenodo.6538177).
-  - `moffett_field_dispersion_v0` v0.9.0 → open-air dispersion subset (`moffett_field_dispersion.h5`), license `CC-BY-NC-4.0`, cite “Acme Environmental Lab 2022, Internal field release report.”
+  - `rigolli_dns_nose_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (nose level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
+  - `rigolli_dns_ground_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (ground level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
+  - `emonet_smoke_v1` v1.0.0 → Dryad smoke plume video (walking Drosophila), license `CC0-1.0`, cite Demir et al. 2020 (eLife, DOI 10.7554/eLife.57524).
 - Cache root defaults to `~/.cache/plume_nav_sim/data_zoo/<cache_subdir>/<version>/<expected_root>`; override with `movie_cache_root` or CLI `--movie-cache-root`.
 - Config usage (registry resolves path and verifies checksum):
 
@@ -177,7 +179,7 @@ flake8 src/backend/plume_nav_sim \
 
 ### Debugger (Qt MVP)
 
-A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It now includes a dockable, information-only Inspector.
+A minimal Qt debugger is available for stepping the environment and viewing RGB frames. It includes dockable tools for inspection and configuration (Inspector, Live Config, Replay Config) plus optional frame overlays (purely visual).
 
 - Install Qt toolkit into your conda env:
 
@@ -195,6 +197,7 @@ Controls:
 
 - Start/Pause, Step, Reset with seed; adjust interval (ms)
 - Keyboard: Space (toggle run), N (step), R (reset)
+- View menu: toggle Inspector, Live Config, Replay Config, and Frame overlays
 
 Policies:
 
@@ -212,11 +215,20 @@ Inspector (information-only):
   - Observation: shows observation shape and min/mean/max summary.
 - The Inspector is intentionally read-only; controls that change simulation behavior (start/pause/step, reset, policy selection) remain in the main toolbar.
 
+Live configuration:
+
+- Dockable window (View → Live Config) provides presets and an editable `DebuggerConfig` (seed, plume, action_type, max_steps, movie_dataset_id/movie_path). Click Apply to reinitialize the live environment.
+
+Replay configuration (read-only):
+
+- Dockable window (View → Replay Config) shows the resolved replay environment settings (including the resolved/inferred action_type) for the currently loaded run.
+
 #### Replay captured runs
 
 - Point the debugger at a run directory produced by `plume-nav-capture` (expects `run.json`, `steps*.jsonl.gz` shards and/or `steps/episodes.parquet` alongside `episodes*.jsonl.gz`).
 - Loader hard-validates schema_version `1.0.0` and consistent `run_id` across `run.json`, steps, and episodes; multipart shards (`*.partNNNN.jsonl.gz`) are accepted and merged in order.
 - Replay reconstructs the environment from recorded `env_config`, inferring `max_steps` from truncation markers when missing; RGB frames require `enable_rendering=True` in the capture.
+- Replay resolves `action_type` from the run metadata when present; otherwise it infers it from recorded steps and surfaces divergences as explicit errors (see Replay Config).
 - Headless regression coverage lives in `tests/debugger/test_replay_loader_engine.py` (gz/multipart/Parquet loader paths plus ReplayEngine reward/position/done parity and rendering). Qt-driven UI coverage remains in `tests/debugger/test_replay_driver.py` and skips when bindings are absent.
 - Version mismatches are treated as hard failures to avoid mixing incompatible capture formats.
 
@@ -269,8 +281,8 @@ ODC Provider Contract (Developer Guide):
 
 Preferences & Config:
 
-- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Default interval (ms), Theme (light/dark)
-- Settings persist via QSettings and mirror to JSON at `~/.config/plume-nav-sim/debugger.json` if present.
+- Edit → Preferences provides toggles for: Show pipeline, Show observation preview, Show sparkline, Show frame overlays, Default interval (ms), Theme (light/dark)
+- Settings persist via QSettings and are also written to JSON at `~/.config/plume_nav_sim/debugger.json` (legacy `~/.config/plume-nav-sim/debugger.json` is migrated).
 - Strict provider-only mode is not configurable.
 
 ### Jupyter notebooks (interactive plots)
@@ -306,7 +318,6 @@ Troubleshooting “'widget' is not a recognised backend name”:
 - Clear any forced backend: `import os; os.environ.pop('MPLBACKEND', None)` in the first cell.
 
 - Fallback safely when ipympl is missing
-  -
 
   ```python
   import matplotlib as mpl
