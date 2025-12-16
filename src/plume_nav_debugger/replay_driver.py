@@ -15,6 +15,7 @@ except Exception as e:  # pragma: no cover - GUI import guard
 import plume_nav_sim as pns
 from plume_nav_sim.data_capture import (
     ReplayArtifacts,
+    ReplayConsistencyError,
     ReplayEngine,
     ReplayLoadError,
     load_replay_artifacts,
@@ -60,6 +61,16 @@ def _infer_max_steps_from_artifacts(artifacts: ReplayArtifacts) -> int | None:
     if len(limits) == 1:
         return limits.pop()
     return None
+
+
+def _normalize_choice(raw: object, allowed: set[str]) -> str | None:
+    if raw is None:
+        return None
+    try:
+        val = str(raw).strip().lower()
+    except Exception:
+        return None
+    return val if val in allowed else None
 
 
 def _env_kwargs_from_meta(
@@ -113,6 +124,31 @@ def _env_kwargs_from_meta(
     if start_location:
         try:
             kwargs["start_location"] = (int(start_location[0]), int(start_location[1]))
+        except Exception:
+            pass
+
+    action_type = _normalize_choice(
+        cfg.get("action_type"), {"discrete", "oriented", "run_tumble"}
+    )
+    if action_type is not None:
+        kwargs["action_type"] = action_type
+
+    observation_type = _normalize_choice(
+        cfg.get("observation_type"), {"concentration", "antennae", "wind_vector"}
+    )
+    if observation_type is not None:
+        kwargs["observation_type"] = observation_type
+
+    reward_type = _normalize_choice(cfg.get("reward_type"), {"sparse", "step_penalty"})
+    if reward_type is not None:
+        kwargs["reward_type"] = reward_type
+
+    step_size = cfg.get("step_size")
+    if step_size is not None:
+        try:
+            step_size_val = int(step_size)
+            if step_size_val > 0:
+                kwargs["step_size"] = step_size_val
         except Exception:
             pass
 
@@ -224,6 +260,86 @@ def _env_kwargs_from_meta(
     return {**defaults, **kwargs}
 
 
+def _infer_action_type_from_artifacts(
+    artifacts: ReplayArtifacts,
+    *,
+    recorded_max_steps: int | None,
+    probe_steps: int = 200,
+) -> tuple[str, dict[str, Any]]:
+    actions: list[int] = []
+    for rec in artifacts.steps:
+        try:
+            actions.append(int(rec.action))
+        except Exception:
+            continue
+    max_action = max(actions) if actions else 0
+
+    candidate_specs = [
+        ("oriented", 2),
+        ("discrete", 3),
+        ("run_tumble", 1),
+    ]
+    candidates = [name for name, hi in candidate_specs if max_action <= hi]
+    if not candidates:
+        return (
+            "oriented",
+            {"source": "default", "reason": f"max_action={max_action} unsupported"},
+        )
+
+    probe = max(1, min(int(probe_steps), len(artifacts.steps)))
+    scores: dict[str, int] = {}
+    for candidate in candidates:
+        try:
+            base_kwargs = _env_kwargs_from_meta(
+                artifacts.run_meta,
+                render=False,
+                recorded_max_steps=recorded_max_steps,
+            )
+
+            def _factory(_meta: RunMeta, _render: bool, *, _c=candidate):
+                kwargs = dict(base_kwargs)
+                kwargs["action_type"] = _c
+                return pns.make_env(**kwargs)
+
+            engine = ReplayEngine(artifacts, env_factory=_factory)
+            matched = 0
+            for ev, rec in zip(
+                engine.iter_events(render=False, validate=False), artifacts.steps
+            ):
+                if matched >= probe:
+                    break
+                try:
+                    if ev.t != rec.step - 1:
+                        break
+                    if ev.terminated != rec.terminated or ev.truncated != rec.truncated:
+                        break
+                    pos = ev.info.get("agent_position") or ev.info.get("agent_xy")
+                    if pos is None:
+                        break
+                    px, py = int(pos[0]), int(pos[1])
+                    if px != rec.agent_position.x or py != rec.agent_position.y:
+                        break
+                except Exception:
+                    break
+                matched += 1
+            scores[candidate] = matched
+        except Exception:
+            scores[candidate] = -1
+
+    best = max(scores.items(), key=lambda kv: kv[1])
+    best_name, best_score = best
+    if best_score < 0:
+        return (
+            "oriented",
+            {
+                "source": "default",
+                "reason": "all candidates failed to replay",
+                "scores": scores,
+            },
+        )
+    return best_name, {"source": "inferred", "probe_steps": probe, "scores": scores}
+
+
 class ReplayDriver(QtCore.QObject):
     frame_ready = QtCore.Signal(np.ndarray)
     episode_finished = QtCore.Signal()
@@ -232,6 +348,7 @@ class ReplayDriver(QtCore.QObject):
     provider_mux_changed = QtCore.Signal(object)  # emits ProviderMux
     run_meta_changed = QtCore.Signal(int, object)  # (seed, start_xy tuple)
     timeline_changed = QtCore.Signal(int, int)  # (current_step, total_steps)
+    error_occurred = QtCore.Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -250,20 +367,47 @@ class ReplayDriver(QtCore.QObject):
         self._recorded_max_steps: Optional[int] = None
         self._cache: list[Any] = []
         self._episode_offsets: list[int] = []
+        self._resolved_action_type: Optional[str] = None
+        self._resolved_action_type_info: dict[str, Any] = {}
 
     def load_run(self, run_dir: str | Path) -> None:
         artifacts = load_replay_artifacts(run_dir)
         self._artifacts = artifacts
         self._run_dir = Path(run_dir)
         self._recorded_max_steps = _infer_max_steps_from_artifacts(artifacts)
-        self._engine = ReplayEngine(
-            artifacts,
-            env_factory=lambda meta, render: pns.make_env(
-                **_env_kwargs_from_meta(
-                    meta, render=render, recorded_max_steps=self._recorded_max_steps
-                )
-            ),
+
+        cfg = _flatten_env_config(getattr(artifacts.run_meta, "env_config", {}) or {})
+        meta_action_type = _normalize_choice(
+            cfg.get("action_type"), {"discrete", "oriented", "run_tumble"}
         )
+        if meta_action_type is not None:
+            resolved_action_type = meta_action_type
+            resolved_info: dict[str, Any] = {"source": "meta"}
+        else:
+            resolved_action_type, resolved_info = _infer_action_type_from_artifacts(
+                artifacts, recorded_max_steps=self._recorded_max_steps
+            )
+
+        self._resolved_action_type = resolved_action_type
+        self._resolved_action_type_info = resolved_info
+
+        def _factory(_meta: RunMeta, render: bool):
+            kwargs = _env_kwargs_from_meta(
+                artifacts.run_meta,
+                render=bool(render),
+                recorded_max_steps=self._recorded_max_steps,
+            )
+            kwargs["action_type"] = resolved_action_type
+            env = pns.make_env(**kwargs)
+            try:
+                from .frame_overlays import OverlayInfoWrapper
+
+                env = OverlayInfoWrapper(env)
+            except Exception:
+                pass
+            return env
+
+        self._engine = ReplayEngine(artifacts, env_factory=_factory)
         self._iter = None
         self._running = False
         self._current_index = -1
@@ -348,7 +492,7 @@ class ReplayDriver(QtCore.QObject):
     def get_grid_size(self) -> tuple[int, int]:
         if self._artifacts is None:
             return (0, 0)
-        cfg = self._artifacts.run_meta.env_config or {}
+        cfg = _flatten_env_config(self._artifacts.run_meta.env_config or {})
         grid = cfg.get("grid_size")
         try:
             if grid:
@@ -357,8 +501,68 @@ class ReplayDriver(QtCore.QObject):
             pass
         return (0, 0)
 
+    def get_overlay_context(self) -> dict[str, Any]:
+        """Best-effort overlay context for FrameView (purely visual)."""
+        if self._artifacts is None:
+            return {}
+        cfg = _flatten_env_config(self._artifacts.run_meta.env_config or {})
+        ctx: dict[str, Any] = {}
+
+        try:
+            src = cfg.get("source_location") or cfg.get("goal_location")
+            if isinstance(src, (list, tuple)) and len(src) == 2:
+                ctx["source_xy"] = (int(src[0]), int(src[1]))
+        except Exception:
+            pass
+
+        try:
+            if cfg.get("goal_radius") is not None:
+                ctx["goal_radius"] = float(cfg["goal_radius"])
+        except Exception:
+            pass
+
+        if self._resolved_action_type is not None:
+            ctx["action_type"] = self._resolved_action_type
+        else:
+            try:
+                at = cfg.get("action_type")
+                if isinstance(at, str) and at.strip():
+                    ctx["action_type"] = at.strip()
+            except Exception:
+                pass
+
+        return ctx
+
     def last_event(self):
         return self._last_event
+
+    def get_resolved_env_kwargs(self, *, render: bool = False) -> dict[str, Any]:
+        if self._artifacts is None:
+            return {}
+        kwargs = _env_kwargs_from_meta(
+            self._artifacts.run_meta,
+            render=bool(render),
+            recorded_max_steps=self._recorded_max_steps,
+        )
+        if self._resolved_action_type is not None:
+            kwargs["action_type"] = self._resolved_action_type
+        return kwargs
+
+    def get_resolved_replay_config(self) -> dict[str, Any]:
+        if self._artifacts is None:
+            return {}
+        meta = self._artifacts.run_meta
+        return {
+            "run_id": getattr(meta, "run_id", None),
+            "run_dir": str(self._run_dir) if self._run_dir is not None else None,
+            "source_format": getattr(self._artifacts, "source_format", None),
+            "config_hash": getattr(meta, "config_hash", None),
+            "base_seed": getattr(meta, "base_seed", None),
+            "episode_seeds": getattr(meta, "episode_seeds", None),
+            "first_seed": self._first_seed(),
+            "action_type_resolution": dict(self._resolved_action_type_info or {}),
+            "env_kwargs": self.get_resolved_env_kwargs(render=False),
+        }
 
     def _emit_timeline(self) -> None:
         self.timeline_changed.emit(self._current_index, self._total_steps)
@@ -382,7 +586,7 @@ class ReplayDriver(QtCore.QObject):
             return
 
         engine_iter = self._engine.iter_events(
-            render=True, start_step=idx, validate=False
+            render=True, start_step=idx, validate=True
         )
         for ev in engine_iter:
             self._cache.append(ev)
@@ -399,9 +603,29 @@ class ReplayDriver(QtCore.QObject):
             self._iter = None
             self._emit_timeline()
             return
-        except Exception:
+        except ReplayConsistencyError as exc:
             self.pause()
-            raise
+            self._iter = None
+            resolved = self._resolved_action_type or "unknown"
+            msg = (
+                f"Replay diverged (action_type={resolved}): {exc}. "
+                "Check Replay Config for resolved env kwargs."
+            )
+            try:
+                self.error_occurred.emit(msg)
+            except Exception:
+                pass
+            self._emit_timeline()
+            return
+        except Exception as exc:
+            self.pause()
+            self._iter = None
+            try:
+                self.error_occurred.emit(f"Replay error: {exc}")
+            except Exception:
+                pass
+            self._emit_timeline()
+            return
 
         self._current_index += 1
         self._last_event = ev
@@ -444,13 +668,20 @@ class ReplayDriver(QtCore.QObject):
             return
 
         try:
-            env = pns.make_env(
-                **_env_kwargs_from_meta(
-                    self._artifacts.run_meta,
-                    render=False,
-                    recorded_max_steps=self._recorded_max_steps,
-                )
+            kwargs = _env_kwargs_from_meta(
+                self._artifacts.run_meta,
+                render=False,
+                recorded_max_steps=self._recorded_max_steps,
             )
+            if self._resolved_action_type is not None:
+                kwargs["action_type"] = self._resolved_action_type
+            env = pns.make_env(**kwargs)
+            try:
+                from .frame_overlays import OverlayInfoWrapper
+
+                env = OverlayInfoWrapper(env)
+            except Exception:
+                pass
             self._probe_env = env
             seed = self._first_seed()
             try:

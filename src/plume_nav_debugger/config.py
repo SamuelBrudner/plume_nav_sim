@@ -16,6 +16,7 @@ class DebuggerPreferences:
     show_pipeline: bool = True
     show_preview: bool = True
     show_sparkline: bool = True
+    show_overlays: bool = True
     default_interval_ms: int = 50
     theme: str = "light"  # or "dark"
 
@@ -29,6 +30,7 @@ class DebuggerPreferences:
                 "prefs/show_pipeline",
                 "prefs/show_preview",
                 "prefs/show_sparkline",
+                "prefs/show_overlays",
                 "prefs/default_interval_ms",
                 "prefs/theme",
             )
@@ -46,6 +48,7 @@ class DebuggerPreferences:
                 show_pipeline=bool(s.value("prefs/show_pipeline", True, type=bool)),
                 show_preview=bool(s.value("prefs/show_preview", True, type=bool)),
                 show_sparkline=bool(s.value("prefs/show_sparkline", True, type=bool)),
+                show_overlays=bool(s.value("prefs/show_overlays", True, type=bool)),
                 default_interval_ms=int(
                     s.value("prefs/default_interval_ms", 50, type=int)
                 ),
@@ -62,6 +65,7 @@ class DebuggerPreferences:
             s.setValue("prefs/show_pipeline", self.show_pipeline)
             s.setValue("prefs/show_preview", self.show_preview)
             s.setValue("prefs/show_sparkline", self.show_sparkline)
+            s.setValue("prefs/show_overlays", self.show_overlays)
             s.setValue("prefs/default_interval_ms", int(self.default_interval_ms))
             s.setValue("prefs/theme", self.theme)
         except Exception:
@@ -76,6 +80,7 @@ class DebuggerPreferences:
                 show_pipeline=bool(data.get("show_pipeline", True)),
                 show_preview=bool(data.get("show_preview", True)),
                 show_sparkline=bool(data.get("show_sparkline", True)),
+                show_overlays=bool(data.get("show_overlays", True)),
                 default_interval_ms=int(data.get("default_interval_ms", 50)),
                 theme=str(data.get("theme", "light")),
             )

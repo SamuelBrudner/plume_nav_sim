@@ -202,6 +202,13 @@ class EnvDriver(QtCore.QObject):
 
         try:
             self._env = pns.make_env(**kwargs)
+            try:
+                from .frame_overlays import OverlayInfoWrapper
+
+                self._env = OverlayInfoWrapper(self._env)
+            except Exception:
+                # Best-effort: overlays should never break core stepping/rendering
+                pass
         except Exception as exc:
             self._env = None
             self._policy = None
@@ -407,6 +414,29 @@ class EnvDriver(QtCore.QObject):
         except Exception:
             return self.config.grid_size
 
+    def get_overlay_context(self) -> dict:
+        """Best-effort overlay context for FrameView (purely visual)."""
+        ctx: dict = {}
+        try:
+            if self._env is not None:
+                from .frame_overlays import augment_info_for_overlays
+
+                ctx = augment_info_for_overlays({}, self._env)
+        except Exception:
+            ctx = {}
+        try:
+            ctx.setdefault("action_type", str(self.config.action_type))
+        except Exception:
+            pass
+        try:
+            if "goal_radius" not in ctx:
+                gr = getattr(self.config, "goal_radius", None)
+                if gr is not None:
+                    ctx["goal_radius"] = float(gr)
+        except Exception:
+            pass
+        return ctx
+
     def set_policy(
         self, policy: object, *, seed: Optional[int] = None, resume: bool = True
     ) -> None:
@@ -549,6 +579,12 @@ class EnvDriver(QtCore.QObject):
 
         try:
             self._env = pns.make_env(**kwargs)
+            try:
+                from .frame_overlays import OverlayInfoWrapper
+
+                self._env = OverlayInfoWrapper(self._env)
+            except Exception:
+                pass
         except Exception as exc:
             self._env = None
             self._iter = None

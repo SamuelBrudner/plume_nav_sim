@@ -9,6 +9,10 @@ daemon.log
 daemon.pid
 bd.sock
 
+# Local metadata/runtime state
+metadata.json
+.local_version
+
 # Legacy database files
 db.sqlite
 bd.db
