@@ -20,6 +20,7 @@ class DebuggerConfig:
     goal_radius: float = 1.0
     plume_sigma: float = 20.0
     max_steps: int = 500
+    action_type: str = "oriented"
     seed: Optional[int] = 123
     start_location: Optional[tuple[int, int]] = None
     plume: str = "static"
@@ -41,6 +42,18 @@ class DebuggerConfig:
                 return None
             val = str(raw).strip()
             return val if val else None
+
+        def _get_int(key: str) -> Optional[int]:
+            raw = os.environ.get(key)
+            if raw is None:
+                return None
+            txt = str(raw).strip()
+            if not txt:
+                return None
+            try:
+                return int(txt)
+            except Exception:
+                return None
 
         def _get_bool(key: str, default: bool) -> bool:
             raw = os.environ.get(key)
@@ -76,7 +89,19 @@ class DebuggerConfig:
         if step_policy not in {"wrap", "clamp"}:
             step_policy = "wrap"
 
+        action_type = (
+            (_get_str("PLUME_DEBUGGER_ACTION_TYPE") or "oriented").strip().lower()
+        )
+        if action_type not in {"discrete", "oriented", "run_tumble"}:
+            action_type = "oriented"
+
+        seed_val = _get_int("PLUME_DEBUGGER_SEED")
+        max_steps_val = _get_int("PLUME_DEBUGGER_MAX_STEPS")
+
         return cls(
+            action_type=action_type,
+            seed=seed_val if seed_val is not None else cls.seed,
+            max_steps=max_steps_val if max_steps_val is not None else cls.max_steps,
             plume=plume,
             movie_path=_get_str("PLUME_DEBUGGER_MOVIE_PATH"),
             movie_dataset_id=_get_str("PLUME_DEBUGGER_MOVIE_DATASET_ID"),
@@ -132,13 +157,19 @@ class EnvDriver(QtCore.QObject):
 
         from .controllable_policy import ControllablePolicy
 
+        action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
+        action_type = action_type.strip().lower()
+        if action_type not in {"discrete", "oriented", "run_tumble"}:
+            action_type = "oriented"
+        self.config.action_type = action_type
+
         kwargs = dict(
             grid_size=self.config.grid_size,
             goal_radius=self.config.goal_radius,
             plume_sigma=self.config.plume_sigma,
             max_steps=self.config.max_steps,
             render_mode="rgb_array",
-            action_type="oriented",
+            action_type=action_type,
             observation_type="concentration",
             reward_type="step_penalty",
         )
@@ -183,15 +214,18 @@ class EnvDriver(QtCore.QObject):
             return
 
         # Choose a policy if available; otherwise fallback to sampler
-        try:
-            from plume_nav_sim.policies import TemporalDerivativePolicy
-
-            self._policy = TemporalDerivativePolicy(eps=0.0, eps_after_turn=0.0)
+        if action_type == "oriented":
             try:
-                self._policy.reset(seed=self.config.seed)
+                from plume_nav_sim.policies import TemporalDerivativePolicy
+
+                self._policy = TemporalDerivativePolicy(eps=0.0, eps_after_turn=0.0)
+                try:
+                    self._policy.reset(seed=self.config.seed)
+                except Exception:
+                    pass
             except Exception:
-                pass
-        except Exception:
+                self._policy = self._make_default_policy()
+        else:
             self._policy = self._make_default_policy()
 
         # Wrap with ControllablePolicy for manual override
@@ -266,6 +300,22 @@ class EnvDriver(QtCore.QObject):
     def pause(self) -> None:
         self._timer.stop()
         self._running = False
+
+    def close(self) -> None:
+        try:
+            self.pause()
+        except Exception:
+            pass
+        try:
+            if self._env is not None and hasattr(self._env, "close"):
+                self._env.close()
+        except Exception:
+            pass
+        self._env = None
+        self._iter = None
+        self._policy = None
+        self._controller = None
+        self._mux = None
 
     def step_once(self) -> None:
         self._on_tick()
@@ -451,13 +501,19 @@ class EnvDriver(QtCore.QObject):
             pass
 
         # Build new env with same config, injecting start_location when provided
+        action_type = str(getattr(self.config, "action_type", "oriented") or "oriented")
+        action_type = action_type.strip().lower()
+        if action_type not in {"discrete", "oriented", "run_tumble"}:
+            action_type = "oriented"
+        self.config.action_type = action_type
+
         kwargs = dict(
             grid_size=self.config.grid_size,
             goal_radius=self.config.goal_radius,
             plume_sigma=self.config.plume_sigma,
             max_steps=self.config.max_steps,
             render_mode="rgb_array",
-            action_type="oriented",
+            action_type=action_type,
             observation_type="concentration",
             reward_type="step_penalty",
         )
