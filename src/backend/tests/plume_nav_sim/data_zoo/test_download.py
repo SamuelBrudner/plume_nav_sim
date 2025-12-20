@@ -10,6 +10,7 @@ import pytest
 from plume_nav_sim.data_zoo import download as download_module
 from plume_nav_sim.data_zoo.download import (
     DatasetDownloadError,
+    _infer_time_y_x_axes_for_rigolli,
     ensure_dataset_available,
 )
 from plume_nav_sim.data_zoo.registry import (
@@ -447,3 +448,30 @@ def test_ingest_spec_invokes_postprocessing(
     assert "args" in calls
     assert calls["args"][1].name == "movie.h5"
     assert (resolved / ".zattrs").exists()
+
+
+@pytest.mark.parametrize(
+    ("shape", "x_len", "y_len", "expected"),
+    [
+        ((64, 32, 1000), 64, 32, (2, 1, 0)),  # (x, y, t)
+        ((1000, 32, 64), 64, 32, (0, 1, 2)),  # (t, y, x)
+        ((1000, 64, 32), 64, 32, (0, 2, 1)),  # (t, x, y)
+        ((32, 64, 1000), 64, 32, (2, 0, 1)),  # (y, x, t)
+    ],
+)
+def test_infer_time_y_x_axes_for_rigolli(shape, x_len, y_len, expected) -> None:
+    assert _infer_time_y_x_axes_for_rigolli(shape, x_len=x_len, y_len=y_len) == expected
+
+
+def test_infer_time_y_x_axes_for_rigolli_prefers_matlab_order_when_ambiguous() -> None:
+    # When x_len == y_len, both spatial assignments match. Prefer (x, y, t) -> (t, y, x).
+    assert _infer_time_y_x_axes_for_rigolli((10, 10, 7), x_len=10, y_len=10) == (
+        2,
+        1,
+        0,
+    )
+
+
+def test_infer_time_y_x_axes_for_rigolli_raises_on_non_3d() -> None:
+    with pytest.raises(DatasetDownloadError):
+        _infer_time_y_x_axes_for_rigolli((10, 10), x_len=10, y_len=10)

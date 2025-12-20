@@ -318,8 +318,8 @@ class DatasetRegistryEntry:
 class CrimaldiFluorescenceIngest:
     """Ingest spec for CU Boulder PLIF fluorescence datasets (Crimaldi lab).
 
-    Handles the specific HDF5 structure used in Zenodo record 6538177 and similar
-    PLIF plume movies from the Crimaldi lab.
+    Handles the specific HDF5 structure used in Crimaldi lab PLIF plume movies
+    (e.g., Dryad DOI 10.5061/dryad.g27mq71, mirrored on Zenodo record 4971113).
     """
 
     dataset: str
@@ -382,14 +382,15 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
     "colorado_jet_v1": DatasetRegistryEntry(
         dataset_id="colorado_jet_v1",
         version="1.0.0",
-        cache_subdir="zenodo_6538177",
+        cache_subdir="zenodo_4971113",
         expected_root="a0004_nearbed_10cm_s.zarr",
         artifact=DatasetArtifact(
             url=(
-                "https://zenodo.org/records/6538177/files/"
-                "a0004_air_stationarySource_isokineticNearbedRelease_10cm_s.h5"
+                "https://zenodo.org/api/records/4971113/files/"
+                "10302017_10cms_bounded_2.h5/content"
             ),
-            checksum="0d712585798102e49b49fe9bcf41da33222fff1b889f4b772c038086eb171512",
+            checksum="cf3cadd8a9b53c2a3f6d3aca37f71a62",
+            checksum_type="md5",
             archive_type="none",
             layout="hdf5",
         ),
@@ -410,13 +411,14 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
                     affiliation="University of Colorado Boulder",
                 ),
             ),
-            publisher="Zenodo",
+            publisher="Dryad",
             publication_year=2018,
             description=(
                 "150-frame acetone vapor plume measured via planar laser-induced "
                 "fluorescence (PLIF) at 15 FPS. Near-bed isokinetic release at "
                 "0.10 m/s with 406x216 px field of view (~300x160 mm), normalized "
-                "concentration values, and embedded experiment metadata."
+                "concentration values, and embedded experiment metadata. "
+                "Source dataset DOI: 10.5061/dryad.g27mq71 (mirrored on Zenodo record 4971113)."
             ),
             subjects=("plume", "PLIF", "odor", "turbulence", "fluorescence"),
             related_identifiers=(
@@ -424,14 +426,20 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
                     identifier="10.1007/s00348-018-2591-3",
                     relation_type="IsSupplementTo",
                 ),
+                RelatedIdentifier(
+                    identifier="https://zenodo.org/records/4971113",
+                    relation_type="IsIdenticalTo",
+                    identifier_type="URL",
+                ),
             ),
-            doi="10.5281/zenodo.6538177",
+            doi="10.5061/dryad.g27mq71",
             license="CC-BY-4.0",
             citation=(
                 "Connor, E. G., McHugh, M. K., & Crimaldi, J. P. (2018). "
                 "Quantification of airborne odor plumes using planar laser-induced "
                 "fluorescence. Experiments in Fluids, 59(9), 137. "
-                "Data from Zenodo record 6538177."
+                "Dryad dataset: https://doi.org/10.5061/dryad.g27mq71 "
+                "(download mirror: Zenodo record 4971113)."
             ),
             contact="Prof. John Crimaldi <crimaldi@colorado.edu>",
         ),

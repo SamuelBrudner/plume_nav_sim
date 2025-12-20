@@ -56,7 +56,7 @@ print(info["agent_xy"])  # starting position
 ### Data zoo (registry-backed movie plumes)
 
 - Curated datasets:
-  - `colorado_jet_v1` v1.0.0 → Zenodo 6538177 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids, DOI 10.5281/zenodo.6538177).
+  - `colorado_jet_v1` v1.0.0 → Zenodo record 4971113 (Dryad DOI 10.5061/dryad.g27mq71) PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids).
   - `rigolli_dns_nose_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (nose level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `rigolli_dns_ground_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (ground level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `emonet_smoke_v1` v1.0.0 → Dryad smoke plume video (walking Drosophila), license `CC0-1.0`, cite Demir et al. 2020 (eLife, DOI 10.7554/eLife.57524).

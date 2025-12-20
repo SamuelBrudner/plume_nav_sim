@@ -14,7 +14,7 @@ Supported plume sources
   - Advances one frame per env step with configurable step policy (`wrap` or `clamp`).
   - Validates dataset metadata via `VideoPlumeAttrs` (fps, pixel_to_grid, origin, extent).
   - Requires optional dependencies: `xarray`, `zarr`, `numcodecs`.
-  - Curated registry dataset: `colorado_jet_v1` (Zenodo 6538177 near-bed acetone plume, 150 frames @ 15 FPS, 406x216 px, normalized concentrations).
+  - Curated registry dataset: `colorado_jet_v1` (Zenodo record 4971113 / Dryad 10.5061/dryad.g27mq71 near-bed acetone plume, 150 frames @ 15 FPS, 406x216 px, normalized concentrations).
 
 Select a plume source
 
@@ -105,7 +105,7 @@ Curated data zoo (registry-backed datasets)
 
 - Where the cache lives: registry datasets unpack to `~/.cache/plume_nav_sim/data_zoo/<cache_subdir>/<version>/<expected_root>` by default. Override with `movie_cache_root=/scratch/pns` (CLI `--movie-cache-root`).
 - Ready-to-use datasets:
-  - `colorado_jet_v1` v1.0.0 → Zenodo 6538177 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids, DOI 10.5281/zenodo.6538177).
+  - `colorado_jet_v1` v1.0.0 → Zenodo record 4971113 / Dryad DOI 10.5061/dryad.g27mq71 PLIF acetone plume (`a0004_nearbed_10cm_s.zarr`), license `CC-BY-4.0`, cite Connor, McHugh, & Crimaldi 2018 (Experiments in Fluids).
   - `rigolli_dns_nose_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (nose level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `rigolli_dns_ground_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (ground level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `emonet_smoke_v1` v1.0.0 → Dryad smoke plume video (walking Drosophila), license `CC0-1.0`, cite Demir et al. 2020 (eLife, DOI 10.7554/eLife.57524).

@@ -30,8 +30,10 @@ def _seed_dataset(
     root = zarr.group(store, overwrite=True)
     conc = root.create_dataset("concentration", data=data, chunks=(1, 2, 2))
     conc.attrs["_ARRAY_DIMENSIONS"] = ["t", "y", "x"]
-    root.create_dataset("x", data=np.array([0.0, 1.0], dtype=np.float32))
-    root.create_dataset("y", data=np.array([0.0, 1.0], dtype=np.float32))
+    x_arr = root.create_dataset("x", data=np.array([0.0, 1.0], dtype=np.float32))
+    x_arr.attrs["_ARRAY_DIMENSIONS"] = ["x"]
+    y_arr = root.create_dataset("y", data=np.array([0.0, 1.0], dtype=np.float32))
+    y_arr.attrs["_ARRAY_DIMENSIONS"] = ["y"]
 
     stats = None
     if with_stats:

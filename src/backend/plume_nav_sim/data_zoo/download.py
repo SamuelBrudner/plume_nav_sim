@@ -336,7 +336,7 @@ def ensure_dataset_available(
     # Fast path: already unpacked and checksum (if available) is trusted
     if expected_path.exists() and not force_download:
         _validate_layout(expected_path, layout)
-        if verify_checksum and artifact_path.exists():
+        if verify_checksum and artifact_path.is_file():
             try:
                 _verify_checksum(artifact_path, entry)
                 return expected_path
@@ -349,10 +349,10 @@ def ensure_dataset_available(
                 )
                 _purge_cached(artifact_path, expected_path, cache_dir)
         else:
-            if verify_checksum and not artifact_path.exists():
+            if verify_checksum and not artifact_path.is_file():
                 LOG.info(
                     "Skipping checksum verification for %s; cached data present but "
-                    "artifact %s is missing",
+                    "artifact %s is missing or is a directory",
                     dataset_id,
                     artifact_path,
                 )
@@ -480,12 +480,23 @@ def _generate_provenance_for_zarr(
 
 def _artifact_filename(entry: DatasetRegistryEntry) -> str:
     """Extract clean filename from artifact URL, stripping query parameters."""
-    from urllib.parse import urlparse
+    from urllib.parse import unquote, urlparse
 
     parsed = urlparse(entry.artifact.url)
+    if parsed.netloc.endswith("zenodo.org"):
+        parts = [p for p in parsed.path.split("/") if p]
+        if parts and parts[-1] == "content":
+            try:
+                files_index = parts.index("files")
+            except ValueError:
+                files_index = -1
+            if 0 <= files_index < len(parts) - 2:
+                candidate = parts[files_index + 1]
+                if candidate:
+                    return unquote(candidate)
     name = Path(parsed.path).name
     if name:
-        return name
+        return unquote(name)
     sanitized = entry.artifact.archive_type.replace(".", "_")
     return f"{entry.dataset_id}.{sanitized}"
 
@@ -615,6 +626,51 @@ def _validate_archive_members(members: list[str], dest: Path) -> None:
             raise DatasetDownloadError(f"Unsafe archive member path: {name}")
 
 
+def _infer_time_y_x_axes_for_rigolli(
+    shape: tuple[int, ...], *, x_len: int, y_len: int
+) -> tuple[int, int, int]:
+    """Infer which axes correspond to (t, y, x) using coordinate lengths.
+
+    Rigolli DNS MATLAB payloads are typically stored as either:
+      - (x, y, t)  (common MATLAB convention)
+      - (t, y, x)  (already in desired order)
+      - (t, x, y)  (spatial axes swapped)
+
+    When the spatial dimensions cannot be inferred from coordinate lengths, this
+    falls back to treating the largest dimension as time.
+    """
+
+    if len(shape) != 3:
+        raise DatasetDownloadError(
+            f"Expected 3D concentration array, got shape {shape}"
+        )
+
+    candidates: list[tuple[int, int, int]] = []
+    for time_axis in (0, 1, 2):
+        other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
+        for y_axis, x_axis in (other_axes, other_axes[::-1]):
+            if shape[y_axis] == y_len and shape[x_axis] == x_len:
+                candidates.append((time_axis, y_axis, x_axis))
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if candidates:
+        # Prefer MATLAB-like ordering when ambiguous: (x, y, t) -> (t, y, x)
+        for candidate in candidates:
+            if candidate == (2, 1, 0):
+                return candidate
+        # Otherwise prefer time-last when possible.
+        for time_axis, y_axis, x_axis in candidates:
+            if time_axis == 2:
+                return (time_axis, y_axis, x_axis)
+        return candidates[0]
+
+    time_axis = max(range(3), key=lambda ax: shape[ax])
+    other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
+    return (time_axis, other_axes[0], other_axes[1])
+
+
 def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -> None:
     if member:
         extracted = dest / member.rstrip("/")
@@ -740,69 +796,133 @@ def _ingest_mat_to_zarr(
             )
 
     try:
-        # Load coordinates - try scipy first (v5), fall back to h5py (v7.3)
+        # Load coordinates - SciPy is optional (v5). Fall back to h5py (v7.3) when
+        # SciPy is missing or the payload is MATLAB v7.3.
+        coords_errors: list[Exception] = []
+        x_coords: np.ndarray
+        y_coords: np.ndarray
+
         try:
-            from scipy.io import loadmat
+            from scipy.io import loadmat  # type: ignore[import-untyped]
+        except Exception as exc:  # pragma: no cover - scipy is optional
+            coords_errors.append(exc)
+        else:
+            try:
+                coords_mat = loadmat(str(coords_path))
+                x_coords = (
+                    np.asarray(coords_mat[spec.x_key]).flatten().astype(np.float32)
+                )
+                y_coords = (
+                    np.asarray(coords_mat[spec.y_key]).flatten().astype(np.float32)
+                )
+            except NotImplementedError as exc:
+                coords_errors.append(exc)
+            except Exception as exc:
+                coords_errors.append(exc)
 
-            coords_mat = loadmat(str(coords_path))
-            x_coords = np.asarray(coords_mat[spec.x_key]).flatten().astype(np.float32)
-            y_coords = np.asarray(coords_mat[spec.y_key]).flatten().astype(np.float32)
-        except NotImplementedError:
-            # MATLAB v7.3 format - use h5py
-            with h5py.File(coords_path, "r") as coords_file:
-                x_data = coords_file[spec.x_key][:]
-                y_data = coords_file[spec.y_key][:]
-                x_coords = np.asarray(x_data).flatten().astype(np.float32)
-                y_coords = np.asarray(y_data).flatten().astype(np.float32)
+        if "x_coords" not in locals() or "y_coords" not in locals():
+            try:
+                with h5py.File(coords_path, "r") as coords_file:
+                    x_data = coords_file[spec.x_key][:]
+                    y_data = coords_file[spec.y_key][:]
+                    x_coords = np.asarray(x_data).flatten().astype(np.float32)
+                    y_coords = np.asarray(y_data).flatten().astype(np.float32)
+            except Exception as exc:
+                coords_errors.append(exc)
+                details = "; ".join(type(e).__name__ for e in coords_errors)
+                raise DatasetDownloadError(
+                    "Failed to load Rigolli DNS coordinates file. "
+                    "If this is a legacy MATLAB v5 file, install SciPy; "
+                    f"load attempts failed with: {details}"
+                ) from exc
 
-        # Load concentration data from source MATLAB file
+        # Load concentration data from source MATLAB file (streaming in time)
         with h5py.File(source_path, "r") as mat_file:
-            conc_data = mat_file[spec.concentration_key][:]
-            # MATLAB stores as (x, y, t) or transposed; normalize to (t, y, x)
-            conc_array = np.asarray(conc_data)
-            # Assume data is (t, y, x) or needs transposition
-            if conc_array.ndim == 3:
-                # Common MATLAB convention: (x, y, t) -> (t, y, x)
-                if conc_array.shape[2] < conc_array.shape[0]:
-                    conc_array = np.transpose(conc_array, (2, 1, 0))
-            conc_array = conc_array.astype(np.float32)
+            if spec.concentration_key not in mat_file:
+                raise DatasetDownloadError(
+                    f"Could not find '{spec.concentration_key}' in {source_path.name}. "
+                    f"Available keys: {list(mat_file.keys())}"
+                )
+            conc_dataset = mat_file[spec.concentration_key]
+            src_shape = tuple(int(s) for s in conc_dataset.shape)
+            time_axis, y_axis, x_axis = _infer_time_y_x_axes_for_rigolli(
+                src_shape, x_len=len(x_coords), y_len=len(y_coords)
+            )
 
-        if spec.normalize:
-            cmin, cmax = conc_array.min(), conc_array.max()
-            if cmax > cmin:
-                conc_array = (conc_array - cmin) / (cmax - cmin)
+            n_frames = src_shape[time_axis]
+            ny = src_shape[y_axis]
+            nx = src_shape[x_axis]
 
-        # Create Zarr store with standardized structure
-        n_frames = conc_array.shape[0]
-        chunk_t = spec.chunk_t or min(100, n_frames)
+            # Sanity: match inferred spatial dims to coordinate arrays when possible.
+            if ny != len(y_coords) or nx != len(x_coords):
+                LOG.warning(
+                    "Rigolli DNS coordinate length mismatch: inferred (ny=%d,nx=%d) "
+                    "but coords are (len(y)=%d,len(x)=%d). Proceeding with inferred dims.",
+                    ny,
+                    nx,
+                    len(y_coords),
+                    len(x_coords),
+                )
 
-        store = zarr.DirectoryStore(str(output_path))
-        root = zarr.group(store, overwrite=True)
+            # Choose chunk size to keep Zarr chunks well below codec limits.
+            bytes_per_frame = ny * nx * 4  # float32
+            max_chunk_bytes = 500 * 1024 * 1024  # 500MB target
+            chunk_t = min(
+                spec.chunk_t or 100, max(1, max_chunk_bytes // max(1, bytes_per_frame))
+            )
 
-        # Store concentration with chunking
-        root.create_dataset(
-            "concentration",
-            data=conc_array,
-            chunks=(chunk_t, conc_array.shape[1], conc_array.shape[2]),
-            dtype=np.float32,
-        )
+            store = zarr.DirectoryStore(str(output_path))
+            root = zarr.group(store, overwrite=True)
+            conc = root.create_dataset(
+                "concentration",
+                shape=(n_frames, ny, nx),
+                chunks=(chunk_t, ny, nx),
+                dtype=np.float32,
+            )
+            root.create_dataset("x", data=x_coords, dtype=np.float32)
+            root.create_dataset("y", data=y_coords, dtype=np.float32)
 
-        # Store coordinate arrays
-        root.create_dataset("x", data=x_coords, dtype=np.float32)
-        root.create_dataset("y", data=y_coords, dtype=np.float32)
+            # Process in time chunks and transpose into (t, y, x)
+            global_min, global_max = np.inf, -np.inf
+            for t_start in range(0, n_frames, chunk_t):
+                t_end = min(t_start + chunk_t, n_frames)
+                slicer = [slice(None), slice(None), slice(None)]
+                slicer[time_axis] = slice(t_start, t_end)
+                chunk = conc_dataset[tuple(slicer)]
+                chunk = np.transpose(chunk, (time_axis, y_axis, x_axis)).astype(
+                    np.float32
+                )
+                conc[t_start:t_end] = chunk
+
+                if spec.normalize:
+                    global_min = min(global_min, float(chunk.min()))
+                    global_max = max(global_max, float(chunk.max()))
+
+                if (t_start // chunk_t) % 10 == 0:
+                    LOG.info("  Processed %d / %d frames...", t_end, n_frames)
+
+        # Normalize in a second pass if needed
+        if spec.normalize and global_max > global_min:
+            LOG.info("Normalizing data (min=%.4f, max=%.4f)...", global_min, global_max)
+            for t_start in range(0, n_frames, chunk_t):
+                t_end = min(t_start + chunk_t, n_frames)
+                chunk = conc[t_start:t_end]
+                conc[t_start:t_end] = (chunk - global_min) / (global_max - global_min)
 
         # Store metadata in .zattrs
         root.attrs["fps"] = spec.fps if spec.fps else 0.0
-        root.attrs["n_frames"] = n_frames
-        root.attrs["shape"] = list(conc_array.shape)
+        root.attrs["n_frames"] = int(n_frames)
+        root.attrs["shape"] = [int(n_frames), int(ny), int(nx)]
         root.attrs["source_format"] = "matlab_v73"
-        root.attrs["normalized"] = spec.normalize
+        root.attrs["normalized"] = bool(spec.normalize)
 
         LOG.info(
-            "Ingested MATLAB file to Zarr: %s -> %s (shape=%s)",
+            "Ingested MATLAB file to Zarr: %s -> %s (shape=[%d, %d, %d])",
             source_path.name,
             output_path.name,
-            conc_array.shape,
+            n_frames,
+            ny,
+            nx,
         )
 
         # Compute and store concentration statistics

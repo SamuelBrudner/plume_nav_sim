@@ -6,8 +6,7 @@ import pytest
 from plume_nav_sim.core.geometry import GridSize
 from plume_nav_sim.data_zoo.movie_plume import MoviePlume
 from plume_nav_sim.envs import factory as env_factory
-
-from .test_loader import _seed_dataset
+from tests.plume_nav_sim.data_zoo.test_loader import _seed_dataset
 
 
 def test_movie_plume_from_registry_loads_normalized(monkeypatch, tmp_path):

@@ -26,8 +26,7 @@ from plume_nav_sim.data_zoo.registry import DATASET_REGISTRY
 # Local source paths on KINGSTON
 LOCAL_SOURCES = {
     "colorado_jet_v1": Path(
-        "/Volumes/KINGSTON/o2a_plumes/"
-        "a0004_air_stationarySource_isokineticNearbedRelease_10cm_s.h5"
+        "/Volumes/KINGSTON/o2a_plumes/" "10302017_10cms_bounded_2.h5"
     ),
     "emonet_smoke_v1": Path(
         "/Volumes/KINGSTON/downloaded/" "2018_09_12_NA_3_3ds_5do_IS_1-frames.mat"
