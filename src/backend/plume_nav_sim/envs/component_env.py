@@ -271,13 +271,7 @@ class ComponentBasedEnvironment(gym.Env):
             - self._step_count incremented
             - self._state may transition to TERMINATED or TRUNCATED
         """
-        # Contract: environment_state_machine.md - P1
-        if self._state == EnvironmentState.CREATED:
-            raise StateError("Must call reset() before step()")
-        if self._state == EnvironmentState.CLOSED:
-            raise StateError("Cannot step closed environment")
-        if self._state != EnvironmentState.READY:
-            raise StateError("Environment must be in READY state to step; call reset()")
+        self._ensure_ready_for_step()
 
         # Validate action
         # Contract: environment_state_machine.md - P2
@@ -295,21 +289,7 @@ class ComponentBasedEnvironment(gym.Env):
         self._step_count += 1
 
         # Advance dynamic plume state for this step if supported
-        try:
-            adv = getattr(self._concentration_field, "advance_to_step", None)
-            if callable(adv):
-                adv(self._step_count)
-        except Exception:
-            # Defensive: optional dynamic hook
-            pass
-
-        try:
-            wind_adv = getattr(self._wind_field, "advance_to_step", None)
-            if callable(wind_adv):
-                wind_adv(self._step_count)
-        except Exception:
-            # Defensive: optional dynamic hook
-            pass
+        self._advance_dynamic_fields()
 
         # Compute reward
         # Delegation to RewardFunction
@@ -331,7 +311,41 @@ class ComponentBasedEnvironment(gym.Env):
         # Update agent state
         self._agent_state = new_agent_state
 
-        # Update state machine
+        self._update_state_after_step(terminated=terminated, truncated=truncated)
+
+        # Generate observation
+        # Delegation to ObservationModel
+        env_state_dict = self._build_env_state_dict()
+        observation = self._observation_model.get_observation(env_state_dict)
+
+        # Build info dict
+        info = self._build_step_info()
+
+        return observation, float(reward), terminated, truncated, info
+
+    def _ensure_ready_for_step(self) -> None:
+        # Contract: environment_state_machine.md - P1
+        if self._state == EnvironmentState.CREATED:
+            raise StateError("Must call reset() before step()")
+        if self._state == EnvironmentState.CLOSED:
+            raise StateError("Cannot step closed environment")
+        if self._state != EnvironmentState.READY:
+            raise StateError("Environment must be in READY state to step; call reset()")
+
+    def _advance_dynamic_field(self, field: Any) -> None:
+        try:
+            adv = getattr(field, "advance_to_step", None)
+            if callable(adv):
+                adv(self._step_count)
+        except Exception:
+            # Defensive: optional dynamic hook
+            pass
+
+    def _advance_dynamic_fields(self) -> None:
+        self._advance_dynamic_field(self._concentration_field)
+        self._advance_dynamic_field(self._wind_field)
+
+    def _update_state_after_step(self, *, terminated: bool, truncated: bool) -> None:
         if terminated:
             self._state = EnvironmentState.TERMINATED
             self._agent_state.goal_reached = True
@@ -346,13 +360,8 @@ class ComponentBasedEnvironment(gym.Env):
                 f"max_steps={self.max_steps} reached"
             )
 
-        # Generate observation
-        # Delegation to ObservationModel
-        env_state_dict = self._build_env_state_dict()
-        observation = self._observation_model.get_observation(env_state_dict)
-
-        # Build info dict
-        info = {
+    def _build_step_info(self) -> dict[str, Any]:
+        return {
             "step_count": self._step_count,
             "agent_position": (
                 self._agent_state.position.x,
@@ -360,8 +369,6 @@ class ComponentBasedEnvironment(gym.Env):
             ),
             "distance_to_goal": self._distance_to_goal(self._agent_state.position),
         }
-
-        return observation, float(reward), terminated, truncated, info
 
     def _sample_random_start_location(self) -> Coordinates:
         rng = getattr(self, "_rng", None)

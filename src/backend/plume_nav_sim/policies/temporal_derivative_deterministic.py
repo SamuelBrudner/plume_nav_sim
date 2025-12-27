@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import gymnasium as gym
-import numpy as np
 
 from ..actions.oriented_grid import OrientedGridActions
 from ..interfaces import Policy

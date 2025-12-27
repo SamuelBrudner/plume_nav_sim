@@ -690,121 +690,145 @@ def describe_dataset(dataset_id: str) -> DatasetRegistryEntry:
     return DATASET_REGISTRY[dataset_id]
 
 
+def _validate_registry_mapping(
+    entries: Optional[Dict[str, DatasetRegistryEntry]],
+) -> Dict[str, DatasetRegistryEntry]:
+    registry = entries or DATASET_REGISTRY
+    if not isinstance(registry, dict):
+        raise RegistryValidationError("Registry must be a mapping of dataset entries")
+    return registry
+
+
+def _validate_entry_identity(key: str, entry: DatasetRegistryEntry) -> None:
+    if not isinstance(entry, DatasetRegistryEntry):
+        raise RegistryValidationError(
+            f"Registry entry for '{key}' is not a DatasetRegistryEntry"
+        )
+    if not entry.dataset_id or key != entry.dataset_id:
+        raise RegistryValidationError(
+            f"Registry key '{key}' must match entry dataset_id '{entry.dataset_id}'"
+        )
+    if not entry.version:
+        raise RegistryValidationError(f"Dataset '{key}' is missing a version")
+    if not entry.cache_subdir:
+        raise RegistryValidationError(f"Dataset '{key}' is missing cache_subdir")
+    if not entry.expected_root:
+        raise RegistryValidationError(f"Dataset '{key}' is missing expected_root")
+
+
+def _validate_artifact(key: str, artifact: DatasetArtifact) -> None:
+    if not artifact.url:
+        raise RegistryValidationError(f"Dataset '{key}' is missing artifact.url")
+    if not artifact.checksum:
+        raise RegistryValidationError(f"Dataset '{key}' is missing artifact.checksum")
+    if not artifact.archive_type:
+        raise RegistryValidationError(
+            f"Dataset '{key}' is missing artifact.archive_type"
+        )
+    if not artifact.layout:
+        raise RegistryValidationError(f"Dataset '{key}' is missing artifact.layout")
+
+
+def _validate_metadata(key: str, metadata: DatasetMetadata) -> None:
+    if not metadata.title.strip():
+        raise RegistryValidationError(f"Dataset '{key}' is missing metadata.title")
+    if not metadata.description.strip():
+        raise RegistryValidationError(
+            f"Dataset '{key}' is missing metadata.description"
+        )
+    # DataCite requires either structured creators OR legacy citation
+    if not metadata.creators and not metadata.citation.strip():
+        raise RegistryValidationError(
+            f"Dataset '{key}' must have either creators or citation"
+        )
+    if not metadata.license.strip():
+        raise RegistryValidationError(f"Dataset '{key}' is missing metadata.license")
+
+
+def _validate_creators(key: str, creators: tuple[Creator, ...]) -> None:
+    for i, creator in enumerate(creators):
+        if not creator.name.strip():
+            raise RegistryValidationError(f"Dataset '{key}' creator {i} has empty name")
+
+
+def _validate_ingest_layout(key: str, ingest: IngestSpec) -> None:
+    if not ingest.output_layout.strip():
+        raise RegistryValidationError(
+            f"Dataset '{key}' ingest output_layout must be provided"
+        )
+    if ingest.output_layout.lower() not in {"zarr", "hdf5", "h5"}:
+        raise RegistryValidationError(
+            f"Dataset '{key}' ingest output_layout '{ingest.output_layout}' "
+            "is not supported"
+        )
+
+
+def _validate_crimaldi_ingest(key: str, ingest: CrimaldiFluorescenceIngest) -> None:
+    if not ingest.dataset:
+        raise RegistryValidationError(
+            f"Dataset '{key}' CrimaldiFluorescenceIngest missing dataset path"
+        )
+    if ingest.fps <= 0:
+        raise RegistryValidationError(f"Dataset '{key}' ingest fps must be positive")
+    py, px = ingest.pixel_to_grid
+    if py <= 0 or px <= 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' ingest pixel_to_grid entries must be positive"
+        )
+    ey, ex = ingest.extent
+    if ey <= 0 or ex <= 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' ingest extent entries must be positive"
+        )
+
+
+def _validate_rigolli_ingest(key: str, ingest: RigolliDNSIngest) -> None:
+    if not ingest.concentration_key:
+        raise RegistryValidationError(
+            f"Dataset '{key}' RigolliDNSIngest missing concentration_key"
+        )
+    if not ingest.coords_url:
+        raise RegistryValidationError(
+            f"Dataset '{key}' RigolliDNSIngest missing coords_url"
+        )
+    if not ingest.coords_checksum:
+        raise RegistryValidationError(
+            f"Dataset '{key}' RigolliDNSIngest missing coords_checksum"
+        )
+
+
+def _validate_emonet_ingest(key: str, ingest: EmonetSmokeIngest) -> None:
+    if ingest.fps <= 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest fps must be positive"
+        )
+    ax, ay = ingest.arena_size_mm
+    if ax <= 0 or ay <= 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest arena_size_mm must be positive"
+        )
+
+
+def _validate_ingest(key: str, ingest: IngestSpec) -> None:
+    _validate_ingest_layout(key, ingest)
+    if isinstance(ingest, CrimaldiFluorescenceIngest):
+        _validate_crimaldi_ingest(key, ingest)
+    elif isinstance(ingest, RigolliDNSIngest):
+        _validate_rigolli_ingest(key, ingest)
+    elif isinstance(ingest, EmonetSmokeIngest):
+        _validate_emonet_ingest(key, ingest)
+
+
 def validate_registry(
     registry: Optional[Dict[str, DatasetRegistryEntry]] = None,
 ) -> None:
     """Validate registry entries for completeness and internal consistency."""
 
-    entries = registry or DATASET_REGISTRY
-    if not isinstance(entries, dict):
-        raise RegistryValidationError("Registry must be a mapping of dataset entries")
-
+    entries = _validate_registry_mapping(registry)
     for key, entry in entries.items():
-        if not isinstance(entry, DatasetRegistryEntry):
-            raise RegistryValidationError(
-                f"Registry entry for '{key}' is not a DatasetRegistryEntry"
-            )
-        if not entry.dataset_id or key != entry.dataset_id:
-            raise RegistryValidationError(
-                f"Registry key '{key}' must match entry dataset_id '{entry.dataset_id}'"
-            )
-        if not entry.version:
-            raise RegistryValidationError(f"Dataset '{key}' is missing a version")
-        if not entry.cache_subdir:
-            raise RegistryValidationError(f"Dataset '{key}' is missing cache_subdir")
-        if not entry.expected_root:
-            raise RegistryValidationError(f"Dataset '{key}' is missing expected_root")
-
-        artifact = entry.artifact
-        if not artifact.url:
-            raise RegistryValidationError(f"Dataset '{key}' is missing artifact.url")
-        if not artifact.checksum:
-            raise RegistryValidationError(
-                f"Dataset '{key}' is missing artifact.checksum"
-            )
-        if not artifact.archive_type:
-            raise RegistryValidationError(
-                f"Dataset '{key}' is missing artifact.archive_type"
-            )
-        if not artifact.layout:
-            raise RegistryValidationError(f"Dataset '{key}' is missing artifact.layout")
-
-        metadata = entry.metadata
-        if not metadata.title.strip():
-            raise RegistryValidationError(f"Dataset '{key}' is missing metadata.title")
-        if not metadata.description.strip():
-            raise RegistryValidationError(
-                f"Dataset '{key}' is missing metadata.description"
-            )
-        # DataCite requires either structured creators OR legacy citation
-        if not metadata.creators and not metadata.citation.strip():
-            raise RegistryValidationError(
-                f"Dataset '{key}' must have either creators or citation"
-            )
-        if not metadata.license.strip():
-            raise RegistryValidationError(
-                f"Dataset '{key}' is missing metadata.license"
-            )
-        # Validate Creator entries
-        for i, creator in enumerate(metadata.creators):
-            if not creator.name.strip():
-                raise RegistryValidationError(
-                    f"Dataset '{key}' creator {i} has empty name"
-                )
-
-        ingest = entry.ingest
-        if ingest:
-            if not ingest.output_layout.strip():
-                raise RegistryValidationError(
-                    f"Dataset '{key}' ingest output_layout must be provided"
-                )
-            if ingest.output_layout.lower() not in {"zarr", "hdf5", "h5"}:
-                raise RegistryValidationError(
-                    f"Dataset '{key}' ingest output_layout '{ingest.output_layout}' "
-                    "is not supported"
-                )
-            # Validate CrimaldiFluorescenceIngest-specific fields
-            if isinstance(ingest, CrimaldiFluorescenceIngest):
-                if not ingest.dataset:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' CrimaldiFluorescenceIngest missing dataset path"
-                    )
-                if ingest.fps <= 0:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' ingest fps must be positive"
-                    )
-                py, px = ingest.pixel_to_grid
-                if py <= 0 or px <= 0:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' ingest pixel_to_grid entries must be positive"
-                    )
-                ey, ex = ingest.extent
-                if ey <= 0 or ex <= 0:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' ingest extent entries must be positive"
-                    )
-            # Validate RigolliDNSIngest-specific fields
-            elif isinstance(ingest, RigolliDNSIngest):
-                if not ingest.concentration_key:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' RigolliDNSIngest missing concentration_key"
-                    )
-                if not ingest.coords_url:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' RigolliDNSIngest missing coords_url"
-                    )
-                if not ingest.coords_checksum:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' RigolliDNSIngest missing coords_checksum"
-                    )
-            # Validate EmonetSmokeIngest-specific fields
-            elif isinstance(ingest, EmonetSmokeIngest):
-                if ingest.fps <= 0:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' EmonetSmokeIngest fps must be positive"
-                    )
-                ax, ay = ingest.arena_size_mm
-                if ax <= 0 or ay <= 0:
-                    raise RegistryValidationError(
-                        f"Dataset '{key}' EmonetSmokeIngest arena_size_mm must be positive"
-                    )
+        _validate_entry_identity(key, entry)
+        _validate_artifact(key, entry.artifact)
+        _validate_metadata(key, entry.metadata)
+        _validate_creators(key, entry.metadata.creators)
+        if entry.ingest:
+            _validate_ingest(key, entry.ingest)

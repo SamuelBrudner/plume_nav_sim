@@ -53,6 +53,69 @@ class MovieConfig:
     data_array: Any | None = None
 
 
+def _open_movie_dataset(path: Path) -> Any:
+    try:
+        import xarray as xr  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise ImportError(
+            "Movie plume requires optional dependency 'xarray'. "
+            "Install extras: pip install xarray zarr numcodecs"
+        ) from exc
+
+    try:
+        return xr.open_zarr(str(path), consolidated=True)  # type: ignore[attr-defined]
+    except Exception:
+        return xr.open_zarr(str(path))  # type: ignore[attr-defined]
+
+
+def _resolve_movie_data(cfg: MovieConfig) -> tuple[Any, Any, str]:
+    data_array: Any = getattr(cfg, "data_array", None)
+    path = Path(cfg.path) if cfg.path else None
+
+    if data_array is None:
+        if path is None:
+            raise ValidationError("movie.path must be provided")
+        if not path.exists():
+            raise ValidationError(f"movie.path not found: {cfg.path}")
+        if not path.is_dir():
+            # Zarr stores are directories; allow xarray to handle file-backed stores.
+            pass
+
+        ds = _open_movie_dataset(path)
+        attrs_source = ds
+        var = ds[VARIABLE_CONCENTRATION]
+        dataset_path = str(path)
+        return var, attrs_source, dataset_path
+
+    try:
+        attrs_source = data_array.to_dataset(name=VARIABLE_CONCENTRATION)
+    except Exception:
+        attrs_source = {VARIABLE_CONCENTRATION: data_array}
+    dataset_path = str(path) if path is not None else "<in-memory>"
+    return data_array, attrs_source, dataset_path
+
+
+def _apply_attr_overrides(cfg: MovieConfig, attrs: VideoPlumeAttrs) -> VideoPlumeAttrs:
+    overrides = {
+        "fps": cfg.fps if cfg.fps is not None else attrs.fps,
+        "pixel_to_grid": cfg.pixel_to_grid or attrs.pixel_to_grid,
+        "origin": cfg.origin or attrs.origin,
+        "extent": cfg.extent or attrs.extent,
+        "schema_version": attrs.schema_version,
+        "timebase": getattr(attrs, "timebase", None),
+        "source_dtype": getattr(attrs, "source_dtype"),
+    }
+    return VideoPlumeAttrs(**overrides)  # type: ignore[arg-type]
+
+
+def _resolve_movie_sizes(var: Any) -> tuple[int, int, int]:
+    dims = tuple(getattr(var, "dims"))
+    if dims != DIMS_TYX:
+        raise ValidationError(f"Movie variable dims must be {DIMS_TYX}, got {dims}")
+    size_t, size_y, size_x = (int(var.sizes[d]) for d in DIMS_TYX)  # type: ignore[index]
+    return size_t, size_y, size_x
+
+
 class MoviePlumeField:
     """Video-backed field exposing current 2D frame via `field_array`.
 
@@ -68,72 +131,10 @@ class MoviePlumeField:
     def __init__(self, cfg: MovieConfig) -> None:
         self._logger = get_component_logger("concentration_field")
 
-        data_array: Any = getattr(cfg, "data_array", None)
-        path = Path(cfg.path) if cfg.path else None
-
-        if data_array is None:
-            if path is None:
-                raise ValidationError("movie.path must be provided")
-            if not path.exists():
-                raise ValidationError(f"movie.path not found: {cfg.path}")
-            if not path.is_dir():
-                # Zarr stores are directories; support file-backed stores via xarray if possible
-                # but fail fast for obviously wrong inputs
-                pass
-
-            # Lazy import optional deps with helpful errors
-            try:
-                import xarray as xr  # type: ignore
-            except Exception as exc:  # pragma: no cover - optional dependency
-                raise ImportError(
-                    "Movie plume requires optional dependency 'xarray'. "
-                    "Install extras: pip install xarray zarr numcodecs"
-                ) from exc
-
-            # Open dataset and validate schema
-            try:
-                ds = xr.open_zarr(  # type: ignore[attr-defined]
-                    str(path), consolidated=True
-                )
-            except Exception:
-                # Fallback to non-consolidated stores
-                ds = xr.open_zarr(str(path))  # type: ignore[attr-defined]
-
-            attrs_source = ds
-            var = ds[VARIABLE_CONCENTRATION]
-            dataset_path = str(path)
-        else:
-            # When a preloaded DataArray is provided (e.g., via load_plume),
-            # validate using an xarray.Dataset view to satisfy the schema helper.
-            try:
-                attrs_source = data_array.to_dataset(name=VARIABLE_CONCENTRATION)
-            except Exception:
-                attrs_source = {VARIABLE_CONCENTRATION: data_array}
-            var = data_array
-            dataset_path = str(path) if path is not None else "<in-memory>"
-
+        var, attrs_source, dataset_path = _resolve_movie_data(cfg)
         attrs = validate_xarray_like(attrs_source)
-
-        # Apply overrides from cfg when provided
-        attrs_overrides = {
-            "fps": cfg.fps if cfg.fps is not None else attrs.fps,
-            "pixel_to_grid": (
-                cfg.pixel_to_grid if cfg.pixel_to_grid else attrs.pixel_to_grid
-            ),
-            "origin": cfg.origin if cfg.origin else attrs.origin,
-            "extent": cfg.extent if cfg.extent else attrs.extent,
-            "schema_version": attrs.schema_version,
-            # Optional in some schema versions; include when present
-            "timebase": getattr(attrs, "timebase", None),
-            "source_dtype": getattr(attrs, "source_dtype"),
-        }
-        self.attrs: VideoPlumeAttrs = VideoPlumeAttrs(**attrs_overrides)  # type: ignore[arg-type]
-
-        # Resolve dims and sizes
-        dims = tuple(getattr(var, "dims"))
-        if dims != DIMS_TYX:
-            raise ValidationError(f"Movie variable dims must be {DIMS_TYX}, got {dims}")
-        size_t, size_y, size_x = (int(var.sizes[d]) for d in DIMS_TYX)  # type: ignore[index]
+        self.attrs = _apply_attr_overrides(cfg, attrs)
+        size_t, size_y, size_x = _resolve_movie_sizes(var)
         self.num_frames = size_t
         self.grid_size = GridSize(width=size_x, height=size_y)
 

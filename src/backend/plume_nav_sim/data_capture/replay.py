@@ -198,6 +198,43 @@ class ReplayEngine:
             artifacts.run_meta, self._episodes
         )
 
+    def _resolve_env_factory(self) -> ReplayEnvFactory:
+        if self._env_factory is not None:
+            return self._env_factory
+
+        def _factory(meta: RunMeta, render_flag: bool) -> Any:
+            return _default_env_factory(
+                meta,
+                render=render_flag,
+                extra_env_kwargs=self._env_kwargs,
+                recorded_max_steps=self._recorded_max_steps,
+            )
+
+        return _factory
+
+    def _render_context(
+        self, *, render: bool
+    ) -> tuple[_runner._RenderContext, bool]:  # type: ignore[attr-defined]
+        cfg = _flatten_env_config(self._artifacts.run_meta.env_config)
+        render_allowed = bool(render and cfg.get("enable_rendering", True))
+        return _runner._RenderContext(enabled=render_allowed), render_allowed  # type: ignore[attr-defined]
+
+    def _validate_start_step(self, start_step: int) -> None:
+        if start_step < 0:
+            raise ValueError("start_step must be non-negative")
+
+    def _validate_seed(
+        self, *, seed: int | None, info: dict[str, Any], episode_id: str
+    ) -> None:
+        if seed is None:
+            return
+        recorded_seed = info.get("seed")
+        if recorded_seed is not None and int(recorded_seed) != int(seed):
+            raise ReplayConsistencyError(
+                f"Seed mismatch at episode {episode_id}: "
+                f"env reported {recorded_seed}, expected {seed}"
+            )
+
     def iter_events(
         self,
         *,
@@ -212,24 +249,13 @@ class ReplayEngine:
             validate: Raise ReplayConsistencyError on reward/position mismatches.
             start_step: Zero-based global step offset for seeking within the run.
         """
-        if start_step < 0:
-            raise ValueError("start_step must be non-negative")
+        self._validate_start_step(start_step)
         if start_step >= self._total_steps:
             return  # type: ignore[return-value]
 
-        factory = self._env_factory
-        if factory is None:
-            factory = lambda meta, render_flag: _default_env_factory(  # noqa: E731
-                meta,
-                render=render_flag,
-                extra_env_kwargs=self._env_kwargs,
-                recorded_max_steps=self._recorded_max_steps,
-            )
-
+        factory = self._resolve_env_factory()
         env = factory(self._artifacts.run_meta, bool(render))
-        cfg = _flatten_env_config(self._artifacts.run_meta.env_config)
-        render_allowed = bool(render and cfg.get("enable_rendering", True))
-        render_ctx = _runner._RenderContext(enabled=render_allowed)  # type: ignore[attr-defined]
+        render_ctx, render_allowed = self._render_context(render=render)
 
         global_index = 0
         try:
@@ -239,44 +265,15 @@ class ReplayEngine:
                     global_index += len(steps)
                     continue
 
-                seed = _resolve_seed(self._artifacts.run_meta, ep.index, steps)
-                obs, info = env.reset(seed=seed)
-                if validate and seed is not None:
-                    recorded_seed = info.get("seed")
-                    if recorded_seed is not None and int(recorded_seed) != int(seed):
-                        raise ReplayConsistencyError(
-                            f"Seed mismatch at episode {ep.episode_id}: "
-                            f"env reported {recorded_seed}, expected {seed}"
-                        )
-
                 offset = max(0, start_step - global_index)
-                episode_total = 0.0
-                last_event: Optional[_runner.StepEvent] = None
-
-                for idx, step_rec in enumerate(steps):
-                    should_emit = idx >= offset
-                    ev, obs = self._replay_step(
-                        env=env,
-                        step_rec=step_rec,
-                        current_obs=obs,
-                        render_ctx=render_ctx,
-                        capture_frame=render_allowed and should_emit,
-                    )
-                    episode_total += ev.reward
-                    last_event = ev
-                    if validate:
-                        self._validate_step(step_rec, ev)
-                    if should_emit:
-                        yield ev
-                    if ev.terminated or ev.truncated:
-                        if validate and idx + 1 < len(steps):
-                            raise ReplayConsistencyError(
-                                f"Run terminated at step {step_rec.step} in "
-                                f"episode {ep.episode_id} with "
-                                f"{len(steps) - idx - 1} recorded steps remaining"
-                            )
-                        break
-
+                last_event, episode_total = yield from self._replay_episode(
+                    env=env,
+                    episode=ep,
+                    offset=offset,
+                    render_ctx=render_ctx,
+                    render_allowed=render_allowed,
+                    validate=validate,
+                )
                 if validate and ep.record is not None and last_event is not None:
                     self._validate_episode(ep, episode_total, last_event)
 
@@ -284,6 +281,51 @@ class ReplayEngine:
         finally:
             with contextlib.suppress(Exception):
                 env.close()
+
+    def _replay_episode(
+        self,
+        *,
+        env: Any,
+        episode: _EpisodeSlice,
+        offset: int,
+        render_ctx: _runner._RenderContext,  # type: ignore[attr-defined]
+        render_allowed: bool,
+        validate: bool,
+    ) -> Iterator[_runner.StepEvent]:
+        steps = episode.steps
+        seed = _resolve_seed(self._artifacts.run_meta, episode.index, steps)
+        obs, info = env.reset(seed=seed)
+        if validate:
+            self._validate_seed(seed=seed, info=info, episode_id=episode.episode_id)
+
+        episode_total = 0.0
+        last_event: Optional[_runner.StepEvent] = None
+
+        for idx, step_rec in enumerate(steps):
+            should_emit = idx >= offset
+            ev, obs = self._replay_step(
+                env=env,
+                step_rec=step_rec,
+                current_obs=obs,
+                render_ctx=render_ctx,
+                capture_frame=render_allowed and should_emit,
+            )
+            episode_total += ev.reward
+            last_event = ev
+            if validate:
+                self._validate_step(step_rec, ev)
+            if should_emit:
+                yield ev
+            if ev.terminated or ev.truncated:
+                if validate and idx + 1 < len(steps):
+                    raise ReplayConsistencyError(
+                        f"Run terminated at step {step_rec.step} in "
+                        f"episode {episode.episode_id} with "
+                        f"{len(steps) - idx - 1} recorded steps remaining"
+                    )
+                break
+
+        return last_event, episode_total
 
     def _replay_step(
         self,

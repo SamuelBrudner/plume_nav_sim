@@ -367,25 +367,56 @@ def _merge_args_from_cfg(
     )
 
 
+def _coerce_pair(value: object) -> tuple[int, int] | None:
+    try:
+        first = getattr(value, "x", None)
+        second = getattr(value, "y", None)
+        if first is not None and second is not None:
+            return int(first), int(second)
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            return int(value[0]), int(value[1])
+    except Exception:
+        return None
+    return None
+
+
+def _maybe_add_int(cfg_kwargs: dict[str, object], env: object, name: str) -> None:
+    raw = getattr(env, name, None)
+    if raw is None:
+        return
+    try:
+        cfg_kwargs[name] = int(raw)
+    except Exception:
+        pass
+
+
+def _maybe_add_float(cfg_kwargs: dict[str, object], env: object, name: str) -> None:
+    raw = getattr(env, name, None)
+    if raw is None:
+        return
+    try:
+        cfg_kwargs[name] = float(raw)
+    except Exception:
+        pass
+
+
+def _infer_enable_rendering(env: object) -> bool | None:
+    enable_rendering = getattr(env, "enable_rendering", None)
+    if enable_rendering is not None:
+        return bool(enable_rendering)
+    render_mode = getattr(env, "render_mode", None)
+    if render_mode is not None:
+        return True
+    return None
+
+
 def _capture_env_config(
     env: object, default_grid: tuple[int, int]
 ) -> EnvironmentConfig:
     """Extract the effective environment configuration for run metadata."""
 
-    def _pair(value: object) -> tuple[int, int] | None:
-        try:
-            first = getattr(value, "x", None)
-            second = getattr(value, "y", None)
-            if first is not None and second is not None:
-                return int(first), int(second)
-            if isinstance(value, (list, tuple)) and len(value) == 2:
-                return int(value[0]), int(value[1])
-        except Exception:
-            return None
-        return None
-
-    grid = _pair(getattr(env, "grid_size", None)) or default_grid
-    src = _pair(getattr(env, "source_location", None))
+    grid = _coerce_pair(getattr(env, "grid_size", None)) or default_grid
+    src = _coerce_pair(getattr(env, "source_location", None))
     if src is None:
         src = (grid[0] // 2, grid[1] // 2)
 
@@ -394,30 +425,16 @@ def _capture_env_config(
         "source_location": src,
     }
 
-    max_steps = getattr(env, "max_steps", None)
-    if max_steps is not None:
-        try:
-            cfg_kwargs["max_steps"] = int(max_steps)
-        except Exception:
-            pass
-
-    goal_radius = getattr(env, "goal_radius", None)
-    if goal_radius is not None:
-        try:
-            cfg_kwargs["goal_radius"] = float(goal_radius)
-        except Exception:
-            pass
+    _maybe_add_int(cfg_kwargs, env, "max_steps")
+    _maybe_add_float(cfg_kwargs, env, "goal_radius")
 
     plume_params = getattr(env, "plume_params", None)
     if plume_params is not None:
         cfg_kwargs["plume_params"] = plume_params
 
-    render_mode = getattr(env, "render_mode", None)
-    enable_rendering = getattr(env, "enable_rendering", None)
+    enable_rendering = _infer_enable_rendering(env)
     if enable_rendering is not None:
-        cfg_kwargs["enable_rendering"] = bool(enable_rendering)
-    elif render_mode is not None:
-        cfg_kwargs["enable_rendering"] = True
+        cfg_kwargs["enable_rendering"] = enable_rendering
 
     return EnvironmentConfig(**cfg_kwargs)
 

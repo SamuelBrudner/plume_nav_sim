@@ -17,13 +17,12 @@ import sys
 import tarfile
 import urllib.request
 import zipfile
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .registry import (
-    DATASET_REGISTRY,
     DEFAULT_CACHE_ROOT,
     CrimaldiFluorescenceIngest,
     DatasetRegistryEntry,
@@ -34,6 +33,47 @@ from .registry import (
 from .stats import compute_concentration_stats, store_stats_in_zarr
 
 LOG = logging.getLogger(__name__)
+
+
+def _format_yaml_string(value: str) -> str:
+    if "\n" in value or ":" in value or '"' in value:
+        return f'"{value}"'
+    return value
+
+
+def _format_yaml_list(values: list[Any], indent: int) -> str:
+    if not values:
+        return "[]"
+    prefix = "  " * indent
+    return "".join(
+        f"\n{prefix}  - {_format_yaml_value(item, indent + 1)}" for item in values
+    )
+
+
+def _format_yaml_dict(values: dict[str, Any], indent: int) -> str:
+    if not values:
+        return "{}"
+    prefix = "  " * indent
+    return "".join(
+        f"\n{prefix}  {key}: {_format_yaml_value(val, indent + 1)}"
+        for key, val in values.items()
+    )
+
+
+def _format_yaml_value(value: Any, indent: int = 0) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return _format_yaml_string(value)
+    if isinstance(value, list):
+        return _format_yaml_list(value, indent)
+    if isinstance(value, dict):
+        return _format_yaml_dict(value, indent)
+    return str(value)
 
 
 class DatasetDownloadError(RuntimeError):
@@ -151,35 +191,8 @@ class ProvenanceSidecar(BaseModel if PYDANTIC_AVAILABLE else object):  # type: i
         lines = ["# Provenance sidecar for plume_nav_sim Data Zoo", ""]
         data = self.to_dict()
 
-        def _format_value(v: Any, indent: int = 0) -> str:
-            prefix = "  " * indent
-            if v is None:
-                return "null"
-            elif isinstance(v, bool):
-                return "true" if v else "false"
-            elif isinstance(v, (int, float)):
-                return str(v)
-            elif isinstance(v, str):
-                if "\n" in v or ":" in v or '"' in v:
-                    return f'"{v}"'
-                return v
-            elif isinstance(v, list):
-                if not v:
-                    return "[]"
-                return "".join(
-                    f"\n{prefix}  - {_format_value(item, indent + 1)}" for item in v
-                )
-            elif isinstance(v, dict):
-                if not v:
-                    return "{}"
-                return "".join(
-                    f"\n{prefix}  {k}: {_format_value(val, indent + 1)}"
-                    for k, val in v.items()
-                )
-            return str(v)
-
         for key, value in data.items():
-            formatted = _format_value(value)
+            formatted = _format_yaml_value(value)
             lines.append(
                 f"{key}:{formatted}" if "\n" in formatted else f"{key}: {formatted}"
             )
@@ -285,6 +298,84 @@ def _dataset_layout(entry: DatasetRegistryEntry) -> str:
     return entry.artifact.layout
 
 
+def _purge_for_force_download(
+    entry: DatasetRegistryEntry,
+    *,
+    cache_dir: Path,
+    artifact_path: Path,
+    expected_path: Path,
+) -> None:
+    _purge_cached(artifact_path, expected_path, cache_dir)
+    if entry.ingest and entry.artifact.archive_member:
+        stale_source = cache_dir / entry.artifact.archive_member
+        if stale_source.exists():
+            if stale_source.is_dir():
+                shutil.rmtree(stale_source)
+            else:
+                stale_source.unlink()
+
+
+def _try_cached_dataset(
+    entry: DatasetRegistryEntry,
+    *,
+    expected_path: Path,
+    artifact_path: Path,
+    cache_dir: Path,
+    layout: str,
+    auto_download: bool,
+    verify_checksum: bool,
+) -> Path | None:
+    if not expected_path.exists():
+        return None
+
+    _validate_layout(expected_path, layout)
+    if verify_checksum and artifact_path.is_file():
+        try:
+            _verify_checksum(artifact_path, entry)
+            return expected_path
+        except ChecksumMismatchError:
+            if not auto_download:
+                raise
+            LOG.warning(
+                "Checksum mismatch for cached %s; purging cache and re-downloading",
+                entry.dataset_id,
+            )
+            _purge_cached(artifact_path, expected_path, cache_dir)
+            return None
+
+    if verify_checksum and not artifact_path.is_file():
+        LOG.info(
+            "Skipping checksum verification for %s; cached data present but "
+            "artifact %s is missing or is a directory",
+            entry.dataset_id,
+            artifact_path,
+        )
+    return expected_path
+
+
+def _confirm_download_if_needed(
+    entry: DatasetRegistryEntry,
+    *,
+    artifact_path: Path,
+    auto_download: bool,
+    confirm_download: Optional[Callable[[DatasetRegistryEntry], bool]],
+) -> None:
+    if artifact_path.exists() or auto_download:
+        return
+
+    should_download = (
+        confirm_download(entry)
+        if confirm_download is not None
+        else _default_confirm_download(entry)
+    )
+    if not should_download:
+        raise DatasetDownloadError(
+            f"Dataset '{entry.dataset_id}' missing from cache; set auto_download=True "
+            "or approve the download to fetch from registry."
+        )
+    LOG.info("User approved download for %s", entry.dataset_id)
+
+
 def ensure_dataset_available(
     dataset_id: str,
     *,
@@ -324,52 +415,33 @@ def ensure_dataset_available(
     layout = _dataset_layout(entry)
 
     if force_download:
-        _purge_cached(artifact_path, expected_path, cache_dir)
-        if entry.ingest and entry.artifact.archive_member:
-            stale_source = cache_dir / entry.artifact.archive_member
-            if stale_source.exists():
-                if stale_source.is_dir():
-                    shutil.rmtree(stale_source)
-                else:
-                    stale_source.unlink()
+        _purge_for_force_download(
+            entry,
+            cache_dir=cache_dir,
+            artifact_path=artifact_path,
+            expected_path=expected_path,
+        )
 
     # Fast path: already unpacked and checksum (if available) is trusted
-    if expected_path.exists() and not force_download:
-        _validate_layout(expected_path, layout)
-        if verify_checksum and artifact_path.is_file():
-            try:
-                _verify_checksum(artifact_path, entry)
-                return expected_path
-            except ChecksumMismatchError:
-                if not auto_download:
-                    raise
-                LOG.warning(
-                    "Checksum mismatch for cached %s; purging cache and re-downloading",
-                    dataset_id,
-                )
-                _purge_cached(artifact_path, expected_path, cache_dir)
-        else:
-            if verify_checksum and not artifact_path.is_file():
-                LOG.info(
-                    "Skipping checksum verification for %s; cached data present but "
-                    "artifact %s is missing or is a directory",
-                    dataset_id,
-                    artifact_path,
-                )
-            return expected_path
-
-    if not artifact_path.exists() and not auto_download:
-        should_download = (
-            confirm_download(entry)
-            if confirm_download is not None
-            else _default_confirm_download(entry)
+    if not force_download:
+        cached_path = _try_cached_dataset(
+            entry,
+            expected_path=expected_path,
+            artifact_path=artifact_path,
+            cache_dir=cache_dir,
+            layout=layout,
+            auto_download=auto_download,
+            verify_checksum=verify_checksum,
         )
-        if not should_download:
-            raise DatasetDownloadError(
-                f"Dataset '{dataset_id}' missing from cache; set auto_download=True "
-                "or approve the download to fetch from registry."
-            )
-        LOG.info("User approved download for %s", dataset_id)
+        if cached_path is not None:
+            return cached_path
+
+    _confirm_download_if_needed(
+        entry,
+        artifact_path=artifact_path,
+        auto_download=auto_download,
+        confirm_download=confirm_download,
+    )
 
     if auto_download or not artifact_path.exists():
         _download_artifact(entry, artifact_path)
@@ -626,6 +698,39 @@ def _validate_archive_members(members: list[str], dest: Path) -> None:
             raise DatasetDownloadError(f"Unsafe archive member path: {name}")
 
 
+def _rigolli_axis_candidates(
+    shape: tuple[int, ...], *, x_len: int, y_len: int
+) -> list[tuple[int, int, int]]:
+    candidates: list[tuple[int, int, int]] = []
+    for time_axis in (0, 1, 2):
+        other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
+        for y_axis, x_axis in (other_axes, other_axes[::-1]):
+            if shape[y_axis] == y_len and shape[x_axis] == x_len:
+                candidates.append((time_axis, y_axis, x_axis))
+    return candidates
+
+
+def _pick_rigolli_axes(
+    candidates: list[tuple[int, int, int]], shape: tuple[int, ...]
+) -> tuple[int, int, int]:
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if candidates:
+        # Prefer MATLAB-like ordering when ambiguous: (x, y, t) -> (t, y, x)
+        if (2, 1, 0) in candidates:
+            return (2, 1, 0)
+        # Otherwise prefer time-last when possible.
+        for time_axis, y_axis, x_axis in candidates:
+            if time_axis == 2:
+                return (time_axis, y_axis, x_axis)
+        return candidates[0]
+
+    time_axis = max(range(3), key=lambda ax: shape[ax])
+    other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
+    return (time_axis, other_axes[0], other_axes[1])
+
+
 def _infer_time_y_x_axes_for_rigolli(
     shape: tuple[int, ...], *, x_len: int, y_len: int
 ) -> tuple[int, int, int]:
@@ -645,30 +750,8 @@ def _infer_time_y_x_axes_for_rigolli(
             f"Expected 3D concentration array, got shape {shape}"
         )
 
-    candidates: list[tuple[int, int, int]] = []
-    for time_axis in (0, 1, 2):
-        other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
-        for y_axis, x_axis in (other_axes, other_axes[::-1]):
-            if shape[y_axis] == y_len and shape[x_axis] == x_len:
-                candidates.append((time_axis, y_axis, x_axis))
-
-    if len(candidates) == 1:
-        return candidates[0]
-
-    if candidates:
-        # Prefer MATLAB-like ordering when ambiguous: (x, y, t) -> (t, y, x)
-        for candidate in candidates:
-            if candidate == (2, 1, 0):
-                return candidate
-        # Otherwise prefer time-last when possible.
-        for time_axis, y_axis, x_axis in candidates:
-            if time_axis == 2:
-                return (time_axis, y_axis, x_axis)
-        return candidates[0]
-
-    time_axis = max(range(3), key=lambda ax: shape[ax])
-    other_axes = [ax for ax in (0, 1, 2) if ax != time_axis]
-    return (time_axis, other_axes[0], other_axes[1])
+    candidates = _rigolli_axis_candidates(shape, x_len=x_len, y_len=y_len)
+    return _pick_rigolli_axes(candidates, shape)
 
 
 def _maybe_rename_member(dest: Path, member: Optional[str], target_path: Path) -> None:
@@ -737,6 +820,340 @@ def _ingest_hdf5_to_zarr(
         ) from exc
 
 
+def _require_ingest_deps(label: str) -> tuple[Any, Any, Any]:
+    try:
+        import h5py
+        import numpy as np
+        import zarr
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise DatasetDownloadError(
+            f"{label} requires optional dependencies (h5py, zarr, numpy). "
+            "Install media extras or provide a pre-ingested dataset."
+        ) from exc
+    return h5py, np, zarr
+
+
+def _ensure_coords_file(spec: RigolliDNSIngest, source_path: Path) -> Path:
+    coords_path = source_path.parent / "coordinates.mat"
+    if coords_path.exists():
+        return coords_path
+
+    LOG.info("Downloading coordinates file for %s", source_path.name)
+    coords_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with (
+            urllib.request.urlopen(spec.coords_url) as response,
+            coords_path.open("wb") as fh,
+        ):
+            shutil.copyfileobj(response, fh)
+    except Exception as exc:
+        raise DatasetDownloadError(
+            f"Failed to download coordinates from {spec.coords_url}: {exc}"
+        ) from exc
+
+    hasher = hashlib.md5(usedforsecurity=False)
+    with coords_path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    if hasher.hexdigest().lower() != spec.coords_checksum.lower():
+        coords_path.unlink()
+        raise DatasetDownloadError(
+            f"Coordinates file checksum mismatch for {spec.coords_url}"
+        )
+
+    return coords_path
+
+
+def _try_load_coords_with_scipy(
+    spec: RigolliDNSIngest,
+    coords_path: Path,
+    np: Any,
+    errors: list[Exception],
+) -> tuple[Any, Any] | None:
+    try:
+        from scipy.io import loadmat  # type: ignore[import-untyped]
+    except Exception as exc:  # pragma: no cover - scipy is optional
+        errors.append(exc)
+        return None
+
+    try:
+        coords_mat = loadmat(str(coords_path))
+        x_coords = np.asarray(coords_mat[spec.x_key]).flatten().astype(np.float32)
+        y_coords = np.asarray(coords_mat[spec.y_key]).flatten().astype(np.float32)
+        return x_coords, y_coords
+    except Exception as exc:
+        errors.append(exc)
+        return None
+
+
+def _try_load_coords_with_h5py(
+    spec: RigolliDNSIngest,
+    coords_path: Path,
+    h5py: Any,
+    np: Any,
+    errors: list[Exception],
+) -> tuple[Any, Any] | None:
+    try:
+        with h5py.File(coords_path, "r") as coords_file:
+            x_data = coords_file[spec.x_key][:]
+            y_data = coords_file[spec.y_key][:]
+            x_coords = np.asarray(x_data).flatten().astype(np.float32)
+            y_coords = np.asarray(y_data).flatten().astype(np.float32)
+            return x_coords, y_coords
+    except Exception as exc:
+        errors.append(exc)
+        return None
+
+
+def _load_rigolli_coords(
+    spec: RigolliDNSIngest, coords_path: Path, *, h5py: Any, np: Any
+) -> tuple[Any, Any]:
+    errors: list[Exception] = []
+    result = _try_load_coords_with_scipy(spec, coords_path, np, errors)
+    if result is not None:
+        return result
+    result = _try_load_coords_with_h5py(spec, coords_path, h5py, np, errors)
+    if result is not None:
+        return result
+    details = "; ".join(type(e).__name__ for e in errors)
+    raise DatasetDownloadError(
+        "Failed to load Rigolli DNS coordinates file. "
+        "If this is a legacy MATLAB v5 file, install SciPy; "
+        f"load attempts failed with: {details}"
+    )
+
+
+def _get_mat_concentration_dataset(
+    mat_file: Any, spec: RigolliDNSIngest, source_path: Path
+) -> Any:
+    if spec.concentration_key not in mat_file:
+        raise DatasetDownloadError(
+            f"Could not find '{spec.concentration_key}' in {source_path.name}. "
+            f"Available keys: {list(mat_file.keys())}"
+        )
+    return mat_file[spec.concentration_key]
+
+
+def _compute_chunk_t(spec_chunk: int | None, bytes_per_frame: int) -> int:
+    max_chunk_bytes = 500 * 1024 * 1024  # 500MB target
+    return min(spec_chunk or 100, max(1, max_chunk_bytes // max(1, bytes_per_frame)))
+
+
+def _init_rigolli_store(
+    *,
+    output_path: Path,
+    n_frames: int,
+    ny: int,
+    nx: int,
+    chunk_t: int,
+    x_coords: Any,
+    y_coords: Any,
+    zarr: Any,
+) -> tuple[Any, Any]:
+    store = zarr.DirectoryStore(str(output_path))
+    root = zarr.group(store, overwrite=True)
+    conc = root.create_dataset(
+        "concentration",
+        shape=(n_frames, ny, nx),
+        chunks=(chunk_t, ny, nx),
+        dtype="float32",
+    )
+    root.create_dataset("x", data=x_coords, dtype="float32")
+    root.create_dataset("y", data=y_coords, dtype="float32")
+    return root, conc
+
+
+def _stream_rigolli_chunks(
+    *,
+    conc_dataset: Any,
+    conc: Any,
+    n_frames: int,
+    chunk_t: int,
+    time_axis: int,
+    y_axis: int,
+    x_axis: int,
+    normalize: bool,
+    np: Any,
+) -> tuple[float, float]:
+    global_min, global_max = np.inf, -np.inf
+    for t_start in range(0, n_frames, chunk_t):
+        t_end = min(t_start + chunk_t, n_frames)
+        slicer = [slice(None), slice(None), slice(None)]
+        slicer[time_axis] = slice(t_start, t_end)
+        chunk = conc_dataset[tuple(slicer)]
+        chunk = np.transpose(chunk, (time_axis, y_axis, x_axis)).astype(np.float32)
+        conc[t_start:t_end] = chunk
+
+        if normalize:
+            global_min = min(global_min, float(chunk.min()))
+            global_max = max(global_max, float(chunk.max()))
+
+        if (t_start // chunk_t) % 10 == 0:
+            LOG.info("  Processed %d / %d frames...", t_end, n_frames)
+
+    return global_min, global_max
+
+
+def _normalize_concentration(
+    conc: Any,
+    *,
+    n_frames: int,
+    chunk_t: int,
+    global_min: float,
+    global_max: float,
+) -> None:
+    for t_start in range(0, n_frames, chunk_t):
+        t_end = min(t_start + chunk_t, n_frames)
+        chunk = conc[t_start:t_end]
+        conc[t_start:t_end] = (chunk - global_min) / (global_max - global_min)
+
+
+def _write_rigolli_attrs(
+    root: Any,
+    *,
+    spec: RigolliDNSIngest,
+    n_frames: int,
+    ny: int,
+    nx: int,
+) -> None:
+    root.attrs["fps"] = spec.fps if spec.fps else 0.0
+    root.attrs["n_frames"] = int(n_frames)
+    root.attrs["shape"] = [int(n_frames), int(ny), int(nx)]
+    root.attrs["source_format"] = "matlab_v73"
+    root.attrs["normalized"] = bool(spec.normalize)
+
+
+def _download_emonet_metadata(
+    spec: EmonetSmokeIngest, source_path: Path
+) -> Path | None:
+    if not spec.metadata_url:
+        return None
+
+    meta_path = source_path.parent / "metadata.mat"
+    if meta_path.exists():
+        return meta_path
+
+    LOG.info("Downloading metadata file for %s", source_path.name)
+    try:
+        with (
+            urllib.request.urlopen(spec.metadata_url) as response,
+            meta_path.open("wb") as fh,
+        ):
+            shutil.copyfileobj(response, fh)
+    except Exception as exc:
+        LOG.warning("Failed to download metadata: %s (continuing without)", exc)
+        return None
+
+    return meta_path
+
+
+def _parse_emonet_metadata(meta_path: Path, *, h5py: Any, np: Any) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    try:
+        with h5py.File(meta_path, "r") as mf:
+            for key in mf.keys():
+                try:
+                    metadata[key] = np.asarray(mf[key]).item()
+                except (ValueError, TypeError):
+                    pass
+    except Exception as exc:
+        LOG.warning("Failed to parse metadata file: %s", exc)
+    return metadata
+
+
+def _load_emonet_metadata(
+    spec: EmonetSmokeIngest, source_path: Path, *, h5py: Any, np: Any
+) -> dict[str, Any]:
+    meta_path = _download_emonet_metadata(spec, source_path)
+    if meta_path is None:
+        return {}
+    return _parse_emonet_metadata(meta_path, h5py=h5py, np=np)
+
+
+def _resolve_frames_key(
+    mat_file: Any, spec: EmonetSmokeIngest, source_path: Path
+) -> str:
+    frames_key = spec.frames_key
+    if frames_key in mat_file:
+        return frames_key
+
+    for key in mat_file.keys():
+        if "frame" in key.lower() or mat_file[key].ndim == 3:
+            return key
+
+    raise DatasetDownloadError(
+        f"Could not find frames array in {source_path}. "
+        f"Available keys: {list(mat_file.keys())}"
+    )
+
+
+def _init_emonet_store(
+    *,
+    output_path: Path,
+    n_frames: int,
+    n_y: int,
+    n_x: int,
+    chunk_t: int,
+    x_coords: Any,
+    y_coords: Any,
+    zarr: Any,
+) -> tuple[Any, Any]:
+    store = zarr.DirectoryStore(str(output_path))
+    root = zarr.group(store, overwrite=True)
+    conc = root.create_dataset(
+        "concentration",
+        shape=(n_frames, n_y, n_x),
+        chunks=(chunk_t, n_y, n_x),
+        dtype="float32",
+    )
+    root.create_dataset("x", data=x_coords, dtype="float32")
+    root.create_dataset("y", data=y_coords, dtype="float32")
+    return root, conc
+
+
+def _stream_emonet_chunks(
+    *,
+    frames_dataset: Any,
+    conc: Any,
+    n_frames: int,
+    batch_size: int,
+    normalize: bool,
+    np: Any,
+) -> tuple[float, float]:
+    global_min, global_max = np.inf, -np.inf
+    for t_start in range(0, n_frames, batch_size):
+        t_end = min(t_start + batch_size, n_frames)
+        chunk = frames_dataset[t_start:t_end]
+        chunk = np.transpose(chunk, (0, 2, 1)).astype(np.float32)
+        conc[t_start:t_end] = chunk
+
+        if normalize:
+            global_min = min(global_min, float(chunk.min()))
+            global_max = max(global_max, float(chunk.max()))
+
+        if (t_start // batch_size) % 10 == 0:
+            LOG.info("  Processed %d / %d frames...", t_end, n_frames)
+
+    return global_min, global_max
+
+
+def _write_emonet_attrs(
+    root: Any,
+    *,
+    metadata: dict[str, Any],
+    spec: EmonetSmokeIngest,
+    n_frames: int,
+    n_y: int,
+    n_x: int,
+) -> None:
+    root.attrs["fps"] = metadata.get("fps", spec.fps)
+    root.attrs["n_frames"] = n_frames
+    root.attrs["shape"] = [n_frames, n_y, n_x]
+    root.attrs["arena_size_mm"] = list(spec.arena_size_mm)
+    root.attrs["source_format"] = "emonet_flywalk"
+    root.attrs["normalized"] = spec.normalize
+
+
 def _ingest_mat_to_zarr(
     spec: RigolliDNSIngest,
     source_path: Path,
@@ -759,91 +1176,14 @@ def _ingest_mat_to_zarr(
         Path to the created Zarr store.
     """
     try:
-        import h5py
-        import numpy as np
-        import zarr
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        raise DatasetDownloadError(
-            "MATLAB ingest requires optional dependencies (h5py, zarr, numpy). "
-            "Install media extras or provide a pre-ingested dataset."
-        ) from exc
+        h5py, np, zarr = _require_ingest_deps("MATLAB ingest")
 
-    # Download coordinates file to cache directory
-    coords_path = source_path.parent / "coordinates.mat"
-    if not coords_path.exists():
-        LOG.info("Downloading coordinates file for %s", source_path.name)
-        coords_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with (
-                urllib.request.urlopen(spec.coords_url) as response,
-                coords_path.open("wb") as fh,
-            ):
-                shutil.copyfileobj(response, fh)
-        except Exception as exc:
-            raise DatasetDownloadError(
-                f"Failed to download coordinates from {spec.coords_url}: {exc}"
-            ) from exc
-
-        # Verify coordinates checksum
-        hasher = hashlib.md5(usedforsecurity=False)
-        with coords_path.open("rb") as fh:
-            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-                hasher.update(chunk)
-        if hasher.hexdigest().lower() != spec.coords_checksum.lower():
-            coords_path.unlink()
-            raise DatasetDownloadError(
-                f"Coordinates file checksum mismatch for {spec.coords_url}"
-            )
-
-    try:
-        # Load coordinates - SciPy is optional (v5). Fall back to h5py (v7.3) when
-        # SciPy is missing or the payload is MATLAB v7.3.
-        coords_errors: list[Exception] = []
-        x_coords: np.ndarray
-        y_coords: np.ndarray
-
-        try:
-            from scipy.io import loadmat  # type: ignore[import-untyped]
-        except Exception as exc:  # pragma: no cover - scipy is optional
-            coords_errors.append(exc)
-        else:
-            try:
-                coords_mat = loadmat(str(coords_path))
-                x_coords = (
-                    np.asarray(coords_mat[spec.x_key]).flatten().astype(np.float32)
-                )
-                y_coords = (
-                    np.asarray(coords_mat[spec.y_key]).flatten().astype(np.float32)
-                )
-            except NotImplementedError as exc:
-                coords_errors.append(exc)
-            except Exception as exc:
-                coords_errors.append(exc)
-
-        if "x_coords" not in locals() or "y_coords" not in locals():
-            try:
-                with h5py.File(coords_path, "r") as coords_file:
-                    x_data = coords_file[spec.x_key][:]
-                    y_data = coords_file[spec.y_key][:]
-                    x_coords = np.asarray(x_data).flatten().astype(np.float32)
-                    y_coords = np.asarray(y_data).flatten().astype(np.float32)
-            except Exception as exc:
-                coords_errors.append(exc)
-                details = "; ".join(type(e).__name__ for e in coords_errors)
-                raise DatasetDownloadError(
-                    "Failed to load Rigolli DNS coordinates file. "
-                    "If this is a legacy MATLAB v5 file, install SciPy; "
-                    f"load attempts failed with: {details}"
-                ) from exc
+        coords_path = _ensure_coords_file(spec, source_path)
+        x_coords, y_coords = _load_rigolli_coords(spec, coords_path, h5py=h5py, np=np)
 
         # Load concentration data from source MATLAB file (streaming in time)
         with h5py.File(source_path, "r") as mat_file:
-            if spec.concentration_key not in mat_file:
-                raise DatasetDownloadError(
-                    f"Could not find '{spec.concentration_key}' in {source_path.name}. "
-                    f"Available keys: {list(mat_file.keys())}"
-                )
-            conc_dataset = mat_file[spec.concentration_key]
+            conc_dataset = _get_mat_concentration_dataset(mat_file, spec, source_path)
             src_shape = tuple(int(s) for s in conc_dataset.shape)
             time_axis, y_axis, x_axis = _infer_time_y_x_axes_for_rigolli(
                 src_shape, x_len=len(x_coords), y_len=len(y_coords)
@@ -866,55 +1206,50 @@ def _ingest_mat_to_zarr(
 
             # Choose chunk size to keep Zarr chunks well below codec limits.
             bytes_per_frame = ny * nx * 4  # float32
-            max_chunk_bytes = 500 * 1024 * 1024  # 500MB target
-            chunk_t = min(
-                spec.chunk_t or 100, max(1, max_chunk_bytes // max(1, bytes_per_frame))
+            chunk_t = _compute_chunk_t(spec.chunk_t, bytes_per_frame)
+
+            root, conc = _init_rigolli_store(
+                output_path=output_path,
+                n_frames=n_frames,
+                ny=ny,
+                nx=nx,
+                chunk_t=chunk_t,
+                x_coords=x_coords,
+                y_coords=y_coords,
+                zarr=zarr,
             )
 
-            store = zarr.DirectoryStore(str(output_path))
-            root = zarr.group(store, overwrite=True)
-            conc = root.create_dataset(
-                "concentration",
-                shape=(n_frames, ny, nx),
-                chunks=(chunk_t, ny, nx),
-                dtype=np.float32,
+            global_min, global_max = _stream_rigolli_chunks(
+                conc_dataset=conc_dataset,
+                conc=conc,
+                n_frames=n_frames,
+                chunk_t=chunk_t,
+                time_axis=time_axis,
+                y_axis=y_axis,
+                x_axis=x_axis,
+                normalize=bool(spec.normalize),
+                np=np,
             )
-            root.create_dataset("x", data=x_coords, dtype=np.float32)
-            root.create_dataset("y", data=y_coords, dtype=np.float32)
-
-            # Process in time chunks and transpose into (t, y, x)
-            global_min, global_max = np.inf, -np.inf
-            for t_start in range(0, n_frames, chunk_t):
-                t_end = min(t_start + chunk_t, n_frames)
-                slicer = [slice(None), slice(None), slice(None)]
-                slicer[time_axis] = slice(t_start, t_end)
-                chunk = conc_dataset[tuple(slicer)]
-                chunk = np.transpose(chunk, (time_axis, y_axis, x_axis)).astype(
-                    np.float32
-                )
-                conc[t_start:t_end] = chunk
-
-                if spec.normalize:
-                    global_min = min(global_min, float(chunk.min()))
-                    global_max = max(global_max, float(chunk.max()))
-
-                if (t_start // chunk_t) % 10 == 0:
-                    LOG.info("  Processed %d / %d frames...", t_end, n_frames)
 
         # Normalize in a second pass if needed
         if spec.normalize and global_max > global_min:
             LOG.info("Normalizing data (min=%.4f, max=%.4f)...", global_min, global_max)
-            for t_start in range(0, n_frames, chunk_t):
-                t_end = min(t_start + chunk_t, n_frames)
-                chunk = conc[t_start:t_end]
-                conc[t_start:t_end] = (chunk - global_min) / (global_max - global_min)
+            _normalize_concentration(
+                conc,
+                n_frames=n_frames,
+                chunk_t=chunk_t,
+                global_min=float(global_min),
+                global_max=float(global_max),
+            )
 
         # Store metadata in .zattrs
-        root.attrs["fps"] = spec.fps if spec.fps else 0.0
-        root.attrs["n_frames"] = int(n_frames)
-        root.attrs["shape"] = [int(n_frames), int(ny), int(nx)]
-        root.attrs["source_format"] = "matlab_v73"
-        root.attrs["normalized"] = bool(spec.normalize)
+        _write_rigolli_attrs(
+            root,
+            spec=spec,
+            n_frames=n_frames,
+            ny=ny,
+            nx=nx,
+        )
 
         LOG.info(
             "Ingested MATLAB file to Zarr: %s -> %s (shape=[%d, %d, %d])",
@@ -965,61 +1300,13 @@ def _ingest_emonet_to_zarr(
     Returns:
         Path to the created Zarr store.
     """
-    try:
-        import h5py
-        import numpy as np
-        import zarr
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        raise DatasetDownloadError(
-            "Emonet ingest requires optional dependencies (h5py, zarr, numpy). "
-            "Install media extras or provide a pre-ingested dataset."
-        ) from exc
-
-    # Optionally download metadata file
-    metadata = {}
-    if spec.metadata_url:
-        meta_path = source_path.parent / "metadata.mat"
-        if not meta_path.exists():
-            LOG.info("Downloading metadata file for %s", source_path.name)
-            try:
-                with (
-                    urllib.request.urlopen(spec.metadata_url) as response,
-                    meta_path.open("wb") as fh,
-                ):
-                    shutil.copyfileobj(response, fh)
-            except Exception as exc:
-                LOG.warning("Failed to download metadata: %s (continuing without)", exc)
-
-        if meta_path.exists():
-            try:
-                with h5py.File(meta_path, "r") as mf:
-                    # Extract any useful metadata (fps, px_per_mm, etc.)
-                    for key in mf.keys():
-                        try:
-                            metadata[key] = np.asarray(mf[key]).item()
-                        except (ValueError, TypeError):
-                            pass
-            except Exception as exc:
-                LOG.warning("Failed to parse metadata file: %s", exc)
+    h5py, np, zarr = _require_ingest_deps("Emonet ingest")
+    metadata = _load_emonet_metadata(spec, source_path, h5py=h5py, np=np)
 
     try:
         # Open HDF5 file and get shape without loading data
         with h5py.File(source_path, "r") as mat_file:
-            # Try common keys for video frames
-            frames_key = spec.frames_key
-            if frames_key not in mat_file:
-                # Try to find the frames array
-                for key in mat_file.keys():
-                    if "frame" in key.lower() or mat_file[key].ndim == 3:
-                        frames_key = key
-                        break
-
-            if frames_key not in mat_file:
-                raise DatasetDownloadError(
-                    f"Could not find frames array in {source_path}. "
-                    f"Available keys: {list(mat_file.keys())}"
-                )
-
+            frames_key = _resolve_frames_key(mat_file, spec, source_path)
             frames_dataset = mat_file[frames_key]
             src_shape = frames_dataset.shape
             LOG.info(
@@ -1044,10 +1331,7 @@ def _ingest_emonet_to_zarr(
             # Use smaller time chunks to stay under 2GB codec limit
             # Each frame is n_y * n_x * 4 bytes = ~10 MB for Emonet
             bytes_per_frame = n_y * n_x * 4
-            max_chunk_bytes = 500 * 1024 * 1024  # 500 MB target
-            chunk_t = min(
-                spec.chunk_t or 100, max(1, max_chunk_bytes // bytes_per_frame)
-            )
+            chunk_t = _compute_chunk_t(spec.chunk_t, bytes_per_frame)
 
             LOG.info(
                 "Using chunks: (%d, %d, %d) for shape (%d, %d, %d), ~%.0f MB/chunk",
@@ -1060,53 +1344,47 @@ def _ingest_emonet_to_zarr(
                 chunk_t * bytes_per_frame / 1e6,
             )
 
-            store = zarr.DirectoryStore(str(output_path))
-            root = zarr.group(store, overwrite=True)
-
-            conc = root.create_dataset(
-                "concentration",
-                shape=(n_frames, n_y, n_x),
-                chunks=(chunk_t, n_y, n_x),
-                dtype=np.float32,
+            root, conc = _init_emonet_store(
+                output_path=output_path,
+                n_frames=n_frames,
+                n_y=n_y,
+                n_x=n_x,
+                chunk_t=chunk_t,
+                x_coords=x_coords,
+                y_coords=y_coords,
+                zarr=zarr,
             )
-            root.create_dataset("x", data=x_coords, dtype=np.float32)
-            root.create_dataset("y", data=y_coords, dtype=np.float32)
 
-            # Process in chunks to avoid memory issues
-            # Source is (T, X, Y), we need (T, Y, X) - swap spatial axes
             batch_size = chunk_t
-            global_min, global_max = np.inf, -np.inf
-
-            for t_start in range(0, n_frames, batch_size):
-                t_end = min(t_start + batch_size, n_frames)
-                # Read time slice: (batch, X, Y)
-                chunk = frames_dataset[t_start:t_end]
-                # Transpose to (batch, Y, X) - swap axes 1 and 2
-                chunk = np.transpose(chunk, (0, 2, 1)).astype(np.float32)
-                conc[t_start:t_end] = chunk
-
-                if spec.normalize:
-                    global_min = min(global_min, chunk.min())
-                    global_max = max(global_max, chunk.max())
-
-                if (t_start // batch_size) % 10 == 0:
-                    LOG.info("  Processed %d / %d frames...", t_end, n_frames)
+            global_min, global_max = _stream_emonet_chunks(
+                frames_dataset=frames_dataset,
+                conc=conc,
+                n_frames=n_frames,
+                batch_size=batch_size,
+                normalize=bool(spec.normalize),
+                np=np,
+            )
 
         # Normalize in a second pass if needed
         if spec.normalize and global_max > global_min:
             LOG.info("Normalizing data (min=%.2f, max=%.2f)...", global_min, global_max)
-            for t_start in range(0, n_frames, batch_size):
-                t_end = min(t_start + batch_size, n_frames)
-                chunk = conc[t_start:t_end]
-                conc[t_start:t_end] = (chunk - global_min) / (global_max - global_min)
+            _normalize_concentration(
+                conc,
+                n_frames=n_frames,
+                chunk_t=batch_size,
+                global_min=float(global_min),
+                global_max=float(global_max),
+            )
 
         # Store metadata
-        root.attrs["fps"] = metadata.get("fps", spec.fps)
-        root.attrs["n_frames"] = n_frames
-        root.attrs["shape"] = [n_frames, n_y, n_x]
-        root.attrs["arena_size_mm"] = list(spec.arena_size_mm)
-        root.attrs["source_format"] = "emonet_flywalk"
-        root.attrs["normalized"] = spec.normalize
+        _write_emonet_attrs(
+            root,
+            metadata=metadata,
+            spec=spec,
+            n_frames=n_frames,
+            n_y=n_y,
+            n_x=n_x,
+        )
 
         LOG.info(
             "Ingested Emonet smoke video to Zarr: %s -> %s (shape=[%d, %d, %d])",

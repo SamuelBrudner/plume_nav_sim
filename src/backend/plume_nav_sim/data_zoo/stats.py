@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional, TypedDict
+from typing import Literal, Optional, TypedDict
 
 import numpy as np
-
-if TYPE_CHECKING:
-    import zarr
 
 LOG = logging.getLogger(__name__)
 
