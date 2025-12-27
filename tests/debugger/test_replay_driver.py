@@ -77,11 +77,11 @@ def _write_fake_run(
         for rec in steps:
             fh.write(json.dumps(rec) + "\n")
 
-    episodes: list[dict] = []
+    episode_records: list[dict] = []
     for ep_idx in range(episodes):
         ep_id = f"ep-{ep_idx + 1}"
         total_reward = sum(rec["reward"] for rec in steps if rec["episode_id"] == ep_id)
-        episodes.append(
+        episode_records.append(
             {
                 "schema_version": SCHEMA_VERSION,
                 "run_id": run_id,
@@ -100,7 +100,7 @@ def _write_fake_run(
             }
         )
     with gzip.open(run_dir / "episodes.jsonl.gz", "wt", encoding="utf-8") as fh:
-        for rec in episodes:
+        for rec in episode_records:
             fh.write(json.dumps(rec) + "\n")
 
     return run_dir, steps

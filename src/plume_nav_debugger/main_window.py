@@ -606,7 +606,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.frame_view = FrameView()
         self.controls = ControlBar()
-        self.inspector = InspectorWidget()
+        self.inspector = InspectorWidget(self)
         self.live_config_widget = LiveConfigWidget(cfg)
         self.replay_config_widget = ReplayConfigWidget()
         self._total_reward: float = 0.0
@@ -1830,8 +1830,8 @@ class _SparklineWidget(QtWidgets.QWidget):
 
 
 class InspectorWidget(QtWidgets.QWidget):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent)
         vbox = QtWidgets.QVBoxLayout(self)
         # Strict-mode banner (hidden by default)
         self.info_label = QtWidgets.QLabel("")
@@ -1964,6 +1964,7 @@ class InspectorWidget(QtWidgets.QWidget):
     def on_action_names(self, names: list[str]) -> None:
         self._act_model.set_action_names(names)
         self.action_panel.on_action_names(names)
+        self._update_strict_banner()
 
     def set_grid_size(self, w: int, h: int) -> None:
         self.action_panel.set_grid_size(w, h)
@@ -2034,5 +2035,8 @@ class InspectorWidget(QtWidgets.QWidget):
                     '<a href="https://plume-nav-sim.dev/odc" style="color:#06c;">Read ODC docs</a>.'
                 )
             self.info_label.setVisible(show)
+            if show and self.parent() is None and not self.isVisible():
+                # Ensure the banner registers as visible for standalone widgets.
+                self.show()
         except Exception:
             self.info_label.setVisible(False)

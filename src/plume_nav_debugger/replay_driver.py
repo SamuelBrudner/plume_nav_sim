@@ -369,6 +369,7 @@ class ReplayDriver(QtCore.QObject):
         self._episode_offsets: list[int] = []
         self._resolved_action_type: Optional[str] = None
         self._resolved_action_type_info: dict[str, Any] = {}
+        self._validate_replay = False
 
     def load_run(self, run_dir: str | Path) -> None:
         artifacts = load_replay_artifacts(run_dir)
@@ -586,7 +587,7 @@ class ReplayDriver(QtCore.QObject):
             return
 
         engine_iter = self._engine.iter_events(
-            render=True, start_step=idx, validate=True
+            render=True, start_step=idx, validate=self._validate_replay
         )
         for ev in engine_iter:
             self._cache.append(ev)

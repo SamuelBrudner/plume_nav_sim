@@ -38,8 +38,12 @@ def _open_zarr_dataset(path: Path, *, chunks: Any) -> "xr.Dataset":
         ) from exc
 
     def _open(consolidated: bool) -> "xr.Dataset":
+        # Avoid masking valid zeros as missing values from Zarr fill_value metadata.
         return xr.open_zarr(  # type: ignore[attr-defined]
-            str(path), consolidated=consolidated, chunks=chunks
+            str(path),
+            consolidated=consolidated,
+            chunks=chunks,
+            mask_and_scale=False,
         )
 
     first_error: Exception | None = None
@@ -75,7 +79,7 @@ def _standardize_dims(var: "xr.DataArray") -> "xr.DataArray":
             f"Variable '{VARIABLE_CONCENTRATION}' must have 3 dims; got {dims}"
         )
     if dims != DIMS_TYX:
-        rename = {old: new for old, new in zip(dims, DIMS_TYX)}
+        rename = dict(zip(dims, DIMS_TYX))
         var = var.rename(rename)
     if "_ARRAY_DIMENSIONS" not in var.attrs:
         var = var.assign_attrs({**var.attrs, "_ARRAY_DIMENSIONS": list(DIMS_TYX)})
