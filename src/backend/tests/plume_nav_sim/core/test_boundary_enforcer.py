@@ -474,7 +474,7 @@ def verify_boundary_statistics_accuracy(
         action = operation.get("action")
 
         if position and action:
-            result = enforcer.enforce_movement_bounds(position, action)
+            _ = enforcer.enforce_movement_bounds(position, action)
 
             # Track expected boundary hits manually for comparison
             if operation.get("expect_boundary_hit", False):
@@ -740,12 +740,12 @@ class TestPositionValidation:
         # First validation (cache miss)
         start_time = time.perf_counter()
         result1 = enforcer.validate_position(test_position)
-        first_time = time.perf_counter() - start_time
+        _ = time.perf_counter() - start_time
 
         # Second validation (cache hit)
         start_time = time.perf_counter()
         result2 = enforcer.validate_position(test_position)
-        second_time = time.perf_counter() - start_time
+        _ = time.perf_counter() - start_time
 
         # Verify subsequent validations are faster due to cache hits
         assert result1 == result2 == True
@@ -900,7 +900,7 @@ class TestMovementValidation:
         for position, action in test_scenarios:
             for _ in range(PERFORMANCE_TEST_ITERATIONS // len(test_scenarios)):
                 start_time = time.perf_counter()
-                result = enforcer.is_movement_valid(position, action)
+                _ = enforcer.is_movement_valid(position, action)
                 end_time = time.perf_counter()
 
                 timing_results.append((end_time - start_time) * 1000)  # Convert to ms
@@ -1421,7 +1421,7 @@ class TestBoundaryStatistics:
 
         expected_hits = 0
         for operation in test_operations:
-            result = enforcer.enforce_movement_bounds(
+            _ = enforcer.enforce_movement_bounds(
                 operation["position"], operation["action"]
             )
             if operation["expect_hit"]:
@@ -1512,7 +1512,7 @@ class TestBoundaryStatistics:
         assert stats_before["total_enforcements"] > 0
 
         # Test clear_cache() method resets cache-related statistics
-        entries_cleared = enforcer.clear_cache()
+        _ = enforcer.clear_cache()
 
         # Check that cache clearing doesn't affect core enforcement functionality
         result = enforcer.enforce_movement_bounds(TEST_COORDINATES_CENTER, Action.UP)
@@ -1626,7 +1626,7 @@ class TestPerformanceBenchmarks:
 
             for _ in range(PERFORMANCE_TEST_ITERATIONS // len(test_scenarios)):
                 start_time = time.perf_counter()
-                result = enforcer.enforce_movement_bounds(position, action)
+                _ = enforcer.enforce_movement_bounds(position, action)
                 end_time = time.perf_counter()
 
                 timing_ms = (end_time - start_time) * 1000
@@ -1635,8 +1635,8 @@ class TestPerformanceBenchmarks:
 
         # Calculate mean, median, 95th and 99th percentile latencies for analysis
         mean_latency = np.mean(all_timings)
-        median_latency = np.median(all_timings)
-        percentile_95 = np.percentile(all_timings, 95)
+        _ = np.median(all_timings)
+        _ = np.percentile(all_timings, 95)
         percentile_99 = np.percentile(all_timings, 99)
 
         # Assert average latency is below target
@@ -1672,10 +1672,8 @@ class TestPerformanceBenchmarks:
             for _ in range(iterations_per_position):
                 start_time = time.perf_counter()
                 try:
-                    result = enforcer.validate_position(
-                        position, raise_on_invalid=False
-                    )
-                except:
+                    _ = enforcer.validate_position(position, raise_on_invalid=False)
+                except Exception:
                     pass  # Handle any conversion errors gracefully
                 end_time = time.perf_counter()
 
@@ -1717,7 +1715,7 @@ class TestPerformanceBenchmarks:
             assert cache_size <= BOUNDARY_VALIDATION_CACHE_SIZE * 2
 
         # Test memory cleanup is effective when cache is cleared
-        initial_cache_size = len(enforcer.validation_cache)
+        _ = len(enforcer.validation_cache)
         entries_cleared = enforcer.clear_cache(force_cleanup=True)
         final_cache_size = len(enforcer.validation_cache)
 
@@ -1856,7 +1854,7 @@ class TestIntegrationAndCompatibility:
         # Populate cache with some validation results
         enforcer.validate_position(TEST_COORDINATES_CENTER)
         enforcer.validate_position(TEST_COORDINATES_CORNER_ORIGIN)
-        initial_cache_size = len(enforcer.validation_cache)
+        _ = len(enforcer.validation_cache)
 
         # Update grid size using update_grid_size() method with new dimensions
         new_grid_size = GridSize(64, 64)
@@ -2019,7 +2017,7 @@ class TestReproducibilityAndDeterminism:
 
             for (position, action), _ in itertools.product(test_operations, range(50)):
                 start_time = time.perf_counter()
-                result = enforcer.enforce_movement_bounds(position, action)
+                _ = enforcer.enforce_movement_bounds(position, action)
                 end_time = time.perf_counter()
 
                 run_timings.append((end_time - start_time) * 1000)

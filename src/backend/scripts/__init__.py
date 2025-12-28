@@ -117,8 +117,6 @@ def validate_installation(
             validation_args.append("--performance-tests")
 
         # Call validate_installation.main with processed arguments and configuration
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = ["validate_installation"] + validation_args
@@ -180,8 +178,6 @@ def setup_development_environment(
             setup_args.append("--force-recreate")
 
         # Call setup_dev_env.main with processed configuration and options
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = ["setup_dev_env"] + setup_args
@@ -249,8 +245,6 @@ def run_tests(
             test_args.extend(["--output-dir", output_directory])
 
         # Call run_tests.main with configured test execution parameters
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = ["run_tests"] + test_args
@@ -352,8 +346,6 @@ def clean_cache(
         cleanup_args.extend(["--max-age", str(max_age_hours)])
 
         # Call clean_cache.main with configured cleanup parameters and retention settings
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = ["clean_cache"] + cleanup_args
@@ -413,8 +405,6 @@ def generate_documentation(
             doc_args.extend(["--output-dir", output_directory])
 
         # Call generate_docs.main with configured documentation generation parameters
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = ["generate_docs"] + doc_args
@@ -542,8 +532,6 @@ def run_script_by_name(
             script_args.append("--quiet")
 
         # Execute script function with processed arguments and merged configuration
-        import sys
-
         original_argv = sys.argv.copy()
         try:
             sys.argv = [script_name] + script_args

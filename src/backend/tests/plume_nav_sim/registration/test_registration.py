@@ -25,7 +25,6 @@ import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for 
 
 # External imports with version comments for testing framework and dependencies
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, and assertion handling with comprehensive test execution management
-from gymnasium.wrappers import TimeLimit
 
 # Internal imports for constants and configuration parameters
 from plume_nav_sim.core.constants import (
@@ -52,11 +51,7 @@ from plume_nav_sim.registration.register import (
 )
 
 # Internal imports for exception classes and error handling testing
-from plume_nav_sim.utils.exceptions import (
-    ConfigurationError,
-    IntegrationError,
-    ValidationError,
-)
+from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Global test constants for comprehensive registration testing scenarios
 TEST_ENV_ID = "TestPlumeNav-StaticGaussian-v0"
@@ -241,7 +236,7 @@ class TestEnvironmentRegistration:
                 second_registration == TEST_ENV_ID
             )  # Should return existing registration
             # Warning should be issued about existing registration
-            warning_messages = [str(w.message) for w in warning_list]
+            _ = [str(w.message) for w in warning_list]
             # Note: Warnings may come from underlying gymnasium or our registration system
 
         # Call register_env() with force_reregister=True and updated parameters
@@ -352,7 +347,7 @@ class TestEnvironmentUnregistration:
         and gym.make() unavailability validation ensuring complete environment removal.
         """
         # Register environment initially using register_env() for setup
-        registered_env_id = register_env(env_id=TEST_ENV_ID)
+        _ = register_env(env_id=TEST_ENV_ID)
 
         # Verify environment is successfully registered and available via gym.make()
         assert is_registered(TEST_ENV_ID) is True
@@ -397,7 +392,7 @@ class TestEnvironmentUnregistration:
         assert is_registered(INVALID_ENV_ID) is False
 
         # Call unregister_env() with non-existent environment ID
-        with warnings.catch_warnings(record=True) as warning_list:
+        with warnings.catch_warnings(record=True) as _:
             self._extracted_from_test_unregister_nonexistent_env_10(False)
             # Validate appropriate warnings are issued unless suppressed
             # Note: The specific warning behavior depends on implementation
@@ -406,7 +401,7 @@ class TestEnvironmentUnregistration:
         assert is_registered(INVALID_ENV_ID) is False
 
         # Test suppress_warnings parameter effectively suppresses warning output
-        with warnings.catch_warnings(record=True) as suppressed_warnings:
+        with warnings.catch_warnings(record=True) as _:
             self._extracted_from_test_unregister_nonexistent_env_10(True)
             # Should have fewer or no warnings when suppressed
             # Note: Implementation-specific behavior
@@ -478,32 +473,21 @@ class TestEnvironmentUnregistration:
         logging control, and silent operation modes for automated testing."""
         # Set up warning capture mechanism for testing output
         with warnings.catch_warnings(record=True) as all_warnings:
-            self._extracted_from_test_unregister_env_suppress_warnings_6(
-                all_warnings, suppress_warnings=False
-            )
+            self._validate_warning_suppression(all_warnings)
         # Test warning suppression with different unregistration scenarios
         # Register and then unregister with suppression
         test_env_id = register_env(env_id=TEST_ENV_ID)
 
-        with warnings.catch_warnings(record=True) as scenario_warnings:
-            unregister_result = (
-                self._extracted_from_test_unregister_env_suppress_warnings_6(
-                    test_env_id, True
-                )
-            )
+        with warnings.catch_warnings(record=True) as _:
+            unregister_result = self._unregister_with_warning_control(test_env_id, True)
             # Validate warning suppression does not affect function return values
             assert is_registered(test_env_id) is False
 
         # Confirm warning suppression maintains functionality
         assert unregister_result is True
 
-    # TODO Rename this here and in `test_unregister_env_suppress_warnings`
-    def _extracted_from_test_unregister_env_suppress_warnings_6(self, all_warnings):
-        unregister_result_with_warnings = (
-            self._extracted_from_test_unregister_env_suppress_warnings_6(
-                INVALID_ENV_ID, False
-            )
-        )
+    def _validate_warning_suppression(self, all_warnings):
+        _ = self._unregister_with_warning_control(INVALID_ENV_ID, False)
         warnings_without_suppression = len(all_warnings)
 
         # Clear warning list for next test
@@ -522,14 +506,11 @@ class TestEnvironmentUnregistration:
         # Note: Some warnings may come from external sources
         assert warnings_with_suppression <= warnings_without_suppression
 
-    # TODO Rename this here and in `test_unregister_env_suppress_warnings`
-    def _extracted_from_test_unregister_env_suppress_warnings_6(
-        self, arg0, suppress_warnings
-    ):
+    def _unregister_with_warning_control(self, env_id, suppress_warnings):
         warnings.simplefilter("always")
 
         # Call unregister_env() for non-existent environment without suppress_warnings
-        result = unregister_env(arg0, suppress_warnings=suppress_warnings)
+        result = unregister_env(env_id, suppress_warnings=suppress_warnings)
 
         # Verify appropriate warnings are generated and captured
         assert result is True
@@ -562,7 +543,7 @@ class TestRegistrationStatus:
         """Test is_registered() returns True for successfully registered environments with
         cache validation, registry consistency, and accurate status reporting."""
         # Register environment using register_env() for test setup
-        registered_env_id = register_env(env_id=TEST_ENV_ID)
+        _ = register_env(env_id=TEST_ENV_ID)
 
         # Call is_registered() without parameters to check default environment
         # Note: We're testing with TEST_ENV_ID, not the default ENV_ID
@@ -639,7 +620,7 @@ class TestRegistrationStatus:
         cache invalidation, and authoritative registry consultation for accurate status reporting.
         """
         # Register environment and verify cache entry creation
-        env_id = register_env(env_id=TEST_ENV_ID)
+        _ = register_env(env_id=TEST_ENV_ID)
 
         # Call is_registered() with use_cache=True to test cache consultation
         cached_status = is_registered(TEST_ENV_ID, use_cache=True)
@@ -921,7 +902,7 @@ class TestRegistrationKwargs:
             "new_param": "test",
         }
 
-        with warnings.catch_warnings(record=True) as warning_list:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             conflict_kwargs = create_registration_kwargs(
@@ -1092,7 +1073,7 @@ class TestConfigurationValidation:
         issues = validation_report.get("errors", []) + validation_report.get(
             "warnings", []
         )
-        entry_point_issues = [
+        _ = [
             issue
             for issue in issues
             if "entry" in issue.lower() or "module" in issue.lower()
@@ -1168,7 +1149,7 @@ class TestConfigurationValidation:
 
         # Verify strict validation identifies subtle configuration issues
         # May generate warnings for boundary values even if technically valid
-        total_issues = len(report_strict.get("errors", [])) + len(
+        _ = len(report_strict.get("errors", [])) + len(
             report_strict.get("warnings", [])
         )
 
@@ -1362,7 +1343,7 @@ class TestCustomParameterRegistration:
         assert is_registered(initial_env_id) is True
 
         # Call register_env() with same env_id and force_reregister=False
-        with warnings.catch_warnings(record=True) as warning_list:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             # This should either succeed (returning existing) or issue warnings
@@ -1459,7 +1440,7 @@ class TestCustomParameterRegistration:
         try:
             kwargs = create_registration_kwargs(grid_size="invalid")
             register_env(kwargs=kwargs)
-        except (ValidationError, TypeError) as e:
+        except (ValidationError, TypeError):
             # May raise ValidationError or TypeError for type mismatch
             pass
 
@@ -1599,9 +1580,7 @@ class TestRegistrationErrorHandling:
         # Verify error handling provides integration context
         error_message = str(error).lower()
         integration_keywords = ["gymnasium", "integration", "dependency"]
-        has_integration_context = any(
-            keyword in error_message for keyword in integration_keywords
-        )
+        _ = any(keyword in error_message for keyword in integration_keywords)
 
         # System should handle integration failures gracefully
         assert isinstance(error, Exception)
@@ -1626,13 +1605,13 @@ class TestRegistrationErrorHandling:
 
             # Perform registration operation that generates warnings
             # Register same environment twice to trigger warning
-            first_registration = register_env(env_id=TEST_ENV_ID)
+            _ = register_env(env_id=TEST_ENV_ID)
 
             # Clear warnings from first registration
             warning_list.clear()
 
             # Second registration should generate warning
-            second_registration = register_env(
+            _ = register_env(
                 env_id=TEST_ENV_ID,
                 force_reregister=False,  # Should warn about existing registration
             )
@@ -1648,16 +1627,14 @@ class TestRegistrationErrorHandling:
             unregister_env(TEST_ENV_ID, suppress_warnings=True)
 
             # Register with force_reregister should not warn
-            force_registration = register_env(env_id=TEST_ENV_ID, force_reregister=True)
+            _ = register_env(env_id=TEST_ENV_ID, force_reregister=True)
 
             # Verify warning messages contain helpful information
             # Warnings should guide users toward correct usage
             for warning_msg in warning_messages:
                 # Should contain actionable information
                 helpful_terms = ["force_reregister", "already", "exist", "override"]
-                has_guidance = any(
-                    term in warning_msg.lower() for term in helpful_terms
-                )
+                _ = any(term in warning_msg.lower() for term in helpful_terms)
 
             # Check warning categories are appropriate for registration context
             # Warnings should be UserWarning or similar appropriate category
@@ -1706,9 +1683,9 @@ class TestRegistrationPerformance:
         # Record baseline system performance for comparison
         baseline_start = time.time()
         # Simple operation for baseline
-        test_dict = {"test": "baseline"}
+        _ = {"test": "baseline"}
         baseline_end = time.time()
-        baseline_time = (baseline_end - baseline_start) * 1000
+        _ = (baseline_end - baseline_start) * 1000
 
         # Measure registration operation timing over multiple iterations
         registration_times = []
@@ -1811,7 +1788,7 @@ class TestRegistrationPerformance:
             cache_test_envs.append(env_id)
 
         # Measure cache consultation timing for is_registered() calls
-        cache_times = []
+        _ = []
         num_cache_tests = 20
 
         start_time = time.time()
@@ -1855,7 +1832,7 @@ class TestRegistrationPerformance:
         unregister_env(target_env)
         invalidation_end = time.time()
 
-        invalidation_time_ms = (invalidation_end - invalidation_start) * 1000
+        _ = (invalidation_end - invalidation_start) * 1000
 
         # Validate cache memory usage remains within acceptable limits
         # This is difficult to measure precisely, but we can test with many environments
@@ -1887,7 +1864,7 @@ class TestRegistrationPerformance:
             concurrent_envs.append(env_id)
         concurrent_end = time.time()
 
-        concurrent_time_ms = (concurrent_end - concurrent_start) * 1000
+        _ = (concurrent_end - concurrent_start) * 1000
 
         # Confirm cache optimization improves overall system performance
         # Cache hits should be significantly faster than registry queries
@@ -1909,9 +1886,10 @@ class TestRegistrationPerformance:
         # This test focuses on behavioral validation of memory-conscious operations
 
         # Measure baseline memory usage before registration operations
+        import gc
         import sys
 
-        baseline_objects = len(gc.get_objects()) if "gc" in sys.modules else 0
+        _ = len(gc.get_objects()) if "gc" in sys.modules else 0
 
         # Monitor memory consumption during registration operations
         memory_test_envs = []
@@ -2052,7 +2030,7 @@ class TestRegistrationPerformance:
                 temp_envs.remove(env_id)
 
         concurrent_end = time.time()
-        concurrent_time_ms = (concurrent_end - concurrent_start) * 1000
+        _ = (concurrent_end - concurrent_start) * 1000
 
         # Validate system stability with maximum supported registrations
         stability_test_count = 0
@@ -2087,7 +2065,7 @@ class TestRegistrationPerformance:
             for i in range(stability_test_count):
                 try:
                     unregister_env(f"StabilityTest-{i}-v0", suppress_warnings=True)
-                except:
+                except Exception:
                     pass
             raise
 
@@ -2173,9 +2151,7 @@ class TestRegistrationIntegration:
                 assert env.action_space.n == 4  # Cardinal directions
 
                 # PlumeSearchEnv returns either Dict or Box observation space
-                assert isinstance(
-                    env.observation_space, (gymnasium.spaces.Dict, gymnasium.spaces.Box)
-                )
+                assert isinstance(env.observation_space, (gymnasium.spaces.Dict, Box))
 
                 # Validate environment parameters match registration configuration
                 # This is validated through successful instantiation with expected spaces
@@ -2302,7 +2278,7 @@ class TestRegistrationIntegration:
                 # Ensure cleanup even if test fails
                 try:
                     env.close()
-                except:
+                except Exception:
                     pass
                 pytest.fail(f"Environment lifecycle integration failed: {e}")
 
@@ -2409,7 +2385,7 @@ class TestRegistrationIntegration:
                 for env in env_instances:
                     try:
                         env.close()
-                    except:
+                    except Exception:
                         pass
                 raise e
 
@@ -2455,7 +2431,7 @@ class TestRegistrationIntegration:
         ), "Environment ID must have name-version format"
 
         # Register environment for compliance testing
-        registered_env_id = register_env(env_id=compliant_env_id)
+        _ = register_env(env_id=compliant_env_id)
 
         # Test entry_point specification conforms to Gymnasium standards
         # Entry point is validated during registration

@@ -47,7 +47,7 @@ from plume_nav_sim.core.types import (
 )
 
 # Internal imports for exception handling and validation
-from plume_nav_sim.utils.exceptions import ComponentError, ValidationError
+from plume_nav_sim.utils.exceptions import ValidationError
 
 # Global test configuration constants
 PERFORMANCE_TEST_ITERATIONS = 1000
@@ -573,7 +573,7 @@ def test_performance_targets():
     ), "Large coordinate performance degradation detected"
 
     # Generate performance report with optimization recommendations
-    performance_report = {
+    _ = {
         "average_time_ms": average_time,
         "median_time_ms": median_time,
         "max_time_ms": max_time,
@@ -611,12 +611,12 @@ def test_caching_efficiency():
     # Perform repeated distance calculations with identical coordinates
     first_time = time.perf_counter()
     first_result = calculator.calculate_reward(test_agent, test_source)
-    first_duration = time.perf_counter() - first_time
+    _ = time.perf_counter() - first_time
 
     # Second calculation should be faster due to caching
     second_time = time.perf_counter()
     second_result = calculator.calculate_reward(test_agent, test_source)
-    second_duration = time.perf_counter() - second_time
+    _ = time.perf_counter() - second_time
 
     # Verify cache hit improves subsequent calculation performance
     assert len(calculator.distance_cache) > 0, "Distance cache should contain entries"
@@ -632,7 +632,7 @@ def test_caching_efficiency():
         cache_miss_times.append(time.perf_counter() - start_time)
 
     # Validate cache size limits and LRU eviction behavior
-    original_cache_size = len(calculator.distance_cache)
+    _ = len(calculator.distance_cache)
 
     # Fill cache beyond typical usage
     for i in range(CACHE_TEST_SIZE):
@@ -676,11 +676,11 @@ def test_caching_efficiency():
     # Compare cached vs non-cached performance
     cached_time = time.perf_counter()
     calculator.get_distance_to_goal(test_agent, test_source, use_cache=True)
-    cached_duration = time.perf_counter() - cached_time
+    _ = time.perf_counter() - cached_time
 
     no_cache_time = time.perf_counter()
     no_cache_calculator.get_distance_to_goal(test_agent, test_source, use_cache=False)
-    no_cache_duration = time.perf_counter() - no_cache_time
+    _ = time.perf_counter() - no_cache_time
 
     # Cache should provide measurable benefit for repeated calculations
     cache_stats = calculator.get_reward_statistics(include_cache_statistics=True)
@@ -756,8 +756,8 @@ def test_reward_statistics_tracking():
 
     # Verify statistics reset functionality clears tracking data properly
     # Note: RewardCalculator doesn't have explicit reset method, but clear_cache affects some stats
-    initial_cache_size = len(calculator.distance_cache)
-    clear_report = calculator.clear_cache()
+    _ = len(calculator.distance_cache)
+    _ = calculator.clear_cache()
 
     post_clear_stats = calculator.get_reward_statistics(include_cache_statistics=True)
     if "cache_statistics" in post_clear_stats:
@@ -804,9 +804,7 @@ def test_parameter_validation_comprehensive():
 
     # Test negative step counts - should raise ValidationError during construction
     with pytest.raises(ValidationError):
-        negative_step_agent = AgentState(
-            position=Coordinates(0, 0), step_count=-1, goal_reached=False
-        )
+        _ = AgentState(position=Coordinates(0, 0), step_count=-1, goal_reached=False)
 
     # Test extremely large coordinate values for numerical stability
     large_coord = Coordinates(999999999, 999999999)
@@ -822,7 +820,7 @@ def test_parameter_validation_comprehensive():
 
     # Verify error messages provide specific parameter constraint information
     try:
-        invalid_config = RewardCalculatorConfig(
+        _ = RewardCalculatorConfig(
             goal_radius=-5.0, reward_goal_reached=1.0, reward_default=0.0
         )
     except ValidationError as e:
@@ -1113,9 +1111,9 @@ def test_reward_result_data_structure():
     assert perf_dict["calculation_details"] == basic_result.calculation_details
 
     # Test RewardResult immutability and data integrity
-    original_reward = basic_result.reward
-    original_goal_reached = basic_result.goal_reached
-    original_distance = basic_result.distance_to_goal
+    _ = basic_result.reward
+    _ = basic_result.goal_reached
+    _ = basic_result.distance_to_goal
 
     # Attempting to modify should not affect original (dataclass is mutable, but test behavior)
     basic_result.reward = 2.0
@@ -1708,7 +1706,7 @@ def test_stress_testing_large_scale():
     calculator = RewardCalculator(config)
 
     # Record initial memory state (simplified - would use memory profiling in practice)
-    initial_cache_size = len(calculator.distance_cache)
+    _ = len(calculator.distance_cache)
 
     # Generate random coordinates for stress testing using isolated RNG
     rng = np.random.default_rng(42)
@@ -1797,7 +1795,7 @@ def test_stress_testing_large_scale():
     assert len(calculator.distance_cache) == 0
 
     # Generate stress test report with performance degradation analysis
-    stress_report = {
+    _ = {
         "total_iterations": STRESS_TEST_ITERATIONS,
         "successful_calculations": successful_calculations,
         "success_rate": success_rate,
@@ -1855,7 +1853,7 @@ def test_mathematical_edge_cases():
         assert isinstance(tiny_result.distance_to_goal, float)
         assert math.isfinite(tiny_result.distance_to_goal)
         assert tiny_result.distance_to_goal >= 0
-    except (OverflowError, UnderflowError):
+    except (OverflowError, FloatingPointError):
         # Acceptable for extreme precision limits
         pass
 
@@ -2024,7 +2022,7 @@ def test_integration_with_performance_metrics():
     ]
 
     # Record initial metrics state
-    initial_metrics_state = calculator.performance_metrics.get_summary()
+    _ = calculator.performance_metrics.get_summary()
 
     for agent_pos, source_pos in test_calculations:
         result = calculator.calculate_reward(agent_pos, source_pos)

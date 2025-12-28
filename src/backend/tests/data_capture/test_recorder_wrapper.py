@@ -2,8 +2,6 @@ import gzip
 import json
 from pathlib import Path
 
-import numpy as np
-
 import plume_nav_sim as pns
 from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.data_capture.recorder import RunRecorder

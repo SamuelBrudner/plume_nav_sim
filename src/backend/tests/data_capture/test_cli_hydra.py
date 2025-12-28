@@ -156,8 +156,8 @@ def test_manual_compose_matches_hydra(tmp_path: Path):
     This protects the behavior of _manual_compose_for_data_capture when
     resolving mixed-group configs such as data_capture/config.
     """
-    hydra = pytest.importorskip("hydra")
-    omegaconf = pytest.importorskip("omegaconf")
+    pytest.importorskip("hydra")
+    pytest.importorskip("omegaconf")
 
     import plume_nav_sim as pns
 

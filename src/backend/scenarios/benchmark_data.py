@@ -13,7 +13,9 @@ statistical analysis, trend detection, and optimization recommendations.
 
 import copy  # >=3.10 - Deep copying of benchmark configurations and data structures for scenario generation
 import datetime  # >=3.10 - Timestamp management for benchmark data versioning, temporal analysis, and result tracking
+import hashlib  # >=3.10 - System fingerprint hashing for benchmark metadata
 import json  # >=3.10 - Benchmark data serialization, baseline storage, and configuration persistence for analysis
+import platform  # >=3.10 - Platform metadata for system fingerprinting
 import statistics  # >=3.10 - Statistical functions for baseline calculation including mean, median, standard deviation, and confidence intervals
 from dataclasses import (  # >=3.10 - Data structure definitions for benchmark data containers and performance baseline objects
     dataclass,
@@ -136,9 +138,6 @@ class PerformanceBaseline:
 
     def _generate_system_fingerprint(self) -> str:
         """Generate unique system fingerprint for platform-specific baseline identification."""
-        import hashlib
-        import platform
-
         # Create fingerprint from system information
         system_info = {
             "platform": platform.platform(),
@@ -1813,7 +1812,7 @@ def get_benchmark_test_matrix(
 
         # Filter by maximum memory usage
         if "max_memory_mb" in matrix_constraints:
-            max_memory = matrix_constraints["max_memory_mb"]
+            _ = matrix_constraints["max_memory_mb"]
             # This would require estimating memory usage for each scenario
             # Implementation depends on detailed memory estimation
 
@@ -2121,10 +2120,10 @@ def validate_benchmark_data(
         "validation_thresholds",
         "creation_timestamp",
     ]
-    for field in required_fields:
-        if field not in benchmark_data:
+    for required_field in required_fields:
+        if required_field not in benchmark_data:
             validation_report["validation_errors"].append(
-                f"Missing required field: {field}"
+                f"Missing required field: {required_field}"
             )
             validation_report["validation_passed"] = False
 
@@ -2160,7 +2159,7 @@ def validate_benchmark_data(
             mean_val = stats.get("mean", 0)
             std_dev = stats.get("std_dev", 0)
             min_val = stats.get("min", 0)
-            max_val = stats.get("max", 0)
+            _ = stats.get("max", 0)
 
             if std_dev > mean_val * 2 and mean_val > 0:  # High variability
                 consistency_check["issues"].append(

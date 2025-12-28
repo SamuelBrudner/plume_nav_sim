@@ -1,6 +1,8 @@
 # External imports with version comments
 # Moved from backend.data to backend.scenarios
 import copy  # >=3.10 - Deep copying of test scenarios for modification and parallel execution isolation
+import json  # >=3.10 - Report serialization for test scenario collections
+import time  # >=3.10 - Execution timing for scenario simulation
 import uuid  # >=3.10 - Unique identifier generation for test scenario tracking and execution correlation
 from dataclasses import (  # >=3.10 - Data class decorators for test scenario data structures and metadata containers
     dataclass,
@@ -512,9 +514,11 @@ class TestScenario:
 
         # Validate configuration completeness and required parameter presence
         required_fields = ["grid_size", "max_steps"]
-        for field in required_fields:
-            if field not in self.config:
-                validation_results["errors"].append(f"Missing required field: {field}")
+        for required_field in required_fields:
+            if required_field not in self.config:
+                validation_results["errors"].append(
+                    f"Missing required field: {required_field}"
+                )
                 validation_results["valid"] = False
 
         # Check parameter consistency and cross-component compatibility
@@ -848,7 +852,7 @@ class TestScenarioCollection:
             ]
 
         # Extract corresponding scenarios from scenarios dictionary
-        filtered_scenarios = {name: self.scenarios[name] for name in scenario_names}
+        _ = {name: self.scenarios[name] for name in scenario_names}
 
         # Apply sorting if sort_by is specified (name, priority, execution_time)
         if sort_by == "name":
@@ -916,8 +920,6 @@ class TestScenarioCollection:
             scenario.execution_state = "running"
 
             # Simulate scenario execution (in real implementation, this would execute the actual test)
-            import time
-
             start_time = time.time()
 
             try:
@@ -1128,8 +1130,6 @@ class TestScenarioCollection:
 
         # Format report according to report_format specification (dict, json, html)
         if report_format == "json":
-            import json
-
             return json.dumps(report, indent=2)
         elif report_format == "html":
             # Simple HTML formatting
@@ -1991,8 +1991,6 @@ def execute_test_scenario(
     Returns:
         dict: Comprehensive execution results with metrics, performance data, and validation status
     """
-    import time
-
     # Initialize scenario execution environment with resource monitoring
     start_time = time.time()
     execution_results = {
@@ -2006,7 +2004,7 @@ def execute_test_scenario(
     }
 
     # Apply timeout_override or use scenario default timeout settings
-    timeout = timeout_override or scenario.resource_requirements.get(
+    _ = timeout_override or scenario.resource_requirements.get(
         "timeout_seconds", DEFAULT_SCENARIO_TIMEOUT
     )
 

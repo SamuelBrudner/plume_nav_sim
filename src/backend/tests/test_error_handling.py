@@ -347,8 +347,8 @@ def simulate_component_failure(
         raise ValueError(f"Unsupported component for failure testing: {component_name}")
 
     # Set up failure injection strategy based on component type
-    original_methods = {}
-    mocked_objects = {}
+    _ = {}
+    _ = {}
 
     try:
         if component_name == "plume_model":
@@ -532,7 +532,7 @@ def measure_error_handling_overhead(
                 try:
                     # Simulate recovery action
                     handle_component_error(e, "test_component")
-                except:
+                except Exception:
                     pass
                 recovery_time = (time.perf_counter() - recovery_start) * 1000
                 timing_data["recovery_times"].append(recovery_time)
@@ -833,7 +833,7 @@ class TestErrorHandling:
                 assert sensitive_pattern not in context_str.lower()
 
         # Test validation error logging with appropriate log levels and security compliance
-        with self.assertLogs(level="WARNING") as log_context:
+        with self.assertLogs(level="WARNING") as _:
             self.logger.warning(f"Validation error occurred: {str(error)}")
 
         # Verify validation error performance impact and overhead measurement
@@ -905,7 +905,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
     @pytest.mark.parametrize("render_mode", ["rgb_array", "human"])
@@ -927,7 +927,7 @@ class TestErrorHandling:
             # Test RenderingError instantiation with render mode and backend context validation
             with simulate_component_failure(
                 "renderer", "backend_failure", {"raise_exception": True}
-            ) as mock_failure:
+            ) as _:
                 with pytest.raises(RenderingError) as exc_info:
                     test_env.render()
 
@@ -971,7 +971,7 @@ class TestErrorHandling:
             fallback_start_time = time.perf_counter()
             try:
                 test_env.render()
-            except:
+            except Exception:
                 pass
             fallback_time = (time.perf_counter() - fallback_start_time) * 1000
             assert (
@@ -982,7 +982,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
     @pytest.mark.parametrize(
@@ -1009,7 +1009,7 @@ class TestErrorHandling:
                 if k not in ["expected_error", "description"]
             }
 
-            test_env = PlumeSearchEnv(**invalid_config)
+            PlumeSearchEnv(**invalid_config)
 
         config_error_obj = exc_info.value
 
@@ -1035,7 +1035,7 @@ class TestErrorHandling:
         # Verify configuration error impact on environment initialization
         with pytest.raises(Exception):
             # Should consistently fail with same invalid configuration
-            test_env = PlumeSearchEnv(**invalid_config)
+            _ = PlumeSearchEnv(**invalid_config)
 
     @pytest.mark.parametrize("component_failure", COMPONENT_FAILURE_SCENARIOS)
     def test_component_error_diagnosis(self, component_failure):
@@ -1058,7 +1058,7 @@ class TestErrorHandling:
                 "calculation_error",
                 {"raise_exception": True},
                 enable_recovery_testing=True,
-            ) as mock_failure:
+            ) as _:
                 with pytest.raises(ComponentError) as exc_info:
                     if component_failure == "plume_model":
                         # Trigger plume model error
@@ -1098,7 +1098,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
     @pytest.mark.parametrize("resource_scenario", RESOURCE_EXHAUSTION_SCENARIOS)
@@ -1118,7 +1118,7 @@ class TestErrorHandling:
                 with patch(
                     "numpy.zeros", side_effect=MemoryError("Insufficient memory")
                 ):
-                    test_env = PlumeSearchEnv(grid_size=(1000, 1000))
+                    _ = PlumeSearchEnv(grid_size=(1000, 1000))
             elif resource_scenario == "cpu_limit":
                 # Simulate CPU resource exhaustion
                 raise ResourceError("CPU time limit exceeded")
@@ -1151,7 +1151,7 @@ class TestErrorHandling:
         try:
             # Attempt resource cleanup
             gc.collect()
-        except:
+        except Exception:
             pass
         cleanup_time = (time.perf_counter() - cleanup_start) * 1000
         assert cleanup_time < 50.0, f"Resource cleanup took {cleanup_time:.2f}ms"
@@ -1174,20 +1174,20 @@ class TestErrorHandling:
                     "gymnasium.spaces.Discrete",
                     side_effect=AttributeError("API changed"),
                 ):
-                    test_env = PlumeSearchEnv()
+                    PlumeSearchEnv()
             elif integration_failure == "numpy_version_mismatch":
                 # Simulate NumPy version incompatibility
                 with patch(
                     "numpy.array", side_effect=ImportError("NumPy version incompatible")
                 ):
-                    test_env = PlumeSearchEnv()
+                    PlumeSearchEnv()
             elif integration_failure == "matplotlib_backend_failure":
                 # Simulate matplotlib backend failure
                 with patch(
                     "matplotlib.pyplot.subplots",
                     side_effect=ImportError("Backend not available"),
                 ):
-                    test_env = PlumeSearchEnv(render_mode="human")
+                    PlumeSearchEnv(render_mode="human")
 
         integration_error = exc_info.value
 
@@ -1370,7 +1370,7 @@ class TestErrorHandling:
             # Inject controlled error and test recovery
             with simulate_component_failure(
                 "plume_model", "calculation_error", {"raise_exception": True}
-            ) as mock_failure:
+            ) as _:
                 try:
                     test_env.step(Action.UP)
                 except ComponentError as e:
@@ -1384,7 +1384,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
         # Verify centralized error handling performance impact and system overhead
@@ -1448,7 +1448,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
         # Verify environment error handling performance impact on operation latency
@@ -1461,7 +1461,7 @@ class TestErrorHandling:
                 step_start = time.perf_counter()
                 try:
                     performance_env.step(Action.UP)
-                except:
+                except Exception:
                     pass
                 step_times.append((time.perf_counter() - step_start) * 1000)
 
@@ -1473,7 +1473,7 @@ class TestErrorHandling:
         finally:
             try:
                 performance_env.close()
-            except:
+            except Exception:
                 pass
 
     @pytest.mark.parametrize(
@@ -1517,7 +1517,7 @@ class TestErrorHandling:
                     validator.validate_parameter(
                         param_name, param_value, ValidationContext("perf_test", "test")
                     )
-            except:
+            except Exception:
                 pass
 
         validation_time = (time.perf_counter() - performance_start) * 1000
@@ -1584,7 +1584,6 @@ class TestErrorHandling:
                     )
 
             # Validate system resilience with multiple concurrent error conditions
-            resilience_test_passed = True
             try:
                 # Test multiple error conditions simultaneously
                 with simulate_component_failure("plume_model", "calculation_error", {}):
@@ -1593,7 +1592,7 @@ class TestErrorHandling:
                             seed=42
                         )  # Should handle multiple failures gracefully
             except Exception:
-                resilience_test_passed = False
+                pass
 
             # Analyze recovery effectiveness with success metrics
             successful_recoveries = sum(
@@ -1622,7 +1621,7 @@ class TestErrorHandling:
             if test_env:
                 try:
                     test_env.close()
-                except:
+                except Exception:
                     pass
 
     @pytest.mark.security
@@ -2109,7 +2108,7 @@ class TestErrorScenarios:
                 # Simulate primary component failure
                 with simulate_component_failure(
                     primary_component, "calculation_error", {"raise_exception": True}
-                ) as primary_failure:
+                ) as _:
                     try:
                         # Test that secondary component can handle primary failure gracefully
                         if primary_component == "plume_model":
@@ -2202,7 +2201,7 @@ class TestErrorScenarios:
             if cascade_test_env:
                 try:
                     cascade_test_env.close()
-                except:
+                except Exception:
                     pass
 
         # Analyze cascade test results for patterns and effectiveness

@@ -7,7 +7,7 @@ pytest.importorskip(
     reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
 )
 
-from plume_nav_debugger.config import DebuggerPreferences
+from plume_nav_debugger.config import DebuggerPreferences  # noqa: E402
 
 
 def test_preferences_json_roundtrip(tmp_path: Path):

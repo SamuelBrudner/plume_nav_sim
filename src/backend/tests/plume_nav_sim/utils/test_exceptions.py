@@ -2439,9 +2439,7 @@ class TestErrorLogging:
         """Test logging performance integration ensuring logging doesn't impact error handling
         performance and includes performance context."""
         # Measure logging overhead during exception handling
-        test_exception = ValidationError(
-            "Performance test error", "test_param", "test_value"
-        )
+        _ = ValidationError("Performance test error", "test_param", "test_value")
 
         # Test performance with multiple logging calls
         start_time = time.perf_counter()
@@ -2588,7 +2586,7 @@ class TestErrorPerformance:
         simple_context = create_test_error_context("comp", "op", False, False)
         complex_context = create_test_error_context("comp", "op", True, True)
 
-        simple_error = PlumeNavSimError("Test", simple_context)
+        _ = PlumeNavSimError("Test", simple_context)
         complex_error = PlumeNavSimError("Test", complex_context)
 
         # Should handle complex context without significant slowdown

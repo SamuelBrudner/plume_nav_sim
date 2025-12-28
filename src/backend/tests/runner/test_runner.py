@@ -14,11 +14,10 @@ and EpisodeResult contains: seed, steps, total_reward, terminated, truncated, me
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Iterator
 
 import gymnasium as gym
 import numpy as np
-import pytest
 
 import plume_nav_sim as pns
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy

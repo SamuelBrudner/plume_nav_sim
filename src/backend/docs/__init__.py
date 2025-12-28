@@ -38,6 +38,7 @@ Architecture Integration:
 - Research integration templates for scientific Python ecosystem and RL framework compatibility
 """
 
+import datetime
 from pathlib import (  # >=3.10 - Path operations for documentation file management, output directory handling, and cross-platform compatibility
     Path,
 )
@@ -154,7 +155,7 @@ except ImportError:
         Returns:
             str: Basic troubleshooting guide with common issues and resolution steps
         """
-        return f"""
+        return """
 # Plume Navigation Simulation Troubleshooting Guide
 
 ## Common Issues and Solutions
@@ -389,7 +390,7 @@ or submit an issue report with system configuration details.
                 status = "✅" if available else "❌"
                 report += f"- {package.replace('_', ' ').title()}: {status}\n"
 
-            report += f"""
+            report += """
 
 ## Dependency Status
 """
@@ -397,7 +398,7 @@ or submit an issue report with system configuration details.
                 status = "✅" if available else "❌"
                 report += f"- {dep}: {status}\n"
 
-            report += f"""
+            report += """
 
 ## Recommendations
 - Ensure Python 3.10+ is installed and active

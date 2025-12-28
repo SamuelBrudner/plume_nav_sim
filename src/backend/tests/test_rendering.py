@@ -36,13 +36,6 @@ import numpy as np  # >=2.1.0 - Array operations for RGB array validation, conce
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for fixtures, parameterized tests, markers, and comprehensive integration test execution with cross-mode validation
 
-pytestmark = [
-    pytest.mark.filterwarnings("ignore:Human mode not available.*:UserWarning"),
-    pytest.mark.filterwarnings(
-        "ignore:No Matplotlib backends reported as available; falling back to Agg-only behavior:UserWarning"
-    ),
-]
-
 # Internal imports - Core types and constants
 from plume_nav_sim.core.constants import (
     AGENT_MARKER_COLOR,  # Agent marker color constant for testing visual specification compliance across both render modes
@@ -73,6 +66,13 @@ from plume_nav_sim.render.matplotlib_viz import (
     detect_matplotlib_capabilities,
 )
 from plume_nav_sim.render.numpy_rgb import NumpyRGBRenderer
+
+pytestmark = [
+    pytest.mark.filterwarnings("ignore:Human mode not available.*:UserWarning"),
+    pytest.mark.filterwarnings(
+        "ignore:No Matplotlib backends reported as available; falling back to Agg-only behavior:UserWarning"
+    ),
+]
 
 # Test configuration globals for consistent testing parameters
 DUAL_MODE_TEST_GRID_SIZES = [(32, 32), (64, 64), (128, 128)]
@@ -262,7 +262,7 @@ def benchmark_dual_mode_performance(
     rgb_times = []
     for i in range(iterations_per_mode):
         start_time = time.time()
-        rgb_output = test_environment.render("rgb_array")
+        _ = test_environment.render("rgb_array")
         duration_ms = (time.time() - start_time) * 1000
         rgb_times.append(duration_ms)
 
@@ -439,7 +439,6 @@ def simulate_rendering_scenarios(
     """
     # Initialize scenario based on scenario_type
     scenario_results = []
-    config = scenario_config or {}
 
     for step in range(scenario_steps):
         step_result = {
@@ -600,7 +599,7 @@ class TestDualModeRendering:
     def test_render_context(self, integration_test_env):
         """Create validated render context for testing."""
         env = integration_test_env
-        obs = env.reset()
+        env.reset()
 
         # Create concentration field
         concentration_field = np.random.rand(32, 32).astype(np.float32)
@@ -665,8 +664,6 @@ class TestDualModeRendering:
         assert result is True, "Should successfully configure interactive mode"
 
         # Validate matplotlib interactive mode toggling (plt.ion/plt.ioff)
-        original_interactive = plt.isinteractive()
-
         env.renderer.enable_interactive_mode()
 
         env.renderer.disable_interactive_mode()
@@ -773,19 +770,13 @@ class TestDualModeRendering:
         rgb_output = env.render("rgb_array")
         assert rgb_output is not None, "RGB output should not be None"
 
-        # Analyze RGB output for visual elements
-        has_agent_marker = _detect_agent_marker_in_rgb(rgb_output)
-        has_source_marker = _detect_source_marker_in_rgb(rgb_output)
-
         # Generate human mode output if matplotlib available and extract comparable elements
-        human_available = True
         try:
-            human_output = env.render("human")
+            env.render("human")
             # Get current matplotlib figure for analysis
             current_figs = plt.get_fignums()
             matplotlib_figure = plt.figure(current_figs[-1]) if current_figs else None
         except Exception as e:
-            human_available = False
             matplotlib_figure = None
             warnings.warn(f"Human mode not available for consistency testing: {e}")
 
@@ -944,7 +935,7 @@ class TestDualModeRendering:
         # Simulate matplotlib backend failures and validate fallback to RGB array mode
         try:
             # Attempt human mode rendering
-            human_output = env.render("human")
+            env.render("human")
             # If successful, test that it handles backend issues
         except Exception as e:
             # Expected in headless environments or when matplotlib is unavailable
@@ -984,7 +975,7 @@ class TestDualModeRendering:
 
         for i in range(10):
             env.step(i % 4)
-            rgb_output = env.render("rgb_array")
+            env.render("rgb_array")
 
             # Test human mode if available
             try:
@@ -993,7 +984,7 @@ class TestDualModeRendering:
                 pass  # Human mode might not be available
 
         # Monitor memory usage during operations
-        peak_memory = memory_monitor.get_usage_mb()
+        _ = memory_monitor.get_usage_mb()
 
         # Test environment cleanup
         cleanup_validator.record_final_state(env)
@@ -1140,7 +1131,7 @@ class TestCrossPlatformCompatibility:
 
             # Test interactive rendering with platform-appropriate backends when available
             try:
-                human_output = env.render("human")
+                env.render("human")
                 # Interactive rendering may not be available on all platforms
             except Exception as e:
                 warnings.warn(
@@ -1273,11 +1264,8 @@ class TestRenderingScenarios:
         )
 
         # Validate goal achievement visualization
-        goal_achieved = False
         for step_result in scenario_results:
             if step_result.get("terminated", False):
-                goal_achieved = True
-
                 # Validate visualization during goal achievement
                 if "rgb_output_shape" in step_result:
                     assert (
@@ -1290,7 +1278,7 @@ class TestRenderingScenarios:
         rgb_output = env.render("rgb_array")
 
         if rgb_output is not None:
-            has_source_marker = _detect_source_marker_in_rgb(rgb_output)
+            _ = _detect_source_marker_in_rgb(rgb_output)
             # Source marker detection depends on implementation details
             assert True, "Source marker analysis completed"
 

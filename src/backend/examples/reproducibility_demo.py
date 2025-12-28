@@ -31,19 +31,18 @@ import sys  # >=3.10 - System interface for exit handling
 import time  # >=3.10 - High-precision timing measurements
 import uuid  # >=3.10 - Unique identifier generation for session tracking
 from pathlib import Path  # >=3.10 - Path handling for report output
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional
 
 # External imports with version comments for dependency management
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 import matplotlib.pyplot as plt  # >=3.9.0 - Visualization for reproducibility analysis (optional)
 import numpy as np  # >=2.1.0 - Random number generation and statistical analysis
 
-from plume_nav_sim.core.constants import DEFAULT_MAX_STEPS
 from plume_nav_sim.core.types import Action
 
 # Internal imports for plume navigation environment
 from plume_nav_sim.registration.register import ENV_ID, register_env
-from plume_nav_sim.utils.exceptions import PlumeNavSimError, ValidationError
+from plume_nav_sim.utils.exceptions import ValidationError
 from plume_nav_sim.utils.seeding import (
     ReproducibilityTracker,
     SeedManager,
@@ -1166,7 +1165,7 @@ def demonstrate_advanced_reproducibility(
             )
 
         # Log final results
-        _logger.info(f"=== ADVANCED REPRODUCIBILITY RESULTS ===")
+        _logger.info("=== ADVANCED REPRODUCIBILITY RESULTS ===")
         _logger.info(f"Overall status: {validation_status}")
         _logger.info(f"Success rate: {success_rate:.2%}")
         _logger.info(f"All seeds reproducible: {all_seeds_reproducible}")
@@ -1850,7 +1849,7 @@ def demonstrate_reproducibility_performance(
 
             # Measure episode with full reproducibility tracking
             start_time = time.perf_counter()
-            episode_with_tracking = execute_reproducibility_episode(
+            _ = execute_reproducibility_episode(
                 env=env,
                 policy=policy,
                 episode_seed=12345 + test_num,
@@ -1867,7 +1866,7 @@ def demonstrate_reproducibility_performance(
 
             # Measure episode with minimal tracking
             start_time = time.perf_counter()
-            episode_minimal = execute_reproducibility_episode(
+            _ = execute_reproducibility_episode(
                 env=env,
                 policy=policy_minimal,
                 episode_seed=12345 + test_num,
@@ -1923,7 +1922,7 @@ def demonstrate_reproducibility_performance(
             baseline_memory = process.memory_info().rss / 1024 / 1024  # MB
 
             # Memory with SeedManager
-            seed_manager = SeedManager()
+            _ = SeedManager()
             memory_with_seed_manager = process.memory_info().rss / 1024 / 1024
 
             # Memory with ReproducibilityTracker
@@ -2070,7 +2069,7 @@ def generate_comprehensive_reproducibility_report(
             "# Comprehensive Reproducibility Analysis Report",
             "",
             f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
-            f"**Environment:** PlumeNav-StaticGaussian-v0",
+            "**Environment:** PlumeNav-StaticGaussian-v0",
             "",
             "## Executive Summary",
             "",
@@ -2081,7 +2080,7 @@ def generate_comprehensive_reproducibility_report(
             "<html><head><title>Reproducibility Analysis Report</title></head><body>",
             "<h1>Comprehensive Reproducibility Analysis Report</h1>",
             f"<p><strong>Generated:</strong> {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}</p>",
-            f"<p><strong>Environment:</strong> PlumeNav-StaticGaussian-v0</p>",
+            "<p><strong>Environment:</strong> PlumeNav-StaticGaussian-v0</p>",
             "<h2>Executive Summary</h2>",
         ]
     else:  # text format
@@ -2090,7 +2089,7 @@ def generate_comprehensive_reproducibility_report(
             "=" * 50,
             "",
             f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
-            f"Environment: PlumeNav-StaticGaussian-v0",
+            "Environment: PlumeNav-StaticGaussian-v0",
             "",
             "EXECUTIVE SUMMARY",
             "-" * 20,

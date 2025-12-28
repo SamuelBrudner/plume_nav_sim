@@ -765,7 +765,7 @@ def test_mathematical_precision_edge_cases(edge_case_test_env):
         ), f"Boundary source observation should be valid: {obs[0]}"
 
         # Test distance calculations with maximum coordinate values
-        agent_pos = info.get("agent_xy", (0, 0))
+        _ = info.get("agent_xy", (0, 0))
         distance = info.get("distance_to_source", 0.0)
 
         # Verify floating point precision handling in reward calculations
@@ -794,7 +794,7 @@ def test_mathematical_precision_edge_cases(edge_case_test_env):
     # Test NaN and infinity propagation through mathematical operations
     try:
         # Test with invalid plume parameters that might produce mathematical edge cases
-        nan_env = create_plume_search_env(
+        _ = create_plume_search_env(
             grid_size=(16, 16), plume_params={"sigma": float("nan")}
         )
         pytest.fail("Environment should reject NaN sigma parameter")
@@ -804,7 +804,7 @@ def test_mathematical_precision_edge_cases(edge_case_test_env):
 
     try:
         # Test with infinite plume parameters
-        inf_env = create_plume_search_env(
+        _ = create_plume_search_env(
             grid_size=(16, 16), plume_params={"sigma": float("inf")}
         )
         pytest.fail("Environment should reject infinite sigma parameter")
@@ -916,7 +916,6 @@ def test_rendering_edge_cases_and_failures(edge_case_test_env):
         thread.join(timeout=5.0)
 
     # Validate resource cleanup after rendering failures
-    cleanup_successful = True
     try:
         # Force garbage collection to test cleanup
         gc.collect()
@@ -929,7 +928,6 @@ def test_rendering_edge_cases_and_failures(edge_case_test_env):
         ), "Environment should function after concurrent rendering"
 
     except Exception as e:
-        cleanup_successful = False
         pytest.fail(f"Resource cleanup failed after concurrent rendering: {e}")
 
     minimal_env.close()
@@ -958,9 +956,8 @@ def test_memory_exhaustion_and_resource_limits(memory_monitor, cleanup_validator
     Test system behavior under memory pressure and resource exhaustion conditions
     including memory leak detection, cleanup validation, and resource recovery testing.
     """
-    initial_memory = 0
     if hasattr(memory_monitor, "get_current_usage"):
-        initial_memory = memory_monitor.get_current_usage().get("memory_mb", 0)
+        memory_monitor.get_current_usage()
 
     # Create multiple environment instances to stress test memory usage
     test_environments = []
@@ -1392,7 +1389,7 @@ def test_performance_degradation_scenarios(
         if terminated or truncated:
             break
 
-    total_duration = time.perf_counter() - total_start_time
+    _ = time.perf_counter() - total_start_time
 
     # Validate performance targets are maintained under stress conditions
     if step_times:
@@ -1430,7 +1427,7 @@ def test_performance_degradation_scenarios(
     gc.collect()  # Force garbage collection
 
     # Test performance after cleanup
-    recovery_start = time.perf_counter()
+    _ = time.perf_counter()
     recovery_obs, recovery_info = edge_case_test_env.reset(seed=123)
 
     recovery_steps = []

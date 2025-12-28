@@ -108,7 +108,7 @@ class TestEpisodeManagerConfig:
         captured_error = None
 
         try:
-            invalid_env_config = create_environment_config(
+            create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=-100,  # Invalid negative value
@@ -121,7 +121,7 @@ class TestEpisodeManagerConfig:
 
         # Test validation with invalid goal_radius (negative value)
         try:
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=100,
@@ -423,7 +423,7 @@ class TestEpisodeManager:
         episode_manager.reset_episode(seed=42)
 
         # Get initial agent position
-        initial_state = episode_manager.get_current_state()
+        _ = episode_manager.get_current_state()
         source_pos = TEST_SOURCE_LOCATION
 
         # Process steps to move agent to source location (simulate goal achievement)
@@ -644,9 +644,7 @@ class TestEpisodeManager:
 
         # Assert success rate calculation is accurate based on terminated episodes
         terminated_count = sum(1 for result in episode_results if result.terminated)
-        expected_success_rate = (
-            terminated_count / len(episode_results) if episode_results else 0.0
-        )
+        _ = terminated_count / len(episode_results) if episode_results else 0.0
 
         # Validate optimization recommendations based on performance patterns
         recommendations = statistics.get_optimization_recommendations()
@@ -877,7 +875,7 @@ class TestEpisodeManagerReproducibility:
                 break
 
         # Record trajectory from first run with seed A
-        trajectory_a1 = info["agent_xy"]
+        _ = info["agent_xy"]
         manager1.finalize_episode()
 
         # Run different episode with seed B
@@ -900,7 +898,7 @@ class TestEpisodeManagerReproducibility:
                 break
 
         # Assert no random state contamination between episodes
-        trajectory_a2 = info["agent_xy"]
+        _ = info["agent_xy"]
 
         # The trajectories with the same seed should be identical
         # Note: This test verifies the final position after same number of steps
@@ -957,8 +955,8 @@ class TestEpisodeManagerPerformance:
 
         # Calculate average, minimum, maximum, and standard deviation of step times
         avg_time = np.mean(step_times)
-        min_time = np.min(step_times)
-        max_time = np.max(step_times)
+        _ = np.min(step_times)
+        _ = np.max(step_times)
         std_time = np.std(step_times)
 
         # Assert average step time is within reasonable bounds
@@ -1007,7 +1005,7 @@ class TestEpisodeManagerPerformance:
 
         # Calculate timing statistics for reset operations
         avg_reset_time = np.mean(reset_times)
-        max_reset_time = np.max(reset_times)
+        _ = np.max(reset_times)
 
         # Assert average reset time is reasonable (more lenient for test environments)
         target_reset_time = PERFORMANCE_TARGET_STEP_LATENCY_MS * 50  # 50ms for reset
@@ -1374,7 +1372,7 @@ class TestEpisodeManagerErrorHandling:
         """Test handling of configuration errors with validation failure recovery and error reporting."""
         # Attempt to create episode manager with invalid configuration
         try:
-            invalid_env_config = create_environment_config(
+            create_environment_config(
                 grid_size=(-10, -10),  # Invalid negative dimensions
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=100,
@@ -1387,7 +1385,7 @@ class TestEpisodeManagerErrorHandling:
 
         # Test specific configuration parameter validation failures
         try:
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=(1000, 1000),  # Outside grid bounds
                 max_steps=100,
@@ -1403,7 +1401,7 @@ class TestEpisodeManagerErrorHandling:
 
         # Test edge cases with borderline invalid configurations
         try:
-            borderline_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=0,  # Zero steps
@@ -1954,7 +1952,7 @@ class TestFactoryFunctions:
         """Test validate_episode_config function with invalid configurations and detailed error reporting."""
         try:
             # Create invalid episode manager configuration (negative max_steps)
-            invalid_env_config = create_environment_config(
+            _ = create_environment_config(
                 grid_size=TEST_GRID_SIZE,
                 source_location=TEST_SOURCE_LOCATION,
                 max_steps=-50,  # Invalid

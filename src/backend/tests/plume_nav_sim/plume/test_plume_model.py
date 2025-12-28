@@ -316,7 +316,7 @@ def test_static_gaussian_concentration_sampling(interpolate):
             ), f"Invalid concentration {concentration} at {position}"
 
             # Test theoretical accuracy for distance-based concentration
-            distance = source_location.distance_to(position)
+            _ = source_location.distance_to(position)
             theoretical_concentration = calculate_gaussian_concentration(
                 x=position.x,
                 y=position.y,
@@ -643,10 +643,10 @@ def test_concentration_field_data_structure(enable_caching):
     sigma = DEFAULT_PLUME_SIGMA
 
     start_time = time.perf_counter()
-    field_array = field.generate_field(
+    _ = field.generate_field(
         source_location=source_location, sigma=sigma, normalize_field=True
     )
-    generation_time_ms = (time.perf_counter() - start_time) * 1000
+    _ = (time.perf_counter() - start_time) * 1000
 
     # Test sampling operations with various positions and interpolation methods
     test_positions = [
@@ -740,7 +740,7 @@ def test_plume_model_performance_requirements():
     for position in test_positions[:100]:  # Test subset to avoid too long test
         if position.is_within_bounds(grid_size):
             start_time = time.perf_counter()
-            concentration = plume_model.sample_concentration(position)
+            _ = plume_model.sample_concentration(position)
             sampling_time_ms = (time.perf_counter() - start_time) * 1000
             sampling_times.append(sampling_time_ms)
 
@@ -947,7 +947,7 @@ def test_plume_model_integration():
     )
 
     assert isinstance(factory_model, StaticGaussianPlume)
-    factory_field = factory_model.generate_concentration_field()
+    _ = factory_model.generate_concentration_field()
 
     # Factory model should produce consistent results
     factory_concentration = factory_model.sample_concentration(source_location)
@@ -1653,7 +1653,7 @@ class TestConcentrationField:
         field_array = self.field.generate_field(
             source_location=source_location, sigma=sigma, force_regeneration=True
         )
-        generation_time_ms = (time.perf_counter() - start_time) * 1000
+        _ = (time.perf_counter() - start_time) * 1000
 
         # Test field array properties including shape, dtype, and value ranges
         assert field_array.shape == (self.test_grid.height, self.test_grid.width)
@@ -1693,7 +1693,7 @@ class TestConcentrationField:
 
         # Test caching behavior including cache hits and misses tracking
         initial_hits = self.field.cache_hits
-        initial_misses = self.field.cache_misses
+        _ = self.field.cache_misses
 
         # Sample same position multiple times to test caching
         for _ in range(5):

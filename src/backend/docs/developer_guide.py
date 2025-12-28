@@ -37,72 +37,8 @@ Architecture Integration:
 - Research integration templates for scientific Python ecosystem and RL frameworks
 """
 
-import ast  # >=3.10 - Abstract syntax tree analysis for code quality tools and static analysis examples
-import inspect  # >=3.10 - Code introspection for automated documentation generation and development tool integration
-import json  # >=3.10 - Configuration management and serialization examples for development workflows
-import logging  # >=3.10 - Development logging patterns, debugging strategies, and monitoring implementation guidance
-import textwrap  # >=3.10 - Documentation formatting utilities for generating readable developer documentation
-import time  # >=3.10 - Performance timing and profiling for development optimization examples and benchmarking
-import unittest  # >=3.10 - Testing framework integration for development testing workflow examples and test writing guidance
-from pathlib import (
-    Path,  # >=3.10 - Path operations for development workflow documentation and file system examples
-)
-from typing import (  # >=3.10 - Advanced type hints for comprehensive type safety documentation and development guidance
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
-
-# External imports with version requirements for development and documentation
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning framework for understanding API compliance and environment development patterns
-import matplotlib.pyplot as plt  # >=3.9.0 - Visualization framework for rendering system development and debugging visualization examples
-import numpy as np  # >=2.1.0 - Mathematical operations, array processing, and performance optimization for technical implementation examples
-import pytest  # >=8.0 - Primary testing framework for development workflow documentation and testing strategy guidance
-
-from ..examples.basic_usage import (  # Basic usage demonstration for developer onboarding and understanding user workflows
-    demonstrate_basic_episode,
-    demonstrate_reproducibility,
-)
-from ..plume_nav_sim.core.constants import (  # System constants for development examples and configuration understanding
-    DEFAULT_GRID_SIZE,
-    DEFAULT_SOURCE_LOCATION,
-)
-from ..plume_nav_sim.core.types import (  # Core type system for understanding data structures and type safety in development
-    Action,
-    Coordinates,
-    EnvironmentConfig,
-    GridSize,
-)
-from ..plume_nav_sim.envs.base_env import (
-    BaseEnvironment,  # Base environment architecture for understanding extension patterns and custom environment development
-)
-
-# Internal imports - Core environment and components for technical implementation examples
-from ..plume_nav_sim.envs.plume_search_env import (  # Main environment class for technical implementation examples and performance analysis
-    PlumeSearchEnv,
-    create_plume_search_env,
-)
-from ..plume_nav_sim.plume.static_gaussian import (
-    StaticGaussianPlume,  # Plume model implementation for understanding mathematical components and custom plume development
-)
-
-# Internal imports - API documentation and user guide integration
-from .api_reference import (  # API documentation generation for technical reference integration in developer workflows
-    APIDocumentationGenerator,
-    generate_api_documentation,
-)
-from .troubleshooting import (  # Troubleshooting utilities for development environment setup and debugging
-    TroubleshootingGuide,
-    run_full_diagnostic,
-)
-from .user_guide import (  # User guide generation for understanding user-facing features that developers must maintain
-    create_quick_start_tutorial,
-    generate_user_guide,
-)
+from pathlib import Path
+from typing import Optional
 
 # Global constants for developer guide configuration
 DEVELOPER_GUIDE_VERSION = '2.0.0'  # Version identifier for developer guide documentation and compatibility tracking
@@ -137,6 +73,260 @@ __all__ = [
     'TestingFramework',                 # Testing framework documentation utility for quality assurance procedures
     'ExtensionManager'                  # Extension management utility for customization patterns and advanced development
 ]
+
+
+class DeveloperGuideGenerator:
+    """Lightweight wrapper for generating the developer guide with defaults."""
+
+    def __init__(self, output_format: str = "markdown") -> None:
+        self.output_format = output_format
+
+    def generate(self, **kwargs: object) -> str:
+        return generate_developer_guide(output_format=self.output_format, **kwargs)
+
+
+class ArchitectureAnalyzer:
+    """Minimal architecture analyzer for documentation workflows."""
+
+    def analyze(self) -> dict:
+        return {
+            "components": ["PlumeSearchEnv", "StaticGaussianPlume", "Renderers"],
+            "notes": "Architecture summary available in the developer guide.",
+        }
+
+
+class PerformanceBenchmarker:
+    """Minimal performance benchmark summary helper."""
+
+    def summarize_targets(self) -> dict:
+        return PERFORMANCE_TARGETS.copy()
+
+
+class TestingFramework:
+    """Minimal testing framework helper for documentation tooling."""
+
+    def list_test_categories(self) -> list[str]:
+        return ["unit", "integration", "performance", "reproducibility"]
+
+
+class ExtensionManager:
+    """Minimal extension manager helper for documentation tooling."""
+
+    def list_extension_points(self) -> list[str]:
+        return ["plume_model", "renderer", "reward_function", "env_wrapper"]
+
+
+def create_contribution_guidelines(
+    include_workflow_diagrams: bool = True,
+    include_code_examples: bool = True,
+    include_review_criteria: bool = True,
+) -> str:
+    sections = [
+        "## Contribution Guidelines",
+        "",
+        "### Core Workflow",
+        "- Fork, branch, and open a PR with a concise summary.",
+        "- Keep changes focused; add tests when behavior changes.",
+    ]
+
+    if include_workflow_diagrams:
+        sections.extend(
+            [
+                "",
+                "```\nbranch -> commit -> test -> review -> merge\n```",
+            ]
+        )
+
+    if include_code_examples:
+        sections.extend(
+            [
+                "",
+                "```python",
+                "# Example: run the fast unit suite",
+                "pytest -q src/backend/tests/test_fast.py",
+                "```",
+            ]
+        )
+
+    if include_review_criteria:
+        sections.extend(
+            [
+                "",
+                "### Review Checklist",
+                "- Tests updated or justified as not required.",
+                "- Public APIs documented for new behaviors.",
+                "- Performance targets respected for hot paths.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_performance_guide(
+    include_benchmarking_tools: bool = True,
+    include_optimization_examples: bool = True,
+    include_profiling_analysis: bool = True,
+) -> str:
+    sections = [
+        "## Performance Guide",
+        "",
+        "### Targets",
+        f"- Step latency: {PERFORMANCE_TARGETS['step_latency_ms']}ms",
+        f"- Memory usage: {PERFORMANCE_TARGETS['memory_usage_mb']}MB",
+        f"- Render time: {PERFORMANCE_TARGETS['render_time_ms']}ms",
+    ]
+
+    if include_benchmarking_tools:
+        sections.extend(
+            [
+                "",
+                "### Benchmarking",
+                "- Use the environment_performance suite for repeatable runs.",
+            ]
+        )
+
+    if include_profiling_analysis:
+        sections.extend(
+            [
+                "",
+                "### Profiling Notes",
+                "- Profile action processing and rendering separately.",
+            ]
+        )
+
+    if include_optimization_examples:
+        sections.extend(
+            [
+                "",
+                "### Optimization Example",
+                "- Preallocate arrays to reduce per-step allocations.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_testing_guide(
+    include_test_examples: bool = True,
+    include_ci_configuration: bool = True,
+    include_coverage_analysis: bool = True,
+) -> str:
+    sections = [
+        "## Testing Guide",
+        "",
+        "### Test Layers",
+        "- Unit tests for core logic.",
+        "- Integration tests for env setup and rendering.",
+    ]
+
+    if include_ci_configuration:
+        sections.extend(
+            [
+                "",
+                "### CI",
+                "- Run pytest and lint checks on every PR.",
+            ]
+        )
+
+    if include_coverage_analysis:
+        sections.extend(
+            [
+                "",
+                "### Coverage",
+                "- Maintain coverage above project thresholds.",
+            ]
+        )
+
+    if include_test_examples:
+        sections.extend(
+            [
+                "",
+                "```bash",
+                "pytest -q src/backend/tests",
+                "```",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_extension_guide(
+    include_custom_examples: bool = True,
+    include_integration_patterns: bool = True,
+    include_research_extensions: bool = True,
+) -> str:
+    sections = [
+        "## Extension Guide",
+        "",
+        "### Extension Points",
+        "- Custom plume models",
+        "- Reward shaping",
+        "- Rendering backends",
+    ]
+
+    if include_integration_patterns:
+        sections.extend(
+            [
+                "",
+                "### Integration Patterns",
+                "- Use factories to swap env components cleanly.",
+            ]
+        )
+
+    if include_research_extensions:
+        sections.extend(
+            [
+                "",
+                "### Research Notes",
+                "- Track configuration metadata alongside results.",
+            ]
+        )
+
+    if include_custom_examples:
+        sections.extend(
+            [
+                "",
+                "```python",
+                "# Example: inject a custom plume model",
+                "env = create_plume_search_env(plume_model=my_model)",
+                "```",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def generate_architecture_diagrams() -> str:
+    return "\n".join(
+        [
+            "## Architecture Diagrams",
+            "",
+            "```\nAgent -> Env -> Plume Model -> Renderer\n```",
+        ]
+    )
+
+
+def generate_performance_analysis() -> str:
+    return "\n".join(
+        [
+            "## Performance Analysis",
+            "",
+            "Benchmarks summarize latency, memory, and rendering targets.",
+        ]
+    )
+
+
+def generate_extension_examples() -> str:
+    return "\n".join(
+        [
+            "## Extension Examples",
+            "",
+            "```python",
+            "class CustomPlume(StaticGaussianPlume):",
+            "    pass",
+            "```",
+        ]
+    )
 
 
 def generate_developer_guide(
@@ -190,10 +380,10 @@ def generate_developer_guide(
     if generation_options is None:
         generation_options = {}
 
-    technical_depth = generation_options.get('technical_depth', 'advanced')
+    _ = generation_options.get('technical_depth', 'advanced')
     include_code_examples = generation_options.get('include_code_examples', True)
-    include_performance_tips = generation_options.get('include_performance_tips', True)
-    target_audience = generation_options.get('target_audience', 'developers')
+    _ = generation_options.get('include_performance_tips', True)
+    _ = generation_options.get('target_audience', 'developers')
 
     try:
         # Generate comprehensive introduction covering system overview, architecture principles, and development philosophy
@@ -251,7 +441,7 @@ productive development work.
         """
 
         # Generate system overview explaining the modular layered design and component-based patterns
-        guide_sections['system_overview'] = f"""
+        guide_sections['system_overview'] = """
 ## System Overview
 
 ### High-Level Architecture
@@ -464,7 +654,7 @@ Comprehensive quality assurance with automated validation:
             guide_sections['extension_examples'] = generate_extension_examples()
 
         # Generate troubleshooting section with development environment issues and debugging strategies
-        guide_sections['troubleshooting'] = f"""
+        guide_sections['troubleshooting'] = """
 ## Developer Troubleshooting Guide
 
 ### Common Development Issues
@@ -765,7 +955,7 @@ repos:
         """
 
         # Create advanced topics section covering research applications and production deployment considerations
-        guide_sections['advanced_topics'] = f"""
+        guide_sections['advanced_topics'] = """
 ## Advanced Development Topics
 
 ### Multi-Agent Architecture Considerations
@@ -1210,7 +1400,7 @@ its current proof-of-life implementation toward research-grade and production-re
         """
 
         # Integrate API reference documentation for comprehensive technical coverage
-        guide_sections['api_reference_integration'] = f"""
+        guide_sections['api_reference_integration'] = """
 ## API Reference Integration
 
 This developer guide integrates closely with the comprehensive API reference documentation.
@@ -2814,7 +3004,7 @@ Choose one of the following methods based on your preference and system setup:
     """)
 
     # Create Python environment setup with version management using pyenv or similar tools
-    setup_sections.append(f"""
+    setup_sections.append("""
 ### Method 1: Basic Development Setup
 
 #### Step 1: Python Installation
@@ -2965,7 +3155,7 @@ pip install -e .[dev]
     """)
 
     # Document development tools setup including pytest, type checking, and linting configuration
-    setup_sections.append(f"""
+    setup_sections.append("""
 ### Development Tools Configuration
 
 #### Code Quality Tools Setup
@@ -3189,7 +3379,7 @@ pre-commit autoupdate
 
     # Include advanced setup if include_advanced_setup enabled with performance profiling and debugging tools
     if include_advanced_setup:
-        setup_sections.append(f"""
+        setup_sections.append("""
 ### Advanced Development Setup
 
 #### Performance Profiling Tools

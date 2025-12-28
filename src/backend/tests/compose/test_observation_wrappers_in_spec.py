@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare

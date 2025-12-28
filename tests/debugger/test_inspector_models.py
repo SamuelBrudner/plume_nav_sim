@@ -6,8 +6,13 @@ pytest.importorskip(
     reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
 )
 
-from plume_nav_debugger.inspector.models import ActionPanelModel, ObservationPanelModel
-from plume_nav_debugger.inspector.plots import normalize_series_to_polyline
+from plume_nav_debugger.inspector.models import (  # noqa: E402
+    ActionPanelModel,
+    ObservationPanelModel,
+)
+from plume_nav_debugger.inspector.plots import (  # noqa: E402
+    normalize_series_to_polyline,
+)
 
 
 def test_observation_summary_scalar_like():

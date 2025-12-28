@@ -964,7 +964,7 @@ class TestBaseRenderer:
         slow_renderer.initialize()
 
         # Execute rendering operations and capture performance warnings
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             # Measure performance with slow renderer
@@ -989,7 +989,7 @@ class TestBaseRenderer:
         """Test successful resource cleanup with proper resource management and memory deallocation."""
         # Initialize renderer with resource allocation tracking
         mock_renderer.initialize()
-        initial_stats = mock_renderer.get_test_statistics()
+        _ = mock_renderer.get_test_statistics()
 
         # Perform rendering operations that allocate cached resources
         valid_context = create_render_context(
@@ -1029,7 +1029,7 @@ class TestBaseRenderer:
         slow_cleanup_renderer.initialize()
 
         # Call cleanup_resources with short timeout period
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as _:
             warnings.simplefilter("always")
 
             # Test cleanup with very short timeout
@@ -1164,9 +1164,7 @@ class TestBaseRenderer:
         ), f"Output shape should match grid size: {expected_shape}"
 
         # Verify performance characteristics meet targets across all grid sizes
-        performance_stats = measure_rendering_performance(
-            renderer, context, num_iterations=3
-        )
+        _ = measure_rendering_performance(renderer, context, num_iterations=3)
 
         # Cleanup
         try:

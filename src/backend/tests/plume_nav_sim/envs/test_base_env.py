@@ -16,12 +16,10 @@ import pytest
 
 from plume_nav_sim.core.types import (
     EnvironmentConfig,
-    PlumeParameters,
-    create_coordinates,
     create_environment_config,
     create_grid_size,
 )
-from plume_nav_sim.envs.base_env import AbstractEnvironmentError, BaseEnvironment
+from plume_nav_sim.envs.base_env import BaseEnvironment
 from plume_nav_sim.utils.exceptions import ValidationError
 
 # Test configuration
@@ -328,7 +326,7 @@ class TestConfigurationValidation:
     def test_invalid_grid_size_rejected(self):
         """Invalid grid size raises error."""
         with pytest.raises((ValidationError, ValueError)):
-            grid_size = create_grid_size((0, 0))
+            create_grid_size((0, 0))
 
     def test_negative_max_steps_rejected(self):
         """Negative max_steps raises error."""

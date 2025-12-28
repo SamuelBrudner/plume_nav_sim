@@ -1329,7 +1329,7 @@ def validate_test_configuration(
                 try:
                     # Validate category-specific configuration can be created
                     factory = TestConfigFactory()
-                    category_config = factory.create_for_test_type(category)
+                    factory.create_for_test_type(category)
                     logger.debug(f"Validated configuration for {category} tests")
                 except Exception as e:
                     context.add_error(
@@ -1355,9 +1355,10 @@ def validate_test_configuration(
 
             # Required package availability
             try:
-                import matplotlib
-                import numpy
-                import pytest
+                import importlib
+
+                for module in ("matplotlib", "numpy", "pytest"):
+                    importlib.import_module(module)
 
                 logger.debug("Core dependencies validated")
             except ImportError as e:
@@ -1594,8 +1595,7 @@ def get_system_info(
 
                 # Memory allocation timing
                 with PerformanceTimer() as timer:
-                    large_array = np.zeros((1000, 1000), dtype=np.float32)
-                    del large_array
+                    np.zeros((1000, 1000), dtype=np.float32)
 
                 baseline_info["timing_tests"][
                     "memory_allocation_ms"
@@ -2403,8 +2403,6 @@ def main(args: Optional[List[str]] = None) -> int:
 __all__ = [
     # Main entry points
     "main",
-    "run_test_suite",
-    "execute_test_category",
     "generate_test_report",
     # Core classes
     "TestRunner",

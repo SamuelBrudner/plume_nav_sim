@@ -1,6 +1,3 @@
-import builtins
-
-
 def test_space_validator_uses_canonical_logger_name():
     # Lazy import to avoid heavy module import cost during test collection
     from plume_nav_sim.utils.spaces import SpaceValidator

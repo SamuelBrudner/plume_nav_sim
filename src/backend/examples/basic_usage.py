@@ -490,7 +490,7 @@ def demonstrate_rendering(env: gymnasium.Env) -> dict:
                 render_results["rgb_array_shape"] = rgb_array.shape
 
                 # Log RGB array properties and performance metrics for educational analysis
-                _logger.info(f"✓ RGB array rendering successful!")
+                _logger.info("✓ RGB array rendering successful!")
                 _logger.info(f"  Array shape: {rgb_array.shape}")
                 _logger.info(f"  Array dtype: {rgb_array.dtype}")
                 _logger.info(f"  Value range: [{rgb_array.min()}, {rgb_array.max()}]")
@@ -517,10 +517,10 @@ def demonstrate_rendering(env: gymnasium.Env) -> dict:
                 _logger.info("Creating temporary environment with human render mode...")
                 temp_env_human = gymnasium.make(ENV_ID, render_mode="human")
                 temp_env_human.reset(seed=EXAMPLE_SEED)
-                result = temp_env_human.render()
+                temp_env_human.render()
                 temp_env_human.close()
             else:
-                result = env.render()
+                env.render()
 
             human_end_time = time.perf_counter()
             render_results["human_mode_time_ms"] = (
@@ -845,7 +845,7 @@ def demonstrate_error_handling(env: gymnasium.Env) -> None:
 
         try:
             # This might trigger various plume_nav_sim specific errors
-            invalid_env = gymnasium.make(ENV_ID, render_mode="invalid_mode")
+            _ = gymnasium.make(ENV_ID, render_mode="invalid_mode")
         except PlumeNavSimError as pnse:
             _logger.info(f"  ✓ PlumeNavSimError caught: {pnse}")
         except Exception as e:
@@ -1073,7 +1073,7 @@ def main() -> None:
             print("Please check your installation and environment setup.")
 
         # Provide user guidance for successful completion and next steps in learning workflow
-        print(f"\nFor more information, see the documentation and additional examples.")
+        print("\nFor more information, see the documentation and additional examples.")
 
         # Exit with appropriate status code for automation and script integration compatibility
         sys.exit(exit_status)

@@ -25,7 +25,6 @@ import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for 
 # External imports
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixtures, parameterization, assertion handling
 
-from plume_nav_sim.core.boundary_enforcer import BoundaryEnforcer
 from plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions
 )
@@ -489,7 +488,6 @@ def measure_registration_performance(
     errors = []
 
     # Baseline measurement
-    baseline_time = time.perf_counter()
     baseline_memory = None
 
     try:
@@ -555,7 +553,7 @@ def measure_registration_performance(
                 performance_metrics["memory_delta_mb"] = (
                     current_memory - baseline_memory
                 )
-            except:
+            except Exception:
                 pass
 
     else:
@@ -914,7 +912,7 @@ class TestRegistrationIntegration:
         }
 
         with pytest.raises((ValidationError, ValueError)):
-            config = create_test_registration_config(
+            create_test_registration_config(
                 overrides=invalid_config, validate_config=True
             )
 

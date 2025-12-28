@@ -7,7 +7,7 @@ JSON wire format (see wire.py). This is intentionally light-weight and does not
 open sockets or threads; concrete transports can be provided by applications.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 

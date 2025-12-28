@@ -36,52 +36,8 @@ Architecture Integration:
 - Provides research workflow templates for scientific applications
 """
 
-import inspect  # >=3.10 - Code introspection utilities for automatic user documentation generation and interactive tutorial features
-import pathlib  # >=3.10 - Object-oriented filesystem paths for cross-platform path handling and file operations
-import textwrap  # >=3.10 - Text formatting utilities for generating well-formatted user documentation strings and tutorial content
-from typing import (  # >=3.10 - Type annotations for clear user documentation and tutorial parameter specifications with educational clarity
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
-
-# External imports with version requirements
-import gymnasium as gym  # >=0.29.0 - Reinforcement learning environment framework for user tutorials demonstrating standard RL workflows and gym.make() usage patterns
-import matplotlib.pyplot as plt  # >=3.9.0 - Visualization framework for user rendering tutorials, plot generation examples, and research data visualization workflows
-import numpy as np  # >=2.1.0 - Array operations and mathematical functions for user data analysis examples, observation processing tutorials, and research workflow integration
-
-from examples.basic_usage import (  # Basic demonstration functions for user tutorial integration and practical examples
-    demonstrate_basic_episode,
-    demonstrate_reproducibility,
-)
-from examples.visualization_demo import (  # Rendering demonstration function for user visualization tutorials and practical guidance
-    demonstrate_rendering_modes,
-)
-from plume_nav_sim.core.constants import (  # Default configuration constants for user configuration examples and tutorials
-    DEFAULT_GRID_SIZE,
-    DEFAULT_MAX_STEPS,
-    DEFAULT_SOURCE_LOCATION,
-)
-from plume_nav_sim.core.enums import (  # Action enumeration for user-friendly action space documentation and tutorial examples
-    Action,
-)
-from plume_nav_sim.envs.plume_search_env import (  # Main environment class and factory function for comprehensive user tutorials and practical usage examples
-    PlumeSearchEnv,
-    create_plume_search_env,
-)
-
-# Internal imports - Environment registration and core functionality
-from plume_nav_sim.registration.register import (  # Environment registration function and identifier for Gymnasium compatibility and user tutorial examples
-    ENV_ID,
-    register_env,
-)
-from plume_nav_sim.utils.seeding import (  # Seed management utilities for user reproducibility tutorials and scientific research examples
-    SeedManager,
-    validate_seed,
-)
+from pathlib import Path
+from typing import Optional
 
 # Global constants for user guide configuration
 USER_GUIDE_VERSION = "1.0.0"  # Version identifier for user guide documentation and compatibility tracking
@@ -120,11 +76,203 @@ __all__ = [
 ]
 
 
+class UserGuideGenerator:
+    """Lightweight wrapper for generating the user guide with defaults."""
+
+    def __init__(self, output_format: str = "markdown") -> None:
+        self.output_format = output_format
+
+    def generate(self, **kwargs: object) -> str:
+        return generate_user_guide(output_format=self.output_format, **kwargs)
+
+
+class TutorialManager:
+    """Minimal tutorial manager for documentation workflows."""
+
+    def list_tutorials(self) -> list[str]:
+        return ["quick_start", "visualization", "reproducibility"]
+
+
+class ConfigurationGuideGenerator:
+    """Minimal configuration guide helper."""
+
+    def generate(self) -> str:
+        return create_configuration_guide()
+
+
+def create_visualization_tutorial(
+    include_interactive_demo: bool = True,
+    include_customization_tips: bool = True,
+    include_matplotlib_examples: bool = True,
+) -> str:
+    sections = [
+        "## Visualization Tutorial",
+        "",
+        "Learn to render the environment in rgb_array or human modes.",
+    ]
+
+    if include_matplotlib_examples:
+        sections.extend(
+            [
+                "",
+                "```python",
+                "env = create_plume_search_env(render_mode='rgb_array')",
+                "frame = env.render()",
+                "```",
+            ]
+        )
+
+    if include_interactive_demo:
+        sections.extend(
+            [
+                "",
+                "- Use `render_mode='human'` for live visualization.",
+            ]
+        )
+
+    if include_customization_tips:
+        sections.extend(
+            [
+                "",
+                "- Adjust grid size for faster iteration during demos.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_reproducibility_guide(
+    include_seed_management: bool = True,
+    include_experiment_tracking: bool = True,
+    include_statistical_validation: bool = True,
+) -> str:
+    sections = [
+        "## Reproducibility Guide",
+        "",
+        "Ensure experiments are repeatable across runs and machines.",
+    ]
+
+    if include_seed_management:
+        sections.extend(
+            [
+                "",
+                "```python",
+                "env.reset(seed=42)",
+                "```",
+            ]
+        )
+
+    if include_experiment_tracking:
+        sections.extend(
+            [
+                "",
+                "- Log configuration and environment versions with results.",
+            ]
+        )
+
+    if include_statistical_validation:
+        sections.extend(
+            [
+                "",
+                "- Run multiple seeds and report confidence intervals.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_research_integration_guide(
+    include_framework_examples: bool = True,
+    include_data_analysis: bool = True,
+    include_publication_tips: bool = True,
+) -> str:
+    sections = [
+        "## Research Integration Guide",
+        "",
+        "Integrate plume_nav_sim into research workflows and pipelines.",
+    ]
+
+    if include_framework_examples:
+        sections.extend(
+            [
+                "",
+                "- Gymnasium compatibility enables RL library integration.",
+            ]
+        )
+
+    if include_data_analysis:
+        sections.extend(
+            [
+                "",
+                "- Store episode metrics for downstream analysis.",
+            ]
+        )
+
+    if include_publication_tips:
+        sections.extend(
+            [
+                "",
+                "- Record environment versions and seeds in reports.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_troubleshooting_section(
+    include_common_issues: bool = True,
+    include_error_diagnostics: bool = True,
+) -> str:
+    sections = [
+        "## Troubleshooting",
+        "",
+        "If something looks off, validate environment registration and dependencies.",
+    ]
+
+    if include_common_issues:
+        sections.extend(
+            [
+                "",
+                "- Rendering window does not appear: check matplotlib backend.",
+            ]
+        )
+
+    if include_error_diagnostics:
+        sections.extend(
+            [
+                "",
+                "- Reinstall dependencies if imports fail.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+def create_faq_section(include_advanced_topics: bool = True) -> str:
+    sections = [
+        "## FAQ",
+        "",
+        "**Q: How do I speed up training?**",
+        "A: Reduce grid size or disable human rendering.",
+    ]
+
+    if include_advanced_topics:
+        sections.extend(
+            [
+                "",
+                "**Q: Can I swap plume models?**",
+                "A: Yes, pass a custom model into the environment factory.",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
 def generate_user_guide(
     output_format: Optional[str] = "markdown",
     include_jupyter_examples: bool = True,
     include_research_workflows: bool = True,
-    output_directory: Optional["pathlib.Path"] = None,
+    output_directory: Optional[Path] = None,
     guide_options: dict = None,
 ) -> str:
     """
@@ -169,16 +317,16 @@ def generate_user_guide(
     if guide_options is None:
         guide_options = {}
 
-    tutorial_complexity = guide_options.get("tutorial_complexity", "intermediate")
+    _ = guide_options.get("tutorial_complexity", "intermediate")
     include_performance_tips = guide_options.get("include_performance_tips", True)
     include_troubleshooting = guide_options.get("include_troubleshooting", True)
-    target_audience = guide_options.get("target_audience", "researchers")
+    _ = guide_options.get("target_audience", "researchers")
 
     try:
         # Generate comprehensive introduction section explaining plume navigation research context and environment benefits
         guide_sections[
             "introduction"
-        ] = f"""
+        ] = """
 ## Introduction
 
 Welcome to the Plume Navigation Simulation (plume_nav_sim) user guide! This comprehensive resource is designed
@@ -238,7 +386,7 @@ Each section includes executable code examples, expected outputs, and practical 
         # Generate installation and setup guide with step-by-step instructions for research environments
         guide_sections[
             "installation"
-        ] = f"""
+        ] = """
 ## Installation and Setup
 
 ### System Requirements
@@ -796,7 +944,7 @@ wandb.finish()
         if include_research_workflows:
             guide_sections[
                 "advanced_workflows"
-            ] = f"""
+            ] = """
 ## Advanced Research Workflows
 
 This section covers sophisticated research workflows and experimental design patterns using plume_nav_sim
@@ -1586,7 +1734,7 @@ def create_quick_start_tutorial(
 
     # Create tutorial introduction explaining plume navigation environment and immediate benefits for users
     tutorial_sections.append(
-        f"""
+        """
 ## Quick Start Tutorial
 
 Welcome to the plume_nav_sim quick start tutorial! In just a few minutes, you'll be running your first
@@ -1620,7 +1768,7 @@ By the end of this tutorial, you will:
     # Generate installation section if include_installation enabled with pip install instructions and verification
     if include_installation:
         tutorial_sections.append(
-            f"""
+            """
 ### Step 1: Installation Verification
 
 First, let's ensure your plume_nav_sim installation is working correctly.
@@ -1677,7 +1825,7 @@ except ImportError as e:
 
     # Create environment registration tutorial with register_env() and gym.make() usage examples
     tutorial_sections.append(
-        f"""
+        """
 ### Step 2: Environment Registration and Creation
 
 Now let's register the environment and create your first plume navigation simulation.
@@ -2485,7 +2633,7 @@ print(f"- Document seed values in research publications")
 
     # Add troubleshooting guidance and common issue resolution for section topics
     tutorial_sections.append(
-        f"""
+        """
 ### Step 8: Troubleshooting and Next Steps
 
 Let's address common issues and provide guidance for continuing your plume navigation research.
@@ -2707,7 +2855,7 @@ def create_configuration_guide(
 
     # Generate configuration overview explaining environment customization capabilities and research benefits
     guide_sections.append(
-        f"""
+        """
 ## Configuration Guide
 
 The plume navigation environment provides extensive configuration options to support diverse research
@@ -2770,7 +2918,7 @@ env = PlumeSearchEnv(
 
     # Document core parameters including grid_size, source_location, max_steps, and goal_radius with research context
     guide_sections.append(
-        f"""
+        """
 ### Core Parameters Documentation
 
 #### Grid Size Configuration
@@ -3015,7 +3163,7 @@ test_goal_radius_impact()
     # Create parameter effects section if include_parameter_effects enabled with performance and behavior implications
     if include_parameter_effects:
         guide_sections.append(
-            f"""
+            """
 ### Parameter Effects and Interactions
 
 Understanding how parameters interact is crucial for designing effective experiments and choosing appropriate configurations.
@@ -3265,7 +3413,7 @@ visualization_parameter_effects()
     # Add research preset configurations if include_research_presets enabled with common experimental designs
     if include_research_presets:
         guide_sections.append(
-            f"""
+            """
 ### Research Configuration Presets
 
 Pre-defined configurations for common research scenarios and experimental designs.

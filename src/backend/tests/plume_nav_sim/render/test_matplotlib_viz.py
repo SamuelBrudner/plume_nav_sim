@@ -90,8 +90,11 @@ def matplotlib_available():
         pytest.skip: If matplotlib is not available or not functional
     """
     try:
-        import matplotlib.backends.backend_agg
+        import importlib
+
         import matplotlib.pyplot as plt
+
+        importlib.import_module("matplotlib.backends.backend_agg")
 
         # Test basic matplotlib functionality including pyplot and figure modules
         fig, ax = plt.subplots(figsize=(2, 2))
@@ -334,7 +337,7 @@ def test_backend_selection_priority(mock_matplotlib_backend):
     backend_manager = MatplotlibBackendManager(backend_preferences=test_priority)
 
     # Mock backend availability testing for systematic priority evaluation
-    with patch("matplotlib.pyplot.switch_backend") as mock_switch:
+    with patch("matplotlib.pyplot.switch_backend") as _:
         with patch("builtins.__import__") as mock_import:
             # Simulate first backend available, second unavailable, third available
             def side_effect(backend_name, *args, **kwargs):
@@ -356,7 +359,7 @@ def test_backend_selection_priority(mock_matplotlib_backend):
             assert selected_backend is not None
 
     # Validate headless mode detection and Agg backend fallback mechanism
-    with patch("os.environ.get", return_value=None) as mock_env:  # No DISPLAY variable
+    with patch("os.environ.get", return_value=None) as _:  # No DISPLAY variable
         headless_manager = MatplotlibBackendManager()
         backend = headless_manager.select_backend(force_headless=True)
 
@@ -370,7 +373,7 @@ def test_backend_selection_priority(mock_matplotlib_backend):
     assert "interactive_supported" in capabilities
 
     # Test force_reselection parameter and backend switching functionality
-    original_backend = backend_manager.get_current_backend()
+    _ = backend_manager.get_current_backend()
     backend_manager.select_backend(force_reselection=True)
     # Should trigger reselection process even if backend was previously selected
 
@@ -403,7 +406,7 @@ def test_backend_capabilities_detection():
 
         # Test display environment
         mock_env.return_value = ":0.0"  # X11 display
-        display_caps = backend_manager.get_backend_capabilities()
+        _ = backend_manager.get_backend_capabilities()
         # May be True or False depending on actual environment
 
     # Assert performance characteristics measurement and caching functionality
@@ -698,12 +701,12 @@ def test_agent_marker_update():
     assert result == True, "Should successfully update agent marker"
 
     # Validate marker creation and position update using matplotlib scatter
-    collections = ax.collections
+    _ = ax.collections
     # Should create scatter plot collection for agent marker
 
     # Test color application from color scheme with RGB conversion
     # Agent marker should use agent_color from color scheme
-    expected_color = tuple(c / 255.0 for c in color_scheme.agent_color)
+    _ = tuple(c / 255.0 for c in color_scheme.agent_color)
 
     # Assert marker properties configuration including size and visibility
     # Marker should be visible and properly positioned
@@ -734,13 +737,13 @@ def test_source_marker_update():
 
     # Validate marker creation with white color and appropriate size
     # Source marker should use source_color (typically white) from color scheme
-    expected_color = tuple(c / 255.0 for c in color_scheme.source_color)
+    _ = tuple(c / 255.0 for c in color_scheme.source_color)
 
     # Test position update and visibility optimization for display hierarchy
     # Source marker should be clearly visible and distinguishable from agent marker
 
     # Assert proper matplotlib marker configuration and styling
-    lines = ax.get_lines()
+    _ = ax.get_lines()
     # Should create line objects for cross pattern (horizontal and vertical lines)
 
     # Test marker layering and z-order for proper display hierarchy
@@ -769,7 +772,7 @@ def test_display_refresh_functionality():
     with patch.object(
         fig.canvas, "draw", side_effect=Exception("Draw failed")
     ) as mock_draw:
-        error_result = update_manager.refresh_display()
+        _ = update_manager.refresh_display()
         # Should handle draw errors gracefully
         mock_draw.assert_called_once()
 
@@ -781,7 +784,7 @@ def test_display_refresh_functionality():
         fig.canvas, "flush_events", side_effect=Exception("Flush failed")
     ):
         # Should continue operating even if flush_events fails
-        degraded_result = update_manager.refresh_display()
+        _ = update_manager.refresh_display()
 
     # Assert performance measurement and timing statistics collection
     stats = update_manager.get_performance_stats()
@@ -823,7 +826,7 @@ def test_batch_update_optimization():
     # Validate selective refresh and change detection optimization
     # Second batch update with same data should be optimized
     optimized_start = time.time()
-    optimized_result = update_manager.batch_update(render_context, color_scheme)
+    _ = update_manager.batch_update(render_context, color_scheme)
     optimized_time = (time.time() - optimized_start) * 1000
 
     # Should be faster due to change detection
@@ -877,7 +880,7 @@ def test_human_mode_rendering(
     # Measure initialization separately from steady-state render
     performance_monitor["start_timing"]("init")
     renderer.initialize()
-    init_time = performance_monitor["end_timing"]("init")
+    _ = performance_monitor["end_timing"]("init")
 
     # Optionally validate init time with a more lenient target suitable for first-frame setup
     try:
@@ -891,8 +894,8 @@ def test_human_mode_rendering(
 
     # Test _render_human method with complete visualization pipeline (steady-state)
     performance_monitor["start_timing"]("human_render")
-    result = renderer.render(render_context, RenderMode.HUMAN)
-    render_time = performance_monitor["end_timing"]("human_render")
+    _ = renderer.render(render_context, RenderMode.HUMAN)
+    _ = performance_monitor["end_timing"]("human_render")
 
     # Validate concentration field rendering with colormap application
     assert renderer._figure is not None, "Should create matplotlib figure"
@@ -1109,7 +1112,7 @@ def test_interactive_mode_configuration():
     assert result == True, "Should successfully configure interactive mode"
 
     # Validate matplotlib interactive mode toggling (plt.ion/plt.ioff)
-    original_interactive = plt.isinteractive()
+    _ = plt.isinteractive()
 
     with pytest.warns(UserWarning, match="Tool classes"):
         renderer.set_interactive_mode(enable=True)
@@ -1123,7 +1126,7 @@ def test_interactive_mode_configuration():
     assert renderer.get_update_interval() == 0.05
 
     # Mock event handling and test interactive responsiveness
-    with patch("matplotlib.pyplot.pause") as mock_pause:
+    with patch("matplotlib.pyplot.pause") as _:
         renderer.process_interactive_events()
         # Should handle interactive events appropriately
 
@@ -1138,7 +1141,7 @@ def test_interactive_mode_configuration():
         "matplotlib.pyplot.ion", side_effect=Exception("Interactive mode failed")
     ):
         # Should handle interactive mode failures gracefully
-        fallback_result = renderer.configure_interactive_mode(interactive_config)
+        _ = renderer.configure_interactive_mode(interactive_config)
         # May return False but should not raise exception
 
     renderer.cleanup_resources()
@@ -1178,7 +1181,7 @@ def test_performance_metrics_collection(test_render_context, performance_monitor
     # Test performance ratio calculation against target thresholds
     if "average_render_time" in metrics:
         avg_time = metrics["average_render_time"]
-        target_ratio = avg_time / PERFORMANCE_TARGET_HUMAN_RENDER_MS
+        _ = avg_time / PERFORMANCE_TARGET_HUMAN_RENDER_MS
         assert "performance_ratio" in metrics or True  # May be calculated internally
 
     # Assert optimization recommendation generation based on performance patterns
@@ -1227,7 +1230,7 @@ def test_headless_environment_detection(headless_environment):
 
     # Should work in headless environment
     renderer.initialize()
-    result = renderer.render(render_context, RenderMode.HUMAN)
+    _ = renderer.render(render_context, RenderMode.HUMAN)
     # May return None but should not raise exception
 
     # Assert proper fallback behavior and error handling in headless environment
@@ -1239,7 +1242,7 @@ def test_headless_environment_detection(headless_environment):
     headless_environment["restore_display"]()
 
     # Backend manager should adapt to restored display
-    restored_backend = backend_manager.select_backend(force_reselection=True)
+    _ = backend_manager.select_backend(force_reselection=True)
     # May select different backend with display available
 
     renderer.cleanup_resources()
@@ -1292,7 +1295,7 @@ def test_backend_fallback_mechanisms(mock_matplotlib_backend):
             assert current_backend is not None
 
             # Assert proper warning generation and user notification for fallback events
-            with warnings.catch_warnings(record=True) as w:
+            with warnings.catch_warnings(record=True) as _:
                 warnings.simplefilter("always")
 
                 # This should generate warnings about backend selection
@@ -1315,7 +1318,7 @@ def test_backend_fallback_mechanisms(mock_matplotlib_backend):
             )
 
             # Rendering should still work with fallback backend
-            fallback_result = fallback_renderer.render(render_context, RenderMode.HUMAN)
+            _ = fallback_renderer.render(render_context, RenderMode.HUMAN)
             # Should complete without exception
 
             renderer.cleanup_resources()
@@ -1329,7 +1332,7 @@ def test_resource_cleanup_comprehensive():
 
     # Create renderer with full resource allocation including figures and managers
     renderer.initialize()
-    original_backend = renderer.backend_manager.get_current_backend()
+    _ = renderer.backend_manager.get_current_backend()
 
     # Ensure resources are allocated
     figure = renderer.get_figure()
@@ -1352,7 +1355,7 @@ def test_resource_cleanup_comprehensive():
     assert renderer._axes is None, "Axes reference should be cleared"
 
     # Test backend restoration and original configuration recovery
-    current_backend = renderer.backend_manager.get_current_backend()
+    _ = renderer.backend_manager.get_current_backend()
     # Backend may be restored to original or maintained as fallback
 
     # Assert memory cleanup and garbage collection effectiveness
@@ -1364,7 +1367,7 @@ def test_resource_cleanup_comprehensive():
 
     with patch("matplotlib.pyplot.close", side_effect=lambda: time.sleep(0.1)):
         # Should handle slow cleanup operations
-        timeout_result = timeout_renderer.cleanup_resources(timeout_sec=0.5)
+        _ = timeout_renderer.cleanup_resources(timeout_sec=0.5)
         # Should complete within timeout
 
     # Validate cleanup success reporting and error logging
@@ -1373,7 +1376,7 @@ def test_resource_cleanup_comprehensive():
 
     with patch("matplotlib.pyplot.close", side_effect=Exception("Cleanup failed")):
         # Should handle cleanup errors gracefully
-        error_result = error_renderer.cleanup_resources()
+        _ = error_renderer.cleanup_resources()
         # May return False but should not raise exception
 
 
@@ -1425,7 +1428,7 @@ def test_error_handling_comprehensive():
 
     # Test error recovery strategies and system state restoration
     backend_manager = MatplotlibBackendManager()
-    original_backend = backend_manager.get_current_backend()
+    _ = backend_manager.get_current_backend()
 
     try:
         backend_manager.switch_to_backend("InvalidBackend")
@@ -1460,7 +1463,7 @@ def test_cross_platform_compatibility():
 
             if platform == "win32":
                 # Validate Windows community support with appropriate limitations and warnings
-                with warnings.catch_warnings(record=True) as w:
+                with warnings.catch_warnings(record=True) as _:
                     warnings.simplefilter("always")
 
                     selected_backend = backend_manager.select_backend()
@@ -1497,7 +1500,7 @@ def test_cross_platform_compatibility():
                     grid_size=TEST_GRID_SIZE,
                 )
 
-                result = renderer.render(render_context, RenderMode.HUMAN)
+                _ = renderer.render(render_context, RenderMode.HUMAN)
                 # Should work or fail gracefully on all platforms
 
                 renderer.cleanup_resources()
@@ -1509,7 +1512,7 @@ def test_cross_platform_compatibility():
                 ), f"Should use appropriate exception types on {platform}"
 
     # Test platform detection and automatic configuration adjustment
-    current_platform = sys.platform
+    _ = sys.platform
     backend_manager = MatplotlibBackendManager()
 
     # Should adapt to current platform automatically
@@ -1548,7 +1551,7 @@ def test_accessibility_features(test_render_context):
 
     # Test colorblind-friendly palette integration with matplotlib renderer
     renderer.set_color_scheme(colorblind_scheme)
-    result = renderer.render(test_render_context, RenderMode.HUMAN)
+    _ = renderer.render(test_render_context, RenderMode.HUMAN)
     # Should render successfully with colorblind-friendly colors
 
     # Validate accessibility scheme application and matplotlib compatibility
@@ -1593,9 +1596,7 @@ def test_memory_usage_optimization():
     """Test memory usage optimization including figure caching, resource reuse, and memory leak prevention."""
     renderers = []
     rng = np.random.default_rng(123)
-    initial_objects = len(
-        [obj for obj in globals() if isinstance(obj, matplotlib.figure.Figure)]
-    )
+    _ = len([obj for obj in globals() if isinstance(obj, matplotlib.figure.Figure)])
 
     # Monitor memory usage during multiple rendering operations
     for i in range(5):
@@ -1669,9 +1670,7 @@ def test_memory_usage_optimization():
 
     gc.collect()
 
-    final_objects = len(
-        [obj for obj in globals() if isinstance(obj, matplotlib.figure.Figure)]
-    )
+    _ = len([obj for obj in globals() if isinstance(obj, matplotlib.figure.Figure)])
 
     # Should not have significantly more figure objects after cleanup
     # This is a rough check for obvious memory leaks
@@ -1752,7 +1751,7 @@ def test_renderer_factory_function():
     )
 
     renderer.initialize()
-    result = renderer.render(render_context, RenderMode.HUMAN)
+    _ = renderer.render(render_context, RenderMode.HUMAN)
     # Should work without issues
 
     renderer.cleanup_resources()
@@ -1787,7 +1786,7 @@ def test_capability_detection_function():
         ), "Should detect no display support"
 
     with patch("os.environ.get", return_value=":0.0"):  # X11 display
-        display_capabilities = detect_matplotlib_capabilities()
+        _ = detect_matplotlib_capabilities()
         # May detect display support depending on system
 
     # Assert performance characteristics assessment and reporting
@@ -1886,7 +1885,7 @@ class TestMatplotlibRenderer:
         if self.cleanup_required and hasattr(self, "renderer"):
             # Execute renderer resource cleanup if cleanup_required is True
             try:
-                cleanup_success = self.renderer.cleanup_resources()
+                _ = self.renderer.cleanup_resources()
 
                 # Validate complete resource disposal and memory cleanup
                 assert self.renderer._figure is None or not hasattr(
@@ -1992,7 +1991,7 @@ class TestMatplotlibRenderer:
 
         # Execute complete render pipeline with performance monitoring
         start_time = time.time()
-        result = self.renderer.render(render_context, RenderMode.HUMAN)
+        _ = self.renderer.render(render_context, RenderMode.HUMAN)
         render_time = (time.time() - start_time) * 1000
 
         # Validate context validation and parameter checking
@@ -2079,7 +2078,7 @@ class TestMatplotlibBackendManager:
         custom_manager = MatplotlibBackendManager(backend_preferences=test_priority)
 
         # Mock backend availability for controlled selection testing
-        with patch("matplotlib.pyplot.switch_backend") as mock_switch:
+        with patch("matplotlib.pyplot.switch_backend") as _:
             # Test systematic backend selection through priority list
             backend = custom_manager.select_backend()
 
@@ -2256,8 +2255,8 @@ class TestInteractiveUpdateManager:
         ), f"Marker updates should be <5ms, got {marker_time:.2f}ms"
 
         # Validate marker layering and display hierarchy
-        collections = self.test_axes.collections
-        lines = self.test_axes.get_lines()
+        _ = self.test_axes.collections
+        _ = self.test_axes.get_lines()
         # Should have visual elements for markers
 
     def test_batch_update_coordination(self):
@@ -2282,9 +2281,7 @@ class TestInteractiveUpdateManager:
         ), f"Batch update should be <{30.0 + PERFORMANCE_TOLERANCE_MS:.0f}ms, got {batch_time:.2f}ms"
 
         # Validate selective refresh and optimization effectiveness
-        optimized_result = self.update_manager.batch_update(
-            render_context, color_scheme
-        )
+        _ = self.update_manager.batch_update(render_context, color_scheme)
         # Should be optimized for repeated calls
 
         # Test performance monitoring during batch operations

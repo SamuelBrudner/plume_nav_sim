@@ -33,7 +33,7 @@ def _build_synthetic_frames(T: int, Y: int, X: int) -> np.ndarray:
 def test_zarr_roundtrip_small_dataset(tmp_path: Path):
     # Hard skip when optional deps missing
     zarr = pytest.importorskip("zarr")
-    numcodecs = pytest.importorskip("numcodecs")  # noqa: F401
+    pytest.importorskip("numcodecs")
 
     from plume_nav_sim.storage.zarr_policies import create_zarr_array
 
@@ -89,8 +89,8 @@ def test_deterministic_frame_selection_with_time_mapping():
 @pytest.mark.slow
 def test_perf_sanity_small_128x128(tmp_path: Path):
     # Lightweight perf sanity; marked slow so it can be skipped in fast CI
-    zarr = pytest.importorskip("zarr")
-    numcodecs = pytest.importorskip("numcodecs")  # noqa: F401
+    pytest.importorskip("zarr")
+    pytest.importorskip("numcodecs")
 
     from plume_nav_sim.storage.zarr_policies import create_zarr_array
 

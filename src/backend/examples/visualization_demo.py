@@ -30,26 +30,18 @@ import time  # >=3.10 - Performance timing measurements and interactive demonstr
 
 # Third-party imports - External dependencies with version requirements
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for visualization demo environment creation and management
-import matplotlib.animation  # >=3.9.0 - Animation capabilities for dynamic visualization demonstration and real-time update showcase
 import matplotlib.pyplot as plt  # >=3.9.0 - Interactive plotting interface for advanced visualization demonstration and figure customization
 import numpy as np  # >=2.1.0 - Array operations for RGB array analysis, pixel manipulation, and mathematical visualization processing
 
-from plume_nav_sim.core.enums import Action, RenderMode
-from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
+from plume_nav_sim.core.geometry import GridSize
 
 # Internal imports - Project modules for environment and visualization
 from plume_nav_sim.registration.register import ENV_ID, register_env
-from plume_nav_sim.render.color_schemes import (
-    ColorSchemeManager,
-    create_accessibility_scheme,
-)
+from plume_nav_sim.render.color_schemes import ColorSchemeManager
 from plume_nav_sim.render.matplotlib_renderer import (
-    MatplotlibRenderer,
     create_matplotlib_renderer,
     detect_matplotlib_capabilities,
 )
-from plume_nav_sim.utils.exceptions import RenderingError, ValidationError
 
 # Global demonstration configuration constants
 DEMO_SEED = 123
@@ -213,7 +205,7 @@ def demonstrate_system_capabilities(
             # Test array operations performance
             test_array = np.random.rand(128, 128)
             array_ops_start = time.time()
-            result = np.exp(
+            _ = np.exp(
                 -(
                     (np.arange(128)[:, np.newaxis] - 64) ** 2
                     + (np.arange(128) - 64) ** 2
@@ -552,7 +544,7 @@ def demonstrate_interactive_visualization(
         try:
 
             grid_size = GridSize(width=128, height=128)  # Default grid size
-            renderer = create_matplotlib_renderer(
+            _ = create_matplotlib_renderer(
                 grid_size=grid_size,
                 color_scheme_name="default",
                 renderer_options={
@@ -701,7 +693,7 @@ def demonstrate_color_scheme_customization(
     """
     # Log color scheme demonstration start with scheme list and analysis configuration
     scheme_names = scheme_names or COLOR_SCHEMES_TO_DEMO
-    _logger.info(f"Starting color scheme customization demonstration")
+    _logger.info("Starting color scheme customization demonstration")
     _logger.info(f"Schemes to test: {scheme_names}")
     _logger.info(
         f"Show comparison: {show_comparison}, Analyze contrast: {analyze_contrast}"
@@ -741,7 +733,7 @@ def demonstrate_color_scheme_customization(
         observation, info = env.reset(seed=DEMO_SEED)
 
         # Store baseline state for comparison
-        baseline_state = {
+        _ = {
             "observation": observation.copy(),
             "agent_position": info.get("agent_position", (0, 0)),
             "source_position": info.get("source_position", (64, 64)),
@@ -831,7 +823,7 @@ def demonstrate_color_scheme_customization(
                     color_results["matplotlib_integration"]["colormap_availability"][
                         colormap_name
                     ] = True
-                except:
+                except Exception:
                     color_results["matplotlib_integration"]["colormap_availability"][
                         colormap_name
                     ] = False
@@ -901,7 +893,7 @@ def demonstrate_color_scheme_customization(
                 "concentration_colormap": "plasma",
             }
 
-            custom_scheme = color_manager.create_custom_scheme(
+            _ = color_manager.create_custom_scheme(
                 "demo_custom",
                 custom_config,
                 validate_scheme=True,
@@ -974,7 +966,7 @@ def demonstrate_backend_compatibility(
     """
     # Log backend compatibility demonstration start with backend list and testing configuration
     backends_to_test = backends_to_test or ["TkAgg", "Qt5Agg", "Agg", "SVG", "PDF"]
-    _logger.info(f"Starting backend compatibility demonstration")
+    _logger.info("Starting backend compatibility demonstration")
     _logger.info(f"Backends to test: {backends_to_test}")
     _logger.info(
         f"Force headless test: {force_headless_test}, Measure performance: {measure_performance}"
@@ -1116,7 +1108,7 @@ def demonstrate_backend_compatibility(
                     suffix=".png", delete=False
                 ) as temp_file:
                     headless_fig.savefig(temp_file.name)
-                    headless_export_successful = True
+                    _ = True
 
                 plt.close(headless_fig)
 
@@ -1232,7 +1224,7 @@ def demonstrate_backend_compatibility(
         # Attempt to restore original backend
         try:
             plt.switch_backend(original_backend)
-        except:
+        except Exception:
             _logger.warning("Could not restore original backend")
 
     # Return comprehensive backend analysis including performance comparison and compatibility matrix
@@ -1259,7 +1251,7 @@ def demonstrate_performance_optimization(
         Performance optimization results with timing analysis, memory metrics, and optimization recommendations
     """
     # Log performance optimization demonstration start with sample count and optimization configuration
-    _logger.info(f"Starting performance optimization demonstration")
+    _logger.info("Starting performance optimization demonstration")
     _logger.info(f"Performance samples: {performance_samples}")
     _logger.info(
         f"Memory testing: {test_memory_usage}, Update optimization: {optimize_updates}"
@@ -1330,7 +1322,7 @@ def demonstrate_performance_optimization(
             # Measure RGB rendering time
             rgb_start = time.time()
             try:
-                rgb_array = env.render(mode="rgb_array")
+                env.render(mode="rgb_array")
                 rgb_time = (time.time() - rgb_start) * 1000
                 performance_results["baseline_performance"][
                     "rgb_render_times_ms"
@@ -1400,7 +1392,7 @@ def demonstrate_performance_optimization(
                 # Measure optimized RGB rendering (simulate caching benefits)
                 rgb_start = time.time()
                 try:
-                    rgb_array = env.render(mode="rgb_array")
+                    _ = env.render(mode="rgb_array")
                     # Simulate optimization benefit (reduced by 10-30%)
                     rgb_time = (time.time() - rgb_start) * 1000 * 0.8
                     performance_results["optimized_performance"][
@@ -1715,7 +1707,7 @@ def demonstrate_advanced_features(
                             advanced_results["export_capabilities"]["file_sizes_kb"][
                                 filename
                             ] = file_size
-                        except:
+                        except Exception:
                             pass
 
                         _logger.info(
@@ -2119,7 +2111,7 @@ def run_comprehensive_visualization_demo(
                         f"RGB array demonstration had issues: {rgb_results['error']}"
                     )
                 else:
-                    _logger.info(f"RGB array demonstration completed successfully")
+                    _logger.info("RGB array demonstration completed successfully")
 
             # Execute interactive visualization demonstration using demonstrate_interactive_visualization() with real-time updates
             if "interactive_visualization" in components_to_run and interactive_mode:
@@ -2322,7 +2314,7 @@ def run_comprehensive_visualization_demo(
                     try:
                         json.dumps(value)  # Test if serializable
                         serializable_results[key] = value
-                    except:
+                    except Exception:
                         serializable_results[key] = str(
                             value
                         )  # Convert to string if not serializable

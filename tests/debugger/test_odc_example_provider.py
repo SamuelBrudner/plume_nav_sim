@@ -6,8 +6,8 @@ pytest.importorskip(
     reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
 )
 
-from plume_nav_debugger.odc.mux import ProviderMux
-from plume_nav_debugger.odc.provider import DebuggerProvider
+from plume_nav_debugger.odc.mux import ProviderMux  # noqa: E402
+from plume_nav_debugger.odc.provider import DebuggerProvider  # noqa: E402
 
 
 def test_example_provider_reflection_on_env():

@@ -5,7 +5,7 @@ pytest.importorskip(
     reason="Debugger package not importable; ensure PYTHONPATH=src for local runs",
 )
 
-from plume_nav_debugger.inspector.introspection import (
+from plume_nav_debugger.inspector.introspection import (  # noqa: E402
     format_pipeline,
     get_env_chain_names,
 )

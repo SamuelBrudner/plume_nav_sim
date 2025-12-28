@@ -837,7 +837,7 @@ def performance_monitor(operation_name: str = "test_operation"):
         if start_memory > 0:
             try:
                 end_memory = process.memory_info().rss / (1024 * 1024)  # MB
-            except:
+            except Exception:
                 end_memory = start_memory
 
         performance_data.update(
@@ -887,7 +887,7 @@ def rgb_renderer(request):
     # Cleanup renderer resources and memory allocations
     try:
         renderer.cleanup_resources()
-    except:
+    except Exception:
         pass  # Ignore cleanup errors in tests
 
     # Clear any cached data or temporary state
@@ -942,7 +942,7 @@ def performance_test_env():
         Performance testing configuration with optimized settings
     """
     # Store original configuration
-    original_config = get_testing_constants()
+    _ = get_testing_constants()
 
     # Set performance-optimized test configuration
     test_config = {
@@ -1516,7 +1516,7 @@ class TestNumpyRGBRenderer:
             # Clean up array to test memory management
             del rgb_array
 
-        final_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        _ = process.memory_info().rss / (1024 * 1024)  # MB
 
         # Validate memory usage stays within MEMORY_USAGE_THRESHOLD_MB limits
         peak_memory_usage = max(memory_samples)

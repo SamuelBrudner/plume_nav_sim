@@ -1,5 +1,4 @@
 import time
-from statistics import mean
 
 import plume_nav_sim as pns
 from plume_nav_sim.core.types import EnvironmentConfig

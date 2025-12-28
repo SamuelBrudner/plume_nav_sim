@@ -219,7 +219,7 @@ def run_performance_test_suite(
 
     # Initialize performance measurement infrastructure with baseline metrics
     start_time = time.perf_counter()
-    initial_memory = _get_memory_usage() if collect_detailed_metrics else 0
+    _ = _get_memory_usage() if collect_detailed_metrics else 0
 
     performance_results = {
         "test_metadata": {
@@ -862,7 +862,7 @@ def _run_spaces_performance_tests(iterations: int, detailed: bool) -> Dict[str, 
         start_time = time.perf_counter()
         # Simulate action validation
         action = i % 4
-        valid = 0 <= action <= 3
+        _ = 0 <= action <= 3
         validation_times.append(time.perf_counter() - start_time)
 
     results["space_validation"] = {
@@ -1151,8 +1151,6 @@ def _generate_reproducibility_report(results: Dict[str, Any]) -> Dict[str, Any]:
 def _validate_testing_dependencies() -> bool:
     """Validate pytest and testing framework dependencies."""
     try:
-        import pytest
-
         # Check pytest version
         pytest_version = tuple(map(int, pytest.__version__.split(".")[:2]))
         if pytest_version < (8, 0):
@@ -1178,13 +1176,8 @@ def _validate_external_dependencies() -> Dict[str, bool]:
     except ImportError:
         dependencies["numpy"] = False
 
-    # Check unittest.mock
-    try:
-        from unittest.mock import MagicMock, Mock
-
-        dependencies["unittest_mock"] = True
-    except ImportError:
-        dependencies["unittest_mock"] = False
+    # Check unittest.mock availability (stdlib)
+    dependencies["unittest_mock"] = True
 
     return dependencies
 

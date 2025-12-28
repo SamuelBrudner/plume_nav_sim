@@ -420,7 +420,8 @@ class TestSeedStatePersistence:
             np_random, seed_used = create_seeded_rng(test_seed)
 
             # Generate a sequence to establish RNG state
-            initial_sequence = [np_random.random() for _ in range(10)]
+            for _ in range(10):
+                np_random.random()
 
             # Save RNG state to temporary file using save_seed_state function
             save_result = save_seed_state(
@@ -439,7 +440,8 @@ class TestSeedStatePersistence:
             assert temp_file_path.stat().st_size > 0, "State file should not be empty"
 
             # Generate some more values to change the state
-            post_save_sequence = [np_random.random() for _ in range(5)]
+            for _ in range(5):
+                np_random.random()
 
             # Load saved state using load_seed_state function
             loaded_np_random, loaded_metadata = load_seed_state(temp_file_path)
@@ -731,11 +733,7 @@ class TestSeedManager:
         ), "Final generators should be dict"
 
         # Should have many generators registered (some may have been cleaned up)
-        expected_min_generators = (
-            thread_count * operations_per_thread * 0.5
-        )  # At least 50% should remain
-        actual_generators = len(final_active_generators)
-        # Note: This is a loose check as cleanup behavior may vary
+        # Note: Cleanup behavior may vary, so we avoid asserting a strict count.
 
         # Test cleanup and reset operations under concurrent access
         # This should not raise exceptions
@@ -852,8 +850,6 @@ class TestReproducibilityTracker:
 
             actions = [np_random.integers(0, 4) for _ in range(10)]
             observations = [np_random.random() for _ in range(10)]
-            rewards = [np_random.random() for _ in range(10)]
-
             episode_id = tracker.record_episode(
                 episode_seed=seed,
                 action_sequence=actions,
@@ -1833,7 +1829,8 @@ class TestSemanticInvariants:
         """
         # Create RNG and generate some values
         rng_original, _ = create_seeded_rng(42)
-        pre_save_values = [rng_original.random() for _ in range(5)]
+        for _ in range(5):
+            rng_original.random()
 
         # Save state
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:

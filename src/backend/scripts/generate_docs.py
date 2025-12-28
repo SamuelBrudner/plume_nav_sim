@@ -137,7 +137,7 @@ def main(argv: list = None) -> int:
         logger.info(f"Output directory prepared: {directory_info['main_directory']}")
 
         # Initialize DocumentationGenerator with configuration options and performance monitoring
-        with PerformanceTimer() as overall_timer:
+        with PerformanceTimer() as _:
             doc_generator = DocumentationGenerator(args, logger)
 
             # Generate complete documentation using generate_documentation() with progress reporting and error handling
@@ -1143,9 +1143,7 @@ def generate_documentation(
         )
 
         # Perform final validation and quality assurance checks with comprehensive error reporting
-        final_validation_passed = True
         if generation_results.get("quality_metrics", {}).get("errors_found", 0) > 0:
-            final_validation_passed = False
             logger.warning("Documentation generated with quality issues")
 
         # Display final progress completion
@@ -1530,7 +1528,7 @@ class DocumentationGenerator:
 
                     try:
                         # Monitor generation progress and update progress_state with component completion status
-                        progress_percent = (
+                        _ = (
                             index / total_components
                         ) * 80  # Leave 20% for post-processing
 

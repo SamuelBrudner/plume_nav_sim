@@ -3,8 +3,6 @@ from __future__ import annotations
 import pytest
 
 from plume_nav_sim.media import (
-    DEFAULT_ROUNDING,
-    DEFAULT_STEP_POLICY,
     ROUND_CEIL,
     ROUND_FLOOR,
     ROUND_NEAREST,

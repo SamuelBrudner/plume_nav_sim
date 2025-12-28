@@ -5,7 +5,6 @@ from typing import Any, List, Optional
 
 import numpy as np
 
-from ..inspector.introspection import get_env_chain_names
 from ..inspector.models import _softmax  # reuse stable softmax impl
 from .discovery import find_provider
 from .models import ActionInfo, ObservationInfo, PipelineInfo
@@ -124,8 +123,12 @@ class ProviderMux:
                             q = np.asarray(d["q_values"], dtype=float).ravel()
                             return _softmax(q) if (n == 0 or len(q) == n) else None
                         if k == "logits" and _is_1d(d.get("logits")):
-                            l = np.asarray(d["logits"], dtype=float).ravel()
-                            return _softmax(l) if (n == 0 or len(l) == n) else None
+                            logits = np.asarray(d["logits"], dtype=float).ravel()
+                            return (
+                                _softmax(logits)
+                                if (n == 0 or len(logits) == n)
+                                else None
+                            )
                         return None
 
                     p1 = _to_probs(res1, key)

@@ -142,7 +142,6 @@ def main() -> int:
     extra_keys: list[str] = []
 
     def collect_extras(section: str, allowed: list[str]):
-        nonlocal extra_keys
         sec = data.get(section, {})
         for k in sec.keys():
             if k not in allowed:

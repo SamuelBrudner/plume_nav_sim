@@ -1,5 +1,3 @@
-import pytest
-
 from plume_nav_sim.policies import SurgeAndCastPolicy
 
 

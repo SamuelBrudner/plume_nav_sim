@@ -3,8 +3,6 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-import pytest
-
 from plume_nav_sim.data_capture.validate import validate_run_artifacts
 
 from .test_helpers import run_small_capture

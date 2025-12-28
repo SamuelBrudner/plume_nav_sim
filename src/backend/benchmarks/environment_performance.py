@@ -26,7 +26,6 @@ Performance Targets:
 """
 
 # External imports with version requirements for comprehensive performance analysis
-import contextlib  # >=3.10 - Context managers for resource management and cleanup operations
 import dataclasses  # >=3.10 - Data structure definitions for benchmark results and configuration
 import gc  # >=3.10 - Garbage collection control for memory leak detection and optimization
 import json  # >=3.10 - Benchmark result serialization and structured output generation
@@ -41,7 +40,6 @@ from typing import (  # >=3.10 - Type hints for comprehensive API
     List,
     Optional,
     Tuple,
-    Union,
 )
 
 # Third-party imports with version comments for mathematical operations and system monitoring
@@ -49,20 +47,14 @@ import numpy as np  # >=2.1.0 - Statistical analysis, timing calculations, and p
 import psutil  # >=5.8.0 - System resource monitoring including memory usage and process-level profiling
 
 from plume_nav_sim.core.constants import (
-    DEFAULT_GRID_SIZE,
     MEMORY_LIMIT_TOTAL_MB,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 from plume_nav_sim.core.enums import Action
-from plume_nav_sim.core.geometry import GridSize
 
 # Internal imports for environment benchmarking and validation framework integration
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from plume_nav_sim.utils.validation import (
-    ValidationContext,
-    ValidationResult,
-    validate_environment_config,
-)
+from plume_nav_sim.utils.validation import ValidationContext, ValidationResult
 
 # Global configuration constants for benchmark execution and analysis
 DEFAULT_BENCHMARK_ITERATIONS = 1000
@@ -627,7 +619,7 @@ class BenchmarkResult:
         return result_dict
 
 
-class PerformanceAnalysis:
+class DetailedPerformanceAnalysis:
     """High-level helper that interprets benchmark output for the test suite.
 
     The original performance tests expected an object capable of summarising raw
@@ -638,7 +630,7 @@ class PerformanceAnalysis:
     """
 
     def __init__(self) -> None:
-        self.logger = logging.getLogger(f"{__name__}.PerformanceAnalysis")
+        self.logger = logging.getLogger(f"{__name__}.DetailedPerformanceAnalysis")
         self._trend_history: List[dict] = []
 
     # ------------------------------------------------------------------
@@ -2334,10 +2326,10 @@ def benchmark_memory_usage(
     return results
 
 
-def benchmark_rendering_performance(
+def benchmark_rendering_performance_detailed(
     env: PlumeSearchEnv, iterations: int = 25, mode: str = "rgb_array"
 ) -> Dict[str, Any]:
-    """Lightweight rendering benchmark used by the trimmed test harness."""
+    """Rendering benchmark with extended metrics (legacy signature)."""
 
     if mode != "rgb_array":
         raise ValueError(

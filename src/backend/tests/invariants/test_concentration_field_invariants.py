@@ -293,7 +293,6 @@ class TestGaussianMonotonicDecay:
         field = create_test_field(32, (16, 16), 2.0)
 
         # Sample at increasing distances
-        source = Coordinates(16, 16)
         samples = [
             ((16, 16), 0),  # At source
             ((17, 16), 1),  # Distance 1

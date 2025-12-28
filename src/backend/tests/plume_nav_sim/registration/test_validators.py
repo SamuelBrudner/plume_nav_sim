@@ -70,16 +70,16 @@ class TestValidateValueHelpers:
         assert any("not set" in w for w in report["warnings"])
 
     def test_validate_max_episode_steps_invalid(self):
-        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+        self._extracted_from_test_validate_max_episode_steps_invalid_2(
             "100", False, "errors", "integer"
         )
-        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+        self._extracted_from_test_validate_max_episode_steps_invalid_2(
             0, False, "errors", "positive"
         )
-        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+        self._extracted_from_test_validate_max_episode_steps_invalid_2(
             100001, False, "errors", "exceeds"
         )
-        report = self._extracted_from_test_validate_max_episode_steps_invalid_2(
+        self._extracted_from_test_validate_max_episode_steps_invalid_2(
             50, True, "warnings", "quite low"
         )
 

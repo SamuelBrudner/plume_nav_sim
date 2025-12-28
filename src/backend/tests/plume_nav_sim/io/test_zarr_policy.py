@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import types
-
 from plume_nav_sim.io.zarr_policy import (
     CHUNKS_TYX,
     DEFAULT_BLOSC_CLEVEL,

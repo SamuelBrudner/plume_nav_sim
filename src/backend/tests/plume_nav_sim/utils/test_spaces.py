@@ -1033,7 +1033,7 @@ def test_space_config_serialization():
         assert key in config_dict, f"Dictionary missing key: {key}"
 
     # Test dictionary can be used to recreate equivalent SpaceConfig
-    reconstructed_values = {
+    _ = {
         "action_space_size": config_dict["action_space_size"],
         "observation_shape": config_dict["observation_shape"],
         "concentration_bounds": config_dict["concentration_bounds"],
@@ -2049,7 +2049,7 @@ def test_integration_with_gymnasium():
 
         def step(self, action):
             # Validate action using our validation function
-            validated_action = validate_action(action, self.action_space)
+            _ = validate_action(action, self.action_space)
 
             # Generate observation
             observation = self.observation_space.sample()
@@ -2159,8 +2159,8 @@ def test_overall_performance():
     assert validate_observation_space(obs_space)
 
     # Test utility functions
-    action = sample_valid_action(action_space)
-    obs = sample_valid_observation(obs_space)
+    _ = sample_valid_action(action_space)
+    _ = sample_valid_observation(obs_space)
 
     # Test configuration
     config = SpaceConfig()

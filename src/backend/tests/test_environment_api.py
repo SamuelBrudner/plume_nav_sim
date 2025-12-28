@@ -42,16 +42,12 @@ import numpy as np  # >=2.1.0 - Array operations for observation validation, mat
 
 # External imports with version comments for comprehensive dependency management
 import pytest  # >=8.0.0 - Testing framework for test organization, fixtures, parametrization, and comprehensive test execution with assertion support
-from gymnasium.wrappers import TimeLimit
 
 from plume_nav_sim.core.constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,  # System constants for environment configuration and performance validation
 )
 from plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCATION
 from plume_nav_sim.envs import EnvironmentState
-from plume_nav_sim.envs.base_env import (  # Base environment class for inheritance testing and abstract method validation
-    BaseEnvironment,
-)
 
 # Internal imports for environment testing with comprehensive API validation
 from plume_nav_sim.envs.plume_search_env import (  # Primary environment class under test for comprehensive Gymnasium API compliance validation
@@ -423,7 +419,7 @@ def _unwrap_gym_env(env: gymnasium.Env) -> gymnasium.Env:
             start_time = time.perf_counter()
 
             try:
-                result = method_call()
+                _ = method_call()
             except Exception as e:
                 warnings.warn(f"Method call failed on iteration {i}: {e}")
                 continue
@@ -871,7 +867,7 @@ def test_invalid_action_handling(invalid_action):
 
         try:
             test_env.step(invalid_action)
-        except:
+        except Exception:
             # Environment state should remain unchanged after invalid action
             current_obs, _ = test_env.reset()  # Reset to get current state
             # State consistency check - environment should handle invalid actions gracefully
@@ -1629,7 +1625,7 @@ def test_error_handling_robustness(invalid_action):
 
         try:
             test_env.step(invalid_action)
-        except:
+        except Exception:
             # After error, environment should still be usable
             try:
                 recovery_result = test_env.step(0)  # Valid action
@@ -1705,7 +1701,7 @@ def test_performance_requirements():
             reset_times.append(reset_time_ms)
 
         avg_reset_time = np.mean(reset_times)
-        max_reset_time = np.max(reset_times)
+        _ = np.max(reset_times)
 
         # Reset should be under 10ms on average (reasonable target)
         assert (
@@ -1733,7 +1729,7 @@ def test_performance_requirements():
         avg_step_time = np.mean(step_times)
         p95_step_time = np.percentile(step_times, 95)
         p99_step_time = np.percentile(step_times, 99)
-        max_step_time = np.max(step_times)
+        _ = np.max(step_times)
 
         # Validate average step latency meets <1ms target requirement from PERFORMANCE_TARGET_STEP_LATENCY_MS
         assert (

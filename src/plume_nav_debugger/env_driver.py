@@ -163,16 +163,16 @@ class EnvDriver(QtCore.QObject):
             action_type = "oriented"
         self.config.action_type = action_type
 
-        kwargs = dict(
-            grid_size=self.config.grid_size,
-            goal_radius=self.config.goal_radius,
-            plume_sigma=self.config.plume_sigma,
-            max_steps=self.config.max_steps,
-            render_mode="rgb_array",
-            action_type=action_type,
-            observation_type="concentration",
-            reward_type="step_penalty",
-        )
+        kwargs = {
+            "grid_size": self.config.grid_size,
+            "goal_radius": self.config.goal_radius,
+            "plume_sigma": self.config.plume_sigma,
+            "max_steps": self.config.max_steps,
+            "render_mode": "rgb_array",
+            "action_type": action_type,
+            "observation_type": "concentration",
+            "reward_type": "step_penalty",
+        }
         if self.config.start_location is not None:
             kwargs["start_location"] = tuple(self.config.start_location)
 
@@ -537,16 +537,16 @@ class EnvDriver(QtCore.QObject):
             action_type = "oriented"
         self.config.action_type = action_type
 
-        kwargs = dict(
-            grid_size=self.config.grid_size,
-            goal_radius=self.config.goal_radius,
-            plume_sigma=self.config.plume_sigma,
-            max_steps=self.config.max_steps,
-            render_mode="rgb_array",
-            action_type=action_type,
-            observation_type="concentration",
-            reward_type="step_penalty",
-        )
+        kwargs = {
+            "grid_size": self.config.grid_size,
+            "goal_radius": self.config.goal_radius,
+            "plume_sigma": self.config.plume_sigma,
+            "max_steps": self.config.max_steps,
+            "render_mode": "rgb_array",
+            "action_type": action_type,
+            "observation_type": "concentration",
+            "reward_type": "step_penalty",
+        }
         if start_location is not None:
             kwargs["start_location"] = tuple(start_location)
             self.config.start_location = tuple(start_location)
