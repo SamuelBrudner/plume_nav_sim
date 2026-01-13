@@ -1,6 +1,6 @@
 # plume-nav-sim
 
-Gymnasium-compatible plume navigation environments engineered for reproducible robotics and reinforcement-learning research. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
+Gymnasium-compatible plume navigation environments engineered for reproducible agent olfactory navigation simulations and reinforcement-learning research. Begin with a single `make_env()` call, customize through typed options, and inject bespoke components when experiments demand it.
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
