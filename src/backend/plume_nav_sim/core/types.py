@@ -31,6 +31,7 @@ MOVEMENT_VECTORS = {
 
 
 class Action(IntEnum):
+    """Discrete movement actions for grid navigation."""
     UP = ACTION_UP
     RIGHT = ACTION_RIGHT
     DOWN = ACTION_DOWN
@@ -41,6 +42,7 @@ class Action(IntEnum):
 
 
 class RenderMode(Enum):
+    """Rendering output modes."""
     RGB_ARRAY = "rgb_array"
     HUMAN = "human"
 
@@ -58,6 +60,7 @@ class RenderMode(Enum):
 
 @dataclass(frozen=True)
 class Coordinates:
+    """2D integer coordinates on the grid."""
     x: int
     y: int
 
@@ -92,6 +95,8 @@ class Coordinates:
 
 @dataclass(frozen=True)
 class GridSize:
+    """Grid dimensions for the environment."""
+
     width: int
     height: int
 
@@ -115,6 +120,8 @@ class GridSize:
 
 @dataclass
 class AgentState:
+    """Mutable agent state during episode."""
+
     position: Coordinates
     orientation: float = 0.0
     step_count: int = 0
@@ -152,10 +159,12 @@ else:  # pragma: no cover - numpy<1.20
 
 
 def calculate_euclidean_distance(coord1: Coordinates, coord2: Coordinates) -> float:
+    """Calculate Euclidean distance between two coordinates."""
     return math.hypot(coord1.x - coord2.x, coord1.y - coord2.y)
 
 
 def create_coordinates(value: CoordinateType, y: int | None = None) -> Coordinates:
+    """Create Coordinates from various input types."""
     if y is not None:
         return Coordinates(int(value), int(y))  # type: ignore[arg-type]
     if isinstance(value, Coordinates):
@@ -166,6 +175,7 @@ def create_coordinates(value: CoordinateType, y: int | None = None) -> Coordinat
 
 
 def create_grid_size(value: GridDimensions, height: int | None = None) -> GridSize:
+    """Create GridSize from various input types."""
     if height is not None:
         return GridSize(int(value), int(height))  # type: ignore[arg-type]
     if isinstance(value, GridSize):
@@ -176,6 +186,7 @@ def create_grid_size(value: GridDimensions, height: int | None = None) -> GridSi
 
 
 def validate_action(action: ActionType) -> Action:
+    """Validate and convert action input to Action enum."""
     if isinstance(action, Action):
         return action
     if isinstance(action, (np.integer, int)) and int(action) in MOVEMENT_VECTORS:
@@ -184,6 +195,7 @@ def validate_action(action: ActionType) -> Action:
 
 
 def get_movement_vector(action: ActionType) -> MovementVector:
+    """Get movement vector for an action."""
     return validate_action(action).to_vector()
 
 

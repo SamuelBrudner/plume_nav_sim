@@ -23,6 +23,8 @@ from ..utils.exceptions import ValidationError
 
 @dataclass(frozen=True)
 class EnvironmentConfig:
+    """Configuration for environment initialization."""
+
     grid_size: GridDimensions = DEFAULT_GRID_SIZE
     source_location: CoordinateType = DEFAULT_SOURCE_LOCATION
     max_steps: int = DEFAULT_MAX_STEPS
@@ -121,6 +123,7 @@ def create_environment_config(
     config: EnvironmentConfig | Mapping[str, Any] | None = None,
     **overrides: Any,
 ) -> EnvironmentConfig:
+    """Create EnvironmentConfig from various input types."""
     if isinstance(config, EnvironmentConfig) and not overrides:
         return config
     data: dict[str, Any] = {}

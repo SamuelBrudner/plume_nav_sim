@@ -9,7 +9,6 @@ pytest.importorskip(
 
 def test_td_policy_provider_distribution() -> None:
     from plume_nav_debugger.odc.mux import ProviderMux
-
     from plume_nav_sim.policies import TemporalDerivativePolicy
 
     class _AS:
