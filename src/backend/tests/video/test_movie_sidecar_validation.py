@@ -14,7 +14,7 @@ def test_sidecar_fps_conflict_raises_validation_error(tmp_path: Path) -> None:
     """Conflicting movie_fps vs sidecar.fps yields a clear ValidationError."""
 
     from plume_nav_sim.media.sidecar import get_default_sidecar_path
-    from plume_nav_sim.plume.movie_field import resolve_movie_dataset_path
+    from plume_nav_sim.plume.video import resolve_movie_dataset_path
     from plume_nav_sim.utils.exceptions import ValidationError
 
     movie_path = tmp_path / "movie.avi"
@@ -44,7 +44,7 @@ def test_sidecar_pixel_to_grid_conflict_raises_validation_error(tmp_path: Path) 
     """Conflicting movie_pixel_to_grid vs sidecar-derived value is rejected."""
 
     from plume_nav_sim.media.sidecar import get_default_sidecar_path
-    from plume_nav_sim.plume.movie_field import resolve_movie_dataset_path
+    from plume_nav_sim.plume.video import resolve_movie_dataset_path
     from plume_nav_sim.utils.exceptions import ValidationError
 
     movie_path = tmp_path / "movie.mp4"

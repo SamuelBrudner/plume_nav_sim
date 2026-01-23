@@ -5,7 +5,7 @@ import pytest
 
 
 def test_setup_logging_console_and_file(tmp_path: Path):
-    from plume_nav_sim.logging.loguru_bootstrap import get_logger, setup_logging
+    from plume_nav_sim.logging import get_loguru_logger, setup_logging
 
     try:
         import loguru  # noqa: F401
@@ -14,12 +14,12 @@ def test_setup_logging_console_and_file(tmp_path: Path):
         with pytest.raises(ImportError):
             setup_logging(level="INFO", console=True, file_path=tmp_path / "x.log")
         with pytest.raises(ImportError):
-            _ = get_logger()
+            _ = get_loguru_logger()
         return
 
     logfile = tmp_path / "app.log"
     setup_logging(level="INFO", console=True, file_path=logfile)
-    logger = get_logger()
+    logger = get_loguru_logger()
     logger.info("hello from loguru")
 
     std = logging.getLogger("std")
@@ -38,5 +38,5 @@ def test_import_does_not_touch_data_capture():
     # This import should not import data_capture or create any files
     import importlib
 
-    m = importlib.import_module("plume_nav_sim.logging.loguru_bootstrap")
+    m = importlib.import_module("plume_nav_sim.logging")
     assert hasattr(m, "setup_logging")

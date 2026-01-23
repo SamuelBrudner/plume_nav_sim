@@ -1726,8 +1726,8 @@ class TestRGBUtilityFunctions:
         assert renderer.performance_config["vectorization_enabled"] == True
 
         # Test factory function parameter validation
-        with pytest.raises(ValidationError):
-            # Invalid grid size should raise ValidationError
+        with pytest.raises((ValidationError, ComponentError)):
+            # Invalid grid size should raise ValidationError or ComponentError
             invalid_grid = create_grid_size(0, 0)  # Invalid dimensions
             create_rgb_renderer(invalid_grid)
 

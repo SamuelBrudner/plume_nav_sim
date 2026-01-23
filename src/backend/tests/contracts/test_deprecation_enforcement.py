@@ -9,7 +9,7 @@ Reference: ../../CONTRACTS.md Section "Removed APIs (Do Not Use)"
 import pytest
 
 from plume_nav_sim.core.geometry import GridSize
-from plume_nav_sim.core.types import PerformanceMetrics, create_coordinates
+from plume_nav_sim.core.types import create_coordinates
 from plume_nav_sim.utils.exceptions import (
     ComponentError,
     ConfigurationError,
@@ -69,27 +69,6 @@ class TestRemovedMethods:
         # to_tuple() is the correct API
         assert grid_size.to_tuple() == (100, 100)
 
-    def test_performance_metrics_get_summary_removed(self):
-        """get_summary() was removed - use get_performance_summary()."""
-        metrics = PerformanceMetrics()
-
-        # get_summary() should NOT exist
-        assert not hasattr(
-            metrics, "get_summary"
-        ), "get_summary() is REMOVED - use get_performance_summary()"
-
-        # get_performance_summary() is the correct API
-        summary = metrics.get_performance_summary()
-        assert isinstance(summary, dict)
-
-    def test_performance_metrics_get_statistics_removed(self):
-        """get_statistics() was removed - use get_performance_summary()."""
-        metrics = PerformanceMetrics()
-
-        assert not hasattr(
-            metrics, "get_statistics"
-        ), "get_statistics() is REMOVED - use get_performance_summary()"
-
 
 class TestRemovedFunctionSignatures:
     """Test that old function signatures are GONE."""
@@ -143,10 +122,9 @@ class TestDeprecatedAPIsDocumented:
             "ConfigurationError(..., invalid_value=x)": "Use parameter_value=",
             # Methods
             "grid_size.to_dict()": "NOW EXISTS (added for compatibility)",
-            "performance_metrics.get_summary()": "NOW EXISTS (added for compatibility)",
             "episode_result.get_performance_metrics()": "NOW EXISTS (added for compatibility)",
             # Function signatures
-            "create_coordinates(x=5, y=10)": "NOW SUPPORTED (backward compat)",
+            "create_coordinates(x=5, y=10)": "REMOVED - use tuple or (value, y)",
             "validate_base_environment_setup(..., strict_mode=True)": "Parameter removed",
             "validate_constant_consistency(..., strict_mode=True)": "Parameter removed",
         }

@@ -355,7 +355,7 @@ def simulate_component_failure(
             # Simulate plume model calculation failures
             if failure_type == "calculation_error":
                 with patch(
-                    "plume_nav_sim.plume.static_gaussian.StaticGaussianPlume.sample_concentration"
+                    "plume_nav_sim.plume.gaussian.GaussianPlume.sample"
                 ) as mock_sample:
                     if failure_parameters.get("raise_exception", True):
                         mock_sample.side_effect = ComponentError(

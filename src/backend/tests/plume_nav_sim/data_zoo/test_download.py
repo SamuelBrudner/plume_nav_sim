@@ -18,6 +18,7 @@ from plume_nav_sim.data_zoo.registry import (
     DatasetArtifact,
     DatasetMetadata,
     DatasetRegistryEntry,
+    EmonetSmokeIngest,
     H5ToZarrSpec,
 )
 
@@ -448,6 +449,25 @@ def test_ingest_spec_invokes_postprocessing(
     assert "args" in calls
     assert calls["args"][1].name == "movie.h5"
     assert (resolved / ".zattrs").exists()
+
+
+def test_cache_root_none_defaults_to_module_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    default_cache = tmp_path / "default_cache"
+    monkeypatch.setattr(download_module, "DEFAULT_CACHE_ROOT", default_cache)
+    entry = _register_entry(tmp_path, monkeypatch, dataset_id="demo_dataset_default")
+
+    resolved = ensure_dataset_available(
+        entry.dataset_id,
+        cache_root=None,
+        auto_download=False,
+        confirm_download=lambda _: True,
+    )
+
+    assert resolved == (
+        default_cache / entry.cache_subdir / entry.version / entry.expected_root
+    )
 
 
 @pytest.mark.parametrize(

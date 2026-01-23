@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 import plume_nav_sim as pns
-from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.data_capture.recorder import RunRecorder
 from plume_nav_sim.data_capture.validate import validate_run_artifacts
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 
 @pytest.mark.filterwarnings("ignore:.*experimental.*")

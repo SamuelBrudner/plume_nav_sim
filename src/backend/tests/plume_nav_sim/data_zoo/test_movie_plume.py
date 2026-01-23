@@ -58,7 +58,7 @@ def test_create_component_environment_uses_loader_when_normalize(monkeypatch, tm
             self.grid_size = GridSize(width=width, height=height)
             self.field_array = np.zeros((height, width), dtype=np.float32)
 
-    monkeypatch.setattr(env_factory, "MoviePlumeField", DummyField)
+    monkeypatch.setattr(env_factory, "VideoPlume", DummyField)
 
     env_factory.create_component_environment(
         plume="movie",
@@ -69,7 +69,7 @@ def test_create_component_environment_uses_loader_when_normalize(monkeypatch, tm
         movie_chunks=None,
     )
 
-    assert captured_cfg, "MoviePlumeField was not constructed"
+    assert captured_cfg, "VideoPlume was not constructed"
     cfg = captured_cfg["cfg"]
     arr = getattr(cfg, "data_array", None)
     assert arr is not None

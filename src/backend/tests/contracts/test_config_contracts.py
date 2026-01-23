@@ -13,7 +13,7 @@ import pytest
 from plume_nav_sim.core.episode_manager import EpisodeManagerConfig
 from plume_nav_sim.core.reward_calculator import RewardCalculatorConfig
 from plume_nav_sim.core.state_manager import StateManagerConfig
-from plume_nav_sim.core.types import EnvironmentConfig
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 
 class TestRewardCalculatorConfigContract:
@@ -246,10 +246,8 @@ class TestConfigImmutability:
     def test_environment_config_is_frozen(self):
         """EnvironmentConfig should be frozen (immutable)."""
 
-        # Check if frozen
         env_config = EnvironmentConfig()
 
-        # Attempt to modify should fail
         with pytest.raises((AttributeError, Exception)):
             env_config.max_steps = 9999  # type: ignore
 

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import EnvironmentConfig
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.envs.plume_search_env import create_plume_search_env
 from plume_nav_sim.utils.seeding import create_seeded_rng
 
@@ -479,7 +479,6 @@ class TestConfigImmutability:
         """EnvironmentConfig must be immutable."""
         config = EnvironmentConfig()
 
-        # Attempt to modify should fail
         with pytest.raises((AttributeError, Exception)):
             config.max_steps = 9999  # type: ignore
 

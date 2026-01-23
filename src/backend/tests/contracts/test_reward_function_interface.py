@@ -23,7 +23,7 @@ from hypothesis import strategies as st
 
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.interfaces import RewardFunction
-from plume_nav_sim.plume.concentration_field import ConcentrationField
+from plume_nav_sim.plume.gaussian import GaussianPlume
 from tests.strategies import (
     agent_state_strategy,
     continuous_action_strategy,
@@ -272,11 +272,11 @@ class TestRewardFunctionInterface:
         next_state = AgentState(position=Coordinates(11, 10))
         action = 0
 
-        plume_field = ConcentrationField(grid_size=grid_size, enable_caching=False)
-        plume_field.field_array = np.zeros(
-            (grid_size.height, grid_size.width), dtype=np.float32
+        plume_field = GaussianPlume(
+            grid_size=grid_size,
+            source_location=Coordinates(0, 0),
+            sigma=1.0,
         )
-        plume_field.is_generated = True
 
         reward = reward_function.compute_reward(
             prev_state, action, next_state, plume_field

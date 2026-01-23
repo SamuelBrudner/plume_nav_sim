@@ -1,9 +1,9 @@
 import time
 
 import plume_nav_sim as pns
-from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.data_capture.recorder import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 
 def _run_steps(env, steps: int) -> float:

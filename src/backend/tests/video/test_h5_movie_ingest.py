@@ -7,7 +7,7 @@ import pytest
 
 
 def test_h5_movie_ingest_and_loader_smoke(tmp_path: Path) -> None:
-    """Smoke test for HDF5 movie ingest -> Zarr -> MoviePlumeField loading.
+    """Smoke test for HDF5 movie ingest -> Zarr -> VideoPlume loading.
 
     This mirrors the existing video ingest smoke test but uses a synthetic
     HDF5 movie source and the dedicated ingest_h5_movie helper.
@@ -23,7 +23,7 @@ def test_h5_movie_ingest_and_loader_smoke(tmp_path: Path) -> None:
             load_manifest,
         )
         from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
-        from plume_nav_sim.plume.movie_field import MovieConfig, MoviePlumeField
+        from plume_nav_sim.plume.video import VideoConfig, VideoPlume
     except Exception as e:  # pragma: no cover - optional media deps
         pytest.skip(f"required modules unavailable: {e}")
 
@@ -82,8 +82,8 @@ def test_h5_movie_ingest_and_loader_smoke(tmp_path: Path) -> None:
     m = load_manifest(out_zarr)
     assert hasattr(m, "source_dtype") and isinstance(getattr(m, "source_dtype"), str)
 
-    # 4) Loader smoke: MoviePlumeField can consume the ingested dataset
-    field = MoviePlumeField(MovieConfig(path=str(out_zarr), step_policy="wrap"))
+    # 4) Loader smoke: VideoPlume can consume the ingested dataset
+    field = VideoPlume(VideoConfig(path=str(out_zarr), step_policy="wrap"))
 
     # Determinism check at a fixed step
     field.advance_to_step(3)
@@ -93,7 +93,7 @@ def test_h5_movie_ingest_and_loader_smoke(tmp_path: Path) -> None:
     b = field.field_array.copy()
     assert np.array_equal(
         a, b
-    ), "MoviePlumeField not deterministic at fixed step for HDF5 source"
+    ), "VideoPlume not deterministic at fixed step for HDF5 source"
 
     # Frame type/shape sanity
     assert a.dtype == np.float32

@@ -16,14 +16,8 @@ from plume_nav_sim.core.episode_manager import (
     validate_episode_config,
 )
 from plume_nav_sim.core.geometry import Coordinates, GridSize
-from plume_nav_sim.core.types import (
-    Action,
-    AgentState,
-    EnvironmentConfig,
-    EpisodeState,
-    create_coordinates,
-    create_environment_config,
-)
+from plume_nav_sim.core.types import Action, AgentState, create_coordinates
+from plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
 from plume_nav_sim.utils.exceptions import (
     ComponentError,
     ResourceError,
@@ -592,7 +586,7 @@ class TestEpisodeManager:
         assert isinstance(current_state.agent_state, AgentState)
 
         # Assert episode state consistency and termination logic
-        assert isinstance(current_state.episode_state, EpisodeState)
+        assert isinstance(current_state.episode_state, dict)
 
         # Test consistency validation with artificially corrupted state
         # Temporarily modify state to create inconsistency
@@ -830,7 +824,7 @@ class TestEpisodeManagerReproducibility:
         state2 = manager2.get_current_state()
 
         assert state1.agent_state.position == state2.agent_state.position
-        assert state1.episode_state.step_count == state2.episode_state.step_count
+        assert state1.episode_state["step_count"] == state2.episode_state["step_count"]
 
         # Process identical action sequence
         actions = [Action.RIGHT, Action.DOWN, Action.LEFT]

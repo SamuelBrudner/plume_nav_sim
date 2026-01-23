@@ -25,11 +25,8 @@ from plume_nav_sim.core.constants import DEFAULT_PLUME_SIGMA, STATIC_GAUSSIAN_MO
 # Core types and data structures for testing
 from plume_nav_sim.core.types import (
     Coordinates,
-    EnvironmentConfig,
     GridSize,
-    PlumeParameters,
     create_coordinates,
-    create_environment_config,
     create_grid_size,
     validate_action,
 )
@@ -41,6 +38,7 @@ from plume_nav_sim.envs.base_env import (
     create_base_environment_config,
     validate_base_environment_setup,
 )
+from plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
 
 # Exception handling for comprehensive error testing
 from plume_nav_sim.utils.exceptions import (
@@ -183,17 +181,17 @@ def create_test_environment_config(
     grid_size_obj = create_grid_size(test_grid_size)
     source_coords = create_coordinates(test_source_location)
 
-    if enable_validation and not grid_size_obj.contains_coordinates(source_coords):
+    if enable_validation and not grid_size_obj.contains(source_coords):
         raise ValidationError(
             "source_location must be within the provided grid_size bounds"
         )
 
-    # Create PlumeParameters with source location and default sigma value
+    # Create plume parameters with source location and default sigma value
     plume_sigma = 12.0
     overrides = dict(additional_params) if additional_params else {}
     if "plume_sigma" in overrides:
         plume_sigma = float(overrides.pop("plume_sigma"))
-    plume_params = PlumeParameters(source_location=source_coords, sigma=plume_sigma)
+    plume_params = {"source_location": source_coords, "sigma": plume_sigma}
 
     # Validate all parameters using appropriate validation functions
     if enable_validation:
@@ -1837,7 +1835,7 @@ class TestBaseEnvironmentConfiguration:
 
         assert isinstance(config, EnvironmentConfig)
         assert isinstance(config.grid_size, GridSize)
-        assert isinstance(config.plume_params, PlumeParameters)
+        assert isinstance(config.plume_params, dict)
         assert config.max_steps > 0
         assert config.goal_radius >= 0
 
@@ -1845,7 +1843,7 @@ class TestBaseEnvironmentConfiguration:
         default_config = create_base_environment_config()
         assert default_config.grid_size.width == 128  # Default from constants
         assert default_config.grid_size.height == 128
-        assert default_config.plume_params.sigma == 12.0  # Default sigma
+        assert default_config.plume_params["sigma"] == 12.0  # Default sigma
 
         # Check invalid parameter combinations raise ConfigurationError
         with pytest.raises((ConfigurationError, ValidationError)):
@@ -1904,9 +1902,9 @@ class TestBaseEnvironmentConfiguration:
 
         assert config_with_all_params.grid_size.width == 64
         assert config_with_all_params.grid_size.height == 64
-        assert config_with_all_params.plume_params.source_location.x == 32
-        assert config_with_all_params.plume_params.source_location.y == 32
-        assert config_with_all_params.plume_params.sigma == 15.0
+        assert config_with_all_params.plume_params["source_location"].x == 32
+        assert config_with_all_params.plume_params["source_location"].y == 32
+        assert config_with_all_params.plume_params["sigma"] == 15.0
         assert config_with_all_params.max_steps == 500
         assert config_with_all_params.goal_radius == 1.0
 
@@ -1959,10 +1957,10 @@ class TestBaseEnvironmentConfiguration:
         # Validate cross-parameter consistency checking works correctly
         inconsistent_config = EnvironmentConfig(
             grid_size=GridSize(10, 10),
-            plume_params=PlumeParameters(
-                source_location=Coordinates(50, 50),
-                sigma=12.0,  # Outside grid
-            ),
+            plume_params={
+                "source_location": Coordinates(50, 50),
+                "sigma": 12.0,  # Outside grid
+            },
             max_steps=100,
             goal_radius=0.0,
         )
@@ -1998,7 +1996,7 @@ class TestBaseEnvironmentConfiguration:
 
         assert config.grid_size == GridSize(32, 32)
         assert config.source_location == Coordinates(16, 16)
-        assert config.plume_params.source_location == Coordinates(16, 16)
+        assert config.plume_params["source_location"] == Coordinates(16, 16)
 
     def test_resource_estimation(self):
         """Test resource estimation functionality including memory calculation, computational
@@ -2198,8 +2196,8 @@ class TestBaseEnvironmentConfiguration:
         multi_component_config = create_test_environment_config()
 
         # All components should be consistent
-        assert multi_component_config.grid_size.contains_coordinates(
-            multi_component_config.plume_params.source_location
+        assert multi_component_config.grid_size.contains(
+            multi_component_config.plume_params["source_location"]
         )
 
         # Verify consistency validation provides specific error details

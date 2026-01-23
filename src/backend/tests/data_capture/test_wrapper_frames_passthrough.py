@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 
 import plume_nav_sim as pns
-from plume_nav_sim.core.types import EnvironmentConfig
 from plume_nav_sim.data_capture.recorder import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.policies import TemporalDerivativeDeterministicPolicy
 from plume_nav_sim.runner import runner as r
 

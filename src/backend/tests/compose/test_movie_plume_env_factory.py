@@ -65,7 +65,7 @@ def test_movie_plume_env_factory_preserves_overrides_for_dataset_dirs(
         "resolve_movie_dataset_path",
         fake_resolve_movie_dataset_path,
     )
-    monkeypatch.setattr(env_factory, "MoviePlumeField", DummyField)
+    monkeypatch.setattr(env_factory, "VideoPlume", DummyField)
 
     env_factory.create_component_environment(
         plume="movie",
@@ -85,8 +85,8 @@ def test_movie_plume_env_factory_preserves_overrides_for_dataset_dirs(
     assert calls["extent"] == (8.0, 16.0)
     assert calls["movie_h5_dataset"] == "foo"
 
-    # Dataset directories preserve explicit overrides when constructing MovieConfig
-    assert captured_cfgs, "MoviePlumeField was not constructed"
+    # Dataset directories preserve explicit overrides when constructing VideoConfig
+    assert captured_cfgs, "VideoPlume was not constructed"
     cfg = captured_cfgs[0]
     assert cfg.path == str(dataset_dir)
     assert cfg.fps == 9.99
@@ -135,7 +135,7 @@ def test_movie_plume_env_factory_drops_overrides_for_raw_sources(tmp_path, monke
         "resolve_movie_dataset_path",
         fake_resolve_movie_dataset_path,
     )
-    monkeypatch.setattr(env_factory, "MoviePlumeField", DummyField)
+    monkeypatch.setattr(env_factory, "VideoPlume", DummyField)
 
     env_factory.create_component_environment(
         plume="movie",
@@ -155,8 +155,8 @@ def test_movie_plume_env_factory_drops_overrides_for_raw_sources(tmp_path, monke
     assert calls["extent"] == (8.0, 16.0)
     assert calls["movie_h5_dataset"] == "bar"
 
-    # For non-directory sources, MovieConfig relies on dataset/sidecar metadata
-    assert captured_cfgs, "MoviePlumeField was not constructed"
+    # For non-directory sources, VideoConfig relies on dataset/sidecar metadata
+    assert captured_cfgs, "VideoPlume was not constructed"
     cfg = captured_cfgs[0]
     assert cfg.path == str(dataset_dir)
     assert cfg.fps is None
@@ -204,7 +204,7 @@ def test_simulation_spec_movie_plume_round_trip(tmp_path, monkeypatch):
         "resolve_movie_dataset_path",
         fake_resolve_movie_dataset_path,
     )
-    monkeypatch.setattr(env_factory, "MoviePlumeField", DummyField)
+    monkeypatch.setattr(env_factory, "VideoPlume", DummyField)
 
     sim = SimulationSpec(
         grid_size=(16, 16),
@@ -233,9 +233,7 @@ def test_simulation_spec_movie_plume_round_trip(tmp_path, monkeypatch):
     assert calls["extent"] == (24.0, 40.0)
     assert calls["movie_h5_dataset"] is None
 
-    assert (
-        captured_cfgs
-    ), "MoviePlumeField was not constructed via SimulationSpec.prepare"
+    assert captured_cfgs, "VideoPlume was not constructed via SimulationSpec.prepare"
     cfg = captured_cfgs[0]
     assert cfg.path == str(dataset_dir)
     assert cfg.fps == 15.0
@@ -244,7 +242,7 @@ def test_simulation_spec_movie_plume_round_trip(tmp_path, monkeypatch):
     assert cfg.extent == (24.0, 40.0)
     assert cfg.step_policy == "wrap"
 
-    # Env grid_size should reflect the MoviePlumeField grid, not the original grid_size
+    # Env grid_size should reflect the VideoPlume grid, not the original grid_size
     gs = getattr(env, "grid_size", None)
     assert gs is not None
     width = getattr(gs, "width", None) or int(gs[0])

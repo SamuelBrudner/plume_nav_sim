@@ -16,7 +16,7 @@ from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.envs import ComponentBasedEnvironment, EnvironmentState
 from plume_nav_sim.interfaces.action import ActionType
 from plume_nav_sim.observations import ConcentrationSensor
-from plume_nav_sim.plume.concentration_field import ConcentrationField
+from plume_nav_sim.plume.gaussian import GaussianPlume
 from plume_nav_sim.rewards import SparseGoalReward
 
 
@@ -35,27 +35,11 @@ def goal_location():
 @pytest.fixture
 def concentration_field(grid_size, goal_location):
     """Create a simple concentration field centered at goal."""
-    import numpy as np
-
-    # Create a mock field with numpy array directly
-    field = ConcentrationField(grid_size=grid_size, enable_caching=False)
-
-    # Manually create a simple Gaussian field
-    x = np.arange(grid_size.width)
-    y = np.arange(grid_size.height)
-    xx, yy = np.meshgrid(x, y)
-
-    # Gaussian centered at goal
-    sigma = 10.0
-    dx = xx - goal_location.x
-    dy = yy - goal_location.y
-    field_array = np.exp(-(dx**2 + dy**2) / (2 * sigma**2))
-
-    # Manually set the field array
-    field.field_array = field_array.astype(np.float32)
-    field.is_generated = True
-
-    return field
+    return GaussianPlume(
+        grid_size=grid_size,
+        source_location=goal_location,
+        sigma=10.0,
+    )
 
 
 @pytest.fixture

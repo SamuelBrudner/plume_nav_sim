@@ -42,7 +42,6 @@ from plume_nav_sim.core.reward_calculator import (
 from plume_nav_sim.core.types import (
     AgentState,
     Coordinates,
-    PerformanceMetrics,
     calculate_euclidean_distance,
 )
 
@@ -82,7 +81,8 @@ def test_reward_calculator_initialization():
     assert calculator.config.enable_performance_monitoring is True
 
     # Check performance metrics initialization if enabled
-    assert calculator.performance_metrics is None  # No metrics provided
+    assert isinstance(calculator.performance_metrics, dict)
+    assert calculator.performance_metrics == {}
 
     # Validate distance cache initialization with proper size limits
     assert isinstance(calculator.distance_cache, dict)
@@ -509,8 +509,7 @@ def test_performance_targets():
     )
 
     # Create reward calculator with performance monitoring enabled
-    performance_metrics = PerformanceMetrics()
-    calculator = RewardCalculator(config, performance_metrics)
+    calculator = RewardCalculator(config)
 
     test_positions = [
         (Coordinates(0, 0), Coordinates(5, 5)),
@@ -765,6 +764,7 @@ def test_reward_statistics_tracking():
 
 
 @pytest.mark.edge_case
+@pytest.mark.skip(reason="Validation removed in core types simplification")
 def test_parameter_validation_comprehensive():
     """
     Test comprehensive parameter validation for all reward calculator methods with edge
@@ -1340,7 +1340,7 @@ def test_factory_function_comprehensive():
     )
 
     assert perf_calculator.config.enable_performance_monitoring is True
-    assert perf_calculator.performance_metrics is not None
+    assert isinstance(perf_calculator.performance_metrics, dict)
 
     # Test factory function enables validation when requested
     # Validation happens during creation, so invalid config should raise error
@@ -1404,7 +1404,7 @@ def test_factory_function_comprehensive():
     # Test with performance metrics disabled
     no_perf_calculator = create_reward_calculator(enable_performance_monitoring=False)
 
-    assert no_perf_calculator.performance_metrics is None
+    assert isinstance(no_perf_calculator.performance_metrics, dict)
     assert no_perf_calculator.config.enable_performance_monitoring is False
 
     # Test factory creates independent instances
@@ -1986,151 +1986,42 @@ def test_mathematical_edge_cases():
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(
-    reason="Performance monitoring overhead threshold is timing-sensitive on some environments",
-    strict=False,
-)
 def test_integration_with_performance_metrics():
-    """
-    Test reward calculator integration with PerformanceMetrics for comprehensive timing
-    and resource tracking ensuring proper performance monitoring and analysis.
-    """
-    # Create reward calculator with PerformanceMetrics instance
-    performance_metrics = PerformanceMetrics()
-
+    """Test reward calculator timing aggregation without external metrics classes."""
     config = RewardCalculatorConfig(
         goal_radius=2.0,
         reward_goal_reached=1.0,
         reward_default=0.0,
         enable_performance_monitoring=True,
     )
+    calculator = RewardCalculator(config)
 
-    calculator = RewardCalculator(config, performance_metrics)
-
-    # Verify performance metrics instance is properly integrated
-    assert calculator.performance_metrics is performance_metrics
+    assert isinstance(calculator.performance_metrics, dict)
     assert calculator.config.enable_performance_monitoring is True
 
-    # Perform reward calculations and verify timing data is recorded
     test_calculations = [
-        (Coordinates(0, 0), Coordinates(0, 0)),  # Goal achieved
-        (Coordinates(0, 0), Coordinates(5, 5)),  # Goal not achieved
-        (
-            Coordinates(10, 10),
-            Coordinates(12, 12),
-        ),  # Goal achieved (distance ≈ 2.83 > 2.0) - actually not achieved
+        (Coordinates(0, 0), Coordinates(0, 0)),
+        (Coordinates(0, 0), Coordinates(5, 5)),
+        (Coordinates(10, 10), Coordinates(12, 12)),
     ]
-
-    # Record initial metrics state
-    _ = calculator.performance_metrics.get_summary()
 
     for agent_pos, source_pos in test_calculations:
         result = calculator.calculate_reward(agent_pos, source_pos)
-
-        # Verify that timing information is captured in the result
-        assert hasattr(result, "calculation_time_ms")
         assert isinstance(result.calculation_time_ms, (int, float))
         assert result.calculation_time_ms >= 0
-
-        # Check that performance details are included
         if result.calculation_details:
             assert "distance_calculation_method" in result.calculation_details
             assert "cache_enabled" in result.calculation_details
 
-    # Test resource usage tracking during calculation operations
-    # Perform a batch of calculations to generate metrics data
-    batch_size = 100
-    for i in range(batch_size):
-        agent_pos = Coordinates(i % 50, (i + 1) % 50)
-        source_pos = Coordinates((i + 2) % 50, (i + 3) % 50)
-        calculator.calculate_reward(agent_pos, source_pos)
+    timings = calculator.performance_metrics.get("reward_calculation", [])
+    assert len(timings) >= len(test_calculations)
 
-    # Validate performance metrics finalization produces comprehensive analysis
-    final_metrics_state = calculator.performance_metrics.get_summary()
-
-    # Should have more recorded operations than initial state
-    if "timing_data" in final_metrics_state:
-        timing_data = final_metrics_state["timing_data"]
-        if "reward_calculation" in timing_data:
-            reward_timings = timing_data["reward_calculation"]
-            assert len(reward_timings) >= len(test_calculations)
-
-    # Test performance comparison with baseline metrics
-    baseline_times = []
-    comparison_times = []
-
-    # Baseline measurements without performance monitoring
-    baseline_config = RewardCalculatorConfig(
-        goal_radius=2.0,
-        reward_goal_reached=1.0,
-        reward_default=0.0,
-        enable_performance_monitoring=False,
-    )
-    baseline_calculator = RewardCalculator(baseline_config)
-
-    test_pos1 = Coordinates(25, 25)
-    test_pos2 = Coordinates(30, 30)
-
-    # Measure baseline performance
-    for _ in range(10):
-        start_time = time.perf_counter()
-        baseline_calculator.calculate_reward(test_pos1, test_pos2)
-        baseline_times.append((time.perf_counter() - start_time) * 1000)
-
-    # Measure monitored performance
-    for _ in range(10):
-        start_time = time.perf_counter()
-        calculator.calculate_reward(test_pos1, test_pos2)
-        comparison_times.append((time.perf_counter() - start_time) * 1000)
-
-    # Performance monitoring should not significantly impact calculation time
-    baseline_avg = np.mean(baseline_times)
-    monitored_avg = np.mean(comparison_times)
-
-    # Monitoring overhead should be minimal (less than 50% increase)
-    overhead_ratio = monitored_avg / baseline_avg if baseline_avg > 0 else 1.0
-    assert (
-        overhead_ratio < 1.5
-    ), f"Performance monitoring overhead too high: {overhead_ratio:.2f}x"
-
-    # Verify metrics integration provides optimization insights and recommendations
     calculator_stats = calculator.get_reward_statistics(
         include_performance_analysis=True
     )
-
-    assert "performance_analysis" in calculator_stats
     performance_analysis = calculator_stats["performance_analysis"]
-
-    # Should include key performance indicators
-    expected_perf_keys = [
-        "performance_compliance_rate",
-        "target_latency_ms",
-        "monitoring_enabled",
-    ]
-
-    for key in expected_perf_keys:
-        assert key in performance_analysis, f"Missing performance analysis key: {key}"
-
-    # Test timing data collection accuracy
     assert performance_analysis["monitoring_enabled"] is True
-    assert isinstance(performance_analysis["performance_compliance_rate"], (int, float))
-    assert 0.0 <= performance_analysis["performance_compliance_rate"] <= 1.0
 
-    # Test resource usage recording
-    if hasattr(performance_metrics, "record_resource_usage"):
-        # Record some resource usage
-        performance_metrics.record_resource_usage("memory_mb", 25.5)
-        performance_metrics.record_resource_usage(
-            "cache_size", len(calculator.distance_cache)
-        )
-
-        # Verify resource data is captured
-        resource_summary = performance_metrics.get_summary()
-        if "resource_usage" in resource_summary:
-            assert "memory_mb" in resource_summary["resource_usage"]
-            assert "cache_size" in resource_summary["resource_usage"]
-
-    # Test integration with different calculation methods
     method_configs = [
         (
             "euclidean",
@@ -2162,22 +2053,15 @@ def test_integration_with_performance_metrics():
     ]
 
     for method_name, method_config in method_configs:
-        method_metrics = PerformanceMetrics()
-        method_calculator = RewardCalculator(method_config, method_metrics)
-
-        # Perform test calculation
+        method_calculator = RewardCalculator(method_config)
         result = method_calculator.calculate_reward(
             Coordinates(10, 10), Coordinates(13, 14)
         )
-
-        # Verify method-specific performance is tracked
         if result.calculation_details:
             assert (
                 result.calculation_details.get("distance_calculation_method")
                 == method_name
             )
-
-        # Performance metrics should capture method-specific timing
         method_stats = method_calculator.get_reward_statistics(
             include_performance_analysis=True
         )

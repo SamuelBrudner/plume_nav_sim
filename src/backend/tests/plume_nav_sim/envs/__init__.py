@@ -5,7 +5,7 @@ testing workflows with performance benchmarking and reproducibility validation.
 
 This module centralizes environment testing infrastructure including test setup functions,
 validation utilities, API compliance checking, performance benchmarking helpers, and
-reproducibility testing tools for comprehensive PlumeSearchEnv and BaseEnvironment testing.
+reproducibility testing tools for comprehensive PlumeSearchEnv and component-based environment testing.
 """
 
 # External imports with version comments
@@ -25,7 +25,7 @@ import numpy as np
 import pytest  # >=8.0.0 - Testing framework integration for fixture management and test utilities in environment testing
 
 # Production helpers used by the lightweight shims below
-from plume_nav_sim.core.types import EnvironmentConfig, create_environment_config
+from plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
 from plume_nav_sim.utils.exceptions import ValidationError
 from plume_nav_sim.utils.seeding import create_seeded_rng, verify_reproducibility

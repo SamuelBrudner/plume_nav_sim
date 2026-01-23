@@ -8,7 +8,7 @@ from plume_nav_sim.actions.semantic_anemotaxis_wrapper import (
 from plume_nav_sim.core.enums import Action
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.state import AgentState
-from plume_nav_sim.plume.wind_field import ConstantWindField
+from plume_nav_sim.wind_field import ConstantWindField
 
 
 class _DummyWindEnv(gym.Env):
