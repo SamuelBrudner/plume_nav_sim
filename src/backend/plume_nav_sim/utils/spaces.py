@@ -29,7 +29,7 @@ from typing import (  # >=3.10 - Type hints for space factory functions, validat
 import gymnasium.spaces  # >=0.29.0 - Core Gymnasium space classes including Discrete and Box for action and observation space creation with standard RL API compliance
 import numpy as np  # >=2.1.0 - Array operations, dtype specifications, and mathematical operations for space bounds and observation validation
 
-from ..core.constants import (
+from ..constants import (
     ACTION_DOWN,
     ACTION_LEFT,
     ACTION_RIGHT,

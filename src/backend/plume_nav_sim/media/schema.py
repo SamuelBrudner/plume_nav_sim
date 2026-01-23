@@ -93,7 +93,11 @@ def validate_xarray_like(ds: Any) -> VideoPlumeAttrs:
     if not isinstance(attrs, Mapping):
         raise ValueError("Dataset attrs must be a mapping of metadata")
 
-    return validate_attrs(attrs)
+    merged_attrs: dict[str, Any] = dict(attrs)
+    if isinstance(var_attrs, Mapping):
+        merged_attrs = {**dict(var_attrs), **merged_attrs}
+
+    return validate_attrs(merged_attrs)
 
 
 __all__ = [

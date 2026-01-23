@@ -48,6 +48,7 @@ class H5MovieIngestConfig:
     pixel_to_grid: Optional[Tuple[float, float]] = None
     origin: Optional[Tuple[float, float]] = None
     extent: Optional[Tuple[float, float]] = None
+    source_location_px: Optional[Tuple[int, int]] = None
     normalize: bool = False
     chunk_t: Optional[int] = None
 
@@ -159,6 +160,15 @@ def _create_zarr_and_write_attrs(
         "extent": list(extent),
         "normalize": bool(cfg.normalize),
     }
+    if cfg.source_location_px is not None:
+        grp.attrs["source_location_px"] = [
+            int(cfg.source_location_px[0]),
+            int(cfg.source_location_px[1]),
+        ]
+        grp.attrs["ingest_args"]["source_location_px"] = [
+            int(cfg.source_location_px[0]),
+            int(cfg.source_location_px[1]),
+        ]
     return arr
 
 

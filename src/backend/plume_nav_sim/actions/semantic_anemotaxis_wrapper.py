@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 import gymnasium as gym
 import numpy as np
 
-from plume_nav_sim.core.constants import MOVEMENT_VECTORS
+from plume_nav_sim.constants import MOVEMENT_VECTORS
 from plume_nav_sim.core.enums import Action
 from plume_nav_sim.core.geometry import Coordinates
 

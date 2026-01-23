@@ -102,7 +102,7 @@ class SimulationSpec(BaseModel):
       aliases:
 
         * For raw media sources (files that will be ingested), these values
-          are forwarded to :func:`plume_nav_sim.plume.movie_field.resolve_movie_dataset_path`
+          are forwarded to :func:`plume_nav_sim.plume.video.resolve_movie_dataset_path`
           and must agree with the movie metadata sidecar; they do not
           override sidecar metadata.
         * For already-ingested dataset directories (for example, ``*.zarr``),

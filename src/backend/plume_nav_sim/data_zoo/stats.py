@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal, Optional, TypedDict
 
 import numpy as np
+from typing_extensions import NotRequired
 
 LOG = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class QuantileStats(TypedDict):
     q75: float
     q95: float
     q99: float
+    q999: NotRequired[float]
 
 
 class ConcentrationStats(TypedDict):
@@ -142,6 +144,7 @@ def compute_concentration_stats(
         q75=float(np.percentile(samples, 75)),
         q95=float(np.percentile(samples, 95)),
         q99=float(np.percentile(samples, 99)),
+        q999=float(np.percentile(samples, 99.9)),
     )
 
     return ConcentrationStats(

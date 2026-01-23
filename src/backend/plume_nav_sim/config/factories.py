@@ -11,15 +11,13 @@ Example:
     >>> env = create_environment_from_config(config)
 """
 
-import numpy as np
-
 from ..actions import DiscreteGridActions, OrientedGridActions, OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..envs import ComponentBasedEnvironment
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
-from ..plume.concentration_field import ConcentrationField
-from ..plume.wind_field import ConstantWindField
+from ..plume.gaussian import GaussianPlume
 from ..rewards import SparseGoalReward, StepPenaltyReward
+from ..wind_field import ConstantWindField
 from .component_configs import (
     ActionConfig,
     EnvironmentConfig,
@@ -138,44 +136,12 @@ def create_reward_function(config: RewardConfig, goal_location: Coordinates):
 def create_concentration_field(
     config: PlumeConfig, grid_size: GridSize, goal_location: Coordinates
 ):
-    """Create concentration field from configuration.
-
-    Args:
-        config: PlumeConfig with dispersion parameters
-        grid_size: Grid dimensions
-        goal_location: Plume source location
-
-    Returns:
-        ConcentrationField instance with generated field
-
-    Example:
-        >>> config = PlumeConfig(sigma=20.0, normalize=True)
-        >>> field = create_concentration_field(
-        ...     config,
-        ...     GridSize(128, 128),
-        ...     Coordinates(64, 64)
-        ... )
-    """
-    field = ConcentrationField(
-        grid_size=grid_size, enable_caching=config.enable_caching
+    """Create concentration field from configuration."""
+    return GaussianPlume(
+        grid_size=grid_size,
+        source_location=goal_location,
+        sigma=config.sigma,
     )
-
-    # Manually create Gaussian field
-    x = np.arange(grid_size.width)
-    y = np.arange(grid_size.height)
-    xx, yy = np.meshgrid(x, y)
-    dx = xx - goal_location.x
-    dy = yy - goal_location.y
-    field_array = np.exp(-(dx**2 + dy**2) / (2 * config.sigma**2))
-
-    if config.normalize:
-        # Already normalized by Gaussian, but ensure [0, 1]
-        field_array = np.clip(field_array, 0.0, 1.0)
-
-    field.field_array = field_array.astype(np.float32)
-    field.is_generated = True
-
-    return field
 
 
 def create_wind_field(config: WindConfig | None):

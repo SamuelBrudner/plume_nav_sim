@@ -50,6 +50,8 @@ class TemporalDerivativePolicy(Policy):
         self._actions = OrientedGridActions()
         self._last_c: Optional[float] = None
         self._last_action: Optional[int] = None
+        self._prev_c: Optional[float] = None
+        self._prev_action: Optional[int] = None
 
     # Policy protocol -----------------------------------------------------
     @property
@@ -61,6 +63,8 @@ class TemporalDerivativePolicy(Policy):
             self._rng = np.random.default_rng(seed)
         self._last_c = None
         self._last_action = None
+        self._prev_c = None
+        self._prev_action = None
 
     def select_action(self, observation: Any, *, explore: bool = True) -> int:
         c = extract_concentration(
@@ -73,9 +77,14 @@ class TemporalDerivativePolicy(Policy):
 
         # Initialize reference on first call
         if self._last_c is None:
+            self._prev_c = None
+            self._prev_action = None
             self._last_c = c
             self._last_action = 0
             return 0
+
+        self._prev_c = self._last_c
+        self._prev_action = self._last_action
 
         # Compute dc identically every step
         dc = c - self._last_c

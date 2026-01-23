@@ -327,6 +327,7 @@ class CrimaldiFluorescenceIngest:
     pixel_to_grid: Tuple[float, float]
     origin: Tuple[float, float]
     extent: Tuple[float, float]
+    source_location_px: Optional[Tuple[int, int]] = None
     normalize: bool = True
     chunk_t: Optional[int] = None
     output_layout: str = "zarr"
@@ -345,6 +346,7 @@ class RigolliDNSIngest:
     coords_checksum: str  # MD5 checksum for coordinates file
     x_key: str = "x"  # Key for X coordinates in coords file
     y_key: str = "y"  # Key for Y coordinates in coords file
+    source_location_px: Optional[Tuple[int, int]] = None
     fps: Optional[float] = None  # Frames per second (None if unknown)
     normalize: bool = False  # Whether to normalize concentration to [0,1]
     chunk_t: Optional[int] = 100  # Chunk size for time dimension
@@ -365,6 +367,19 @@ class EmonetSmokeIngest:
     fps: float = 90.0  # Frame rate (90 Hz for intermittent plume experiments)
     px_per_mm: float = 1.0  # Pixel to mm conversion factor
     arena_size_mm: Tuple[float, float] = (300.0, 180.0)  # Arena dimensions (x, y) in mm
+    source_location_px: Optional[Tuple[int, int]] = None
+    background_subtract: bool = True
+    background_n_frames: int = 200
+    auto_trim_start: bool = True
+    skip_initial_frames: int = 0
+    trim_abs_threshold: Optional[float] = None
+    trim_sigma: float = 5.0
+    trim_consecutive: int = 10
+    trim_max_scan: int = 5000
+    auto_trim_end: bool = False
+    end_abs_threshold: Optional[float] = None
+    end_sigma: float = 5.0
+    end_consecutive: int = 900
     normalize: bool = True  # Normalize smoke intensity to [0,1]
     chunk_t: Optional[int] = 100  # Chunk size for time dimension
     output_layout: str = "zarr"
@@ -444,11 +459,12 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
             contact="Prof. John Crimaldi <crimaldi@colorado.edu>",
         ),
         ingest=CrimaldiFluorescenceIngest(
-            dataset="/Plume Data/dataset_001",
+            dataset="dataset2",
             fps=15.0,
-            pixel_to_grid=(159.84 / 216.0, 300.44 / 406.0),
+            pixel_to_grid=(159.84 / 406.0, 300.44 / 216.0),
             origin=(0.0, 0.0),
             extent=(159.84, 300.44),
+            source_location_px=(107, 0),
             normalize=False,
             chunk_t=50,
         ),
@@ -597,7 +613,7 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         cache_subdir="dryad_4j0zpc87z",
         expected_root="emonet_smoke.zarr",
         artifact=DatasetArtifact(
-            url="https://datadryad.org/stash/downloads/file_stream/852661",
+            url="https://datadryad.org/api/v2/files/852661/download",
             checksum="6f87df24e4a5146c49c56979aca0fd78",
             checksum_type="md5",
             archive_type="none",
@@ -664,11 +680,112 @@ DATASET_REGISTRY: Dict[str, DatasetRegistryEntry] = {
         ),
         ingest=EmonetSmokeIngest(
             frames_key="frames",
-            metadata_url="https://datadryad.org/stash/downloads/file_stream/852662",
+            metadata_url="https://datadryad.org/api/v2/files/852662/download",
             metadata_checksum="",  # Optional - metadata parsing is best-effort
             fps=90.0,  # 90 Hz camera (can be refined from metadata.p.framerate)
             px_per_mm=2048.0 / 300.0,  # ~6.83 px/mm based on 300mm arena width
             arena_size_mm=(300.0, 180.0),  # 2048x1200 px arena
+            background_subtract=True,
+            background_n_frames=200,
+            auto_trim_start=True,
+            trim_abs_threshold=1.3,
+            trim_sigma=5.0,
+            trim_consecutive=10,
+            trim_max_scan=5000,
+            normalize=True,
+            chunk_t=100,
+        ),
+    ),
+    "emonet_smoke_trimmed_v1": DatasetRegistryEntry(
+        dataset_id="emonet_smoke_trimmed_v1",
+        version="1.0.0",
+        cache_subdir="dryad_4j0zpc87z",
+        expected_root="emonet_smoke_trimmed.zarr",
+        artifact=DatasetArtifact(
+            url="https://datadryad.org/api/v2/files/852661/download",
+            checksum="6f87df24e4a5146c49c56979aca0fd78",
+            checksum_type="md5",
+            archive_type="none",
+            layout="hdf5",
+        ),
+        metadata=DatasetMetadata(
+            title="Emonet lab smoke plume video (walking Drosophila study) - tail-trimmed",
+            creators=(
+                Creator(
+                    name="Demir, Mahmut",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Kadakia, Nirag",
+                    orcid="https://orcid.org/0000-0003-0538-7539",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Anderson, Hope D.",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Clark, Damon A.",
+                    orcid="https://orcid.org/0000-0001-5698-9094",
+                    affiliation="Yale University",
+                ),
+                Creator(
+                    name="Emonet, Thierry",
+                    orcid="https://orcid.org/0000-0002-7746-3527",
+                    affiliation="Yale University",
+                ),
+            ),
+            publisher="Dryad",
+            publication_year=2020,
+            description=(
+                "High-speed (90 Hz) smoke plume video from wind tunnel walking arena. "
+                "Smoke intensity serves as proxy for odor concentration. 300×180 mm arena, "
+                "~29 GB raw frames. This entry trims the low-intensity tail using "
+                "background-subtracted mean intensity over time and then ingests to standardized Zarr. "
+                "WARNING: Large download!"
+            ),
+            subjects=(
+                "Drosophila",
+                "plume",
+                "navigation",
+                "smoke",
+                "olfaction",
+                "behavior",
+            ),
+            related_identifiers=(
+                RelatedIdentifier(
+                    identifier="10.7554/eLife.57524",
+                    relation_type="IsSupplementTo",
+                ),
+            ),
+            doi="10.5061/dryad.4j0zpc87z",
+            license="CC0-1.0",
+            citation=(
+                "Demir, M., Kadakia, N., Anderson, H. D., Clark, D. A., & Emonet, T. (2020). "
+                "Walking Drosophila navigate complex plumes using stochastic decisions "
+                "biased by the timing of odor encounters. eLife, 9, e57524. "
+                "https://doi.org/10.7554/eLife.57524"
+            ),
+            contact="Thierry Emonet <thierry.emonet@yale.edu>",
+        ),
+        ingest=EmonetSmokeIngest(
+            frames_key="frames",
+            metadata_url="https://datadryad.org/api/v2/files/852662/download",
+            metadata_checksum="",
+            fps=90.0,
+            px_per_mm=2048.0 / 300.0,
+            arena_size_mm=(300.0, 180.0),
+            background_subtract=True,
+            background_n_frames=200,
+            auto_trim_start=True,
+            trim_abs_threshold=1.3,
+            trim_sigma=5.0,
+            trim_consecutive=10,
+            trim_max_scan=5000,
+            auto_trim_end=True,
+            end_abs_threshold=1.3,
+            end_sigma=5.0,
+            end_consecutive=900,
             normalize=True,
             chunk_t=100,
         ),
@@ -806,6 +923,38 @@ def _validate_emonet_ingest(key: str, ingest: EmonetSmokeIngest) -> None:
     if ax <= 0 or ay <= 0:
         raise RegistryValidationError(
             f"Dataset '{key}' EmonetSmokeIngest arena_size_mm must be positive"
+        )
+    if ingest.background_n_frames < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest background_n_frames must be >= 0"
+        )
+    if ingest.trim_sigma < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest trim_sigma must be >= 0"
+        )
+    if ingest.trim_consecutive < 1:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest trim_consecutive must be >= 1"
+        )
+    if ingest.trim_max_scan < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest trim_max_scan must be >= 0"
+        )
+    if ingest.trim_abs_threshold is not None and ingest.trim_abs_threshold < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest trim_abs_threshold must be >= 0"
+        )
+    if ingest.end_sigma < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest end_sigma must be >= 0"
+        )
+    if ingest.end_consecutive < 1:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest end_consecutive must be >= 1"
+        )
+    if ingest.end_abs_threshold is not None and ingest.end_abs_threshold < 0:
+        raise RegistryValidationError(
+            f"Dataset '{key}' EmonetSmokeIngest end_abs_threshold must be >= 0"
         )
 
 

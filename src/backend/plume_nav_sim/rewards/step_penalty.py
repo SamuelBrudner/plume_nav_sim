@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover
 from plume_nav_sim.core.geometry import Coordinates
 from plume_nav_sim.core.state import AgentState
 from plume_nav_sim.interfaces.action import ActionType
-from plume_nav_sim.plume.concentration_field import ConcentrationField
+from plume_nav_sim.plume.protocol import ConcentrationField
 
 
 class StepPenaltyReward:

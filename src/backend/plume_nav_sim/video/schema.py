@@ -25,7 +25,7 @@ SCHEMA_VERSION: str = "1.0.0"
 """Schema version for the video plume dataset contract."""
 
 # Conservatively allow a small, explicit set of source dtypes for v0.
-ALLOWED_SOURCE_DTYPES = {"uint8", "uint16", "float32"}
+ALLOWED_SOURCE_DTYPES = {"uint8", "uint16", "float32", "float64"}
 
 
 def _tuple2(value: Union[float, Iterable[float]], *, name: str) -> Tuple[float, float]:

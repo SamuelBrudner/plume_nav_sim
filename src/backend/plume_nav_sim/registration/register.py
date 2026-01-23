@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover - fallback for older Python in trimmed e
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 
 # Internal imports for configuration constants and system integration
-from ..core.constants import (
+from ..constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
     DEFAULT_MAX_STEPS,

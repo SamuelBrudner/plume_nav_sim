@@ -84,9 +84,10 @@ def main() -> int:
     if args.dry_run:
         for dataset_id in dataset_ids:
             entry = DATASET_REGISTRY[dataset_id]
+            cache_dir = entry.cache_path(args.cache_root)
             print(f"Would download: {dataset_id}")
             print(f"  URL: {entry.artifact.url}")
-            print(f"  Target: {args.cache_root / dataset_id}")
+            print(f"  Target: {cache_dir / entry.expected_root}")
         return 0
 
     # Download datasets

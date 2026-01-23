@@ -21,6 +21,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
+
+from plume_nav_sim.video.schema import DIMS_TYX, SCHEMA_VERSION
 
 from .registry import (
     DEFAULT_CACHE_ROOT,
@@ -33,6 +36,18 @@ from .registry import (
 from .stats import compute_concentration_stats, store_stats_in_zarr
 
 LOG = logging.getLogger(__name__)
+
+
+def _http_request(url: str) -> urllib.request.Request:
+    user_agent = os.environ.get(
+        "PLUME_DATA_ZOO_USER_AGENT",
+        "plume_nav_sim-data_zoo/1.0 (urllib; https://github.com/SamuelBrudner/plume_nav_sim)",
+    )
+    headers: dict[str, str] = {"User-Agent": user_agent}
+    bearer = os.environ.get("PLUME_DRYAD_BEARER_TOKEN")
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    return urllib.request.Request(url, headers=headers)
 
 
 def _format_yaml_string(value: str) -> str:
@@ -78,6 +93,51 @@ def _format_yaml_value(value: Any, indent: int = 0) -> str:
 
 class DatasetDownloadError(RuntimeError):
     """Base error for data zoo download failures."""
+
+
+def _resolve_dryad_presigned_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.netloc != "datadryad.org":
+        return url
+    if not parsed.path.startswith("/api/v2/files/"):
+        return url
+    if not parsed.path.endswith("/download"):
+        return url
+
+    # Dryad API v2 download endpoints may reject plain GET/HEAD with 401 but will
+    # issue a redirect when a small ranged GET is used.
+    req = _http_request(url)
+    user_agent = (
+        req.headers.get("User-agent")
+        or req.headers.get("User-Agent")
+        or os.environ.get("PLUME_DATA_ZOO_USER_AGENT")
+        or "plume_nav_sim-data_zoo/1.0 (urllib)"
+    )
+    auth = req.headers.get("Authorization")
+    headers: dict[str, str] = {
+        "User-Agent": user_agent,
+        "Range": "bytes=0-0",
+        "Accept": "*/*",
+    }
+    if auth:
+        headers["Authorization"] = auth
+    range_req = urllib.request.Request(
+        url,
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(range_req, timeout=30) as response:
+            resolved = response.geturl()
+    except Exception as exc:
+        raise DatasetDownloadError(
+            f"Failed to resolve Dryad presigned URL for {url}: {exc}"
+        ) from exc
+
+    if not resolved or resolved == url:
+        raise DatasetDownloadError(
+            f"Dryad download URL did not resolve to a presigned Location URL: {url}"
+        )
+    return resolved
 
 
 @dataclass
@@ -379,7 +439,7 @@ def _confirm_download_if_needed(
 def ensure_dataset_available(
     dataset_id: str,
     *,
-    cache_root: Path = DEFAULT_CACHE_ROOT,
+    cache_root: Path | None = DEFAULT_CACHE_ROOT,
     auto_download: bool = False,
     force_download: bool = False,
     verify_checksum: bool = True,
@@ -407,7 +467,8 @@ def ensure_dataset_available(
     """
 
     entry = describe_dataset(dataset_id)
-    cache_dir = entry.cache_path(cache_root)
+    resolved_cache_root = DEFAULT_CACHE_ROOT if cache_root is None else cache_root
+    cache_dir = entry.cache_path(resolved_cache_root)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     expected_path = cache_dir / entry.expected_root
@@ -443,11 +504,23 @@ def ensure_dataset_available(
         confirm_download=confirm_download,
     )
 
-    if auto_download or not artifact_path.exists():
+    if not artifact_path.exists():
         _download_artifact(entry, artifact_path)
 
     if verify_checksum:
-        _verify_checksum(artifact_path, entry)
+        try:
+            _verify_checksum(artifact_path, entry)
+        except ChecksumMismatchError:
+            if artifact_path.exists():
+                artifact_path.unlink()
+            if not auto_download:
+                raise
+            LOG.warning(
+                "Checksum mismatch for %s; re-downloading because auto_download=True",
+                entry.dataset_id,
+            )
+            _download_artifact(entry, artifact_path)
+            _verify_checksum(artifact_path, entry)
 
     source_path = _unpack_artifact(
         entry,
@@ -555,6 +628,26 @@ def _artifact_filename(entry: DatasetRegistryEntry) -> str:
     from urllib.parse import unquote, urlparse
 
     parsed = urlparse(entry.artifact.url)
+    if parsed.netloc == "datadryad.org" and parsed.path.startswith("/api/v2/files/"):
+        parts = [p for p in parsed.path.split("/") if p]
+        if (
+            len(parts) >= 4
+            and parts[0] == "api"
+            and parts[1] == "v2"
+            and parts[2] == "files"
+        ):
+            file_id = parts[3]
+            try:
+                meta_url = f"https://datadryad.org/api/v2/files/{file_id}"
+                with urllib.request.urlopen(
+                    _http_request(meta_url), timeout=30
+                ) as resp:
+                    meta = json.load(resp)
+                candidate = meta.get("path")
+                if isinstance(candidate, str) and candidate:
+                    return candidate
+            except Exception:
+                return f"dryad_file_{file_id}"
     if parsed.netloc.endswith("zenodo.org"):
         parts = [p for p in parsed.path.split("/") if p]
         if parts and parts[-1] == "content":
@@ -588,11 +681,31 @@ def _download_artifact(entry: DatasetRegistryEntry, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     LOG.info("Downloading %s -> %s", entry.dataset_id, dest)
     try:
-        with (
-            urllib.request.urlopen(url) as response,
-            dest.open("wb") as fh,
-        ):
-            shutil.copyfileobj(response, fh)
+        tmp_dest = dest.with_name(dest.name + ".part")
+        if tmp_dest.exists():
+            tmp_dest.unlink()
+
+        resolved_url = _resolve_dryad_presigned_url(url)
+
+        with urllib.request.urlopen(_http_request(resolved_url)) as response:
+            headers = getattr(response, "headers", None)
+            content_length = (
+                headers.get("Content-Length") if hasattr(headers, "get") else None
+            )
+            expected_bytes = int(content_length) if content_length else None
+
+            with tmp_dest.open("wb") as fh:
+                shutil.copyfileobj(response, fh)
+
+        actual_bytes = tmp_dest.stat().st_size
+        if expected_bytes is not None and actual_bytes != expected_bytes:
+            tmp_dest.unlink()
+            raise DatasetDownloadError(
+                f"Partial download for {entry.dataset_id} from {url}: expected "
+                f"{expected_bytes} bytes, got {actual_bytes} bytes"
+            )
+
+        tmp_dest.replace(dest)
     except Exception as exc:
         raise DatasetDownloadError(
             f"Failed to download {entry.dataset_id} from {url}: {exc}"
@@ -801,6 +914,7 @@ def _ingest_hdf5_to_zarr(
         pixel_to_grid=spec.pixel_to_grid,
         origin=spec.origin,
         extent=spec.extent,
+        source_location_px=spec.source_location_px,
         normalize=spec.normalize,
         chunk_t=spec.chunk_t,
     )
@@ -842,7 +956,7 @@ def _ensure_coords_file(spec: RigolliDNSIngest, source_path: Path) -> Path:
     coords_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with (
-            urllib.request.urlopen(spec.coords_url) as response,
+            urllib.request.urlopen(_http_request(spec.coords_url)) as response,
             coords_path.open("wb") as fh,
         ):
             shutil.copyfileobj(response, fh)
@@ -958,9 +1072,214 @@ def _init_rigolli_store(
         chunks=(chunk_t, ny, nx),
         dtype="float32",
     )
-    root.create_dataset("x", data=x_coords, dtype="float32")
-    root.create_dataset("y", data=y_coords, dtype="float32")
+    conc.attrs["_ARRAY_DIMENSIONS"] = list(DIMS_TYX)
+    x_arr = root.create_dataset("x", data=x_coords, dtype="float32")
+    x_arr.attrs["_ARRAY_DIMENSIONS"] = ["x"]
+    y_arr = root.create_dataset("y", data=y_coords, dtype="float32")
+    y_arr.attrs["_ARRAY_DIMENSIONS"] = ["y"]
     return root, conc
+
+
+def _compute_emonet_background(
+    *,
+    frames_dataset: Any,
+    n_bg: int,
+    np: Any,
+) -> Any:
+    background = None
+    for idx in range(n_bg):
+        frame = frames_dataset[idx]
+        frame = np.transpose(frame, (1, 0)).astype(np.float32)
+        if background is None:
+            background = np.zeros_like(frame, dtype=np.float32)
+        background += frame
+    if background is None:
+        raise DatasetDownloadError(
+            "Failed to compute Emonet background: no frames read"
+        )
+    return background / float(n_bg)
+
+
+def _emonet_frame_signal(
+    frame: Any,
+    *,
+    background: Any | None,
+    subtract_background: bool,
+    np: Any,
+) -> float:
+    frame_f = frame.astype(np.float32)
+    if subtract_background and background is not None:
+        frame_f = frame_f - background
+        frame_f = np.clip(frame_f, 0.0, None)
+    return float(frame_f.mean())
+
+
+def _estimate_emonet_start_frame(
+    *,
+    frames_dataset: Any,
+    n_frames: int,
+    background: Any | None,
+    spec: Any,
+    np: Any,
+) -> tuple[int, dict[str, float]]:
+    n_bg = int(getattr(spec, "background_n_frames", 0))
+    n_scan = min(int(getattr(spec, "trim_max_scan", 0)), n_frames)
+    if n_scan <= 0:
+        return 0, {}
+
+    subtract_background = bool(getattr(spec, "background_subtract", False))
+    baseline_end = min(max(n_bg, 1), n_scan)
+    baseline: list[float] = []
+    for idx in range(baseline_end):
+        frame = frames_dataset[idx]
+        frame = np.transpose(frame, (1, 0))
+        baseline.append(
+            _emonet_frame_signal(
+                frame,
+                background=background,
+                subtract_background=subtract_background,
+                np=np,
+            )
+        )
+    baseline_arr = np.asarray(baseline, dtype=np.float32)
+    baseline_mean = float(baseline_arr.mean())
+    baseline_std = float(baseline_arr.std())
+
+    trim_abs_threshold = getattr(spec, "trim_abs_threshold", None)
+    if trim_abs_threshold is not None:
+        try:
+            threshold = float(trim_abs_threshold)
+        except Exception as exc:
+            raise DatasetDownloadError(
+                f"Invalid trim_abs_threshold={trim_abs_threshold!r} (must be float)"
+            ) from exc
+        if not np.isfinite(threshold) or threshold < 0.0:
+            raise DatasetDownloadError(
+                f"Invalid trim_abs_threshold={threshold} (must be finite and >= 0)"
+            )
+    else:
+        threshold = (
+            baseline_mean + float(getattr(spec, "trim_sigma", 0.0)) * baseline_std
+        )
+    consecutive_needed = int(getattr(spec, "trim_consecutive", 1))
+    consecutive = 0
+    for idx in range(baseline_end, n_scan):
+        frame = frames_dataset[idx]
+        frame = np.transpose(frame, (1, 0))
+        signal = _emonet_frame_signal(
+            frame,
+            background=background,
+            subtract_background=subtract_background,
+            np=np,
+        )
+        if signal > threshold:
+            consecutive += 1
+            if consecutive >= consecutive_needed:
+                return idx - consecutive_needed + 1, {
+                    "baseline_mean": baseline_mean,
+                    "baseline_std": baseline_std,
+                    "threshold": float(threshold),
+                }
+        else:
+            consecutive = 0
+
+    return 0, {
+        "baseline_mean": baseline_mean,
+        "baseline_std": baseline_std,
+        "threshold": float(threshold),
+    }
+
+
+def _estimate_emonet_end_frame(
+    *,
+    frames_dataset: Any,
+    n_frames: int,
+    start_frame: int,
+    background: Any | None,
+    spec: Any,
+    np: Any,
+) -> tuple[int, dict[str, float]]:
+    if n_frames <= 0:
+        return 0, {}
+    if start_frame < 0:
+        start_frame = 0
+    if start_frame >= n_frames:
+        return n_frames, {}
+
+    subtract_background = bool(getattr(spec, "background_subtract", False))
+    consecutive_needed = int(getattr(spec, "end_consecutive", 1))
+    if consecutive_needed < 1:
+        raise DatasetDownloadError(
+            f"Invalid end_consecutive={consecutive_needed} (must be >= 1)"
+        )
+
+    end_abs_threshold = getattr(spec, "end_abs_threshold", None)
+    if end_abs_threshold is None:
+        end_abs_threshold = getattr(spec, "trim_abs_threshold", None)
+
+    stats: dict[str, float] = {}
+    if end_abs_threshold is not None:
+        try:
+            threshold = float(end_abs_threshold)
+        except Exception as exc:
+            raise DatasetDownloadError(
+                f"Invalid end_abs_threshold={end_abs_threshold!r} (must be float)"
+            ) from exc
+        if not np.isfinite(threshold) or threshold < 0.0:
+            raise DatasetDownloadError(
+                f"Invalid end_abs_threshold={threshold} (must be finite and >= 0)"
+            )
+    else:
+        baseline_n = int(getattr(spec, "background_n_frames", 0))
+        baseline_n = max(baseline_n, 1)
+        baseline_n = min(baseline_n, n_frames - start_frame)
+        if baseline_n <= 0:
+            return n_frames, {}
+
+        baseline: list[float] = []
+        baseline_start = n_frames - baseline_n
+        for idx in range(baseline_start, n_frames):
+            frame = frames_dataset[idx]
+            frame = np.transpose(frame, (1, 0))
+            baseline.append(
+                _emonet_frame_signal(
+                    frame,
+                    background=background,
+                    subtract_background=subtract_background,
+                    np=np,
+                )
+            )
+
+        baseline_arr = np.asarray(baseline, dtype=np.float32)
+        baseline_mean = float(baseline_arr.mean())
+        baseline_std = float(baseline_arr.std())
+        threshold = (
+            baseline_mean + float(getattr(spec, "end_sigma", 0.0)) * baseline_std
+        )
+        stats["baseline_mean"] = baseline_mean
+        stats["baseline_std"] = baseline_std
+
+    stats["threshold"] = float(threshold)
+
+    tail_len = 0
+    for idx in range(n_frames - 1, start_frame - 1, -1):
+        frame = frames_dataset[idx]
+        frame = np.transpose(frame, (1, 0))
+        signal = _emonet_frame_signal(
+            frame,
+            background=background,
+            subtract_background=subtract_background,
+            np=np,
+        )
+        if signal <= threshold:
+            tail_len += 1
+        else:
+            break
+
+    stats["tail_len"] = float(tail_len)
+    if tail_len < consecutive_needed:
+        return n_frames, stats
+    return n_frames - tail_len, stats
 
 
 def _stream_rigolli_chunks(
@@ -1015,12 +1334,60 @@ def _write_rigolli_attrs(
     n_frames: int,
     ny: int,
     nx: int,
+    x_coords: Any,
+    y_coords: Any,
 ) -> None:
-    root.attrs["fps"] = spec.fps if spec.fps else 0.0
+    fps = float(spec.fps) if spec.fps is not None else 1.0
+    if spec.fps is None:
+        LOG.warning(
+            "Rigolli DNS ingest missing fps; defaulting to fps=1.0 for xarray compatibility."
+        )
+        root.attrs["fps_is_placeholder"] = True
+
+    x_vals = x_coords
+    y_vals = y_coords
+    try:
+        x_min = float(min(x_vals))
+        x_max = float(max(x_vals))
+    except Exception:
+        x_min = 0.0
+        x_max = float(nx)
+    try:
+        y_min = float(min(y_vals))
+        y_max = float(max(y_vals))
+    except Exception:
+        y_min = 0.0
+        y_max = float(ny)
+
+    pixel_to_grid_y = (y_max - y_min) / float(max(1, len(y_vals) - 1))
+    pixel_to_grid_x = (x_max - x_min) / float(max(1, len(x_vals) - 1))
+
+    root.attrs["schema_version"] = SCHEMA_VERSION
+    root.attrs["fps"] = fps
+    root.attrs["source_dtype"] = "float32"
+    root.attrs["pixel_to_grid"] = [float(pixel_to_grid_y), float(pixel_to_grid_x)]
+    root.attrs["origin"] = [float(y_min), float(x_min)]
+    root.attrs["extent"] = [float(y_max - y_min), float(x_max - x_min)]
+    root.attrs["dims"] = list(DIMS_TYX)
+
     root.attrs["n_frames"] = int(n_frames)
     root.attrs["shape"] = [int(n_frames), int(ny), int(nx)]
     root.attrs["source_format"] = "matlab_v73"
     root.attrs["normalized"] = bool(spec.normalize)
+
+    source_location_px = getattr(spec, "source_location_px", None)
+    if source_location_px is None:
+        source_location_px = (0, int(ny) // 2)
+        root.attrs["source_location_px_is_heuristic"] = True
+        LOG.warning(
+            "Rigolli DNS ingest missing source_location_px; defaulting to heuristic (x=%d, y=%d).",
+            source_location_px[0],
+            source_location_px[1],
+        )
+    root.attrs["source_location_px"] = [
+        int(source_location_px[0]),
+        int(source_location_px[1]),
+    ]
 
 
 def _download_emonet_metadata(
@@ -1035,8 +1402,9 @@ def _download_emonet_metadata(
 
     LOG.info("Downloading metadata file for %s", source_path.name)
     try:
+        resolved_url = _resolve_dryad_presigned_url(spec.metadata_url)
         with (
-            urllib.request.urlopen(spec.metadata_url) as response,
+            urllib.request.urlopen(_http_request(resolved_url)) as response,
             meta_path.open("wb") as fh,
         ):
             shutil.copyfileobj(response, fh)
@@ -1074,12 +1442,44 @@ def _resolve_frames_key(
     mat_file: Any, spec: EmonetSmokeIngest, source_path: Path
 ) -> str:
     frames_key = spec.frames_key
-    if frames_key in mat_file:
+
+    # h5py allows nested paths (e.g., "ComplexPlume/frames"). Prefer the
+    # explicitly configured key if it exists.
+    try:
+        obj = mat_file.get(frames_key)
+    except Exception:
+        obj = None
+    if obj is not None and hasattr(obj, "ndim") and int(obj.ndim) == 3:
         return frames_key
 
-    for key in mat_file.keys():
-        if "frame" in key.lower() or mat_file[key].ndim == 3:
-            return key
+    # Otherwise, search for candidate 3D datasets and pick the largest (by
+    # element count). This is metadata-only and does not read the dataset.
+    candidates: list[tuple[int, str]] = []
+
+    def _visit(name: str, node: Any) -> None:
+        if not hasattr(node, "shape"):
+            return
+        try:
+            shape = tuple(int(x) for x in node.shape)
+        except Exception:
+            return
+        if len(shape) != 3:
+            return
+        n = 1
+        for s in shape:
+            n *= int(s)
+        candidates.append((n, name))
+
+    try:
+        mat_file.visititems(_visit)
+    except Exception as exc:
+        raise DatasetDownloadError(
+            f"Failed while scanning {source_path} for a 3D frames dataset: {exc}"
+        ) from exc
+
+    if candidates:
+        candidates.sort(reverse=True)
+        return candidates[0][1]
 
     raise DatasetDownloadError(
         f"Could not find frames array in {source_path}. "
@@ -1106,8 +1506,11 @@ def _init_emonet_store(
         chunks=(chunk_t, n_y, n_x),
         dtype="float32",
     )
-    root.create_dataset("x", data=x_coords, dtype="float32")
-    root.create_dataset("y", data=y_coords, dtype="float32")
+    conc.attrs["_ARRAY_DIMENSIONS"] = list(DIMS_TYX)
+    x_arr = root.create_dataset("x", data=x_coords, dtype="float32")
+    x_arr.attrs["_ARRAY_DIMENSIONS"] = ["x"]
+    y_arr = root.create_dataset("y", data=y_coords, dtype="float32")
+    y_arr.attrs["_ARRAY_DIMENSIONS"] = ["y"]
     return root, conc
 
 
@@ -1116,15 +1519,33 @@ def _stream_emonet_chunks(
     frames_dataset: Any,
     conc: Any,
     n_frames: int,
+    start_frame: int,
+    end_frame: int,
     batch_size: int,
     normalize: bool,
+    background: Any | None,
+    subtract_background: bool,
     np: Any,
 ) -> tuple[float, float]:
+    if end_frame <= start_frame:
+        raise DatasetDownloadError(
+            f"Invalid trim range: start_frame={start_frame} end_frame={end_frame}"
+        )
     global_min, global_max = np.inf, -np.inf
     for t_start in range(0, n_frames, batch_size):
         t_end = min(t_start + batch_size, n_frames)
-        chunk = frames_dataset[t_start:t_end]
+        src_start = start_frame + t_start
+        src_end = start_frame + t_end
+        if src_end > end_frame:
+            raise DatasetDownloadError(
+                "Emonet stream attempted to read past end_frame: "
+                f"src_end={src_end} end_frame={end_frame}"
+            )
+        chunk = frames_dataset[src_start:src_end]
         chunk = np.transpose(chunk, (0, 2, 1)).astype(np.float32)
+        if subtract_background and background is not None:
+            chunk = chunk - background[None, :, :]
+            chunk = np.clip(chunk, 0.0, None)
         conc[t_start:t_end] = chunk
 
         if normalize:
@@ -1145,13 +1566,90 @@ def _write_emonet_attrs(
     n_frames: int,
     n_y: int,
     n_x: int,
+    x_coords: Any,
+    y_coords: Any,
+    start_frame: int,
+    end_frame: int,
+    background_n_frames: int,
+    trim_stats: dict[str, float],
+    end_trim_stats: dict[str, float],
 ) -> None:
-    root.attrs["fps"] = metadata.get("fps", spec.fps)
+    fps = float(metadata.get("fps", spec.fps))
+
+    x_vals = x_coords
+    y_vals = y_coords
+    try:
+        x_min = float(min(x_vals))
+        x_max = float(max(x_vals))
+    except Exception:
+        x_min = 0.0
+        x_max = float(n_x)
+    try:
+        y_min = float(min(y_vals))
+        y_max = float(max(y_vals))
+    except Exception:
+        y_min = 0.0
+        y_max = float(n_y)
+
+    pixel_to_grid_y = (y_max - y_min) / float(max(1, len(y_vals) - 1))
+    pixel_to_grid_x = (x_max - x_min) / float(max(1, len(x_vals) - 1))
+
+    root.attrs["schema_version"] = SCHEMA_VERSION
+    root.attrs["fps"] = fps
+    root.attrs["source_dtype"] = "float32"
+    root.attrs["pixel_to_grid"] = [float(pixel_to_grid_y), float(pixel_to_grid_x)]
+    root.attrs["origin"] = [float(y_min), float(x_min)]
+    root.attrs["extent"] = [float(y_max - y_min), float(x_max - x_min)]
+    root.attrs["dims"] = list(DIMS_TYX)
+
     root.attrs["n_frames"] = n_frames
     root.attrs["shape"] = [n_frames, n_y, n_x]
     root.attrs["arena_size_mm"] = list(spec.arena_size_mm)
     root.attrs["source_format"] = "emonet_flywalk"
     root.attrs["normalized"] = spec.normalize
+
+    root.attrs["background_subtract"] = bool(
+        getattr(spec, "background_subtract", False)
+    )
+    root.attrs["background_n_frames"] = int(background_n_frames)
+    root.attrs["auto_trim_start"] = bool(getattr(spec, "auto_trim_start", False))
+    root.attrs["skip_initial_frames"] = int(getattr(spec, "skip_initial_frames", 0))
+    trim_abs_threshold = getattr(spec, "trim_abs_threshold", None)
+    if trim_abs_threshold is not None:
+        root.attrs["trim_abs_threshold"] = float(trim_abs_threshold)
+    root.attrs["trim_sigma"] = float(getattr(spec, "trim_sigma", 0.0))
+    root.attrs["trim_consecutive"] = int(getattr(spec, "trim_consecutive", 1))
+    root.attrs["trim_max_scan"] = int(getattr(spec, "trim_max_scan", 0))
+    root.attrs["start_frame"] = int(start_frame)
+    for key, val in trim_stats.items():
+        root.attrs[f"trim_{key}"] = float(val)
+
+    root.attrs["auto_trim_end"] = bool(getattr(spec, "auto_trim_end", False))
+    end_abs_threshold = getattr(spec, "end_abs_threshold", None)
+    if end_abs_threshold is not None:
+        root.attrs["end_abs_threshold"] = float(end_abs_threshold)
+    root.attrs["end_sigma"] = float(getattr(spec, "end_sigma", 0.0))
+    root.attrs["end_consecutive"] = int(getattr(spec, "end_consecutive", 1))
+    root.attrs["end_frame"] = int(end_frame)
+    for key, val in end_trim_stats.items():
+        if key == "tail_len":
+            root.attrs["end_tail_len"] = int(val)
+        else:
+            root.attrs[f"end_{key}"] = float(val)
+
+    source_location_px = getattr(spec, "source_location_px", None)
+    if source_location_px is None:
+        source_location_px = (0, int(n_y) // 2)
+        root.attrs["source_location_px_is_heuristic"] = True
+        LOG.warning(
+            "Emonet ingest missing source_location_px; defaulting to heuristic (x=%d, y=%d).",
+            source_location_px[0],
+            source_location_px[1],
+        )
+    root.attrs["source_location_px"] = [
+        int(source_location_px[0]),
+        int(source_location_px[1]),
+    ]
 
 
 def _ingest_mat_to_zarr(
@@ -1249,6 +1747,8 @@ def _ingest_mat_to_zarr(
             n_frames=n_frames,
             ny=ny,
             nx=nx,
+            x_coords=x_coords,
+            y_coords=y_coords,
         )
 
         LOG.info(
@@ -1267,6 +1767,8 @@ def _ingest_mat_to_zarr(
             if spec.normalize:
                 stats["normalized_during_ingest"] = True
             store_stats_in_zarr(output_path, stats)
+
+        zarr.consolidate_metadata(output_path)
 
         return output_path
 
@@ -1322,6 +1824,97 @@ def _ingest_emonet_to_zarr(
             # We want (T, Y, X) -> swap axes 1 and 2 during chunk processing
             n_frames, n_x, n_y = src_shape
 
+            background_n_frames = int(getattr(spec, "background_n_frames", 0))
+            if background_n_frames < 0:
+                raise DatasetDownloadError(
+                    f"Invalid background_n_frames={background_n_frames} for {source_path}"
+                )
+            background_n_frames = min(background_n_frames, n_frames)
+
+            background = None
+            if bool(getattr(spec, "background_subtract", False)):
+                if background_n_frames <= 0:
+                    raise DatasetDownloadError(
+                        "background_subtract=True requires background_n_frames > 0"
+                    )
+                LOG.info(
+                    "Computing background image from first %d frames...",
+                    background_n_frames,
+                )
+                background = _compute_emonet_background(
+                    frames_dataset=frames_dataset,
+                    n_bg=background_n_frames,
+                    np=np,
+                )
+
+            trim_stats: dict[str, float] = {}
+            start_frame = int(max(0, getattr(spec, "skip_initial_frames", 0)))
+            if bool(getattr(spec, "auto_trim_start", False)):
+                auto_start, trim_stats = _estimate_emonet_start_frame(
+                    frames_dataset=frames_dataset,
+                    n_frames=n_frames,
+                    background=background,
+                    spec=spec,
+                    np=np,
+                )
+                start_frame = max(start_frame, int(auto_start))
+
+            end_trim_stats: dict[str, float] = {}
+            end_frame = n_frames
+            if bool(getattr(spec, "auto_trim_end", False)):
+                end_frame, end_trim_stats = _estimate_emonet_end_frame(
+                    frames_dataset=frames_dataset,
+                    n_frames=n_frames,
+                    start_frame=start_frame,
+                    background=background,
+                    spec=spec,
+                    np=np,
+                )
+
+            LOG.info(
+                "Emonet preprocessing: background_subtract=%s background_n_frames=%d auto_trim_start=%s "
+                "skip_initial_frames=%d -> start_frame=%d auto_trim_end=%s -> end_frame=%d",
+                bool(getattr(spec, "background_subtract", False)),
+                background_n_frames,
+                bool(getattr(spec, "auto_trim_start", False)),
+                int(getattr(spec, "skip_initial_frames", 0)),
+                start_frame,
+                bool(getattr(spec, "auto_trim_end", False)),
+                int(end_frame),
+            )
+            if trim_stats:
+                LOG.info(
+                    "Emonet trim stats: baseline_mean=%.6f baseline_std=%.6f threshold=%.6f (sigma=%.2f, consecutive=%d, max_scan=%d)",
+                    float(trim_stats.get("baseline_mean", 0.0)),
+                    float(trim_stats.get("baseline_std", 0.0)),
+                    float(trim_stats.get("threshold", 0.0)),
+                    float(getattr(spec, "trim_sigma", 0.0)),
+                    int(getattr(spec, "trim_consecutive", 1)),
+                    int(getattr(spec, "trim_max_scan", 0)),
+                )
+            if end_trim_stats:
+                LOG.info(
+                    "Emonet end trim stats: tail_len=%d threshold=%.6f (sigma=%.2f, consecutive=%d)",
+                    int(end_trim_stats.get("tail_len", 0.0)),
+                    float(end_trim_stats.get("threshold", 0.0)),
+                    float(getattr(spec, "end_sigma", 0.0)),
+                    int(getattr(spec, "end_consecutive", 1)),
+                )
+
+            if start_frame >= n_frames:
+                raise DatasetDownloadError(
+                    f"Start frame {start_frame} is out of bounds for {source_path} with {n_frames} frames"
+                )
+            if end_frame > n_frames:
+                raise DatasetDownloadError(
+                    f"End frame {end_frame} is out of bounds for {source_path} with {n_frames} frames"
+                )
+            if end_frame <= start_frame:
+                raise DatasetDownloadError(
+                    f"End frame {end_frame} must be greater than start frame {start_frame}"
+                )
+            n_frames_out = end_frame - start_frame
+
             # Generate spatial coordinates from arena size
             arena_x, arena_y = spec.arena_size_mm
             x_coords = np.linspace(0, arena_x, n_x, dtype=np.float32)
@@ -1346,7 +1939,7 @@ def _ingest_emonet_to_zarr(
 
             root, conc = _init_emonet_store(
                 output_path=output_path,
-                n_frames=n_frames,
+                n_frames=n_frames_out,
                 n_y=n_y,
                 n_x=n_x,
                 chunk_t=chunk_t,
@@ -1359,9 +1952,13 @@ def _ingest_emonet_to_zarr(
             global_min, global_max = _stream_emonet_chunks(
                 frames_dataset=frames_dataset,
                 conc=conc,
-                n_frames=n_frames,
+                n_frames=n_frames_out,
+                start_frame=start_frame,
+                end_frame=end_frame,
                 batch_size=batch_size,
                 normalize=bool(spec.normalize),
+                background=background,
+                subtract_background=bool(getattr(spec, "background_subtract", False)),
                 np=np,
             )
 
@@ -1370,7 +1967,7 @@ def _ingest_emonet_to_zarr(
             LOG.info("Normalizing data (min=%.2f, max=%.2f)...", global_min, global_max)
             _normalize_concentration(
                 conc,
-                n_frames=n_frames,
+                n_frames=n_frames_out,
                 chunk_t=batch_size,
                 global_min=float(global_min),
                 global_max=float(global_max),
@@ -1381,16 +1978,23 @@ def _ingest_emonet_to_zarr(
             root,
             metadata=metadata,
             spec=spec,
-            n_frames=n_frames,
+            n_frames=n_frames_out,
             n_y=n_y,
             n_x=n_x,
+            x_coords=x_coords,
+            y_coords=y_coords,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            background_n_frames=background_n_frames,
+            trim_stats=trim_stats,
+            end_trim_stats=end_trim_stats,
         )
 
         LOG.info(
             "Ingested Emonet smoke video to Zarr: %s -> %s (shape=[%d, %d, %d])",
             source_path.name,
             output_path.name,
-            n_frames,
+            n_frames_out,
             n_y,
             n_x,
         )
@@ -1410,6 +2014,8 @@ def _ingest_emonet_to_zarr(
                     float(global_max) if global_max > global_min else None
                 )
             store_stats_in_zarr(output_path, stats)
+
+        zarr.consolidate_metadata(output_path)
 
         return output_path
 

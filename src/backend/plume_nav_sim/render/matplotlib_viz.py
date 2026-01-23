@@ -45,13 +45,13 @@ import matplotlib.figure  # >=3.9.0 - Figure object management for matplotlib vi
 import matplotlib.pyplot as plt  # >=3.9.0 - Primary matplotlib interface for figure creation, plotting, and display management
 import numpy as np  # >=2.1.0 - Array operations for concentration field processing and coordinate arithmetic
 
-from ..core.constants import (
+from ..constants import (
     BACKEND_PRIORITY_LIST,  # Backend priority order ['TkAgg', 'Qt5Agg', 'Agg'] for matplotlib configuration fallback
 )
-from ..core.constants import (
+from ..constants import (
     MATPLOTLIB_DEFAULT_FIGSIZE,  # Default matplotlib figure size (8, 8) for human mode visualization configuration
 )
-from ..core.constants import (
+from ..constants import (
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,  # Performance target (<50ms) for human mode rendering operations and timing validation
 )
 

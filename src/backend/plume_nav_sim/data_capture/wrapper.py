@@ -5,7 +5,7 @@ from typing import Optional
 
 import gymnasium as gym
 
-from ..core.types import EnvironmentConfig
+from ..envs.config_types import EnvironmentConfig
 from .recorder import RunRecorder
 from .schemas import EpisodeRecord, Position, RunMeta, StepRecord
 

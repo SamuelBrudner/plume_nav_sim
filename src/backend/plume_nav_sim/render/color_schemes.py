@@ -28,7 +28,7 @@ import matplotlib.colors  # >=3.9.0 - Colormap objects, normalization utilities,
 # External imports - Third-party libraries with version requirements
 import numpy as np  # >=2.1.0 - Array operations, RGB color manipulation, concentration field processing
 
-from ..core.constants import (
+from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
     CONCENTRATION_RANGE,

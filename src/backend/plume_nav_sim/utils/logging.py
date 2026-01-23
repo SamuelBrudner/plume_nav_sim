@@ -30,7 +30,7 @@ from typing import (  # >=3.10
 from typing_extensions import ParamSpec
 
 # Core system constants for component identification and configuration
-from ..core.constants import (
+from ..constants import (
     COMPONENT_NAMES,
     LOG_LEVEL_DEFAULT,
     PACKAGE_NAME,
@@ -45,14 +45,12 @@ logging.raiseExceptions = False
 
 # Centralized logging infrastructure components
 try:
-    from ..logging.config import (
+    from ..logging import (
         ComponentType,
+        PerformanceFormatter,
         configure_development_logging,
         get_logger,
     )
-
-    # Specialized performance logging formatter for timing analysis
-    from ..logging.formatters import PerformanceFormatter
 except ImportError:  # pragma: no cover - fallback for optional logging package
     from enum import Enum
 
