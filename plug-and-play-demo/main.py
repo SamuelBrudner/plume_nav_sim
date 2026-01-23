@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare
-from plume_nav_sim.core.types import EnvironmentConfig
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.runner import runner
 
 DEMO_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -317,6 +317,12 @@ def main() -> None:
         help="Select the plume source (static Gaussian or bundled movie)",
     )
     parser.add_argument(
+        "--plume-sigma",
+        type=float,
+        default=24.0,
+        help="Gaussian sigma for the static plume (ignored for movie plumes)",
+    )
+    parser.add_argument(
         "--movie-path",
         type=str,
         default=None,
@@ -426,6 +432,8 @@ def main() -> None:
     def _flag_provided(flag: str) -> bool:
         return flag in sys.argv[1:]
 
+    plume_sigma_provided = _flag_provided("--plume-sigma")
+
     capture_requested = any(
         _flag_provided(f)
         for f in (
@@ -464,6 +472,16 @@ def main() -> None:
             cfg["render"] = not args.no_render
         if _flag_provided("--plume"):
             cfg["plume"] = args.plume
+
+        resolved_plume = cfg.get("plume", args.plume)
+        if resolved_plume == "movie" and plume_sigma_provided:
+            raise SystemExit("--plume-sigma is only valid for --plume static")
+        if resolved_plume == "static":
+            if plume_sigma_provided:
+                cfg["plume_sigma"] = float(args.plume_sigma)
+            else:
+                cfg.setdefault("plume_sigma", float(args.plume_sigma))
+
         # Movie-specific overrides (only meaningful for plume='movie')
         if _flag_provided("--movie-path"):
             cfg["movie_path"] = args.movie_path
@@ -516,6 +534,8 @@ def main() -> None:
                 kwargs={"n": 2},
             )
         ]
+        if args.plume == "movie" and plume_sigma_provided:
+            raise SystemExit("--plume-sigma is only valid for --plume static")
         movie_kwargs = _build_movie_kwargs(
             plume=args.plume,
             movie_path=args.movie_path,
@@ -538,6 +558,7 @@ def main() -> None:
             render=(not args.no_render),
             seed=args.seed,
             plume=args.plume,
+            plume_sigma=(float(args.plume_sigma) if args.plume == "static" else None),
             policy=PolicySpec(spec=args.policy_spec),
             observation_wrappers=wrapper_specs,
             **movie_kwargs,

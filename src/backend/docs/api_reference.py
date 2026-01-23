@@ -32,10 +32,7 @@ import numpy as np  # >=2.1.0 - Mathematical operations and array handling for d
 from ..plume_nav_sim.core.constants import (
     DEFAULT_GRID_SIZE,
     DEFAULT_SOURCE_LOCATION,
-    get_action_space_constants,
     get_default_environment_constants,
-    get_plume_model_constants,
-    get_rendering_constants,
 )
 
 # Internal imports - Core types and data structures
@@ -43,14 +40,11 @@ from ..plume_nav_sim.core.types import (
     Action,
     AgentState,
     Coordinates,
-    EnvironmentConfig,
-    EpisodeState,
     GridSize,
-    PlumeParameters,
     create_coordinates,
-    create_environment_config,
     create_grid_size,
 )
+from ..plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
 
 # Internal imports - Core environment and registration system
 from ..plume_nav_sim.envs.plume_search_env import (
@@ -114,17 +108,12 @@ __all__ = [
     "np",
     "DEFAULT_GRID_SIZE",
     "DEFAULT_SOURCE_LOCATION",
-    "get_action_space_constants",
     "get_default_environment_constants",
-    "get_plume_model_constants",
-    "get_rendering_constants",
     "Action",
     "AgentState",
     "Coordinates",
     "EnvironmentConfig",
-    "EpisodeState",
     "GridSize",
-    "PlumeParameters",
     "create_coordinates",
     "create_environment_config",
     "create_grid_size",

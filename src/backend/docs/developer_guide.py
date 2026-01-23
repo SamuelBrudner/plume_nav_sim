@@ -31,7 +31,7 @@ Technical Design:
 
 Architecture Integration:
 - Deep integration with PlumeSearchEnv for implementation examples and performance analysis
-- Component analysis using BaseEnvironment, StaticGaussianPlume, and rendering systems
+- Component analysis using ComponentBasedEnvironment, StaticGaussianPlume, and rendering systems
 - Development workflow coordination with testing utilities and validation frameworks
 - Extension pattern documentation for custom plume models and rendering backends
 - Research integration templates for scientific Python ecosystem and RL frameworks
@@ -459,7 +459,7 @@ providing a foundation for research-grade plume navigation experiments.
 │         Gymnasium API │ Registration │ Documentation        │
 ├─────────────────────────────────────────────────────────────┤
 │                     Core Layer                              │
-│    PlumeSearchEnv │ BaseEnvironment │ Action Processing     │
+│    PlumeSearchEnv │ ComponentBasedEnvironment │ Action Processing     │
 ├─────────────────────────────────────────────────────────────┤
 │                   Domain Layer                              │
 │  Plume Models │ Reward Calculation │ State Management       │
@@ -965,7 +965,9 @@ foundation patterns for multi-agent extensions:
 
 ```python
 # Conceptual multi-agent extension pattern
-class MultiAgentPlumeSearchEnv(BaseEnvironment):
+import gymnasium as gym
+
+class MultiAgentPlumeSearchEnv(gym.Env):
     \"\"\"
     Conceptual multi-agent environment extending current architecture.
     NOTE: This is architectural guidance, not current implementation.
@@ -978,13 +980,13 @@ class MultiAgentPlumeSearchEnv(BaseEnvironment):
         self.agents = {{}}
 
         # Multi-agent observation and action spaces
-        self.observation_space = spaces.Dict({{
-            f'agent_{{i}}': spaces.Box(0.0, 1.0, (3,), np.float32)  # [concentration, x_pos, y_pos]
+        self.observation_space = gym.spaces.Dict({{
+            f'agent_{{i}}': gym.spaces.Box(0.0, 1.0, (3,), np.float32)  # [concentration, x_pos, y_pos]
             for i in range(num_agents)
         }})
 
-        self.action_space = spaces.Dict({{
-            f'agent_{{i}}': spaces.Discrete(4)
+        self.action_space = gym.spaces.Dict({{
+            f'agent_{{i}}': gym.spaces.Discrete(4)
             for i in range(num_agents)
         }})
 
@@ -1838,7 +1840,7 @@ extensibility while optimizing for research-grade performance.
 │    Gymnasium API │ Environment Registration │ User Documentation    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         Core Layer                                  │
-│  PlumeSearchEnv │ BaseEnvironment │ Episode Management │ Validation │
+│  PlumeSearchEnv │ ComponentBasedEnvironment │ Episode Management │ Validation │
 ├─────────────────────────────────────────────────────────────────────┤
 │                        Domain Layer                                 │
 │ Plume Models │ Reward Functions │ Action Processing │ State Updates │
@@ -2402,7 +2404,7 @@ graph TB
 
     subgraph "Core Layer"
         G[PlumeSearchEnv]
-        H[BaseEnvironment]
+        H[ComponentBasedEnvironment]
         I[Episode Management]
     end
 

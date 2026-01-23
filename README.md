@@ -14,7 +14,7 @@ pip install plume-nav-sim
 
 ## 1. What You Get
 
-- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.loguru_bootstrap.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
+- **Turnkey environment** – `plume_nav_sim.make_env()` returns a Gymnasium-compatible environment with sensible defaults. Optional operational logging is available via `plume_nav_sim.logging.setup_logging`; analysis data capture is a separate workflow (see "Operational logging vs. data capture" below).
 - **Deterministic runs** – Centralized seeding utilities keep experiments reproducible across machines and CI.
 - **Pluggable architecture** – Swap observation, reward, action, or plume components via dependency injection.
 - **Research data workflow** – Built-in metadata export and curated examples accelerate analysis pipelines.
@@ -83,6 +83,12 @@ print(info["agent_xy"])  # starting position
     --movie-auto-download
   ```
 
+- Notes on `emonet_smoke_v1` (Dryad) access + preprocessing:
+  - Some Dryad API endpoints can return `401 Unauthorized` for automated downloads.
+  - If auto-download fails, manually download the large frames `.mat` artifact and symlink it into the Data Zoo cache.
+  - The Emonet ingest performs background subtraction + auto-trimming of initial baseline frames (configurable in `EmonetSmokeIngest`).
+  - For local analysis (not committed), you can use the helper script `local_scripts/emonet_mean_intensity.py` to compute a background-subtracted mean-intensity trace and estimate smoke onset.
+
 - Attribution and new-entry workflow (checksums, ingest specs) are documented in `src/backend/docs/plume_types.md`.
 
 #### DataCite-compliant metadata
@@ -121,7 +127,7 @@ This captures software provenance, config hash, random seed, and parameters — 
 ## 3. Progressive Customization
 
 | Stage | Goal | Example |
-|-------|------|---------|
+| --- | --- | --- |
 | **Customize** | Tune built-ins with typed kwargs | `examples/custom_configuration.py` |
 | **Extend** | Inject custom components (reward, observation, plume) | `examples/custom_components.py` |
 | **Reproduce** | Capture seeds and metadata for benchmarking | `examples/reproducibility.py` |
@@ -195,8 +201,8 @@ make debugger ENV_NAME=plume-nav-sim
 
 Controls:
 
-- Start/Pause, Step, Reset with seed; adjust interval (ms)
-- Keyboard: Space (toggle run), N (step), R (reset)
+- Start/Pause, Step, Step Back, Reset with seed; toggle Explore (policy explore=True) and adjust interval (ms)
+- Keyboard: Space (toggle run), N (step), B (step back), R (reset)
 - View menu: toggle Inspector, Live Config, Replay Config, and Frame overlays
 
 Policies:
@@ -459,7 +465,7 @@ MIT License. See [LICENSE](LICENSE).
 - Enable loguru sinks and stdlib bridge:
 
 ```python
-from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+from plume_nav_sim.logging import setup_logging
 
 # Minimal ops logging setup
 setup_logging(level="INFO", console=True)

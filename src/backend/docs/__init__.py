@@ -32,7 +32,7 @@ Technical Design:
 
 Architecture Integration:
 - Deep integration with PlumeSearchEnv for implementation examples and performance documentation
-- Component analysis using BaseEnvironment, StaticGaussianPlume, and rendering systems for technical accuracy
+- Component analysis using ComponentBasedEnvironment, StaticGaussianPlume, and rendering systems for technical accuracy
 - Development workflow coordination with testing utilities and validation frameworks
 - Extension pattern documentation for custom plume models, rendering backends, and research modifications
 - Research integration templates for scientific Python ecosystem and RL framework compatibility

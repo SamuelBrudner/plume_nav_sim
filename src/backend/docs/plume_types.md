@@ -109,6 +109,37 @@ Curated data zoo (registry-backed datasets)
   - `rigolli_dns_nose_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (nose level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `rigolli_dns_ground_v1` v1.0.0 → Zenodo 15469831 DNS turbulent plume (ground level), license `CC-BY-4.0`, cite Rigolli et al. 2022 (eLife, DOI 10.7554/eLife.76989).
   - `emonet_smoke_v1` v1.0.0 → Dryad smoke plume video (walking Drosophila), license `CC0-1.0`, cite Demir et al. 2020 (eLife, DOI 10.7554/eLife.57524).
+
+Emonet smoke plume notes (manual staging + trimming)
+
+- The Emonet smoke dataset is hosted on Dryad and may require manual download if the Dryad API returns `401 Unauthorized`.
+- Manual staging workflow:
+  1. Download the large frames `.mat` artifact from Dryad.
+  2. Symlink into the default cache path:
+
+     ```bash
+     mkdir -p ~/.cache/plume_nav_sim/data_zoo/dryad_4j0zpc87z/1.0.0
+     ln -sf "/path/to/2018_09_12_NA_3_3ds_5do_IS_1-frames.mat" \
+       ~/.cache/plume_nav_sim/data_zoo/dryad_4j0zpc87z/1.0.0/2018_09_12_NA_3_3ds_5do_IS_1-frames.mat
+     ```
+
+- Ingest preprocessing for `emonet_smoke_v1`:
+  - Background subtraction is computed from the first `background_n_frames` frames.
+  - The ingest can auto-trim the initial baseline frames ("no smoke") using a per-frame signal threshold.
+  - These knobs live in `EmonetSmokeIngest` in `src/backend/plume_nav_sim/data_zoo/registry.py`.
+
+- Tuning smoke onset:
+  - A local (gitignored) helper script can compute background-subtracted mean intensity per frame and estimate an onset frame:
+
+    ```bash
+    conda run -n plume-nav-sim python local_scripts/emonet_mean_intensity.py \
+      --mat "/path/to/2018_09_12_NA_3_3ds_5do_IS_1-frames.mat" \
+      --baseline-n 5 \
+      --sigma 5 \
+      --consecutive 10
+    ```
+
+  - Use the reported `onset_frame` to set `skip_initial_frames` (or to guide `trim_sigma`/`trim_consecutive`).
 - Configuration usage:
 
   ```python

@@ -522,19 +522,8 @@ class SeedManager:
 
 ## 📊 Performance & Metrics
 
-### `PerformanceMetrics`
-
-**Methods (IMMUTABLE):**
-```python
-class PerformanceMetrics:
-    def record_timing(self, operation: str, time_ms: float) -> None:
-        """Record operation timing."""
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get performance statistics."""
-    
-    # DOES NOT HAVE: get_summary() method
-```
+- Timing data is recorded as simple dictionaries (operation → list of ms values).
+- No `PerformanceMetrics` class; use component `get_performance_metrics()` summaries.
 
 ---
 

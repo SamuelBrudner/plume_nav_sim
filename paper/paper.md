@@ -33,7 +33,7 @@ The package targets researchers building agents that must localize a plume sourc
 
 - **Plume Semantics:** A clean separation between spatial domains, plume fields, and sensor models.
 - **Workflow Reproducibility:** Deterministic seeding, typed configuration, and validated data capture.
-- **Interactive Inspection:** A dedicated Qt-based debugger that allows researchers to step through simulations frame-by-frame. This tool is designed to be pluggable: users can visualize their own agent's internal state (e.g., belief maps, memory) alongside the ground-truth plume and sensor readings via a standardized, side-effect-free interface.
+- **Interactive Inspection:** A dedicated Qt-based debugger that allows researchers to step through simulations frame-by-frame, including step-back for recent transitions. This tool is designed to be pluggable: users can visualize their own agent's internal state (e.g., belief maps, memory) alongside the ground-truth plume and sensor readings via a standardized, side-effect-free interface.
 - **Data-Driven Environments:** A schema-based architecture for loading external plume datasets (Zarr/xarray).
 
 ## Statement of need
@@ -70,7 +70,7 @@ The implementation emphasizes clear separation of concerns:
 - **Core environment and components** live under `plume_nav_sim.envs`, `plume_nav_sim.plume`, and `plume_nav_sim.policies`.
 - **Configuration and composition** are handled by `plume_nav_sim.config`, which defines typed specs and helpers for building environments and policies.
 - **Data capture and media** live in `plume_nav_sim.data_capture`, `plume_nav_sim.media`, and `plume_nav_sim.video`, providing schemas and helpers for validated artifacts. Standard Gymnasium environments typically rely on unstructured `info` dictionaries for auxiliary data. `plume-nav-sim` improves upon this by enforcing strict, validated schemas for data capture, ensuring that simulation artifacts are self-describing and analysis-ready.
-- **Visualization and debugging** are provided by rendering utilities and an optional Qt-based interactive debugger (`plume_nav_debugger`). This application enables researchers to step through simulations, switch policies dynamically, and inspect agent decisions and sensory inputs via a decoupled "Odor Data Controller" (ODC) interface.
+- **Visualization and debugging** are provided by rendering utilities and an optional Qt-based interactive debugger (`plume_nav_debugger`). This application enables researchers to step through simulations forward or backward, switch policies dynamically, and inspect agent decisions and sensory inputs via a decoupled "Opinionated Debugger Contract" (ODC) interface.
 
 This layout allows users to either:
 

@@ -521,8 +521,8 @@ Used for debugging: "which component detected the error?"
 
 | Operation | Target | Measured By |
 |-----------|--------|-------------|
-| `env.step()` | < 1ms | `PerformanceMetrics` |
-| `env.reset()` | < 10ms | `PerformanceMetrics` |
+| `env.step()` | < 1ms | Internal timing summaries |
+| `env.reset()` | < 10ms | Internal timing summaries |
 | `env.render()` | < 16ms (60 FPS) | Frame timing |
 | Reward calculation | < 0.5ms | Internal timing |
 

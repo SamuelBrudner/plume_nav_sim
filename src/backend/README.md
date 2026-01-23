@@ -896,7 +896,7 @@ This project builds upon the excellent work of the scientific Python ecosystem:
 - Use loguru for operational, human-readable logs (console/file). Configure it independently of data capture.
 
 ```python
-from plume_nav_sim.logging.loguru_bootstrap import setup_logging
+from plume_nav_sim.logging import setup_logging
 setup_logging(level="INFO", console=True, file_path="run.log", rotation="10 MB", retention="7 days")
 ```
 
@@ -912,7 +912,7 @@ Quick start (data capture):
 ```python
 from plume_nav_sim.data_capture import RunRecorder
 from plume_nav_sim.data_capture.wrapper import DataCaptureWrapper
-from plume_nav_sim.core.types import EnvironmentConfig
+from plume_nav_sim.envs.config_types import EnvironmentConfig
 
 env = plume_nav_sim.make_env(action_type="oriented", observation_type="concentration")
 rec = RunRecorder("results", experiment="demo")
