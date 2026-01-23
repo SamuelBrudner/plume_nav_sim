@@ -2,7 +2,7 @@
 Environment module initialization providing comprehensive exports for plume navigation environments,
 registration functions, and core constants. Serves as primary interface for environment creation,
 registration, and configuration with streamlined imports, factory functions, and validation utilities
-enabling easy access to PlumeSearchEnv, BaseEnvironment classes, registration utilities, and default
+enabling easy access to PlumeSearchEnv, ComponentBasedEnvironment classes, registration utilities, and default
 configurations for reinforcement learning research workflows.
 
 This module establishes the complete public API for the plume navigation environment package,
@@ -18,7 +18,7 @@ Key Features:
 - Module documentation and usage guidance for research accessibility
 
 Architecture Integration:
-- Primary interface layer exposing PlumeSearchEnv and BaseEnvironment classes
+- Primary interface layer exposing PlumeSearchEnv and ComponentBasedEnvironment classes
 - Factory function coordination for streamlined environment creation workflows
 - Registration system integration enabling gym.make() compatibility
 - Constants and configuration centralization for parameter consistency
@@ -61,20 +61,20 @@ from typing import (  # noqa: F401  # >=3.10 - Advanced type hints for factory f
 import gymnasium  # >=0.29.0 - Core reinforcement learning environment framework for gym.make() demonstrations and registry access
 
 # Internal imports - Core constants and configuration management
-from ..core.constants import (
+from ..constants import (
     DEFAULT_GOAL_RADIUS,  # Default goal radius (float32 epsilon) enabling near-exact goal detection
 )
-from ..core.constants import (
+from ..constants import (
     DEFAULT_GRID_SIZE,  # Default environment grid dimensions (128, 128) for consistent initialization
 )
-from ..core.constants import (
+from ..constants import (
     DEFAULT_MAX_STEPS,  # Default maximum episode steps (1000) for truncation and training efficiency
 )
-from ..core.constants import (
+from ..constants import (
     DEFAULT_SOURCE_LOCATION,  # Default plume source location (64, 64) at grid center for balanced navigation
 )
-from ..core.constants import (  # noqa: F401  # Factory function returning dictionary of environment configuration constants
-    get_default_environment_constants,
+from ..constants import (
+    get_default_environment_constants,  # Factory function returning dictionary of environment configuration constants
 )
 
 # Internal imports - Registration system integration
@@ -106,17 +106,7 @@ from ..utils.validation import (  # Parameter validation utilities
     validate_grid_size,
 )
 
-# Internal imports - Core environment classes and abstract base
-from .base_env import (
-    BaseEnvironment,  # Abstract base environment class providing Gymnasium-compatible interface template
-)
-from .base_env import (
-    create_base_environment_config,  # Factory function for creating validated base environment configuration
-)
-from .base_env import (  # noqa: F401  # Exception class for abstract method enforcement with implementation guidance; noqa: F401  # Comprehensive validation function for environment setup feasibility
-    AbstractEnvironmentError,
-    validate_base_environment_setup,
-)
+# Internal imports - Core environment classes
 from .component_env import (
     ComponentBasedEnvironment,  # New component-based environment with dependency injection
 )
@@ -151,14 +141,12 @@ _module_logger = get_component_logger("envs")
 # Comprehensive module exports for external API access
 __all__ = [
     # Core environment classes with complete functionality
-    "BaseEnvironment",  # Abstract base environment class providing Gymnasium-compatible interface template
     "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
     "ComponentBasedEnvironment",  # Component-based environment with dependency injection
     "EnvironmentState",  # Environment state machine enum
     "create_component_environment",  # Factory for component-based environments
     # Factory functions for environment creation and configuration
     "create_plume_search_env",  # Factory function for PlumeSearchEnv with parameter validation and component initialization
-    "create_base_environment_config",  # Factory function for validated base environment configuration
     "validate_plume_search_config",  # Configuration validation function ensuring parameter consistency and feasibility
     # Registration system functions for Gymnasium integration
     "register_env",  # Environment registration function for Gymnasium compatibility with parameter validation
@@ -185,7 +173,7 @@ def create_environment(  # noqa: C901
     goal_radius: Optional[float] = None,
     render_mode: Optional[str] = None,
     env_options: Optional[Dict[str, Any]] = None,
-) -> BaseEnvironment:
+) -> gymnasium.Env:
     """
     Unified factory function for creating any plume navigation environment with automatic type detection,
     parameter validation, comprehensive configuration management, and performance optimization for
@@ -205,7 +193,7 @@ def create_environment(  # noqa: C901
         env_options (Optional[Dict[str, Any]]): Additional environment options and configuration overrides
 
     Returns:
-        BaseEnvironment: Configured environment instance ready for RL training with validated parameters
+        gymnasium.Env: Configured environment instance ready for RL training with validated parameters
         and component initialization
 
     Raises:
@@ -375,7 +363,7 @@ def make_environment(  # noqa: C901
     env_config: Optional[Dict[str, Any]] = None,
     auto_register: bool = True,
     force_reregister: bool = False,
-) -> BaseEnvironment:
+) -> gymnasium.Env:
     """
     Convenience wrapper for creating and registering environment in single call with automatic
     registration, gym.make() compatibility, and comprehensive error handling for rapid environment setup.
@@ -391,7 +379,7 @@ def make_environment(  # noqa: C901
         force_reregister (bool): Whether to force re-registration even if environment already exists
 
     Returns:
-        BaseEnvironment: Environment instance created through gym.make() after registration with
+        gymnasium.Env: Environment instance created through gym.make() after registration with
         validation and configuration management
 
     Raises:
@@ -497,9 +485,9 @@ def make_environment(  # noqa: C901
             )
 
         # Validate created environment meets requirements and initialization criteria
-        if not isinstance(environment, BaseEnvironment):
+        if not isinstance(environment, gymnasium.Env):
             raise ComponentError(
-                f"Created environment is not BaseEnvironment instance: {type(environment)}",
+                f"Created environment is not gymnasium.Env instance: {type(environment)}",
                 component_name="make_environment",
                 operation_name="environment_validation",
             )
@@ -1120,7 +1108,7 @@ _module_logger.info(
 # Perform module-level validation checks for consistency and readiness
 try:
     # Validate default constants consistency
-    from ..core.constants import validate_constant_consistency
+    from ..constants import validate_constant_consistency
 
     constants_valid, validation_report = validate_constant_consistency(
         strict_mode=False

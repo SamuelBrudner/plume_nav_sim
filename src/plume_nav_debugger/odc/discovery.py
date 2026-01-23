@@ -90,4 +90,19 @@ def find_provider(env: Any, policy: Any) -> Optional[DebuggerProvider]:
                 return prov
         except Exception:
             pass
+    # Built-in policy support (fallback)
+    try:
+        from plume_nav_sim.policies.temporal_derivative import TemporalDerivativePolicy
+        from plume_nav_sim.policies.temporal_derivative_deterministic import (
+            TemporalDerivativeDeterministicPolicy,
+        )
+
+        from .td_provider import TemporalDerivativeProvider
+
+        if isinstance(policy, TemporalDerivativePolicy):
+            return TemporalDerivativeProvider(mode="stochastic")
+        if isinstance(policy, TemporalDerivativeDeterministicPolicy):
+            return TemporalDerivativeProvider(mode="deterministic")
+    except Exception:
+        pass
     return None

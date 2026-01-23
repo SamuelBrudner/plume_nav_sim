@@ -28,11 +28,11 @@ __all__ = [
 
 def _normalize_grid_size(grid_size: Optional[Tuple[int, int]]) -> Tuple[int, int]:
     if grid_size is None:
-        from ..core.constants import DEFAULT_GRID_SIZE
+        from ..constants import DEFAULT_GRID_SIZE
 
         return DEFAULT_GRID_SIZE
 
-    from ..core.constants import MAX_GRID_SIZE
+    from ..constants import MAX_GRID_SIZE
 
     width, height = int(grid_size[0]), int(grid_size[1])
     if width <= 0 or height <= 0:
@@ -60,7 +60,7 @@ def _normalize_goal(
 
 def _normalize_goal_radius(goal_radius: Optional[float]) -> float:
     if goal_radius is None:
-        from ..core.constants import DEFAULT_GOAL_RADIUS
+        from ..constants import DEFAULT_GOAL_RADIUS
 
         goal_radius = float(DEFAULT_GOAL_RADIUS)
     value = float(goal_radius)
@@ -73,7 +73,7 @@ def _normalize_goal_radius(goal_radius: Optional[float]) -> float:
 
 def _normalize_max_steps(max_steps: Optional[int]) -> int:
     if max_steps is None:
-        from ..core.constants import DEFAULT_MAX_STEPS
+        from ..constants import DEFAULT_MAX_STEPS
 
         return DEFAULT_MAX_STEPS
     value = int(max_steps)
@@ -87,7 +87,7 @@ def _normalize_plume_sigma(plume_params: Optional[Dict[str, Any]]) -> float:
     if plume_params:
         sigma = plume_params.get("sigma")
     if sigma is None:
-        from ..core.constants import DEFAULT_PLUME_SIGMA
+        from ..constants import DEFAULT_PLUME_SIGMA
 
         return float(DEFAULT_PLUME_SIGMA)
     value = float(sigma)

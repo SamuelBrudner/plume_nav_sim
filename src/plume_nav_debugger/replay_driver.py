@@ -459,6 +459,16 @@ class ReplayDriver(QtCore.QObject):
     def step_once(self) -> None:
         self._emit_next()
 
+    def step_back(self) -> None:
+        if not self.is_loaded():
+            return
+        if self._total_steps <= 0:
+            return
+        if self._current_index <= 0:
+            self.seek_to(0)
+            return
+        self.seek_to(self._current_index - 1)
+
     def seek_to_episode(self, episode_index: int, *, auto_emit: bool = True) -> None:
         if not self._episode_offsets:
             return

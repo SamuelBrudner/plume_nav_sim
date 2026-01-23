@@ -260,8 +260,6 @@ class FrameView(QtWidgets.QLabel):
                 heading_deg = float(info_dict["agent_orientation"]) % 360.0
         except Exception:
             heading_deg = None
-        if heading_deg is None and agent_xy is not None:
-            heading_deg = 0.0
 
         action_idx = None
         try:
@@ -361,7 +359,7 @@ class FrameView(QtWidgets.QLabel):
         if agent_xy is not None:
             ax, ay = agent_xy
             if heading_deg is not None:
-                lines.append(f"agent=({ax},{ay}) heading={heading_deg:.0f}°")
+                lines.append(f"agent=({ax},{ay}) orient={heading_deg:.0f}° (post-step)")
             else:
                 lines.append(f"agent=({ax},{ay})")
         if source_xy is not None:
@@ -396,11 +394,13 @@ class ControlBar(QtWidgets.QWidget):
     start = QtCore.Signal()
     pause = QtCore.Signal()
     step = QtCore.Signal()
+    step_back = QtCore.Signal()
     reset = QtCore.Signal(int)
     mode_changed = QtCore.Signal(str)
     load_replay = QtCore.Signal()
     seek_requested = QtCore.Signal(int)
     episode_seek_requested = QtCore.Signal(int)
+    explore_toggled = QtCore.Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -411,6 +411,7 @@ class ControlBar(QtWidgets.QWidget):
         self.start_btn = QtWidgets.QPushButton("Start")
         self.pause_btn = QtWidgets.QPushButton("Pause")
         self.step_btn = QtWidgets.QPushButton("Step")
+        self.step_back_btn = QtWidgets.QPushButton("Back")
         # Mode and replay loader
         self.mode_combo = QtWidgets.QComboBox()
         self.mode_combo.addItems(["Live", "Replay"])
@@ -433,6 +434,7 @@ class ControlBar(QtWidgets.QWidget):
         self.custom_policy_edit = QtWidgets.QLineEdit()
         self.custom_policy_edit.setPlaceholderText("custom.module:ClassOrCallable")
         self.custom_load_btn = QtWidgets.QPushButton("Load")
+        self.explore_check = QtWidgets.QCheckBox("Explore")
         self.seed_edit = QtWidgets.QLineEdit()
         self.seed_edit.setPlaceholderText("Seed")
         self.reset_btn = QtWidgets.QPushButton("Reset")
@@ -440,6 +442,7 @@ class ControlBar(QtWidgets.QWidget):
         main_row.addWidget(self.start_btn)
         main_row.addWidget(self.pause_btn)
         main_row.addWidget(self.step_btn)
+        main_row.addWidget(self.step_back_btn)
         main_row.addSpacing(8)
         main_row.addWidget(QtWidgets.QLabel("Mode:"))
         main_row.addWidget(self.mode_combo)
@@ -449,6 +452,8 @@ class ControlBar(QtWidgets.QWidget):
         main_row.addWidget(self.policy_combo)
         main_row.addWidget(self.custom_policy_edit)
         main_row.addWidget(self.custom_load_btn)
+        main_row.addSpacing(8)
+        main_row.addWidget(self.explore_check)
         main_row.addSpacing(8)
         main_row.addWidget(QtWidgets.QLabel("Interval (ms):"))
         main_row.addWidget(self.interval_spin)
@@ -491,9 +496,11 @@ class ControlBar(QtWidgets.QWidget):
         self.start_btn.clicked.connect(self.start)
         self.pause_btn.clicked.connect(self.pause)
         self.step_btn.clicked.connect(self.step)
+        self.step_back_btn.clicked.connect(self.step_back)
         self.reset_btn.clicked.connect(self._emit_reset)
         self.mode_combo.currentTextChanged.connect(self.mode_changed)
         self.load_replay_btn.clicked.connect(self.load_replay)
+        self.explore_check.toggled.connect(self.explore_toggled)
         self.timeline_slider.sliderReleased.connect(self._emit_seek_from_slider)
         self.timeline_slider.sliderMoved.connect(self._on_slider_moved)
         self.timeline_spin.editingFinished.connect(self._emit_seek_from_spin)
@@ -519,6 +526,7 @@ class ControlBar(QtWidgets.QWidget):
         self.policy_combo.setEnabled(not is_replay)
         self.custom_policy_edit.setEnabled(not is_replay)
         self.custom_load_btn.setEnabled(not is_replay)
+        self.explore_check.setEnabled(not is_replay)
         self.seed_edit.setEnabled(not is_replay)
         self._timeline_row.setVisible(is_replay)
 
@@ -714,14 +722,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.start.connect(self._on_start_clicked)
         self.controls.pause.connect(self._on_pause_clicked)
         self.controls.step.connect(self._on_step_clicked)
+        self.controls.step_back.connect(self._on_step_back_clicked)
         self.controls.reset.connect(self._on_reset_clicked)
         self.controls.interval_spin.valueChanged.connect(self._on_interval_changed)
         self.controls.policy_combo.currentIndexChanged.connect(self._on_policy_selected)
         self.controls.custom_load_btn.clicked.connect(self._on_custom_policy_load)
+        self.controls.explore_toggled.connect(self._on_explore_toggled)
         self.controls.mode_changed.connect(self._on_mode_changed)
         self.controls.load_replay.connect(self._on_load_replay)
         self.controls.seek_requested.connect(self._on_seek_requested)
         self.controls.episode_seek_requested.connect(self._on_episode_seek_requested)
+        try:
+            self.live_driver.set_policy_explore(
+                bool(self.controls.explore_check.isChecked())
+            )
+        except Exception:
+            pass
 
         # Status bar showing step/total reward/flags and run meta
         self._status = QtWidgets.QLabel("ready")
@@ -969,6 +985,24 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             self.statusBar().showMessage(f"Step failed: {exc}", 3000)
 
+    @QtCore.Slot()
+    def _on_step_back_clicked(self) -> None:
+        if self._active_mode == "replay":
+            if not self.replay_driver.is_loaded():
+                self.statusBar().showMessage(
+                    "Load a replay run before stepping back", 2500
+                )
+                return
+            try:
+                self.replay_driver.step_back()
+            except Exception as exc:
+                self.statusBar().showMessage(f"Step back failed: {exc}", 3000)
+            return
+        try:
+            self.live_driver.step_back()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Step back failed: {exc}", 3000)
+
     def _setup_shortcuts(self) -> None:
         # Space: toggle start/pause
         space = QtGui.QShortcut(QtGui.QKeySequence("Space"), self)
@@ -977,6 +1011,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # N: step once
         step = QtGui.QShortcut(QtGui.QKeySequence("N"), self)
         step.activated.connect(self._on_step_clicked)
+
+        # B: step back
+        back = QtGui.QShortcut(QtGui.QKeySequence("B"), self)
+        back.activated.connect(self._on_step_back_clicked)
 
         # R: reset with seed from edit (delegates to existing handler)
         reset = QtGui.QShortcut(QtGui.QKeySequence("R"), self)
@@ -1009,7 +1047,11 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(object)
     def _on_step_event(self, ev) -> None:
         try:
-            self._total_reward += float(getattr(ev, "reward", 0.0))
+            info = getattr(ev, "info", None)
+            if isinstance(info, dict) and "total_reward" in info:
+                self._total_reward = float(info["total_reward"])
+            else:
+                self._total_reward += float(getattr(ev, "reward", 0.0))
         except Exception:
             pass
         t = getattr(ev, "t", "?")
@@ -1077,6 +1119,12 @@ class MainWindow(QtWidgets.QMainWindow):
         old_live = getattr(self, "live_driver", None)
         # Swap live driver (reconnect if in live mode); also close old env
         self.live_driver = EnvDriver(cfg_obj)
+        try:
+            self.live_driver.set_policy_explore(
+                bool(self.controls.explore_check.isChecked())
+            )
+        except Exception:
+            pass
         try:
             self.live_config_widget.set_applied_config(cfg_obj)
         except Exception:
@@ -1321,6 +1369,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.statusBar().showMessage("Loaded Random Sampler policy", 1500)
         except Exception as e:  # pragma: no cover - UI safety
             self.statusBar().showMessage(f"Policy load failed: {e}", 3000)
+
+    @QtCore.Slot(bool)
+    def _on_explore_toggled(self, enabled: bool) -> None:
+        if self._active_mode != "live":
+            self.statusBar().showMessage("Explore is live-mode only", 2000)
+            return
+        try:
+            self.live_driver.set_policy_explore(bool(enabled))
+        except Exception as exc:  # pragma: no cover - UI safety
+            self.statusBar().showMessage(f"Explore toggle failed: {exc}", 3000)
 
     @QtCore.Slot()
     def _on_custom_policy_load(self) -> None:
@@ -1716,7 +1774,7 @@ class ActionPanelWidget(QtWidgets.QWidget):
         super().__init__()
         layout = QtWidgets.QGridLayout(self)
         # Policy insight
-        self.expected_action_label = QtWidgets.QLabel("expected action: -")
+        self.expected_action_label = QtWidgets.QLabel("action taken: -")
         self.distribution_label = QtWidgets.QLabel("distribution: N/A")
         self.source_label = QtWidgets.QLabel("source: none")
         # Layout
@@ -1945,15 +2003,23 @@ class InspectorWidget(QtWidgets.QWidget):
                     self.obs_panel.pipeline_label.setText(self._pipeline_text)
 
             # Update UI: action
-            self.action_panel.expected_action_label.setText(
-                f"expected action: {self._act_model.state.action_label}"
-            )
+            action_label = self._act_model.state.action_label
+            tie_label = None
+            if self._act_model.state.distribution is not None:
+                tie_label = self._distribution_tie(self._act_model.state.distribution)
+            if tie_label:
+                self.action_panel.expected_action_label.setText(
+                    f"action taken: {action_label} (policy tie: {tie_label})"
+                )
+            else:
+                self.action_panel.expected_action_label.setText(
+                    f"action taken: {action_label}"
+                )
             if self._act_model.state.distribution is not None:
                 src = self._act_model.state.distribution_source or "probs"
-                p = self._act_model.state.distribution
-                preview = ", ".join(f"{v:.2f}" for v in p[:6])
+                preview = self._format_distribution(self._act_model.state.distribution)
                 self.action_panel.distribution_label.setText(
-                    f"distribution ({src}): [{preview}]"
+                    f"distribution ({src}): {preview}"
                 )
             else:
                 self.action_panel.distribution_label.setText("distribution: N/A")
@@ -2024,6 +2090,41 @@ class InspectorWidget(QtWidgets.QWidget):
             self.obs_panel.set_show_sparkline(flag)
         except Exception:
             pass
+
+    def _label_for_action_index(self, idx: int, *, include_index: bool = True) -> str:
+        name = None
+        try:
+            if 0 <= idx < len(self._act_model.action_names):
+                name = self._act_model.action_names[idx]
+        except Exception:
+            name = None
+        if name:
+            return f"{name}({idx})" if include_index else str(name)
+        return str(idx)
+
+    def _format_distribution(self, probs: list[float], *, max_items: int = 6) -> str:
+        parts = []
+        for idx, val in enumerate(probs):
+            label = self._label_for_action_index(idx, include_index=True)
+            parts.append(f"{label}={val:.2f}")
+        if len(parts) > max_items:
+            return ", ".join(parts[:max_items]) + ", ..."
+        return ", ".join(parts)
+
+    def _distribution_tie(self, probs: list[float], *, tol: float = 1e-3) -> str | None:
+        if not probs:
+            return None
+        arr = np.asarray(probs, dtype=float).ravel()
+        if arr.size == 0:
+            return None
+        max_val = float(np.max(arr))
+        if not np.isfinite(max_val):
+            return None
+        top = [i for i, v in enumerate(arr) if abs(v - max_val) <= tol]
+        if len(top) <= 1:
+            return None
+        labels = [self._label_for_action_index(i, include_index=False) for i in top]
+        return "/".join(labels)
 
     def _update_strict_banner(self) -> None:
         try:

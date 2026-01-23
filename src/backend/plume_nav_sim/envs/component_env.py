@@ -23,21 +23,22 @@ Architecture:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import gymnasium as gym
 import numpy as np
 
-from ..core.constants import (
+from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
 )
-from ..core.geometry import Coordinates, GridSize
-from ..core.state import AgentState
+from ..core.types import AgentState, Coordinates, GridSize
 from ..utils.exceptions import StateError, ValidationError
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
         RewardFunction,
         VectorField,
     )
-    from ..plume.concentration_field import ConcentrationField
+    from ..plume.protocol import ConcentrationField
 
 __all__ = ["ComponentBasedEnvironment", "EnvironmentState"]
 
@@ -475,22 +476,19 @@ class ComponentBasedEnvironment(gym.Env):
 
     def _reset_concentration_dynamic_state(self) -> None:
         """Allow concentration and wind fields to reset any dynamic state."""
-        try:
-            on_reset = getattr(self._concentration_field, "on_reset", None)
-            if callable(on_reset):
-                on_reset()
-        except Exception:
-            # Defensive: dynamic hooks are optional
-            pass
-
-        try:
+        with contextlib.suppress(Exception):
+            reset = getattr(self._concentration_field, "reset", None)
+            if callable(reset):
+                reset(self._seed)
+            else:
+                on_reset = getattr(self._concentration_field, "on_reset", None)
+                if callable(on_reset):
+                    on_reset()
+        with contextlib.suppress(Exception):
             wind_reset = getattr(self, "_wind_field", None)
             on_reset = getattr(wind_reset, "on_reset", None)
             if callable(on_reset):
                 on_reset()
-        except Exception:
-            # Defensive: dynamic hooks are optional
-            pass
 
     def _initial_observation_and_info(self) -> tuple[Any, dict]:
         """Generate initial observation and info dict."""
@@ -515,22 +513,65 @@ class ComponentBasedEnvironment(gym.Env):
         field = getattr(self, "_concentration_field", None)
         field_array = getattr(field, "field_array", None)
         if isinstance(field_array, np.ndarray) and field_array.size == height * width:
+            if not hasattr(self, "_render_norm_range"):
+                self._render_norm_range = None
+
             flat = field_array.reshape(-1)
             finite_mask = np.isfinite(flat)
             if finite_mask.any():
-                finite_vals = flat[finite_mask]
-                field_min = float(finite_vals.min())
-                field_max = float(finite_vals.max())
-                normalized = np.zeros_like(flat, dtype=np.float32)
-                if field_max > field_min:
-                    span = field_max - field_min
-                    normalized[finite_mask] = (finite_vals - field_min) / span
-                normalized_2d = normalized.reshape(field_array.shape)
+                normalized_2d = self._extracted_from__render_field_grayscale_14(
+                    flat, finite_mask, field, field_array
+                )
             else:
                 normalized_2d = np.zeros_like(field_array, dtype=np.float32)
 
-            grayscale = (normalized_2d * 255.0).astype(np.uint8)
+            grayscale = (np.clip(normalized_2d, 0.0, 1.0) * 255.0).astype(np.uint8)
             canvas[:, :, :] = grayscale[:, :, None]
+
+    # TODO Rename this here and in `_render_field_grayscale`
+    def _extracted_from__render_field_grayscale_14(
+        self, flat, finite_mask, field, field_array
+    ):
+        finite_vals = flat[finite_mask]
+        norm_range = getattr(self, "_render_norm_range", None)
+        if norm_range is None:
+            dataset_path = getattr(field, "_dataset_path", None)
+            if isinstance(dataset_path, str) and Path(dataset_path).is_dir():
+                try:
+                    import zarr
+
+                    root = zarr.open_group(dataset_path, mode="r")
+                    stats = root.attrs.get("concentration_stats")
+                    if isinstance(stats, dict):
+                        quantiles = stats.get("quantiles")
+                        stats_max = stats.get("max")
+                        vmin = 0.0
+                        vmax = (
+                            float(
+                                quantiles.get("q999", quantiles.get("q99", stats_max))
+                            )
+                            if isinstance(quantiles, dict)
+                            else float(stats_max)
+                        )
+                        if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
+                            norm_range = (vmin, vmax)
+                except Exception:
+                    norm_range = None
+
+            if norm_range is not None:
+                self._render_norm_range = norm_range
+
+        if norm_range is not None:
+            field_min, field_max = float(norm_range[0]), float(norm_range[1])
+        else:
+            field_min = float(finite_vals.min())
+            field_max = float(finite_vals.max())
+        normalized = np.zeros_like(flat, dtype=np.float32)
+        if field_max > field_min:
+            span = field_max - field_min
+            normalized[finite_mask] = (finite_vals - field_min) / span
+        result = normalized.reshape(field_array.shape)
+        return result
 
     def _draw_source_marker(self, canvas: np.ndarray, height: int, width: int) -> None:
         """Draw source marker and optional dashed goal radius."""

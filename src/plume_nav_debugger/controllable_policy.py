@@ -19,6 +19,7 @@ class ControllablePolicy:
         self._base = base_policy
         self._next_action: Optional[ActionType] = None
         self._sticky_action: Optional[ActionType] = None
+        self._explore_override: Optional[bool] = None
 
     # Policy protocol ---------------------------------------------------------
     @property
@@ -38,6 +39,11 @@ class ControllablePolicy:
     def select_action(
         self, observation: ObservationType, *, explore: bool = False
     ) -> ActionType:  # type: ignore[override]
+        use_explore = (
+            bool(self._explore_override)
+            if self._explore_override is not None
+            else bool(explore)
+        )
         # Highest priority: sticky override
         if self._sticky_action is not None:
             return self._sticky_action
@@ -51,7 +57,9 @@ class ControllablePolicy:
         # Delegate to base policy
         if hasattr(self._base, "select_action"):
             try:
-                return self._base.select_action(observation, explore=explore)  # type: ignore[attr-defined]
+                return self._base.select_action(  # type: ignore[attr-defined]
+                    observation, explore=use_explore
+                )
             except TypeError:
                 return self._base.select_action(observation)  # type: ignore[misc]
 
@@ -70,3 +78,6 @@ class ControllablePolicy:
 
     def clear_sticky(self) -> None:
         self._sticky_action = None
+
+    def set_explore_override(self, value: Optional[bool]) -> None:
+        self._explore_override = value

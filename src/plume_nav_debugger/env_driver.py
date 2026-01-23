@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -115,6 +115,51 @@ class DebuggerConfig:
         )
 
 
+class _ActionReplayPolicy:
+    def __init__(self, base_policy: Any, actions: list[Any]) -> None:
+        self._base = base_policy
+        self._actions = list(actions)
+        self._index = 0
+
+    def reset(self, *, seed: int | None = None) -> None:  # type: ignore[override]
+        self._index = 0
+        try:
+            self._base.reset(seed=seed)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    def select_action(  # type: ignore[override]
+        self, observation: Any, *, explore: bool = False
+    ) -> Any:
+        if self._index < len(self._actions):
+            action = self._actions[self._index]
+            self._index += 1
+            try:
+                if hasattr(self._base, "select_action"):
+                    try:
+                        self._base.select_action(  # type: ignore[attr-defined]
+                            observation, explore=explore
+                        )
+                    except TypeError:
+                        self._base.select_action(observation)  # type: ignore[misc]
+                elif callable(self._base):
+                    self._base(observation)
+            except Exception:
+                pass
+            return action
+
+        if hasattr(self._base, "select_action"):
+            try:
+                return self._base.select_action(  # type: ignore[attr-defined]
+                    observation, explore=explore
+                )
+            except TypeError:
+                return self._base.select_action(observation)  # type: ignore[misc]
+        if callable(self._base):
+            return self._base(observation)
+        raise TypeError("Base policy must implement select_action() or be callable")
+
+
 class EnvDriver(QtCore.QObject):
     frame_ready = QtCore.Signal(np.ndarray)
     episode_finished = QtCore.Signal()
@@ -139,6 +184,8 @@ class EnvDriver(QtCore.QObject):
         self._episode_seed: Optional[int] = self.config.seed
         self._mux = None  # ProviderMux
         self._last_start_xy: Optional[tuple[int, int]] = None
+        self._action_history: list[Any] = []
+        self._policy_explore: Optional[bool] = None
 
     def _make_default_policy(self):
         # Fallback policy: sample from env action_space each step
@@ -150,6 +197,9 @@ class EnvDriver(QtCore.QObject):
                 return self._env.action_space.sample()
 
         return _Sampler(self._env)
+
+    def _clear_history(self) -> None:
+        self._action_history = []
 
     def initialize(self) -> None:
         import plume_nav_sim as pns
@@ -163,6 +213,7 @@ class EnvDriver(QtCore.QObject):
             action_type = "oriented"
         self.config.action_type = action_type
 
+        self._clear_history()
         kwargs = {
             "grid_size": self.config.grid_size,
             "goal_radius": self.config.goal_radius,
@@ -237,6 +288,7 @@ class EnvDriver(QtCore.QObject):
 
         # Wrap with ControllablePolicy for manual override
         self._controller = ControllablePolicy(self._policy)
+        self._apply_explore_override()
 
         # Persist the episode seed actually in use
         self._episode_seed = self.config.seed
@@ -327,6 +379,58 @@ class EnvDriver(QtCore.QObject):
     def step_once(self) -> None:
         self._on_tick()
 
+    def step_back(self) -> None:
+        if self._env is None:
+            return
+        if not self._action_history:
+            self.reset(self._episode_seed)
+            return
+
+        was_running = self.is_running()
+        if was_running:
+            self.pause()
+
+        self._action_history.pop()
+
+        from plume_nav_sim.runner import runner
+
+        if self._controller is not None:
+            base_policy = self._controller
+        elif self._policy is not None:
+            base_policy = self._policy
+        else:
+            base_policy = self._make_default_policy()
+        replay_policy = _ActionReplayPolicy(base_policy, self._action_history)
+        self._iter = runner.stream(
+            self._env,
+            replay_policy,
+            seed=self._episode_seed,
+            render=True,
+        )
+
+        last_ev = None
+        try:
+            for _ in range(len(self._action_history)):
+                last_ev = next(self._iter)
+        except StopIteration:
+            self._iter = None
+            last_ev = None
+
+        if last_ev is None:
+            self._last_event = None
+            self._emit_frame_now()
+        else:
+            self._last_event = last_ev
+            if isinstance(last_ev.frame, np.ndarray):
+                self.frame_ready.emit(last_ev.frame)
+            self.step_done.emit(last_ev)
+            if last_ev.terminated or last_ev.truncated:
+                self.episode_finished.emit()
+                self.pause()
+
+        if was_running and self._iter is not None:
+            self.start(self.get_interval_ms())
+
     def reset(self, seed: Optional[int] = None) -> None:
         if self._env is None:
             return
@@ -345,6 +449,7 @@ class EnvDriver(QtCore.QObject):
         )
         self._episode_seed = eff_seed
 
+        self._clear_history()
         # Ensure controller stays active for manual overrides
         if self._controller is None and self._policy is not None:
             try:
@@ -353,6 +458,7 @@ class EnvDriver(QtCore.QObject):
                 self._controller = ControllablePolicy(self._policy)
             except Exception:
                 self._controller = None
+        self._apply_explore_override()
 
         # Eagerly reset env and controller before building stream so the frame shows start state
         try:
@@ -475,6 +581,7 @@ class EnvDriver(QtCore.QObject):
 
         # Recreate iterator
         self._controller = ControllablePolicy(self._policy)
+        self._apply_explore_override()
         # Persist episode seed for reproducibility
         self._episode_seed = eff_seed
 
@@ -488,6 +595,7 @@ class EnvDriver(QtCore.QObject):
             seed=eff_seed,
             render=True,
         )
+        self._clear_history()
 
         # Emit immediate frame
         self._emit_frame_now()
@@ -594,6 +702,15 @@ class EnvDriver(QtCore.QObject):
                 pass
             return
 
+        self._clear_history()
+        if self._controller is None and self._policy is not None:
+            try:
+                from .controllable_policy import ControllablePolicy
+
+                self._controller = ControllablePolicy(self._policy)
+            except Exception:
+                self._controller = None
+        self._apply_explore_override()
         # Reset controller/base policy deterministically and env
         eff_seed = (
             self._episode_seed if self._episode_seed is not None else self.config.seed
@@ -648,6 +765,21 @@ class EnvDriver(QtCore.QObject):
                 self._controller, "clear_sticky"
             ):
                 self._controller.clear_sticky()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    def set_policy_explore(self, enabled: Optional[bool]) -> None:
+        self._policy_explore = None if enabled is None else bool(enabled)
+        self._apply_explore_override()
+
+    def _apply_explore_override(self) -> None:
+        try:
+            if self._controller is not None and hasattr(
+                self._controller, "set_explore_override"
+            ):
+                self._controller.set_explore_override(  # type: ignore[attr-defined]
+                    self._policy_explore
+                )
         except Exception:
             pass
 
@@ -720,6 +852,10 @@ class EnvDriver(QtCore.QObject):
             if isinstance(ev.frame, np.ndarray):
                 self.frame_ready.emit(ev.frame)
             self._last_event = ev
+            try:
+                self._action_history.append(ev.action)
+            except Exception:
+                pass
             self.step_done.emit(ev)
             if ev.terminated or ev.truncated:
                 self.episode_finished.emit()

@@ -139,6 +139,9 @@ def test_replay_driver_loads_and_seeks(tmp_path) -> None:
     assert driver.current_index() == 1
     assert events, "Replay driver should emit events on step"
 
+    driver.step_back()
+    assert driver.current_index() == 0
+
     driver.seek_to(len(steps) - 1)
     assert driver.current_index() == len(steps) - 1
 
