@@ -7,10 +7,12 @@ import pytest
 
 
 def test_ingest_cli_and_loader_smoke(tmp_path: Path) -> None:
-    # Require xarray and core plume_nav_sim modules; imageio only needed if we synthesize frames
-    try:
-        import xarray as xr  # type: ignore
+    # Require media deps for reading Zarr; imageio only needed if we synthesize frames
+    xr = pytest.importorskip("xarray")
+    pytest.importorskip("zarr")
+    pytest.importorskip("numcodecs")
 
+    try:
         from plume_nav_sim.cli import video_ingest
         from plume_nav_sim.media import (
             MANIFEST_FILENAME,
