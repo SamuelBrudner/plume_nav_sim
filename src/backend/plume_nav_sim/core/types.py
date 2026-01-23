@@ -1,9 +1,11 @@
-"""Canonical core type definitions and factories for plume_nav_sim."""
+"""Core types for plume_nav_sim."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
+import math
+from dataclasses import dataclass
+from enum import Enum, IntEnum
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -12,418 +14,177 @@ try:  # pragma: no cover - numpy<1.20 compatibility
 except ImportError:  # pragma: no cover
     NDArray = np.ndarray  # type: ignore[assignment]
 
-from .constants import (
-    DEFAULT_GOAL_RADIUS,
-    DEFAULT_GRID_SIZE,
-    DEFAULT_MAX_STEPS,
-    DEFAULT_PLUME_SIGMA,
-    DEFAULT_SOURCE_LOCATION,
-    MOVEMENT_VECTORS,
-)
-from .enums import Action, RenderMode
-from .geometry import Coordinates, GridSize, calculate_euclidean_distance
-from .models import PlumeModel
-from .snapshots import StateSnapshot
-from .state import AgentState, EpisodeState
+DEFAULT_GRID_SIZE = (128, 128)
+DEFAULT_SOURCE_LOCATION = (64, 64)
+DEFAULT_MAX_STEPS = 1000
+DEFAULT_GOAL_RADIUS = float(np.finfo(np.float32).eps)
+DEFAULT_PLUME_SIGMA = 12.0
+
+ACTION_UP, ACTION_RIGHT, ACTION_DOWN, ACTION_LEFT = 0, 1, 2, 3
+ACTION_SPACE_SIZE = 4
+MOVEMENT_VECTORS = {
+    ACTION_UP: (0, 1),
+    ACTION_RIGHT: (1, 0),
+    ACTION_DOWN: (0, -1),
+    ACTION_LEFT: (-1, 0),
+}
 
 
-def _validation_error_class():
-    """Return the canonical ValidationError class on demand."""
+class Action(IntEnum):
+    UP = ACTION_UP
+    RIGHT = ACTION_RIGHT
+    DOWN = ACTION_DOWN
+    LEFT = ACTION_LEFT
 
-    from ..utils.exceptions import (
-        ValidationError as _ValidationError,  # Local import avoids circular dependency
-    )
-
-    return _ValidationError
-
-
-def _raise_validation_error(message: str, **kwargs: Any) -> None:
-    """Raise the shared ValidationError with deferred import semantics."""
-
-    raise _validation_error_class()(message, **kwargs)
+    def to_vector(self) -> tuple[int, int]:
+        return MOVEMENT_VECTORS[int(self)]
 
 
-CoordinateType = Union[Coordinates, Tuple[int, int], Sequence[int]]
-GridDimensions = Union[GridSize, Tuple[int, int], Sequence[int]]
-MovementVector = Tuple[int, int]
-ActionType = Union[
-    Action, int, np.ndarray, NDArray[Any], Dict[str, Any], tuple[Any, ...]
-]
-ObservationType = Union[NDArray[np.floating], Dict[str, Any], tuple[Any, ...]]
-RewardType = float
-InfoType = Dict[str, Any]
+class RenderMode(Enum):
+    RGB_ARRAY = "rgb_array"
+    HUMAN = "human"
+
+    def is_programmatic(self) -> bool:
+        return self == RenderMode.RGB_ARRAY
+
+    def requires_display(self) -> bool:
+        return self == RenderMode.HUMAN
+
+    def get_output_format(self) -> str:
+        if self == RenderMode.RGB_ARRAY:
+            return "np.ndarray[H,W,3] uint8"
+        return "Interactive matplotlib window (returns None)"
+
+
+@dataclass(frozen=True)
+class Coordinates:
+    x: int
+    y: int
+
+    def to_tuple(self) -> tuple[int, int]:
+        return (int(self.x), int(self.y))
+
+    def is_within_bounds(self, grid_bounds: "GridSize") -> bool:
+        return 0 <= self.x < grid_bounds.width and 0 <= self.y < grid_bounds.height
+
+    def distance_to(self, other: "Coordinates") -> float:
+        return calculate_euclidean_distance(self, other)
+
+    def move(
+        self,
+        movement: Action | tuple[int, int],
+        bounds: "GridSize | None" = None,
+    ) -> "Coordinates":
+        if isinstance(movement, Action):
+            dx, dy = movement.to_vector()
+        else:
+            dx, dy = movement
+        new_x = self.x + int(dx)
+        new_y = self.y + int(dy)
+        if bounds is not None:
+            new_x = max(0, min(new_x, bounds.width - 1))
+            new_y = max(0, min(new_y, bounds.height - 1))
+        return Coordinates(new_x, new_y)
+
+    def to_array_index(self, grid_bounds: "GridSize") -> tuple[int, int]:
+        return (self.y, self.x)
+
+
+@dataclass(frozen=True)
+class GridSize:
+    width: int
+    height: int
+
+    def to_tuple(self) -> tuple[int, int]:
+        return (int(self.width), int(self.height))
+
+    def total_cells(self) -> int:
+        return int(self.width) * int(self.height)
+
+    def center(self) -> Coordinates:
+        return Coordinates(self.width // 2, self.height // 2)
+
+    def contains(self, coord: Coordinates) -> bool:
+        return 0 <= coord.x < self.width and 0 <= coord.y < self.height
+
+    def estimate_memory_mb(self, field_dtype: np.dtype | None = None) -> float:
+        dtype = field_dtype if field_dtype is not None else np.float32
+        bytes_per_cell = np.dtype(dtype).itemsize
+        return (self.total_cells() * bytes_per_cell) / (1024 * 1024)
+
+
+@dataclass
+class AgentState:
+    position: Coordinates
+    orientation: float = 0.0
+    step_count: int = 0
+    total_reward: float = 0.0
+    goal_reached: bool = False
+
+    def update_position(self, new_position: Coordinates) -> None:
+        self.position = new_position
+
+    def add_reward(self, reward: float) -> None:
+        self.total_reward += float(reward)
+        if reward > 0:
+            self.goal_reached = True
+
+    def increment_step(self) -> None:
+        self.step_count += 1
+
+    def mark_goal_reached(self) -> None:
+        self.goal_reached = True
+
+
+CoordinateType = Coordinates | tuple[int, int] | Sequence[int]
+GridDimensions = GridSize | tuple[int, int] | Sequence[int]
+MovementVector = tuple[int, int]
+ActionType = Action | int | np.ndarray | NDArray[Any]
+Observation = NDArray[np.floating] | dict[str, Any] | tuple[Any, ...]
+Info = dict[str, Any]
+ObservationType = Observation
+InfoType = Info
 
 if NDArray is not None:
     RGBArray = NDArray[np.uint8]
 else:  # pragma: no cover - numpy<1.20
     RGBArray = np.ndarray  # type: ignore[assignment]
 
-PlumeParameters = PlumeModel
+
+def calculate_euclidean_distance(coord1: Coordinates, coord2: Coordinates) -> float:
+    return math.hypot(coord1.x - coord2.x, coord1.y - coord2.y)
 
 
-@dataclass
-class PerformanceMetrics:
-    """Minimal performance metrics container shared across components.
-
-    Provides step timing capture plus a simple record_timing/get_performance_summary
-    interface used by higher-level modules.
-    """
-
-    step_durations_ms: list[float] = field(default_factory=list)
-    total_steps: int = 0
-    other_timings_ms: Dict[str, list[float]] = field(default_factory=dict)
-
-    def record_step(self, duration_ms: float) -> None:
-        """Record a single step duration in milliseconds."""
-        self.step_durations_ms.append(duration_ms)
-        self.total_steps += 1
-
-    def record_timing(self, name: str, value_ms: float) -> None:
-        """Generic timing recorder; maps the "episode_step" series to record_step."""
-        if name == "episode_step":
-            self.record_step(value_ms)
-            return
-        self.other_timings_ms.setdefault(name, []).append(value_ms)
-
-    def average_step_time_ms(self) -> float:
-        """Return the rolling average step duration."""
-        if not self.step_durations_ms:
-            return 0.0
-        return sum(self.step_durations_ms) / len(self.step_durations_ms)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize the metrics for logging or debugging."""
-        return {
-            "total_steps": self.total_steps,
-            "average_step_time_ms": self.average_step_time_ms(),
-            "step_durations_ms": list(self.step_durations_ms),
-            "other_timings_ms": {k: list(v) for k, v in self.other_timings_ms.items()},
-        }
-
-    def get_performance_summary(self) -> Dict[str, Any]:
-        """Return a lightweight summary compatible with EpisodeManager consumers."""
-        total_ms = sum(self.step_durations_ms)
-        return {
-            "total_step_time_ms": total_ms,
-            "average_step_time_ms": self.average_step_time_ms(),
-            "timings": {
-                "episode_step": list(self.step_durations_ms),
-                **{k: list(v) for k, v in self.other_timings_ms.items()},
-            },
-        }
-
-
-@dataclass(frozen=True)
-class EnvironmentConfig:
-    """Validated environment configuration shared by state and episode managers."""
-
-    grid_size: GridDimensions = DEFAULT_GRID_SIZE
-    source_location: CoordinateType = DEFAULT_SOURCE_LOCATION
-    max_steps: int = DEFAULT_MAX_STEPS
-    goal_radius: float = DEFAULT_GOAL_RADIUS
-    plume_params: Union[PlumeParameters, Mapping[str, Any], None] = None
-    enable_rendering: bool = True
-
-    def __post_init__(self) -> None:
-        grid = create_grid_size(self.grid_size)
-        object.__setattr__(self, "grid_size", grid)
-
-        source = create_coordinates(self.source_location)
-        object.__setattr__(self, "source_location", source)
-
-        plume = self._normalize_plume_params(self.plume_params)
-        object.__setattr__(self, "plume_params", plume)
-
-        if not isinstance(self.max_steps, int) or self.max_steps <= 0:
-            _raise_validation_error("max_steps must be a positive integer")
-
-        if not isinstance(self.goal_radius, (int, float)) or self.goal_radius < 0:
-            _raise_validation_error("goal_radius must be a non-negative number")
-
-        if not isinstance(self.enable_rendering, bool):
-            _raise_validation_error("enable_rendering must be a boolean flag")
-
-        if not self.source_location.is_within_bounds(self.grid_size):
-            _raise_validation_error(
-                "source_location must be within the provided grid_size bounds"
-            )
-
-        if plume.grid_compatibility and plume.grid_compatibility != self.grid_size:
-            _raise_validation_error(
-                "plume_params.grid_compatibility must match the environment grid_size"
-            )
-
-    def _normalize_plume_params(
-        self, plume_params: Union[PlumeParameters, Mapping[str, Any], None]
-    ) -> PlumeParameters:
-        if plume_params is None:
-            return PlumeParameters(
-                source_location=self.source_location,
-                sigma=DEFAULT_PLUME_SIGMA,
-                grid_compatibility=self.grid_size,
-            )
-
-        if isinstance(plume_params, PlumeParameters):
-            return plume_params
-
-        if isinstance(plume_params, Mapping):
-            params = dict(plume_params)
-            source = create_coordinates(
-                params.get("source_location", self.source_location)
-            )
-            sigma = params.get("sigma", DEFAULT_PLUME_SIGMA)
-            compatibility = params.get("grid_compatibility", self.grid_size)
-            grid = create_grid_size(compatibility)
-            return PlumeParameters(
-                source_location=source,
-                sigma=float(sigma),
-                grid_compatibility=grid,
-            )
-
-        _raise_validation_error(
-            "plume_params must be a PlumeParameters instance or mapping"
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize configuration for downstream consumers."""
-        return {
-            "grid_size": self.grid_size.to_tuple(),
-            "source_location": self.source_location.to_tuple(),
-            "max_steps": self.max_steps,
-            "goal_radius": self.goal_radius,
-            "enable_rendering": self.enable_rendering,
-            "plume_params": {
-                "source_location": self.plume_params.source_location.to_tuple(),
-                "sigma": self.plume_params.sigma,
-            },
-        }
-
-    def clone_with_overrides(self, **overrides: Any) -> "EnvironmentConfig":
-        """Return a new configuration with the provided overrides applied."""
-        data: Dict[str, Any] = {
-            "grid_size": self.grid_size,
-            "source_location": self.source_location,
-            "max_steps": self.max_steps,
-            "goal_radius": self.goal_radius,
-            "plume_params": self.plume_params,
-            "enable_rendering": self.enable_rendering,
-        }
-        data.update(overrides)
-        return EnvironmentConfig(**data)
-
-    def validate(self) -> bool:
-        """Explicit validation hook used by higher-level utilities."""
-        return True
-
-
-def _coerce_pair(value: Sequence[int], *, name: str) -> Tuple[int, int]:
-    if len(value) != 2:
-        _raise_validation_error(f"{name} must contain exactly two values")
-    try:
-        first, second = int(value[0]), int(value[1])
-    except (TypeError, ValueError) as exc:
-        raise _validation_error_class()(f"{name} values must be integers") from exc
-    return first, second
-
-
-def create_coordinates(value: CoordinateType, y: Optional[int] = None) -> Coordinates:
-    """Create a Coordinates object from tuple or Coordinates instance.
-
-    Args:
-        value: Either a Coordinates instance, a (x, y) tuple, or x when y is provided
-        y: Optional y coordinate when providing x as a separate positional argument
-
-    Returns:
-        Coordinates instance
-
-    Raises:
-        ValidationError: If value is not valid
-    """
-    # Two-argument form: create_coordinates(x, y)
+def create_coordinates(value: CoordinateType, y: int | None = None) -> Coordinates:
     if y is not None:
-        try:
-            x_int = int(value)  # type: ignore[arg-type]
-            y_int = int(y)
-        except (TypeError, ValueError):
-            _raise_validation_error("Coordinates x and y must be integers")
-        return Coordinates(x=x_int, y=y_int)
-
-    # Single-argument forms
+        return Coordinates(int(value), int(y))  # type: ignore[arg-type]
     if isinstance(value, Coordinates):
         return value
-    if isinstance(value, Sequence):
-        x1, y1 = _coerce_pair(value, name="Coordinates")
-        return Coordinates(x=x1, y=y1)
-    _raise_validation_error(
-        "Coordinates must be a Coordinates instance, length-2 sequence, or provided as x,y"
-    )
+    if isinstance(value, Sequence) and len(value) == 2:
+        return Coordinates(int(value[0]), int(value[1]))
+    raise TypeError("Coordinates must be Coordinates or length-2 sequence")
 
 
-def create_grid_size(value: GridDimensions, height: Optional[int] = None) -> GridSize:
-    """Create a GridSize object from diverse inputs.
-
-    Supports the following call patterns:
-    - create_grid_size(GridSize)
-    - create_grid_size((width, height)) or create_grid_size([width, height])
-    - create_grid_size(width, height)
-    """
-    # Two-argument form: (width, height)
+def create_grid_size(value: GridDimensions, height: int | None = None) -> GridSize:
     if height is not None:
-        try:
-            width_int = int(value)  # type: ignore[arg-type]
-            height_int = int(height)
-        except (TypeError, ValueError):
-            _raise_validation_error("GridSize width/height must be integers")
-        return GridSize(width=width_int, height=height_int)
-
-    # Single-argument forms
+        return GridSize(int(value), int(height))  # type: ignore[arg-type]
     if isinstance(value, GridSize):
         return value
-    if isinstance(value, Sequence):
-        width, h = _coerce_pair(value, name="GridSize")
-        return GridSize(width=width, height=h)
-    _raise_validation_error(
-        "GridSize must be (GridSize) or length-2 sequence, or be provided as width,height"
-    )
-
-
-def create_agent_state(
-    position: Union[AgentState, CoordinateType],
-    *,
-    orientation: Optional[float] = None,
-    step_count: Optional[int] = None,
-    total_reward: Optional[float] = None,
-    goal_reached: Optional[bool] = None,
-) -> AgentState:
-    """Create or clone an AgentState with optional overrides.
-
-    Args:
-        position: Either AgentState to clone or coordinates for new state
-        orientation: Heading in degrees (auto-normalized to [0, 360))
-        step_count: Override step count
-        total_reward: Override total reward
-        goal_reached: Override goal reached flag
-
-    Returns:
-        AgentState with specified values
-    """
-    if isinstance(position, AgentState):
-        base = AgentState(
-            position=position.position.clone(),
-            orientation=position.orientation,
-            step_count=position.step_count,
-            total_reward=position.total_reward,
-            movement_history=list(position.movement_history),
-            goal_reached=position.goal_reached,
-            performance_metrics=position.performance_metrics.copy(),
-        )
-    else:
-        base = AgentState(
-            position=create_coordinates(position),
-            orientation=orientation if orientation is not None else 0.0,
-        )
-
-    # Apply overrides
-    if orientation is not None and isinstance(position, AgentState):
-        base.orientation = float(orientation) % 360.0
-    if step_count is not None:
-        if step_count < 0:
-            _raise_validation_error("step_count override must be non-negative")
-        base.step_count = step_count
-    if total_reward is not None:
-        base.total_reward = float(total_reward)
-    if goal_reached is not None:
-        base.goal_reached = bool(goal_reached)
-    return base
-
-
-def create_episode_state(
-    agent_state: Union[AgentState, CoordinateType],
-    *,
-    terminated: bool = False,
-    truncated: bool = False,
-    episode_id: Optional[str] = None,
-) -> EpisodeState:
-    """Factory for EpisodeState with sensible defaults."""
-    state = EpisodeState(
-        agent_state=create_agent_state(agent_state),
-        terminated=terminated,
-        truncated=truncated,
-    )
-    if episode_id is not None:
-        state.episode_id = episode_id
-    return state
-
-
-def create_environment_config(
-    config: Union[EnvironmentConfig, Mapping[str, Any], None] = None,
-    **overrides: Any,
-) -> EnvironmentConfig:
-    """Factory helper that accepts existing configs, mappings, or keyword overrides."""
-    if isinstance(config, EnvironmentConfig) and not overrides:
-        return config
-
-    data: Dict[str, Any] = {}
-    if isinstance(config, EnvironmentConfig):
-        data = {
-            "grid_size": config.grid_size,
-            "source_location": config.source_location,
-            "max_steps": config.max_steps,
-            "goal_radius": config.goal_radius,
-            "plume_params": config.plume_params,
-            "enable_rendering": config.enable_rendering,
-        }
-    elif isinstance(config, Mapping):
-        data = dict(config)
-    elif config is not None:
-        _raise_validation_error("config must be EnvironmentConfig, mapping, or None")
-
-    data.update(overrides)
-    return EnvironmentConfig(**data)
-
-
-def create_step_info(
-    agent_state: AgentState,
-    additional_info: Optional[Mapping[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Create the info dictionary returned from environment step calls."""
-    if not isinstance(agent_state, AgentState):
-        _raise_validation_error("agent_state must be an AgentState instance")
-
-    info: Dict[str, Any] = {
-        "agent_position": agent_state.position.to_tuple(),
-        "step_count": agent_state.step_count,
-        "total_reward": agent_state.total_reward,
-        "goal_reached": agent_state.goal_reached,
-    }
-    if additional_info:
-        info.update(additional_info)
-    return info
+    if isinstance(value, Sequence) and len(value) == 2:
+        return GridSize(int(value[0]), int(value[1]))
+    raise TypeError("GridSize must be GridSize or length-2 sequence")
 
 
 def validate_action(action: ActionType) -> Action:
-    """Normalize and validate an action value, returning the Action enum."""
     if isinstance(action, Action):
         return action
-    if isinstance(action, int) and action in MOVEMENT_VECTORS:
-        return Action(action)
-    _raise_validation_error(
-        "Action must be an Action enum or integer in the action space"
-    )
+    if isinstance(action, (np.integer, int)) and int(action) in MOVEMENT_VECTORS:
+        return Action(int(action))
+    raise TypeError("Action must be Action enum or integer in action space")
 
 
 def get_movement_vector(action: ActionType) -> MovementVector:
-    """Return the movement vector associated with an action."""
-    validated = validate_action(action)
-    return validated.to_vector()
-
-
-def __getattr__(name: str) -> Any:
-    if name == "ValidationError":
-        cls = _validation_error_class()
-        globals()["ValidationError"] = cls
-        return cls
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return validate_action(action).to_vector()
 
 
 __all__ = [
@@ -432,26 +193,18 @@ __all__ = [
     "AgentState",
     "CoordinateType",
     "Coordinates",
-    "EnvironmentConfig",
-    "EpisodeState",
     "GridDimensions",
     "GridSize",
+    "Info",
     "InfoType",
     "MovementVector",
+    "Observation",
     "ObservationType",
-    "PerformanceMetrics",
-    "PlumeParameters",
     "RGBArray",
     "RenderMode",
-    "RewardType",
-    "StateSnapshot",
     "calculate_euclidean_distance",
-    "create_agent_state",
     "create_coordinates",
-    "create_environment_config",
-    "create_episode_state",
     "create_grid_size",
-    "create_step_info",
     "get_movement_vector",
     "validate_action",
 ]

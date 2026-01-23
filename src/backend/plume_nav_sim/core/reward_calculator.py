@@ -19,6 +19,7 @@ from dataclasses import (  # >=3.10 - Data class utilities for reward calculatio
 from typing import (  # >=3.10 - Type hints for reward calculation methods, parameter specifications, and return value annotations
     Any,
     Dict,
+    List,
     Optional,
     Tuple,
 )
@@ -42,7 +43,6 @@ from .constants import (
 )
 from .geometry import Coordinates, calculate_euclidean_distance
 from .state import AgentState
-from .types import PerformanceMetrics
 
 # Module version and metadata
 REWARD_CALCULATOR_VERSION = "1.0.0"
@@ -595,7 +595,6 @@ class RewardCalculator:
     def __init__(
         self,
         config: RewardCalculatorConfig,
-        performance_metrics: Optional[PerformanceMetrics] = None,
     ):
         """
         Initialize reward calculator with configuration validation, performance monitoring setup,
@@ -603,7 +602,6 @@ class RewardCalculator:
 
         Args:
             config: Validated reward calculator configuration
-            performance_metrics: Optional performance metrics collection system
         """
         # Validate configuration using config.validate() with comprehensive parameter checking
         if not isinstance(config, RewardCalculatorConfig):
@@ -618,23 +616,8 @@ class RewardCalculator:
         # Store configuration for reward calculation parameter access and validation reference
         self.config = config
 
-        # Initialize or store provided performance_metrics for timing analysis and optimization
-        self.performance_metrics = performance_metrics
-        # Backward-compat: some tests call performance_metrics.get_summary()
-        # Provide a shim on the instance without altering the class API to
-        # preserve deprecation expectations elsewhere.
-        if self.performance_metrics is not None and not hasattr(
-            self.performance_metrics, "get_summary"
-        ):
-
-            def _compat_get_summary(pm=self.performance_metrics):
-                return pm.get_performance_summary()
-
-            try:  # Best-effort; ignore if instance forbids attribute set
-                # Assign directly to avoid getattr/setattr with constant attribute name
-                self.performance_metrics.get_summary = _compat_get_summary  # type: ignore[attr-defined]
-            except Exception:
-                pass
+        # Store performance timings locally (simple list-based aggregation)
+        self.performance_metrics: Dict[str, List[float]] = {}
 
         # Create distance_cache dictionary for caching repeated distance calculations
         self.distance_cache: Dict[str, float] = {}
@@ -730,11 +713,9 @@ class RewardCalculator:
                         "goal_radius": self.config.goal_radius,
                     },
                 )
-
-                if self.performance_metrics:
-                    self.performance_metrics.record_timing(
-                        "reward_calculation", calculation_time_ms
-                    )
+                self.performance_metrics.setdefault("reward_calculation", []).append(
+                    float(calculation_time_ms)
+                )
 
             # Update calculation_count and goal_achievement_stats for statistics tracking
             self.calculation_count += 1
@@ -1191,11 +1172,7 @@ def create_reward_calculator(
     config.enable_performance_monitoring = enable_performance_monitoring
 
     # Initialize RewardCalculator with validated configuration and component dependencies
-    performance_metrics = (
-        PerformanceMetrics() if enable_performance_monitoring else None
-    )
-
-    reward_calculator = RewardCalculator(config, performance_metrics)
+    reward_calculator = RewardCalculator(config)
 
     # Validate complete reward calculator setup and mathematical consistency
     if enable_validation:
