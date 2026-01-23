@@ -1,12 +1,4 @@
-"""Video-backed concentration field that advances with simulation steps.
-
-This lightweight field reads frames from a Zarr/xarray dataset with variable
-`concentration: (t,y,x)` and exposes the current 2D frame via `field_array`.
-It supports simple step policies (wrap, clamp) to map environment steps to
-frame indices. Metadata is validated via media.schema.VideoPlumeAttrs.
-
-Dependencies: xarray, zarr (optional). When missing, clear errors are raised.
-"""
+"""Video-backed plume with lazy frame loading from Zarr/HDF5 datasets."""
 
 from __future__ import annotations
 
@@ -25,24 +17,13 @@ from ..media.schema import (
 )
 from ..media.sidecar import MovieMetadataSidecar, load_movie_sidecar
 from ..utils.exceptions import ValidationError
-from ..utils.logging import get_component_logger
 
 StepPolicy = str  # "wrap" | "clamp"
 
 
 @dataclass
-class MovieConfig:
-    """Configuration for loading a movie-backed plume dataset.
-
-    Attributes:
-        path: Filesystem path to the Zarr dataset root (directory)
-        fps: Optional override for frames-per-second metadata
-        pixel_to_grid: Optional (y,x) scaling from pixels to grid units
-        origin: Optional (y,x) grid origin
-        extent: Optional (y,x) grid extent; defaults to pixel dims * pixel_to_grid
-        step_policy: Frame stepping policy when advancing time ("wrap" or "clamp")
-        data_array: Optional preloaded xarray.DataArray (t,y,x) to use instead of opening from path
-    """
+class VideoConfig:
+    """Configuration for loading a video-backed plume dataset."""
 
     path: str
     fps: Optional[float] = None
@@ -58,7 +39,7 @@ def _open_movie_dataset(path: Path) -> Any:
         import xarray as xr  # type: ignore
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
-            "Movie plume requires optional dependency 'xarray'. "
+            "Video plume requires optional dependency 'xarray'. "
             "Install extras: pip install xarray zarr numcodecs"
         ) from exc
 
@@ -68,24 +49,19 @@ def _open_movie_dataset(path: Path) -> Any:
         return xr.open_zarr(str(path))  # type: ignore[attr-defined]
 
 
-def _resolve_movie_data(cfg: MovieConfig) -> tuple[Any, Any, str]:
+def _resolve_movie_data(cfg: VideoConfig) -> tuple[Any, Any, str]:
     data_array: Any = getattr(cfg, "data_array", None)
     path = Path(cfg.path) if cfg.path else None
 
     if data_array is None:
         if path is None:
-            raise ValidationError("movie.path must be provided")
+            raise ValidationError("video.path must be provided")
         if not path.exists():
-            raise ValidationError(f"movie.path not found: {cfg.path}")
-        if not path.is_dir():
-            # Zarr stores are directories; allow xarray to handle file-backed stores.
-            pass
-
+            raise ValidationError(f"video.path not found: {cfg.path}")
         ds = _open_movie_dataset(path)
-        attrs_source = ds
         var = ds[VARIABLE_CONCENTRATION]
         dataset_path = str(path)
-        return var, attrs_source, dataset_path
+        return var, ds, dataset_path
 
     try:
         attrs_source = data_array.to_dataset(name=VARIABLE_CONCENTRATION)
@@ -95,7 +71,7 @@ def _resolve_movie_data(cfg: MovieConfig) -> tuple[Any, Any, str]:
     return data_array, attrs_source, dataset_path
 
 
-def _apply_attr_overrides(cfg: MovieConfig, attrs: VideoPlumeAttrs) -> VideoPlumeAttrs:
+def _apply_attr_overrides(cfg: VideoConfig, attrs: VideoPlumeAttrs) -> VideoPlumeAttrs:
     overrides = {
         "fps": cfg.fps if cfg.fps is not None else attrs.fps,
         "pixel_to_grid": cfg.pixel_to_grid or attrs.pixel_to_grid,
@@ -111,26 +87,15 @@ def _apply_attr_overrides(cfg: MovieConfig, attrs: VideoPlumeAttrs) -> VideoPlum
 def _resolve_movie_sizes(var: Any) -> tuple[int, int, int]:
     dims = tuple(getattr(var, "dims"))
     if dims != DIMS_TYX:
-        raise ValidationError(f"Movie variable dims must be {DIMS_TYX}, got {dims}")
+        raise ValidationError(f"Video dims must be {DIMS_TYX}, got {dims}")
     size_t, size_y, size_x = (int(var.sizes[d]) for d in DIMS_TYX)  # type: ignore[index]
     return size_t, size_y, size_x
 
 
-class MoviePlumeField:
-    """Video-backed field exposing current 2D frame via `field_array`.
+class VideoPlume:
+    """Video-backed plume with a current 2D frame in `field_array`."""
 
-    Attributes:
-        grid_size: GridSize derived from dataset dims (x, y)
-        field_array: np.ndarray (float32) of shape (y, x) for current frame
-        attrs: VideoPlumeAttrs describing calibration metadata
-        num_frames: Total number of frames (T)
-        frame_index: Current frame index
-        step_policy: Mapping policy from step count to frame index
-    """
-
-    def __init__(self, cfg: MovieConfig) -> None:
-        self._logger = get_component_logger("concentration_field")
-
+    def __init__(self, cfg: VideoConfig) -> None:
         var, attrs_source, dataset_path = _resolve_movie_data(cfg)
         attrs = validate_xarray_like(attrs_source)
         self.attrs = _apply_attr_overrides(cfg, attrs)
@@ -138,44 +103,49 @@ class MoviePlumeField:
         self.num_frames = size_t
         self.grid_size = GridSize(width=size_x, height=size_y)
 
-        # Backing handle for lazy frame selection
         self._data_array = var
         self._dataset_path = dataset_path
         self.step_policy: StepPolicy = cfg.step_policy or "wrap"
         if self.step_policy not in ("wrap", "clamp"):
             raise ValidationError(
-                f"movie.step_policy must be 'wrap' or 'clamp', got {self.step_policy!r}"
+                f"video.step_policy must be 'wrap' or 'clamp', got {self.step_policy!r}"
             )
 
-        # Initialize to first frame
         self.frame_index = 0
         self.field_array = self._load_frame(0)
+        self._seed: Optional[int] = None
 
-    # ------------------------------------------------------------------
-    # Step/reset integration hooks
+    def reset(self, seed: int | None = None) -> None:
+        self._seed = None if seed is None else int(seed)
+        self.on_reset()
+
     def on_reset(self) -> None:
         self.frame_index = 0
         self.field_array = self._load_frame(0)
 
     def advance_to_step(self, step_count: int) -> None:
-        """Advance current frame based on step count and step_policy."""
         if self.num_frames <= 0:
             return
         if self.step_policy == "wrap":
             idx = int(step_count) % self.num_frames
-        else:  # clamp
+        else:
             idx = min(int(step_count), self.num_frames - 1)
         if idx != self.frame_index:
             self.field_array = self._load_frame(idx)
             self.frame_index = idx
 
-    # ------------------------------------------------------------------
-    # Internal helpers
+    def sample(self, x: float, y: float, t: float | None = None) -> float:
+        if t is not None:
+            self.advance_to_step(int(round(t)))
+        ix = int(round(x))
+        iy = int(round(y))
+        if 0 <= ix < self.grid_size.width and 0 <= iy < self.grid_size.height:
+            return float(self.field_array[iy, ix])
+        return 0.0
+
     def _load_frame(self, idx: int) -> np.ndarray:
         try:
-            arr = self._data_array.isel(
-                t=int(idx)
-            ).values.astype(  # type: ignore[attr-defined]
+            arr = self._data_array.isel(t=int(idx)).values.astype(  # type: ignore[attr-defined]
                 np.float32, copy=False
             )
         except Exception as exc:
@@ -205,15 +175,7 @@ def resolve_movie_dataset_path(
     normalize: bool = True,
     movie_h5_dataset: Optional[str] = None,
 ) -> Path:
-    """Resolve a user-facing movie path into a dataset root for MoviePlumeField.
-
-    Accepts either:
-
-    - A directory path (assumed to be a ready-to-use dataset root).
-    - A file path (e.g. .avi, .mp4, or an image-sequence directory), which is
-      ingested on demand into a sibling dataset directory using the
-      ``video_ingest`` implementation.
-    """
+    """Resolve a user-facing movie path into a dataset root for VideoPlume."""
 
     path = Path(source_path)
 
@@ -361,4 +323,4 @@ def _ingest_video_from_sidecar(
     return ingest_video(cfg)
 
 
-__all__ = ["MoviePlumeField", "MovieConfig", "resolve_movie_dataset_path"]
+__all__ = ["VideoPlume", "VideoConfig", "resolve_movie_dataset_path"]
