@@ -18,6 +18,7 @@ Example:
     >>> obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -30,21 +31,75 @@ import numpy as np
 
 from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
+from ..constants import DEFAULT_SOURCE_LOCATION
 from ..core.geometry import Coordinates, GridSize
 from ..data_zoo import (
     DEFAULT_CACHE_ROOT,
+    describe_dataset,
     ensure_dataset_available,
     get_dataset_registry,
     load_plume,
 )
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
-from ..plume.concentration_field import ConcentrationField
-from ..plume.movie_field import MovieConfig, MoviePlumeField, resolve_movie_dataset_path
-from ..plume.wind_field import ConstantWindField
+from ..plume.gaussian import GaussianPlume
+from ..plume.video import VideoConfig, VideoPlume, resolve_movie_dataset_path
 from ..rewards import SparseGoalReward, StepPenaltyReward
+from ..wind_field import ConstantWindField
 from .component_env import ComponentBasedEnvironment
 
+LOG = logging.getLogger(__name__)
+
 __all__ = ["create_component_environment"]
+
+
+def _coerce_source_location_px(value: object) -> tuple[int, int] | None:
+    if not isinstance(value, (tuple, list)) or len(value) != 2:
+        return None
+    try:
+        return (int(value[0]), int(value[1]))
+    except Exception:
+        return None
+
+
+def _source_location_px_from_dataset_dir(dataset_path: Path) -> tuple[int, int] | None:
+    try:
+        import zarr
+    except Exception:
+        return None
+    try:
+        root = zarr.open_group(str(dataset_path), mode="r")
+        direct = _coerce_source_location_px(root.attrs.get("source_location_px"))
+        if direct is not None:
+            return direct
+        ingest_args = root.attrs.get("ingest_args")
+        if isinstance(ingest_args, dict):
+            return _coerce_source_location_px(ingest_args.get("source_location_px"))
+
+        source_format = root.attrs.get("source_format")
+        dims = root.attrs.get("dims")
+        looks_like_rigolli = (
+            source_format == "matlab_v73"
+            or dataset_path.name.startswith("rigolli_")
+            or (dims == ["t", "y", "x"] and "x" in root and "y" in root)
+        )
+        looks_like_emonet = (
+            source_format == "emonet_flywalk" or dataset_path.name.startswith("emonet_")
+        )
+        if looks_like_rigolli or looks_like_emonet:
+            conc = root.get("concentration")
+            if conc is not None and hasattr(conc, "shape") and len(conc.shape) >= 3:
+                ny = int(conc.shape[1])
+                resolved = (0, ny // 2)
+                LOG.warning(
+                    "Dataset missing source_location_px; using heuristic (x=%d, y=%d) for %s",
+                    resolved[0],
+                    resolved[1],
+                    str(dataset_path),
+                )
+                return resolved
+    except Exception:
+        return None
+    return None
 
 
 def create_component_environment(  # noqa: C901
@@ -149,6 +204,18 @@ def create_component_environment(  # noqa: C901
     if goal_radius == 0:
         goal_radius = float(np.finfo(np.float32).eps)
 
+    goal_location_is_default = (
+        goal_location.x,
+        goal_location.y,
+    ) == DEFAULT_SOURCE_LOCATION
+
+    # Clamp goal_location to grid bounds if default is outside smaller grid
+    if goal_location.x >= grid_size.width or goal_location.y >= grid_size.height:
+        goal_location = Coordinates(
+            x=min(goal_location.x, grid_size.width - 1),
+            y=min(goal_location.y, grid_size.height - 1),
+        )
+
     # Create action processor
     if action_type == "discrete":
         action_processor = DiscreteGridActions(step_size=step_size)
@@ -174,23 +241,6 @@ def create_component_environment(  # noqa: C901
             f"Must be 'concentration', 'antennae', or 'wind_vector'."
         )
 
-    # Create reward function
-    if reward_type == "sparse":
-        reward_function = SparseGoalReward(
-            goal_position=goal_location, goal_radius=goal_radius
-        )
-    elif reward_type == "step_penalty":
-        reward_function = StepPenaltyReward(
-            goal_position=goal_location,
-            goal_radius=goal_radius,
-            goal_reward=1.0,
-            step_penalty=0.01,
-        )
-    else:
-        raise ValueError(
-            f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
-        )
-
     # Create plume/concentration field
     if plume == "movie":
         if not movie_path and not movie_dataset_id:
@@ -211,6 +261,19 @@ def create_component_environment(  # noqa: C901
             movie_h5_dataset=movie_h5_dataset,
         )
 
+        if goal_location_is_default:
+            resolved: tuple[int, int] | None = None
+            if movie_dataset_id:
+                entry = describe_dataset(movie_dataset_id)
+                ingest = getattr(entry, "ingest", None)
+                resolved = _coerce_source_location_px(
+                    getattr(ingest, "source_location_px", None)
+                )
+            if resolved is None and Path(dataset_path).is_dir():
+                resolved = _source_location_px_from_dataset_dir(Path(dataset_path))
+            if resolved is not None:
+                goal_location = Coordinates(x=resolved[0], y=resolved[1])
+
         data_array = movie_data
         if data_array is None and movie_dataset_id:
             data_array = load_plume(
@@ -224,7 +287,7 @@ def create_component_environment(  # noqa: C901
         # For raw media sources (non-directory movie_path values), treat the
         # sidecar as the single source of truth for movie-level metadata. Once
         # ingestion has produced a dataset, rely on its attrs instead of
-        # overriding via MovieConfig. For existing dataset directories, preserve
+        # overriding via VideoConfig. For existing dataset directories, preserve
         # the prior behavior and allow explicit overrides.
         source_root = Path(movie_path) if movie_path else Path(dataset_path)
         source_is_dir = source_root.is_dir()
@@ -239,7 +302,7 @@ def create_component_environment(  # noqa: C901
             cfg_origin = None
             cfg_extent = None
 
-        movie_cfg = MovieConfig(
+        movie_cfg = VideoConfig(
             path=str(dataset_path),
             fps=cfg_fps,
             pixel_to_grid=cfg_pixel_to_grid,
@@ -248,24 +311,31 @@ def create_component_environment(  # noqa: C901
             step_policy=movie_step_policy,
             data_array=data_array,
         )
-        movie_field = MoviePlumeField(movie_cfg)
+        movie_field = VideoPlume(movie_cfg)
         concentration_field = movie_field  # type: ignore[assignment]
 
         # Override grid_size based on dataset to avoid mismatches
         grid_size = movie_field.grid_size
     else:
-        concentration_field = ConcentrationField(
-            grid_size=grid_size, enable_caching=True
+        concentration_field = _create_gaussian_plume_field(
+            grid_size, goal_location, plume_sigma
         )
-        # Manually create Gaussian field (generate_field has signature issues)
-        x = np.arange(grid_size.width)
-        y = np.arange(grid_size.height)
-        xx, yy = np.meshgrid(x, y)
-        dx = xx - goal_location.x
-        dy = yy - goal_location.y
-        field_array = np.exp(-(dx**2 + dy**2) / (2 * plume_sigma**2))
-        concentration_field.field_array = field_array.astype(np.float32)
-        concentration_field.is_generated = True
+    # Create reward function (after movie goal override)
+    if reward_type == "sparse":
+        reward_function = SparseGoalReward(
+            goal_position=goal_location, goal_radius=goal_radius
+        )
+    elif reward_type == "step_penalty":
+        reward_function = StepPenaltyReward(
+            goal_position=goal_location,
+            goal_radius=goal_radius,
+            goal_reward=1.0,
+            step_penalty=0.01,
+        )
+    else:
+        raise ValueError(
+            f"Invalid reward_type: {reward_type}. Must be 'sparse' or 'step_penalty'."
+        )
 
     wind_field = None
     if enable_wind or observation_type == "wind_vector":
@@ -288,6 +358,14 @@ def create_component_environment(  # noqa: C901
         goal_radius=goal_radius,
         start_location=start_location,
         render_mode=render_mode,
+    )
+
+
+def _create_gaussian_plume_field(
+    grid_size: GridSize, goal_location: Coordinates, plume_sigma: float
+) -> GaussianPlume:
+    return GaussianPlume(
+        grid_size=grid_size, source_location=goal_location, sigma=plume_sigma
     )
 
 

@@ -68,7 +68,13 @@ def _normalize_env_kwargs(
         params = dict(plume_params)
         src_loc = params.get("source_location")
         if src_loc:
-            params["source_location"] = (int(src_loc[0]), int(src_loc[1]))
+            # Handle Coordinates object, dict, or tuple
+            if hasattr(src_loc, "x"):
+                params["source_location"] = (int(src_loc.x), int(src_loc.y))
+            elif isinstance(src_loc, dict):
+                params["source_location"] = (int(src_loc["x"]), int(src_loc["y"]))
+            else:
+                params["source_location"] = (int(src_loc[0]), int(src_loc[1]))
         kwargs["plume_params"] = params
 
     enable_rendering = bool(cfg.get("enable_rendering", True))

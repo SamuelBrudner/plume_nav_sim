@@ -28,7 +28,7 @@ from typing import (  # >=3.10 - Type hints for RGB array types and method annot
 # External imports with version comments
 import numpy as np  # >=2.1.0 - Core array operations, RGB array creation, vectorized pixel manipulation
 
-from ..core.constants import (
+from ..constants import (
     AGENT_MARKER_SIZE,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
     PIXEL_VALUE_MAX,
@@ -1095,10 +1095,10 @@ def create_rgb_renderer(
     Returns:
         NumpyRGBRenderer: Configured RGB renderer instance ready for high-performance array generation
     """
-    # Validate grid_size dimensions and memory feasibility using GridSize validation methods
+    # Validate grid_size dimensions - skip performance check if method doesn't exist (simplified types)
     if (
-        not hasattr(grid_size, "is_performance_feasible")
-        or not grid_size.is_performance_feasible()
+        hasattr(grid_size, "is_performance_feasible")
+        and not grid_size.is_performance_feasible()
     ):
         raise ValidationError(
             f"Grid size {grid_size.to_tuple()} may not meet performance requirements",
