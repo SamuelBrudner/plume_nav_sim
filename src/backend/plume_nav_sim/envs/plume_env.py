@@ -26,14 +26,36 @@ from ..interfaces import ActionProcessor, ObservationModel, RewardFunction
 from ..observations import ConcentrationSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.protocol import ConcentrationField
+from ..plume.video import VideoConfig, VideoPlume
 from ..rewards import SparseGoalReward
 from ..utils.exceptions import StateError, ValidationError
 from ..utils.validation import validate_seed_value
 from .component_env import EnvironmentState
 
-__all__ = ["PlumeEnv"]
+__all__ = ["PlumeEnv", "create_plume_env"]
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_plume_grid(plume: ConcentrationField) -> Optional[GridSize]:
+    candidate = getattr(plume, "grid_size", None)
+    if candidate is None:
+        return None
+    if isinstance(candidate, GridSize):
+        return candidate
+    if isinstance(candidate, (tuple, list)) and len(candidate) == 2:
+        try:
+            return GridSize(width=int(candidate[0]), height=int(candidate[1]))
+        except Exception:
+            return None
+    width = getattr(candidate, "width", None)
+    height = getattr(candidate, "height", None)
+    if width is not None and height is not None:
+        try:
+            return GridSize(width=int(width), height=int(height))
+        except Exception:
+            return None
+    return None
 
 
 class PlumeEnv(gym.Env):
@@ -66,7 +88,11 @@ class PlumeEnv(gym.Env):
                 expected_format=str(self.metadata["render_modes"]),
             )
 
-        grid_value = DEFAULT_GRID_SIZE if grid_size is None else grid_size
+        plume_grid = _coerce_plume_grid(plume) if plume is not None else None
+        if grid_size is None and plume_grid is not None:
+            grid_value = plume_grid
+        else:
+            grid_value = DEFAULT_GRID_SIZE if grid_size is None else grid_size
         if isinstance(grid_value, GridSize):
             grid = grid_value
         else:
@@ -132,6 +158,16 @@ class PlumeEnv(gym.Env):
                 "max_steps must be positive",
                 parameter_name="max_steps",
                 parameter_value=steps,
+            )
+
+        if plume_grid is not None and (
+            grid.width != plume_grid.width or grid.height != plume_grid.height
+        ):
+            raise ValidationError(
+                "grid_size must match plume grid_size",
+                parameter_name="grid_size",
+                parameter_value=grid.to_tuple(),
+                expected_format=str(plume_grid.to_tuple()),
             )
 
         self._grid_size = grid
@@ -470,3 +506,94 @@ class PlumeEnv(gym.Env):
         x0 = max(0, x - half_w)
         x1 = min(width, x + half_w + 1)
         canvas[y0:y1, x0:x1] = np.array(color, dtype=np.uint8)
+
+
+def create_plume_env(plume_type: str = "gaussian", **kwargs: Any) -> PlumeEnv:
+    """Create a PlumeEnv with a Gaussian or video plume backend."""
+
+    if plume_type is None:
+        plume_kind = "gaussian"
+    elif isinstance(plume_type, str):
+        plume_kind = plume_type.lower()
+    else:
+        raise ValidationError(
+            "plume_type must be a string",
+            parameter_name="plume_type",
+            parameter_value=plume_type,
+        )
+
+    if plume_kind == "gaussian":
+        return PlumeEnv(**kwargs)
+
+    if plume_kind != "video":
+        raise ValidationError(
+            "plume_type must be 'gaussian' or 'video'",
+            parameter_name="plume_type",
+            parameter_value=plume_type,
+            expected_format="gaussian|video",
+        )
+
+    if "plume" in kwargs:
+        raise ValidationError(
+            "plume must not be provided when plume_type='video'",
+            parameter_name="plume",
+            parameter_value=kwargs.get("plume"),
+        )
+
+    video_step_policy_provided = "video_step_policy" in kwargs
+    video_path = kwargs.pop("video_path", None)
+    video_data = kwargs.pop("video_data", None)
+    video_fps = kwargs.pop("video_fps", None)
+    video_pixel_to_grid = kwargs.pop("video_pixel_to_grid", None)
+    video_origin = kwargs.pop("video_origin", None)
+    video_extent = kwargs.pop("video_extent", None)
+    video_step_policy = kwargs.pop("video_step_policy", "wrap")
+
+    video_config = kwargs.pop("video_config", None)
+    if video_config is not None and not isinstance(video_config, VideoConfig):
+        raise ValidationError(
+            "video_config must be a VideoConfig instance",
+            parameter_name="video_config",
+            parameter_value=type(video_config).__name__,
+        )
+
+    if video_config is not None:
+        extra_video = any(
+            value is not None
+            for value in (
+                video_path,
+                video_data,
+                video_fps,
+                video_pixel_to_grid,
+                video_origin,
+                video_extent,
+            )
+        )
+        if extra_video or video_step_policy_provided:
+            raise ValidationError(
+                "video_config is mutually exclusive with video_* overrides",
+                parameter_name="video_config",
+                parameter_value=type(video_config).__name__,
+            )
+    else:
+        if video_path is None and video_data is None:
+            raise ValidationError(
+                "video plume requires video_path or video_data",
+                parameter_name="video_path",
+                parameter_value=video_path,
+            )
+
+        resolved_path = "" if video_path is None else str(video_path)
+        video_config = VideoConfig(
+            path=resolved_path,
+            fps=video_fps,
+            pixel_to_grid=video_pixel_to_grid,
+            origin=video_origin,
+            extent=video_extent,
+            step_policy=video_step_policy,
+            data_array=video_data,
+        )
+
+    plume = VideoPlume(video_config)
+    kwargs["plume"] = plume
+    return PlumeEnv(**kwargs)

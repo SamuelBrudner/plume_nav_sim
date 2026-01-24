@@ -114,7 +114,7 @@ from .component_env import EnvironmentState  # Environment state machine enum
 from .factory import (
     create_component_environment,  # Factory function for easy component assembly
 )
-from .plume_env import PlumeEnv
+from .plume_env import PlumeEnv, create_plume_env
 
 # Internal imports - Main environment implementation and factory functions
 from .plume_search_env import (
@@ -144,6 +144,7 @@ __all__ = [
     # Core environment classes with complete functionality
     "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
     "PlumeEnv",  # Flattened environment with direct component injection
+    "create_plume_env",  # Factory for PlumeEnv with gaussian or video plume backends
     "ComponentBasedEnvironment",  # Component-based environment with dependency injection
     "EnvironmentState",  # Environment state machine enum
     "create_component_environment",  # Factory for component-based environments
