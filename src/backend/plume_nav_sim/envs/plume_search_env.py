@@ -1,8 +1,9 @@
-"""Gym-facing wrapper that delegates to the DI-backed environment stack."""
+"""Deprecated Gym-facing wrapper that delegates to the DI-backed environment stack."""
 
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any, Dict, Optional, Tuple
 
 import gymnasium as gym
@@ -117,7 +118,7 @@ class _AttributeForwardingTimeLimit(TimeLimit):
 
 
 class PlumeSearchEnv(gym.Env):
-    """Compatibility wrapper exposing the DI-backed component environment.
+    """Deprecated compatibility wrapper exposing the DI-backed component environment.
 
     Delegation contract (stabilized by tests):
     - Seeding: reset(seed=...) produces reproducible trajectories across
@@ -141,6 +142,12 @@ class PlumeSearchEnv(gym.Env):
         plume_params: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "PlumeSearchEnv is deprecated and will be removed in a future release. "
+            "Use PlumeEnv or create_plume_env instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         env_options = kwargs.get("env_options") or {}
 
         normalized_grid = _normalize_grid_size(grid_size)
@@ -195,7 +202,9 @@ class PlumeSearchEnv(gym.Env):
             elif key in kwargs:
                 factory_kwargs[key] = kwargs[key]
 
-        self._core_env = create_component_environment(**factory_kwargs)
+        self._core_env = create_component_environment(
+            **factory_kwargs, warn_deprecated=False
+        )
 
         # Legacy attribute compatibility expected by registration tests
         # Ensure grid_size exposed here is always a plain (width, height) tuple

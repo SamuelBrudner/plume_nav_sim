@@ -1,6 +1,8 @@
 """
 Component-based environment using dependency injection.
 
+Deprecated: use PlumeEnv (plume_nav_sim.envs.PlumeEnv) instead.
+
 This module implements a Gymnasium environment that delegates to injected
 components (ActionProcessor, ObservationModel, RewardFunction) rather than
 using abstract methods. This architecture enables component swapping and
@@ -25,7 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from enum import Enum
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -40,6 +42,7 @@ from ..constants import (
 )
 from ..core.types import AgentState, Coordinates, GridSize
 from ..utils.exceptions import StateError, ValidationError
+from .state import EnvironmentState
 
 if TYPE_CHECKING:
     from ..interfaces import (
@@ -53,19 +56,6 @@ if TYPE_CHECKING:
 __all__ = ["ComponentBasedEnvironment", "EnvironmentState"]
 
 logger = logging.getLogger(__name__)
-
-
-class EnvironmentState(Enum):
-    """Formal states for Environment lifecycle.
-
-    Contract: environment_state_machine.md - State Definition
-    """
-
-    CREATED = "created"  # After __init__(), must reset() before step()
-    READY = "ready"  # After reset(), can step()
-    TERMINATED = "terminated"  # Episode ended (goal reached)
-    TRUNCATED = "truncated"  # Episode timeout
-    CLOSED = "closed"  # Resources released, terminal state
 
 
 class ComponentBasedEnvironment(gym.Env):
@@ -114,6 +104,7 @@ class ComponentBasedEnvironment(gym.Env):
         goal_radius: float = 5.0,
         start_location: Optional[Coordinates] = None,
         render_mode: Optional[str] = None,
+        _warn_deprecated: bool = True,
     ):
         """
         Initialize environment with injected components.
@@ -143,6 +134,13 @@ class ComponentBasedEnvironment(gym.Env):
             - No episode active
         """
         super().__init__()
+        if _warn_deprecated:
+            warnings.warn(
+                "ComponentBasedEnvironment is deprecated and will be removed in a future "
+                "release. Use PlumeEnv or create_plume_env instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Contract: environment_state_machine.md - P1, P2, P3
         if max_steps <= 0:

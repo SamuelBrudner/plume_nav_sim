@@ -117,6 +117,7 @@ def create_component_environment(  # noqa: C901
     plume_sigma: float = 20.0,
     step_size: int = 1,
     render_mode: Optional[str] = None,
+    warn_deprecated: bool = True,
     # New: select plume source and optional movie configuration
     plume: Literal["static", "movie"] = "static",
     movie_path: Optional[str] = None,
@@ -157,6 +158,7 @@ def create_component_environment(  # noqa: C901
         plume_sigma: Gaussian plume dispersion parameter
         step_size: Movement step size in grid cells
         render_mode: Rendering mode ('rgb_array' or 'human')
+        warn_deprecated: Emit a deprecation warning when constructing ComponentBasedEnvironment
         movie_dataset_id: Registry id for curated plume datasets; when set,
             movie_path is optional and will be resolved via the data zoo cache.
         movie_auto_download: Allow registry downloads when cache is missing.
@@ -358,6 +360,7 @@ def create_component_environment(  # noqa: C901
         goal_radius=goal_radius,
         start_location=start_location,
         render_mode=render_mode,
+        _warn_deprecated=warn_deprecated,
     )
 
 

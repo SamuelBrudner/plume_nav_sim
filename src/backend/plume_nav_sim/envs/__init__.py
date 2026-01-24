@@ -1,9 +1,9 @@
 """
 Environment module initialization providing comprehensive exports for plume navigation environments,
-registration functions, and core constants. Serves as primary interface for environment creation,
-registration, and configuration with streamlined imports, factory functions, and validation utilities
-enabling easy access to PlumeSearchEnv, ComponentBasedEnvironment classes, registration utilities, and default
-configurations for reinforcement learning research workflows.
+registration functions, and core constants. PlumeEnv is the canonical environment; legacy
+PlumeSearchEnv/ComponentBasedEnvironment remain for compatibility and are deprecated. This module
+serves as the primary interface for environment creation, registration, and configuration with
+streamlined imports, factory functions, and validation utilities.
 
 This module establishes the complete public API for the plume navigation environment package,
 coordinating all major components and providing factory functions, validation utilities, and
@@ -31,14 +31,14 @@ Usage Examples:
 
     # Custom environment with parameters
     env = create_environment(
-        env_type='plume_search',
+        env_type='plume_env',
         grid_size=(256, 256),
         source_location=(128, 128)
     )
 
     # Environment creation with registration
     env = make_environment(
-        env_type='plume_search',
+        env_type='plume_env',
         auto_register=True
     )
 
@@ -108,9 +108,9 @@ from ..utils.validation import (  # Parameter validation utilities
 
 # Internal imports - Core environment classes
 from .component_env import (
-    ComponentBasedEnvironment,  # New component-based environment with dependency injection
+    ComponentBasedEnvironment,  # Deprecated component-based environment
 )
-from .component_env import EnvironmentState  # Environment state machine enum
+from .state import EnvironmentState  # Environment state machine enum
 from .factory import (
     create_component_environment,  # Factory function for easy component assembly
 )
@@ -132,25 +132,33 @@ ENVIRONMENT_VERSION = (
     "1.0.0"  # Module version for compatibility tracking and development phases
 )
 # Supported environment selectors for unified factory
-# - 'plume_search': legacy monolithic environment
-# - 'component': component-based environment (dependency injection)
+# - 'plume_env': canonical flattened environment
+# - 'plume_search': deprecated wrapper environment
+# - 'component': deprecated component-based environment (dependency injection)
 # Also accept the class name for backward compatibility in some helpers.
-SUPPORTED_ENVIRONMENTS = ["plume_search", "component", "PlumeSearchEnv"]
+SUPPORTED_ENVIRONMENTS = [
+    "plume_env",
+    "plume",
+    "PlumeEnv",
+    "plume_search",
+    "component",
+    "PlumeSearchEnv",
+]
 
 _module_logger = get_component_logger("envs")
 
 # Comprehensive module exports for external API access
 __all__ = [
     # Core environment classes with complete functionality
-    "PlumeSearchEnv",  # Main plume navigation environment class for reinforcement learning research
     "PlumeEnv",  # Flattened environment with direct component injection
     "create_plume_env",  # Factory for PlumeEnv with gaussian or video plume backends
-    "ComponentBasedEnvironment",  # Component-based environment with dependency injection
     "EnvironmentState",  # Environment state machine enum
-    "create_component_environment",  # Factory for component-based environments
+    "ComponentBasedEnvironment",  # Deprecated component-based environment
+    "create_component_environment",  # Deprecated factory for component-based environments
+    "PlumeSearchEnv",  # Deprecated wrapper environment
     # Factory functions for environment creation and configuration
-    "create_plume_search_env",  # Factory function for PlumeSearchEnv with parameter validation and component initialization
-    "validate_plume_search_config",  # Configuration validation function ensuring parameter consistency and feasibility
+    "create_plume_search_env",  # Deprecated factory for PlumeSearchEnv
+    "validate_plume_search_config",  # Deprecated config validation
     # Registration system functions for Gymnasium integration
     "register_env",  # Environment registration function for Gymnasium compatibility with parameter validation
     "unregister_env",  # Environment unregistration function for cleanup and testing workflows
@@ -187,7 +195,7 @@ def create_environment(  # noqa: C901
     all environment types with consistent parameter handling and performance monitoring.
 
     Args:
-        env_type (Optional[str]): Environment type identifier, defaults to 'plume_search' for automatic selection
+        env_type (Optional[str]): Environment type identifier, defaults to 'plume_env' for automatic selection
         grid_size (Optional[Tuple[int, int]]): Environment dimensions (width, height) for spatial configuration
         source_location (Optional[Tuple[int, int]]): Plume source coordinates (x, y) for goal positioning
         max_steps (Optional[int]): Maximum episode steps before truncation for training efficiency
@@ -209,7 +217,7 @@ def create_environment(  # noqa: C901
 
         # Custom environment configuration
         env = create_environment(
-            env_type='plume_search',
+            env_type='plume_env',
             grid_size=(256, 256),
             source_location=(128, 128),
             max_steps=2000,
@@ -218,15 +226,15 @@ def create_environment(  # noqa: C901
 
         # Environment with additional options
         env = create_environment(
-            env_type='plume_search',
+            env_type='plume_env',
             env_options={'performance_mode': True, 'debug_logging': False}
         )
     """
     creation_start_time = time.perf_counter()
 
     try:
-        # Apply default env_type to 'plume_search' if not provided for automatic environment selection
-        effective_env_type = env_type or "plume_search"
+        # Apply default env_type to 'plume_env' if not provided for automatic environment selection
+        effective_env_type = env_type or "plume_env"
 
         _module_logger.debug(
             f"Creating environment: type={effective_env_type}, grid_size={grid_size}"
@@ -296,8 +304,25 @@ def create_environment(  # noqa: C901
                 expected_format="Non-negative number",
             )
 
-        # Route to create_plume_search_env for 'plume_search' type with parameter forwarding
-        if effective_env_type in ("plume_search", "PlumeSearchEnv"):
+        if effective_env_type in ("plume_env", "plume", "PlumeEnv"):
+            plume_env_kwargs = dict(env_options or {})
+            plume_type = plume_env_kwargs.pop("plume_type", "gaussian")
+            environment = create_plume_env(
+                plume_type=plume_type,
+                grid_size=effective_grid_size,
+                source_location=effective_source_location,
+                max_steps=effective_max_steps,
+                goal_radius=effective_goal_radius,
+                render_mode=effective_render_mode,
+                **plume_env_kwargs,
+            )
+        # Route to create_plume_search_env for deprecated 'plume_search' type
+        elif effective_env_type in ("plume_search", "PlumeSearchEnv"):
+            warnings.warn(
+                "env_type 'plume_search' is deprecated; use 'plume_env' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             environment = create_plume_search_env(
                 grid_size=effective_grid_size,
                 source_location=effective_source_location,
@@ -307,6 +332,11 @@ def create_environment(  # noqa: C901
                 env_options=env_options,
             )
         elif effective_env_type == "component":
+            warnings.warn(
+                "env_type 'component' is deprecated; use 'plume_env' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             # Map legacy naming (source_location) to goal_location for the component environment
             environment = create_component_environment(
                 grid_size=effective_grid_size,
@@ -395,7 +425,7 @@ def make_environment(  # noqa: C901
 
         # Custom configuration with automatic registration
         env = make_environment(
-            env_type='plume_search',
+            env_type='plume_env',
             env_config={
                 'grid_size': (256, 256),
                 'source_location': (128, 128),
@@ -593,7 +623,7 @@ def get_environment_info(
             "query_timestamp": time.time(),
             "module_version": ENVIRONMENT_VERSION,
             "supported_environments": SUPPORTED_ENVIRONMENTS.copy(),
-            "default_environment_type": "plume_search",
+            "default_environment_type": "plume_env",
             "total_environment_types": len(SUPPORTED_ENVIRONMENTS),
         }
 
@@ -625,15 +655,31 @@ def get_environment_info(
 
         # Include specific environment type information if requested
         if effective_env_type:
-            if effective_env_type == "plume_search":
+            if effective_env_type in ("plume_env", "plume", "PlumeEnv"):
+                environment_info["plume_env_details"] = {
+                    "description": "Flattened plume environment with injectable components",
+                    "observation_type": "Sensor model output (default: concentration)",
+                    "action_type": "Action model output (default: discrete grid actions)",
+                    "reward_structure": "Reward function output (default: sparse goal)",
+                    "termination_condition": "Agent reaches source location within goal_radius",
+                    "truncation_condition": "Episode exceeds max_steps limit",
+                    "plume_model": "Gaussian or video plume backends",
+                }
+            elif effective_env_type in ("plume_search", "PlumeSearchEnv"):
                 environment_info["plume_search_details"] = {
-                    "description": "Static Gaussian plume navigation environment",
+                    "description": "Legacy plume search wrapper environment (deprecated)",
                     "observation_type": "Concentration value at agent position",
                     "action_type": "Discrete cardinal directions (Up, Right, Down, Left)",
                     "reward_structure": "Sparse reward (1.0 for goal, 0.0 otherwise)",
                     "termination_condition": "Agent reaches source location within goal_radius",
                     "truncation_condition": "Episode exceeds max_steps limit",
                     "plume_model": "Static Gaussian distribution with configurable dispersion",
+                    "deprecated": True,
+                }
+            elif effective_env_type == "component":
+                environment_info["component_details"] = {
+                    "description": "Component-based environment (deprecated)",
+                    "deprecated": True,
                 }
             else:
                 environment_info["environment_type_error"] = (

@@ -30,7 +30,7 @@ from ..plume.video import VideoConfig, VideoPlume
 from ..rewards import SparseGoalReward
 from ..utils.exceptions import StateError, ValidationError
 from ..utils.validation import validate_seed_value
-from .component_env import EnvironmentState
+from .state import EnvironmentState
 
 __all__ = ["PlumeEnv", "create_plume_env"]
 
