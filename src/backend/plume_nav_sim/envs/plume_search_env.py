@@ -10,9 +10,7 @@ import numpy as np
 from gymnasium.utils import seeding as gym_seeding
 from gymnasium.wrappers import TimeLimit
 
-from ..core.types import GridSize, RenderMode
-from ..render.matplotlib_viz import MatplotlibRenderer
-from ..render.numpy_rgb import NumpyRGBRenderer
+from ..render.adapter import RendererAdapter
 from ..utils.exceptions import ValidationError
 from ..utils.validation import validate_seed_value
 from .component_env import ComponentBasedEnvironment
@@ -247,56 +245,8 @@ class PlumeSearchEnv(gym.Env):
         # Provide a renderer handle and default interactive configuration
         # for integration tests that expect env.renderer.* APIs to be present.
         # Adapter exposes a minimal unified surface across RGB and Matplotlib renderers.
-        class _RendererAdapter:
-            def __init__(self, width: int, height: int) -> None:
-                grid = GridSize(width=int(width), height=int(height))
-                # Initialize lightweight RGB renderer (for mode support checks)
-                try:
-                    self.rgb_renderer = NumpyRGBRenderer(grid)
-                except Exception:
-                    self.rgb_renderer = None
-                # Initialize Matplotlib renderer for interactive configuration APIs
-                try:
-                    self.matplotlib_renderer = MatplotlibRenderer(grid)
-                except Exception:
-                    self.matplotlib_renderer = None
-
-            # Mode support check used by test helper
-            def supports_render_mode(self, mode: RenderMode) -> bool:
-                if mode == RenderMode.RGB_ARRAY:
-                    return self.rgb_renderer is not None
-                if mode == RenderMode.HUMAN:
-                    if self.matplotlib_renderer is None:
-                        return False
-                    try:
-                        return self.matplotlib_renderer.supports_render_mode(mode)
-                    except Exception:
-                        return False
-                return False
-
-            # Interactive configuration helpers forwarded to matplotlib renderer if available
-            def configure_interactive_mode(self, cfg) -> bool:
-                if self.matplotlib_renderer is None:
-                    return False
-                return bool(self.matplotlib_renderer.configure_interactive_mode(cfg))
-
-            def enable_interactive_mode(self) -> None:
-                if self.matplotlib_renderer is not None:
-                    self.matplotlib_renderer.enable_interactive_mode()
-
-            def disable_interactive_mode(self) -> None:
-                if self.matplotlib_renderer is not None:
-                    self.matplotlib_renderer.disable_interactive_mode()
-
-            def set_interactive_mode(self, enable: bool = True, **kwargs) -> bool:
-                if self.matplotlib_renderer is None:
-                    return False
-                return bool(
-                    self.matplotlib_renderer.set_interactive_mode(enable, **kwargs)
-                )
-
         w, h = normalized_grid
-        self.renderer = _RendererAdapter(width=w, height=h)
+        self.renderer = RendererAdapter(width=w, height=h)
 
         # Default interactive configuration consumed by rendering tests
         self.interactive_config = {

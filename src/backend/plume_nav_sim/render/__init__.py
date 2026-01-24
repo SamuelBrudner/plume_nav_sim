@@ -79,6 +79,7 @@ from .numpy_rgb import (
     generate_rgb_array_fast,
     validate_rgb_array_output,
 )
+from .adapter import RendererAdapter
 
 # Module-level logger configuration
 _logger = logging.getLogger("plume_nav_sim.render")
@@ -1346,6 +1347,7 @@ __all__ = [
     "NumpyRGBRenderer",  # High-performance RGB array renderer with optimization
     "MatplotlibRenderer",  # Interactive matplotlib renderer for human mode
     "MatplotlibBackendManager",  # Backend management for cross-platform compatibility
+    "RendererAdapter",  # Minimal adapter exposing mode support checks
     # Color scheme management system
     "ColorSchemeManager",  # Central color scheme management with caching
     "CustomColorScheme",  # Custom color scheme configuration with validation
