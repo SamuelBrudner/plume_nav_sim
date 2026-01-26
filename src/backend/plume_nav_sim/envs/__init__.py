@@ -79,7 +79,7 @@ from ..constants import (
 
 # Internal imports - Registration system integration
 from ..registration.register import (
-    ENV_ID,  # Environment identifier constant 'PlumeNav-StaticGaussian-v0' for gym.make() calls
+    ENV_ID,  # Environment identifier constant for gym.make() calls
 )
 from ..registration.register import (
     is_registered,  # Registration status checking function with cache validation and registry verification
@@ -699,7 +699,7 @@ def get_environment_info(
                 },
                 "gym_make_usage": {
                     "description": "Use with gym.make() after registration",
-                    "code": 'import gymnasium as gym\nregister_env()  # Ensure registration\nenv = gym.make("PlumeNav-StaticGaussian-v0")',
+                    "code": 'import gymnasium as gym\nregister_env()  # Ensure registration\nenv = gym.make("PlumeNav-v0")',
                 },
                 "research_workflow": {
                     "description": "Typical research workflow with validation",

@@ -1,19 +1,18 @@
 """
 Core Gymnasium environment registration module implementing the complete registration system
-for PlumeNav-StaticGaussian-v0 environment with comprehensive parameter validation, configuration
-management, version control, and error handling. Provides primary registration functions for
-Gymnasium compatibility including register_env(), unregister_env(), is_registered(), and
-registration status management with strict versioning compliance and entry point specification.
+for PlumeNav environments with comprehensive parameter validation, configuration management,
+version control, and error handling. Provides primary registration functions for Gymnasium
+compatibility including register_env(), unregister_env(), is_registered(), and registration
+status management with strict versioning compliance and entry point specification.
 
-This module serves as the primary interface for registering and managing the PlumeNav-StaticGaussian-v0  # noqa: E501
-environment within the Gymnasium ecosystem, ensuring proper integration with gym.make() calls and
-providing comprehensive parameter validation, error handling, and configuration management.
+This module serves as the primary interface for registering and managing PlumeNav environments
+within the Gymnasium ecosystem, ensuring proper integration with gym.make() calls and providing
+comprehensive parameter validation, error handling, and configuration management.
 
 Notes:
-- Legacy `PlumeSearchEnv` remains the default entry point.
-- A first-class component-based environment is also available via
-  `env_id='PlumeNav-Components-v0'` which uses the factory callable
-  (`plume_nav_sim.envs.factory:create_component_environment`).
+- PlumeEnv is the canonical entry point (via create_plume_env).
+- Legacy environment IDs remain supported and map to PlumeEnv.
+- Component-based registration is deprecated but still available via explicit entry_point usage.
 """
 
 import contextlib
@@ -53,9 +52,10 @@ from ..utils.logging import get_component_logger
 
 
 # Global constants for registration system configuration and environment identification
-ENV_ID = ENVIRONMENT_ID  # Primary environment identifier: 'PlumeNav-StaticGaussian-v0'
-ENTRY_POINT = "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv"  # Legacy entry point
-COMPONENT_ENV_ID = "PlumeNav-Components-v0"  # Component-based DI environment identifier
+ENV_ID = ENVIRONMENT_ID  # Primary environment identifier (defaults to PlumeNav-Sim-v0)
+ENTRY_POINT = "plume_nav_sim.envs.plume_env:create_plume_env"  # PlumeEnv factory entry point
+LEGACY_ENV_IDS = ("PlumeNav-StaticGaussian-v0", "PlumeNav-v0")
+COMPONENT_ENV_ID = "PlumeNav-Components-v0"  # Deprecated component env id (legacy)
 COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
 MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000)
 
@@ -80,6 +80,7 @@ __all__ = [
     "ensure_component_env_registered",
     "ENV_ID",
     "ENTRY_POINT",
+    "LEGACY_ENV_IDS",
     "COMPONENT_ENV_ID",
     "COMPONENT_ENTRY_POINT",
 ]
@@ -108,13 +109,13 @@ def register_env(  # noqa: C901
     max_episode_steps: Optional[int] = None,
     kwargs: Optional[Dict[str, object]] = None,
     force_reregister: bool = False,
-    use_legacy: bool = False,
+    use_legacy: bool = True,
     **compat_flags: object,
 ) -> str:
     """
     Main environment registration function for Gymnasium compatibility with comprehensive parameter
     validation, configuration management, version control, and error handling ensuring proper
-    PlumeNav-StaticGaussian-v0 environment registration.
+    PlumeEnv environment registration.
 
     This function serves as the primary interface for registering the plume navigation environment
     with Gymnasium, providing comprehensive parameter validation, error handling, and integration
@@ -123,10 +124,11 @@ def register_env(  # noqa: C901
 
     Args:
         env_id: Environment identifier string, defaults to ENV_ID constant if not provided
-        entry_point: Module path string for environment class, defaults to ENTRY_POINT if not provided  # noqa: E501
+        entry_point: Module path string for environment factory/class, defaults to ENTRY_POINT if not provided  # noqa: E501
         max_episode_steps: Maximum steps per episode, defaults to MAX_EPISODE_STEPS if not provided
         kwargs: Additional environment parameters dictionary for customization
         force_reregister: Whether to force re-registration if environment already exists
+        use_legacy: Whether to also register legacy env IDs that map to PlumeEnv
 
     Returns:
         Registered environment ID string ready for immediate use with gym.make() calls
@@ -150,12 +152,7 @@ def register_env(  # noqa: C901
         # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided  # noqa: E501
         effective_env_id = env_id or ENV_ID
 
-        if entry_point is not None:
-            effective_entry_point = entry_point
-        elif effective_env_id == COMPONENT_ENV_ID:
-            effective_entry_point = COMPONENT_ENTRY_POINT
-        else:
-            effective_entry_point = ENTRY_POINT
+        effective_entry_point = ENTRY_POINT if entry_point is None else entry_point
         effective_max_steps = max_episode_steps or MAX_EPISODE_STEPS
         effective_kwargs = kwargs or {}
 
@@ -209,8 +206,7 @@ def register_env(  # noqa: C901
 
         if _is_component_entry_point(effective_entry_point):
             registration_kwargs = _convert_kwargs_for_component_env(registration_kwargs)
-
-        # PlumeSearchEnv already delegates to DI factory internally - no parameter mapping needed
+        # PlumeEnv accepts native config kwargs; legacy component factory needs mapping
 
         _validate_entry_point_resolves(effective_entry_point)
 
@@ -274,6 +270,26 @@ def register_env(  # noqa: C901
             f"Registration parameters: max_steps={effective_max_steps}, kwargs={registration_kwargs}"  # noqa: E501
         )
 
+        if use_legacy and effective_env_id == ENV_ID:
+            for legacy_env_id in LEGACY_ENV_IDS:
+                if legacy_env_id == effective_env_id:
+                    continue
+                try:
+                    register_env(
+                        env_id=legacy_env_id,
+                        entry_point=effective_entry_point,
+                        max_episode_steps=effective_max_steps,
+                        kwargs=effective_kwargs,
+                        force_reregister=force_flag,
+                        use_legacy=False,
+                    )
+                except Exception as legacy_exc:  # pragma: no cover - best-effort alias
+                    _logger.warning(
+                        "Failed to register legacy env id '%s': %s",
+                        legacy_env_id,
+                        legacy_exc,
+                    )
+
         # Skip internal make() verification; integration tests will validate gym.make() externally
 
         # Return registered environment ID for immediate use with comprehensive success confirmation
@@ -289,7 +305,7 @@ def ensure_component_env_registered(
     force: bool = False,
     validate_creation: bool = False,
 ) -> str:
-    """Ensure the component-based environment id is present in the registry.
+    """Ensure the legacy component environment id is present in the registry.
 
     Args:
         force: Force re-registration even if already registered.
@@ -297,17 +313,16 @@ def ensure_component_env_registered(
 
     Returns:
         The component environment id.
+
+    Note:
+        Pass entry_point=COMPONENT_ENTRY_POINT to register the deprecated component env explicitly.
     """
 
     if force:
         unregister_env(COMPONENT_ENV_ID, suppress_warnings=True)
 
     if not is_registered(COMPONENT_ENV_ID, use_cache=True):
-        register_env(
-            env_id=COMPONENT_ENV_ID,
-            entry_point=COMPONENT_ENTRY_POINT,
-            force_reregister=False,
-        )
+        register_env(env_id=COMPONENT_ENV_ID, entry_point=ENTRY_POINT, force_reregister=False)
 
     if validate_creation:
         test_env = gymnasium.make(COMPONENT_ENV_ID)
@@ -1373,8 +1388,8 @@ def _validate_registration_config(
     Example:
         # Validate registration configuration
         is_valid, report = validate_registration_config(
-            env_id="PlumeNav-StaticGaussian-v0",
-            entry_point="plume_nav_sim.envs.plume_search_env:PlumeSearchEnv",
+            env_id="PlumeNav-Sim-v0",
+            entry_point="plume_nav_sim.envs.plume_env:create_plume_env",
             max_episode_steps=1000,
             kwargs={"grid_size": (128, 128)}
         )

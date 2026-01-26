@@ -1,8 +1,7 @@
 """
 Registration module initialization providing centralized access to Gymnasium environment
 registration functionality with public API design, convenience functions, module-level
-initialization, and comprehensive registration utilities for PlumeNav-StaticGaussian-v0
-environment setup and management.
+initialization, and comprehensive registration utilities for PlumeEnv setup and management.
 
 This module serves as the primary interface for environment registration within the plume_nav_sim
 package, offering streamlined registration workflows, validation, error handling, and integration

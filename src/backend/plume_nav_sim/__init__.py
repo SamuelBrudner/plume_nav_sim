@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Dict, Optional
 
 from typing_extensions import NotRequired, TypedDict
@@ -38,17 +39,25 @@ from .envs.config_types import EnvironmentConfig, create_environment_config
 
 # Optional environment exports (import may fail if optional deps are missing)
 # Predeclare symbols with precise optional types to satisfy mypy strict rules.
+PlumeEnv: Optional[object]
+create_plume_env: Optional[object]
 PlumeSearchEnv: Optional[object]
 create_plume_search_env: Optional[object]
 _ENV_IMPORT_ERROR: Optional[Exception] = None
 
 try:
+    from .envs import PlumeEnv as _PlumeEnv
     from .envs import PlumeSearchEnv as _PlumeSearchEnv
+    from .envs import create_plume_env as _create_plume_env
     from .envs import create_plume_search_env as _create_plume_search_env
 
+    PlumeEnv = _PlumeEnv
+    create_plume_env = _create_plume_env
     PlumeSearchEnv = _PlumeSearchEnv
     create_plume_search_env = _create_plume_search_env
 except Exception as env_import_error:  # pragma: no cover - optional dependency guard
+    PlumeEnv = None
+    create_plume_env = None
     PlumeSearchEnv = None
     create_plume_search_env = None
     _ENV_IMPORT_ERROR = env_import_error
@@ -171,11 +180,13 @@ def get_package_info(
             "available": [],
         }
 
+        if PlumeEnv is not None:
+            environment_details["available"].append("PlumeEnv")
+            environment_details["factory"] = "create_plume_env"
+            environment_details["module"] = "plume_nav_sim.envs.plume_env"
         if PlumeSearchEnv is not None:
             environment_details["available"].append("PlumeSearchEnv")
-            environment_details["factory"] = "create_plume_search_env"
-            environment_details["module"] = "plume_nav_sim.envs.plume_search_env"
-        else:
+        if not environment_details["available"]:
             environment_details["error"] = str(_ENV_IMPORT_ERROR)
 
         info["environment"] = environment_details
@@ -198,30 +209,23 @@ def make_env(**kwargs):
     consistent interface while hiding implementation details.
 
     Args:
-        **kwargs: Environment configuration parameters:
+        **kwargs: PlumeEnv configuration parameters:
             - grid_size: tuple[int, int] = (128, 128)
             - source_location: tuple[int, int] = grid center
             - max_steps: int = 1000
             - goal_radius: float = 5.0
-            - action_type: str = 'discrete'  # or 'oriented' / 'run_tumble'
-            - observation_type: str = 'concentration'  # or 'antennae'
-            - reward_type: str = 'sparse'  # or 'step_penalty'
-            - plume_sigma: float = 20.0
+            - plume_params: dict = {"sigma": 20.0}
+            - plume_type: str = 'gaussian'  # or 'video'
             - render_mode: str = None  # or 'human', 'rgb_array'
+        Legacy kwargs (action_type, movie_*, etc.) fall back to PlumeSearchEnv with
+        a deprecation warning.
 
     Returns:
-        PlumeSearchEnv: Configured environment ready to use
+        PlumeEnv: Configured environment ready to use
 
     Examples:
         >>> # Simple - use defaults
         >>> env = make_env()
-
-        >>> # Customize with built-in options
-        >>> env = make_env(
-        ...     action_type='oriented',
-        ...     observation_type='antennae',
-        ...     reward_type='step_penalty'
-        ... )
 
         >>> # Custom grid and parameters
         >>> env = make_env(
@@ -230,11 +234,40 @@ def make_env(**kwargs):
         ...     goal_radius=10.0
         ... )
     """
-    if PlumeSearchEnv is None:
-        raise RuntimeError(
-            "PlumeSearchEnv not available. Ensure gymnasium and dependencies are installed."
+    legacy_keys = {
+        "action_type",
+        "observation_type",
+        "reward_type",
+        "plume_sigma",
+        "step_size",
+        "enable_wind",
+        "wind_direction_deg",
+        "wind_speed",
+        "wind_vector",
+        "wind_noise_std",
+    }
+    plume_value = kwargs.get("plume")
+    legacy_plume = isinstance(plume_value, str)
+    uses_legacy = legacy_plume or any(k.startswith("movie_") for k in kwargs)
+    uses_legacy = uses_legacy or any(k in kwargs for k in legacy_keys)
+
+    if uses_legacy:
+        if create_plume_search_env is None:
+            raise RuntimeError(
+                "Legacy PlumeSearchEnv not available to handle legacy kwargs."
+            )
+        warnings.warn(
+            "make_env received legacy kwargs; falling back to deprecated PlumeSearchEnv.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-    return create_plume_search_env(**kwargs)
+        return create_plume_search_env(**kwargs)
+
+    if create_plume_env is None:
+        raise RuntimeError(
+            "PlumeEnv not available. Ensure gymnasium and dependencies are installed."
+        )
+    return create_plume_env(**kwargs)
 
 
 def get_conf_dir():
@@ -289,7 +322,9 @@ __all__ = [
     "create_environment_config",
     "validate_action",
     "get_movement_vector",
-    # Legacy/advanced
+    # Environments
+    "PlumeEnv",
+    "create_plume_env",
     "PlumeSearchEnv",
     "create_plume_search_env",
     "initialize_package",
