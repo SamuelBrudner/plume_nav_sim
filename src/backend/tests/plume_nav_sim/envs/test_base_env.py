@@ -1,5 +1,5 @@
 """
-Contract tests for the component-based environment.
+Contract tests for the canonical PlumeEnv.
 
 These tests verify:
 1. Gymnasium API compliance (reset, step, render, close)
@@ -11,33 +11,31 @@ import gymnasium as gym
 import numpy as np
 import pytest
 
-from plume_nav_sim.envs import ComponentBasedEnvironment, create_component_environment
+from plume_nav_sim.envs.plume_env import PlumeEnv
 from plume_nav_sim.utils.exceptions import StateError, ValidationError
 
 # Test configuration
 DEFAULT_TEST_GRID_SIZE = (32, 32)
-TEST_GOAL_LOCATION = (10, 10)
+TEST_SOURCE_LOCATION = (10, 10)
 
 
-def create_test_environment(
-    *, render_mode: str | None = None
-) -> ComponentBasedEnvironment:
-    """Create a small component-based environment for contract tests."""
-    return create_component_environment(
+def create_test_environment(*, render_mode: str | None = None) -> PlumeEnv:
+    """Create a small PlumeEnv for contract tests."""
+    return PlumeEnv(
         grid_size=DEFAULT_TEST_GRID_SIZE,
-        goal_location=TEST_GOAL_LOCATION,
+        source_location=TEST_SOURCE_LOCATION,
         max_steps=25,
         render_mode=render_mode,
     )
 
 
-class TestComponentEnvironmentContract:
+class TestPlumeEnvContract:
     """Test Gymnasium API contract compliance."""
 
-    def test_component_env_can_be_instantiated(self):
+    def test_env_can_be_instantiated(self):
         env = create_test_environment()
         try:
-            assert isinstance(env, ComponentBasedEnvironment)
+            assert isinstance(env, PlumeEnv)
             assert isinstance(env, gym.Env)
         finally:
             env.close()

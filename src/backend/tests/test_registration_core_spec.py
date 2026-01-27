@@ -1,6 +1,6 @@
 import gymnasium
 
-from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv
+from plume_nav_sim.envs.plume_env import PlumeEnv
 from plume_nav_sim.registration import ensure_registered
 from plume_nav_sim.registration.register import (
     ENV_ID,
@@ -18,11 +18,11 @@ def test_register_make_isinstance_and_cleanup():
     env_id = register_env()
     assert is_registered(env_id)
 
-    # make() should yield an instance recognized as PlumeSearchEnv (even if wrapped)
+    # make() should yield an instance recognized as PlumeEnv (even if wrapped)
     env = gymnasium.make(env_id)
     try:
         base_env = getattr(env, "unwrapped", env)
-        assert isinstance(base_env, PlumeSearchEnv)
+        assert isinstance(base_env, PlumeEnv)
     finally:
         env.close()
 

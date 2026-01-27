@@ -9,6 +9,7 @@ Gymnasium registry state to avoid Phase C runtime dependency issues.
 import gymnasium as gym
 
 from plume_nav_sim.registration import ENV_ID, register_env, unregister_env
+from plume_nav_sim.registration.register import COMPONENT_ENTRY_POINT
 
 
 def _get_entry_point_string(env_id: str) -> str:
@@ -27,10 +28,10 @@ def _get_entry_point_string(env_id: str) -> str:
 def test_register_legacy_entry_point_default():
     # Ensure clean state
     unregister_env(ENV_ID, suppress_warnings=True)
-    # Default registration uses legacy PlumeSearchEnv
+    # Default registration uses PlumeEnv factory entry point
     register_env(force_reregister=True)
     entry_point = _get_entry_point_string(ENV_ID)
-    assert "plume_nav_sim.envs.plume_search_env:PlumeSearchEnv" in entry_point
+    assert "plume_nav_sim.envs.plume_env:create_plume_env" in entry_point
 
 
 def test_register_component_env_id():
@@ -39,6 +40,10 @@ def test_register_component_env_id():
     # Register DI env id and verify factory entry point
     di_env_id = "PlumeNav-Components-v0"
     unregister_env(di_env_id, suppress_warnings=True)
-    register_env(env_id=di_env_id, force_reregister=True)
+    register_env(
+        env_id=di_env_id,
+        entry_point=COMPONENT_ENTRY_POINT,
+        force_reregister=True,
+    )
     entry_point = _get_entry_point_string(di_env_id)
     assert "plume_nav_sim.envs.factory:create_component_environment" in entry_point
