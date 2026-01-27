@@ -1,23 +1,3 @@
-"""Factory functions for creating component-based environments.
-
-This module provides convenience functions for assembling environments
-from components without manually wiring dependencies.
-
-Example:
-    >>> from plume_nav_sim.envs.factory import create_component_environment
-    >>>
-    >>> env = create_component_environment(
-    ...     grid_size=(128, 128),
-    ...     goal_location=(64, 64),
-    ...     action_type='discrete',
-    ...     observation_type='concentration',
-    ...     reward_type='sparse'
-    ... )
-    >>>
-    >>> obs, info = env.reset()
-    >>> obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
-"""
-
 import logging
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -139,58 +119,6 @@ def create_component_environment(  # noqa: C901
     wind_vector: Optional[tuple[float, float]] = None,
     wind_noise_std: float = 0.0,
 ) -> ComponentBasedEnvironment:
-    """
-    Create a fully-configured component-based environment.
-
-    This factory function assembles an environment from sensible defaults,
-    allowing you to quickly create environments for experiments without
-    manual component wiring.
-
-    Args:
-        grid_size: Environment dimensions (width, height)
-        goal_location: Target position (x, y)
-        start_location: Initial agent position (default: grid center)
-        max_steps: Episode step limit
-        goal_radius: Success threshold distance
-        action_type: Action processor type ('discrete', 'oriented', or 'run_tumble')
-        observation_type: Observation model type ('concentration', 'antennae', or 'wind_vector')
-        reward_type: Reward function type ('sparse' or 'step_penalty')
-        plume_sigma: Gaussian plume dispersion parameter
-        step_size: Movement step size in grid cells
-        render_mode: Rendering mode ('rgb_array' or 'human')
-        warn_deprecated: Emit a deprecation warning when constructing ComponentBasedEnvironment
-        movie_dataset_id: Registry id for curated plume datasets; when set,
-            movie_path is optional and will be resolved via the data zoo cache.
-        movie_auto_download: Allow registry downloads when cache is missing.
-        movie_cache_root: Override cache root for registry-backed datasets.
-        enable_wind: Whether to instantiate a wind field (also enabled automatically when observation_type='wind_vector')
-        wind_direction_deg: Wind direction in degrees when using constant wind
-        wind_speed: Wind speed magnitude when using constant wind
-        wind_vector: Optional explicit wind vector (overrides direction/speed)
-        wind_noise_std: Gaussian noise stddev applied by WindVectorSensor
-
-    Returns:
-        Configured ComponentBasedEnvironment ready to use
-
-    Example:
-        >>> # Simple sparse goal environment with discrete actions
-        >>> env = create_component_environment(
-        ...     grid_size=(64, 64),
-        ...     goal_location=(50, 50),
-        ...     action_type='discrete',
-        ...     reward_type='sparse'
-        ... )
-        >>>
-        >>> # Oriented navigation with dense reward
-        >>> env = create_component_environment(
-        ...     action_type='oriented',
-        ...     reward_type='dense',
-        ...     observation_type='antennae'
-        ... )
-
-    Raises:
-        ValueError: If invalid type specified for any component
-    """
     # Convert tuples to proper types
     if isinstance(grid_size, tuple):
         grid_size = GridSize(width=grid_size[0], height=grid_size[1])

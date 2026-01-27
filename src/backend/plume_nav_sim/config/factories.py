@@ -1,16 +1,3 @@
-"""
-Factory functions for creating components and environments from configs.
-
-This module provides functions to instantiate actual component objects
-from Pydantic configuration models, enabling config-driven environment creation.
-
-Example:
-    >>> from plume_nav_sim.config import EnvironmentConfig, create_environment_from_config
-    >>>
-    >>> config = EnvironmentConfig.parse_file("conf/experiment.yaml")
-    >>> env = create_environment_from_config(config)
-"""
-
 from ..actions import DiscreteGridActions, OrientedGridActions, OrientedRunTumbleActions
 from ..core.geometry import Coordinates, GridSize
 from ..envs import ComponentBasedEnvironment
@@ -38,21 +25,6 @@ __all__ = [
 
 
 def create_action_processor(config: ActionConfig):
-    """Create action processor from configuration.
-
-    Args:
-        config: ActionConfig with type and parameters
-
-    Returns:
-        ActionProcessor instance (DiscreteGridActions, OrientedGridActions, or OrientedRunTumbleActions)
-
-    Raises:
-        ValueError: If config.type is invalid
-
-    Example:
-        >>> config = ActionConfig(type="discrete", step_size=2)
-        >>> processor = create_action_processor(config)
-    """
     if config.type == "discrete":
         return DiscreteGridActions(step_size=config.step_size)
     elif config.type == "oriented":
@@ -66,21 +38,6 @@ def create_action_processor(config: ActionConfig):
 
 
 def create_observation_model(config: ObservationConfig):
-    """Create observation model from configuration.
-
-    Args:
-        config: ObservationConfig with type and parameters
-
-    Returns:
-        ObservationModel instance (ConcentrationSensor, AntennaeArraySensor, or WindVectorSensor)
-
-    Raises:
-        ValueError: If config.type is invalid
-
-    Example:
-        >>> config = ObservationConfig(type="concentration")
-        >>> model = create_observation_model(config)
-    """
     if config.type == "concentration":
         return ConcentrationSensor()
     elif config.type == "antennae":
@@ -99,22 +56,6 @@ def create_observation_model(config: ObservationConfig):
 
 
 def create_reward_function(config: RewardConfig, goal_location: Coordinates):
-    """Create reward function from configuration.
-
-    Args:
-        config: RewardConfig with type and parameters
-        goal_location: Goal position (required for reward calculation)
-
-    Returns:
-        RewardFunction instance (SparseGoalReward or StepPenaltyReward)
-
-    Raises:
-        ValueError: If config.type is invalid
-
-    Example:
-        >>> config = RewardConfig(type="sparse", goal_radius=5.0)
-        >>> reward_fn = create_reward_function(config, Coordinates(64, 64))
-    """
     if config.type == "sparse":
         return SparseGoalReward(
             goal_position=goal_location,
@@ -145,15 +86,6 @@ def create_concentration_field(
 
 
 def create_wind_field(config: WindConfig | None):
-    """Create wind field from configuration.
-
-    Args:
-        config: Optional WindConfig. If None, wind is disabled.
-
-    Returns:
-        ConstantWindField instance or None if no wind configured.
-    """
-
     if config is None:
         return None
 
@@ -172,32 +104,6 @@ def create_wind_field(config: WindConfig | None):
 def create_environment_from_config(
     config: EnvironmentConfig,
 ) -> ComponentBasedEnvironment:
-    """Create complete environment from configuration.
-
-    This is the main entry point for config-driven environment creation.
-    It instantiates all components and assembles them into an environment.
-
-    Args:
-        config: EnvironmentConfig with all component configurations
-
-    Returns:
-        Fully configured ComponentBasedEnvironment
-
-    Example:
-        >>> # From Python
-        >>> config = EnvironmentConfig(
-        ...     grid_size=(128, 128),
-        ...     goal_location=(64, 64),
-        ...     action=ActionConfig(type="discrete"),
-        ...     observation=ObservationConfig(type="concentration"),
-        ...     reward=RewardConfig(type="sparse")
-        ... )
-        >>> env = create_environment_from_config(config)
-        >>>
-        >>> # From YAML
-        >>> config = EnvironmentConfig.parse_file("conf/experiment.yaml")
-        >>> env = create_environment_from_config(config)
-    """
     # Convert tuples to proper types
     grid_size = GridSize(width=config.grid_size[0], height=config.grid_size[1])
     goal_location = Coordinates(x=config.goal_location[0], y=config.goal_location[1])

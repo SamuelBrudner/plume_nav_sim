@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 try:  # pragma: no cover - optional dependency
-    from loguru import logger as _loguru_logger  # type: ignore
+    from loguru import logger as _loguru_logger
 except Exception:  # pragma: no cover - optional dependency
     _loguru_logger = None  # type: ignore
 

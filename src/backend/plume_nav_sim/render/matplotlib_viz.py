@@ -1,33 +1,11 @@
-"""
-Interactive matplotlib visualization renderer for human mode plume navigation with real-time updates,
-backend compatibility management, cross-platform support, and performance optimization.
-
-This module implements BaseRenderer for dual-mode rendering pipeline with matplotlib figure management,
-colormap integration, marker visualization, and graceful fallback mechanisms for headless environments
-while targeting <50ms human mode rendering performance.
-
-Key Components:
-- MatplotlibRenderer: Main renderer class with backend management and interactive visualization
-- MatplotlibBackendManager: Backend detection, selection, and configuration utility
-- InteractiveUpdateManager: Efficient matplotlib updates with change detection and performance optimization
-- Factory functions: Renderer creation, capability detection, and integration validation
-
-Architecture Integration:
-- Strategy pattern implementation of BaseRenderer for polymorphic usage
-- Performance targets: <50ms human mode updates with comprehensive optimization
-- Cross-platform support: Linux (full), macOS (full), Windows (community) with headless operation
-- Resource management: Automatic cleanup, memory management, and graceful degradation
-- Error handling: Comprehensive exception handling with fallback mechanisms
-"""
-
 from __future__ import annotations
 
 # Standard library imports - Python >=3.10
-import atexit  # >=3.10 - Automatic resource cleanup registration for matplotlib figures at program exit
-import os  # >=3.10 - Environment variable detection for headless operation and display availability
-import sys  # >=3.10 - Platform detection and system capability assessment for backend selection
-import time  # >=3.10 - High-precision timing for performance measurement and interactive update delays
-from typing import (  # >=3.10 - Type hints for matplotlib renderer type safety
+import atexit
+import os
+import sys
+import time
+from typing import (
     Any,
     Dict,
     List,
@@ -36,14 +14,14 @@ from typing import (  # >=3.10 - Type hints for matplotlib renderer type safety
     Union,
 )
 
-import matplotlib.axes  # >=3.9.0 - Axes object management for plotting area configuration and marker placement
-import matplotlib.backends.backend_agg  # >=3.9.0 - Agg backend for headless rendering fallback when GUI backends unavailable
-import matplotlib.colors  # >=3.9.0 - Colormap and normalization utilities for concentration field visualization
-import matplotlib.figure  # >=3.9.0 - Figure object management for matplotlib visualization with proper resource handling
+import matplotlib.axes
+import matplotlib.backends.backend_agg
+import matplotlib.colors
+import matplotlib.figure
 
 # Third-party imports - External dependencies for matplotlib visualization
-import matplotlib.pyplot as plt  # >=3.9.0 - Primary matplotlib interface for figure creation, plotting, and display management
-import numpy as np  # >=2.1.0 - Array operations for concentration field processing and coordinate arithmetic
+import matplotlib.pyplot as plt
+import numpy as np
 
 from ..constants import (
     BACKEND_PRIORITY_LIST,  # Backend priority order ['TkAgg', 'Qt5Agg', 'Agg'] for matplotlib configuration fallback
@@ -55,7 +33,6 @@ from ..constants import (
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,  # Performance target (<50ms) for human mode rendering operations and timing validation
 )
 
-# Internal imports - Core types and constants for rendering operations
 from ..core.types import (
     Coordinates,  # 2D coordinate representation for agent and source position marker placement
 )
@@ -66,7 +43,6 @@ from ..core.types import (
     RenderMode,  # Rendering mode enumeration for dual-mode visualization support and mode validation
 )
 
-# Internal imports - Exception handling and logging utilities
 from ..utils.exceptions import (
     ComponentError,  # General component-level exception handling for renderer lifecycle and resource management
 )
@@ -83,7 +59,6 @@ from ..utils.logging import (
     monitor_performance,  # Performance monitoring decorator for automatic timing and resource usage tracking
 )
 
-# Internal imports - Base renderer interface and shared functionality
 from .base_renderer import (
     BaseRenderer,  # Abstract base class providing shared rendering functionality, performance tracking, and consistent API contracts
 )
@@ -91,7 +66,6 @@ from .base_renderer import (
     RenderContext,  # Immutable rendering context with environment state and visual configuration for consistent renderer operations
 )
 
-# Internal imports - Color scheme management and matplotlib integration
 from .color_schemes import (
     ColorSchemeManager,  # Color scheme management with caching, validation, and optimization for dual-mode rendering
 )
@@ -105,7 +79,6 @@ from .color_schemes import (
     get_matplotlib_colormap,  # Cached utility function for matplotlib colormap retrieval with performance optimization
 )
 
-# Global configuration constants for matplotlib renderer behavior and optimization
 DEFAULT_FIGURE_SIZE = MATPLOTLIB_DEFAULT_FIGSIZE  # Default figure size (8, 8) for matplotlib visualization
 DEFAULT_DPI = (
     100  # Standard DPI for matplotlib figure resolution and display compatibility
@@ -124,7 +97,6 @@ MARKER_UPDATE_BATCH_SIZE = (
     100  # Batch size for efficient marker updates in large-scale visualizations
 )
 
-# Module exports for external usage and renderer factory functions
 __all__ = [
     "MatplotlibRenderer",  # Interactive matplotlib renderer for human mode visualization with backend management
     "MatplotlibBackendManager",  # Backend management utility for intelligent backend selection and configuration
@@ -132,17 +104,11 @@ __all__ = [
     "create_matplotlib_renderer",  # Factory function for creating configured matplotlib renderer with optimization
     "detect_matplotlib_capabilities",  # System capability detection function for matplotlib integration assessment
     "configure_matplotlib_backend",  # Backend configuration function with priority-based selection and fallback
-    "validate_matplotlib_integration",  # Comprehensive validation function for matplotlib integration and performance testing
+    "validate_matplotlib_integration",
 ]
 
 
 def _is_widget_or_web_backend(backend: str) -> bool:
-    """Return True for ipympl/nbAgg/WebAgg/inline style backends.
-
-    Guards toolbar configuration to avoid traitlets/matplotlib deprecation
-    warnings on widget/web backends where a canvas-managed toolbar is
-    inappropriate (e.g., Jupyter inline, nbAgg, WebAgg, ipympl).
-    """
     b = (backend or "").lower()
     return (
         b.startswith("module://ipympl")
@@ -153,24 +119,6 @@ def _is_widget_or_web_backend(backend: str) -> bool:
 
 
 class MatplotlibBackendManager:
-    """
-    Backend management utility class providing intelligent backend selection, capability detection,
-    configuration, and fallback handling for cross-platform matplotlib compatibility.
-
-    This class encapsulates the complexity of matplotlib backend management, providing automatic
-    backend detection, priority-based selection, and graceful fallback to headless operation.
-    The manager supports Linux (full support), macOS (full support), and Windows (community support)
-    with comprehensive error handling and performance optimization.
-
-    Key Features:
-    - Intelligent backend detection with system capability assessment
-    - Priority-based backend selection with fallback mechanisms
-    - Headless environment detection and automatic Agg backend configuration
-    - Backend capability caching for performance optimization
-    - Cross-platform compatibility with platform-specific optimizations
-    - Thread-safe backend operations for concurrent usage
-    """
-
     # Sentinel to distinguish between omitted backend_preferences and explicit None
     _PREFS_UNSET = object()
 
@@ -182,14 +130,6 @@ class MatplotlibBackendManager:
         enable_fallback: bool = True,
         backend_options: dict = None,
     ):
-        """
-        Initialize backend manager with preferences, fallback configuration, and capability assessment.
-
-        Args:
-            backend_preferences: Ordered list of preferred backends or None for system defaults
-            enable_fallback: Enable automatic fallback to headless Agg backend
-            backend_options: Additional backend configuration options
-        """
         # Validate and set backend preferences
         if backend_preferences is MatplotlibBackendManager._PREFS_UNSET:
             # Use system defaults when argument omitted
@@ -255,19 +195,6 @@ class MatplotlibBackendManager:
         force_headless: bool = False,
         detect_headless: bool = False,
     ) -> str:
-        """
-        Intelligent backend selection with priority-based testing, compatibility validation,
-        and automatic fallback configuration.
-
-        Args:
-            force_reselection: Force backend reselection even if current backend available
-            validate_functionality: Test backend functionality with sample operations
-            force_headless: Force headless selection behavior (skip interactive unless forced)
-            detect_headless: Request explicit headless detection (alias for headless mode in tests)
-
-        Returns:
-            Selected backend name with capability validation and configuration
-        """
         # Return current backend if already selected and force_reselection is False
         if self.current_backend and not force_reselection:
             self.logger.debug(f"Using existing backend: {self.current_backend}")
@@ -358,17 +285,6 @@ class MatplotlibBackendManager:
         force_refresh: bool = False,
         use_cache: Optional[bool] = None,
     ) -> bool:
-        """
-        Retrieve comprehensive backend capabilities including display support, interactive features,
-        performance characteristics, and platform compatibility.
-
-        Args:
-            backend_name: Specific backend to analyze or None for current backend
-            force_refresh: Force capability reassessment ignoring cache
-
-        Returns:
-            Dictionary with backend capabilities and performance characteristics
-        """
         # Use current backend if backend_name not provided
         effective_backend = (
             backend_name or self.current_backend or self.select_backend()
@@ -490,21 +406,6 @@ class MatplotlibBackendManager:
     def configure_backend(  # noqa: C901
         self, arg1=None, arg2=None, strict_validation: bool = False
     ) -> bool:
-        """
-        Configure matplotlib backend and rcParams.
-
-        Supports two forms:
-        - configure_backend(backend_name: str, options: dict)
-        - configure_backend(options: dict)
-
-        Args:
-            arg1: Either backend_name (str) or configuration options (dict)
-            arg2: Options dict when arg1 is backend_name
-            strict_validation: Raise ValidationError on invalid values
-
-        Returns:
-            True on success, False otherwise
-        """
         # Normalize arguments
         if isinstance(arg1, str):
             backend_name = arg1
@@ -636,12 +537,6 @@ class MatplotlibBackendManager:
         return self.current_backend or plt.get_backend()
 
     def restore_original_backend(self) -> bool:
-        """
-        Restore matplotlib backend to the original backend captured at initialization.
-
-        Returns:
-            True if restoration successful, False otherwise
-        """
         try:
             target = self._original_backend or "Agg"
             plt.switch_backend(target)
@@ -663,11 +558,6 @@ class MatplotlibBackendManager:
         return self._last_selection_report.copy()
 
     def is_headless_environment(self) -> bool:
-        """Public helper to determine if running in a headless environment.
-
-        Returns:
-            True if no display is available or environment suggests headless.
-        """
         try:
             detected = self._detect_headless_environment()
             # Update cached flag to reflect current environment state
@@ -678,12 +568,6 @@ class MatplotlibBackendManager:
             return bool(getattr(self, "headless_mode", True))
 
     def get_platform_configuration(self) -> Dict[str, any]:
-        """Return a simple platform-aware configuration summary.
-
-        Includes detected platform, headless status, and recommended backend
-        ordering based on current environment. Keeps contract minimal to avoid
-        test brittleness across platforms.
-        """
         try:
             platform_name = sys.platform
         except Exception:
@@ -714,12 +598,6 @@ class MatplotlibBackendManager:
         }
 
     def _detect_headless_environment(self) -> bool:
-        """
-        Detect headless environment using display availability and system environment variables.
-
-        Returns:
-            True if headless environment detected, False if display available
-        """
         # Check for DISPLAY environment variable on Unix-like systems
         if os.name == "posix":
             display = os.environ.get("DISPLAY", "")
@@ -746,15 +624,6 @@ class MatplotlibBackendManager:
         return False
 
     def _test_backend_availability(self, backend_name: str) -> bool:
-        """
-        Test backend availability by attempting import and basic initialization.
-
-        Args:
-            backend_name: Backend name to test
-
-        Returns:
-            True if backend available and functional, False otherwise
-        """
         try:
             # Attempt to import backend module
             if backend_name == "TkAgg":
@@ -787,15 +656,6 @@ class MatplotlibBackendManager:
             return False
 
     def _test_backend_functionality(self, backend_name: str) -> bool:
-        """
-        Test backend functionality with sample figure operations.
-
-        Args:
-            backend_name: Backend name to test functionality
-
-        Returns:
-            True if backend functional, False otherwise
-        """
         try:
             # Store current backend for restoration
             original_backend = plt.get_backend()
@@ -830,15 +690,6 @@ class MatplotlibBackendManager:
             return False
 
     def _measure_backend_performance(self, backend_name: str) -> Dict[str, float]:
-        """
-        Measure backend performance characteristics with timing benchmarks.
-
-        Args:
-            backend_name: Backend to benchmark
-
-        Returns:
-            Dictionary with performance metrics
-        """
         performance_metrics = {
             "figure_creation_ms": 0.0,
             "plot_operation_ms": 0.0,
@@ -883,24 +734,6 @@ class MatplotlibBackendManager:
 
 
 class InteractiveUpdateManager:
-    """
-    Manager class for handling interactive matplotlib updates including efficient marker updates,
-    figure refresh optimization, animation control, and performance monitoring for real-time visualization.
-
-    This class provides optimized update management for matplotlib interactive displays, implementing
-    change detection, selective refresh, and performance optimization strategies. The manager handles
-    concentration field updates, marker positioning, and display refresh with minimal overhead for
-    real-time plume navigation visualization.
-
-    Key Features:
-    - Efficient change detection to minimize unnecessary updates
-    - Selective refresh of modified visualization elements
-    - Performance-optimized marker updates with batch processing
-    - Interactive display management with frame rate control
-    - Memory-efficient caching of matplotlib objects and state
-    - Thread-safe operations for concurrent visualization access
-    """
-
     def __init__(
         self,
         figure: matplotlib.figure.Figure,
@@ -910,14 +743,6 @@ class InteractiveUpdateManager:
         change_detection: bool = True,
         optimization_level: str = "standard",
     ):
-        """
-        Initialize interactive update manager with matplotlib objects and performance configuration.
-
-        Args:
-            figure: Matplotlib figure object for display management
-            axes: Matplotlib axes object for plotting operations
-            update_interval: Minimum time between display updates for frame rate control
-        """
         # Validate inputs
         if figure is None or not isinstance(figure, matplotlib.figure.Figure):
             raise ValidationError(
@@ -971,18 +796,6 @@ class InteractiveUpdateManager:
         color_scheme: Optional[CustomColorScheme] = None,
         force_update: bool = False,
     ) -> bool:
-        """
-        Update concentration field heatmap with efficient change detection, colormap application,
-        and axes configuration optimization.
-
-        Args:
-            concentration_field: 2D numpy array with concentration values
-            color_scheme: Color scheme configuration for matplotlib integration
-            force_update: Skip change detection and force complete update
-
-        Returns:
-            True if update successful, False if update failed or skipped
-        """
         try:
             # Compute current field identifier for change detection
             field_id = f"concentration_{concentration_field.shape}_{np.sum(concentration_field):.6f}"
@@ -1041,18 +854,6 @@ class InteractiveUpdateManager:
         color_scheme: CustomColorScheme,
         animate_transition: bool = False,
     ) -> bool:
-        """
-        Update agent position marker with efficient positioning, color application,
-        and visual optimization for real-time tracking.
-
-        Args:
-            agent_position: Current agent coordinates
-            color_scheme: Color scheme for marker appearance
-            animate_transition: Enable smooth position transition animation
-
-        Returns:
-            True if marker update successful, False otherwise
-        """
         try:
             # Check for position changes for efficient update detection
             position_key = f"agent_{agent_position.x}_{agent_position.y}"
@@ -1103,17 +904,6 @@ class InteractiveUpdateManager:
     def update_source_marker(
         self, source_position: Coordinates, color_scheme: CustomColorScheme
     ) -> bool:
-        """
-        Update source location marker with cross-pattern visualization, color application,
-        and visibility optimization for goal indication.
-
-        Args:
-            source_position: Source location coordinates
-            color_scheme: Color scheme for marker appearance
-
-        Returns:
-            True if source marker update successful, False otherwise
-        """
         try:
             # Check if source position changed
             position_key = f"source_{source_position.x}_{source_position.y}"
@@ -1155,17 +945,6 @@ class InteractiveUpdateManager:
     def refresh_display(  # noqa: C901
         self, force_refresh: bool = False, measure_performance: bool = False
     ) -> bool:
-        """
-        Refresh matplotlib display with performance optimization, frame rate control,
-        and resource management for smooth interactive updates.
-
-        Args:
-            force_refresh: Skip frame rate limiting and force immediate refresh
-            measure_performance: Record refresh timing for performance analysis
-
-        Returns:
-            True if refresh processed successfully (or skipped by rate limit), False on error
-        """
         refresh_start = time.time()
 
         try:
@@ -1242,18 +1021,6 @@ class InteractiveUpdateManager:
         color_scheme: CustomColorScheme,
         optimize_updates: bool = True,
     ) -> bool:
-        """
-        Perform batch update of all visualization elements with optimized rendering,
-        change detection, and performance monitoring for efficient updates.
-
-        Args:
-            context: Complete rendering context with environment state
-            color_scheme: Color scheme configuration for consistent visualization
-            optimize_updates: Enable update optimization with change detection
-
-        Returns:
-            Dictionary with update performance metrics and timing analysis
-        """
         batch_start = time.time()
         performance_report = {
             "batch_start_time": batch_start,
@@ -1379,26 +1146,6 @@ class InteractiveUpdateManager:
 
 
 class MatplotlibRenderer(BaseRenderer):
-    """
-    Concrete matplotlib renderer implementation providing interactive human mode visualization
-    with backend management, real-time updates, performance optimization, and comprehensive
-    resource management for plume navigation environments.
-
-    This class implements the BaseRenderer interface using matplotlib for interactive visualization,
-    providing comprehensive backend management, real-time updates, and performance optimization.
-    The renderer supports cross-platform operation with graceful fallback mechanisms and targets
-    <50ms update performance for smooth human mode visualization.
-
-    Key Features:
-    - Interactive matplotlib visualization with real-time environment updates
-    - Intelligent backend management with cross-platform compatibility
-    - Performance-optimized rendering targeting <50ms human mode updates
-    - Comprehensive resource management with automatic cleanup
-    - Color scheme integration with matplotlib colormap support
-    - Headless environment support with automatic Agg backend fallback
-    - Thread-safe operations for concurrent visualization access
-    """
-
     def __init__(
         self,
         grid_size: GridSize,
@@ -1408,16 +1155,6 @@ class MatplotlibRenderer(BaseRenderer):
         color_scheme: Optional[CustomColorScheme] = None,
         memory_optimization: bool = False,
     ):
-        """
-        Initialize matplotlib renderer with backend management, color scheme integration,
-        and performance optimization setup.
-
-        Args:
-            grid_size: Grid dimensions for matplotlib axes configuration
-            color_scheme_name: Optional color scheme identifier for visualization
-            backend_preferences: Optional list of preferred matplotlib backends
-            renderer_options: Dictionary of renderer-specific configuration options
-        """
         # Initialize base renderer with grid configuration and options
         super().__init__(grid_size, color_scheme_name, renderer_options)
 
@@ -1520,15 +1257,6 @@ class MatplotlibRenderer(BaseRenderer):
         return self.current_color_scheme
 
     def supports_render_mode(self, mode: RenderMode) -> bool:
-        """
-        Check if renderer supports specified rendering mode with capability validation.
-
-        Args:
-            mode: RenderMode enumeration value to check for support
-
-        Returns:
-            True if mode is HUMAN and matplotlib backend available, False otherwise
-        """
         # Validate mode type
         if not isinstance(mode, RenderMode):
             raise ValidationError(
@@ -1569,10 +1297,6 @@ class MatplotlibRenderer(BaseRenderer):
         return False
 
     def _initialize_renderer_resources(self) -> None:
-        """
-        Initialize matplotlib-specific resources including backend configuration, figure creation,
-        color scheme setup, and interactive update management.
-        """
         try:
             # Configure matplotlib backend using backend manager with error handling
             selected_backend = self.backend_manager.select_backend(
@@ -1650,10 +1374,6 @@ class MatplotlibRenderer(BaseRenderer):
             raise RenderingError(f"Failed to initialize matplotlib renderer: {e}")
 
     def _cleanup_renderer_resources(self) -> None:
-        """
-        Clean up matplotlib resources including figure disposal, backend restoration,
-        and memory management with comprehensive resource cleanup.
-        """
         try:
             # Close matplotlib figure with error handling
             if self.figure is not None:
@@ -1684,26 +1404,10 @@ class MatplotlibRenderer(BaseRenderer):
             self.logger.error(f"Matplotlib resource cleanup failed: {e}")
 
     def _render_rgb_array(self, context: RenderContext) -> np.ndarray:
-        """
-        RGB array rendering not supported by matplotlib renderer - raises NotImplementedError.
-
-        Args:
-            context: Rendering context (unused)
-
-        Raises:
-            NotImplementedError: Matplotlib renderer only supports HUMAN mode
-        """
         raise NotImplementedError("MatplotlibRenderer only supports HUMAN render mode")
 
     @monitor_performance("render_human")
     def _render_human(self, context: RenderContext) -> None:
-        """
-        Render interactive matplotlib visualization for human mode with real-time updates,
-        marker placement, and performance optimization targeting <50ms updates.
-
-        Args:
-            context: Validated rendering context with current environment state
-        """
         try:
             # Initialize matplotlib resources if not already available
             if self.figure is None or self.axes is None:
@@ -1759,17 +1463,6 @@ class MatplotlibRenderer(BaseRenderer):
     def set_color_scheme(
         self, color_scheme: Union[str, CustomColorScheme], force_update: bool = False
     ) -> bool:
-        """
-        Update matplotlib renderer color scheme with validation, optimization,
-        and interactive display refresh for consistent visualization.
-
-        Args:
-            color_scheme: Color scheme identifier string or CustomColorScheme instance
-            force_update: Force immediate visualization update with new colors
-
-        Returns:
-            True if color scheme update successful, False otherwise
-        """
         try:
             # Validate input type early to surface clear errors for tests
             if color_scheme is None or not isinstance(
@@ -1825,15 +1518,6 @@ class MatplotlibRenderer(BaseRenderer):
     def get_figure(
         self, create_if_needed: bool = True
     ) -> Optional[matplotlib.figure.Figure]:
-        """
-        Retrieve matplotlib figure object with lazy initialization and resource management.
-
-        Args:
-            create_if_needed: Initialize renderer resources if figure not available
-
-        Returns:
-            Matplotlib figure object or None if not initialized
-        """
         if self.figure is None and create_if_needed:
             try:
                 self._initialize_renderer_resources()
@@ -1854,18 +1538,6 @@ class MatplotlibRenderer(BaseRenderer):
         save_options: dict = None,
         **kwargs,
     ) -> bool:
-        """
-        Save current matplotlib visualization to file with format support, quality configuration,
-        and metadata preservation for publication and analysis.
-
-        Args:
-            filename: Output filename with path
-            format: File format (inferred from extension if None)
-            save_options: Additional matplotlib savefig options
-
-        Returns:
-            True if save successful, False otherwise
-        """
         try:
             # Validate filename
             if not isinstance(filename, str) or not filename.strip():
@@ -1913,18 +1585,6 @@ class MatplotlibRenderer(BaseRenderer):
         update_interval: Optional[float] = None,
         interactive_options: dict = None,
     ) -> bool:
-        """
-        Configure interactive matplotlib mode with event handling, update intervals,
-        and performance optimization for responsive visualization.
-
-        Args:
-            config_or_enable: Either a bool to enable/disable interactive mode, or a dict
-            update_interval: Optional update interval for interactive refresh
-            interactive_options: Additional interactive configuration options
-
-        Returns:
-            True if configuration successful, False otherwise
-        """
         try:
             # Normalize arguments
             options = {}
@@ -2073,18 +1733,12 @@ class MatplotlibRenderer(BaseRenderer):
 
     # Backwards-compatible API expected by some tests
     def set_interactive_mode(self, enable: bool = True, **options) -> bool:
-        """Compat shim that toggles interactive mode.
-
-        Mirrors configure_interactive_mode() and triggers the same matplotlib
-        rcParam updates used in tests so Tool classes warnings are surfaced
-        when appropriate.
-        """
         try:
             # Nudge rcParams only for GUI backends; avoid widget/web and headless 'Agg'.
             try:
                 import warnings as _warnings
 
-                import matplotlib.pyplot as plt  # Local import to avoid module import costs
+                import matplotlib.pyplot as plt
 
                 try:
                     current_backend = plt.get_backend()
@@ -2154,17 +1808,6 @@ class MatplotlibRenderer(BaseRenderer):
         include_resource_usage: bool = True,
         include_optimization_analysis: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Retrieve comprehensive matplotlib renderer performance metrics including timing analysis,
-        resource usage, and optimization recommendations.
-
-        Args:
-            include_backend_info: Include matplotlib backend information and capabilities
-            include_update_stats: Include interactive update statistics and performance data
-
-        Returns:
-            Dictionary with comprehensive performance analysis and optimization guidance
-        """
         metrics = {
             "collection_timestamp": time.time(),
             "renderer_type": "MatplotlibRenderer",
@@ -2263,19 +1906,6 @@ def create_matplotlib_renderer(
     backend_preferences: Optional[List[str]] = None,
     renderer_options: dict = None,
 ) -> MatplotlibRenderer:
-    """
-    Factory function to create matplotlib renderer with backend detection, capability assessment,
-    and configuration optimization for interactive human mode visualization.
-
-    Args:
-        grid_size: Grid dimensions for matplotlib axes configuration
-        color_scheme_name: Optional color scheme identifier for visualization
-        backend_preferences: Optional list of preferred matplotlib backends
-        renderer_options: Dictionary of renderer-specific configuration options
-
-    Returns:
-        Configured MatplotlibRenderer ready for human mode visualization
-    """
     try:
         # Support dict-based configuration as a convenience overload
         enable_perf_flag = True
@@ -2336,7 +1966,6 @@ def create_matplotlib_renderer(
             renderer_options=default_options,
         )
 
-        # Initialize renderer with comprehensive validation
         renderer.initialize(
             validate_immediately=True, enable_performance_monitoring=enable_perf_flag
         )
@@ -2378,7 +2007,6 @@ def create_matplotlib_renderer(
         )
 
 
-# Module-level cache for matplotlib capabilities
 _matplotlib_capabilities_cache: Optional[Dict[str, any]] = None
 
 
@@ -2388,19 +2016,6 @@ def detect_matplotlib_capabilities(  # noqa: C901
     assess_performance: bool = False,
     use_cache: bool = False,
 ) -> Dict[str, any]:
-    """
-    Comprehensive system capability detection for matplotlib including backend availability,
-    display detection, platform compatibility, and performance characteristics assessment.
-
-    Args:
-        test_backends: Test backend availability by attempting import and initialization
-        check_display_availability: Check for display environment and GUI capability
-        assess_performance: Evaluate performance characteristics with timing benchmarks
-        use_cache: Return cached results if available instead of re-detecting
-
-    Returns:
-        Dictionary with system capabilities, backend availability, and performance characteristics
-    """
     global _matplotlib_capabilities_cache
 
     # Return cached result if requested and available
@@ -2472,7 +2087,7 @@ def detect_matplotlib_capabilities(  # noqa: C901
                         capabilities["backend_availability"][backend] = True
                         capabilities["gui_toolkits"]["qt5"] = True
                         try:
-                            import PyQt5  # noqa: F401
+                            import PyQt5
 
                             capabilities["qt_binding_available"] = True
                             capabilities["gui_toolkits"]["pyqt5"] = True
@@ -2583,7 +2198,6 @@ def detect_matplotlib_capabilities(  # noqa: C901
         capabilities["recommendations"] = [f"Capability detection failed: {e}"]
 
     # Cache only on first call with default parameters (no special testing)
-    # Don't cache comprehensive detection runs (test_backends, assess_performance)
     # This keeps cache for lightweight baseline checks while allowing full testing
     should_cache = (
         _matplotlib_capabilities_cache is None
@@ -2601,18 +2215,6 @@ def configure_matplotlib_backend(  # noqa: C901
     allow_headless_fallback: bool = True,
     configuration_options: dict = None,
 ) -> Tuple[str, Dict[str, any]]:
-    """
-    Intelligent matplotlib backend configuration with priority-based selection, compatibility testing,
-    and graceful fallback to headless operation.
-
-    Args:
-        backend_preferences: Ordered list of preferred backends or None for defaults
-        allow_headless_fallback: Enable automatic fallback to Agg backend
-        configuration_options: Backend-specific configuration parameters
-
-    Returns:
-        Tuple of (selected_backend, backend_info) with configuration details
-    """
     preferences = backend_preferences or list(BACKEND_PRIORITY_LIST)
     config_options = configuration_options or {}
 
@@ -2711,19 +2313,6 @@ def validate_matplotlib_integration(  # noqa: C901
     test_rendering_operations: bool = True,
     validate_performance: bool = True,
 ) -> Tuple[bool, Dict[str, any]]:
-    """
-    Comprehensive validation of matplotlib integration including backend functionality, colormap availability,
-    rendering capability, and performance compliance testing.
-
-    Args:
-        backend_name: Backend name to validate functionality (default: current backend or "Agg")
-        color_scheme: Optional color scheme to test with matplotlib integration
-        test_rendering_operations: Execute rendering operations with sample data
-        validate_performance: Validate performance against targets
-
-    Returns:
-        Dict with validation results including integration_valid, backend_functional, rendering_functional
-    """
     # Use current backend if none specified
     if backend_name is None:
         import matplotlib

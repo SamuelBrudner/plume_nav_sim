@@ -1,39 +1,12 @@
-"""
-Registration module initialization providing centralized access to Gymnasium environment
-registration functionality with public API design, convenience functions, module-level
-initialization, and comprehensive registration utilities for PlumeEnv setup and management.
-
-This module serves as the primary interface for environment registration within the plume_nav_sim
-package, offering streamlined registration workflows, validation, error handling, and integration
-with the broader Gymnasium ecosystem for research and development use cases.
-
-Key Features:
-- Centralized environment registration with gym.make() compatibility
-- Convenience functions for immediate environment availability
-- Comprehensive validation and error handling
-- Cache management and registration state tracking
-- Development-oriented debugging and monitoring
-- Clean public API following Python packaging best practices
-"""
-
-import sys  # Ensure ability to tweak module registry for test stability
-import threading  # >=3.10 - Thread-safe registration operations and cache consistency management
-import time  # >=3.10 - Timestamp generation for cache management and registration state tracking
-import warnings  # >=3.10 - Module initialization warnings and registration
-
-# compatibility notifications for development environments
+import sys
+import threading
+import time
+import warnings
 from typing import Dict, Mapping, Optional
 
-# External imports with version comments
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
+import gymnasium
 
-# for registry access and environment creation validation in module initialization
-
-# Compatibility shim: older tests expect registry.env_specs; gymnasium>=1.x uses a dict
 try:
-    # Some tests conditionally reference the 'gc' module if present in sys.modules.
-    # To avoid an UnboundLocalError from a late local import in those tests, ensure
-    # 'gc' is not preloaded here so their conditional path chooses the safe branch.
     sys.modules.pop("gc", None)
 
     envs_mod = gymnasium.envs
@@ -52,7 +25,6 @@ except Exception:
     )
 
 
-# Compatibility shim: ensure common wrappers forward unknown attributes to underlying env
 try:
     from gymnasium.wrappers.common import OrderEnforcing
 
@@ -62,7 +34,6 @@ try:
         env = object.__getattribute__(self, "env")
         return getattr(env, name)
 
-    # Assign via setattr to avoid static type complaints in strict mode
     setattr(OrderEnforcing, "__getattr__", _order_enforcing_getattr)
 except Exception:
     pass
@@ -90,28 +61,16 @@ else:
 
 from ..utils.exceptions import ConfigurationError
 
-# Internal imports for logging and error handling integration
 from ..utils.logging import get_component_logger
 
-# Internal imports for core registration functionality
-from .register import (
-    COMPONENT_ENV_ID,
-    ENTRY_POINT,
-    ENV_ID,
-    ensure_component_env_registered,
-    is_registered,
-    register_env,
-    unregister_env,
-)
+from .register import ENTRY_POINT, ENV_ID, is_registered, register_env, unregister_env
 
-# Global module state for initialization tracking and cache management
 _module_logger = get_component_logger("registration")
 _module_initialized = False
 _registration_cache: Dict[str, object] = {}
 _cache_lock = threading.Lock()
 _initialization_timestamp: Optional[float] = None
 
-# Public API exports for core registration functionality
 __all__ = [
     "register_env",
     "unregister_env",
@@ -119,53 +78,22 @@ __all__ = [
     "ensure_registered",
     "ENV_ID",
     "ENTRY_POINT",
-    "COMPONENT_ENV_ID",
-    "ensure_component_env_registered",
 ]
 
 
 def ensure_registered(  # noqa: C901
     auto_register: bool = True, raise_on_failure: bool = True
 ) -> bool:
-    """
-    Ensure environment is registered with automatic registration if not present,
-    comprehensive validation, error recovery, and registration status verification
-    for reliable environment availability.
-
-    This function provides robust environment registration with automatic fallback
-    mechanisms and comprehensive error handling, ensuring reliable environment
-    availability across different execution contexts.
-
-    Args:
-        auto_register (bool): Whether to attempt automatic registration if not present
-        raise_on_failure (bool): Whether to raise exception if registration fails
-
-    Returns:
-        bool: True if environment is registered and available, False if registration
-        failed and raise_on_failure is False
-
-    Raises:
-        ConfigurationError: If registration fails and raise_on_failure is True
-
-    Example:
-        >>> if ensure_registered():
-        >>>     env = gymnasium.make(ENV_ID)
-        >>> else:
-        >>>     print("Environment registration failed")
-    """
     try:
-        # Initialize module if not already done to ensure proper functionality
         if not _module_initialized:
             _initialize_registration_module()
 
-        # Check current registration status using is_registered() with cache validation
         if is_registered():
             _module_logger.debug(
                 f"Environment {ENV_ID} already registered and available",
                 extra={"registration_status": "confirmed", "cache_validated": True},
             )
 
-            # Update cache with ensure_registered success timestamp
             with _cache_lock:
                 _registration_cache.update(
                     {
@@ -175,10 +103,8 @@ def ensure_registered(  # noqa: C901
                     }
                 )
 
-            # Return True immediately if environment is already properly registered
             return True
 
-        # Log attempt to ensure registration with auto_register flag status
         _module_logger.info(
             f"Environment {ENV_ID} not registered, auto_register={auto_register}",
             extra={
@@ -188,13 +114,11 @@ def ensure_registered(  # noqa: C901
             },
         )
 
-        # Attempt automatic registration using register_env() if auto_register is True
         if auto_register:
             try:
                 register_env(force_reregister=False)
                 env_id = ENV_ID
 
-                # Validate registration success and environment availability after auto-registration
                 if is_registered():
                     _module_logger.info(
                         f"Automatic registration successful for {ENV_ID}",
@@ -204,7 +128,6 @@ def ensure_registered(  # noqa: C901
                         },
                     )
 
-                    # Update cache with successful ensure_registered operation
                     with _cache_lock:
                         _registration_cache.update(
                             {
@@ -240,7 +163,6 @@ def ensure_registered(  # noqa: C901
                     },
                 )
 
-                # Update cache with auto-registration failure information
                 with _cache_lock:
                     _registration_cache.update(
                         {
@@ -260,7 +182,6 @@ def ensure_registered(  # noqa: C901
                     ) from e
                 return False
 
-        # Log registration status and actions taken for debugging and monitoring
         _module_logger.warning(
             f"Environment {ENV_ID} not registered and auto_register=False",
             extra={
@@ -270,7 +191,6 @@ def ensure_registered(  # noqa: C901
             },
         )
 
-        # Update registration cache with final status and timestamp
         with _cache_lock:
             _registration_cache.update(
                 {
@@ -281,7 +201,6 @@ def ensure_registered(  # noqa: C901
                 }
             )
 
-        # Raise ConfigurationError if registration failed and raise_on_failure is True
         if raise_on_failure:
             raise ConfigurationError(
                 f"Environment {ENV_ID} not registered and auto_register disabled",
@@ -289,14 +208,11 @@ def ensure_registered(  # noqa: C901
                 parameter_value="not_registered",
             )
 
-        # Return False if registration failed and raise_on_failure is False
         return False
 
     except ConfigurationError:
-        # Re-raise ConfigurationError as-is
         raise
     except Exception as e:
-        # Handle unexpected errors with comprehensive logging
         error_msg = f"Ensure registration failed unexpectedly: {e}"
         _module_logger.error(
             error_msg,
@@ -322,25 +238,9 @@ def ensure_registered(  # noqa: C901
 
 
 def _initialize_registration_module() -> bool:  # noqa: C901
-    """
-    Internal module initialization function performing registration system setup,
-    dependency validation, cache initialization, and module state configuration
-    for consistent registration behavior.
-
-    This function ensures proper module initialization with comprehensive validation
-    and setup of all required components for registration functionality.
-
-    Returns:
-        bool: True if module initialization successful, raises ConfigurationError
-        if critical initialization fails
-
-    Raises:
-        ConfigurationError: If critical initialization components fail
-    """
     global _module_initialized, _initialization_timestamp
 
     try:
-        # Check if module already initialized using _module_initialized global flag
         if _module_initialized:
             _module_logger.debug(
                 "Module already initialized, skipping re-initialization",
@@ -350,7 +250,6 @@ def _initialize_registration_module() -> bool:  # noqa: C901
 
         initialization_start = time.time()
 
-        # Validate Gymnasium framework availability and compatibility for registration functionality
         try:
             import gymnasium
 
@@ -366,7 +265,6 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 parameter_value="not_available",
             ) from e
 
-        # Initialize registration cache dictionary and consistency tracking mechanisms
         with _cache_lock:
             if not isinstance(_registration_cache, dict):
                 raise ConfigurationError(
@@ -375,7 +273,6 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                     parameter_value="invalid_type",
                 )
 
-            # Set up initial cache state with module initialization metadata
             _registration_cache.update(
                 {
                     "module_initialization_start": initialization_start,
@@ -385,9 +282,7 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 }
             )
 
-        # Validate environment entry point availability and module path accessibility
         try:
-            # Verify that the entry point specification is valid
             if not ENV_ID or not isinstance(ENV_ID, str):
                 raise ConfigurationError(
                     f"Invalid environment ID: {ENV_ID}",
@@ -416,7 +311,6 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 parameter_value=ENTRY_POINT,
             ) from e
 
-        # Set up module logger with appropriate logging configuration and component identification
         if _module_logger is None:
             raise ConfigurationError(
                 "Module logger not properly configured",
@@ -424,26 +318,20 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 parameter_value="logger_none",
             )
 
-        # Perform initial registration system validation and compatibility checking
         try:
             envs_mod2 = gymnasium.envs
             registry = getattr(envs_mod2, "registry", None)
 
-            # Known-good patterns:
-            # - Gymnasium >= 1.x: registry is a dict[str, EnvSpec]
-            # - Gymnasium 0.29.x: registry has an env_specs mapping
             is_dict_registry = isinstance(registry, dict)
             has_env_specs_attr = hasattr(registry, "env_specs")
 
             if registry is None:
-                # Only warn when registry is genuinely unavailable
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
                     stacklevel=2,
                 )
             elif not (is_dict_registry or has_env_specs_attr):
-                # Unknown/untested registry type: log a soft warning
                 warnings.warn(
                     "Gymnasium registry may not be fully compatible - some features may be limited",
                     UserWarning,
@@ -466,13 +354,10 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 f"Registry validation encountered issues: {e}",
                 extra={"validation_warning": str(e)},
             )
-            # Continue initialization but log the issue
 
-        # Finalize initialization state and timing
         initialization_end = time.time()
         _initialization_timestamp = initialization_end
 
-        # Update cache with successful initialization information
         with _cache_lock:
             _registration_cache.update(
                 {
@@ -486,10 +371,8 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                 }
             )
 
-        # Set _module_initialized flag to True indicating successful initialization
         _module_initialized = True
 
-        # Log successful module initialization with configuration summary and available functionality  # noqa: E501
         _module_logger.info(
             "Registration module initialized successfully",
             extra={
@@ -504,12 +387,9 @@ def _initialize_registration_module() -> bool:  # noqa: C901
             },
         )
 
-        # Return True indicating module ready for registration operations with
-        # full functionality
         return True
 
     except ConfigurationError:
-        # Re-raise ConfigurationError as-is with proper error state
         with _cache_lock:
             _registration_cache.update(
                 {
@@ -521,10 +401,8 @@ def _initialize_registration_module() -> bool:  # noqa: C901
         raise
 
     except Exception as e:
-        # Handle unexpected initialization errors
         error_msg = f"Module initialization failed unexpectedly: {e}"
 
-        # Update cache with error information if possible
         try:
             with _cache_lock:
                 _registration_cache.update(
@@ -536,10 +414,8 @@ def _initialize_registration_module() -> bool:  # noqa: C901
                     }
                 )
         except Exception:
-            # If even cache update fails, continue with error raising
             pass
 
-        # Log the error if logger is available
         if _module_logger:
             _module_logger.error(
                 error_msg,
@@ -553,18 +429,15 @@ def _initialize_registration_module() -> bool:  # noqa: C901
         ) from e
 
 
-# Automatic module initialization on import for immediate functionality
 try:
     if not _module_initialized:
         _initialize_registration_module()
 except Exception as e:
-    # Handle initialization failure gracefully - set up minimal error state
     _module_logger.error(
         f"Automatic module initialization failed: {e}",
         extra={"auto_initialization_failed": True, "error_type": type(e).__name__},
     )
 
-    # Set up error state in cache for debugging
     with _cache_lock:
         _registration_cache.update(
             {
@@ -574,7 +447,6 @@ except Exception as e:
             }
         )
 
-    # Issue warning about reduced functionality
     warnings.warn(
         f"Registration module initialization failed: {e}. "
         f"Call _initialize_registration_module() manually or use ensure_registered()",

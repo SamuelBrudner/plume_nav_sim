@@ -1,13 +1,3 @@
-"""Schema constants and validation for video plume datasets.
-
-This module publishes the contract for Zarr/xarray datasets representing
-video-derived concentration fields with dimensions (t, y, x).
-
-It is intentionally lightweight (no hard dependency on xarray/zarr) so it can
-be imported by tooling that may not have media/IO extras installed. Validation
-is performed on plain mappings (e.g., dataset/global attrs).
-"""
-
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Tuple, Union
@@ -29,11 +19,6 @@ ALLOWED_SOURCE_DTYPES = {"uint8", "uint16", "float32", "float64"}
 
 
 def _tuple2(value: Union[float, Iterable[float]], *, name: str) -> Tuple[float, float]:
-    """Coerce a scalar or 2-sequence to a 2-tuple of floats.
-
-    Accepts a single float (applied to both axes) or an iterable of exactly two
-    floats. Raises ValueError on invalid shapes.
-    """
     if isinstance(value, (int, float)):
         v = float(value)
         return (v, v)
@@ -47,12 +32,6 @@ def _tuple2(value: Union[float, Iterable[float]], *, name: str) -> Tuple[float, 
 
 
 class VideoPlumeAttrs(BaseModel):
-    """Pydantic model for required dataset/global attributes.
-
-    These attrs are stored alongside the dataset and validated at load time.
-    They intentionally mirror the acceptance criteria of bead 87.
-    """
-
     schema_version: str = Field(default=SCHEMA_VERSION)
     fps: float = Field(gt=0, description="Frames per second")
     source_dtype: str = Field(description="Original frame dtype before normalization")
@@ -116,11 +95,6 @@ class VideoPlumeAttrs(BaseModel):
 
 
 def validate_attrs(attrs: Mapping[str, Any]) -> VideoPlumeAttrs:
-    """Validate and normalize a mapping of dataset/global attributes.
-
-    Returns a parsed ``VideoPlumeAttrs`` instance on success, raising ``ValueError``
-    with a helpful message on failure.
-    """
     try:
         return VideoPlumeAttrs.model_validate(attrs)
     except Exception as e:  # pydantic.ValidationError already informative

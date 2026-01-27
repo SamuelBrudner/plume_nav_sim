@@ -1,11 +1,3 @@
-"""Downloader utilities for curated plume datasets.
-
-These helpers resolve registry entries, manage cache locations, download and
-verify artifacts, unpack archives, and perform lightweight layout validation for
-Zarr and HDF5 payloads. Callers can opt-in to automatic downloads or operate in
-an offline mode when the cache already satisfies integrity checks.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -173,12 +165,6 @@ except ImportError:
 
 
 class ProvenanceSidecar(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
-    """Provenance metadata for a processed dataset.
-
-    This sidecar documents the full lineage from raw source to processed Zarr,
-    enabling reproducibility and citation tracking.
-    """
-
     # Dataset identification
     dataset_id: str
     version: str
@@ -225,15 +211,6 @@ class ProvenanceSidecar(BaseModel if PYDANTIC_AVAILABLE else object):  # type: i
         return dict(self.__dict__)
 
     def write(self, output_path: Path, format: str = "json") -> Path:
-        """Write sidecar to file next to the dataset.
-
-        Args:
-            output_path: Path to the Zarr directory or output file
-            format: 'json' (recommended) or 'yaml'
-
-        Returns:
-            Path to the written sidecar file
-        """
         sidecar_path = output_path.parent / f"{output_path.name}.provenance.{format}"
 
         if format == "json":
@@ -297,18 +274,6 @@ def generate_provenance(
     output_shape: List[int],
     output_dtype: str = "float32",
 ) -> ProvenanceSidecar:
-    """Generate a provenance sidecar for a processed dataset.
-
-    Args:
-        entry: The registry entry for the dataset
-        source_path: Path to the downloaded source file
-        output_path: Path to the output Zarr directory
-        output_shape: Shape of the main data array
-        output_dtype: Data type of the main array
-
-    Returns:
-        ProvenanceSidecar instance (also writes to disk)
-    """
     # Get source file size
     source_size = source_path.stat().st_size if source_path.exists() else None
 
@@ -445,27 +410,6 @@ def ensure_dataset_available(
     verify_checksum: bool = True,
     confirm_download: Optional[Callable[[DatasetRegistryEntry], bool]] = None,
 ) -> Path:
-    """Ensure a dataset is present locally and return the resolved path.
-
-    Args:
-        dataset_id: Registry key for the dataset.
-        cache_root: Base cache directory for artifacts and unpacked data.
-        auto_download: When True, download the artifact if it is missing or the
-            existing checksum fails validation. When False, raises if download is
-            required unless the caller confirms via confirm_download.
-        force_download: When True, re-download and re-unpack even if the cache
-            appears valid.
-        verify_checksum: When True, validate the downloaded artifact against the
-            registry checksum before unpacking.
-        confirm_download: Optional callable that returns True when the user
-            approves a download. If omitted, an interactive prompt is used when
-            auto_download is False and a download is required in a TTY context.
-
-    Returns:
-        Path to the unpacked dataset root (e.g., Zarr store directory or HDF5
-        file).
-    """
-
     entry = describe_dataset(dataset_id)
     resolved_cache_root = DEFAULT_CACHE_ROOT if cache_root is None else cache_root
     cache_dir = entry.cache_path(resolved_cache_root)
@@ -847,17 +791,6 @@ def _pick_rigolli_axes(
 def _infer_time_y_x_axes_for_rigolli(
     shape: tuple[int, ...], *, x_len: int, y_len: int
 ) -> tuple[int, int, int]:
-    """Infer which axes correspond to (t, y, x) using coordinate lengths.
-
-    Rigolli DNS MATLAB payloads are typically stored as either:
-      - (x, y, t)  (common MATLAB convention)
-      - (t, y, x)  (already in desired order)
-      - (t, x, y)  (spatial axes swapped)
-
-    When the spatial dimensions cannot be inferred from coordinate lengths, this
-    falls back to treating the largest dimension as time.
-    """
-
     if len(shape) != 3:
         raise DatasetDownloadError(
             f"Expected 3D concentration array, got shape {shape}"
@@ -885,17 +818,6 @@ def _ingest_hdf5_to_zarr(
     output_path: Path,
     compute_stats: bool = True,
 ) -> Path:
-    """Convert an HDF5 plume movie into a Zarr dataset.
-
-    Args:
-        spec: Ingestion specification from registry.
-        source_path: Path to source HDF5 file.
-        output_path: Path for output Zarr store.
-        compute_stats: If True, compute and store concentration statistics.
-
-    Returns:
-        Path to the created Zarr store.
-    """
     try:
         from plume_nav_sim.media.h5_movie import H5MovieIngestConfig, ingest_h5_movie
     except ImportError as exc:  # pragma: no cover - optional dependency
@@ -985,7 +907,7 @@ def _try_load_coords_with_scipy(
     errors: list[Exception],
 ) -> tuple[Any, Any] | None:
     try:
-        from scipy.io import loadmat  # type: ignore[import-untyped]
+        from scipy.io import loadmat
     except Exception as exc:  # pragma: no cover - scipy is optional
         errors.append(exc)
         return None
@@ -1658,21 +1580,6 @@ def _ingest_mat_to_zarr(
     output_path: Path,
     compute_stats: bool = True,
 ) -> Path:
-    """Convert a MATLAB v7.3 plume dataset with separate coordinates into Zarr.
-
-    Downloads the coordinates file, loads both files using h5py (for MATLAB v7.3
-    HDF5 format), and creates a standardized Zarr dataset with proper spatial
-    dimension coordinates.
-
-    Args:
-        spec: Ingestion specification from registry.
-        source_path: Path to source MATLAB file.
-        output_path: Path for output Zarr store.
-        compute_stats: If True, compute and store concentration statistics.
-
-    Returns:
-        Path to the created Zarr store.
-    """
     try:
         h5py, np, zarr = _require_ingest_deps("MATLAB ingest")
 
@@ -1787,21 +1694,6 @@ def _ingest_emonet_to_zarr(
     output_path: Path,
     compute_stats: bool = True,
 ) -> Path:
-    """Convert Emonet lab flyWalk video frames into standardized Zarr.
-
-    Downloads optional metadata file, loads video frames from MATLAB format,
-    and creates a Zarr dataset with spatial coordinates derived from arena size.
-
-    Args:
-        spec: Ingestion specification from registry.
-        source_path: Path to source MATLAB file.
-        output_path: Path for output Zarr store.
-        compute_stats: If True, compute and store concentration statistics.
-            For large datasets, set to False and compute stats separately.
-
-    Returns:
-        Path to the created Zarr store.
-    """
     h5py, np, zarr = _require_ingest_deps("Emonet ingest")
     metadata = _load_emonet_metadata(spec, source_path, h5py=h5py, np=np)
 

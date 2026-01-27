@@ -65,7 +65,7 @@ from plume_nav_sim.core.types import Action, RenderMode
 # Test constants for validation
 EXPECTED_PACKAGE_NAME = "plume_nav_sim"
 EXPECTED_PACKAGE_VERSION_PATTERN = r"^\d+\.\d+\.\d+$"
-EXPECTED_ENVIRONMENT_ID_PATTERN = r"^PlumeNav-.+-v\d+$"
+EXPECTED_ENVIRONMENT_ID_PATTERN = r"^PlumeNav(?:-.+)?-v\d+$"
 EXPECTED_GRID_SIZE_DEFAULT = (128, 128)
 EXPECTED_SOURCE_LOCATION_DEFAULT = (64, 64)
 EXPECTED_ACTION_RANGE = [0, 1, 2, 3]

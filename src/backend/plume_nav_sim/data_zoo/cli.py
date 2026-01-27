@@ -1,19 +1,4 @@
 #!/usr/bin/env python
-"""CLI for downloading and managing Data Zoo datasets.
-
-Usage:
-    # Download all datasets to default cache
-    python -m plume_nav_sim.data_zoo.cli
-
-    # Download to external storage
-    python -m plume_nav_sim.data_zoo.cli --cache-root /Volumes/KINGSTON/downloaded
-
-    # Download specific dataset
-    python -m plume_nav_sim.data_zoo.cli --dataset emonet_smoke_v1
-
-    # List available datasets
-    python -m plume_nav_sim.data_zoo.cli --list
-"""
 
 from __future__ import annotations
 

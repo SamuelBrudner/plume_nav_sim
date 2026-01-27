@@ -37,7 +37,7 @@ from plume_nav_sim.core.constants import (
 from plume_nav_sim.envs.plume_env import PlumeEnv
 
 # Internal imports for registration functions and dependencies
-from plume_nav_sim.registration.register import ENV_ID, LEGACY_ENV_IDS
+from plume_nav_sim.registration.register import ENV_ID
 from plume_nav_sim.registration.register import (
     _create_registration_kwargs as create_registration_kwargs,
 )
@@ -147,34 +147,6 @@ class TestEnvironmentRegistration:
         # Clean up registration after test completion
         assert unregister_env(ENV_ID) is True
         assert is_registered(ENV_ID) is False
-
-    def test_legacy_env_ids_map_to_plume_env(self):
-        """Legacy env ids should resolve to PlumeEnv with registration kwargs applied."""
-        unregister_env(ENV_ID, suppress_warnings=True)
-        for legacy_env_id in LEGACY_ENV_IDS:
-            unregister_env(legacy_env_id, suppress_warnings=True)
-
-        custom_kwargs = {
-            "grid_size": (40, 24),
-            "source_location": (12, 8),
-            "max_steps": 77,
-        }
-
-        register_env(env_id=ENV_ID, kwargs=custom_kwargs, force_reregister=True)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            for legacy_env_id in LEGACY_ENV_IDS:
-                env = gymnasium.make(legacy_env_id)
-                base_env = _unwrap_gym_env(env)
-                assert isinstance(base_env, PlumeEnv)
-                assert base_env.grid_size == custom_kwargs["grid_size"]
-                assert base_env.max_steps == custom_kwargs["max_steps"]
-                env.close()
-
-        unregister_env(ENV_ID, suppress_warnings=True)
-        for legacy_env_id in LEGACY_ENV_IDS:
-            unregister_env(legacy_env_id, suppress_warnings=True)
 
     # TODO Rename this here and in `test_register_env_with_defaults`
     def _extracted_from_test_register_env_with_defaults_23(self):

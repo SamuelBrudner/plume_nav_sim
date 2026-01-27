@@ -24,7 +24,7 @@ from ..plume_nav_sim.core.constants import DEFAULT_SOURCE_LOCATION
 from ..plume_nav_sim.core.types import Action
 
 # Internal imports
-from ..plume_nav_sim.registration.register import COMPONENT_ENV_ID, ENV_ID, register_env
+from ..plume_nav_sim.registration.register import ENV_ID, register_env
 
 # Global constants for manual control configuration
 CONTROL_INSTRUCTIONS = (
@@ -89,9 +89,8 @@ def setup_manual_control(
     try:
         # Register environment using register_env() with validation and error handling
         logger.info("Registering plume navigation environment...")
-        # Prefer DI environment id for examples; legacy remains supported
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-        logger.info(f"Successfully registered environment: {COMPONENT_ENV_ID}")
+        register_env(env_id=ENV_ID, force_reregister=True)
+        logger.info(f"Successfully registered environment: {ENV_ID}")
 
         # Determine current matplotlib backend once so it is always defined
         current_backend = plt.get_backend()
@@ -119,8 +118,8 @@ def setup_manual_control(
                     )
 
         # Create environment instance using gym.make() with human render mode for real-time visualization
-        logger.info(f"Creating environment instance: {COMPONENT_ENV_ID}")
-        env = gym.make(COMPONENT_ENV_ID, render_mode="human")
+        logger.info(f"Creating environment instance: {ENV_ID}")
+        env = gym.make(ENV_ID, render_mode="human")
 
         # Initialize environment with provided seed or DEFAULT_MANUAL_SEED for reproducible sessions
         if seed is None:

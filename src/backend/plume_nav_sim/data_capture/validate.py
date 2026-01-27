@@ -44,7 +44,7 @@ def _flatten_steps(rows: List[dict]):
         rp.setdefault("truncated", False)
         if "schema_version" not in rp:
             try:
-                from .schemas import (  # local import to avoid heavy deps at import time
+                from .schemas import (
                     SCHEMA_VERSION,
                 )
 
@@ -53,7 +53,7 @@ def _flatten_steps(rows: List[dict]):
                 rp["schema_version"] = "1.0.0"
         flat.append(rp)
     # Construct DataFrame lazily to avoid import cost at module import time
-    import pandas as pd  # type: ignore
+    import pandas as pd
 
     return pd.DataFrame(flat)
 
@@ -77,7 +77,7 @@ def _flatten_episodes(rows: List[dict]):
             except Exception:
                 rp["schema_version"] = "1.0.0"
         flat.append(rp)
-    import pandas as pd  # type: ignore
+    import pandas as pd
 
     return pd.DataFrame(flat)
 
@@ -85,12 +85,12 @@ def _flatten_episodes(rows: List[dict]):
 def _schemas():
     # Prefer pandas-specific API to avoid deprecation warnings
     try:  # pandera >= recommended API
-        import pandera.pandas as pa  # type: ignore
-        from pandera.pandas import Column, DataFrameSchema  # type: ignore
+        import pandera.pandas as pa
+        from pandera.pandas import Column, DataFrameSchema
     except Exception:  # fallback for older pandera
-        import pandera as pa  # type: ignore
-        from pandera import Column, DataFrameSchema  # type: ignore
-    from pandera.dtypes import Bool, Float, Int, String  # type: ignore
+        import pandera as pa
+        from pandera import Column, DataFrameSchema
+    from pandera.dtypes import Bool, Float, Int, String
 
     steps_schema = DataFrameSchema(
         {
@@ -132,10 +132,6 @@ def _schemas():
 
 
 def validate_run_artifacts(run_dir: Path) -> Dict[str, object]:
-    """Validate steps.jsonl.gz and episodes.jsonl.gz with Pandera.
-
-    Returns a report dict with per-file status and optional error messages.
-    """
     report: Dict[str, object] = {"steps": None, "episodes": None}
     steps_rows = _read_jsonl_gz_files(run_dir / "steps")
     ep_rows = _read_jsonl_gz_files(run_dir / "episodes")

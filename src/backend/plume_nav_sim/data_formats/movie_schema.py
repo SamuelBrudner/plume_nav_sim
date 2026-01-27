@@ -1,16 +1,3 @@
-"""
-Schema constants and lightweight validator for video plume Zarr datasets.
-
-This module defines the expected variable/dimension names and a simple
-runtime validator returning parsed metadata needed by MoviePlumeField.
-
-Notes
-- This is a minimal slice to unblock the MoviePlumeField loader. It does not
-  attempt to be a full bead-87 implementation but mirrors its intent: clear
-  constants and a validator callable producing structured info or raising a
-  ValidationError with actionable context.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -105,12 +92,6 @@ _ATTR_VALIDATORS: Mapping[str, Callable[[Any], Any]] = {
 
 
 def _get_required_attr(attrs: Mapping[str, Any], key: str, expected: str) -> Any:
-    """Return attribute value or raise ValidationError with context.
-
-    The expected string is surfaced via ``expected_format`` to help callers
-    understand the contract when a required attribute is missing.
-    """
-
     if key in attrs:
         return attrs[key]
     raise ValidationError(
@@ -130,27 +111,14 @@ def _apply_attr_validator(key: str, value: Any) -> Any:
 
 
 def _require_attr(attrs: Mapping[str, Any], key: str, expected: str) -> Any:
-    """Lookup and validate a required attribute from a mapping.
-
-    Known keys are validated using dedicated helpers; unknown keys are returned
-    as-is so the caller can handle them.
-    """
-
     val = _get_required_attr(attrs, key, expected)
     return _apply_attr_validator(key, val)
 
 
 def validate_movie_dataset(ds: Any) -> MovieSchemaInfo:
-    """Validate an xarray Dataset for the movie plume contract.
-
-    Expected:
-    - DataArray named VAR_CONCENTRATION with dims DIMS_TYX
-    - dtype float32
-    - Required attributes present and well-typed
-    """
     # Import lazily to avoid hard dependency at import time
     try:  # type: ignore
-        import xarray as xr  # noqa: F401
+        import xarray as xr
     except Exception as exc:  # pragma: no cover - import guard
         raise ValidationError(
             "xarray is required to validate movie plume datasets; install extras 'media'",

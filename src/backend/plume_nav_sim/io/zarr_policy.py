@@ -1,17 +1,3 @@
-"""
-Zarr chunking + compressor policy (contract).
-
-This module defines the canonical chunk shape and a helper to construct a
-Blosc compressor preferring Zstd with a CI‑friendly fallback to LZ4 when Zstd
-is unavailable in the runtime environment.
-
-Rationale (short):
-- Chunks (T, Y, X) = (8, 64, 64) balance fast time‑indexed access with
-  manageable spatial blocks and low writer overhead on small test fixtures.
-- Blosc/Zstd at clevel=5 gives strong compression and good throughput on float32
-  frames; fallback to LZ4 maintains speed when Zstd is not compiled in.
-"""
-
 from __future__ import annotations
 
 import warnings
@@ -27,12 +13,6 @@ DEFAULT_BLOSC_CLEVEL: int = 5
 
 @dataclass
 class _BloscFallback:
-    """Minimal shim mirroring numcodecs.Blosc.get_config contract.
-
-    Returned only when numcodecs is not importable. Not suitable for actual
-    Zarr storage, but preserves interface for configuration plumbing and tests.
-    """
-
     cname: str
     clevel: int
     shuffle: int = 1
@@ -54,18 +34,10 @@ def make_blosc_compressor(
     clevel: int = DEFAULT_BLOSC_CLEVEL,
     shuffle: int = 1,
 ) -> object:
-    """Create a Blosc compressor preferring Zstd then LZ4.
-
-    - If numcodecs is available and supports Zstd, returns numcodecs.Blosc(...).
-    - If Zstd is unavailable, falls back to LZ4 with a warning.
-    - If numcodecs itself is unavailable, returns a minimal shim with the same
-      .get_config() shape so downstream code can record attrs and proceed in
-      environments without compression support.
-    """
     candidates: Iterable[str] = preferred_codecs or ("zstd", "lz4")
 
     try:
-        from numcodecs.blosc import Blosc  # type: ignore
+        from numcodecs.blosc import Blosc
     except Exception:
         warnings.warn(
             "numcodecs not available; using Blosc fallback shim (lz4)",
@@ -91,10 +63,6 @@ def make_blosc_compressor(
 
 
 def compressor_config(compressor: object) -> dict:
-    """Return a serializable compressor config dict suitable for attrs.
-
-    Works with both numcodecs.Blosc and the fallback shim.
-    """
     get_cfg = getattr(compressor, "get_config", None)
     if callable(get_cfg):
         return dict(get_cfg())
@@ -110,11 +78,6 @@ def compressor_config(compressor: object) -> dict:
 
 
 def default_encoding() -> dict:
-    """Return recommended Zarr/xarray encoding for (t,y,x) float32 arrays.
-
-    Includes chunking and a compressor instance. Call compressor_config() to
-    record a JSON‑serializable copy into dataset attrs.
-    """
     return {
         "chunks": CHUNKS_TYX,
         "compressor": make_blosc_compressor(),

@@ -1,23 +1,5 @@
-"""
-NumPy RGB renderer implementation providing high-performance programmatic visualization
-through RGB array generation for automated plume navigation analysis.
-
-This module extends BaseRenderer with specialized RGB array creation using vectorized
-NumPy operations, color scheme integration, marker placement, and concentration field
-visualization optimized for <5ms generation targeting machine learning pipelines,
-automated analysis tools, and headless research environments.
-
-Key Features:
-- High-performance RGB array generation (<5ms target)
-- Vectorized NumPy operations for optimal performance
-- Comprehensive color scheme integration and management
-- Performance tracking and optimization analytics
-- Extensive validation and error handling
-- Memory-efficient caching and resource management
-"""
-
-import time  # >=3.10 - High-precision timing for RGB array generation performance measurement
-from typing import (  # >=3.10 - Type hints for RGB array types and method annotations
+import time
+from typing import (
     Any,
     Dict,
     Optional,
@@ -25,8 +7,7 @@ from typing import (  # >=3.10 - Type hints for RGB array types and method annot
     Union,
 )
 
-# External imports with version comments
-import numpy as np  # >=2.1.0 - Core array operations, RGB array creation, vectorized pixel manipulation
+import numpy as np
 
 from ..constants import (
     AGENT_MARKER_SIZE,
@@ -39,7 +20,6 @@ from ..constants import (
 from ..core.types import Coordinates, GridSize, RenderMode
 from ..utils.exceptions import ComponentError, RenderingError, ValidationError
 
-# Internal imports from base renderer and supporting modules
 from .base_renderer import BaseRenderer, RenderContext
 from .color_schemes import (
     ColorSchemeManager,
@@ -49,7 +29,6 @@ from .color_schemes import (
     normalize_concentration_to_rgb,
 )
 
-# Global configuration and caching variables
 _RGB_ARRAY_CACHE = {}
 _GENERATION_STATS = {}
 _PERFORMANCE_BASELINE_MS = PERFORMANCE_TARGET_RGB_RENDER_MS
@@ -68,30 +47,12 @@ __all__ = [
 
 
 class NumpyRGBRenderer(BaseRenderer):
-    """
-    High-performance RGB array renderer extending BaseRenderer with specialized NumPy operations,
-    vectorized pixel manipulation, color scheme integration, and performance optimization targeting
-    <5ms generation for machine learning pipelines, automated analysis, and headless research environments.
-
-    This renderer provides programmatic RGB array generation with comprehensive performance tracking,
-    extensive validation, and optimized memory management for automated processing workflows.
-    """
-
     def __init__(
         self,
         grid_size: GridSize,
         color_scheme_name: Optional[str] = None,
         renderer_options: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Initialize NumpyRGBRenderer with grid configuration, color scheme setup, performance
-        optimization, and buffer allocation for high-performance RGB array generation.
-
-        Args:
-            grid_size: Grid dimensions for RGB array sizing and coordinate system management
-            color_scheme_name: Optional color scheme name for ColorSchemeManager integration
-            renderer_options: Optional renderer configuration options and performance settings
-        """
         # Call parent BaseRenderer.__init__ with grid_size, color_scheme_name, and renderer_options
         super().__init__(grid_size, color_scheme_name, renderer_options)
 
@@ -147,10 +108,6 @@ class NumpyRGBRenderer(BaseRenderer):
         self.caching_enabled = self.performance_config["enable_caching"]
 
     def _initialize_renderer_resources(self) -> None:
-        """
-        Initialize RGB renderer-specific resources including color scheme optimization, array buffers,
-        performance baselines, and validation implementing BaseRenderer abstract method.
-        """
         # Optimize color scheme for RGB_ARRAY mode using ColorSchemeManager optimization methods
         self.color_manager.optimize_scheme(
             self.current_color_scheme, RenderMode.RGB_ARRAY
@@ -186,10 +143,6 @@ class NumpyRGBRenderer(BaseRenderer):
         # BaseRenderer.initialize() when immediate validation is enabled.
 
     def _cleanup_renderer_resources(self) -> None:
-        """
-        Clean up RGB renderer resources including array buffers, cache memory, performance statistics,
-        and optimization structures implementing BaseRenderer abstract method.
-        """
         # Clear RGB array cache and performance statistics for memory cleanup
         if self.caching_enabled:
             _RGB_ARRAY_CACHE.clear()
@@ -218,16 +171,6 @@ class NumpyRGBRenderer(BaseRenderer):
         gc.collect()  # Force garbage collection for complete cleanup
 
     def supports_render_mode(self, mode: Union[RenderMode, str]) -> bool:
-        """
-        Check RGB renderer support for specific rendering mode with focus on RGB_ARRAY mode
-        and programmatic processing capabilities.
-
-        Args:
-            mode: RenderMode enum or string name to check for support
-
-        Returns:
-            bool: True if renderer supports RGB_ARRAY mode, False for other modes like HUMAN
-        """
         # Normalize string to enum if necessary (case-insensitive)
         if isinstance(mode, str):
             mode_normalized = mode.strip().lower()
@@ -245,17 +188,6 @@ class NumpyRGBRenderer(BaseRenderer):
         return False
 
     def _render_rgb_array(self, context: RenderContext) -> np.ndarray:  # noqa: C901
-        """
-        Core RGB array generation method implementing BaseRenderer abstract method with vectorized
-        operations, color scheme application, and performance optimization for sub-5ms generation targeting.
-
-        Args:
-            context: RenderContext containing concentration field, positions, and grid configuration
-
-        Returns:
-            numpy.ndarray: RGB array with shape (H,W,3) and dtype uint8 containing concentration
-                          field and position markers
-        """
         # Start performance timing for RGB array generation monitoring and optimization
         start_time = time.perf_counter()
 
@@ -371,12 +303,6 @@ class NumpyRGBRenderer(BaseRenderer):
     def render(  # noqa: C901
         self, context: RenderContext, mode_override: Optional[RenderMode] = None
     ) -> np.ndarray:
-        """
-        Optimized render implementation for RGB_ARRAY mode with minimal overhead.
-
-        Bypasses base-class performance decorators and tracking to reduce per-call
-        variance during tight benchmark loops. Uses cache fast-path when available.
-        """
         # Basic context type validation
         if not isinstance(context, RenderContext):
             raise TypeError("context must be a RenderContext instance")
@@ -461,18 +387,6 @@ class NumpyRGBRenderer(BaseRenderer):
         reuse_buffer: bool = True,
         skip_validation: bool = False,
     ) -> np.ndarray:
-        """
-        High-performance RGB array generation with advanced optimization techniques, memory reuse,
-        vectorized operations, and minimal validation for performance-critical applications.
-
-        Args:
-            context: RenderContext with validated environment state
-            reuse_buffer: Whether to reuse pre-allocated array buffer for memory optimization
-            skip_validation: Whether to skip input validation for maximum performance
-
-        Returns:
-            numpy.ndarray: Optimized RGB array with maximum performance and minimal overhead
-        """
         # Use pre-allocated _array_buffer if reuse_buffer enabled for memory optimization
         if reuse_buffer and self._array_buffer is not None:
             output_array = self._array_buffer
@@ -544,15 +458,6 @@ class NumpyRGBRenderer(BaseRenderer):
         optimize_for_rgb: bool = True,
         clear_cache: bool = True,
     ) -> None:
-        """
-        Update RGB renderer color scheme with validation, optimization, and cache management
-        for dynamic color configuration while maintaining performance characteristics.
-
-        Args:
-            color_scheme: New color scheme (string name or CustomColorScheme instance)
-            optimize_for_rgb: Whether to optimize color scheme for RGB_ARRAY mode
-            clear_cache: Whether to clear RGB array cache to force regeneration with new colors
-        """
         # Retrieve CustomColorScheme from ColorSchemeManager if string provided
         if isinstance(color_scheme, str):
             self.current_color_scheme = self.color_manager.get_scheme(color_scheme)
@@ -603,17 +508,6 @@ class NumpyRGBRenderer(BaseRenderer):
         reset_stats_after_retrieval: bool = False,
         include_memory_analysis: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Retrieve comprehensive RGB array generation statistics including timing analysis, cache performance,
-        memory usage, and optimization recommendations for performance monitoring.
-
-        Args:
-            reset_stats_after_retrieval: Whether to reset statistics after retrieval for fresh tracking
-            include_memory_analysis: Whether to include memory usage analysis with allocation patterns
-
-        Returns:
-            dict: Detailed generation statistics with performance metrics and optimization analysis
-        """
         # Compile timing statistics from generation_stats including average, min, max generation times
         stats = {
             "total_generations": self.generation_stats["total_generations"],
@@ -698,18 +592,6 @@ class NumpyRGBRenderer(BaseRenderer):
         num_iterations: int = 100,
         include_memory_profiling: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Performance benchmarking method for RGB array generation including timing analysis, memory profiling,
-        and optimization validation for performance tuning and validation.
-
-        Args:
-            test_context: RenderContext for consistent benchmarking conditions
-            num_iterations: Number of benchmark iterations for statistical analysis
-            include_memory_profiling: Whether to include memory profiling with allocation tracking
-
-        Returns:
-            dict: Comprehensive benchmark results with timing, memory, and performance analysis
-        """
         # Execute RGB array generation for num_iterations with precise timing measurement
         timing_results = []
 
@@ -816,18 +698,6 @@ class NumpyRGBRenderer(BaseRenderer):
         reference_context: RenderContext,
         strict_quality_check: bool = False,
     ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Quality validation method for RGB array output ensuring marker accuracy, color fidelity,
-        concentration field representation, and format compliance for quality assurance.
-
-        Args:
-            rgb_array: RGB array to validate for quality and format compliance
-            reference_context: RenderContext for expected marker positions and field validation
-            strict_quality_check: Whether to enable strict quality checks with pixel-level accuracy
-
-        Returns:
-            tuple: Tuple of (quality_passed: bool, quality_report: dict) with detailed analysis
-        """
         quality_report = {
             "format_compliance": {},
             "marker_accuracy": {},
@@ -981,7 +851,6 @@ class NumpyRGBRenderer(BaseRenderer):
                         f"Strict pixel accuracy {pixel_accuracy:.2%} below threshold"
                     )
 
-        # Generate comprehensive quality report with findings and improvement recommendations
         if quality_report["overall_quality"]:
             quality_report["recommendations"].append(
                 "RGB array meets quality standards"
@@ -1016,12 +885,6 @@ class NumpyRGBRenderer(BaseRenderer):
     def validate_context(
         self, context: RenderContext, strict_validation: bool = True
     ) -> bool:
-        """Lightweight validation optimized for high-frequency RGB rendering.
-
-        Skips expensive statistical checks; validates shapes and bounds and ensures
-        buffers are sized appropriately. Designed to minimize per-call overhead
-        during performance benchmarks.
-        """
         # Allow dynamic grid sizes: update internal grid and buffers if needed
         if context.grid_size != self.grid_size:
             self.grid_size = context.grid_size
@@ -1059,11 +922,6 @@ class NumpyRGBRenderer(BaseRenderer):
         return True
 
     def _render_human(self, context: RenderContext) -> None:
-        """
-        Human mode is not supported by the NumPy RGB renderer. Implemented to
-        satisfy the abstract interface; callers should use a matplotlib-based
-        renderer for HUMAN mode.
-        """
         raise ComponentError(
             "HUMAN mode not supported by NumpyRGBRenderer",
             component_name=self.__class__.__name__,
@@ -1081,20 +939,6 @@ def create_rgb_renderer(
     optimize_for_performance: bool = True,
     renderer_options: Optional[Dict[str, Any]] = None,
 ) -> NumpyRGBRenderer:
-    """
-    Factory function for creating optimized NumpyRGBRenderer instances with performance configuration,
-    color scheme integration, and validation for streamlined RGB array generation setup.
-
-    Args:
-        grid_size: Grid dimensions and memory feasibility using GridSize validation methods
-        color_scheme_name: Optional color scheme name with RGB array optimization
-        enable_caching: Whether to enable caching, vectorization, and memory optimization
-        optimize_for_performance: Whether to enable performance optimization configuration
-        renderer_options: Optional renderer options and performance configuration
-
-    Returns:
-        NumpyRGBRenderer: Configured RGB renderer instance ready for high-performance array generation
-    """
     # Validate grid_size dimensions - skip performance check if method doesn't exist (simplified types)
     if (
         hasattr(grid_size, "is_performance_feasible")
@@ -1144,20 +988,6 @@ def generate_rgb_array_fast(  # noqa: C901
     color_scheme: Optional[CustomColorScheme] = None,
     validate_inputs: bool = True,
 ) -> np.ndarray:
-    """
-    High-performance utility function for direct RGB array generation bypassing renderer overhead
-    with vectorized operations, optimized memory allocation, and minimal validation for performance-critical scenarios.
-
-    Args:
-        concentration_field: NumPy array with concentration values for grayscale conversion
-        agent_position: Coordinates for agent marker placement with boundary checking
-        source_position: Coordinates for source marker placement with cross pattern
-        color_scheme: Optional CustomColorScheme for agent and source marker colors
-        validate_inputs: Whether to perform input validation for safety vs performance trade-off
-
-    Returns:
-        numpy.ndarray: RGB array with shape (H,W,3) and dtype uint8 optimized for performance and memory efficiency
-    """
     # Validate concentration_field array format and data type if validate_inputs enabled
     if validate_inputs:
         if (
@@ -1239,20 +1069,6 @@ def validate_rgb_array_output(  # noqa: C901
     expected_source_position: Coordinates,
     strict_validation: bool = False,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """
-    Comprehensive validation function for RGB array output ensuring format compliance, color accuracy,
-    marker presence, and performance characteristics for quality assurance and debugging.
-
-    Args:
-        rgb_array: NumPy array to validate for format compliance and quality standards
-        expected_grid_size: GridSize for dimension validation and bounds checking
-        expected_agent_position: Coordinates for agent marker presence verification
-        expected_source_position: Coordinates for source marker cross pattern validation
-        strict_validation: Whether to enable strict pixel-level accuracy validation
-
-    Returns:
-        tuple: Tuple of (is_valid: bool, validation_report: dict) with comprehensive quality analysis and recommendations
-    """
     validation_report = {
         "format_validation": {},
         "marker_validation": {},
@@ -1368,18 +1184,6 @@ def clear_rgb_cache(
     clear_performance_stats: bool = True,
     force_gc: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Cache management utility function for clearing RGB array cache, performance statistics,
-    and memory optimization with garbage collection for testing and resource management scenarios.
-
-    Args:
-        clear_array_cache: Whether to clear RGB array cache from global _RGB_ARRAY_CACHE
-        clear_performance_stats: Whether to clear performance statistics from global _GENERATION_STATS
-        force_gc: Whether to force garbage collection for complete memory cleanup and optimization
-
-    Returns:
-        dict: Cache clearing report with memory freed, performance impact analysis, and cleanup statistics
-    """
     cleanup_report = {
         "cache_cleared": False,
         "stats_cleared": False,
@@ -1430,19 +1234,6 @@ def get_rgb_performance_stats(  # noqa: C901
     include_memory_usage: bool = True,
     include_optimization_suggestions: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Performance monitoring utility function retrieving comprehensive RGB renderer statistics including
-    generation timing, cache performance, memory usage analysis, and optimization recommendations
-    for performance tuning.
-
-    Args:
-        include_cache_analysis: Whether to include cache performance analysis with hit rates and efficiency
-        include_memory_usage: Whether to add memory usage analysis with allocation patterns and optimization
-        include_optimization_suggestions: Whether to generate optimization suggestions based on performance patterns
-
-    Returns:
-        dict: Comprehensive performance statistics with timing analysis, cache metrics, and optimization guidance
-    """
     performance_stats = {
         "global_statistics": {
             "total_renderers_created": len(_GENERATION_STATS),

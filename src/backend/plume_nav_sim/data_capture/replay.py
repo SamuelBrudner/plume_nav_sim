@@ -248,13 +248,6 @@ class ReplayEngine:
         validate: bool = False,
         start_step: int = 0,
     ) -> Iterator[_runner.StepEvent]:
-        """Yield StepEvents by replaying recorded actions through the environment.
-
-        Args:
-            render: Capture frames when the environment supports rgb_array rendering.
-            validate: Raise ReplayConsistencyError on reward/position mismatches.
-            start_step: Zero-based global step offset for seeking within the run.
-        """
         self._validate_start_step(start_step)
         if start_step >= self._total_steps:
             return  # type: ignore[return-value]

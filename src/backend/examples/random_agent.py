@@ -27,7 +27,7 @@ from plume_nav_sim.core.constants import (  # Default maximum episode steps for 
 
 # Internal imports from plume_nav_sim package
 from plume_nav_sim.registration.register import (  # Environment registration function enabling gym.make() instantiation for random agent demonstration
-    COMPONENT_ENV_ID,
+    ENV_ID,
     register_env,
 )
 from plume_nav_sim.utils.exceptions import (  # Base exception handling for comprehensive error management in random agent execution
@@ -1418,8 +1418,8 @@ def benchmark_random_agent(
 
     try:
         # Register DI environment id for benchmarking (legacy remains supported)
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-        env = gym.make(COMPONENT_ENV_ID, render_mode="rgb_array")
+        register_env(env_id=ENV_ID, force_reregister=True)
+        env = gym.make(ENV_ID, render_mode="rgb_array")
 
         # Execute baseline performance testing with standard configuration and statistical analysis
         _logger.info("Executing baseline performance testing")
@@ -1710,14 +1710,14 @@ def run_random_agent_demo(demo_config: dict = None) -> int:
     try:
         # Register environment using register_env() with error handling and validation
         _logger.info("Registering plume navigation environment (DI)")
-        register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
+        register_env(env_id=ENV_ID, force_reregister=True)
 
         # Create environment instance using gym.make() with render mode and configuration
         render_mode = (
             "human" if demo_config.get("render_episodes", False) else "rgb_array"
         )
         _logger.info(f"Creating environment with render mode: {render_mode}")
-        env = gym.make(COMPONENT_ENV_ID, render_mode=render_mode)
+        env = gym.make(ENV_ID, render_mode=render_mode)
 
         # Execute random agent analysis using run_random_agent_analysis() with comprehensive tracking
         _logger.info("Executing random agent analysis")

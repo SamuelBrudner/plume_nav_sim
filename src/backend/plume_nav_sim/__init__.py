@@ -5,7 +5,6 @@ from __future__ import annotations
 import warnings
 from typing import Dict, Optional
 
-from typing_extensions import NotRequired, TypedDict
 
 from .core import (
     DEFAULT_GOAL_RADIUS,
@@ -69,27 +68,6 @@ def initialize_package(  # noqa: C901
     auto_register_environment: bool = True,
     validate_constants: bool = False,
 ) -> Dict[str, object]:
-    """Initialize core plume_nav_sim subsystems and return status information.
-
-    This compatibility helper keeps the legacy package-level bootstrap routine
-    available while delegating to the modern module structure.  It conditionally
-    configures logging, registers the Gymnasium environment, and can validate the
-    exported constants without raising hard failures when optional dependencies
-    are absent.
-
-    Args:
-        configure_logging: Configure the development logging profile using the
-            :mod:`plume_nav_sim.utils.logging` helpers.
-        auto_register_environment: Register the default environment with
-            Gymnasium if the dependency is available.
-        validate_constants: Run the lightweight constant consistency validation
-            utility from :mod:`plume_nav_sim.core.constants`.
-
-    Returns:
-        A dictionary containing initialization metadata, success flags, and any
-        captured errors for optional steps.
-    """
-
     status: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
         "package_version": PACKAGE_VERSION,
@@ -108,7 +86,7 @@ def initialize_package(  # noqa: C901
             configure_logging_for_development()
             status["logging_configured"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "configure_logging", exc)
+            _record_init_error(status, "configure_logging", exc)
     if auto_register_environment:
         try:
             from plume_nav_sim.registration import ensure_registered
@@ -116,7 +94,7 @@ def initialize_package(  # noqa: C901
             ensure_registered()
             status["environment_registered"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "register_environment", exc)
+            _record_init_error(status, "register_environment", exc)
     if validate_constants:
         try:
             from plume_nav_sim.core.constants import validate_constant_consistency
@@ -125,16 +103,15 @@ def initialize_package(  # noqa: C901
             status["constants_validated"] = bool(is_valid)
             status["constant_validation_report"] = report
         except Exception as exc:  # pragma: no cover - defensive guard
-            _extracted_from_initialize_package_47(status, "validate_constants", exc)
+            _record_init_error(status, "validate_constants", exc)
     return status
 
 
-# TODO Rename this here and in `initialize_package`
-def _extracted_from_initialize_package_47(status, arg1, exc):
+def _record_init_error(status, step, exc):
     # errors is a List[dict[str, str]] but stored in a heterogeneous mapping
     errors = status.get("errors")
     if isinstance(errors, list):
-        errors.append({"step": arg1, "error": str(exc)})
+        errors.append({"step": step, "error": str(exc)})
     status["initialized"] = False
 
 
@@ -145,7 +122,7 @@ def get_package_info(
     include_performance_targets: bool = True,
     include_registration_status: bool = False,
 ) -> Dict[str, object]:
-    """Return high-level package metadata for tooling and legacy scripts."""
+    """Return package metadata for tooling."""
 
     info: Dict[str, object] = {
         "package_name": PACKAGE_NAME,
@@ -170,15 +147,7 @@ def get_package_info(
 
     if include_environment_info:
 
-        class EnvironmentDetails(TypedDict, total=False):
-            available: list[str]
-            factory: NotRequired[str]
-            module: NotRequired[str]
-            error: NotRequired[str]
-
-        environment_details: EnvironmentDetails = {
-            "available": [],
-        }
+        environment_details: Dict[str, object] = {"available": []}
 
         if PlumeEnv is not None:
             environment_details["available"].append("PlumeEnv")
@@ -203,37 +172,6 @@ def get_package_info(
 
 
 def make_env(**kwargs):
-    """Create a plume navigation environment with optional customization.
-
-    This is the recommended way to create environments. It provides a simple,
-    consistent interface while hiding implementation details.
-
-    Args:
-        **kwargs: PlumeEnv configuration parameters:
-            - grid_size: tuple[int, int] = (128, 128)
-            - source_location: tuple[int, int] = grid center
-            - max_steps: int = 1000
-            - goal_radius: float = 5.0
-            - plume_params: dict = {"sigma": 20.0}
-            - plume_type: str = 'gaussian'  # or 'video'
-            - render_mode: str = None  # or 'human', 'rgb_array'
-        Legacy kwargs (action_type, movie_*, etc.) fall back to PlumeSearchEnv with
-        a deprecation warning.
-
-    Returns:
-        PlumeEnv: Configured environment ready to use
-
-    Examples:
-        >>> # Simple - use defaults
-        >>> env = make_env()
-
-        >>> # Custom grid and parameters
-        >>> env = make_env(
-        ...     grid_size=(256, 256),
-        ...     max_steps=2000,
-        ...     goal_radius=10.0
-        ... )
-    """
     legacy_keys = {
         "action_type",
         "observation_type",
@@ -271,12 +209,6 @@ def make_env(**kwargs):
 
 
 def get_conf_dir():
-    """Return the repository "conf" directory for Hydra configs if available.
-
-    This resolves the path relative to the installed package when running from
-    source. For installed distributions without a source tree, callers should
-    prefer hydra.initialize_config_module with a packaged config module.
-    """
     try:
         from pathlib import Path
 

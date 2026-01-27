@@ -11,14 +11,6 @@ from .schemas import EpisodeRecord, Position, RunMeta, StepRecord
 
 
 class DataCaptureWrapper(gym.Wrapper):
-    """Gymnasium wrapper that records step/episode data using RunRecorder.
-
-    Usage:
-        env = make_env(...)
-        recorder = RunRecorder("results")
-        wrapped = DataCaptureWrapper(env, recorder, env_config)
-    """
-
     def __init__(
         self,
         env: gym.Env,
@@ -117,9 +109,4 @@ class DataCaptureWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
     def render(self, *args, **kwargs):
-        """Passthrough to underlying env.render to preserve frames.
-
-        Ensures that calls like env.render() or env.render("rgb_array")
-        return the ndarray produced by the wrapped environment.
-        """
         return self.env.render(*args, **kwargs)

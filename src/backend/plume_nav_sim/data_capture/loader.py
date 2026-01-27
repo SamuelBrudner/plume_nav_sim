@@ -27,15 +27,6 @@ class ReplayArtifacts:
 def load_replay_artifacts(
     run_dir: str | Path, *, prefer_parquet: bool = True
 ) -> ReplayArtifacts:
-    """Load replay artifacts (run.json + steps/episodes) with schema checks.
-
-    Supports:
-    - JSONL (.jsonl.gz with optional .partNNNN.jsonl.gz segments)
-    - Parquet (flattened columns produced by RunRecorder.finalize)
-
-    Preference is given to Parquet when present and readable; otherwise the
-    loader falls back to JSONL.
-    """
     run_path = Path(run_dir)
     if not run_path.exists() or not run_path.is_dir():
         raise ReplayLoadError(f"Run directory not found: {run_path}")
@@ -94,7 +85,7 @@ def _maybe_load_parquet(
         return None
 
     try:
-        import pandas as pd  # type: ignore
+        import pandas as pd
     except Exception:
         return None
 

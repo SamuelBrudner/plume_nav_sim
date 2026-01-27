@@ -1,24 +1,3 @@
-"""Zarr chunking and compression policy.
-
-Contract summary (bead plume_nav_sim-197):
-- Chunking: CHUNKS_TYX = (8, 64, 64) for time, Y, X layouts
-- Compressor: Blosc with Zstandard (zstd) at clevel=5 when available
-- Fallback: If zstd isn't available in the runtime's numcodecs/blosc build,
-  fall back to Blosc with LZ4, emitting a warning, while keeping the same API
-  surface and recording the chosen compressor in Zarr attrs.
-
-Rationale (abridged):
-- Small temporal chunks (T=8) keep write amplification and partial reads low
-  for short clips while enabling bounded buffering.
-- Spatial chunks (64x64) align well with common cache lines and typical image
-  operations while keeping per-chunk memory modest for CI.
-- Zstd generally yields good compression ratios with solid speed; clevel=5
-  balances CPU cost with CI throughput. LZ4 is the compatibility fallback.
-  Note: Zstd availability depends on the c-blosc build bundled with
-  numcodecs; many environments provide only LZ4. If you require Zstd, ensure
-  your numcodecs/c-blosc installation includes Zstd support for your platform.
-"""
-
 from __future__ import annotations
 
 import os
@@ -53,13 +32,8 @@ class CompressorInfo:
 
 
 def _probe_blosc_support(cname: str, clevel: int, shuffle: int) -> bool:
-    """Return True if a working blosc compressor with `cname` can encode bytes.
-
-    We avoid importing numcodecs at module import time to keep the import graph
-    light; this function is only called within creators.
-    """
     try:
-        from numcodecs import blosc as _blosc  # type: ignore
+        from numcodecs import blosc as _blosc
 
         comp = _blosc.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
         # Encode a tiny payload to verify the codec is actually usable.
@@ -74,17 +48,8 @@ def create_blosc_compressor(
     clevel: int = DEFAULT_BLOSC_CLEVEL,
     shuffle: int = DEFAULT_BLOSC_SHUFFLE,
 ):
-    """Create a numcodecs Blosc compressor honoring policy and fallbacks.
-
-    Attempts to create a compressor for `preferred` (default: "zstd"). If that
-    compressor cannot be used in the current environment, falls back to "lz4"
-    with a warning, preserving the same interface.
-
-    Returns the numcodecs compressor instance. Raises ImportError if numcodecs
-    is not available.
-    """
     try:
-        from numcodecs import blosc as _blosc  # type: ignore
+        from numcodecs import blosc as _blosc
     except Exception as e:  # pragma: no cover - exercised in environments w/o numcodecs
         raise ImportError(
             "numcodecs is required for Zarr compression. Install with 'pip install numcodecs zarr'."
@@ -139,16 +104,8 @@ def create_zarr_array(
     overwrite: bool = False,
     extra_attrs: Optional[dict] = None,
 ):
-    """Create (or require) a Zarr array following the default policy.
-
-    - Uses CHUNKS_TYX unless overridden
-    - Uses Blosc Zstd clevel=5 when available, otherwise lz4
-    - Records the chosen compressor metadata in attrs
-
-    Returns the created or existing Zarr array.
-    """
     try:
-        import zarr as _zarr  # type: ignore
+        import zarr as _zarr
     except Exception as e:  # pragma: no cover - exercised in environments w/o zarr
         raise ImportError(
             "zarr is required to create Zarr arrays. Install with 'pip install zarr numcodecs'."

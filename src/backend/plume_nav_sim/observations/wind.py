@@ -1,12 +1,3 @@
-"""
-WindVectorSensor: mechanosensory wind velocity observer.
-
-Contract: src/backend/contracts/observation_model_interface.md
-
-This sensor samples the local wind vector (vx, vy) at the agent's position
-and optionally adds Gaussian noise to mimic mechanosensory variability.
-"""
-
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -21,20 +12,6 @@ except ImportError:  # pragma: no cover
 
 
 class WindVectorSensor:
-    """Wind velocity sensor returning a 2D vector.
-
-    Observation Space:
-        Box(low=-inf, high=inf, shape=(2,), dtype=float32)
-
-    Required env_state Keys:
-        - 'agent_state': AgentState with position
-        - Optional 'wind_field': VectorField implementing sample()
-
-    Noise Model:
-        Adds zero-mean Gaussian noise with configurable standard deviation
-        to each vector component when noise_std > 0.
-    """
-
     def __init__(self, noise_std: float = 0.0):
         self.noise_std = float(noise_std)
         self._observation_space = gym.spaces.Box(

@@ -1,13 +1,4 @@
-"""Video plume dataset schema and validation utilities.
-
-This package defines the contract for movie/video-based plume datasets used by
-downstream tooling (ingest, loader, tests, and Hydra integration).
-
-Exports a small set of constants and a Pydantic model describing required
-dataset attributes, along with helper validation functions.
-"""
-
-from .schema import (  # noqa: F401
+from .schema import (
     ALLOWED_SOURCE_DTYPES,
     DIMS_TYX,
     SCHEMA_VERSION,

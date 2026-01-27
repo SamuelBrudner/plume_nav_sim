@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 import numpy
 
 try:
-    import gymnasium.utils.seeding  # type: ignore[import-not-found]
+    import gymnasium.utils.seeding
 except Exception:  # pragma: no cover - minimal stub for trimmed environments
     import sys
     import types
@@ -1037,7 +1037,6 @@ class SeedManager:
         num_tests: int = 10,
         tolerance: float = _REPRODUCIBILITY_TOLERANCE,
     ) -> Dict[str, Any]:  # noqa: C901
-        """Validate reproducibility of seeded generators through comprehensive testing, statistical analysis, and tolerance-based comparison for scientific research requirements."""
         try:
             is_valid, validated_seed, error_message = validate_seed(test_seed)
             if not is_valid:
@@ -1317,8 +1316,6 @@ class SeedManager:
 
 
 class ReproducibilityTracker:
-    """Specialized reproducibility tracking and validation class for scientific research with comprehensive episode comparison, statistical analysis, failure diagnostics, and research-grade reporting capabilities."""
-
     def __init__(
         self,
         tolerance: float = _REPRODUCIBILITY_TOLERANCE,
@@ -1695,7 +1692,6 @@ class ReproducibilityTracker:
         include_detailed_analysis: bool = True,
         custom_sections: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:  # noqa: C901
-        """Generate comprehensive reproducibility report for scientific documentation including statistical summaries, success rates, and detailed analysis."""
         try:
             report_timestamp = time.time()
 

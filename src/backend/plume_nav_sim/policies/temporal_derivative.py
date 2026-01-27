@@ -13,20 +13,6 @@ from ._concentration_extractor import extract_concentration
 
 @dataclass
 class TemporalDerivativePolicy(Policy):
-    """Stochastic temporal-gradient policy for oriented control.
-
-    - Maintains 1-back concentration measured only after FORWARD steps
-    - Surges FORWARD on non-decreasing concentration (dC >= eps)
-    - Otherwise casts by turning; enforces a FORWARD probe right after any TURN
-    - Adds epsilon-greedy exploration for RL preparation
-
-    Observation handling:
-    - Expects a scalar concentration value; will raise a descriptive error if
-      given multi-sensor arrays unless ``sensor_index`` is provided.
-    - For dict/tuple observations, use ``concentration_key``/``modality_index`` to
-      locate the concentration modality.
-    """
-
     eps: float = 0.05  # exploration rate
     eps_after_turn: float = (
         0.0  # exploration right after turn (default off to avoid spin)
@@ -113,10 +99,6 @@ class TemporalDerivativePolicy(Policy):
 
     # --------------------------------------------------------------------
     def _sample_explore(self, *, after_turn: bool = False) -> int:
-        """Sample an exploratory action.
-
-        If after_turn is True, prefer FORWARD to quickly probe the new heading.
-        """
         if after_turn:
             # Mostly prefer forward; allow a tiny chance to turn to keep stochasticity
             if self._rng.random() < max(0.8, 1.0 - self.eps):

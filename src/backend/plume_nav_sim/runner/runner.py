@@ -26,19 +26,6 @@ class _PolicyLike(Protocol):  # minimal protocol to support tests
 
 @dataclass
 class StepEvent:
-    """Per-step event emitted by the runner stream.
-
-    Attributes:
-        t: Zero-based step index within the episode
-        obs: Observation before taking the action (policy input; array/dict/tuple)
-        action: Action applied to the environment
-        reward: Scalar reward returned by the step
-        terminated: True if episode terminated
-        truncated: True if episode truncated (time or other limit)
-        info: Info dict returned by env.step
-        frame: Optional RGB ndarray when render=True and env supports rgb_array
-    """
-
     t: int
     obs: ObservationType
     action: ActionType
@@ -51,17 +38,6 @@ class StepEvent:
 
 @dataclass
 class EpisodeResult:
-    """Summary result of a completed episode run.
-
-    Attributes:
-        seed: Seed used to reset env/policy for this run
-        steps: Number of steps executed
-        total_reward: Sum of rewards across steps
-        terminated: True if episode terminated
-        truncated: True if episode truncated (time or other limit)
-        metrics: Optional metrics dictionary (reserved for future use)
-    """
-
     seed: Optional[int]
     steps: int
     total_reward: float
@@ -119,10 +95,6 @@ def _select_action(
 
 
 def _ensure_action_space_compat(env: Any, policy: Any) -> None:
-    """Validate that policy and env action spaces are compatible.
-
-    Currently supports Discrete spaces; raises ValueError on mismatch.
-    """
     env_space = getattr(env, "action_space", None)
     pol_space = getattr(policy, "action_space", None)
     if env_space is None or pol_space is None:
@@ -134,11 +106,6 @@ def _ensure_action_space_compat(env: Any, policy: Any) -> None:
 
 
 def _render_with_fallback(env: Any) -> tuple[Optional[np.ndarray], bool, bool]:
-    """Attempt to render a frame, trying modern and legacy signatures.
-
-    Returns (frame, fallback_success, fallback_failure) where fallback flags
-    indicate whether the legacy path was attempted and succeeded/failed.
-    """
     frame = None
     fallback_success = False
     fallback_failure = False
@@ -275,13 +242,6 @@ def run_episode(
     render: bool = False,
     policy_obs_adapter: Optional[PolicyObsAdapter] = None,
 ) -> EpisodeResult:
-    """Run a single episode and return summary result.
-
-    Deterministic when given the same (seed, env, policy) triplet. Supports
-    arbitrary observation structures (np.ndarray, dict, tuple) and allows
-    optional adaptation of observations before forwarding them to the policy
-    via ``policy_obs_adapter`` while keeping StepEvent.obs unchanged.
-    """
     # Reset env and policy deterministically when seed provided
     obs = _reset_env_and_policy(env, policy, seed=seed)
     _ensure_action_space_compat(env, policy)
@@ -350,12 +310,6 @@ def stream(
     on_step: Optional[Callable[[StepEvent], None]] = None,
     policy_obs_adapter: Optional[PolicyObsAdapter] = None,
 ) -> Iterator[StepEvent]:
-    """Yield one StepEvent per env.step() until termination.
-
-    If seed is provided, resets env and policy deterministically. Observations
-    are passed through untouched in emitted StepEvents but can be adapted before
-    hitting the policy via ``policy_obs_adapter`` to support Dict/Tuple spaces.
-    """
     obs = _reset_env_and_policy(env, policy, seed=seed)
     _ensure_action_space_compat(env, policy)
 
@@ -384,12 +338,6 @@ def stream(
 
 
 class Runner:
-    """Thin OO wrapper over runner functions with upfront validation.
-
-    Validates policy/env action-space subset on construction and exposes
-    `stream` and `run_episode` bound to the provided env and policy.
-    """
-
     def __init__(
         self,
         env: Any,

@@ -1,21 +1,14 @@
-"""Logging utilities for the :mod:`plume_nav_sim` package.
-
-Provides component-specific logger factories, performance monitoring helpers, and
-development-focused configuration that integrates with (but does not require)
-the optional ``plume_nav_sim.logging`` package.
-"""
-
 from __future__ import annotations
 
-import functools  # >=3.10
-import inspect  # >=3.10
-import logging  # >=3.10
-import threading  # >=3.10
-import time  # >=3.10
-import weakref  # >=3.10
+import functools
+import inspect
+import logging
+import threading
+import time
+import weakref
 from contextlib import suppress
 from types import TracebackType
-from typing import (  # >=3.10
+from typing import (
     Any,
     Callable,
     Dict,
@@ -37,7 +30,6 @@ from ..constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 
-# Internal imports for exception handling and error logging integration
 from .exceptions import PlumeNavSimError, ValidationError, handle_component_error
 
 # Avoid noisy '--- Logging error ---' prints on handler failures during tests
@@ -108,7 +100,6 @@ except ImportError:  # pragma: no cover - fallback for optional logging package
             return f"{operation_name}: {duration_ms:.3f}ms"
 
 
-# Global state for logger caching and thread-safe operations
 _logger_cache: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _performance_baselines: Dict[str, Dict[str, Any]] = {}
 _logging_initialized: bool = False
@@ -141,16 +132,10 @@ __all__ = [
 
 
 # ------------------------------
-# Internal helper functions
 # ------------------------------
 
 
 def _normalized_module_component_name(component_name: str) -> Optional[str]:
-    """Return first segment after package prefix for module-like names.
-
-    Example: 'plume_nav_sim.utils.validation' -> 'utils'. Returns None if the
-    name does not start with the package prefix.
-    """
     pkg_prefix = f"{PACKAGE_NAME}."
     if component_name.startswith(pkg_prefix):
         remainder = component_name[len(pkg_prefix) :]
@@ -244,10 +229,6 @@ def _build_file_config(enable_file_logging: bool, log_directory: str) -> Dict[st
 
 
 def _init_component_logger_for_name(component_name: str, log_level: str) -> bool:
-    """Initialize a component logger for a single component name.
-
-    Returns True on success, False on failure without raising.
-    """
     try:
         name_l = component_name.lower()
         if "environment" in name_l:
@@ -318,10 +299,6 @@ def _performance_thresholds(
 def _validate_performance_inputs(
     operation_name: Any, duration_ms: Any
 ) -> tuple[str, float]:
-    """Validate performance logging inputs and return normalized values.
-
-    Raises ValidationError when inputs are invalid.
-    """
     if not operation_name or not isinstance(operation_name, str):
         raise ValidationError(
             f"operation_name must be non-empty string, got {operation_name}"
@@ -352,10 +329,6 @@ def _baseline_comparison_info(
 
 
 def _select_log_level(threshold_ratio: float) -> Optional[int]:
-    """Map threshold ratio to log level, with throttling for near-threshold warnings.
-
-    Returns None when message should be throttled (i.e., not logged).
-    """
     if threshold_ratio <= 1.0:
         return logging.DEBUG
     if threshold_ratio <= 2.0:
@@ -528,37 +501,6 @@ def get_component_logger(
     *,
     core_component_id: Optional[str] = None,
 ) -> Any:
-    """
-    Factory function for creating or retrieving loggers for plume_nav_sim code.
-
-    The first parameter (``component_name``) is a free-form logger name and may be any
-    string, including dotted module paths (e.g., ``__name__``). This value is used to
-    construct the underlying logger name and cache key.
-
-    For core, stable components that participate in package-level logging configuration,
-    callers may optionally pass ``core_component_id``. When provided, it is validated
-    against ``plume_nav_sim.core.constants.COMPONENT_NAMES``. Scripts, benchmarks, and
-    ad-hoc tools should omit this parameter and are not validated or warned on.
-
-    Minimal normalization is applied only for module-like names that start with the
-    package prefix (``PACKAGE_NAME + '.'``) to support ``__name__`` usage. No other
-    heuristics (e.g., CamelCase, instance IDs) are applied.
-
-    Args:
-        component_name: Free-form logger name used to create and identify the logger.
-        component_type: ComponentType for specialized configuration (defaults to UTILS).
-        logger_level: Optional logging level override.
-        enable_performance_tracking: Enable performance timing and monitoring.
-        core_component_id: Optional core component identifier; if provided, must be one of
-            ``COMPONENT_NAMES`` and is validated. Omit for ad-hoc/script loggers.
-
-    Returns:
-        ComponentLogger configured with appropriate settings and performance options.
-
-    Raises:
-        ValidationError: If ``component_type`` is incorrect or ``core_component_id`` is invalid.
-        PlumeNavSimError: If logger creation or configuration fails.
-    """
     try:
         if not isinstance(component_type, ComponentType):
             raise ValidationError(
@@ -617,22 +559,6 @@ def configure_logging_for_development(
     log_directory: str = "./logs",
     log_file_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Configures development-optimized logging for plume_nav_sim with enhanced debugging information,
-    performance monitoring, and interactive development features.
-
-    Args:
-        log_level: Logging level for development (DEBUG, INFO, WARNING, ERROR)
-        enable_console_colors: Enable ANSI color output for console logging
-        enable_file_logging: Enable file-based logging output
-        log_directory: Directory path for log files when file logging enabled
-
-    Returns:
-        Development logging configuration status and settings information
-
-    Raises:
-        PlumeNavSimError: If logging configuration fails or parameters are invalid
-    """
     global _logging_initialized
 
     try:
@@ -705,21 +631,6 @@ def log_performance(
     *,
     target_ms: Optional[float] = None,
 ) -> None:
-    """
-    Utility function for logging performance measurements with timing analysis, threshold
-    comparison, and baseline tracking for development performance monitoring.
-
-    Args:
-        logger: Logger instance for output (should be ComponentLogger or compatible)
-        operation_name: Name of the operation being measured
-        duration_ms: Duration of the operation in milliseconds
-        additional_metrics: Optional additional metrics (memory usage, operation count, etc.)
-        compare_to_baseline: Whether to compare against stored baseline measurements
-
-    Raises:
-        ValidationError: If parameters are invalid
-        PlumeNavSimError: If performance logging fails
-    """
     try:
         base_logger = _resolve_base_logger(logger)
 
@@ -793,13 +704,6 @@ def monitor_performance(
     performance_threshold_ms: Optional[float] = None,
     compare_to_baseline: bool = False,
 ) -> Any:
-    """Decorator to measure execution time and log performance metrics.
-
-    Supports optional performance thresholds and baseline comparisons. Can be used
-    without parentheses (``@monitor_performance``) or with parameters such as
-    ``@monitor_performance('operation', 10.0, True)``.
-    """
-
     if callable(operation_name):  # Decorator used without parentheses
         func = operation_name  # type: ignore[assignment]
         return monitor_performance()(func)  # type: ignore[misc]
@@ -848,20 +752,6 @@ def log_with_context(
     extra_context: Optional[Dict[str, Any]] = None,
     include_stack_info: bool = False,
 ) -> None:
-    """
-    Enhanced logging function that automatically captures caller context, component information,
-    and runtime details for comprehensive development debugging.
-
-    Args:
-        logger: Logger instance for output
-        level: Logging level as string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        message: Log message content
-        extra_context: Additional context information to include
-        include_stack_info: Whether to include stack trace information
-
-    Raises:
-        ValidationError: If parameters are invalid
-    """
     try:
         # Validate logger instance and convert level string to logging level constant
         if not isinstance(logger, logging.Logger):
@@ -907,7 +797,6 @@ def log_with_context(
         stack_info = include_stack_info and log_level >= logging.WARNING
 
         # Create enhanced LogRecord with context information in extra fields
-        # Log message using specified level with comprehensive context information
         logger.log(log_level, message, extra=context, stack_info=stack_info)
 
     except Exception as e:
@@ -930,22 +819,6 @@ def create_performance_logger(
     component_name: Optional[str] = None,
     enable_automatic_logging: bool = False,
 ) -> "ComponentLogger":
-    """
-    Creates specialized logger instance optimized for performance monitoring with timing
-    measurement capabilities, baseline tracking, and threshold alerting.
-
-    Args:
-        logger_name: Name for the performance logger
-        timing_thresholds: Dictionary of operation names to threshold values (ms)
-        enable_memory_tracking: Enable memory usage tracking in performance logs
-        baseline_file: Optional file path to load/save performance baselines
-
-    Returns:
-        Performance-optimized logger with specialized formatting and monitoring capabilities
-
-    Raises:
-        PlumeNavSimError: If logger creation fails
-    """
     try:
         name = _resolve_perf_logger_name(component_name, logger_name)
         base_logger = get_logger(
@@ -989,19 +862,6 @@ def setup_error_logging(
     exception_types_to_log: List[Type[Exception]] = None,
     **kwargs: Any,
 ) -> None:
-    """
-    Configures automatic error logging integration with exception handling system, providing
-    seamless error context capture and recovery logging for development debugging.
-
-    Args:
-        logger: Logger instance to configure for error handling integration
-        enable_auto_recovery_logging: Enable automatic logging of recovery actions
-        exception_types_to_log: List of exception types to automatically log
-
-    Raises:
-        ValidationError: If parameters are invalid
-        PlumeNavSimError: If error logging setup fails
-    """
     try:
         if logger is None:
             logger = _resolve_logger_from_kwargs(kwargs)
@@ -1038,18 +898,6 @@ def setup_error_logging(
 def get_caller_info(
     stack_depth: int = 1, include_locals: bool = False
 ) -> Dict[str, Any]:
-    """
-    Utility function that uses stack inspection to automatically extract caller information
-    including function name, line number, and file path for context-aware logging.
-
-    Args:
-        stack_depth: How many levels up the stack to inspect (1 = immediate caller)
-        include_locals: Whether to include local variable information (filtered for security)
-
-    Returns:
-        Dictionary containing caller information including function, file, line,
-        and optional local variables
-    """
     try:
         # Use inspect.stack() to get call stack information at specified depth
         stack = inspect.stack()
@@ -1107,17 +955,6 @@ def get_caller_info(
 def clear_logger_cache(
     force_cleanup: bool = False, component_filter: Optional[str] = None
 ) -> int:
-    """
-    Utility function for clearing cached logger instances with proper cleanup and resource
-    management, useful for testing and development reconfiguration.
-
-    Args:
-        force_cleanup: Whether to force cleanup of logger handlers and resources
-        component_filter: Optional filter to only clear loggers for specific component
-
-    Returns:
-        Number of cached loggers cleared from cache
-    """
     cleared_count = 0
 
     try:
@@ -1167,34 +1004,12 @@ def clear_logger_cache(
 
 
 class ComponentLogger:
-    """
-    Enhanced logger class specifically designed for plume_nav_sim components with automatic
-    performance tracking, context capture, security filtering, and component-specific
-    configuration management.
-
-    This class provides enhanced logging capabilities including:
-    - Automatic caller context capture
-    - Performance timing and monitoring
-    - Component-specific configuration
-    - Security-aware information filtering
-    - Integration with error handling system
-    """
-
     def __init__(
         self,
         component_name: str,
         component_type: ComponentType,
         base_logger: logging.Logger,
     ) -> None:
-        """
-        Initialize ComponentLogger with component identification, base logger configuration,
-        and component-specific features for enhanced debugging and monitoring.
-
-        Args:
-            component_name: Name of the component this logger serves
-            component_type: ComponentType enum for specialized configuration
-            base_logger: Underlying Python logger instance
-        """
         # Store component_name and component_type for component identification
         self.component_name = component_name
         self.component_type = component_type
@@ -1243,13 +1058,6 @@ class ComponentLogger:
         return self.base_logger.handlers
 
     def debug(self, message: str, *args: Any, **kwargs: Any) -> None:
-        """Debug with standard logging semantics plus component context.
-
-        Accepts positional *args for %-style formatting and an optional ``extra``
-        dict in **kwargs, matching ``logging.Logger``. The extra context is
-        merged into the component metadata and caller info before being passed to
-        the underlying logger.
-        """
         extra = kwargs.pop("extra", None)
         context = self._extracted_from_warning_11(extra)
 
@@ -1260,14 +1068,8 @@ class ComponentLogger:
         self.base_logger.debug(formatted_message, *args, extra=context, **kwargs)
 
     def info(self, message: str, *args: Any, **kwargs: Any) -> None:
-        """Info with component context and optional extra mapping.
-
-        Behaves like ``logging.Logger.info`` for positional *args while merging any
-        ``extra`` mapping from **kwargs into the component context.
-        """
         extra = kwargs.pop("extra", None)
 
-        # Merge extra parameters with component_context for comprehensive logging
         context = {**self.component_context}
         if isinstance(extra, dict):
             context.update(extra)
@@ -1295,13 +1097,6 @@ class ComponentLogger:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        """
-        Enhanced warning logging with automatic error context capture and recovery
-        suggestion logging for non-critical issues requiring attention.
-
-        Args:
-            message: Warning message to log
-        """
         recovery_suggestion = kwargs.pop("recovery_suggestion", None)
         extra = kwargs.pop("extra", None)
 
@@ -1337,18 +1132,10 @@ class ComponentLogger:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        """
-        Enhanced error logging with full context capture, stack trace information,
-        and automatic integration with error handling system for critical issue tracking.
-
-        Args:
-            message: Error message to log
-        """
         exception = kwargs.pop("exception", None)
         extra = kwargs.pop("extra", None)
         include_stack_trace = kwargs.pop("include_stack_trace", True)
 
-        # Capture comprehensive error context including system state and component status
         caller_info = get_caller_info(stack_depth=2, include_locals=True)
         context = {
             **self.component_context,
@@ -1388,7 +1175,6 @@ class ComponentLogger:
         # Format error message with maximum debugging context
         formatted_message = f"[{self.component_name}] ERROR: {message}"
 
-        # Log error with critical level formatting and comprehensive information
         self.base_logger.error(
             formatted_message,
             *args,
@@ -1404,16 +1190,6 @@ class ComponentLogger:
         metrics: Optional[Dict[str, Any]] = None,
         update_baseline: bool = True,
     ) -> None:
-        """
-        Specialized performance logging with timing analysis, baseline comparison,
-        and threshold monitoring for component performance tracking and optimization.
-
-        Args:
-            operation_name: Name of the operation that was measured
-            duration_ms: Duration of the operation in milliseconds
-            metrics: Additional performance metrics (memory, operation count, etc.)
-            update_baseline: Whether to update baseline performance measurements
-        """
         if not self.performance_tracking_enabled:
             return
 
@@ -1487,19 +1263,6 @@ class ComponentLogger:
         raise_on_timeout: bool = False,
         timeout_ms: Optional[float] = None,
     ) -> "PerformanceTimer":
-        """
-        Context manager and decorator for automatic operation timing with performance
-        logging integration for seamless performance monitoring.
-
-        Args:
-            operation_name: Name of the operation being timed
-            log_result: Whether to automatically log the result when timing completes
-            raise_on_timeout: Whether to raise exception if timeout is exceeded
-            timeout_ms: Optional timeout threshold in milliseconds
-
-        Returns:
-            PerformanceTimer context manager for automatic timing and performance logging
-        """
         # Create PerformanceTimer instance with operation_name and configuration
         timer = PerformanceTimer(
             operation_name=operation_name, logger=self, auto_log=log_result
@@ -1523,18 +1286,6 @@ class ComponentLogger:
         baseline_duration_ms: float,
         baseline_metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """
-        Sets or updates performance baseline for specific operation to enable performance
-        regression detection and trend analysis.
-
-        Args:
-            operation_name: Name of the operation to set baseline for
-            baseline_duration_ms: Baseline duration in milliseconds
-            baseline_metadata: Optional metadata about the baseline measurement
-
-        Returns:
-            True if baseline set successfully, False otherwise
-        """
         try:
             # Validate operation_name and baseline_duration_ms parameters
             if not operation_name or not isinstance(operation_name, str):
@@ -1573,39 +1324,12 @@ class ComponentLogger:
 
 
 class PerformanceTimer:
-    """
-    Context manager and utility class for precise timing measurements with automatic
-    performance logging, threshold monitoring, and integration with ComponentLogger
-    for seamless performance tracking.
-
-    Usage:
-        # As context manager
-        with PerformanceTimer("operation", logger) as timer:
-            # perform operation
-            timer.add_metric("memory_mb", 128.5)
-
-        # Manual timing
-        timer = PerformanceTimer("operation", logger, auto_log=False)
-        timer.__enter__()
-        # perform operation
-        timer.__exit__(None, None, None)
-    """
-
     def __init__(
         self,
         operation_name: str = "operation",
         logger: Optional[ComponentLogger] = None,
         auto_log: bool = True,
     ) -> None:
-        """
-        Initialize PerformanceTimer with operation identification, optional logger integration,
-        and automatic logging configuration for timing measurements.
-
-        Args:
-            operation_name: Name of the operation being timed
-            logger: Optional ComponentLogger instance for automatic logging
-            auto_log: Whether to automatically log performance results
-        """
         # Store operation_name for timing identification and logging
         self.operation_name = operation_name
 
@@ -1667,13 +1391,6 @@ class PerformanceTimer:
         return self.duration_ms / baseline_duration_ms
 
     def __enter__(self) -> "PerformanceTimer":
-        """
-        Context manager entry method that starts timing measurement with high-precision
-        timestamp capture for accurate performance monitoring.
-
-        Returns:
-            Self reference for context manager pattern with timing started
-        """
         # Capture high-precision start timestamp using time.perf_counter()
         self.start_time = time.perf_counter()
 
@@ -1692,18 +1409,6 @@ class PerformanceTimer:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> bool:
-        """
-        Context manager exit method that stops timing, calculates duration, and optionally
-        logs performance results with threshold analysis and baseline comparison.
-
-        Args:
-            exc_type: Exception type if an exception occurred
-            exc_value: Exception instance if an exception occurred
-            traceback: Exception traceback if an exception occurred
-
-        Returns:
-            False to propagate any exceptions that occurred during timed operation
-        """
         # Capture end timestamp using time.perf_counter() for duration calculation
         self.end_time = time.perf_counter()
 
@@ -1744,13 +1449,6 @@ class PerformanceTimer:
         return False
 
     def get_duration_ms(self) -> Optional[float]:
-        """
-        Returns measured duration in milliseconds with validation and precision formatting
-        for performance analysis and reporting.
-
-        Returns:
-            Duration in milliseconds if timing completed, None if timing not finished or not started
-        """
         # Check if timing has been completed (end_time is not None)
         if self.end_time is not None and self.start_time is not None:
             # Return calculated duration_ms if timing is complete
@@ -1762,15 +1460,6 @@ class PerformanceTimer:
     def add_metric(
         self, metric_name: str, metric_value: Any, metric_unit: Optional[str] = None
     ) -> None:
-        """
-        Adds additional performance metric to timing measurement for comprehensive performance
-        analysis including memory usage, operation counts, or custom metrics.
-
-        Args:
-            metric_name: Name of the metric being added
-            metric_value: Value of the metric
-            metric_unit: Optional unit description for the metric
-        """
         # Validate metric_name is non-empty string
         if not metric_name or not isinstance(metric_name, str):
             return
@@ -1792,17 +1481,6 @@ class PerformanceTimer:
     def log_performance(
         self, message: Optional[str] = None, include_metrics: bool = True
     ) -> bool:
-        """
-        Manually logs performance results with timing analysis, threshold comparison,
-        and additional metrics for performance monitoring and debugging.
-
-        Args:
-            message: Optional custom message to include in the performance log
-            include_metrics: Whether to include additional metrics in the log output
-
-        Returns:
-            True if performance logged successfully, False if no logger or timing incomplete
-        """
         # Check that timing measurement is complete and logger is available
         if not self.logger or self.duration_ms is None:
             return False
@@ -1823,28 +1501,7 @@ class PerformanceTimer:
 
 
 class LoggingMixin:
-    """
-    Mixin class providing logging capabilities to plume_nav_sim components with automatic
-    logger creation, component identification, and performance tracking integration for
-    convenient logging in component classes.
-
-    Usage:
-        class MyComponent(LoggingMixin):
-            def __init__(self):
-                super().__init__()
-                self.configure_logging("MyComponent", ComponentType.UTILS)
-
-            def do_work(self):
-                self.log_method_entry("do_work", {"param": "value"})
-                # ... perform work ...
-                self.log_method_exit("do_work", return_value="success")
-    """
-
     def __init__(self) -> None:
-        """
-        Initialize LoggingMixin with automatic component detection and logger configuration
-        for seamless integration with plume_nav_sim components.
-        """
         # Initialize _logger to None for lazy initialization pattern
         self._logger: Optional[ComponentLogger] = None
 
@@ -1857,13 +1514,6 @@ class LoggingMixin:
 
     @property
     def logger(self) -> ComponentLogger:
-        """
-        Property that provides lazy-initialized ComponentLogger with automatic component
-        detection and configuration for convenient access to logging functionality.
-
-        Returns:
-            Component-specific logger configured for the current class and component type
-        """
         # Check if _logger is already initialized to avoid duplicate creation
         if self._logger is not None:
             return self._logger
@@ -1927,15 +1577,6 @@ class LoggingMixin:
         logger_config: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> None:
-        """
-        Configures component logging with specific component name, type, and logger settings
-        for customized logging behavior and component identification.
-
-        Args:
-            component_name: Name of the component for logger identification
-            component_type: ComponentType enum for specialized configuration
-            logger_config: Optional configuration dictionary for customized behavior
-        """
         # Store component_name and component_type for logger configuration
         self._component_name = component_name
         self._component_type = component_type
@@ -1971,15 +1612,6 @@ class LoggingMixin:
         parameters: Optional[Dict[str, Any]] = None,
         include_locals: bool = False,
     ) -> None:
-        """
-        Convenience method for logging method entry with automatic parameter capture
-        and context information for debugging and tracing method execution flow.
-
-        Args:
-            method_name: Name of the method being entered
-            parameters: Dictionary of method parameters and values
-            include_locals: Whether to include local variable information
-        """
         try:
             # Use inspect to capture method context and caller information
             caller_info = get_caller_info(stack_depth=2, include_locals=include_locals)
@@ -2015,7 +1647,6 @@ class LoggingMixin:
                 "class_name": self.__class__.__name__,
             }
 
-            # Log method entry using debug level with comprehensive context
             self.logger.debug(entry_message, extra=context)
 
         except Exception as e:
@@ -2028,15 +1659,6 @@ class LoggingMixin:
         return_value: Optional[Any] = None,
         execution_time_ms: Optional[float] = None,
     ) -> None:
-        """
-        Convenience method for logging method exit with return value information and
-        execution summary for complete method execution tracing.
-
-        Args:
-            method_name: Name of the method being exited
-            return_value: Optional return value from the method
-            execution_time_ms: Optional execution timing in milliseconds
-        """
         try:
             # Format method exit message with method_name and class context
             exit_message = f"← EXIT {self.__class__.__name__}.{method_name}"

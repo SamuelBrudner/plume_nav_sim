@@ -1,10 +1,3 @@
-"""Media I/O and dataset utilities (manifests, loaders).
-
-This module houses helpers for working with external media-backed plume
-datasets, such as video-derived Zarr stores. It provides a provenance
-manifest schema and utilities to read/write it alongside datasets.
-"""
-
 from .manifest import (
     MANIFEST_FILENAME,
     ProvenanceManifest,

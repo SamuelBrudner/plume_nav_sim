@@ -1,17 +1,3 @@
-"""
-Gymnasium observation wrappers for temporal odor history.
-
-These wrappers are provided as convenience utilities for users who want to
-augment the built-in concentration observation with a short history window
-without modifying the environment or observation model. They maintain their own
-internal state and reset deterministically with the environment.
-
-Design note: The ObservationModel protocol requires pure, deterministic
-observations as a function of env_state. Temporal history therefore fits best as
-an ObservationWrapper, not as an ObservationModel, because it depends on past
-observations rather than the current env_state alone.
-"""
-
 from __future__ import annotations
 
 from collections import deque
@@ -22,27 +8,6 @@ import numpy as np
 
 
 class ConcentrationNBackWrapper(gym.ObservationWrapper):
-    """Expose an n-back history of scalar concentration observations.
-
-    Input expectation (from wrapped env):
-      - observation_space: Box(low, high, shape=(1,), dtype=float32-compatible)
-      - observation: np.ndarray shape (1,) with current concentration in [low, high]
-
-    Output observation:
-      - np.ndarray shape (n,), oldest-to-newest concentration values
-      - On the first observation after reset, the history is padded with the
-        initial concentration value to length n.
-
-    Parameters
-    ----------
-    env : gym.Env
-        Environment yielding scalar concentration observations
-    n : int
-        Length of the history window (>= 1)
-    dtype : np.dtype | None
-        Optional explicit dtype for the output Box; defaults to wrapped dtype
-    """
-
     def __init__(self, env: gym.Env, n: int = 3, *, dtype: np.dtype | None = None):
         super().__init__(env)
         if n <= 0:

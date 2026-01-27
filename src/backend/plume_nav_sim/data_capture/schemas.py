@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import List, Optional
 
 try:  # Python 3.8+ provides Literal in typing
-    from typing import Literal  # type: ignore[attr-defined]
+    from typing import Literal
 except ImportError:  # Fallback for Python 3.7 runtimes
-    from typing_extensions import Literal  # type: ignore[assignment]
+    from typing_extensions import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 

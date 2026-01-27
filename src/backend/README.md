@@ -239,29 +239,6 @@ Two ways to use components:
   obs, info = env.reset(seed=42)
   ```
 
-- Register the component-based environment id (first‑class DI env):
-
-  ```python
-  import gymnasium as gym
-  from plume_nav_sim.registration import register_env, COMPONENT_ENV_ID
-
-  # Register DI env id (factory-backed)
-  env_id = register_env(env_id=COMPONENT_ENV_ID, force_reregister=True)
-  env = gym.make(env_id)
-  ```
-
-  Or opt-in globally without changing code by setting an environment variable before registering:
-
-  ```bash
-  # Use DI behind the default env id for this process
-  export PLUMENAV_DEFAULT=components
-  ```
-
-  ```python
-  from plume_nav_sim.registration import register_env, ENV_ID
-  env_id = register_env()  # Will use the DI entry point when PLUMENAV_DEFAULT is set
-  ```
-
 Components derive spaces:
 
 - `action_space` comes from the ActionProcessor

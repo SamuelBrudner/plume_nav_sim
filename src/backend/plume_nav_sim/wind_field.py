@@ -1,10 +1,3 @@
-"""Simple wind field implementations for plume_nav_sim.
-
-The initial wind support uses constant vector fields that return the same
-velocity everywhere in the grid. This is enough to drive cross-wind casting
-policies and can be extended with spatially varying models later.
-"""
-
 from __future__ import annotations
 
 import math
@@ -25,14 +18,6 @@ __all__ = ["ConstantWindField"]
 
 
 class ConstantWindField(VectorField):
-    """Constant wind vector field.
-
-    The field stores a fixed 2D vector (vx, vy) representing the wind
-    velocity everywhere in the grid. Vector orientation follows the
-    simulator convention: 0° = East, 90° = North, and positive y points
-    downward in array coordinates.
-    """
-
     def __init__(
         self,
         *,

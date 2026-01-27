@@ -6,19 +6,12 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, model_validator
 
 try:  # pragma: no cover - exercised when PyYAML is unavailable
-    import yaml  # type: ignore
+    import yaml
 except Exception:  # pragma: no cover - exercised when PyYAML is unavailable
     yaml = None
 
 
 class MovieMetadataSidecar(BaseModel):
-    """Metadata sidecar describing a plume movie on disk.
-
-    This model captures minimal information needed to interpret a movie
-    dataset (frame rate, spatial calibration, and optional HDF5 dataset
-    name) independently from the on-disk container.
-    """
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     version: int = Field(default=1)
@@ -51,25 +44,11 @@ class MovieMetadataSidecar(BaseModel):
 
 
 def get_default_sidecar_path(movie_path: Path | str) -> Path:
-    """Return the default YAML sidecar path for a movie file.
-
-    The convention is ``<movie>.<original-suffix>.plume-movie.yaml`` so that
-    multiple containers (e.g. HDF5, MP4) can share a consistent metadata
-    naming scheme.
-    """
-
     path = Path(movie_path)
     return path.with_suffix(path.suffix + ".plume-movie.yaml")
 
 
 def load_movie_sidecar(movie_path: Path | str) -> MovieMetadataSidecar:
-    """Load and validate the metadata sidecar for a movie file.
-
-    Raises FileNotFoundError if the expected YAML file is missing, or
-    ValueError if the loaded structure does not satisfy MovieMetadataSidecar
-    constraints (including HDF5-specific rules).
-    """
-
     path = Path(movie_path)
     sidecar_path = get_default_sidecar_path(path)
 

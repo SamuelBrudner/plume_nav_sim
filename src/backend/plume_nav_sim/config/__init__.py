@@ -1,11 +1,3 @@
-"""Configuration package for environment and component setup.
-
-This package provides:
-- Pydantic models for component configuration
-- Factory functions for config-driven creation
-- Test configuration utilities
-"""
-
 from .component_configs import (
     ActionConfig,
     EnvironmentConfig,
@@ -35,7 +27,6 @@ from .factories import (
     create_wind_field,
 )
 from .registration import (
-    COMPONENT_ENV_ID,
     ENV_ID,
     ensure_registered,
     is_registered,
@@ -86,7 +77,6 @@ __all__ = [
     "is_registered",
     "ensure_registered",
     "ENV_ID",
-    "COMPONENT_ENV_ID",
     # Test configs
     "REPRODUCIBILITY_SEEDS",
     "TestConfigFactory",

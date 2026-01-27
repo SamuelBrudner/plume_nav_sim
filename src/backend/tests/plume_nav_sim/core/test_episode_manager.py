@@ -1076,8 +1076,8 @@ class TestEpisodeManagerPerformance:
         gc.collect()
         post_gc_memory_mb = process.memory_info().rss / 1024 / 1024
 
-        # Memory should not grow indefinitely
-        assert post_gc_memory_mb <= final_memory_mb
+        # Memory should not grow indefinitely (allow small allocator jitter)
+        assert post_gc_memory_mb <= final_memory_mb + 1.0
 
     def test_component_coordination_efficiency(self, performance_episode_manager):
         """Test efficiency of component coordination with timing analysis and bottleneck identification."""

@@ -50,6 +50,7 @@ from plume_nav_sim.core.constants import DEFAULT_GRID_SIZE, DEFAULT_SOURCE_LOCAT
 from plume_nav_sim.envs import EnvironmentState
 
 # Internal imports for environment testing with comprehensive API validation
+from plume_nav_sim.envs.plume_env import PlumeEnv
 from plume_nav_sim.envs.plume_search_env import (  # Primary environment class under test for comprehensive Gymnasium API compliance validation
     PlumeSearchEnv,
 )
@@ -1478,8 +1479,8 @@ def test_environment_registration():
         try:
             base_env = _unwrap_gym_env(gym_env)
             assert isinstance(
-                base_env, PlumeSearchEnv
-            ), "gym.make should create PlumeSearchEnv instance"
+                base_env, PlumeEnv
+            ), "gym.make should create PlumeEnv instance"
 
             # Test basic functionality of gym.make created environment
             obs, info = gym_env.reset()
@@ -1510,8 +1511,8 @@ def test_environment_registration():
             # Note: Wrapper may not expose internal parameters directly
             base_custom_env = _unwrap_gym_env(custom_env)
             assert isinstance(
-                base_custom_env, PlumeSearchEnv
-            ), "Custom gym.make should return PlumeSearchEnv"
+                base_custom_env, PlumeEnv
+            ), "Custom gym.make should return PlumeEnv"
             obs, info = custom_env.reset()
             assert obs is not None, "Custom env should reset successfully"
             # Parameters are applied internally during construction

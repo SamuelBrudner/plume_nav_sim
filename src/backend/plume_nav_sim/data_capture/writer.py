@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    import orjson as _orjson  # type: ignore
+    import orjson as _orjson
 except Exception:  # pragma: no cover
     _orjson = None  # type: ignore
 import json as _json
@@ -23,14 +23,6 @@ def _dumps(obj: Any) -> bytes:
 
 
 class JSONLGzWriter:
-    """Buffered gzipped JSONL writer with optional size-based rotation.
-
-    - Thread-safe append
-    - Buffered writes
-    - atexit close
-    - Size-based rotation (approximate, compressed size)
-    """
-
     def __init__(
         self,
         path: os.PathLike | str,

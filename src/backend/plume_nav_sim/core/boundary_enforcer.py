@@ -1,28 +1,7 @@
-"""
-Boundary enforcement module for plume_nav_sim providing comprehensive agent movement validation,
-grid constraint enforcement, position bounds checking, and coordinate system management with
-performance optimization and detailed error reporting for the Gymnasium environment's navigation
-system ensuring agents stay within valid grid positions.
-
-This module implements the core boundary enforcement logic for the plume navigation simulation,
-ensuring that agent movements remain within valid grid boundaries through comprehensive validation,
-clamping, and constraint analysis. The module provides both high-level boundary enforcer classes
-and low-level utility functions for performance-critical validation operations.
-
-Key Features:
-- High-performance boundary validation with <0.1ms per check performance targets
-- Comprehensive position bounds checking with detailed error reporting
-- Flexible movement constraint configuration with clamping and validation policies
-- Integration with the broader plume_nav_sim validation and error handling framework
-- Thread-safe caching for repeated validation operations
-- Component-specific logging with performance monitoring and timing analysis
-"""
-
-# External imports with version comments
-import logging  # >=3.10 - Logging integration for boundary enforcement operations and debugging
-import time  # >=3.10 - High-precision timing for performance measurement and benchmarking
+import logging
+import time
 from dataclasses import dataclass, field
-from typing import (  # >=3.10 - Type hints for boundary enforcer methods and interfaces
+from typing import (
     Any,
     Dict,
     List,
@@ -30,33 +9,28 @@ from typing import (  # >=3.10 - Type hints for boundary enforcer methods and in
     Tuple,
 )
 
-import numpy as np  # >=2.1.0 - Array operations, coordinate calculations, and mathematical validation
+import numpy as np
 
 from ..utils.exceptions import ValidationError
 from ..utils.logging import ComponentType, get_component_logger, monitor_performance
 
-# Internal imports from utils for validation, error handling, and logging integration
 from ..utils.validation import validate_action_parameter, validate_coordinates
 
-# Internal imports for system-wide constants and configuration values
 from .constants import (
     BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
     BOUNDARY_VALIDATION_CACHE_SIZE,
     MOVEMENT_VECTORS,
 )
 
-# Internal imports from core modules for coordinate and action type system integration
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .types import ActionType, CoordinateType, create_coordinates, create_grid_size
 
-# Global constants for boundary enforcement configuration and performance optimization
 DEFAULT_CLAMPING_ENABLED = True  # Default clamping behavior for position enforcement
 POSITION_BOUNDS_TOLERANCE = (
     0  # Tolerance for position bounds checking (strict by default)
 )
 
-# Module exports for comprehensive boundary enforcement interface
 __all__ = [
     "BoundaryEnforcer",
     "BoundaryEnforcementResult",
@@ -71,16 +45,6 @@ __all__ = [
 
 @dataclass(frozen=True)
 class BoundaryEnforcementResult:
-    """
-    Data class representing comprehensive boundary enforcement results with position updates,
-    constraint analysis, boundary hit detection, and performance metrics for detailed
-    boundary enforcement reporting and debugging support.
-
-    This immutable data class captures complete information about boundary enforcement
-    operations, enabling detailed analysis of constraint application, movement modifications,
-    and performance characteristics for monitoring and debugging purposes.
-    """
-
     # Core boundary enforcement result fields
     original_position: Coordinates  # Original position before boundary enforcement
     final_position: Coordinates  # Final position after boundary constraint application
@@ -131,13 +95,6 @@ class BoundaryEnforcementResult:
             )
 
     def get_constraint_analysis(self) -> Dict[str, Any]:
-        """
-        Generate comprehensive constraint analysis including direction, magnitude, and reasoning
-        for boundary enforcement debugging and detailed movement analysis.
-
-        Returns:
-            dict: Dictionary containing detailed constraint analysis with direction vectors and boundary details
-        """
         # Calculate position difference vector between original and final positions
         position_delta = (
             self.final_position.x - self.original_position.x,
@@ -185,35 +142,14 @@ class BoundaryEnforcementResult:
         }
 
     def was_movement_constrained(self) -> bool:
-        """
-        Determine if movement was constrained by boundary enforcement for movement analysis
-        and constraint detection in navigation systems.
-
-        Returns:
-            bool: True if movement was constrained by boundaries, False if movement was unconstrained
-        """
         # Return position_modified flag indicating constraint application
         return self.position_modified
 
     def get_final_position(self) -> Coordinates:
-        """
-        Get final position after boundary enforcement for position management and
-        coordinate system integration with agent state updates.
-
-        Returns:
-            Coordinates: Final position coordinates after boundary constraint application
-        """
         # Return final_position coordinates for external use
         return self.final_position
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert boundary enforcement result to dictionary for serialization and external analysis,
-        enabling integration with logging, monitoring, and debugging systems.
-
-        Returns:
-            dict: Dictionary representation of boundary enforcement result with analysis data
-        """
         return {
             "original_position": (
                 self.original_position.x,
@@ -231,16 +167,6 @@ class BoundaryEnforcementResult:
 
 @dataclass
 class MovementConstraint:
-    """
-    Data class representing movement constraint configuration with boundary policies, clamping
-    settings, and enforcement parameters for customizable boundary enforcement behavior and
-    flexible constraint management across different navigation scenarios.
-
-    This configuration class enables fine-grained control over boundary enforcement behavior,
-    allowing customization of clamping policies, validation strictness, logging preferences,
-    and performance monitoring for different use cases and environments.
-    """
-
     # Core constraint configuration fields
     enable_clamping: bool = (
         DEFAULT_CLAMPING_ENABLED  # Enable position clamping to bounds
@@ -258,16 +184,6 @@ class MovementConstraint:
     performance_monitoring: bool = field(default=True)  # Enable performance monitoring
 
     def validate_configuration(self) -> bool:
-        """
-        Validate movement constraint configuration for consistency and feasibility, ensuring
-        all configuration parameters are logically consistent and implementable.
-
-        Returns:
-            bool: True if configuration is valid, raises ValidationError if invalid
-
-        Raises:
-            ValidationError: If configuration parameters are invalid or inconsistent
-        """
         # Validate tolerance is non-negative for bounds checking
         if self.tolerance < 0:
             raise ValidationError(
@@ -299,16 +215,6 @@ class MovementConstraint:
         return True
 
     def clone(self, overrides: Optional[Dict[str, Any]] = None) -> "MovementConstraint":
-        """
-        Create deep copy of movement constraint configuration with optional parameter overrides
-        for constraint inheritance and configuration customization scenarios.
-
-        Args:
-            overrides: Optional dictionary of parameter overrides to apply
-
-        Returns:
-            MovementConstraint: New MovementConstraint instance with optional modifications
-        """
         # Create deep copy of current constraint configuration
         new_config = MovementConstraint(
             enable_clamping=self.enable_clamping,
@@ -340,34 +246,12 @@ class MovementConstraint:
 
 
 class BoundaryEnforcer:
-    """
-    Primary boundary enforcement class providing comprehensive agent movement validation,
-    grid constraint enforcement, position bounds checking, and coordinate system management
-    with performance monitoring and caching for Gymnasium environment navigation system.
-
-    This class serves as the central component for boundary enforcement operations, integrating
-    with the validation framework, error handling system, and logging infrastructure to provide
-    robust, high-performance boundary checking and constraint application for agent navigation.
-    """
-
     def __init__(
         self,
         grid_size: GridSize,
         constraint_config: Optional[MovementConstraint] = None,
         enable_caching: bool = True,
     ) -> None:
-        """
-        Initialize boundary enforcer with grid dimensions, constraint configuration, and
-        performance optimization settings for comprehensive boundary enforcement operations.
-
-        Args:
-            grid_size: Grid dimensions for boundary limit definitions
-            constraint_config: Optional constraint configuration, defaults to standard settings
-            enable_caching: Enable validation result caching for performance optimization
-
-        Raises:
-            ValidationError: If grid_size is invalid or constraint configuration is inconsistent
-        """
         try:
             self.grid_size = create_grid_size(grid_size)
             validate_coordinates((0, 0), self.grid_size)  # Validate grid configuration
@@ -640,16 +524,6 @@ class BoundaryEnforcer:
             raise
 
     def get_valid_moves(self, current_position: CoordinateType) -> List[Action]:
-        """
-        Analyze current position to determine which actions would result in valid movements
-        within grid boundaries for action space analysis and navigation planning.
-
-        Args:
-            current_position: Current agent position coordinates
-
-        Returns:
-            list: List of valid Action enum values that would not violate boundary constraints from current position
-        """
         # Convert current_position to Coordinates for consistent processing
         coords = create_coordinates(current_position)
 
@@ -672,16 +546,6 @@ class BoundaryEnforcer:
         return valid_actions
 
     def update_grid_size(self, new_grid_size: GridSize) -> None:
-        """
-        Update grid size configuration and clear related caches for boundary enforcement
-        configuration management and runtime grid size changes.
-
-        Args:
-            new_grid_size: New grid dimensions for boundary enforcement
-
-        Raises:
-            ValidationError: If new_grid_size has invalid dimensions
-        """
         # Validate new_grid_size has positive dimensions using validate_coordinates
         try:
             validate_coordinates((0, 0), new_grid_size)
@@ -716,13 +580,6 @@ class BoundaryEnforcer:
         self.boundary_hits = 0
 
     def get_boundary_statistics(self) -> Dict[str, Any]:
-        """
-        Get comprehensive boundary enforcement statistics including hit rates, performance
-        metrics, and validation efficiency for monitoring and optimization analysis.
-
-        Returns:
-            dict: Dictionary containing boundary enforcement statistics and performance analysis
-        """
         # Compile total enforcement operations performed from enforcement_count
         total_operations = self.enforcement_count
 
@@ -794,20 +651,9 @@ class BoundaryEnforcer:
                 / max(total_operations, 1),
             }
 
-        # Return comprehensive boundary enforcement statistics
         return stats
 
     def clear_cache(self, force_cleanup: bool = False) -> int:
-        """
-        Clear validation cache and reset performance statistics for memory management and testing
-        scenarios with optional resource cleanup.
-
-        Args:
-            force_cleanup: Whether to force cleanup of additional resources
-
-        Returns:
-            int: Number of cache entries cleared
-        """
         if not self.enable_caching:
             return 0
 
@@ -824,19 +670,6 @@ class BoundaryEnforcer:
         return entries_cleared
 
     def validate_constraint_configuration(self, strict_mode: bool = False) -> bool:
-        """
-        Validate current constraint configuration for consistency and feasibility with
-        comprehensive configuration analysis and error reporting.
-
-        Args:
-            strict_mode: Whether to apply strict validation rules and enhanced checking
-
-        Returns:
-            bool: True if configuration is valid, raises ValidationError if invalid
-
-        Raises:
-            ValidationError: If configuration is invalid or inconsistent
-        """
         try:
             self.constraint_config.validate_configuration()
 
@@ -910,20 +743,6 @@ def validate_movement_bounds(
     grid_bounds: GridSize,
     strict_validation: bool = True,
 ) -> bool:
-    """
-    Standalone function to validate movement bounds without requiring full boundary enforcer
-    instance, optimized for performance-critical validation operations with comprehensive
-    boundary checking and minimal overhead.
-
-    Args:
-        current_position: Current agent position coordinates
-        action: Action to be performed (Action enum or integer value)
-        grid_bounds: Grid size defining boundary limits
-        strict_validation: Whether to apply strict validation rules including edge cases
-
-    Returns:
-        bool: True if movement is within bounds, False if movement would violate boundary constraints
-    """
     try:
         # Convert current_position to Coordinates using create_coordinates factory for type consistency
         coords = create_coordinates(current_position)
@@ -959,19 +778,6 @@ def enforce_position_bounds(
     clamp_to_bounds: bool = True,
     log_boundary_hits: bool = False,
 ) -> Tuple[Coordinates, bool]:
-    """
-    Enforce position bounds by clamping coordinates to valid grid range ensuring agent position
-    stays within boundaries with optional boundary hit detection and logging for position management.
-
-    Args:
-        position: Position coordinates to enforce bounds on
-        grid_bounds: Grid size defining boundary limits
-        clamp_to_bounds: Whether to clamp coordinates to valid range
-        log_boundary_hits: Whether to log boundary constraint applications
-
-    Returns:
-        tuple: Tuple of (constrained_position: Coordinates, position_modified: bool) with boundary enforcement result
-    """
     # Convert position to Coordinates using create_coordinates with validation
     coords = create_coordinates(position)
 
@@ -1008,17 +814,6 @@ def enforce_position_bounds(
 
 
 def is_position_within_bounds(position: CoordinateType, grid_bounds: GridSize) -> bool:
-    """
-    Fast boolean check for position validity within grid bounds optimized for high-frequency
-    boundary validation without comprehensive error reporting or logging overhead.
-
-    Args:
-        position: Position coordinates to check
-        grid_bounds: Grid size defining boundary limits
-
-    Returns:
-        bool: True if position is within grid bounds, False otherwise
-    """
     try:
         # Convert position to Coordinates using fast conversion without full validation
         if isinstance(position, Coordinates):
@@ -1040,17 +835,6 @@ def is_position_within_bounds(position: CoordinateType, grid_bounds: GridSize) -
 def clamp_coordinates_to_bounds(
     coordinates: CoordinateType, grid_bounds: GridSize
 ) -> Coordinates:
-    """
-    Clamp coordinate values to grid boundaries ensuring valid position within grid constraints
-    with coordinate-by-coordinate clamping for precise boundary enforcement and position correction.
-
-    Args:
-        coordinates: Coordinates to clamp to grid boundaries
-        grid_bounds: Grid size defining boundary limits
-
-    Returns:
-        Coordinates: Coordinates object with values clamped to grid boundaries
-    """
     # Convert coordinates to Coordinates object for consistent processing
     coords = create_coordinates(coordinates)
 
@@ -1069,19 +853,6 @@ def calculate_bounded_movement(
     grid_bounds: GridSize,
     allow_boundary_clamping: bool = True,
 ) -> Tuple[Coordinates, bool, bool]:
-    """
-    Calculate movement result with boundary constraints applied ensuring agent movement stays
-    within valid grid positions with comprehensive movement analysis and constraint reporting.
-
-    Args:
-        current_position: Current agent position coordinates
-        action: Action to be performed (Action enum or integer value)
-        grid_bounds: Grid size defining boundary limits
-        allow_boundary_clamping: Whether to allow position clamping when boundaries are exceeded
-
-    Returns:
-        tuple: Tuple of (final_position: Coordinates, movement_successful: bool, boundary_hit: bool) with movement analysis
-    """
     try:
         # Convert current_position to Coordinates and validate action parameter
         coords = create_coordinates(current_position)

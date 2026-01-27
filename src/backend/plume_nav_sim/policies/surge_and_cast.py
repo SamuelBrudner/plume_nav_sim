@@ -15,25 +15,6 @@ CastMode = Literal["random_turn", "alternating_turn", "zigzag"]
 
 @dataclass
 class SurgeAndCastPolicy(Policy):
-    """Explicit surge-and-cast controller for oriented actions.
-
-    Behavior:
-    - Surge FORWARD while the temporal derivative stays above threshold.
-    - Cast (turn) when the derivative drops below threshold using a configurable
-      turn pattern.
-    - After each cast, persist in FORWARD for ``persistence`` steps to probe the
-      new heading.
-
-    Cast modes:
-    - random_turn: sample LEFT/RIGHT uniformly (deterministic LEFT when
-      explore=False).
-    - alternating_turn: alternate LEFT/RIGHT on each cast, reset on reset().
-    - zigzag: alternate LEFT/RIGHT across casts but do not reset between
-      positive gradients (only on reset()).
-
-    Observation handling mirrors TemporalDerivativePolicy for compatibility.
-    """
-
     threshold: float = 1e-6
     cast_mode: CastMode = "random_turn"
     persistence: int = 1

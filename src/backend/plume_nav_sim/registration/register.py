@@ -1,20 +1,3 @@
-"""
-Core Gymnasium environment registration module implementing the complete registration system
-for PlumeNav environments with comprehensive parameter validation, configuration management,
-version control, and error handling. Provides primary registration functions for Gymnasium
-compatibility including register_env(), unregister_env(), is_registered(), and registration
-status management with strict versioning compliance and entry point specification.
-
-This module serves as the primary interface for registering and managing PlumeNav environments
-within the Gymnasium ecosystem, ensuring proper integration with gym.make() calls and providing
-comprehensive parameter validation, error handling, and configuration management.
-
-Notes:
-- PlumeEnv is the canonical entry point (via create_plume_env).
-- Legacy environment IDs remain supported and map to PlumeEnv.
-- Component-based registration is deprecated but still available via explicit entry_point usage.
-"""
-
 import contextlib
 import copy
 import importlib
@@ -23,18 +6,8 @@ import sys
 import time
 from typing import Dict, List, Optional, Tuple, cast
 
-from typing_extensions import TypedDict
+import gymnasium
 
-try:  # pragma: no cover - Protocol is present on supported runtimes
-    from typing import Protocol
-except ImportError:  # pragma: no cover - fallback for older Python in trimmed envs
-    from typing_extensions import Protocol
-
-
-# External imports with version comments for dependency management and compatibility tracking
-import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
-
-# Internal imports for configuration constants and system integration
 from ..constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -43,26 +16,14 @@ from ..constants import (
     ENVIRONMENT_ID,
 )
 
-# Internal imports for error handling and logging integration
 from ..utils.exceptions import ConfigurationError, IntegrationError, ValidationError
 from ..utils.logging import get_component_logger
 
-# providing register() function, environment registry, and gym.make() compatibility for
-# standard RL environment registration
+ENV_ID = ENVIRONMENT_ID
+ENTRY_POINT = "plume_nav_sim.envs.plume_env:create_plume_env"
+MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS
 
-
-# Global constants for registration system configuration and environment identification
-ENV_ID = ENVIRONMENT_ID  # Primary environment identifier (defaults to PlumeNav-Sim-v0)
-ENTRY_POINT = "plume_nav_sim.envs.plume_env:create_plume_env"  # PlumeEnv factory entry point
-LEGACY_ENV_IDS = ("PlumeNav-StaticGaussian-v0", "PlumeNav-v0")
-COMPONENT_ENV_ID = "PlumeNav-Components-v0"  # Deprecated component env id (legacy)
-COMPONENT_ENTRY_POINT = "plume_nav_sim.envs.factory:create_component_environment"
-MAX_EPISODE_STEPS = DEFAULT_MAX_STEPS  # Default maximum episode steps (1000)
-
-# Component logger for registration system debugging and operation tracking
 _logger = get_component_logger("registration")
-
-# Registration cache for tracking environment status and preventing duplicate registrations
 _registration_cache: Dict[str, Dict[str, object]] = {}
 
 # Workaround for a pytest scoping quirk: some tests use `gc` inside a function
@@ -71,36 +32,17 @@ _registration_cache: Dict[str, Dict[str, object]] = {}
 # import it locally when needed.
 sys.modules.pop("gc", None)
 
-# Public API exports for core registration functionality
 __all__ = [
     "register_env",
     "unregister_env",
     "is_registered",
     "get_registration_info",
-    "ensure_component_env_registered",
     "ENV_ID",
     "ENTRY_POINT",
-    "LEGACY_ENV_IDS",
-    "COMPONENT_ENV_ID",
-    "COMPONENT_ENTRY_POINT",
 ]
 
 
-class RegistrationValidationReport(TypedDict):
-    """Structured validation report for registration checks.
-
-    Using a TypedDict makes mypy aware of the concrete types stored under
-    keys such as "errors" and "warnings", avoiding "object has no attribute
-    'append'" errors when appending messages during validation.
-    """
-
-    timestamp: float
-    strict_validation: bool
-    errors: List[str]
-    warnings: List[str]
-    recommendations: List[str]
-    performance_analysis: Dict[str, object]
-    compatibility_check: Dict[str, object]
+RegistrationValidationReport = Dict[str, object]
 
 
 def register_env(  # noqa: C901
@@ -109,56 +51,16 @@ def register_env(  # noqa: C901
     max_episode_steps: Optional[int] = None,
     kwargs: Optional[Dict[str, object]] = None,
     force_reregister: bool = False,
-    use_legacy: bool = True,
     **compat_flags: object,
 ) -> str:
-    """
-    Main environment registration function for Gymnasium compatibility with comprehensive parameter
-    validation, configuration management, version control, and error handling ensuring proper
-    PlumeEnv environment registration.
-
-    This function serves as the primary interface for registering the plume navigation environment
-    with Gymnasium, providing comprehensive parameter validation, error handling, and integration
-    with the gym.make() ecosystem. It supports both default and custom configuration parameters
-    while ensuring strict compliance with Gymnasium versioning conventions.
-
-    Args:
-        env_id: Environment identifier string, defaults to ENV_ID constant if not provided
-        entry_point: Module path string for environment factory/class, defaults to ENTRY_POINT if not provided  # noqa: E501
-        max_episode_steps: Maximum steps per episode, defaults to MAX_EPISODE_STEPS if not provided
-        kwargs: Additional environment parameters dictionary for customization
-        force_reregister: Whether to force re-registration if environment already exists
-        use_legacy: Whether to also register legacy env IDs that map to PlumeEnv
-
-    Returns:
-        Registered environment ID string ready for immediate use with gym.make() calls
-
-    Raises:
-        ValidationError: If environment ID format is invalid or parameters fail validation
-        ConfigurationError: If registration configuration is invalid or conflicts exist
-
-    Example:
-        # Basic registration with defaults
-        env_id = register_env()
-        env = gym.make(env_id)
-
-        # Custom registration with parameters
-        env_id = register_env(
-            env_id="CustomPlume-v0",
-            kwargs={"grid_size": (256, 256), "source_location": (128, 128)}
-        )
-    """
     try:
-        # Apply default values using ENV_ID, ENTRY_POINT, MAX_EPISODE_STEPS if parameters not provided  # noqa: E501
         effective_env_id = env_id or ENV_ID
-
         effective_entry_point = ENTRY_POINT if entry_point is None else entry_point
         effective_max_steps = max_episode_steps or MAX_EPISODE_STEPS
         effective_kwargs = kwargs or {}
 
         _logger.debug(f"Starting registration for environment: {effective_env_id}")
 
-        # Validate environment ID follows Gymnasium versioning conventions with '-v0' suffix pattern
         if not effective_env_id.endswith("-v0"):
             raise ValidationError(
                 f"Environment ID '{effective_env_id}' must end with '-v0' suffix for Gymnasium versioning compliance",  # noqa: E501
@@ -167,15 +69,10 @@ def register_env(  # noqa: C901
                 expected_format="environment_name-v0",
             )
 
-        # Check if environment already registered using is_registered() with cache validation
-        # Support 'force' alias used by some tests
         force_flag = bool(compat_flags.get("force", False)) or force_reregister
-
-        # No special toggles; env id determines default behavior, callers may still pass entry_point explicitly  # noqa: E501
 
         if is_registered(effective_env_id, use_cache=True):
             if force_flag:
-                # Handle force_reregister flag by calling unregister_env() if environment exists and force requested  # noqa: E501
                 _logger.info(
                     f"Force re-registration requested for '{effective_env_id}', unregistering existing..."  # noqa: E501
                 )
@@ -186,7 +83,6 @@ def register_env(  # noqa: C901
                     f"Environment '{effective_env_id}' already registered. Use force_reregister=True to override."  # noqa: E501
                 )
                 return effective_env_id
-        # Create complete kwargs dictionary using _create_registration_kwargs() with parameter validation  # noqa: E501
         grid_size_arg = cast(
             Optional[Tuple[int, int]], effective_kwargs.get("grid_size")
         )
@@ -204,13 +100,8 @@ def register_env(  # noqa: C901
             additional_kwargs=effective_kwargs,
         )
 
-        if _is_component_entry_point(effective_entry_point):
-            registration_kwargs = _convert_kwargs_for_component_env(registration_kwargs)
-        # PlumeEnv accepts native config kwargs; legacy component factory needs mapping
-
         _validate_entry_point_resolves(effective_entry_point)
 
-        # Validate registration configuration using validate_registration_config() for consistency checking  # noqa: E501
         is_valid, validation_report = _validate_registration_config(
             env_id=effective_env_id,
             entry_point=effective_entry_point,
@@ -227,7 +118,6 @@ def register_env(  # noqa: C901
                 parameter_value=validation_report,
             )
 
-        # Call gymnasium.register() with validated env_id, entry_point, max_episode_steps, and kwargs  # noqa: E501
         gymnasium.register(
             id=effective_env_id,
             entry_point=effective_entry_point,
@@ -252,7 +142,6 @@ def register_env(  # noqa: C901
                 spec_error,
             )
 
-        # Update registration cache with successful registration information and timestamp
         _registration_cache[effective_env_id] = {
             "registered": True,
             "entry_point": effective_entry_point,
@@ -262,7 +151,6 @@ def register_env(  # noqa: C901
             "validation_report": validation_report,
         }
 
-        # Log successful environment registration with configuration details and usage instructions
         _logger.info(
             f"Successfully registered environment '{effective_env_id}' with entry_point '{effective_entry_point}'"  # noqa: E501
         )
@@ -270,118 +158,11 @@ def register_env(  # noqa: C901
             f"Registration parameters: max_steps={effective_max_steps}, kwargs={registration_kwargs}"  # noqa: E501
         )
 
-        if use_legacy and effective_env_id == ENV_ID:
-            for legacy_env_id in LEGACY_ENV_IDS:
-                if legacy_env_id == effective_env_id:
-                    continue
-                try:
-                    register_env(
-                        env_id=legacy_env_id,
-                        entry_point=effective_entry_point,
-                        max_episode_steps=effective_max_steps,
-                        kwargs=effective_kwargs,
-                        force_reregister=force_flag,
-                        use_legacy=False,
-                    )
-                except Exception as legacy_exc:  # pragma: no cover - best-effort alias
-                    _logger.warning(
-                        "Failed to register legacy env id '%s': %s",
-                        legacy_env_id,
-                        legacy_exc,
-                    )
-
-        # Skip internal make() verification; integration tests will validate gym.make() externally
-
-        # Return registered environment ID for immediate use with comprehensive success confirmation
         return effective_env_id
 
     except Exception as e:
         _logger.error(f"Environment registration failed for '{env_id or ENV_ID}': {e}")
         raise
-
-
-def ensure_component_env_registered(
-    *,
-    force: bool = False,
-    validate_creation: bool = False,
-) -> str:
-    """Ensure the legacy component environment id is present in the registry.
-
-    Args:
-        force: Force re-registration even if already registered.
-        validate_creation: If True, instantiate the environment once to confirm availability.
-
-    Returns:
-        The component environment id.
-
-    Note:
-        Pass entry_point=COMPONENT_ENTRY_POINT to register the deprecated component env explicitly.
-    """
-
-    if force:
-        unregister_env(COMPONENT_ENV_ID, suppress_warnings=True)
-
-    if not is_registered(COMPONENT_ENV_ID, use_cache=True):
-        register_env(env_id=COMPONENT_ENV_ID, entry_point=ENTRY_POINT, force_reregister=False)
-
-    if validate_creation:
-        test_env = gymnasium.make(COMPONENT_ENV_ID)
-
-        class _EnvProbe(Protocol):
-            def reset(self, *args: object, **kwargs: object) -> object:
-                """Protocol method stub."""
-                ...
-
-            def close(self) -> None:
-                """Protocol method stub."""
-                ...
-
-        probe = cast(_EnvProbe, test_env)
-        try:
-            probe.reset()
-        finally:
-            probe.close()
-
-    return COMPONENT_ENV_ID
-
-
-def _is_component_entry_point(entry_point: str) -> bool:
-    return entry_point == COMPONENT_ENTRY_POINT
-
-
-def _convert_kwargs_for_component_env(kwargs: Dict[str, object]) -> Dict[str, object]:
-    """Translate legacy-style kwargs to the component factory interface.
-
-    - source_location -> goal_location
-    - plume_params.sigma -> plume_sigma
-    - Ensure grid_size is a plain (w, h) tuple of ints
-    """
-    converted = dict(kwargs)
-
-    # Normalize grid_size shape for factory
-    if "grid_size" in converted:
-        grid_val = converted["grid_size"]
-        try:
-            if isinstance(grid_val, (list, tuple)) and len(grid_val) == 2:
-                converted["grid_size"] = (int(grid_val[0]), int(grid_val[1]))
-        except Exception:
-            # Leave as-is; validation will catch issues later
-            pass
-
-    # Map goal/source naming
-    if "source_location" in converted and "goal_location" not in converted:
-        converted["goal_location"] = converted.pop("source_location")
-
-    # Extract plume sigma from nested params if provided
-    plume_params = converted.pop("plume_params", None)
-    if (
-        isinstance(plume_params, dict)
-        and "sigma" in plume_params
-        and "plume_sigma" not in converted
-    ):
-        converted["plume_sigma"] = plume_params["sigma"]
-
-    return converted
 
 
 def _validate_entry_point_resolves(entry_point: str) -> None:
@@ -491,10 +272,6 @@ def _apply_strict_checks(
 
 
 def _pop_env_from_registry(effective_env_id: str) -> bool:  # noqa: C901
-    """Attempt to remove env spec from Gymnasium registry across versions.
-
-    Returns True if a registry entry was removed, False otherwise.
-    """
     removed = False
     try:
         # Modern Gymnasium (>= 0.29): registry is a plain dict
@@ -551,31 +328,6 @@ def _verify_not_registered(effective_env_id: str) -> bool:
 def unregister_env(
     env_id: Optional[str] = None, suppress_warnings: bool = False
 ) -> bool:
-    """
-    Environment unregistration function for cleanup and testing workflows with comprehensive
-    cache management and error handling ensuring proper environment removal from Gymnasium registry.
-
-    This function provides a clean mechanism for removing environments from the Gymnasium registry,
-    supporting testing workflows and cleanup operations. It handles both cache management and
-    registry cleanup with comprehensive error handling and validation.
-
-    Args:
-        env_id: Environment identifier to unregister, defaults to ENV_ID if not provided
-        suppress_warnings: Whether to suppress warnings about unregistration operations
-
-    Returns:
-        True if environment was successfully unregistered or was not registered, False if unregistration failed  # noqa: E501
-
-    Raises:
-        ValidationError: If environment ID format is invalid
-
-    Example:
-        # Unregister default environment
-        success = unregister_env()
-
-        # Unregister specific environment with warnings suppressed
-        success = unregister_env("CustomPlume-v0", suppress_warnings=True)
-    """
     try:
         effective_env_id = env_id or ENV_ID
         _logger.debug(f"Starting unregistration for environment: {effective_env_id}")
@@ -651,20 +403,6 @@ def _query_registry_fallback(effective_env_id: str) -> bool:
 
 
 def _get_registry_status(effective_env_id: str) -> bool:
-    """Return registration status using lightweight, registry-only checks.
-
-    We deliberately avoid calling ``gymnasium.make`` here. Some environments may
-    perform heavy initialization or depend on configuration that is not yet
-    established during status probes (including tests that exercise
-    ``ensure_registered``). In those cases, attempting instantiation can raise
-    unexpected errors such as ``TypeError: dictionary update sequence element``
-    deep inside external libraries.
-
-    The direct registry query is sufficient for all current tests: after
-    ``register_env`` succeeds, the Gymnasium registry contains an entry for the
-    environment ID. For unregistered IDs, the lookup correctly returns False.
-    """
-
     try:
         return _query_registry_direct(effective_env_id)
     except Exception as registry_error:  # pragma: no cover - defensive guard
@@ -698,29 +436,6 @@ def _maybe_prime_cache(effective_env_id: str, is_in_registry: bool) -> None:
 
 
 def is_registered(env_id: Optional[str] = None, use_cache: bool = True) -> bool:
-    """
-    Registration status checking function with comprehensive cache validation, registry consistency
-    checking, and error handling providing accurate environment availability information.
-
-    This function provides reliable status checking for environment registration, supporting both
-    cached and authoritative registry queries with comprehensive validation and consistency checking.  # noqa: E501
-
-    Args:
-        env_id: Environment identifier to check, defaults to ENV_ID if not provided
-        use_cache: Whether to use cached registration information for faster queries
-
-    Returns:
-        True if environment is properly registered and available, False otherwise
-
-    Example:
-        # Quick cache-based check
-        if is_registered():
-            env = gym.make(ENV_ID)
-
-        # Authoritative registry check
-        if is_registered("CustomPlume-v0", use_cache=False):
-            print("Environment confirmed in registry")
-    """
     try:
         effective_env_id = env_id or ENV_ID
 
@@ -749,11 +464,6 @@ def _base_registration_info(effective_env_id: str) -> Dict[str, object]:
 
 
 def _env_spec_info(effective_env_id: str) -> Dict[str, object]:
-    """Fetch spec fields from Gymnasium registry. Returns empty dict on miss.
-
-    If an exception occurs while retrieving spec, a 'spec_retrieval_error' message
-    is returned instead of raising, to preserve current behavior.
-    """
     try:
         if hasattr(gymnasium.envs, "registry") and hasattr(
             gymnasium.envs.registry, "env_specs"
@@ -829,21 +539,6 @@ def get_registration_info(
     include_defaults: bool = True,
     include_system_info: bool = True,
 ) -> Dict[str, object]:
-    """Return structured registration metadata for tooling and diagnostics.
-
-    Args:
-        env_id: Environment identifier to query (defaults to ``ENV_ID``).
-        include_registry_details: Include Gymnasium registry spec metadata.
-        include_cache_details: Include cached registration state, when available.
-        include_defaults: Include default configuration summary and cached validation report.
-        include_system_info: Include registry/cache summary information.
-
-    Returns:
-        Dictionary containing registration metadata. Missing fields fall back to
-        empty dictionaries when the registry/cache lacks information to avoid
-        raising during diagnostic probes.
-    """
-
     effective_env_id = env_id or ENV_ID
 
     info: Dict[str, object] = _base_registration_info(effective_env_id)
@@ -1052,39 +747,6 @@ def _create_registration_kwargs(
     goal_radius: Optional[float] = None,
     additional_kwargs: Optional[Dict[str, object]] = None,
 ) -> Dict[str, object]:
-    """
-    Registration kwargs factory function for Gymnasium register() calls with comprehensive
-    parameter validation, default value application, and configuration consistency ensuring
-    proper environment setup.
-
-    This function creates validated parameter dictionaries for environment registration,
-    providing comprehensive validation, default application, and consistency checking for
-    all configuration parameters.
-
-    Args:
-        grid_size: Grid dimensions as (width, height) tuple, defaults to DEFAULT_GRID_SIZE
-        source_location: Plume source coordinates as (x, y) tuple, defaults to DEFAULT_SOURCE_LOCATION  # noqa: E501
-        max_steps: Maximum episode steps, defaults to DEFAULT_MAX_STEPS
-        goal_radius: Goal detection radius, defaults to DEFAULT_GOAL_RADIUS
-        additional_kwargs: Additional parameters dictionary for custom configuration
-
-    Returns:
-        Complete kwargs dictionary ready for gymnasium.register() call with validated parameters
-
-    Raises:
-        ValidationError: If parameter validation fails or constraints are violated
-
-    Example:
-        # Default parameters
-        kwargs = create_registration_kwargs()
-
-        # Custom configuration
-        kwargs = create_registration_kwargs(
-            grid_size=(256, 256),
-            source_location=(128, 128),
-            goal_radius=5.0
-        )
-    """
     try:
         # Apply defaults with None-only semantics (invalid values should not be masked)
         effective_grid_size = DEFAULT_GRID_SIZE if grid_size is None else grid_size
@@ -1138,7 +800,6 @@ def _create_registration_kwargs(
         # Log kwargs creation with parameter summary and validation status for debugging
         _logger.debug(f"Successfully created registration kwargs: {base_kwargs}")
 
-        # Return complete kwargs dictionary ready for Gymnasium registration with comprehensive validation  # noqa: E501
         return base_kwargs
 
     except Exception as e:
@@ -1368,35 +1029,6 @@ def _validate_registration_config(
     kwargs: Dict[str, object],
     strict_validation: bool = True,
 ) -> Tuple[bool, RegistrationValidationReport]:
-    """
-    Configuration validation function ensuring parameter consistency, Gymnasium compliance,
-    mathematical feasibility, and performance requirements for robust environment registration.
-
-    This function provides comprehensive validation of all registration parameters, ensuring
-    compatibility with Gymnasium requirements, mathematical feasibility, and performance constraints.  # noqa: E501
-
-    Args:
-        env_id: Environment identifier string to validate
-        entry_point: Entry point specification to validate
-        max_episode_steps: Maximum episode steps parameter to validate
-        kwargs: Environment parameters dictionary to validate
-        strict_validation: Whether to apply enhanced validation rules and constraints
-
-    Returns:
-        Tuple of (is_valid: bool, validation_report: dict) with detailed configuration analysis and recommendations  # noqa: E501
-
-    Example:
-        # Validate registration configuration
-        is_valid, report = validate_registration_config(
-            env_id="PlumeNav-Sim-v0",
-            entry_point="plume_nav_sim.envs.plume_env:create_plume_env",
-            max_episode_steps=1000,
-            kwargs={"grid_size": (128, 128)}
-        )
-
-        if not is_valid:
-            print(f"Validation errors: {report['errors']}")
-    """
     try:
         report = _init_validation_report(strict_validation)
         is_valid = True

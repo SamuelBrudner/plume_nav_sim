@@ -1,17 +1,3 @@
-"""
-Pydantic configuration models for environment components.
-
-This module defines validated configuration classes for all pluggable
-components (actions, observations, rewards) with automatic type checking
-and validation.
-
-Example:
-    >>> from plume_nav_sim.config import ActionConfig, create_environment_from_config
-    >>>
-    >>> action_cfg = ActionConfig(type="discrete", step_size=2)
-    >>> env = create_environment_from_config(action=action_cfg, ...)
-"""
-
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -27,18 +13,6 @@ __all__ = [
 
 
 class ActionConfig(BaseModel):
-    """Configuration for action processors.
-
-    Attributes:
-        type: Action processor type ('discrete', 'oriented', or 'run_tumble')
-        step_size: Movement step size in grid cells (default: 1)
-
-    Example:
-        >>> config = ActionConfig(type="discrete", step_size=2)
-        >>> config = ActionConfig(type="oriented", step_size=1)
-        >>> config = ActionConfig(type="run_tumble", step_size=1)
-    """
-
     type: Literal["discrete", "oriented", "run_tumble"] = Field(
         default="discrete",
         description=(
@@ -53,24 +27,6 @@ class ActionConfig(BaseModel):
 
 
 class ObservationConfig(BaseModel):
-    """Configuration for observation models.
-
-    Attributes:
-        type: Observation model type ('concentration', 'antennae', or 'wind_vector')
-        n_sensors: Number of sensors (for 'antennae' type)
-        sensor_distance: Distance from agent to sensors (for 'antennae')
-        sensor_angles: Custom sensor angles (optional, for 'antennae')
-        noise_std: WindVectorSensor noise standard deviation (for 'wind_vector')
-
-    Example:
-        >>> config = ObservationConfig(type="concentration")
-        >>> config = ObservationConfig(
-        ...     type="antennae",
-        ...     n_sensors=4,
-        ...     sensor_distance=2.0
-        ... )
-    """
-
     type: Literal["concentration", "antennae", "wind_vector"] = Field(
         default="concentration",
         description=(
@@ -109,15 +65,6 @@ class ObservationConfig(BaseModel):
 
 
 class WindConfig(BaseModel):
-    """Configuration for wind models.
-
-    Attributes:
-        type: Wind model type ('constant' only for now)
-        direction_deg: Wind direction in degrees (0°=East, 90°=North)
-        speed: Wind speed magnitude
-        vector: Optional explicit vector override (vx, vy)
-    """
-
     type: Literal["constant"] = Field(
         default="constant", description="Wind model type (constant vector)"
     )
@@ -146,24 +93,6 @@ class WindConfig(BaseModel):
 
 
 class RewardConfig(BaseModel):
-    """Configuration for reward functions.
-
-    Attributes:
-        type: Reward function type ('sparse' or 'step_penalty')
-        goal_radius: Success threshold distance from goal
-        goal_reward: Reward at goal (step_penalty reward only)
-        step_penalty: Penalty per step away from goal (step_penalty reward only)
-
-    Example:
-        >>> config = RewardConfig(type="sparse", goal_radius=5.0)
-        >>> config = RewardConfig(
-        ...     type="step_penalty",
-        ...     goal_radius=5.0,
-        ...     goal_reward=1.0,
-        ...     step_penalty=0.01
-        ... )
-    """
-
     type: Literal["sparse", "step_penalty"] = Field(
         default="sparse",
         description="Reward function type: 'sparse' (binary) or 'step_penalty' (time-aware)",
@@ -185,18 +114,6 @@ class RewardConfig(BaseModel):
 
 
 class PlumeConfig(BaseModel):
-    """Configuration for plume/concentration field.
-
-    Attributes:
-        sigma: Gaussian dispersion parameter (standard deviation)
-        normalize: Whether to normalize field values to [0, 1]
-        enable_caching: Whether to enable field value caching
-        parameters: Deprecated placeholder for plume-specific parameters
-
-    Example:
-        >>> config = PlumeConfig(sigma=20.0, normalize=True)
-    """
-
     sigma: float = Field(
         default=20.0, gt=0.0, description="Gaussian dispersion parameter (std dev)"
     )
@@ -224,34 +141,6 @@ class PlumeConfig(BaseModel):
 
 
 class EnvironmentConfig(BaseModel):
-    """Complete environment configuration.
-
-    This is the master config that combines all component configs
-    plus environment-specific settings.
-
-    Attributes:
-        grid_size: Environment dimensions (width, height)
-        goal_location: Target position (x, y)
-        start_location: Initial agent position (x, y), optional
-        max_steps: Episode step limit
-        render_mode: Rendering mode ('rgb_array', 'human', or None)
-        action: Action processor configuration
-        observation: Observation model configuration
-        reward: Reward function configuration
-        plume: Plume field configuration
-        wind: Optional wind model configuration
-
-    Example:
-        >>> config = EnvironmentConfig(
-        ...     grid_size=(128, 128),
-        ...     goal_location=(64, 64),
-        ...     max_steps=1000,
-        ...     action=ActionConfig(type="discrete"),
-        ...     observation=ObservationConfig(type="concentration"),
-        ...     reward=RewardConfig(type="sparse")
-        ... )
-    """
-
     # Environment settings
     grid_size: tuple[int, int] = Field(
         default=(128, 128), description="Environment dimensions (width, height)"

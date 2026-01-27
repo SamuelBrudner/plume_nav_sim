@@ -14,10 +14,6 @@ from plume_nav_sim.envs.config_types import EnvironmentConfig
 def _parse_args_and_overrides(
     argv: Optional[list[str]] = None,
 ) -> Tuple[argparse.Namespace, List[str]]:
-    """Parse CLI args, returning known args and passthrough overrides.
-
-    Overrides are intended for Hydra, e.g. ["episodes=5", "env.max_steps=100"].
-    """
     p = argparse.ArgumentParser(
         description="Run plume-nav-sim episodes and capture analysis-ready data",
         add_help=True,
@@ -72,12 +68,6 @@ def _parse_args_and_overrides(
 
 
 def _resolve_config_dir(config_path: Optional[str]) -> str:
-    """Resolve the Hydra config directory, defaulting to the repo conf/ tree.
-
-    Uses plume_nav_sim.get_conf_dir() when available, falling back to
-    conf/ relative to this file. This mirrors the previous inline logic
-    in _load_hydra_config.
-    """
     if config_path:
         return config_path
 
@@ -92,12 +82,6 @@ def _manual_compose_for_data_capture(
     conf_root: Path,
     overrides: List[str],
 ) -> dict:
-    """Manual composition for data_capture/config to support mixed group locations.
-
-    This handles the case where data_capture/config.yaml references groups
-    that live at the repository conf/ root (e.g., movie/, env/plume/), while
-    the experiment/ group lives under conf/data_capture/.
-    """
     from omegaconf import OmegaConf
 
     yaml_path = _get_data_capture_yaml_path(config_name, conf_root)
@@ -111,11 +95,6 @@ def _manual_compose_for_data_capture(
 
 
 def _get_data_capture_yaml_path(config_name: str, conf_root: Path) -> Path:
-    """Locate the YAML file for a given data_capture config.
-
-    This preserves the original MissingConfigException semantics used by
-    _manual_compose_for_data_capture.
-    """
     from hydra.errors import MissingConfigException
 
     yaml_path = conf_root.joinpath(*config_name.split("/"))

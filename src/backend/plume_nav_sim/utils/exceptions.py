@@ -1,14 +1,13 @@
-# External imports with version comments
 import dataclasses
 import enum
-import inspect  # >=3.10 - Frame inspection for automatic error context extraction and caller information
-import logging  # >=3.10 - Logger creation and error logging integration for development debugging and monitoring
-import re  # >=3.10 - Regular expressions for sanitizing untrusted error messages
-import threading  # >=3.10 - Thread-safe error handling and context management for multi-threaded exception scenarios
-import time  # >=3.10 - Timestamp generation for error tracking and performance context in exception handling
-import traceback  # >=3.10 - Stack trace formatting for detailed error context and development debugging
+import inspect
+import logging
+import re
+import threading
+import time
+import traceback
 import uuid
-from typing import (  # >=3.10 - Type hints for exception parameters, error contexts, and recovery suggestion functions
+from typing import (
     Any,
     Dict,
     List,
@@ -16,7 +15,6 @@ from typing import (  # >=3.10 - Type hints for exception parameters, error cont
     Union,
 )
 
-# Global constants for error handling configuration
 ERROR_CONTEXT_MAX_LENGTH = 1000
 MAX_STACK_TRACE_DEPTH = 10
 SANITIZATION_PLACEHOLDER = "<sanitized>"
@@ -34,7 +32,6 @@ SENSITIVE_KEYS = [
 RECOVERY_SUGGESTION_MAX_LENGTH = 500
 ERROR_HISTORY_MAX_SIZE = 50
 
-# Module exports - comprehensive exception handling interface
 __all__ = [
     "PlumeNavSimError",
     "ValidationError",
@@ -55,12 +52,6 @@ __all__ = [
 
 
 class ErrorSeverity(enum.IntEnum):
-    """Enumeration class defining error severity levels for exception classification and handling priority in development and monitoring contexts.
-
-    This enumeration provides standardized severity levels that enable consistent error classification,
-    appropriate logging levels, and escalation decisions throughout the plume_nav_sim system.
-    """
-
     # Severity level definitions with integer values for ordering
     LOW = 1  # Minor issues like validation warnings
     MEDIUM = 2  # Recoverable errors like rendering fallbacks
@@ -68,11 +59,6 @@ class ErrorSeverity(enum.IntEnum):
     CRITICAL = 4  # System-level failures requiring immediate attention
 
     def get_description(self) -> str:
-        """Get human-readable description of error severity level.
-
-        Returns:
-            str: Description of severity level for logging and user display
-        """
         severity_descriptions = {
             ErrorSeverity.LOW: "Minor issue with suggested improvements",
             ErrorSeverity.MEDIUM: "Recoverable error with fallback available",
@@ -82,22 +68,11 @@ class ErrorSeverity(enum.IntEnum):
         return severity_descriptions.get(self, "Unknown severity level")
 
     def should_escalate(self) -> bool:
-        """Check if error severity requires escalation to higher-level error handling.
-
-        Returns:
-            bool: True if error should be escalated based on severity level
-        """
         return self in (ErrorSeverity.HIGH, ErrorSeverity.CRITICAL)
 
 
 @dataclasses.dataclass
 class ErrorContext:
-    """Data class for structured error context information including timestamps, component details, operation context, and debugging information for comprehensive error tracking.
-
-    This class provides a standardized structure for capturing and managing error context
-    across all plume_nav_sim components, enabling consistent debugging and error analysis.
-    """
-
     # Required fields for error context identification
     component_name: str
     operation_name: str
@@ -111,11 +86,6 @@ class ErrorContext:
     is_sanitized: bool = False
 
     def add_caller_info(self, stack_depth: int = 2) -> None:
-        """Add caller function and line information using stack inspection.
-
-        Args:
-            stack_depth (int): Stack depth to inspect for caller information
-        """
         try:
             # Use inspect.stack() to get caller information at specified depth
             frame_info = inspect.stack()[stack_depth]
@@ -150,11 +120,6 @@ class ErrorContext:
             )
 
     def sanitize(self, additional_sensitive_keys: Optional[List[str]] = None) -> None:
-        """Sanitize error context removing sensitive information while preserving debugging data.
-
-        Args:
-            additional_sensitive_keys (Optional[List[str]]): Additional sensitive keys to sanitize
-        """
         if self.is_sanitized:
             return
 
@@ -176,11 +141,6 @@ class ErrorContext:
         self.is_sanitized = True
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert error context to dictionary for serialization and logging.
-
-        Returns:
-            dict: Dictionary representation of error context with auto-sanitization
-        """
         # Auto-sanitize if not already sanitized to prevent sensitive data exposure
         if not self.is_sanitized:
             self.sanitize()
@@ -208,12 +168,6 @@ class ErrorContext:
 
 
 class PlumeNavSimError(Exception):
-    """Base exception class for all plume_nav_sim package errors providing consistent error handling interface, logging integration, recovery suggestions, and secure error reporting with development debugging support.
-
-    This base class establishes the foundation for hierarchical error handling throughout
-    the plume_nav_sim system, ensuring consistent error reporting, logging, and recovery patterns.
-    """
-
     def __init__(
         self,
         message: str,
@@ -221,13 +175,6 @@ class PlumeNavSimError(Exception):
         severity: Union[ErrorSeverity, str] = ErrorSeverity.MEDIUM,
         **kwargs: Any,
     ):
-        """Initialize base exception with message, context, severity level, and error tracking.
-
-        Args:
-            message (str): Primary error description
-            context (Optional[ErrorContext]): Error context for debugging and analysis
-            severity (ErrorSeverity): Error severity level for classification and handling priority
-        """
         super().__init__(message)
 
         # Store message as primary error description
@@ -289,11 +236,6 @@ class PlumeNavSimError(Exception):
             )
 
     def get_error_details(self) -> Dict[str, Any]:
-        """Get comprehensive error details including context, timestamp, and recovery information for debugging and logging.
-
-        Returns:
-            dict: Dictionary containing all error details and metadata
-        """
         # Create base error details with message, error_id, and timestamp
         details = {
             "error_id": self.error_id,
@@ -321,14 +263,6 @@ class PlumeNavSimError(Exception):
         return details
 
     def format_for_user(self, include_suggestions: bool = True) -> str:
-        """Format error message for user display removing technical details and sensitive information.
-
-        Args:
-            include_suggestions (bool): Whether to include recovery suggestions
-
-        Returns:
-            str: User-friendly error message with optional recovery suggestions
-        """
         # Extract user-readable message removing technical jargon
         user_message = self.message
 
@@ -396,12 +330,6 @@ class PlumeNavSimError(Exception):
     def log_error(  # noqa: C901
         self, logger: Optional[logging.Logger] = None, include_stack_trace: bool = False
     ) -> None:
-        """Log error with appropriate logger including context, recovery suggestions, and debugging information.
-
-        Args:
-            logger (Optional[logging.Logger]): Logger instance or None for default
-            include_stack_trace (bool): Whether to include stack trace in log
-        """
         if self.logged:
             return  # Prevent duplicate logging
 
@@ -409,7 +337,6 @@ class PlumeNavSimError(Exception):
         if logger is None:
             logger = logging.getLogger("plume_nav_sim.exceptions")
 
-        # Create comprehensive log message with error details (details available via get_error_details())
 
         # Include sanitized context information for debugging
         context_str = ""
@@ -462,11 +389,6 @@ class PlumeNavSimError(Exception):
         self.logged = True
 
     def set_recovery_suggestion(self, suggestion: str) -> None:
-        """Set recovery suggestion for automated error handling and user guidance.
-
-        Args:
-            suggestion (str): Recovery suggestion text
-        """
         # Validate suggestion length against RECOVERY_SUGGESTION_MAX_LENGTH
         if len(suggestion) > RECOVERY_SUGGESTION_MAX_LENGTH:
             suggestion = suggestion[: RECOVERY_SUGGESTION_MAX_LENGTH - 3] + "..."
@@ -478,12 +400,6 @@ class PlumeNavSimError(Exception):
         self.error_details["has_recovery_guidance"] = True
 
     def add_context(self, key: str, value: Any) -> None:
-        """Add additional context information to error for enhanced debugging.
-
-        Args:
-            key (str): Context key
-            value (Any): Context value
-        """
         # Validate key is non-empty string
         if not key or not isinstance(key, str):
             raise ValueError("Context key must be a non-empty string")
@@ -499,12 +415,6 @@ class PlumeNavSimError(Exception):
 
 
 class ValidationError(PlumeNavSimError, ValueError):
-    """Exception class for input parameter and action validation failures with specific validation context, detailed error reporting, and parameter-specific recovery suggestions for development debugging.
-
-    This exception handles all input validation failures with detailed parameter information
-    and specific recovery suggestions for resolving validation issues.
-    """
-
     def __init__(
         self,
         message: str,
@@ -516,14 +426,6 @@ class ValidationError(PlumeNavSimError, ValueError):
         *,
         invalid_value: Optional[Any] = None,
     ):
-        """Initialize validation error with parameter details and validation context.
-
-        Args:
-            message (str): Primary error description
-            parameter_name (Optional[str]): Name of parameter that failed validation
-            parameter_value (Optional[Any]): The value that was provided for the parameter
-            expected_format (Optional[str]): Expected format or constraint description
-        """
         # Call parent constructor with message, context, and MEDIUM severity
         super().__init__(message, context=context, severity=ErrorSeverity.MEDIUM)
 
@@ -560,11 +462,6 @@ class ValidationError(PlumeNavSimError, ValueError):
         return value
 
     def get_validation_details(self) -> Dict[str, Any]:
-        """Get comprehensive validation error details including parameter information and expected formats.
-
-        Returns:
-            dict: Dictionary containing validation-specific error details
-        """
         # Get base error details from parent class
         details = self.get_error_details()
 
@@ -584,12 +481,6 @@ class ValidationError(PlumeNavSimError, ValueError):
     def add_validation_error(
         self, error_message: str, field_name: Optional[str] = None
     ) -> None:
-        """Add additional validation error for compound validation failures.
-
-        Args:
-            error_message (str): Validation error description
-            field_name (Optional[str]): Field name associated with error
-        """
         # Validate error_message is non-empty string
         if not error_message or not isinstance(error_message, str):
             raise ValueError("Error message must be a non-empty string")
@@ -608,11 +499,6 @@ class ValidationError(PlumeNavSimError, ValueError):
             )
 
     def set_parameter_constraints(self, constraints: Dict[str, Any]) -> None:
-        """Set parameter constraints that were violated for detailed error reporting.
-
-        Args:
-            constraints (dict): Dictionary of parameter constraints
-        """
         # Validate constraints is dictionary
         if not isinstance(constraints, dict):
             raise TypeError("Constraints must be a dictionary")
@@ -629,12 +515,6 @@ class ValidationError(PlumeNavSimError, ValueError):
 
 
 class StateError(PlumeNavSimError):
-    """Exception class for invalid environment state transitions and inconsistent component states with state analysis, transition validation, and automated recovery action suggestions.
-
-    This exception handles state-related errors with comprehensive state analysis
-    and specific recovery actions for resolving state inconsistencies.
-    """
-
     def __init__(
         self,
         message: str,
@@ -642,14 +522,6 @@ class StateError(PlumeNavSimError):
         expected_state: Optional[str] = None,
         component_name: Optional[str] = None,
     ):
-        """Initialize state error with current state, expected state, and component information.
-
-        Args:
-            message (str): Primary error description
-            current_state (Optional[str]): Current state description
-            expected_state (Optional[str]): Expected state description
-            component_name (Optional[str]): Component name where state error occurred
-        """
         # Call parent constructor with message and HIGH severity
         super().__init__(message, severity=ErrorSeverity.HIGH)
 
@@ -669,11 +541,6 @@ class StateError(PlumeNavSimError):
         self.set_recovery_suggestion(recovery_action)
 
     def suggest_recovery_action(self) -> str:
-        """Suggest specific recovery actions based on state transition analysis and component type.
-
-        Returns:
-            str: Recovery action suggestion for resolving state error
-        """
         # Check for specific state conditions first (uninitialized, terminated, error)
         # These are high-priority indicators that override component-specific logic
         if self.current_state:
@@ -704,11 +571,6 @@ class StateError(PlumeNavSimError):
         return "Verify component state and reinitialize if necessary"
 
     def add_state_details(self, details: Dict[str, Any]) -> None:
-        """Add detailed state information for debugging and recovery analysis.
-
-        Args:
-            details (dict): State details dictionary
-        """
         # Validate details is dictionary
         if not isinstance(details, dict):
             raise TypeError("State details must be a dictionary")
@@ -727,12 +589,6 @@ class StateError(PlumeNavSimError):
 
 
 class RenderingError(PlumeNavSimError):
-    """Exception class for visualization and display failures including matplotlib backend issues, rendering pipeline problems, and display fallback strategies with backend compatibility analysis.
-
-    This exception handles rendering and visualization errors with specific fallback
-    suggestions and backend compatibility analysis.
-    """
-
     def __init__(
         self,
         message: str,
@@ -741,14 +597,6 @@ class RenderingError(PlumeNavSimError):
         underlying_error: Optional[Exception] = None,
         context: Optional[Any] = None,
     ):
-        """Initialize rendering error with render mode, backend information, and underlying error details.
-
-        Args:
-            message (str): Primary error description
-            render_mode (Optional[str]): Rendering mode that failed
-            backend_name (Optional[str]): Backend that caused the error
-            underlying_error (Optional[Exception]): Underlying exception that caused rendering failure
-        """
         # Prepare optional context: accept either ErrorContext or a plain dict
         error_context = None
         if context is not None:
@@ -791,11 +639,6 @@ class RenderingError(PlumeNavSimError):
             )
 
     def get_fallback_suggestions(self) -> List[str]:
-        """Get list of available rendering fallback options based on error context and system capabilities.
-
-        Returns:
-            list: List of fallback rendering options with implementation details
-        """
         fallbacks = []
 
         # Analyze render_mode and backend_name for fallback options
@@ -815,11 +658,6 @@ class RenderingError(PlumeNavSimError):
         return self.available_fallbacks
 
     def set_rendering_context(self, context: Dict[str, Any]) -> None:
-        """Set rendering context information for detailed error analysis and debugging.
-
-        Args:
-            context (dict): Rendering context information
-        """
         # Validate context contains rendering-specific information
         if not isinstance(context, dict):
             raise TypeError("Rendering context must be a dictionary")
@@ -834,12 +672,6 @@ class RenderingError(PlumeNavSimError):
 
 
 class ConfigurationError(PlumeNavSimError):
-    """Exception class for environment setup, registration issues, and invalid configuration parameters with configuration validation, parameter analysis, and valid option suggestions.
-
-    This exception handles configuration-related errors with comprehensive parameter
-    validation and suggestions for valid configuration options.
-    """
-
     def __init__(
         self,
         message: str,
@@ -849,14 +681,6 @@ class ConfigurationError(PlumeNavSimError):
         *,
         invalid_value: Optional[Any] = None,
     ):
-        """Initialize configuration error with parameter details and valid options.
-
-        Args:
-            message (str): Primary error description
-            config_parameter (Optional[str]): Configuration parameter that is invalid
-            parameter_value (Optional[Any]): Value that was provided for the configuration parameter
-            valid_options (Optional[dict]): Dictionary of valid configuration options
-        """
         # Call parent constructor with message and HIGH severity
         super().__init__(message, severity=ErrorSeverity.HIGH)
 
@@ -898,11 +722,6 @@ class ConfigurationError(PlumeNavSimError):
         return value
 
     def get_valid_options(self) -> Dict[str, Any]:
-        """Get dictionary of valid configuration options for error parameter with descriptions and examples.
-
-        Returns:
-            dict: Dictionary containing valid configuration options and usage examples
-        """
         # Return valid_options if available
         if self.valid_options:
             return self.valid_options
@@ -925,11 +744,6 @@ class ConfigurationError(PlumeNavSimError):
         return standard_options
 
     def add_configuration_context(self, context: Dict[str, Any]) -> None:
-        """Add configuration context for detailed error analysis and debugging.
-
-        Args:
-            context (dict): Configuration context information
-        """
         # Sanitize context to remove sensitive configuration data
         sanitized_context = sanitize_error_context(context)
 
@@ -949,12 +763,6 @@ class ConfigurationError(PlumeNavSimError):
 
 
 class ComponentError(PlumeNavSimError):
-    """Exception class for general component-level failures in plume model, rendering pipeline, or state management with component diagnostic information and failure analysis.
-
-    This exception handles component-specific errors with detailed diagnostic
-    information and component-specific recovery strategies.
-    """
-
     def __init__(
         self,
         message: str,
@@ -962,14 +770,6 @@ class ComponentError(PlumeNavSimError):
         operation_name: Optional[str] = None,
         underlying_error: Optional[Exception] = None,
     ):
-        """Initialize component error with component identification and operation context.
-
-        Args:
-            message (str): Primary error description
-            component_name (str): Name of component that failed
-            operation_name (Optional[str]): Operation that was being performed
-            underlying_error (Optional[Exception]): Underlying exception that caused component failure
-        """
         # Call parent constructor with message and HIGH severity
         super().__init__(message, severity=ErrorSeverity.HIGH)
 
@@ -1000,11 +800,6 @@ class ComponentError(PlumeNavSimError):
             return f"Restart {self.component_name} component or check configuration"
 
     def diagnose_failure(self) -> Dict[str, Any]:
-        """Perform component-specific failure diagnosis and generate detailed diagnostic report.
-
-        Returns:
-            dict: Diagnostic report with component analysis and failure details
-        """
         # Analyze component_name for component-specific diagnostics
         diagnostic_report = {
             "component_name": self.component_name,
@@ -1033,11 +828,6 @@ class ComponentError(PlumeNavSimError):
         return diagnostic_report
 
     def set_component_state(self, state: Dict[str, Any]) -> None:
-        """Set component state information for diagnostic analysis.
-
-        Args:
-            state (dict): Component state information
-        """
         # Sanitize state to remove sensitive component information
         sanitized_state = sanitize_error_context(state)
 
@@ -1056,12 +846,6 @@ class ComponentError(PlumeNavSimError):
 
 
 class ResourceError(PlumeNavSimError):
-    """Exception class for resource-related failures including memory exhaustion, cleanup issues, and system resource constraints with resource analysis and cleanup action recommendations.
-
-    This exception handles resource-related errors with detailed resource usage
-    analysis and specific cleanup action recommendations.
-    """
-
     def __init__(
         self,
         message: str,
@@ -1069,14 +853,6 @@ class ResourceError(PlumeNavSimError):
         current_usage: Optional[float] = None,
         limit_exceeded: Optional[float] = None,
     ):
-        """Initialize resource error with resource type and usage information.
-
-        Args:
-            message (str): Primary error description
-            resource_type (Optional[str]): Type of resource (memory, disk, etc.)
-            current_usage (Optional[float]): Current resource usage value
-            limit_exceeded (Optional[float]): Resource limit that was exceeded
-        """
         # Call parent constructor with message and HIGH severity
         super().__init__(message, severity=ErrorSeverity.HIGH)
 
@@ -1126,11 +902,6 @@ class ResourceError(PlumeNavSimError):
         return actions
 
     def set_resource_details(self, details: Dict[str, Any]) -> None:
-        """Set detailed resource usage information for analysis and cleanup planning.
-
-        Args:
-            details (dict): Resource usage details
-        """
         # Store details in resource_details dictionary
         self.resource_details = details
 
@@ -1151,12 +922,6 @@ class ResourceError(PlumeNavSimError):
 
 
 class IntegrationError(PlumeNavSimError):
-    """Exception class for external dependency failures including Gymnasium, NumPy, or Matplotlib integration issues with dependency compatibility checking and version analysis.
-
-    This exception handles integration errors with external dependencies including
-    detailed compatibility analysis and version checking.
-    """
-
     def __init__(
         self,
         message: str,
@@ -1164,14 +929,6 @@ class IntegrationError(PlumeNavSimError):
         required_version: Optional[str] = None,
         current_version: Optional[str] = None,
     ):
-        """Initialize integration error with dependency information and version details.
-
-        Args:
-            message (str): Primary error description
-            dependency_name (str): Name of dependency that failed
-            required_version (Optional[str]): Required version specification
-            current_version (Optional[str]): Currently installed version
-        """
         # Call parent constructor with message and HIGH severity
         super().__init__(message, severity=ErrorSeverity.HIGH)
 
@@ -1216,11 +973,6 @@ class IntegrationError(PlumeNavSimError):
             return True  # Assume mismatch if comparison fails
 
     def check_compatibility(self) -> Dict[str, Any]:
-        """Check dependency compatibility and generate detailed compatibility report.
-
-        Returns:
-            dict: Compatibility analysis with version details and upgrade recommendations
-        """
         # Compare required_version with current_version if both available
         compatibility_report = {
             "dependency_name": self.dependency_name,
@@ -1249,7 +1001,6 @@ class IntegrationError(PlumeNavSimError):
                 ),
             }
 
-        # Return comprehensive compatibility analysis dictionary
         self.compatibility_info = compatibility_report
         return compatibility_report
 
@@ -1291,11 +1042,6 @@ class PlumeModelError(ComponentError):
         return suggestions
 
     def set_compatibility_info(self, info: Dict[str, Any]) -> None:
-        """Set detailed compatibility information for comprehensive error analysis.
-
-        Args:
-            info (dict): Compatibility information dictionary
-        """
         # Store info in compatibility_info dictionary
         self.compatibility_info.update(info)
 
@@ -1320,19 +1066,6 @@ def handle_component_error(
     error_context: Optional[dict] = None,
     recovery_action: Optional[str] = None,
 ) -> str:
-    """Centralized error handling function with component-specific recovery strategies,
-    logging integration, and secure error reporting for all plume_nav_sim components.
-
-    Args:
-        error (Exception): Exception that occurred
-        component_name (str): Name of component where error occurred
-        error_context (Optional[dict]): Additional error context information
-        recovery_action (Optional[str]): Suggested recovery action
-
-    Returns:
-        str: Recovery strategy identifier or error escalation status for automated
-            error handling
-    """
     # Validate error is Exception instance and component_name is non-empty string
     if not isinstance(error, Exception):
         raise TypeError("Error parameter must be an Exception instance")
@@ -1402,15 +1135,6 @@ def handle_component_error(
 def sanitize_error_context(  # noqa: C901
     context: dict, additional_sensitive_keys: Optional[List[str]] = None
 ) -> dict:
-    """Sanitize error context dictionary to prevent sensitive information disclosure while preserving debugging information for secure error logging.
-
-    Args:
-        context (dict): Context dictionary to sanitize
-        additional_sensitive_keys (Optional[List[str]]): Additional sensitive keys to sanitize
-
-    Returns:
-        dict: Sanitized context dictionary safe for logging and error reporting
-    """
     if not isinstance(context, dict):
         return {}
 
@@ -1493,17 +1217,6 @@ def format_error_details(  # noqa: C901
     recovery_suggestion: Optional[str] = None,
     include_stack_trace: bool = False,
 ) -> str:
-    """Format comprehensive error details including exception info, context, and recovery suggestions for development debugging and user-friendly error messages.
-
-    Args:
-        error (Exception): Exception to format
-        context (Optional[dict]): Error context information
-        recovery_suggestion (Optional[str]): Recovery suggestion text
-        include_stack_trace (bool): Whether to include stack trace
-
-    Returns:
-        str: Formatted error details string with context and recovery information
-    """
     # Extract basic error information (type, message, args)
     error_type = type(error).__name__
     error_message = str(error)
@@ -1564,7 +1277,6 @@ def format_error_details(  # noqa: C901
             )
         details_lines.extend(["\nRecovery Suggestion:", recovery_suggestion])
 
-    # Return comprehensive error details formatted for logging and debugging
     return "\n".join(details_lines)
 
 
@@ -1574,17 +1286,6 @@ def create_error_context(
     include_caller_info: bool = False,
     include_system_info: bool = False,
 ) -> ErrorContext:
-    """Create standardized error context dictionary with caller information, timestamp, and environment details for consistent error reporting.
-
-    Args:
-        operation_name (Optional[str]): Name of operation being performed
-        additional_context (Optional[dict]): Additional context information
-        include_caller_info (bool): Whether to include caller information
-        include_system_info (bool): Whether to include system information
-
-    Returns:
-        ErrorContext: Standardized error context dictionary with timestamp and debugging information
-    """
     # Create base context dictionary with current timestamp
     timestamp = time.time()
 
@@ -1642,15 +1343,6 @@ def log_exception_with_recovery(  # noqa: C901
     recovery_action: Optional[str] = None,
     include_performance_impact: bool = False,
 ) -> None:
-    """Log exception with detailed context, recovery suggestions, and performance impact analysis for development debugging and monitoring.
-
-    Args:
-        exception (Exception): Exception to log
-        logger (logging.Logger): Logger instance to use
-        context (Optional[dict]): Error context information
-        recovery_action (Optional[str]): Recovery action taken or suggested
-        include_performance_impact (bool): Whether to include performance impact analysis
-    """
     # Validate exception and logger parameters
     if not isinstance(exception, Exception):
         raise TypeError("Exception parameter must be an Exception instance")
@@ -1660,7 +1352,6 @@ def log_exception_with_recovery(  # noqa: C901
             "Logger parameter must be a logging.Logger instance or ComponentLogger"
         )
 
-    # Create comprehensive error context using create_error_context
     error_context = create_error_context(
         operation_name="exception_logging",
         additional_context=context,

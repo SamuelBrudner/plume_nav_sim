@@ -1,47 +1,16 @@
-"""Concentration statistics computation and normalization utilities.
-
-Provides functions to compute statistics on zarr datasets and apply
-on-the-fly normalization during loading.
-"""
-
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal, Optional, TypedDict
+from typing import Literal, Optional
 
 import numpy as np
-from typing_extensions import NotRequired
 
 LOG = logging.getLogger(__name__)
 
 
-class QuantileStats(TypedDict):
-    """Quantile statistics for concentration data."""
-
-    q01: float
-    q05: float
-    q25: float
-    q50: float
-    q75: float
-    q95: float
-    q99: float
-    q999: NotRequired[float]
-
-
-class ConcentrationStats(TypedDict):
-    """Statistics for concentration normalization."""
-
-    min: float
-    max: float
-    mean: float
-    std: float
-    quantiles: QuantileStats
-    nonzero_fraction: float
-    # For pre-normalized data, store original range
-    original_min: Optional[float]
-    original_max: Optional[float]
-    normalized_during_ingest: bool
+QuantileStats = dict[str, float]
+ConcentrationStats = dict[str, object]
 
 
 def compute_concentration_stats(
@@ -49,17 +18,6 @@ def compute_concentration_stats(
     sample_frames: Optional[int] = None,
     chunk_size: int = 100,
 ) -> ConcentrationStats:
-    """Compute statistics for a zarr concentration dataset.
-
-    Args:
-        zarr_path: Path to zarr store containing 'concentration' dataset
-        sample_frames: If set, sample this many frames for quantile estimation.
-                      None means use all frames (may be slow for large datasets).
-        chunk_size: Number of frames to load at once for streaming stats.
-
-    Returns:
-        ConcentrationStats dict with min, max, mean, std, quantiles, etc.
-    """
     import zarr
 
     store = zarr.DirectoryStore(str(zarr_path))
@@ -136,28 +94,28 @@ def compute_concentration_stats(
     samples = np.concatenate(all_samples)
     LOG.info("  Computing quantiles from %d samples", len(samples))
 
-    quantiles = QuantileStats(
-        q01=float(np.percentile(samples, 1)),
-        q05=float(np.percentile(samples, 5)),
-        q25=float(np.percentile(samples, 25)),
-        q50=float(np.percentile(samples, 50)),
-        q75=float(np.percentile(samples, 75)),
-        q95=float(np.percentile(samples, 95)),
-        q99=float(np.percentile(samples, 99)),
-        q999=float(np.percentile(samples, 99.9)),
-    )
+    quantiles: QuantileStats = {
+        "q01": float(np.percentile(samples, 1)),
+        "q05": float(np.percentile(samples, 5)),
+        "q25": float(np.percentile(samples, 25)),
+        "q50": float(np.percentile(samples, 50)),
+        "q75": float(np.percentile(samples, 75)),
+        "q95": float(np.percentile(samples, 95)),
+        "q99": float(np.percentile(samples, 99)),
+        "q999": float(np.percentile(samples, 99.9)),
+    }
 
-    return ConcentrationStats(
-        min=float(running_min),
-        max=float(running_max),
-        mean=float(mean),
-        std=float(std),
-        quantiles=quantiles,
-        nonzero_fraction=float(nonzero_fraction),
-        original_min=None,
-        original_max=None,
-        normalized_during_ingest=False,
-    )
+    return {
+        "min": float(running_min),
+        "max": float(running_max),
+        "mean": float(mean),
+        "std": float(std),
+        "quantiles": quantiles,
+        "nonzero_fraction": float(nonzero_fraction),
+        "original_min": None,
+        "original_max": None,
+        "normalized_during_ingest": False,
+    }
 
 
 def store_stats_in_zarr(zarr_path: Path, stats: ConcentrationStats) -> None:
@@ -183,7 +141,7 @@ def load_stats_from_zarr(zarr_path: Path) -> Optional[ConcentrationStats]:
     if stats_dict is None:
         return None
 
-    return ConcentrationStats(**stats_dict)
+    return dict(stats_dict)
 
 
 NormalizationMethod = Literal["minmax", "robust", "zscore", None]
@@ -194,20 +152,6 @@ def normalize_array(
     stats: ConcentrationStats,
     method: NormalizationMethod = "minmax",
 ) -> np.ndarray:
-    """Apply normalization to concentration data using pre-computed stats.
-
-    Args:
-        data: Raw concentration array
-        stats: Pre-computed statistics
-        method: Normalization method:
-            - "minmax": Scale to [0, 1] using min/max
-            - "robust": Scale to [0, 1] using 5th-95th percentile
-            - "zscore": Standardize to mean=0, std=1
-            - None: Return data unchanged
-
-    Returns:
-        Normalized array (same shape as input)
-    """
     if method is None:
         return data
 

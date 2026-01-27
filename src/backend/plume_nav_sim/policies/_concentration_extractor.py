@@ -174,19 +174,6 @@ def extract_concentration(
     modality_index: int,
     sensor_index: int | None,
 ) -> float:
-    """Extract a scalar concentration value from heterogeneous observations.
-
-    Supports:
-    - numpy arrays or numeric scalars (shape () or (1,))
-    - dict observations with a concentration-bearing key
-    - tuple/list observations treated as multi-modal containers (selects
-      modality_index and recurses)
-
-    Raises:
-        ValueError: If no scalar concentration can be extracted, with guidance
-        on how to adapt the observation (e.g., set sensor_index or
-        concentration_key).
-    """
     return _coerce_concentration(
         observation,
         policy_name=policy_name,

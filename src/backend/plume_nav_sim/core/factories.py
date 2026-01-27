@@ -1,7 +1,3 @@
-"""
-Core factory functions for creating default data structures.
-"""
-
 from .geometry import GridSize
 from .state import AgentState
 

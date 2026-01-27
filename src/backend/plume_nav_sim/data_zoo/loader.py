@@ -30,7 +30,7 @@ def _normalize_arg(normalize: NormalizationMethod | str | None) -> Normalization
 
 def _open_zarr_dataset(path: Path, *, chunks: Any) -> "xr.Dataset":
     try:
-        import xarray as xr  # type: ignore
+        import xarray as xr
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume requires optional dependency 'xarray'. "
@@ -122,7 +122,7 @@ def _apply_normalization(
         )
 
     try:
-        import xarray as xr  # type: ignore
+        import xarray as xr
     except Exception as exc:  # pragma: no cover - optional dependency
         raise ImportError(
             "load_plume normalization requires optional dependency 'xarray'. "
@@ -153,16 +153,6 @@ def load_plume(
     auto_download: bool = False,
     chunks: Any = "auto",
 ) -> "xr.DataArray":
-    """Load a registry dataset as an xarray.DataArray with optional normalization.
-
-    Args:
-        dataset_id: Registry identifier (e.g., "colorado_jet_v1").
-        normalize: Normalization method ("minmax", "robust", "zscore", or None).
-        cache_root: Base cache directory for registry data.
-        auto_download: Allow downloads when the dataset is missing from cache.
-        chunks: Chunking strategy passed to ``xr.open_zarr`` (default: "auto" for dask).
-    """
-
     method = _normalize_arg(normalize)
     entry = describe_dataset(dataset_id)
     layout = entry.ingest.output_layout if entry.ingest else entry.artifact.layout

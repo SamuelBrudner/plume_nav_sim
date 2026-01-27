@@ -1,30 +1,13 @@
-"""
-Default colormap and color scheme configuration module for plume navigation environment.
-
-This module provides standardized color definitions, colormap utilities, and scheme
-management for dual-mode rendering with optimized color schemes for both RGB array
-generation and matplotlib human mode visualization. Includes accessibility features,
-performance optimization, and cross-platform compatibility.
-
-Key Features:
-- Dual-mode rendering support (RGB array + matplotlib)
-- Predefined color schemes with accessibility options
-- Performance-optimized color operations (<5ms RGB, <50ms human mode)
-- Cross-platform matplotlib backend compatibility
-- Comprehensive validation and error handling
-- LRU caching for colormap operations
-"""
-
 from __future__ import annotations
 
-import functools  # >=3.10 - LRU cache decorator for performance optimization
-import warnings  # >=3.10 - Deprecation warnings and compatibility alerts
-from dataclasses import (  # >=3.10 - Structured configuration with validation
+import functools
+import warnings
+from dataclasses import (
     dataclass,
     field,
 )
-from enum import Enum  # >=3.10 - Color scheme enumeration with type safety
-from typing import (  # >=3.10 - Type hints and annotations
+from enum import Enum
+from typing import (
     Any,
     Dict,
     Optional,
@@ -32,10 +15,10 @@ from typing import (  # >=3.10 - Type hints and annotations
     Union,
 )
 
-import matplotlib  # >=3.9.0 - Top-level matplotlib package for colormap access
-import matplotlib.cm  # >=3.9.0 - Built-in colormap registry and management
-import matplotlib.colors  # >=3.9.0 - Colormap objects and normalization utilities
-import numpy as np  # >=2.1.0 - RGB array operations, mathematical transformations
+import matplotlib
+import matplotlib.cm
+import matplotlib.colors
+import numpy as np
 
 # =============================================================================
 # GLOBAL CONSTANTS AND CONFIGURATION
@@ -77,13 +60,6 @@ PREDEFINED_SCHEMES = [
 
 
 def create_default_scheme() -> "ColorScheme":
-    """Return the default ColorScheme used by rendering templates.
-
-    This helper centralizes the mapping from module-level defaults to the
-    ColorScheme data class so that callers such as the RGB and Matplotlib
-    templates can obtain a consistent baseline configuration.
-    """
-
     return ColorScheme(
         agent_color=DEFAULT_AGENT_COLOR,
         source_color=DEFAULT_SOURCE_COLOR,
@@ -92,7 +68,6 @@ def create_default_scheme() -> "ColorScheme":
     )
 
 
-# Module exports for external access
 __all__ = [
     "ColorScheme",
     "PredefinedScheme",
@@ -113,14 +88,6 @@ __all__ = [
 
 
 class PredefinedScheme(Enum):
-    """
-    Enumeration of predefined color schemes for plume navigation visualization.
-
-    Provides common visualization configurations including standard research colors,
-    high contrast accessibility, colorblind-friendly palettes, minimal visualization,
-    and debug schemes with optimized performance characteristics.
-    """
-
     STANDARD = "standard"  # Default visualization scheme
     HIGH_CONTRAST = "high_contrast"  # Enhanced visibility for accessibility
     COLORBLIND_FRIENDLY = "colorblind_friendly"  # Optimized for color vision deficiency
@@ -128,13 +95,6 @@ class PredefinedScheme(Enum):
     DEBUG = "debug"  # High visibility for development
 
     def get_color_config(self) -> Dict[str, Any]:
-        """
-        Returns complete color configuration for the predefined scheme.
-
-        Returns:
-            dict: Complete color configuration with agent, source, background colors,
-                 colormap specification, accessibility settings, and performance flags
-        """
         config_map = {
             PredefinedScheme.STANDARD: {
                 "agent_color": (255, 0, 0),  # Red agent marker
@@ -190,26 +150,12 @@ class PredefinedScheme(Enum):
         return config_map[self]
 
     def is_accessibility_enhanced(self) -> bool:
-        """
-        Check if scheme includes accessibility enhancements.
-
-        Returns:
-            bool: True if scheme includes high contrast ratios, colorblind-friendly
-                 colors, or enhanced visibility features
-        """
         return self in [
             PredefinedScheme.HIGH_CONTRAST,
             PredefinedScheme.COLORBLIND_FRIENDLY,
         ]
 
     def get_performance_profile(self) -> Dict[str, Any]:
-        """
-        Returns performance characteristics for the predefined scheme.
-
-        Returns:
-            dict: Performance profile with target latencies, memory usage estimates,
-                 and optimization settings
-        """
         base_profile = {
             "target_rgb_latency_ms": PERFORMANCE_TARGET_RGB_MS,
             "target_human_latency_ms": PERFORMANCE_TARGET_HUMAN_MS,
@@ -246,14 +192,6 @@ class PredefinedScheme(Enum):
 
 @dataclass
 class ColorScheme:
-    """
-    Main color scheme configuration for plume navigation environment visualization.
-
-    Provides comprehensive color configuration, validation, and rendering integration
-    with support for dual-mode rendering (RGB array and matplotlib), accessibility
-    features, and performance optimization.
-    """
-
     # Core color configuration (RGB tuples)
     agent_color: Tuple[int, int, int]
     source_color: Tuple[int, int, int]
@@ -328,15 +266,6 @@ class ColorScheme:
     def get_agent_color(
         self, format_type: str = "rgb"
     ) -> Union[Tuple[int, int, int], np.ndarray, str]:
-        """
-        Returns agent color in specified format with validation.
-
-        Args:
-            format_type: Output format - 'rgb' tuple, 'normalized' [0,1] array, or 'hex' string
-
-        Returns:
-            Agent color in requested format with appropriate type conversion
-        """
         if format_type == "rgb":
             return self.agent_color
         elif format_type == "normalized":
@@ -351,15 +280,6 @@ class ColorScheme:
     def get_source_color(
         self, format_type: str = "rgb"
     ) -> Union[Tuple[int, int, int], np.ndarray, str]:
-        """
-        Returns source color in specified format with validation.
-
-        Args:
-            format_type: Output format - 'rgb' tuple, 'normalized' [0,1] array, or 'hex' string
-
-        Returns:
-            Source color in requested format with appropriate type conversion
-        """
         if format_type == "rgb":
             return self.source_color
         elif format_type == "normalized":
@@ -376,16 +296,6 @@ class ColorScheme:
         use_cache: bool = True,
         normalization_range: Optional[Tuple[float, float]] = None,
     ) -> matplotlib.colors.Colormap:
-        """
-        Returns matplotlib colormap with caching and normalization.
-
-        Args:
-            use_cache: Enable colormap caching for performance optimization
-            normalization_range: Custom normalization range, defaults to [0,1]
-
-        Returns:
-            Configured matplotlib colormap object ready for visualization
-        """
         if use_cache and self._cached_colormap is not None:
             return self._cached_colormap
 
@@ -419,17 +329,6 @@ class ColorScheme:
         agent_position: Tuple[int, int],
         source_position: Tuple[int, int],
     ) -> np.ndarray:
-        """
-        Applies complete color scheme to RGB array including concentration field and markers.
-
-        Args:
-            concentration_field: 2D array with concentration values [0,1]
-            agent_position: (x, y) coordinates for agent marker placement
-            source_position: (x, y) coordinates for source marker placement
-
-        Returns:
-            Complete RGB array (H,W,3) with color scheme applied
-        """
         # Validate input concentration field
         if not isinstance(concentration_field, np.ndarray):
             raise ValueError("concentration_field must be a numpy array")
@@ -473,16 +372,6 @@ class ColorScheme:
     def configure_matplotlib_axes(
         self, axes: matplotlib.axes.Axes, concentration_field: np.ndarray
     ) -> matplotlib.image.AxesImage:
-        """
-        Configures matplotlib axes with color scheme for human mode visualization.
-
-        Args:
-            axes: Matplotlib axes object for configuration
-            concentration_field: 2D concentration data for display
-
-        Returns:
-            Configured AxesImage object ready for marker updates
-        """
         # Get colormap with caching
         colormap = self.get_concentration_colormap(use_cache=True)
 
@@ -506,13 +395,6 @@ class ColorScheme:
     def optimize_for_render_mode(
         self, render_mode: str, optimization_options: Dict[str, Any] = None
     ):
-        """
-        Optimizes color scheme for specific rendering mode with performance enhancements.
-
-        Args:
-            render_mode: Target rendering mode ('rgb_array' or 'human')
-            optimization_options: Custom optimization settings
-        """
         if optimization_options is None:
             optimization_options = {}
 
@@ -549,9 +431,6 @@ class ColorScheme:
         check_performance: bool = False,
         strict_mode: bool = False,
     ) -> bool:
-        """
-        Validates color scheme configuration for consistency, accessibility, and performance.
-        """
         # Basic validation checks
         for name, color in (
             ("agent_color", self.agent_color),
@@ -631,18 +510,6 @@ def validate_color_scheme(
     check_performance: bool = False,
     strict_mode: bool = False,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """
-    Comprehensive validation function for color scheme configuration.
-
-    Args:
-        color_scheme: ColorScheme instance to validate
-        check_accessibility: Enable accessibility compliance checking
-        check_performance: Enable performance requirement validation
-        strict_mode: Apply strict validation rules including edge cases
-
-    Returns:
-        Tuple of (is_valid: bool, validation_report: dict) with detailed analysis
-    """
     validation_report = {
         "is_valid": True,
         "errors": [],
@@ -722,18 +589,6 @@ def normalize_concentration_to_rgb(
     use_cache: bool = True,
     value_range: Optional[Tuple[float, float]] = None,
 ) -> np.ndarray:
-    """
-    Converts concentration field from [0,1] to RGB grayscale values [0,255].
-
-    Args:
-        concentration_field: 2D array with concentration values
-        colormap_name: Matplotlib colormap name for conversion
-        use_cache: Enable colormap caching for performance optimization
-        value_range: Custom value range, defaults to [0,1]
-
-    Returns:
-        RGB array (H,W,3) with dtype uint8 containing grayscale visualization
-    """
     # Validate input array
     if not isinstance(concentration_field, np.ndarray):
         raise ValueError("concentration_field must be a numpy array")
@@ -766,18 +621,6 @@ def apply_agent_marker(
     marker_color: Tuple[int, int, int] = DEFAULT_AGENT_COLOR,
     marker_size: Optional[Tuple[int, int]] = None,
 ) -> np.ndarray:
-    """
-    Applies agent marker visualization to RGB array at specified position.
-
-    Args:
-        rgb_array: Target RGB array for marker application
-        agent_position: (x, y) coordinates for marker placement
-        marker_color: RGB color tuple for marker, defaults to red
-        marker_size: Marker dimensions (height, width), defaults to AGENT_MARKER_SIZE
-
-    Returns:
-        Updated RGB array with agent marker applied
-    """
     height, width, _ = rgb_array.shape
     x, y = agent_position
 
@@ -813,18 +656,6 @@ def apply_source_marker(
     marker_color: Tuple[int, int, int] = DEFAULT_SOURCE_COLOR,
     marker_size: Optional[Tuple[int, int]] = None,
 ) -> np.ndarray:
-    """
-    Applies source marker visualization in cross shape to RGB array at specified position.
-
-    Args:
-        rgb_array: Target RGB array for marker application
-        source_position: (x, y) coordinates for marker placement
-        marker_color: RGB color tuple for cross marker, defaults to white
-        marker_size: Marker dimensions (height, width), defaults to SOURCE_MARKER_SIZE
-
-    Returns:
-        Updated RGB array with source marker applied
-    """
     height, width, _ = rgb_array.shape
     x, y = source_position
 
@@ -866,18 +697,6 @@ def get_matplotlib_colormap(
     use_cache: bool = True,
     validate_backend: bool = False,
 ) -> matplotlib.colors.Colormap:
-    """
-    Retrieves matplotlib colormap with caching, normalization, and performance optimization.
-
-    Args:
-        colormap_name: Name of matplotlib colormap to retrieve
-        normalization_range: Value range for normalization, defaults to [0,1]
-        use_cache: Enable LRU caching for performance (decorator handles this)
-        validate_backend: Check matplotlib backend availability
-
-    Returns:
-        Configured matplotlib colormap object optimized for performance
-    """
     # Validate matplotlib backend if requested
     if validate_backend:
         try:
@@ -910,17 +729,6 @@ def optimize_for_performance(
     render_mode: str,
     optimization_options: Dict[str, Any] = None,
 ) -> ColorScheme:
-    """
-    Optimizes color scheme configuration for specified rendering mode with performance enhancements.
-
-    Args:
-        color_scheme: ColorScheme instance to optimize
-        render_mode: Target rendering mode ('rgb_array' or 'human')
-        optimization_options: Custom optimization settings and resource management options
-
-    Returns:
-        Optimized color scheme with performance enhancements and mode-specific configurations
-    """
     if optimization_options is None:
         optimization_options = {}
 

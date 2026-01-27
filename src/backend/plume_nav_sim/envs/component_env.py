@@ -1,28 +1,3 @@
-"""
-Component-based environment using dependency injection.
-
-Deprecated: use PlumeEnv (plume_nav_sim.envs.PlumeEnv) instead.
-
-This module implements a Gymnasium environment that delegates to injected
-components (ActionProcessor, ObservationModel, RewardFunction) rather than
-using abstract methods. This architecture enables component swapping and
-testing without modifying the environment class.
-
-Contract: environment_state_machine.md
-
-Key Features:
-- Component dependency injection (no inheritance required)
-- Protocol-based interfaces (duck typing)
-- Clean separation of concerns
-- Easy testing and component composition
-
-Architecture:
-    Environment → ActionProcessor (for actions)
-               → ObservationModel (for observations)
-               → RewardFunction (for rewards)
-               → ConcentrationField (plume model)
-"""
-
 from __future__ import annotations
 
 import contextlib
@@ -59,35 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 class ComponentBasedEnvironment(gym.Env):
-    """
-    Gymnasium environment using component dependency injection.
-
-    This environment delegates to injected components rather than using
-    abstract methods, enabling flexible composition and testing.
-
-    Contract: environment_state_machine.md
-
-    Components (injected):
-        action_processor: Processes actions and computes new agent states
-        observation_model: Generates observations from environment state
-        reward_function: Computes rewards based on state transitions
-        concentration_field: Plume model for odor concentration
-        wind_field: Wind model providing velocity vectors (optional)
-
-    Attributes:
-        action_space: From action_processor.action_space
-        observation_space: From observation_model.observation_space
-        grid_size: Spatial bounds for the environment
-        max_steps: Episode step limit
-        goal_location: Target position for agent
-        goal_radius: Success threshold distance
-
-    State Machine:
-        CREATED --reset()--> READY --step()--> {READY, TERMINATED, TRUNCATED}
-        {TERMINATED, TRUNCATED} --reset()--> READY
-        * --close()--> CLOSED
-    """
-
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
@@ -106,33 +52,6 @@ class ComponentBasedEnvironment(gym.Env):
         render_mode: Optional[str] = None,
         _warn_deprecated: bool = True,
     ):
-        """
-        Initialize environment with injected components.
-
-        Contract: environment_state_machine.md - __init__() preconditions
-
-        Args:
-            action_processor: Component for action processing
-            observation_model: Component for observation generation
-            reward_function: Component for reward calculation
-            concentration_field: Plume model for odor
-            wind_field: Wind model providing velocity vectors (optional)
-            grid_size: Spatial bounds (width, height)
-            max_steps: Episode step limit
-            goal_location: Target position
-            goal_radius: Success threshold
-            start_location: Initial agent position (default: grid center)
-            render_mode: Visualization mode ('rgb_array' or 'human')
-
-        Raises:
-            ValidationError: If parameters invalid
-            TypeError: If components don't satisfy protocols
-
-        Postconditions:
-            - self._state = CREATED
-            - action_space and observation_space assigned from components
-            - No episode active
-        """
         super().__init__()
         if _warn_deprecated:
             warnings.warn(
@@ -198,29 +117,6 @@ class ComponentBasedEnvironment(gym.Env):
     def reset(
         self, *, seed: Optional[int] = None, options: Optional[dict] = None
     ) -> tuple[Any, dict]:
-        """
-        Begin new episode, transition to READY state.
-
-        Contract: environment_state_machine.md - reset() contract
-
-        Args:
-            seed: RNG seed for reproducibility
-            options: Additional reset options (unused)
-
-        Returns:
-            observation: From observation_model.get_observation()
-            info: Episode metadata
-
-        Raises:
-            StateError: If state == CLOSED
-            ValidationError: If seed invalid
-
-        Postconditions:
-            - self._state = READY
-            - self._step_count = 0
-            - self._episode_count incremented
-            - Agent positioned at start_location
-        """
         # Contract: environment_state_machine.md - P1
         if self._state == EnvironmentState.CLOSED:
             raise StateError("Cannot reset closed environment")
@@ -247,29 +143,6 @@ class ComponentBasedEnvironment(gym.Env):
         return observation, info
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict]:
-        """
-        Execute action, advance one timestep.
-
-        Contract: environment_state_machine.md - step() contract
-
-        Args:
-            action: Action from action_space
-
-        Returns:
-            observation: Next observation
-            reward: Reward for this transition
-            terminated: Whether episode ended (goal reached)
-            truncated: Whether episode timed out
-            info: Step metadata
-
-        Raises:
-            StateError: If state not READY
-            ValidationError: If action invalid
-
-        Postconditions:
-            - self._step_count incremented
-            - self._state may transition to TERMINATED or TRUNCATED
-        """
         self._ensure_ready_for_step()
 
         # Validate action
@@ -380,17 +253,6 @@ class ComponentBasedEnvironment(gym.Env):
         return Coordinates(x=start_x, y=start_y)
 
     def close(self) -> None:
-        """
-        Release resources, transition to CLOSED state.
-
-        Contract: environment_state_machine.md - close() contract
-
-        Postconditions:
-            - self._state = CLOSED
-            - Subsequent operations raise StateError
-
-        Idempotent: Multiple calls safe
-        """
         if self._state == EnvironmentState.CLOSED:
             return  # Idempotent
 
@@ -402,14 +264,6 @@ class ComponentBasedEnvironment(gym.Env):
         )
 
     def render(self) -> Optional[np.ndarray]:
-        """
-        Generate visualization composed of the concentration field with agent/source markers.
-
-        Contract: environment_state_machine.md - render() contract
-
-        Returns:
-            RGB array if render_mode='rgb_array', else None
-        """
         if self.render_mode != "rgb_array":
             return None
 
@@ -640,17 +494,6 @@ class ComponentBasedEnvironment(gym.Env):
     def _build_env_state_dict(
         self, agent_state: Optional[AgentState] = None
     ) -> dict[str, Any]:
-        """
-        Build environment state dictionary for component protocols.
-
-        Contract: observation_model_interface.md, reward_function_interface.md
-
-        Args:
-            agent_state: Override current agent state (for lookahead)
-
-        Returns:
-            Dictionary with required keys for component protocols
-        """
         state = agent_state or self._agent_state
 
         return {

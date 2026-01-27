@@ -1,22 +1,10 @@
-"""
-Gymnasium spaces utility module for plume_nav_sim package providing action and observation
-space creation, validation, and compatibility utilities with comprehensive type checking,
-performance optimization, and Gymnasium API compliance for reinforcement learning
-environment integration.
-
-This module implements factory functions for creating Gymnasium-compatible action and
-observation spaces, validation utilities for runtime parameter checking, configuration
-classes for customizable space creation, and performance-optimized operations with
-caching and monitoring capabilities.
-"""
-
-import functools  # standard library - Caching decorators for performance optimization of space creation and validation operations
-import time  # standard library - Performance timing for validation and creation operations
-import warnings  # standard library - Space compatibility warnings and deprecation notifications for API changes
-from dataclasses import (  # >=3.10 - Dataclass decorator for structured configuration management
+import functools
+import time
+import warnings
+from dataclasses import (
     dataclass,
 )
-from typing import (  # >=3.10 - Type hints for space factory functions, validation methods, and parameter specifications
+from typing import (
     Any,
     Dict,
     List,
@@ -25,9 +13,8 @@ from typing import (  # >=3.10 - Type hints for space factory functions, validat
     Union,
 )
 
-# External imports with version comments
-import gymnasium.spaces  # >=0.29.0 - Core Gymnasium space classes including Discrete and Box for action and observation space creation with standard RL API compliance
-import numpy as np  # >=2.1.0 - Array operations, dtype specifications, and mathematical operations for space bounds and observation validation
+import gymnasium.spaces
+import numpy as np
 
 from ..constants import (
     ACTION_DOWN,
@@ -39,21 +26,17 @@ from ..constants import (
     OBSERVATION_DTYPE,
 )
 
-# Internal imports from core module
 from ..core.enums import Action
 from ..core.types import ActionType, ObservationType
 
-# Internal imports from utils module
 from .exceptions import ValidationError
 from .logging import ComponentType, get_component_logger
 
-# Global constants for caching and performance
 SPACE_VALIDATION_CACHE_SIZE = 1000
 SPACE_CREATION_CACHE_SIZE = 100
 DEFAULT_OBSERVATION_SHAPE = (1,)
 SPACE_VALIDATION_TIMEOUT_MS = 10.0
 
-# Module exports
 __all__ = [
     "create_action_space",
     "create_observation_space",
@@ -80,22 +63,6 @@ def create_action_space(
     validate_actions: bool = True,
     space_config: Optional[Dict] = None,
 ) -> gymnasium.spaces.Discrete:
-    """
-    Creates Gymnasium Discrete action space for cardinal direction navigation with validation,
-    caching, and performance optimization for environment initialization.
-
-    Args:
-        num_actions: Number of discrete actions (defaults to ACTION_SPACE_SIZE)
-        validate_actions: Whether to validate action space properties
-        space_config: Custom space configuration dictionary
-
-    Returns:
-        Configured Discrete action space for 4-direction agent movement with validation and metadata
-
-    Raises:
-        ValidationError: If num_actions is invalid or space creation fails
-        TypeError: If parameters are of incorrect type
-    """
     if space_config:
         return _create_action_space_impl(num_actions, validate_actions, space_config)
 
@@ -173,15 +140,6 @@ _SUBSET_DISPATCH = {
 def is_space_subset(
     policy_space: gymnasium.spaces.Space, env_space: gymnasium.spaces.Space
 ) -> bool:
-    """Return True if ``policy_space`` is a subset of ``env_space``.
-
-    Subset is defined structurally per common Gymnasium spaces without sampling:
-    - Discrete/MultiBinary: policy.n <= env.n
-    - MultiDiscrete: elementwise policy.nvec <= env.nvec
-    - Box: identical shape and policy bounds within env bounds
-    - Tuple: same length and pairwise subset
-    - Dict: policy keys subset of env keys and pairwise subset per key
-    """
     if policy_space is env_space:
         return True
 
@@ -289,24 +247,6 @@ def create_observation_space(
     validate_bounds: bool = True,
     space_config: Optional[Dict] = None,
 ) -> gymnasium.spaces.Box:
-    """
-    Creates Gymnasium Box observation space for concentration values with proper bounds,
-    dtype, and shape configuration for plume navigation observations.
-
-    Args:
-        observation_shape: Shape of observation array (defaults to DEFAULT_OBSERVATION_SHAPE)
-        concentration_bounds: Low and high bounds for concentration values
-        observation_dtype: NumPy dtype for observations
-        validate_bounds: Whether to validate observation space properties
-        space_config: Custom space configuration dictionary
-
-    Returns:
-        Configured Box observation space for concentration values with proper bounds and dtype specifications
-
-    Raises:
-        ValidationError: If bounds or shape are invalid
-        TypeError: If dtype is not supported
-    """
     if space_config:
         return _create_observation_space_impl(
             observation_shape,
@@ -462,23 +402,6 @@ def validate_action(  # noqa: C901
     strict_mode: bool = False,
     log_validation: bool = False,
 ) -> int:
-    """
-    Validates action parameter for Discrete action space compliance with comprehensive type
-    checking, bounds validation, and performance monitoring for runtime use.
-
-    Args:
-        action: Action value to validate (int, Action enum, or ActionType)
-        action_space: Optional action space to validate against
-        strict_mode: Enable strict validation rules
-        log_validation: Whether to log validation activity
-
-    Returns:
-        Validated action integer in range [0, 3] ready for environment step processing
-
-    Raises:
-        ValidationError: If action is invalid or out of bounds
-        TypeError: If action type is not supported
-    """
     start_time = time.time() if log_validation else 0
 
     try:
@@ -623,24 +546,6 @@ def validate_observation(  # noqa: C901
     strict_mode: bool = False,
     log_validation: bool = False,
 ) -> np.ndarray:
-    """
-    Validates observation parameter for Box observation space compliance with shape, dtype,
-    and range checking for concentration value observations.
-
-    Args:
-        observation: Observation array to validate
-        observation_space: Optional observation space to validate against
-        check_range: Whether to check concentration range
-        strict_mode: Enable strict validation rules
-        log_validation: Whether to log validation activity
-
-    Returns:
-        Validated observation array with proper shape, dtype, and concentration range compliance
-
-    Raises:
-        ValidationError: If observation is invalid
-        TypeError: If observation is not array-like
-    """
     start_time = time.time() if log_validation else 0
 
     try:
@@ -790,22 +695,6 @@ def validate_action_space(  # noqa: C901
     check_metadata: bool = False,
     strict_validation: bool = False,
 ) -> bool:
-    """
-    Validates Gymnasium Discrete action space configuration ensuring proper size, metadata,
-    and compatibility with environment requirements.
-
-    Args:
-        action_space: Discrete action space to validate
-        check_metadata: Whether to validate metadata
-        strict_validation: Enable strict validation rules
-
-    Returns:
-        True if action space is valid and compatible, raises ValidationError if invalid
-
-    Raises:
-        ValidationError: If action space is invalid or incompatible
-        TypeError: If action_space is not Discrete
-    """
     try:
         # Collect non-strict warnings to emit once per call
         non_strict_notes: List[str] = []
@@ -977,23 +866,6 @@ def validate_observation_space(  # noqa: C901
     check_dtype: bool = True,
     strict_validation: bool = False,
 ) -> bool:
-    """
-    Validates Gymnasium Box observation space configuration ensuring proper bounds, shape,
-    dtype, and compatibility with concentration observations.
-
-    Args:
-        observation_space: Box observation space to validate
-        check_bounds: Whether to check concentration bounds
-        check_dtype: Whether to validate dtype
-        strict_validation: Enable strict validation rules
-
-    Returns:
-        True if observation space is valid and compatible, raises ValidationError if invalid
-
-    Raises:
-        ValidationError: If observation space is invalid or incompatible
-        TypeError: If observation_space is not Box
-    """
     try:
         # Collect non-strict warnings to emit once per call
         non_strict_notes: List[str] = []
@@ -1251,19 +1123,6 @@ def get_space_info(  # noqa: C901
     include_metadata: bool = False,
     include_performance_info: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Returns comprehensive information about Gymnasium space configuration including properties,
-    bounds, metadata, and compatibility details for debugging and analysis.
-
-    Args:
-        space: Gymnasium space to analyze
-        include_samples: Whether to include sample values
-        include_metadata: Whether to include metadata
-        include_performance_info: Whether to include performance timing
-
-    Returns:
-        Dictionary containing complete space information with properties, bounds, samples, and metadata
-    """
     try:
         info = {"space_type": type(space).__name__, "module": type(space).__module__}
 
@@ -1405,21 +1264,6 @@ def sample_valid_action(
     excluded_actions: Optional[List[int]] = None,
     validate_sample: bool = True,
 ) -> int:
-    """
-    Generates valid action sample from action space with validation and optional constraints
-    for testing and random policy implementations.
-
-    Args:
-        action_space: Action space to sample from (creates default if None)
-        excluded_actions: List of actions to exclude from sampling
-        validate_sample: Whether to validate sampled action
-
-    Returns:
-        Valid action integer sampled from action space with constraints applied
-
-    Raises:
-        ValidationError: If sampling fails or produces invalid action
-    """
     try:
         # Create default action space if action_space is None using create_action_space()
         if action_space is None:
@@ -1473,21 +1317,6 @@ def sample_valid_observation(
     concentration_range: Optional[Tuple[float, float]] = None,
     validate_sample: bool = True,
 ) -> np.ndarray:
-    """
-    Generates valid observation sample from observation space with validation and optional
-    concentration constraints for testing and simulation.
-
-    Args:
-        observation_space: Observation space to sample from (creates default if None)
-        concentration_range: Optional range to constrain concentration values
-        validate_sample: Whether to validate sampled observation
-
-    Returns:
-        Valid observation array sampled from observation space with concentration constraints
-
-    Raises:
-        ValidationError: If sampling fails or produces invalid observation
-    """
     try:
         # Create default observation space if observation_space is None using create_observation_space()
         if observation_space is None:
@@ -1550,19 +1379,6 @@ def check_space_compatibility(  # noqa: C901
     strict_checking: bool = False,
     compatibility_requirements: Optional[Dict] = None,
 ) -> Dict[str, Any]:
-    """
-    Checks compatibility between action and observation spaces ensuring proper configuration
-    for reinforcement learning environment integration.
-
-    Args:
-        action_space: Discrete action space to check
-        observation_space: Box observation space to check
-        strict_checking: Enable strict compatibility rules
-        compatibility_requirements: Custom compatibility requirements
-
-    Returns:
-        Compatibility analysis report with status, issues, and recommendations
-    """
     try:
         compatibility_report = {
             "compatible": True,
@@ -1742,19 +1558,6 @@ def optimize_space_operations(  # noqa: C901
     profile_operations: bool = False,
     optimization_settings: Optional[Dict] = None,
 ) -> Dict[str, Any]:
-    """
-    Optimizes space creation, validation, and sampling operations for improved performance
-    with caching, profiling, and configuration tuning.
-
-    Args:
-        space_config: Configuration dictionary for spaces
-        enable_caching: Whether to enable operation caching
-        profile_operations: Whether to profile operations for bottlenecks
-        optimization_settings: Custom optimization settings
-
-    Returns:
-        Optimization results with performance improvements and configuration recommendations
-    """
     try:
         optimization_results = {
             "optimization_applied": [],
@@ -1948,11 +1751,6 @@ def optimize_space_operations(  # noqa: C901
 
 @dataclass
 class SpaceConfig:
-    """
-    Configuration data class for Gymnasium space creation with validation, metadata, and
-    optimization parameters for action and observation space customization.
-    """
-
     action_space_size: int = ACTION_SPACE_SIZE
     observation_shape: Tuple = DEFAULT_OBSERVATION_SHAPE
     concentration_bounds: Tuple[float, float] = CONCENTRATION_RANGE
@@ -1963,10 +1761,6 @@ class SpaceConfig:
     optimization_settings: Dict[str, Any] = None
 
     def __post_init__(self):
-        """
-        Initialize space configuration with action space size, observation parameters, and
-        validation settings.
-        """
         # Store action_space_size with validation against ACTION_SPACE_SIZE constant
         if not isinstance(self.action_space_size, int) or self.action_space_size <= 0:
             raise ValidationError(
@@ -2029,16 +1823,6 @@ class SpaceConfig:
             }
 
     def validate_config(self, strict_validation: bool = False) -> bool:  # noqa: C901
-        """
-        Validates space configuration parameters ensuring mathematical consistency, performance
-        feasibility, and Gymnasium compatibility.
-
-        Args:
-            strict_validation: Enable strict validation rules
-
-        Returns:
-            True if configuration is valid, raises ValidationError if invalid
-        """
         try:
             # Validate action_space_size is positive integer matching expected cardinal directions
             if self.action_space_size != ACTION_SPACE_SIZE and strict_validation:
@@ -2099,12 +1883,6 @@ class SpaceConfig:
             )
 
     def create_action_space(self) -> gymnasium.spaces.Discrete:
-        """
-        Creates Gymnasium Discrete action space using configuration parameters with validation and optimization.
-
-        Returns:
-            Configured Discrete action space based on configuration settings
-        """
         return create_action_space(
             num_actions=self.action_space_size,
             validate_actions=self.enable_validation,
@@ -2115,12 +1893,6 @@ class SpaceConfig:
         )
 
     def create_observation_space(self) -> gymnasium.spaces.Box:
-        """
-        Creates Gymnasium Box observation space using configuration parameters with bounds and dtype validation.
-
-        Returns:
-            Configured Box observation space based on configuration settings
-        """
         return create_observation_space(
             observation_shape=self.observation_shape,
             concentration_bounds=self.concentration_bounds,
@@ -2135,16 +1907,6 @@ class SpaceConfig:
     def estimate_performance(
         self, include_memory_usage: bool = True, include_timing_estimates: bool = True
     ) -> Dict[str, Any]:
-        """
-        Estimates performance characteristics for space operations based on configuration parameters.
-
-        Args:
-            include_memory_usage: Whether to include memory usage analysis
-            include_timing_estimates: Whether to include timing estimates
-
-        Returns:
-            Performance estimation report with memory usage, timing, and optimization recommendations
-        """
         performance_report = {}
 
         # Estimate memory usage for observation space based on shape and dtype
@@ -2210,16 +1972,6 @@ class SpaceConfig:
     def to_dict(
         self, include_metadata: bool = True, include_optimization_settings: bool = True
     ) -> Dict[str, Any]:
-        """
-        Converts space configuration to dictionary for serialization, logging, and external analysis.
-
-        Args:
-            include_metadata: Whether to include metadata information
-            include_optimization_settings: Whether to include optimization settings
-
-        Returns:
-            Dictionary representation of space configuration with optional metadata and settings
-        """
         config_dict = {
             "action_space_size": self.action_space_size,
             "observation_shape": self.observation_shape,
@@ -2241,29 +1993,15 @@ class SpaceConfig:
 
 
 class SpaceValidator:
-    """
-    Comprehensive validation utility class for Gymnasium spaces with caching, performance
-    monitoring, and detailed error reporting for development and production use.
-    """
-
     def __init__(
         self,
         enable_caching: bool = True,
         strict_mode: bool = False,
         validation_config: Optional[Dict] = None,
     ):
-        """
-        Initialize space validator with caching, strict mode, and custom validation configuration.
-
-        Args:
-            enable_caching: Enable validation result caching for performance
-            strict_mode: Enable strict validation rules
-            validation_config: Custom validation configuration
-        """
         # Store enable_caching flag for performance optimization of repeated validations
         self.enable_caching = enable_caching
 
-        # Set strict_mode for enhanced validation rigor and comprehensive checking
         self.strict_mode = strict_mode
 
         # Initialize validation_config with default settings merged with custom config
@@ -2306,17 +2044,6 @@ class SpaceValidator:
         space_type: str,
         validation_requirements: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """
-        Generic space validation method with caching, comprehensive checking, and detailed error reporting.
-
-        Args:
-            space: Gymnasium space to validate
-            space_type: Type of space ('action' or 'observation')
-            validation_requirements: Validation requirements dictionary
-
-        Returns:
-            Validation result with status, errors, warnings, and recommendations
-        """
         start_time = time.time()
 
         try:
@@ -2432,7 +2159,6 @@ class SpaceValidator:
             elapsed_time = (time.time() - start_time) * 1000
             validation_result["validation_time_ms"] = elapsed_time
 
-            # Generate comprehensive validation result with status, messages, and context
             if validation_result["valid"]:
                 validation_result["recommendations"].append(
                     "Space passed all validation checks"
@@ -2472,17 +2198,6 @@ class SpaceValidator:
         action_space: gymnasium.spaces.Discrete,
         check_navigation_compatibility: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Specialized validation method for Discrete action spaces with cardinal direction checking
-        and navigation compatibility.
-
-        Args:
-            action_space: Discrete action space to validate
-            check_navigation_compatibility: Whether to check navigation compatibility
-
-        Returns:
-            Action space validation result with navigation-specific analysis
-        """
         validation_requirements = {
             "space_size": ACTION_SPACE_SIZE,
             "navigation_compatible": check_navigation_compatibility,
@@ -2508,16 +2223,6 @@ class SpaceValidator:
         observation_space: gymnasium.spaces.Box,
         check_concentration_compatibility: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Specialized validation method for Box observation spaces with concentration bounds and dtype checking.
-
-        Args:
-            observation_space: Box observation space to validate
-            check_concentration_compatibility: Whether to check concentration compatibility
-
-        Returns:
-            Observation space validation result with concentration-specific analysis
-        """
         validation_requirements = {
             "expected_shape": DEFAULT_OBSERVATION_SHAPE,
             "expected_bounds": CONCENTRATION_RANGE,
@@ -2547,12 +2252,6 @@ class SpaceValidator:
         return result
 
     def clear_cache(self) -> Dict[str, Any]:
-        """
-        Clears validation cache and resets performance statistics for memory management and fresh validation state.
-
-        Returns:
-            Cache clearing report with statistics and memory freed
-        """
         cache_report = {
             "cache_entries_cleared": 0,
             "memory_freed_estimate_mb": 0.0,
@@ -2587,16 +2286,6 @@ class SpaceValidator:
         include_cache_stats: bool = True,
         include_performance_analysis: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Returns comprehensive validation statistics including cache performance, error rates, and timing analysis.
-
-        Args:
-            include_cache_stats: Whether to include cache statistics
-            include_performance_analysis: Whether to include performance metrics
-
-        Returns:
-            Validation statistics with performance metrics and analysis
-        """
         stats = {
             "validation_counts": {
                 "total": self.validation_stats["total_validations"],
@@ -2659,14 +2348,6 @@ class SpaceValidator:
         performance_requirements: Dict,
         validation_result: Dict,
     ):
-        """
-        Tests space performance against requirements.
-
-        Args:
-            space: Space to test
-            performance_requirements: Performance requirement thresholds
-            validation_result: Result dictionary to update
-        """
         try:
             # Test sampling performance
             if "max_sample_time_ms" in performance_requirements:
@@ -2697,12 +2378,6 @@ class SpaceValidator:
             validation_result["warnings"].append(f"Performance testing failed: {e}")
 
     def _update_performance_metrics(self, validation_time_ms: float):
-        """
-        Updates performance metrics with latest validation timing.
-
-        Args:
-            validation_time_ms: Validation time in milliseconds
-        """
         self.performance_metrics["total_validation_time_ms"] += validation_time_ms
         self.performance_metrics["max_validation_time_ms"] = max(
             self.performance_metrics["max_validation_time_ms"], validation_time_ms

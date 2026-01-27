@@ -1,17 +1,3 @@
-"""Schema constants and validation for video-derived plume datasets.
-
-This module defines the public contract for Zarr/xarray datasets that store
-video-backed concentration fields for the plume simulator. It exposes:
-
-- Constants for variable name and dimension order
-- A Pydantic model describing required dataset attributes
-- Lightweight validators for attrs-only mappings and xarray-like datasets
-
-The intent is for other components (ingest CLI, loader, tests, Hydra
-integration) to import these constants and the validator to ensure consistent
-metadata and layout.
-"""
-
 from __future__ import annotations
 
 from typing import Any, Mapping
@@ -41,27 +27,12 @@ class Timebase(BaseModel):
 
 
 def validate_attrs(attrs: Mapping[str, Any]) -> VideoPlumeAttrs:
-    """Validate a mapping of dataset attributes and return the parsed model.
-
-    This is the primary entry point for ingest and loaders to ensure metadata
-    consistency without importing heavy array libraries.
-    """
-
     # Delegate to the canonical validator from the video schema module so callers
     # receive the canonical VideoPlumeAttrs type.
     return _validate_video_attrs(attrs)
 
 
 def validate_xarray_like(ds: Any) -> VideoPlumeAttrs:
-    """Validate an xarray-like dataset for required variable, dims, and attrs.
-
-    The check is duck-typed to avoid a hard dependency on xarray. It expects:
-    - A mapping-like `data_vars` with a variable named `VARIABLE_CONCENTRATION`
-    - That variable declares dimension order via array attr `_ARRAY_DIMENSIONS`
-      equal to `DIMS_TYX`; if absent, fall back to the variable's `.dims`.
-    - An `attrs` mapping that satisfies the canonical `VideoPlumeAttrs`
-    """
-
     # Resolve data variable by name from either mapping or attribute access
     data_vars = getattr(ds, "data_vars", None)
     var = None

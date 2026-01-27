@@ -1,7 +1,3 @@
-"""
-State management for plume_nav_sim.
-"""
-
 import copy
 import threading
 import time

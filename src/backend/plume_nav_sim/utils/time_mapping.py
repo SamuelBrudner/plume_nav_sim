@@ -1,41 +1,3 @@
-"""
-Deterministic mapping from simulation step index to video frame index.
-
-This module defines a small, explicit contract for mapping a simulation step
-``k`` to a source video frame index ``f(k)`` given a video timebase. It is
-pure and deterministic by construction and provides clear policies for out-of-
-range behavior.
-
-Timebase
---------
-- ``fps``: Frames per second as a float (e.g., 30.0)
-- ``timebase``: A pair ``(numerator, denominator)`` representing seconds per
-  frame as a rational number: seconds_per_frame = numerator / denominator,
-  so ``fps = denominator / numerator``.
-
-If both ``fps`` and ``timebase`` are provided, they must agree within a small
-absolute tolerance or a ValueError is raised. If neither is provided, a
-ValueError is raised.
-
-Mapping
--------
-Given step index ``k`` (0-based), an optional simulation rate
-``steps_per_second`` and an optional fractional ``offset_frames``:
-
-- If ``steps_per_second`` is provided: ``f_float = k * fps / steps_per_second + offset_frames``
-- Otherwise: ``f_float = k + offset_frames`` (index policy)
-
-The resulting float index is rounded by the selected rule and then adapted to
-the available range using the selected policy:
-
-- Rounding: ``'nearest'`` (half-up), ``'floor'``, ``'ceil'``
-- Policy: ``'index'`` (error on out-of-range), ``'clamp'`` (saturate),
-  ``'wrap'`` (modulo). Default policy is ``'wrap'``.
-
-This helper is intentionally small and self-contained so it can be reused by
-future loaders and validators without bringing in heavy dependencies.
-"""
-
 from __future__ import annotations
 
 import math
@@ -45,14 +7,6 @@ from typing import Final, Optional, Tuple
 
 
 class FrameMappingPolicy(str, Enum):
-    """Out-of-range handling policy for frame selection.
-
-    - index: Use computed index as-is; raise on out-of-range when ``total_frames``
-      is provided.
-    - clamp: Clamp index to [0, total_frames - 1] when ``total_frames`` is provided.
-    - wrap: Wrap index modulo ``total_frames`` when provided.
-    """
-
     INDEX = "index"
     CLAMP = "clamp"
     WRAP = "wrap"
@@ -69,12 +23,6 @@ DEFAULT_FRAME_MAPPING_POLICY: Final[FrameMappingPolicy] = FrameMappingPolicy.WRA
 
 
 def _round_half_up(x: float) -> int:
-    """Round to nearest integer with ties (x.5) rounded away from zero.
-
-    For non-negative values (the expected domain here), this is equivalent to
-    floor(x + 0.5). Defined explicitly to avoid Python's bankers' rounding.
-    """
-
     return int(math.floor(x + 0.5)) if x >= 0 else int(math.ceil(x - 0.5))
 
 
@@ -84,24 +32,6 @@ def resolve_fps(
     timebase: Optional[Tuple[int, int]] = None,
     tol: float = 1e-6,
 ) -> float:
-    """Resolve frames-per-second from ``fps`` or ``timebase``.
-
-    Parameters
-    ----------
-    fps:
-        Frames per second as a positive float.
-    timebase:
-        Pair (numerator, denominator) representing seconds per frame as a
-        rational number; fps = denominator / numerator.
-    tol:
-        Absolute tolerance for consistency check when both provided.
-
-    Returns
-    -------
-    float
-        Frames per second.
-    """
-
     fps_from_tb: Optional[float] = None
     if timebase is not None:
         num, den = timebase
@@ -214,36 +144,6 @@ def map_step_to_frame(
     rounding: str = "nearest",
     policy: FrameMappingPolicy = DEFAULT_FRAME_MAPPING_POLICY,
 ) -> int:
-    """Map simulation step index to a source video frame index.
-
-    This function is pure and deterministic. It does not perform any IO.
-
-    Parameters
-    ----------
-    step:
-        Simulation step index (0-based, non-negative).
-    total_frames:
-        When provided, enables policy handling ('index'|'clamp'|'wrap').
-    fps:
-        Frames per second as a positive float.
-    timebase:
-        (numerator, denominator) seconds-per-frame; fps = den / num.
-    steps_per_second:
-        If provided, use time mapping k * fps / steps_per_second; otherwise use
-        index mapping (k).
-    offset_frames:
-        Optional fractional frame offset applied before rounding and policy.
-    rounding:
-        'nearest' (half-up), 'floor', or 'ceil'.
-    policy:
-        Out-of-range handling when total_frames is provided.
-
-    Returns
-    -------
-    int
-        Selected frame index (0-based).
-    """
-
     _validate_step_and_total_frames(step, total_frames)
 
     fps_val = resolve_fps(fps=fps, timebase=timebase)

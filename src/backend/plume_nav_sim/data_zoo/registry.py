@@ -1,10 +1,3 @@
-"""Dataset registry definitions for curated plume data assets.
-
-This module defines the schema for the plume data "zoo" along with a small set
-of seed entries. Future downloader utilities can rely on the typed structure to
-resolve cache locations, integrity expectations, and citation metadata.
-"""
-
 from __future__ import annotations
 
 import os
@@ -80,15 +73,6 @@ class RelatedIdentifier:
 
 @dataclass(frozen=True)
 class DatasetMetadata:
-    """DataCite-compatible metadata for attribution and documentation.
-
-    Follows DataCite Metadata Schema 4.5 for compatibility with Zenodo,
-    Figshare, and other DOI registries.
-
-    Required fields (DataCite): title, creators, publisher, publication_year, resource_type
-    Recommended fields: description, license, subjects, related_identifiers
-    """
-
     # DataCite required fields
     title: str
     creators: Tuple[Creator, ...] = ()
@@ -177,12 +161,6 @@ class DatasetMetadata:
 
 @dataclass(frozen=True)
 class SimulationMetadata(DatasetMetadata):
-    """DataCite-compatible metadata for simulation-generated datasets.
-
-    Extends DatasetMetadata with fields specific to computational outputs:
-    software provenance, configuration parameters, and reproducibility info.
-    """
-
     # Software provenance
     software_name: str = "plume-nav-sim"
     software_version: Optional[str] = None
@@ -256,16 +234,6 @@ class SimulationMetadata(DatasetMetadata):
         software_version: Optional[str] = None,
         **kwargs,
     ) -> "SimulationMetadata":
-        """Create simulation metadata from a Hydra/dict config.
-
-        Args:
-            title: Dataset title
-            creator_name: Your name in "Family, Given" format
-            config: Configuration dict (will be hashed and key params extracted)
-            seed: Random seed used
-            software_version: Version of plume-nav-sim used
-            **kwargs: Additional DatasetMetadata fields
-        """
         import hashlib
         import json
         from datetime import datetime, timezone
@@ -316,12 +284,6 @@ class DatasetRegistryEntry:
 
 @dataclass(frozen=True)
 class CrimaldiFluorescenceIngest:
-    """Ingest spec for CU Boulder PLIF fluorescence datasets (Crimaldi lab).
-
-    Handles the specific HDF5 structure used in Crimaldi lab PLIF plume movies
-    (e.g., Dryad DOI 10.5061/dryad.g27mq71, mirrored on Zenodo record 4971113).
-    """
-
     dataset: str
     fps: float
     pixel_to_grid: Tuple[float, float]
@@ -335,12 +297,6 @@ class CrimaldiFluorescenceIngest:
 
 @dataclass(frozen=True)
 class RigolliDNSIngest:
-    """Ingest spec for Rigolli et al. DNS turbulent plume datasets.
-
-    Handles the specific MATLAB v7.3 structure with separate concentration and
-    coordinate files from Zenodo record 15469831.
-    """
-
     concentration_key: str  # Key in .mat file for concentration array
     coords_url: str  # URL to download coordinates.mat
     coords_checksum: str  # MD5 checksum for coordinates file
@@ -355,12 +311,6 @@ class RigolliDNSIngest:
 
 @dataclass(frozen=True)
 class EmonetSmokeIngest:
-    """Ingest spec for Emonet lab smoke plume video datasets.
-
-    Handles the flyWalk MATLAB video format from Dryad record 10.5061/dryad.4j0zpc87z.
-    Smoke intensity serves as proxy for odor concentration.
-    """
-
     frames_key: str = "frames"  # Key in .mat file for video frames array
     metadata_url: str = ""  # URL to download metadata .mat file
     metadata_checksum: str = ""  # MD5 checksum for metadata file

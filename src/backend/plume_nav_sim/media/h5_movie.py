@@ -9,7 +9,7 @@ import numpy as np
 
 def _try_import_h5py():
     try:
-        import h5py  # type: ignore
+        import h5py
 
         return h5py
     except Exception as e:  # pragma: no cover - exercised when media extras missing
@@ -32,13 +32,6 @@ def _git_sha() -> Optional[str]:
 
 @dataclass
 class H5MovieIngestConfig:
-    """Configuration for converting an HDF5 plume movie into a Zarr dataset.
-
-    The fields mirror the CLI-style options used by ingest helpers and tests,
-    and are kept deliberately small so that ingest_h5_movie can be exercised
-    directly from Python as well as via DVC/CI pipelines.
-    """
-
     input: Path
     dataset: str
     output: Path
@@ -204,7 +197,7 @@ def _write_frames_to_zarr(
 
 def _try_import_zarr():
     try:
-        import zarr as _zarr  # type: ignore
+        import zarr as _zarr
 
         return _zarr
     except Exception as e:  # pragma: no cover - exercised when media extras missing

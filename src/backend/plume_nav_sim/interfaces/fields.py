@@ -1,10 +1,3 @@
-"""Field interfaces for scalar (odor) and vector (wind) environment data.
-
-These protocols capture a minimal sampling contract that sensors rely on. Use
-`ScalarField` for concentration-style fields and `VectorField` for wind or
-velocity-style fields.
-"""
-
 from typing import Protocol, runtime_checkable
 
 import numpy as np

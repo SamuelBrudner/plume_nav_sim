@@ -12,20 +12,6 @@ from ._concentration_extractor import extract_concentration
 
 @dataclass
 class TemporalDerivativeDeterministicPolicy(Policy):
-    """Deterministic temporal-gradient policy for oriented control.
-
-    - Maintains 1-back concentration measured only after FORWARD steps
-    - Surges FORWARD on non-decreasing concentration (dC >= threshold)
-    - Otherwise casts by turning; enforces a FORWARD probe right after any TURN
-    - Casting alternates deterministically RIGHT/LEFT/RIGHT/...
-
-    Observation handling:
-    - Expects a scalar concentration value; will raise a descriptive error if
-      given multi-sensor arrays unless ``sensor_index`` is provided.
-    - For dict/tuple observations, use ``concentration_key``/``modality_index`` to
-      locate the concentration modality.
-    """
-
     threshold: float = 1e-6
     cast_right_first: bool = True
     alternate_cast: bool = True  # if False, always turn RIGHT on negative derivative

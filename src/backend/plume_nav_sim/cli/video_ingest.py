@@ -14,7 +14,7 @@ import numpy as np
 
 def _try_import_imageio_v3():
     try:
-        import imageio.v3 as iio  # type: ignore
+        import imageio.v3 as iio
 
         return iio
     except Exception as e:  # pragma: no cover - exercised in media-optional envs
@@ -25,7 +25,7 @@ def _try_import_imageio_v3():
 
 def _try_import_zarr():
     try:
-        import zarr  # type: ignore
+        import zarr
 
         return zarr
     except Exception as e:  # pragma: no cover - exercised in media-optional envs
@@ -106,12 +106,6 @@ def _iter_frames(iio, input_path: Path) -> Iterator[np.ndarray]:
 def _stack_to_concentration(
     frames: Iterable[np.ndarray], *, normalize: bool
 ) -> Tuple[np.ndarray, str]:
-    """Convert input frames to a (T,Y,X) float32 concentration array.
-
-    Returns (data, source_dtype_str).
-    - Accepts grayscale (H,W) or RGB (H,W,3) inputs; RGB is converted to luma.
-    - When normalize=True, output is in [0,1] float32; else float32 preserving range.
-    """
     frames_list: List[np.ndarray] = []
     src_dtype: Optional[np.dtype] = None
     for f in frames:
@@ -224,7 +218,7 @@ def ingest_video(cfg: IngestConfig) -> Path:
     arr[:] = data  # small inputs; for very large, loop over t
 
     # Write group/global attrs
-    import zarr as _zarr  # type: ignore
+    import zarr as _zarr
 
     grp = _zarr.open_group(out, mode="a")
     for k, v in valid.model_dump().items():
@@ -306,12 +300,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Entry point for the video ingest CLI.
-
-    Returns 0 on success, non-zero on failure. When required media dependencies
-    are missing, prints an informational message and exits 0 to allow CI to
-    proceed when media stack is optional.
-    """
     args = build_arg_parser().parse_args(argv)
     logger = _setup_logger(args.log_level)
 

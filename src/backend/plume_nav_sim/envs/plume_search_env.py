@@ -118,18 +118,6 @@ class _AttributeForwardingTimeLimit(TimeLimit):
 
 
 class PlumeSearchEnv(gym.Env):
-    """Deprecated compatibility wrapper exposing the DI-backed component environment.
-
-    Delegation contract (stabilized by tests):
-    - Seeding: reset(seed=...) produces reproducible trajectories across
-      instances with identical configuration; wrapper forwards the seed to the
-      underlying environment and tracks the latest seed in info.
-    - Attributes: grid_size, source_location, max_steps, goal_radius reflect
-      the normalized constructor arguments for registration and docs stability.
-    - Rewards: step returns the immediate reward while maintaining an internal
-      cumulative reward that is exposed via info["total_reward"].
-    """
-
     metadata = ComponentBasedEnvironment.metadata
 
     def __init__(  # noqa: C901
@@ -328,12 +316,6 @@ class PlumeSearchEnv(gym.Env):
         )
 
     def render(self, mode: Optional[str] = None) -> Any:
-        """Render with Gymnasium-compatible semantics.
-
-        - If no mode is provided, respect the wrapped env's configured render_mode.
-        - For 'rgb_array', return an ndarray frame; fall back to core env or zeros.
-        - For 'human', return None (side-effects may occur in wrapped envs).
-        """
         effective_mode = (
             mode if mode is not None else getattr(self._env, "render_mode", None)
         )
@@ -466,26 +448,10 @@ def unwrap_to_plume_env(env: gym.Env) -> PlumeSearchEnv:
 
 
 def create_plume_search_env(**kwargs: Any) -> PlumeSearchEnv:
-    """Factory function to create a PlumeSearchEnv instance.
-
-    Args:
-        **kwargs: Configuration parameters passed to PlumeSearchEnv constructor.
-
-    Returns:
-        PlumeSearchEnv: Configured environment instance.
-    """
     return PlumeSearchEnv(**kwargs)
 
 
 def validate_plume_search_config(**kwargs: Any) -> Dict[str, Any]:
-    """Validate and normalize PlumeSearchEnv configuration parameters.
-
-    Args:
-        **kwargs: Raw configuration parameters to validate.
-
-    Returns:
-        Dict[str, Any]: Validated and normalized configuration.
-    """
     grid = _normalize_grid_size(kwargs.get("grid_size"))
     source = _normalize_goal(kwargs.get("source_location"), grid)
     max_steps = _normalize_max_steps(kwargs.get("max_steps"))

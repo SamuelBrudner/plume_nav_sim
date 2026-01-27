@@ -11,14 +11,6 @@ from plume_nav_sim.core.geometry import Coordinates
 
 
 class SemanticAnemotaxisActionWrapper(gym.ActionWrapper):
-    """Map SURGE/CAST intents to cardinal primitives using instantaneous wind.
-
-    SURGE selects the primitive action aligned with the upwind direction
-    (opposite the current wind vector). CAST samples uniformly from the
-    remaining three primitives. One semantic action always maps to a single
-    primitive action (no temporal macro locking).
-    """
-
     SURGE = 0
     CAST = 1
 

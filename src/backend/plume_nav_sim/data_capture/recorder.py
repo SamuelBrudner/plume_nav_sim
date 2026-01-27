@@ -16,15 +16,6 @@ _HAVE_PYARROW = None  # lazy detection
 
 
 class RunRecorder:
-    """Manage a single run’s artifacts directory and record writing.
-
-    Writes:
-    - run.json (metadata)
-    - steps.jsonl.gz (append)
-    - episodes.jsonl.gz (append)
-    Optional: export Parquet at finalize() if pyarrow available.
-    """
-
     def __init__(
         self,
         root_dir: str | Path,
@@ -89,11 +80,6 @@ class RunRecorder:
             pass
 
     def _export_parquet(self) -> None:
-        """Export flattened Parquet files matching the Pandera schema.
-
-        Uses the same flattening logic as batch validation to ensure the
-        Parquet columns align with the schema fields used in CI validation.
-        """
         # Import lazily to keep import time minimal during normal operation
         import gzip
         import json
@@ -149,17 +135,6 @@ class RunRecorder:
         return bool(_HAVE_PYARROW)
 
     def _write_manifest(self) -> None:
-        """Write a provenance manifest.json alongside artifacts.
-
-        Captures:
-        - git SHA (if available)
-        - package version (if available)
-        - schema_version(s)
-        - config hash and raw env_config (from run.json)
-        - basic seed summary extracted from step records (best-effort)
-        - validation report from validate_run_artifacts
-        - file inventory (names, sizes if accessible)
-        """
         import json
 
         manifest = self._build_manifest_payload()

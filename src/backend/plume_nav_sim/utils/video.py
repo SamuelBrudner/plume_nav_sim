@@ -1,15 +1,3 @@
-"""
-Video saving utilities for frames and runner streams.
-
-These helpers provide a thin, optional wrapper around imageio.v3 so callers can
-persist RGB frames (H, W, 3) to GIF/MP4 without wiring a writer manually.
-
-Optional dependency:
-    pip install imageio  # and ffmpeg for MP4
-
-The functions raise ImportError with a clear message if imageio is missing.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +8,7 @@ import numpy as np
 
 def _import_imageio_v3():
     try:
-        import imageio.v3 as iio  # type: ignore
+        import imageio.v3 as iio
     except (
         Exception
     ) as e:  # pragma: no cover - exercised via tests with sys.modules shims
@@ -43,23 +31,6 @@ def save_video_frames(
     loop: Optional[int] = None,
     **kwargs,
 ) -> None:
-    """Save a sequence of RGB frames to a video file.
-
-    Parameters
-    ----------
-    frames:
-        Iterable of (H, W, 3) uint8 RGB arrays.
-    path:
-        Output filepath; extension determines writer (e.g., .gif, .mp4).
-    fps:
-        Frames-per-second for playback.
-    codec:
-        Optional codec hint for formats like MP4 (e.g., 'libx264').
-    loop:
-        GIF loop parameter; 0 for infinite (default when writing GIFs).
-    kwargs:
-        Additional keyword args forwarded to imageio.v3.imwrite.
-    """
     iio = _import_imageio_v3()
     out = _coerce_path(path)
     ext = Path(out).suffix.lower()
@@ -100,12 +71,6 @@ def save_video_events(
     loop: Optional[int] = None,
     **kwargs,
 ) -> None:
-    """Save frames from a runner StepEvent stream to a video file.
-
-    The iterable is expected to yield objects with an attribute 'frame' holding
-    an (H, W, 3) uint8 RGB array or None. Events with frame=None are skipped.
-    """
-
     def _iter_frames():
         for ev in events:
             f = getattr(ev, "frame", None)

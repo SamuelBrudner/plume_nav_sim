@@ -22,7 +22,7 @@ from .core.types import (
 
 PACKAGE_NAME = "plume_nav_sim"
 PACKAGE_VERSION = "0.0.0"
-ENVIRONMENT_ID = "PlumeNav-Sim-v0"
+ENVIRONMENT_ID = "PlumeNav-v0"
 
 MIN_GRID_SIZE = (1, 1)
 MAX_GRID_SIZE = (2048, 2048)

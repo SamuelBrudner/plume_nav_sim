@@ -1,13 +1,3 @@
-"""Run/Tumble oriented action processor.
-
-Action space: Discrete(2)
-  - 0 = RUN (move forward in current heading)
-  - 1 = TUMBLE (reset orientation uniformly at random in [0, 360), then move forward)
-
-Determinism: Environment calls set_rng() on reset with its episode RNG so that
-TUMBLE is reproducible under seeding.
-"""
-
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -20,12 +10,6 @@ from plume_nav_sim.core.state import AgentState
 
 
 class OrientedRunTumbleActions:
-    """Oriented 2-action processor implementing RUN/TUMBLE semantics.
-
-    - RUN keeps the current heading and advances one step.
-    - TUMBLE samples a uniform new heading in [0, 360) and then advances.
-    """
-
     def __init__(self, step_size: int = 1):
         if step_size <= 0:
             raise ValueError(f"step_size must be positive, got {step_size}")
