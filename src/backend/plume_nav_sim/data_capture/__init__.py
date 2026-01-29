@@ -1,20 +1,28 @@
-from .loader import ReplayArtifacts, ReplayLoadError, load_replay_artifacts
 from .recorder import RunRecorder
-from .replay import ReplayConsistencyError, ReplayEngine, ReplayEnvFactory
-from .schemas import SCHEMA_VERSION, EpisodeRecord, RunMeta, StepRecord
-from .writer import JSONLGzWriter
+from .replay import (
+    ReplayConsistencyError,
+    ReplayEngine,
+    ReplayLoadError,
+    ReplayStepEvent,
+    load_replay_artifacts,
+    load_replay_engine,
+)
+from .schemas import EpisodeRecord, RunMeta, StepRecord, SCHEMA_VERSION
+from .validate import validate_run_artifacts
+from .wrapper import DataCaptureWrapper
 
 __all__ = [
+    "RunRecorder",
+    "DataCaptureWrapper",
+    "ReplayLoadError",
+    "ReplayConsistencyError",
+    "ReplayStepEvent",
+    "ReplayEngine",
+    "load_replay_artifacts",
+    "load_replay_engine",
     "RunMeta",
     "StepRecord",
     "EpisodeRecord",
     "SCHEMA_VERSION",
-    "JSONLGzWriter",
-    "RunRecorder",
-    "ReplayArtifacts",
-    "ReplayLoadError",
-    "ReplayConsistencyError",
-    "ReplayEngine",
-    "ReplayEnvFactory",
-    "load_replay_artifacts",
+    "validate_run_artifacts",
 ]

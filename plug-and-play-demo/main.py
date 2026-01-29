@@ -9,7 +9,12 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from plume_nav_sim.compose import PolicySpec, SimulationSpec, WrapperSpec, prepare
+from plume_nav_sim.config.composition import (
+    PolicySpec,
+    SimulationSpec,
+    WrapperSpec,
+    prepare,
+)
 from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.runner import runner
 
@@ -63,9 +68,17 @@ def _build_movie_kwargs(
     if plume != "movie":
         return {}
 
-    if movie_path and movie_dataset_id:
+    if movie_dataset_id is not None:
         raise SystemExit(
-            "Specify only one of --movie-path or --movie-dataset-id (not both)."
+            "--movie-dataset-id is no longer supported; provide --movie-path instead."
+        )
+    if movie_auto_download or movie_cache_root:
+        raise SystemExit(
+            "--movie-auto-download/--movie-cache-root are no longer supported; provide --movie-path instead."
+        )
+    if movie_normalize is not None or movie_chunks is not None:
+        raise SystemExit(
+            "--movie-normalize/--movie-chunks are no longer supported; pre-process the dataset before ingest."
         )
 
     movie_kwargs: Dict[str, Any] = {}
@@ -75,7 +88,7 @@ def _build_movie_kwargs(
     resolved_path: Optional[Path] = None
     if movie_path:
         resolved_path = Path(movie_path)
-    elif not movie_dataset_id:
+    else:
         resolved_path = DEFAULT_MOVIE_ZARR
 
     if resolved_path:
@@ -91,18 +104,6 @@ def _build_movie_kwargs(
                 "HDF5 movie plume requires --movie-h5-dataset to specify the dataset within the file"
             )
         movie_kwargs["movie_path"] = str(resolved_path)
-
-    if movie_dataset_id:
-        movie_kwargs["movie_dataset_id"] = movie_dataset_id
-        movie_kwargs["movie_auto_download"] = bool(movie_auto_download)
-        if movie_cache_root:
-            movie_kwargs["movie_cache_root"] = movie_cache_root
-        if movie_normalize is not None:
-            movie_kwargs["movie_normalize"] = movie_normalize
-        if movie_chunks is not None:
-            movie_kwargs["movie_chunks"] = (
-                None if movie_chunks == "none" else movie_chunks
-            )
 
     if movie_fps is not None:
         movie_kwargs["movie_fps"] = float(movie_fps)

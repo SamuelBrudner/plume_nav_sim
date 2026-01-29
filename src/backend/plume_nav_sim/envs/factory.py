@@ -13,13 +13,6 @@ from ..actions import DiscreteGridActions, OrientedGridActions
 from ..actions.oriented_run_tumble import OrientedRunTumbleActions
 from ..constants import DEFAULT_SOURCE_LOCATION
 from ..core.geometry import Coordinates, GridSize
-from ..data_zoo import (
-    DEFAULT_CACHE_ROOT,
-    describe_dataset,
-    ensure_dataset_available,
-    get_dataset_registry,
-    load_plume,
-)
 from ..observations import AntennaeArraySensor, ConcentrationSensor, WindVectorSensor
 from ..plume.gaussian import GaussianPlume
 from ..plume.video import VideoConfig, VideoPlume, resolve_movie_dataset_path
@@ -173,17 +166,23 @@ def create_component_environment(  # noqa: C901
 
     # Create plume/concentration field
     if plume == "movie":
-        if not movie_path and not movie_dataset_id:
+        if not movie_path:
+            if movie_dataset_id is not None:
+                raise ValueError(
+                    "movie_dataset_id is no longer supported; provide movie_path instead"
+                )
+            raise ValueError("env.plume=movie requires movie.path to be provided")
+
+        if movie_auto_download or movie_cache_root is not None:
             raise ValueError(
-                "env.plume=movie requires movie.path or movie.dataset_id to be provided"
+                "movie_auto_download/movie_cache_root are not supported; provide movie_path directly"
             )
 
-        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
         dataset_path = _resolve_movie_dataset(
             movie_path=movie_path,
             movie_dataset_id=movie_dataset_id,
             movie_auto_download=movie_auto_download,
-            movie_cache_root=cache_root,
+            movie_cache_root=movie_cache_root,
             movie_fps=movie_fps,
             movie_pixel_to_grid=movie_pixel_to_grid,
             movie_origin=movie_origin,
@@ -193,26 +192,16 @@ def create_component_environment(  # noqa: C901
 
         if goal_location_is_default:
             resolved: tuple[int, int] | None = None
-            if movie_dataset_id:
-                entry = describe_dataset(movie_dataset_id)
-                ingest = getattr(entry, "ingest", None)
-                resolved = _coerce_source_location_px(
-                    getattr(ingest, "source_location_px", None)
-                )
             if resolved is None and Path(dataset_path).is_dir():
                 resolved = _source_location_px_from_dataset_dir(Path(dataset_path))
             if resolved is not None:
                 goal_location = Coordinates(x=resolved[0], y=resolved[1])
 
-        data_array = movie_data
-        if data_array is None and movie_dataset_id:
-            data_array = load_plume(
-                movie_dataset_id,
-                normalize=movie_normalize,
-                cache_root=cache_root,
-                auto_download=movie_auto_download,
-                chunks=movie_chunks,
+        if movie_normalize is not None or movie_chunks is not None:
+            raise ValueError(
+                "movie_normalize/movie_chunks are no longer supported; pre-normalize data before passing movie_data"
             )
+        data_array = movie_data
 
         # For raw media sources (non-directory movie_path values), treat the
         # sidecar as the single source of truth for movie-level metadata. Once
@@ -314,34 +303,23 @@ def _resolve_movie_dataset(
 ) -> Path:
     """Resolve dataset path via registry or direct path/ingest."""
 
-    # Explicit paths (including raw media) take precedence over registry ids so
-    # callers can override a curated dataset with a local copy.
-    if movie_path:
-        return resolve_movie_dataset_path(
-            movie_path,
-            fps=movie_fps,
-            pixel_to_grid=movie_pixel_to_grid,
-            origin=movie_origin,
-            extent=movie_extent,
-            movie_h5_dataset=movie_h5_dataset,
-        )
+    if not movie_path:
+        raise ValueError("env.plume=movie requires movie.path to be provided")
 
     if movie_dataset_id:
-        cache_root = Path(movie_cache_root) if movie_cache_root else DEFAULT_CACHE_ROOT
-        try:
-            return ensure_dataset_available(
-                movie_dataset_id,
-                cache_root=cache_root,
-                auto_download=movie_auto_download,
-                verify_checksum=True,
-            )
-        except KeyError as exc:
-            known = sorted(get_dataset_registry().keys())
-            known_hint = f" Known ids: {', '.join(known)}." if known else ""
-            raise ValueError(
-                f"Unknown movie dataset id '{movie_dataset_id}'.{known_hint}"
-            ) from exc
+        raise ValueError(
+            "movie_dataset_id is no longer supported; provide movie_path instead"
+        )
+    if movie_auto_download or movie_cache_root is not None:
+        raise ValueError(
+            "movie_auto_download/movie_cache_root are not supported; provide movie_path directly"
+        )
 
-    raise ValueError(
-        "env.plume=movie requires movie.path or movie.dataset_id to be provided"
+    return resolve_movie_dataset_path(
+        movie_path,
+        fps=movie_fps,
+        pixel_to_grid=movie_pixel_to_grid,
+        origin=movie_origin,
+        extent=movie_extent,
+        movie_h5_dataset=movie_h5_dataset,
     )

@@ -1474,7 +1474,7 @@ def validate_registration_system(
         try:
             # First, clean up any existing registration
             if is_registered(ENV_ID):
-                unregister_env(ENV_ID, suppress_warnings=True)
+                unregister_env(ENV_ID)
 
             # Register the environment
             registered_id = register_env()
@@ -1550,7 +1550,7 @@ def validate_registration_system(
 
                 # Clean up any existing custom registration
                 if is_registered(custom_env_id):
-                    unregister_env(custom_env_id, suppress_warnings=True)
+                    unregister_env(custom_env_id)
 
                 # Test registration with custom grid size
                 if CONSTANTS_AVAILABLE:
@@ -1583,7 +1583,7 @@ def validate_registration_system(
 
                 # Clean up custom registration
                 if cleanup_registration:
-                    unregister_env(custom_env_id, suppress_warnings=True)
+                    unregister_env(custom_env_id)
 
             except Exception as e:
                 if not QUIET_MODE:
@@ -1628,7 +1628,7 @@ def validate_registration_system(
         # Test environment unregistration and cleanup if cleanup_registration enabled
         if cleanup_registration:
             try:
-                success = unregister_env(ENV_ID, suppress_warnings=True)
+                success = unregister_env(ENV_ID)
 
                 if not success:
                     if VERBOSE_OUTPUT:

@@ -241,7 +241,7 @@ def make_environment(  # noqa: C901
                 parameter_value=effective_env_type,
             )
 
-        currently_registered = is_registered(ENV_ID, use_cache=True)
+        currently_registered = is_registered(ENV_ID)
 
         if auto_register and not currently_registered:
             _module_logger.info(f"Auto-registering environment: {ENV_ID}")
@@ -267,7 +267,7 @@ def make_environment(  # noqa: C901
         elif force_reregister and currently_registered:
             _module_logger.info(f"Force re-registering environment: {ENV_ID}")
 
-            unregister_env(ENV_ID, suppress_warnings=True)
+            unregister_env(ENV_ID)
 
             registration_params = {
                 "grid_size": effective_env_config.get("grid_size"),

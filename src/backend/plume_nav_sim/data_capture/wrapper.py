@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import gymnasium as gym
 
@@ -10,101 +10,120 @@ from .recorder import RunRecorder
 from .schemas import EpisodeRecord, Position, RunMeta, StepRecord
 
 
+def _coerce_int(value: Any) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
 class DataCaptureWrapper(gym.Wrapper):
     def __init__(
         self,
         env: gym.Env,
         recorder: RunRecorder,
-        env_config: EnvironmentConfig,
+        env_config: EnvironmentConfig | dict,
         *,
         meta_overrides: Optional[dict] = None,
     ):
         super().__init__(env)
         self.recorder = recorder
         self.env_config = env_config
-        # Write run meta on construction
+        self._episode_index = 0
+        self._episode_steps = 0
+        self._episode_reward = 0.0
+        self._episode_start_ms: Optional[float] = None
+        self._episode_id: Optional[str] = None
+
+        cfg_payload = (
+            env_config.to_dict()
+            if hasattr(env_config, "to_dict")
+            else dict(env_config)
+        )
         meta = RunMeta(
             run_id=recorder.run_id,
             experiment=recorder.experiment,
-            package_version=None,
-            git_sha=None,
-            start_time=time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
-            ),  # will be parsed by pydantic
-            env_config=env_config.to_dict(),
-            base_seed=None,
-            episode_seeds=None,
-            system=RunMeta.SystemInfo(),
+            start_time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            env_config=cfg_payload,
         )
         if meta_overrides:
-            try:
-                meta = meta.model_copy(update={**meta_overrides})
-            except Exception:
-                # Best-effort: ignore invalid overrides
-                pass
-        # pydantic will coerce start_time to datetime if string in ISO format
+            cfg = meta.to_dict()
+            extra: dict[str, Any] = {}
+            for key, value in meta_overrides.items():
+                if key in cfg:
+                    cfg[key] = value
+                else:
+                    extra[key] = value
+            if extra:
+                cfg["extra"] = extra
+            meta = RunMeta(**cfg)
         self.recorder.write_run_meta(meta)
-        self._episode_id: Optional[str] = None
-        self._episode_start_ms: Optional[float] = None
-        self._episode_steps: int = 0
-        self._episode_reward: float = 0.0
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
-        # Start new episode
+        self._episode_index += 1
         self._episode_steps = 0
         self._episode_reward = 0.0
         self._episode_start_ms = time.time() * 1000.0
-        eid = info.get("episode", 0)
-        self._episode_id = f"ep-{int(eid):06d}"
+        self._episode_id = f"ep-{self._episode_index:06d}"
         return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self._episode_steps += 1
         self._episode_reward += float(reward)
+
         pos = info.get("agent_position") or info.get("agent_xy") or (0, 0)
         dist = float(info.get("distance_to_goal", 0.0))
         seed = info.get("seed")
-        # Compose step record
-        rec = StepRecord(
+
+        obs_summary = None
+        if hasattr(obs, "__len__"):
+            try:
+                if len(obs) > 0:
+                    obs_summary = [float(obs[0])]
+            except Exception:
+                obs_summary = None
+
+        step_rec = StepRecord(
             ts=time.time(),
             run_id=self.recorder.run_id,
             episode_id=self._episode_id or "ep-unknown",
             step=self._episode_steps,
-            action=int(action),
+            action=_coerce_int(action),
             reward=float(reward),
             terminated=bool(terminated),
             truncated=bool(truncated),
-            agent_position=Position(x=int(pos[0]), y=int(pos[1])),
+            agent_position=Position(x=_coerce_int(pos[0]), y=_coerce_int(pos[1])),
             distance_to_goal=dist,
-            observation_summary=(
-                [float(obs[0])] if hasattr(obs, "__len__") and len(obs) > 0 else None
-            ),
-            seed=int(seed) if isinstance(seed, (int,)) else None,
+            observation_summary=obs_summary,
+            seed=_coerce_int(seed) if seed is not None else None,
         )
-        self.recorder.append_step(rec)
+        self.recorder.append_step(step_rec)
 
         if terminated or truncated:
-            # finalize episode record
             duration_ms = None
             if self._episode_start_ms is not None:
                 duration_ms = (time.time() * 1000.0) - self._episode_start_ms
-            ep = EpisodeRecord(
+            ep_rec = EpisodeRecord(
                 run_id=self.recorder.run_id,
                 episode_id=self._episode_id or "ep-unknown",
                 terminated=bool(terminated),
                 truncated=bool(truncated),
                 total_steps=self._episode_steps,
                 total_reward=self._episode_reward,
-                final_position=Position(x=int(pos[0]), y=int(pos[1])),
+                final_position=Position(
+                    x=_coerce_int(pos[0]), y=_coerce_int(pos[1])
+                ),
                 final_distance_to_goal=dist,
                 duration_ms=duration_ms,
                 avg_step_time_ms=(
-                    (duration_ms / max(1, self._episode_steps)) if duration_ms else None
+                    (duration_ms / max(1, self._episode_steps))
+                    if duration_ms is not None
+                    else None
                 ),
             )
-            self.recorder.append_episode(ep)
+            self.recorder.append_episode(ep_rec)
 
         return obs, reward, terminated, truncated, info
 

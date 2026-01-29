@@ -1385,7 +1385,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._active_mode != "live":
             self.statusBar().showMessage("Custom policies are live-mode only", 2500)
             return
-        from plume_nav_sim.compose.policy_loader import load_policy
+        from plume_nav_sim.config.composition import load_policy
 
         spec = self.controls.custom_policy_edit.text().strip()
         if not spec:

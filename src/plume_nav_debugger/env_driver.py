@@ -562,7 +562,7 @@ class EnvDriver(QtCore.QObject):
                 self.start(self.get_interval_ms())
             return
 
-        from plume_nav_sim.compose.policy_loader import reset_policy_if_possible
+        from plume_nav_sim.config.composition import reset_policy_if_possible
         from plume_nav_sim.runner import runner
 
         from .controllable_policy import ControllablePolicy
