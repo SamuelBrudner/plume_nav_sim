@@ -62,6 +62,6 @@ See `src/backend/examples/custom_components.py` for a full walkthrough, includin
 ## Best Practices
 
 - **Duck typing**: Satisfy protocol shapes; inheritance is optional.
-- **Validation**: Reuse helpers in `plume_nav_sim.utils.validation` for consistent error reporting.
+- **Validation**: Reuse helpers in `plume_nav_sim._compat` for consistent error reporting.
 - **Testing**: Start with `tests/contracts/` suites to harden new components before integration.
 - **Documentation**: Record behavioral differences in `docs/extending/` so future experiments build on verified groundwork.

@@ -62,7 +62,7 @@ dx, dy = get_movement_vector(action)
 
 ## Error Model
 - All validation routes through the shared `ValidationError` in
-  `plume_nav_sim.utils.exceptions`.
+  `plume_nav_sim._compat`.
 
 ## Tests and Contracts
 - Contract tests exercise invariants for these types in

@@ -452,31 +452,35 @@ SEED_MAX_VALUE = 2**32 - 1  # 4,294,967,295
 
 ---
 
-### `validate_seed()` Function
+### `validate_seed_value()` Function
 
 **Signature (IMMUTABLE):**
 ```python
-def validate_seed(seed: Optional[int]) -> tuple[Optional[int], str]:
+def validate_seed_value(
+    seed: Optional[int],
+    *,
+    allow_none: bool = True,
+    strict_type_checking: bool = True,
+) -> Optional[int]:
     """Validate seed value.
     
     Args:
         seed: Seed to validate (None or int)
+        allow_none: Whether None is accepted
+        strict_type_checking: Enforce integer-only inputs
         
     Returns:
-        Tuple of (normalized_seed, error_message)
-        - normalized_seed: None if invalid, else the seed
-        - error_message: Empty string if valid, else error description
+        Normalized seed value (int) or None when allowed.
         
     Raises:
-        Never raises - returns error in tuple instead
+        ValidationError on invalid seeds
     """
 ```
 
 **Contract:**
-- Returns `(seed, "")` if valid
-- Returns `(None, "error message")` if invalid
-- Never raises exceptions
-- `None` input returns `(None, "")` (valid)
+- Returns `seed` if valid
+- Returns `None` only when `allow_none=True` and `seed is None`
+- Raises `ValidationError` on invalid inputs
 
 ---
 
@@ -660,7 +664,7 @@ episode_result.performance_metrics  # Direct access
 
 # Functions - single signature
 create_coordinates((x, y))  # Tuple only
-validate_seed(seed)  # No strict_mode
+validate_seed_value(seed)  # Single validation entrypoint
 ```
 
 ---

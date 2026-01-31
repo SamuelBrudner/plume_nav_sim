@@ -50,9 +50,8 @@
 ```python
 def test_validate_seed_accepts_valid_integer():
     """ValidationError should not be raised for valid seed."""
-    seed, error = validate_seed(42)
+    seed = validate_seed_value(42)
     assert seed == 42
-    assert error == ""
 ```
 
 **Coverage Requirements:**
@@ -166,8 +165,9 @@ def test_seed_roundtrip_property(seed):
 def test_episode_seed_generation(seed, episode, exp_id):
     # This creates 5 × 4 × 3 = 60 tests
     # ALL testing the SAME LOGIC with different data
-    manager = SeedManager(seed)
-    result = manager.generate_episode_seed(episode, exp_id)
+    manager = SeedManager()
+    manager.seed(seed)
+    result = int(manager.rng.integers(0, 2**32 - 1))
     assert isinstance(result, int)
 ```
 
@@ -184,29 +184,36 @@ def test_episode_seed_generation(seed, episode, exp_id):
 ```python
 def test_episode_seed_is_deterministic():
     """Same inputs should produce same episode seed."""
-    manager = SeedManager(42)
-    seed1 = manager.generate_episode_seed(0, "exp1")
-    seed2 = manager.generate_episode_seed(0, "exp1")
+    manager = SeedManager()
+    manager.seed(42)
+    seed1 = int(manager.rng.integers(0, 2**32 - 1))
+    manager.seed(42)
+    seed2 = int(manager.rng.integers(0, 2**32 - 1))
     assert seed1 == seed2
 
 def test_episode_seed_varies_by_episode_number():
-    """Different episode numbers should produce different seeds."""
-    manager = SeedManager(42)
-    seed0 = manager.generate_episode_seed(0, "exp1")
-    seed1 = manager.generate_episode_seed(1, "exp1")
+    """Different base seeds should produce different episode seeds."""
+    manager = SeedManager()
+    manager.seed(42)
+    seed0 = int(manager.rng.integers(0, 2**32 - 1))
+    manager.seed(43)
+    seed1 = int(manager.rng.integers(0, 2**32 - 1))
     assert seed0 != seed1
 
 def test_episode_seed_varies_by_experiment_id():
-    """Different experiment IDs should produce different seeds."""
-    manager = SeedManager(42)
-    seed_exp1 = manager.generate_episode_seed(0, "exp1")
-    seed_exp2 = manager.generate_episode_seed(0, "exp2")
+    """Different base seeds should produce different episode seeds."""
+    manager = SeedManager()
+    manager.seed(100)
+    seed_exp1 = int(manager.rng.integers(0, 2**32 - 1))
+    manager.seed(200)
+    seed_exp2 = int(manager.rng.integers(0, 2**32 - 1))
     assert seed_exp1 != seed_exp2
 
 def test_episode_seed_handles_none_experiment_id():
-    """None experiment_id should be valid."""
-    manager = SeedManager(42)
-    seed = manager.generate_episode_seed(0, None)
+    """None experiment_id no longer applies; SeedManager uses RNG directly."""
+    manager = SeedManager()
+    manager.seed(42)
+    seed = int(manager.rng.integers(0, 2**32 - 1))
     assert isinstance(seed, int)
 ```
 
@@ -433,39 +440,33 @@ class TestValidateSeed:
     """Test pattern for validation functions."""
     
     def test_valid_seed_returns_seed_and_empty_error(self):
-        """Valid seed should return (seed, empty_string)."""
-        seed, error = validate_seed(42)
+        """Valid seed should return the normalized seed."""
+        seed = validate_seed_value(42)
         assert seed == 42
-        assert error == ""
     
     def test_invalid_seed_returns_none_and_error_message(self):
-        """Invalid seed should return (None, error_msg)."""
-        seed, error = validate_seed(-1)
-        assert seed is None
-        assert "non-negative" in error.lower()
+        """Invalid seed should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            validate_seed_value(-1)
     
     def test_none_is_valid_seed(self):
         """None should be valid (means use entropy)."""
-        seed, error = validate_seed(None)
+        seed = validate_seed_value(None)
         assert seed is None
-        assert error == ""
     
     def test_boundary_values(self):
         """Test boundary conditions."""
         # Minimum valid
-        seed, error = validate_seed(0)
+        seed = validate_seed_value(0)
         assert seed == 0
-        assert error == ""
         
         # Maximum valid
-        seed, error = validate_seed(2**32 - 1)
+        seed = validate_seed_value(2**32 - 1)
         assert seed == 2**32 - 1
-        assert error == ""
         
         # Just beyond max
-        seed, error = validate_seed(2**32)
-        assert seed is None
-        assert "too large" in error.lower()
+        with pytest.raises(ValidationError):
+            validate_seed_value(2**32)
 ```
 
 ---
@@ -789,7 +790,7 @@ from plume_nav_sim.core.reward_calculator import (
     RewardResult
 )
 from plume_nav_sim.core.geometry import Coordinates
-from plume_nav_sim.utils.exceptions import ValidationError
+from plume_nav_sim._compat import ValidationError
 
 
 # ============================================================================

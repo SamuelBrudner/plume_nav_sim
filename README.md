@@ -390,13 +390,12 @@ These policies are referenced by dataset ingest and loader components to ensure 
 
 ```python
 import plume_nav_sim as pns
-from plume_nav_sim.utils.seeding import SeedManager
+from plume_nav_sim._compat import SeedManager
 
 manager = SeedManager()
 base_seed = 2025
-episode_seed = manager.generate_episode_seed(
-    base_seed, episode_number=0, experiment_id="repro"
-)
+manager.seed(base_seed)
+episode_seed = int(manager.rng.integers(0, 2**32 - 1))
 
 env = pns.make_env()
 obs, info = env.reset(seed=episode_seed)
