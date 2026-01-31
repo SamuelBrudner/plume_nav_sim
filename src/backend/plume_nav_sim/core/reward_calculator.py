@@ -1,26 +1,15 @@
 import copy
 import math
 import time
-from dataclasses import (
-    dataclass,
-    field,
-)
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 # Standard library imports with version comments
 import numpy as np
 
-from ..utils.exceptions import ComponentError, ValidationError
-from ..utils.logging import get_component_logger, monitor_performance
-
 # Internal utility imports for validation, exceptions, and logging
-from ..utils.validation import validate_coordinates
+from .._compat import ComponentError, ValidationError, validate_coordinates
+from ..logging import get_component_logger
 
 # Internal core imports for constants, types, and mathematical operations
 from .constants import (
@@ -506,9 +495,6 @@ class RewardCalculator:
             f"reward_goal={config.reward_goal_reached}, reward_default={config.reward_default}"
         )
 
-    @monitor_performance(
-        "reward_calculation", PERFORMANCE_TARGET_STEP_LATENCY_MS, False
-    )
     def calculate_reward(
         self,
         agent_position: Coordinates,

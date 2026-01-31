@@ -14,7 +14,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from plume_nav_sim import PlumeSearchEnv
-from plume_nav_sim.utils.exceptions import StateError
+from plume_nav_sim._compat import StateError
 
 # ============================================================================
 # Test Categories

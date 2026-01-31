@@ -11,9 +11,8 @@ import numpy as np
 from gymnasium.utils import seeding as gym_seeding
 from gymnasium.wrappers import TimeLimit
 
+from .._compat import ValidationError, validate_seed_value
 from ..render.adapter import RendererAdapter
-from ..utils.exceptions import ValidationError
-from ..utils.validation import validate_seed_value
 from .component_env import ComponentBasedEnvironment
 from .factory import create_component_environment
 

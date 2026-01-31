@@ -195,7 +195,7 @@ class TestComponentBasedEnvironment:
 
     def test_step_before_reset_raises_error(self, component_env):
         """Test: step() before reset() raises StateError."""
-        from plume_nav_sim.utils.exceptions import StateError
+        from plume_nav_sim._compat import StateError
 
         with pytest.raises(StateError, match="Must call reset"):
             component_env.step(0)
@@ -309,7 +309,7 @@ class TestComponentBasedEnvironment:
 
     def test_cannot_step_after_close(self, component_env):
         """Test: step() after close() raises StateError."""
-        from plume_nav_sim.utils.exceptions import StateError
+        from plume_nav_sim._compat import StateError
 
         component_env.reset()
         component_env.close()
@@ -319,7 +319,7 @@ class TestComponentBasedEnvironment:
 
     def test_cannot_reset_after_close(self, component_env):
         """Test: reset() after close() raises StateError."""
-        from plume_nav_sim.utils.exceptions import StateError
+        from plume_nav_sim._compat import StateError
 
         component_env.reset()
         component_env.close()
@@ -393,7 +393,7 @@ class TestComponentBasedEnvironment:
 
     def test_invalid_action_raises_error(self, component_env):
         """Test: Invalid action raises ValidationError."""
-        from plume_nav_sim.utils.exceptions import ValidationError
+        from plume_nav_sim._compat import ValidationError
 
         component_env.reset()
 

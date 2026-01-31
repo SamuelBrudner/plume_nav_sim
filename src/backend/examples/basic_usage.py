@@ -19,6 +19,9 @@ import time  # >=3.10 - Performance timing measurements and demonstration of ste
 import gymnasium  # >=0.29.0 - Reinforcement learning environment framework for gym.make() calls and standard RL API usage
 import numpy as np  # >=2.1.0 - Array operations and random number generation for action selection and data analysis
 
+from plume_nav_sim._compat import (
+    ValidationError,  # Exception handling for input validation failures and error demonstration
+)
 from plume_nav_sim.core.enums import (  # Action enumeration for demonstrating discrete action space usage and movement directions
     Action,
 )
@@ -29,12 +32,6 @@ from plume_nav_sim.registration.register import (
 )
 from plume_nav_sim.registration.register import (
     register_env,  # Environment registration function for Gymnasium compatibility enabling gym.make() instantiation
-)
-from plume_nav_sim.utils.exceptions import (
-    PlumeNavSimError,  # Base exception handling for comprehensive error management and user guidance
-)
-from plume_nav_sim.utils.exceptions import (
-    ValidationError,  # Exception handling for input validation failures and error demonstration
 )
 
 # Global demonstration constants for example configuration and reproducibility
@@ -836,18 +833,18 @@ def demonstrate_error_handling(env: gymnasium.Env) -> None:
     except Exception as e:
         _logger.error(f"Error during state recovery testing: {e}")
 
-    # Show proper exception hierarchy usage with PlumeNavSimError base class handling
+    # Show proper exception hierarchy usage with base exception handling
     _logger.info("\n3. Testing exception hierarchy and custom errors:")
 
     try:
-        # Demonstrate catching PlumeNavSimError base class
-        _logger.info("Testing PlumeNavSimError base class exception handling...")
+        # Demonstrate catching base exception class
+        _logger.info("Testing base exception handling...")
 
         try:
             # This might trigger various plume_nav_sim specific errors
             _ = gymnasium.make(ENV_ID, render_mode="invalid_mode")
-        except PlumeNavSimError as pnse:
-            _logger.info(f"  ✓ PlumeNavSimError caught: {pnse}")
+        except Exception as exc:
+            _logger.info(f"  ✓ Base exception caught: {exc}")
         except Exception as e:
             _logger.info(f"  Other error type: {type(e).__name__}: {e}")
 
@@ -879,7 +876,7 @@ def demonstrate_error_handling(env: gymnasium.Env) -> None:
     # Log each error scenario with recovery procedure and user guidance information
     _logger.info("\n5. Error handling best practices summary:")
     _logger.info("  ✓ Always validate inputs before environment operations")
-    _logger.info("  ✓ Use specific exception types (ValidationError, PlumeNavSimError)")
+    _logger.info("  ✓ Use specific exception types (ValidationError, RuntimeError)")
     _logger.info("  ✓ Implement graceful fallbacks for non-critical failures")
     _logger.info("  ✓ Log errors with sufficient detail for debugging")
     _logger.info("  ✓ Test error scenarios during development")

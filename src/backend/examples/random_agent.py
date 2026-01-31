@@ -30,9 +30,6 @@ from plume_nav_sim.registration.register import (  # Environment registration fu
     ENV_ID,
     register_env,
 )
-from plume_nav_sim.utils.exceptions import (  # Base exception handling for comprehensive error management in random agent execution
-    PlumeNavSimError,
-)
 
 # Global constants and configuration
 DEFAULT_SEED = 42
@@ -119,7 +116,7 @@ def create_random_policy(env: gym.Env, policy_seed: int = None) -> callable:
     if hasattr(env.action_space, "n"):
         action_space_size = env.action_space.n
     else:
-        raise PlumeNavSimError(
+        raise RuntimeError(
             f"Environment action space {type(env.action_space)} not supported for random policy"
         )
 
@@ -1810,7 +1807,7 @@ def run_random_agent_demo(demo_config: dict = None) -> int:
                 f"\nBenchmarking completed - Performance validation: {'PASSED' if validation_passed else 'NEEDS_ATTENTION'}"
             )
 
-    except PlumeNavSimError as sim_error:
+    except RuntimeError as sim_error:
         _logger.error(f"Simulation error during demonstration: {sim_error}")
         return 1
     except Exception as demo_error:

@@ -6,9 +6,9 @@ from typing import Optional
 
 import numpy as np
 
+from .._compat import ValidationError
 from ..constants import DEFAULT_PLUME_SIGMA
 from ..core.geometry import Coordinates, GridSize
-from ..utils.exceptions import ValidationError
 
 __all__ = ["GaussianPlume"]
 

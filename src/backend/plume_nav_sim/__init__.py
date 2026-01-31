@@ -5,7 +5,6 @@ from __future__ import annotations
 import warnings
 from typing import Dict, Optional
 
-
 from .core import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -81,9 +80,9 @@ def initialize_package(  # noqa: C901
 
     if configure_logging:
         try:
-            from plume_nav_sim.utils.logging import configure_logging_for_development
+            from plume_nav_sim.logging import configure_development_logging
 
-            configure_logging_for_development()
+            configure_development_logging()
             status["logging_configured"] = True
         except Exception as exc:  # pragma: no cover - defensive guard
             _record_init_error(status, "configure_logging", exc)

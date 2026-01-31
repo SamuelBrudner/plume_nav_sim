@@ -9,10 +9,10 @@ Reference: ../../SEMANTIC_MODEL.md Section "Semantic Invariants (Testable)"
 import numpy as np
 import pytest
 
+from plume_nav_sim._compat import create_seeded_rng
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.envs.config_types import EnvironmentConfig
 from plume_nav_sim.envs.plume_search_env import create_plume_search_env
-from plume_nav_sim.utils.seeding import create_seeded_rng
 
 
 class TestPositionInvariant:

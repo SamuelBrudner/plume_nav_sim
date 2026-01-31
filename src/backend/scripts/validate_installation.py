@@ -805,8 +805,8 @@ def check_package_installation(
                 "plume_nav_sim.core",
                 "plume_nav_sim.core.constants",
                 "plume_nav_sim.core.types",
-                "plume_nav_sim.utils",
-                "plume_nav_sim.utils.validation",
+                "plume_nav_sim._compat",
+                "plume_nav_sim.logging",
             ]
 
             missing_modules = []

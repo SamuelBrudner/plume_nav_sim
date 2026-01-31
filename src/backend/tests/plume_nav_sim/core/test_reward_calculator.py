@@ -19,6 +19,9 @@ import numpy as np  # >=2.1.0 - Numerical testing, array operations, and mathema
 # Standard library imports with version comments
 import pytest  # >=8.0.0 - Testing framework for fixtures, parametrized tests, and comprehensive test execution
 
+# Internal imports for exception handling and validation
+from plume_nav_sim._compat import ValidationError
+
 # Internal imports for constants and mathematical operations
 from plume_nav_sim.core.constants import (
     DEFAULT_GOAL_RADIUS,
@@ -44,9 +47,6 @@ from plume_nav_sim.core.types import (
     Coordinates,
     calculate_euclidean_distance,
 )
-
-# Internal imports for exception handling and validation
-from plume_nav_sim.utils.exceptions import ValidationError
 
 # Global test configuration constants
 PERFORMANCE_TEST_ITERATIONS = 1000

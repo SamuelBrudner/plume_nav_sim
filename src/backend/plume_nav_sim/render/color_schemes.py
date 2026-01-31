@@ -1,24 +1,14 @@
 import copy
 import functools
 import logging
-from dataclasses import (
-    dataclass,
-    field,
-)
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import matplotlib.cm as cm
 import matplotlib.colors
-
 import numpy as np
 
+from .._compat import RenderingError, ValidationError, validate_render_mode
 from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
@@ -28,10 +18,7 @@ from ..constants import (
     SOURCE_MARKER_COLOR,
     SOURCE_MARKER_SIZE,
 )
-
 from ..core.types import Coordinates, RenderMode
-from ..utils.exceptions import RenderingError, ValidationError
-from ..utils.validation import sanitize_parameters, validate_render_mode
 from .colormaps import DEFAULT_COLORMAP, PredefinedScheme
 
 __all__ = [
@@ -760,7 +747,7 @@ class ColorSchemeManager:
         if not isinstance(scheme_name, str) or not scheme_name.strip():
             raise ValidationError("scheme_name must be a non-empty string")
 
-        sanitized_config = sanitize_parameters(color_config)
+        sanitized_config = copy.deepcopy(color_config)
 
         # Create CustomColorScheme using create_color_scheme() with configuration
         color_scheme = create_color_scheme(

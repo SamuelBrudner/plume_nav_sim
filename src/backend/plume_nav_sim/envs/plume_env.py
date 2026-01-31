@@ -9,6 +9,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium.utils import seeding as gym_seeding
 
+from .._compat import StateError, ValidationError, validate_seed_value
 from ..actions import DiscreteGridActions
 from ..constants import (
     AGENT_MARKER_COLOR,
@@ -28,8 +29,6 @@ from ..plume.gaussian import GaussianPlume
 from ..plume.protocol import ConcentrationField
 from ..plume.video import VideoConfig, VideoPlume
 from ..rewards import SparseGoalReward
-from ..utils.exceptions import StateError, ValidationError
-from ..utils.validation import validate_seed_value
 from .state import EnvironmentState
 
 __all__ = ["PlumeEnv", "create_plume_env"]
@@ -119,7 +118,9 @@ class PlumeEnv(gym.Env):
                 )
             grid = GridSize(width=width, height=height)
 
-        def _to_coordinates(value: tuple[int, int] | Coordinates, name: str) -> Coordinates:
+        def _to_coordinates(
+            value: tuple[int, int] | Coordinates, name: str
+        ) -> Coordinates:
             if isinstance(value, Coordinates):
                 coords = value
             else:
@@ -138,8 +139,10 @@ class PlumeEnv(gym.Env):
                 )
             return coords
 
-        goal = grid.center() if source_location is None else _to_coordinates(
-            source_location, "source_location"
+        goal = (
+            grid.center()
+            if source_location is None
+            else _to_coordinates(source_location, "source_location")
         )
 
         radius = DEFAULT_GOAL_RADIUS if goal_radius is None else float(goal_radius)
@@ -477,7 +480,9 @@ class PlumeEnv(gym.Env):
         self._draw_marker(canvas, sx, sy, SOURCE_MARKER_SIZE, SOURCE_MARKER_COLOR)
 
         if self._agent_state is not None:
-            ax, ay = int(self._agent_state.position.x), int(self._agent_state.position.y)
+            ax, ay = int(self._agent_state.position.x), int(
+                self._agent_state.position.y
+            )
         elif self._start_location is not None:
             ax, ay = int(self._start_location.x), int(self._start_location.y)
         else:

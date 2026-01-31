@@ -34,6 +34,9 @@ import numpy as np  # >=2.1.0 - Array operations and mathematical validation for
 # Standard library imports with version comments
 import pytest  # >=8.0.0 - Testing framework for comprehensive boundary enforcement test suite execution
 
+# Internal imports from exceptions for comprehensive error handling validation
+from plume_nav_sim._compat import ConfigurationError, ValidationError
+
 # Internal imports from boundary enforcer module for comprehensive testing coverage
 from plume_nav_sim.core.boundary_enforcer import (
     BoundaryEnforcementResult,
@@ -55,9 +58,6 @@ from plume_nav_sim.core.constants import (
 
 # Internal imports from core types for coordinate and action system integration
 from plume_nav_sim.core.types import Action, Coordinates, GridSize
-
-# Internal imports from exceptions for comprehensive error handling validation
-from plume_nav_sim.utils.exceptions import ConfigurationError, ValidationError
 
 # Test configuration constants for comprehensive boundary enforcement testing
 TEST_GRID_SIZE = GridSize(32, 32)

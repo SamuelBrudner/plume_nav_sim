@@ -38,6 +38,10 @@ from ..config.environment_configs import (
     get_available_presets,
 )
 
+# Internal imports from logging and performance monitoring
+from ..plume_nav_sim.logging import configure_development_logging
+from ..plume_nav_sim.logging import get_component_logger as _get_component_logger
+
 # Internal imports from registration system
 from ..plume_nav_sim.registration.register import (
     ENV_ID,
@@ -47,20 +51,35 @@ from ..plume_nav_sim.registration.register import (
     unregister_env,
 )
 
-# Internal imports from logging and performance monitoring
-from ..plume_nav_sim.utils.logging import (
-    PerformanceTimer,
-    configure_logging_for_development,
-    get_component_logger,
-)
-
 # Global constants for advanced demonstration configuration
 ADVANCED_DEMO_SEED = 42
 NUM_REPRODUCIBILITY_TESTS = 10
 PERFORMANCE_BASELINE_EPISODES = 5
 STATISTICAL_SIGNIFICANCE_THRESHOLD = 0.01
 
+
 # Global performance tracking and logging setup
+class PerformanceTimer:
+    def __init__(self) -> None:
+        self._start = 0.0
+        self._end = 0.0
+
+    def __enter__(self) -> "PerformanceTimer":
+        self._start = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self._end = time.perf_counter()
+
+    def get_duration_ms(self) -> float:
+        end = self._end or time.perf_counter()
+        return (end - self._start) * 1000.0
+
+
+def get_component_logger(name: str, component_type: Optional[str] = None):
+    return _get_component_logger(name)
+
+
 _logger = get_component_logger("gymnasium_integration", "UTILS")
 _performance_results = {}
 
@@ -98,12 +117,10 @@ def setup_advanced_logging(
 def _extracted_from_setup_advanced_logging_25(
     log_level, enable_performance_logging, enable_file_output, _logger
 ):
-    # Configure development logging using configure_logging_for_development with enhanced parameters
-    logging_config = configure_logging_for_development(
-        log_level=log_level or "INFO",
-        enable_performance_monitoring=enable_performance_logging,
-        enable_file_logging=enable_file_output,
-        component_name="gymnasium_integration",
+    # Configure development logging with basic options
+    logging_config = configure_development_logging(
+        development_log_level=log_level or "INFO",
+        log_to_file=enable_file_output,
     )
 
     # Set up component-specific loggers for environment, registration, and performance monitoring

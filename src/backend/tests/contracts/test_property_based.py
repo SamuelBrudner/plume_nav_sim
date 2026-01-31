@@ -11,13 +11,16 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from plume_nav_sim._compat import (
+    ValidationError,
+    create_seeded_rng,
+    validate_seed_value,
+)
 from plume_nav_sim.core.geometry import (
     Coordinates,
     GridSize,
     calculate_euclidean_distance,
 )
-from plume_nav_sim.utils.exceptions import ValidationError
-from plume_nav_sim.utils.seeding import create_seeded_rng, validate_seed
 
 
 class TestSeedValidationProperties:
@@ -26,28 +29,21 @@ class TestSeedValidationProperties:
     @given(st.integers(min_value=0, max_value=2**31 - 1))
     def test_valid_seeds_validate_to_themselves(self, seed):
         """Property: Any valid seed validates to itself (identity)."""
-        is_valid, validated, error = validate_seed(seed)
+        validated = validate_seed_value(seed)
 
-        assert is_valid is True
         assert validated == seed
-        assert error == ""
 
     @given(st.integers(max_value=-1))
     def test_negative_seeds_always_invalid(self, seed):
         """Property: All negative seeds are invalid."""
-        is_valid, validated, error = validate_seed(seed)
-
-        assert is_valid is False
-        assert validated is None
-        assert "non-negative" in error.lower() or "negative" in error.lower()
+        with pytest.raises(ValidationError):
+            _ = validate_seed_value(seed)
 
     @given(st.integers(min_value=2**32))
     def test_too_large_seeds_invalid(self, seed):
         """Property: Seeds beyond 32-bit range are invalid."""
-        is_valid, validated, error = validate_seed(seed)
-
-        assert is_valid is False
-        assert validated is None
+        with pytest.raises(ValidationError):
+            _ = validate_seed_value(seed)
 
     @given(st.integers(min_value=0, max_value=2**31 - 1))
     def test_same_seed_produces_identical_rngs(self, seed):

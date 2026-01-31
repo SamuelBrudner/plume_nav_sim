@@ -16,8 +16,8 @@ Reference: CONTRACTS.md v1.1.0, TEST_TAXONOMY.md
 import numpy as np
 import pytest
 
+from plume_nav_sim._compat import StateError, ValidationError
 from plume_nav_sim.envs import PlumeSearchEnv
-from plume_nav_sim.utils.exceptions import StateError, ValidationError
 
 
 class TestEnvironmentStateTransitions:

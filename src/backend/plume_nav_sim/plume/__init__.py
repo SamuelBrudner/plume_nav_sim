@@ -2,7 +2,13 @@
 
 from .gaussian import GaussianPlume
 from .protocol import ConcentrationField
-from .video import VideoConfig, VideoPlume, resolve_movie_dataset_path
+from .video import (
+    VideoConfig,
+    VideoPlume,
+    resolve_movie_dataset_path,
+    save_video_events,
+    save_video_frames,
+)
 
 __all__ = [
     "ConcentrationField",
@@ -10,4 +16,6 @@ __all__ = [
     "VideoConfig",
     "VideoPlume",
     "resolve_movie_dataset_path",
+    "save_video_frames",
+    "save_video_events",
 ]

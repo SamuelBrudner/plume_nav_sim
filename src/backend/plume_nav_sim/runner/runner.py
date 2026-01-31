@@ -6,8 +6,8 @@ from typing import Any, Callable, Iterator, Optional, Protocol
 
 import numpy as np
 
+from plume_nav_sim._compat import is_space_subset
 from plume_nav_sim.core.types import ActionType, ObservationType
-from plume_nav_sim.utils.spaces import is_space_subset
 
 logger = logging.getLogger(__name__)
 

@@ -269,7 +269,7 @@ def run_demo(
     # Optional: save frames to a video using library utility (imageio required)
     if save_gif and frames:
         try:
-            from plume_nav_sim.utils.video import save_video_frames
+            from plume_nav_sim.plume.video import save_video_frames
 
             save_video_frames(frames, save_gif, fps=10)
             print(f"Saved video: {save_gif}")
@@ -601,7 +601,7 @@ def main() -> None:
 
         if args.save_gif and frames:
             try:
-                from plume_nav_sim.utils.video import save_video_frames
+                from plume_nav_sim.plume.video import save_video_frames
 
                 save_video_frames(frames, args.save_gif, fps=10)
                 print(f"Saved video: {args.save_gif}")
@@ -642,7 +642,7 @@ def main() -> None:
         )
         if args.save_gif and frames:
             try:
-                from plume_nav_sim.utils.video import save_video_frames
+                from plume_nav_sim.plume.video import save_video_frames
 
                 save_video_frames(frames, args.save_gif, fps=10)
                 print(f"Saved video: {args.save_gif}")

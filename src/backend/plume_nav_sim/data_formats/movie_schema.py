@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence, Tuple
 
-from ..utils.exceptions import ValidationError
+from .._compat import ValidationError
 
 # Variable and dimension contract
 VAR_CONCENTRATION = "concentration"

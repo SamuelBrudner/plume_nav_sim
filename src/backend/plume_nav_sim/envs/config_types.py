@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from .._compat import ValidationError
 from ..core.types import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -18,7 +19,6 @@ from ..core.types import (
     create_coordinates,
     create_grid_size,
 )
-from ..utils.exceptions import ValidationError
 
 
 @dataclass(frozen=True)

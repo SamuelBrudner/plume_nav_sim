@@ -11,8 +11,8 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
+from plume_nav_sim._compat import ValidationError
 from plume_nav_sim.core.types import Coordinates
-from plume_nav_sim.utils.exceptions import ValidationError
 
 # ============================================================================
 # Hypothesis Strategies

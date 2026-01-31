@@ -8,6 +8,12 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
+from .._compat import (
+    ComponentError,
+    RenderingError,
+    ValidationError,
+    validate_coordinates,
+)
 from ..constants import (
     FIELD_DTYPE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
@@ -16,9 +22,7 @@ from ..constants import (
     SUPPORTED_RENDER_MODES,
 )
 from ..core.types import Coordinates, GridSize, RenderMode, RGBArray
-from ..utils.exceptions import ComponentError, RenderingError, ValidationError
-from ..utils.logging import get_component_logger, monitor_performance
-from ..utils.validation import validate_coordinates
+from ..logging import get_component_logger
 
 DEFAULT_CONTEXT_VALIDATION = True
 PERFORMANCE_MONITORING_ENABLED = True
@@ -90,23 +94,27 @@ class RenderContext:
                         },
                     )
 
-            if not validate_coordinates(self.agent_position, self.grid_size):
+            try:
+                validate_coordinates(self.agent_position, self.grid_size)
+            except ValidationError as exc:
                 raise ValidationError(
                     "Agent position is outside grid boundaries",
                     context={
                         "agent_position": f"({self.agent_position.x}, {self.agent_position.y})",
                         "grid_bounds": f"0 <= x < {self.grid_size.width}, 0 <= y < {self.grid_size.height}",
                     },
-                )
+                ) from exc
 
-            if not validate_coordinates(self.source_position, self.grid_size):
+            try:
+                validate_coordinates(self.source_position, self.grid_size)
+            except ValidationError as exc:
                 raise ValidationError(
                     "Source position is outside grid boundaries",
                     context={
                         "source_position": f"({self.source_position.x}, {self.source_position.y})",
                         "grid_bounds": f"0 <= x < {self.grid_size.width}, 0 <= y < {self.grid_size.height}",
                     },
-                )
+                ) from exc
 
             if self.agent_position == self.source_position:
                 pass
@@ -652,7 +660,6 @@ class BaseRenderer(abc.ABC):
             else:
                 raise RenderingError(f"Renderer initialization failed: {e}")
 
-    @monitor_performance("render_operation")
     def render(  # noqa: C901
         self, context: RenderContext, mode_override: Optional[RenderMode] = None
     ) -> Union[RGBArray, None]:

@@ -10,9 +10,9 @@ try:  # pragma: no cover - numpy<1.20 compatibility
 except ImportError:  # pragma: no cover
     NDArray = np.ndarray  # type: ignore[assignment]
 
+from ._compat import ValidationError
 from .core.geometry import Coordinates
 from .interfaces.fields import VectorField
-from .utils.exceptions import ValidationError
 
 __all__ = ["ConstantWindField"]
 

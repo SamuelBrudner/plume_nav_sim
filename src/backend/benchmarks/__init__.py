@@ -22,7 +22,7 @@ import typing  # >=3.10 - Type hints for benchmark orchestration functions, suit
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Internal imports - Logging infrastructure for benchmark orchestration and progress tracking
-from plume_nav_sim.utils.logging import (  # Component-specific logger factory for benchmark orchestration logging
+from plume_nav_sim.logging import (  # Component-specific logger factory for benchmark orchestration logging
     get_component_logger,
 )
 
@@ -48,7 +48,7 @@ except ImportError:
     # Placeholder implementation for missing rendering performance module
     def run_rendering_performance_benchmark(*args, **kwargs):
         """Placeholder for rendering performance benchmark - not yet implemented."""
-        logger = get_component_logger("benchmarks_rendering", "UTILS")
+        logger = get_component_logger("benchmarks_rendering")
         logger.warning("Rendering performance benchmarking not yet implemented")
         return {
             "status": "not_implemented",

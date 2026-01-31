@@ -1,14 +1,9 @@
 import time
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 
+from .._compat import ComponentError, RenderingError, ValidationError
 from ..constants import (
     AGENT_MARKER_SIZE,
     PERFORMANCE_TARGET_RGB_RENDER_MS,
@@ -18,8 +13,6 @@ from ..constants import (
     SOURCE_MARKER_SIZE,
 )
 from ..core.types import Coordinates, GridSize, RenderMode
-from ..utils.exceptions import ComponentError, RenderingError, ValidationError
-
 from .base_renderer import BaseRenderer, RenderContext
 from .color_schemes import (
     ColorSchemeManager,

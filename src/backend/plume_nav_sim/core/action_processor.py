@@ -6,22 +6,19 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 # Exception handling system for error reporting and recovery
-from ..utils.exceptions import ComponentError, StateError, ValidationError
+from .._compat import ComponentError, StateError, ValidationError
 
 # Logging and performance monitoring utilities
-from ..utils.logging import ComponentType, get_component_logger, monitor_performance
+from ..logging import ComponentType, get_component_logger
 
 # Boundary enforcement integration for movement validation
 from .boundary_enforcer import BoundaryEnforcer
 
 # System constants for action processing and performance targets
 from .constants import ACTION_SPACE_SIZE, MOVEMENT_VECTORS
-
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .types import ActionType, MovementVector
-
-
 
 ACTION_PROCESSING_PERFORMANCE_TARGET_MS = 0.1
 ACTION_VALIDATION_CACHE_SIZE = 100
@@ -193,7 +190,7 @@ class ActionProcessor:
 
             # Initialize component logger for action processing operations
             self.logger = get_component_logger(
-                component_name="action_processor",
+                "action_processor",
                 component_type=ComponentType.UTILS,
                 enable_performance_tracking=self.config.enable_performance_monitoring,
             )
@@ -233,9 +230,6 @@ class ActionProcessor:
                 underlying_error=e,
             ) from e
 
-    @monitor_performance(
-        "action_processing", ACTION_PROCESSING_PERFORMANCE_TARGET_MS, True
-    )
     def process_action(  # noqa
         self, action: ActionType, current_position: Coordinates
     ) -> ActionProcessingResult:

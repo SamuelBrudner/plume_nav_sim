@@ -33,6 +33,7 @@ import numpy as np  # >=2.1.0 - Array operations for test data generation and nu
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for comprehensive test execution, fixtures, and parameterized testing
 
+from plume_nav_sim._compat import RenderingError, ValidationError
 from plume_nav_sim.core.constants import (
     MATPLOTLIB_DEFAULT_FIGSIZE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
@@ -53,7 +54,6 @@ from plume_nav_sim.render.matplotlib_viz import (
     detect_matplotlib_capabilities,
     validate_matplotlib_integration,
 )
-from plume_nav_sim.utils.exceptions import RenderingError, ValidationError
 
 # Global test constants for consistent test execution
 MATPLOTLIB_AVAILABLE = True  # Flag indicating matplotlib availability for test setup

@@ -11,8 +11,8 @@ import gymnasium as gym
 import numpy as np
 import pytest
 
+from plume_nav_sim._compat import StateError, ValidationError
 from plume_nav_sim.envs.plume_env import PlumeEnv
-from plume_nav_sim.utils.exceptions import StateError, ValidationError
 
 # Test configuration
 DEFAULT_TEST_GRID_SIZE = (32, 32)

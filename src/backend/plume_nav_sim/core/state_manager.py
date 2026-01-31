@@ -4,6 +4,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from .._compat import (
+    ComponentError,
+    SeedManager,
+    StateError,
+    ValidationError,
+    validate_action_input,
+)
 from ..constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -13,10 +20,7 @@ from ..constants import (
     MOVEMENT_VECTORS,
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
-from ..utils.exceptions import ComponentError, StateError, ValidationError
-from ..utils.logging import get_component_logger, monitor_performance
-from ..utils.seeding import SeedManager
-from ..utils.validation import validate_action_input
+from ..logging import get_component_logger
 from .boundary_enforcer import BoundaryEnforcer
 from .types import Action, AgentState, Coordinates, GridSize, create_coordinates
 
@@ -441,7 +445,6 @@ class StateManager:
             "sigma": float(DEFAULT_PLUME_SIGMA),
         }
 
-    @monitor_performance("episode_reset", PERFORMANCE_TARGET_STEP_LATENCY_MS * 10, True)
     def reset_episode(
         self,
         seed: Optional[int] = None,
@@ -525,7 +528,6 @@ class StateManager:
                     component_name="StateManager",
                 ) from exc
 
-    @monitor_performance("process_step", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
     def process_step(
         self, action: Action, action_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:

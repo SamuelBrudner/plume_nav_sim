@@ -34,6 +34,8 @@ import pathlib  # >=3.10 - File system operations for benchmark result storage a
 import statistics  # >=3.10 - Statistical analysis including mean, median, percentile calculations
 import threading  # >=3.10 - Thread-safe performance monitoring and concurrent resource tracking
 import time  # >=3.10 - High-precision timing measurements using perf_counter for step latency analysis
+from dataclasses import dataclass as _dataclass
+from dataclasses import field as _field
 from typing import (  # >=3.10 - Type hints for comprehensive API
     Any,
     Dict,
@@ -54,7 +56,6 @@ from plume_nav_sim.core.enums import Action
 
 # Internal imports for environment benchmarking and validation framework integration
 from plume_nav_sim.envs.plume_search_env import PlumeSearchEnv, create_plume_search_env
-from plume_nav_sim.utils.validation import ValidationContext, ValidationResult
 
 # Global configuration constants for benchmark execution and analysis
 DEFAULT_BENCHMARK_ITERATIONS = 1000
@@ -91,6 +92,42 @@ __all__ = [
     "generate_performance_report",
     "PerformanceAnalysis",
 ]
+
+
+@_dataclass
+class ValidationContext:
+    operation_name: str
+    component_name: str
+    timestamp: float
+    additional_context: Dict[str, Any] = _field(default_factory=dict)
+
+    def merge_context(self, context: Dict[str, Any]) -> None:
+        self.additional_context.update(context)
+
+    def get_context_summary(self) -> Dict[str, Any]:
+        return {
+            "operation_name": self.operation_name,
+            "component_name": self.component_name,
+            "timestamp": self.timestamp,
+            "additional_context": dict(self.additional_context),
+        }
+
+
+@_dataclass
+class ValidationResult:
+    is_valid: bool
+    operation_name: str
+    context: ValidationContext
+    errors: List[str] = _field(default_factory=list)
+    warnings: List[str] = _field(default_factory=list)
+    summary_message: str = ""
+
+    def add_error(self, message: str) -> None:
+        self.errors.append(message)
+        self.is_valid = False
+
+    def add_warning(self, message: str) -> None:
+        self.warnings.append(message)
 
 
 @dataclasses.dataclass

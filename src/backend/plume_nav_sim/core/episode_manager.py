@@ -12,6 +12,13 @@ try:  # pragma: no cover - numpy<1.20 compatibility
     from numpy.typing import NDArray
 except ImportError:  # pragma: no cover
     NDArray = np.ndarray  # type: ignore[assignment]
+from .._compat import (
+    ComponentError,
+    ResourceError,
+    SeedManager,
+    StateError,
+    ValidationError,
+)
 from ..constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -19,14 +26,7 @@ from ..constants import (
     PERFORMANCE_TARGET_STEP_LATENCY_MS,
 )
 from ..envs.config_types import EnvironmentConfig
-from ..utils.exceptions import (
-    ComponentError,
-    ResourceError,
-    StateError,
-    ValidationError,
-)
-from ..utils.logging import get_component_logger, monitor_performance
-from ..utils.seeding import SeedManager
+from ..logging import get_component_logger
 from .action_processor import ActionProcessingResult, ActionProcessor
 from .reward_calculator import RewardCalculator, RewardResult
 from .state_manager import StateManager, StateManagerConfig
@@ -875,7 +875,6 @@ class EpisodeManager:
                 "component_validation",
             ) from e
 
-    @monitor_performance("episode_reset", PERFORMANCE_TARGET_STEP_LATENCY_MS * 10, True)
     def reset_episode(
         self,
         seed: Optional[int] = None,
@@ -936,7 +935,6 @@ class EpisodeManager:
                 expected_state="reset_initialization",
             ) from e
 
-    @monitor_performance("episode_step", PERFORMANCE_TARGET_STEP_LATENCY_MS, False)
     def process_step(self, action: Action) -> ProcessStepResult:
         try:
             step_start_time = time.time()

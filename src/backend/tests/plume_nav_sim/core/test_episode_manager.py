@@ -6,6 +6,14 @@ import uuid  # >=3.10 - Unique identifier generation for test isolation and epis
 import numpy as np  # >=2.1.0 - Array operations and mathematical testing utilities for numerical validation and performance testing
 import pytest  # >=8.0.0 - Testing framework for test discovery, fixture management, parameterized testing, and comprehensive test execution
 
+from plume_nav_sim._compat import (
+    ComponentError,
+    ResourceError,
+    SeedManager,
+    StateError,
+    ValidationError,
+)
+
 # Internal imports from plume_nav_sim core components
 from plume_nav_sim.core.episode_manager import (
     EpisodeManager,
@@ -18,13 +26,6 @@ from plume_nav_sim.core.episode_manager import (
 from plume_nav_sim.core.geometry import Coordinates, GridSize
 from plume_nav_sim.core.types import Action, AgentState, create_coordinates
 from plume_nav_sim.envs.config_types import EnvironmentConfig, create_environment_config
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    ResourceError,
-    StateError,
-    ValidationError,
-)
-from plume_nav_sim.utils.seeding import SeedManager
 
 # Global test constants from JSON specification
 TEST_TIMEOUT = 30.0
@@ -127,9 +128,9 @@ class TestEpisodeManagerConfig:
             assert "goal_radius" in str(exc.message).lower()
             captured_error = exc
 
-        # Assert comprehensive error reporting with recovery suggestions
+        # Assert structured error reporting is preserved
         assert captured_error is not None
-        assert hasattr(captured_error, "recovery_suggestion")
+        assert captured_error.parameter_name == "goal_radius"
 
     def test_derive_component_configs(self):
         """Test derivation of individual component configurations from episode manager configuration with consistency validation."""
@@ -1421,7 +1422,7 @@ class TestEpisodeManagerErrorHandling:
             resource_exhaustion_count += 1
 
             if resource_exhaustion_count > 3:
-                from plume_nav_sim.utils.exceptions import ResourceError
+                from plume_nav_sim._compat import ResourceError
 
                 raise ResourceError(
                     message="Simulated memory exhaustion during validation",

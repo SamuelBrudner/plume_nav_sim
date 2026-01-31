@@ -11,7 +11,13 @@ import numpy as np
 
 from plume_nav_sim.envs.plume_env import PlumeEnv
 
-from . import assert_rendering_output_valid
+
+def assert_rendering_output_valid(env: PlumeEnv, mode: str = "rgb_array") -> None:
+    """Minimal rendering validation for rgb_array output."""
+    frame = env.render(mode=mode)
+    assert isinstance(frame, np.ndarray)
+    assert frame.ndim == 3 and frame.shape[-1] == 3
+    assert frame.dtype == np.uint8
 
 
 def test_rgb_array_fallback_returns_ndarray_small_grid():

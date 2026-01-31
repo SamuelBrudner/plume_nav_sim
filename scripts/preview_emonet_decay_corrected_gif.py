@@ -274,7 +274,10 @@ def main() -> int:
     print(f"chunks_t={chunk_t}")
     print(f"fit: log(mean)=b+m*t with m={m:.6e}, b={b:.6f}")
     print(f"tau_frames={tau_frames:.2f}")
-    fps = float(getattr(root.attrs, "get", lambda *_: None)("fps") or root.attrs.get("fps", 90.0))
+    fps = float(
+        getattr(root.attrs, "get", lambda *_: None)("fps")
+        or root.attrs.get("fps", 90.0)
+    )
     print(f"tau_seconds={tau_frames / float(fps):.3f}")
     print(f"vmax_quantile={float(args.vmax_quantile)}")
     print(f"vmax={vmax:.6f}")
@@ -285,7 +288,7 @@ def main() -> int:
         frame = frame * float(gain[ti])
         frames_rgb.append(_frame_to_rgb(frame, vmax=vmax))
 
-    from plume_nav_sim.utils.video import save_video_frames
+    from plume_nav_sim.plume.video import save_video_frames
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     save_video_frames(frames_rgb, args.out, fps=int(args.fps))

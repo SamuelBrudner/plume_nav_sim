@@ -12,7 +12,7 @@ def test_render_validation_error_alias():
         "plume_nav_sim.render",
         reason="Rendering package not importable in this minimal test environment.",
     )
-    utils_exceptions = importlib.import_module("plume_nav_sim.utils.exceptions")
+    utils_exceptions = importlib.import_module("plume_nav_sim._compat")
 
     assert render_module.ValidationError is utils_exceptions.ValidationError
     assert issubclass(utils_exceptions.ValidationError, ValueError)

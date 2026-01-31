@@ -9,9 +9,9 @@ import warnings
 # Standard library imports for configuration and logging
 from typing import Any, Dict, Optional, Tuple
 
+from .._compat import ValidationError
 from ..core.types import GridSize, RenderMode
-from ..utils.exceptions import ValidationError
-
+from .adapter import RendererAdapter
 from .base_renderer import (
     BaseRenderer,
     RenderContext,
@@ -19,7 +19,6 @@ from .base_renderer import (
     create_render_context,
     validate_rendering_parameters,
 )
-
 from .color_schemes import (
     ColorSchemeManager,
     CustomColorScheme,
@@ -27,21 +26,18 @@ from .color_schemes import (
     create_color_scheme,
     get_default_scheme,
 )
-
 from .matplotlib_viz import (
     MatplotlibBackendManager,
     MatplotlibRenderer,
     create_matplotlib_renderer,
     detect_matplotlib_capabilities,
 )
-
 from .numpy_rgb import (
     NumpyRGBRenderer,
     create_rgb_renderer,
     generate_rgb_array_fast,
     validate_rgb_array_output,
 )
-from .adapter import RendererAdapter
 
 _logger = logging.getLogger("plume_nav_sim.render")
 _logger.setLevel(logging.INFO)

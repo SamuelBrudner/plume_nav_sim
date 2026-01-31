@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 import plume_nav_sim as pns
-from plume_nav_sim.utils.spaces import is_space_subset
+from plume_nav_sim._compat import is_space_subset
 
 # ===== Specs =====
 

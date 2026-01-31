@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from plume_nav_sim.utils.time_mapping import (
+from plume_nav_sim.media.time_mapping import (
     DEFAULT_FRAME_MAPPING_POLICY,
     FrameMappingPolicy,
     map_step_to_frame,

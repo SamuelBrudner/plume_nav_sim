@@ -186,9 +186,9 @@ def test_resolve_movie_dataset_path_conflicting_overrides_raise_validation_error
     source of truth for movie-level metadata for raw media sources.
     """
 
+    from plume_nav_sim._compat import ValidationError
     from plume_nav_sim.media.sidecar import get_default_sidecar_path
     from plume_nav_sim.plume.video import resolve_movie_dataset_path
-    from plume_nav_sim.utils.exceptions import ValidationError
 
     movie_path = tmp_path / "conflict.avi"
     movie_path.write_bytes(b"")

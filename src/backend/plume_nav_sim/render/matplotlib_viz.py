@@ -5,14 +5,7 @@ import atexit
 import os
 import sys
 import time
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import matplotlib.axes
 import matplotlib.backends.backend_agg
@@ -23,6 +16,15 @@ import matplotlib.figure
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .._compat import (
+    ComponentError,  # General component-level exception handling for renderer lifecycle and resource management
+)
+from .._compat import (
+    RenderingError,  # Exception handling for rendering operation failures and matplotlib backend errors
+)
+from .._compat import (
+    ValidationError,  # Validation errors for manager parameter/config validation
+)
 from ..constants import (
     BACKEND_PRIORITY_LIST,  # Backend priority order ['TkAgg', 'Qt5Agg', 'Agg'] for matplotlib configuration fallback
 )
@@ -32,7 +34,6 @@ from ..constants import (
 from ..constants import (
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,  # Performance target (<50ms) for human mode rendering operations and timing validation
 )
-
 from ..core.types import (
     Coordinates,  # 2D coordinate representation for agent and source position marker placement
 )
@@ -42,30 +43,15 @@ from ..core.types import (
 from ..core.types import (
     RenderMode,  # Rendering mode enumeration for dual-mode visualization support and mode validation
 )
-
-from ..utils.exceptions import (
-    ComponentError,  # General component-level exception handling for renderer lifecycle and resource management
-)
-from ..utils.exceptions import (
-    RenderingError,  # Exception handling for rendering operation failures and matplotlib backend errors
-)
-from ..utils.exceptions import (
-    ValidationError,  # Validation errors for manager parameter/config validation
-)
-from ..utils.logging import (
+from ..logging import (
     get_component_logger,  # Component-specific logger creation for matplotlib renderer with performance monitoring integration
 )
-from ..utils.logging import (
-    monitor_performance,  # Performance monitoring decorator for automatic timing and resource usage tracking
-)
-
 from .base_renderer import (
     BaseRenderer,  # Abstract base class providing shared rendering functionality, performance tracking, and consistent API contracts
 )
 from .base_renderer import (
     RenderContext,  # Immutable rendering context with environment state and visual configuration for consistent renderer operations
 )
-
 from .color_schemes import (
     ColorSchemeManager,  # Color scheme management with caching, validation, and optimization for dual-mode rendering
 )
@@ -1406,7 +1392,6 @@ class MatplotlibRenderer(BaseRenderer):
     def _render_rgb_array(self, context: RenderContext) -> np.ndarray:
         raise NotImplementedError("MatplotlibRenderer only supports HUMAN render mode")
 
-    @monitor_performance("render_human")
     def _render_human(self, context: RenderContext) -> None:
         try:
             # Initialize matplotlib resources if not already available

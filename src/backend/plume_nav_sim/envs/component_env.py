@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 import gymnasium as gym
 import numpy as np
 
+from .._compat import StateError, ValidationError
 from ..constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
@@ -16,7 +17,6 @@ from ..constants import (
     SOURCE_MARKER_SIZE,
 )
 from ..core.types import AgentState, Coordinates, GridSize
-from ..utils.exceptions import StateError, ValidationError
 from .state import EnvironmentState
 
 if TYPE_CHECKING:

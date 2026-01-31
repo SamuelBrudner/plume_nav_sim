@@ -38,17 +38,12 @@ import gymnasium  # >=0.29.0 - Reinforcement learning environment framework
 import matplotlib.pyplot as plt  # >=3.9.0 - Visualization for reproducibility analysis (optional)
 import numpy as np  # >=2.1.0 - Random number generation and statistical analysis
 
+from plume_nav_sim._compat import SeedManager, ValidationError, validate_seed_value
+from plume_nav_sim.constants import SEED_MAX_VALUE
 from plume_nav_sim.core.types import Action
 
 # Internal imports for plume navigation environment
 from plume_nav_sim.registration.register import ENV_ID, register_env
-from plume_nav_sim.utils.exceptions import ValidationError
-from plume_nav_sim.utils.seeding import (
-    ReproducibilityTracker,
-    SeedManager,
-    generate_deterministic_seed,
-    validate_seed,
-)
 
 # Global constants for reproducibility demonstration
 DEFAULT_TEST_SEED = 12345
@@ -78,6 +73,77 @@ __all__ = [
     "compare_episodes",
     "create_deterministic_policy",
 ]
+
+
+def validate_seed(seed: int) -> tuple[bool, Optional[int], str]:
+    """Compatibility shim for legacy validate_seed usage in this demo."""
+    try:
+        validated = validate_seed_value(seed)
+        return True, validated, ""
+    except ValidationError as exc:
+        return False, None, str(exc)
+
+
+def generate_deterministic_seed(seed_string: str) -> int:
+    """Generate a deterministic seed from a string identifier."""
+    if not isinstance(seed_string, str) or not seed_string.strip():
+        raise ValidationError("seed_string must be a non-empty string")
+    digest = hashlib.sha256(seed_string.encode("utf-8")).digest()
+    seed = int.from_bytes(digest[:4], "big")
+    return int(seed % (SEED_MAX_VALUE + 1))
+
+
+class ReproducibilityTracker:
+    """Minimal tracker for reproducibility comparisons in the demo."""
+
+    def __init__(self) -> None:
+        self.episodes: list[dict[str, Any]] = []
+
+    def record_episode(
+        self,
+        *,
+        episode_seed: int,
+        action_sequence: list[Any],
+        observation_sequence: list[Any] | None = None,
+        episode_metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.episodes.append(
+            {
+                "episode_seed": int(episode_seed),
+                "action_sequence": list(action_sequence),
+                "observation_sequence": list(observation_sequence or []),
+                "episode_metadata": dict(episode_metadata or {}),
+            }
+        )
+
+    def verify_episode_reproducibility(
+        self,
+        *,
+        episode_seed: int,
+        reference_actions: list[Any],
+        reference_observations: list[Any] | None = None,
+    ) -> Dict[str, Any]:
+        ref_obs = list(reference_observations or [])
+        matches = [
+            ep for ep in self.episodes if ep["episode_seed"] == int(episode_seed)
+        ]
+        reproducible = all(
+            ep["action_sequence"] == reference_actions
+            and ep["observation_sequence"] == ref_obs
+            for ep in matches
+        )
+        return {
+            "reproducible": reproducible,
+            "episodes_checked": len(matches),
+        }
+
+    def generate_reproducibility_report(self) -> Dict[str, Any]:
+        seeds = sorted({ep["episode_seed"] for ep in self.episodes})
+        return {
+            "total_episodes": len(self.episodes),
+            "unique_seeds": len(seeds),
+            "seeds": seeds,
+        }
 
 
 # --- Observation helpers for Dict-or-ndarray compatibility ---
@@ -956,7 +1022,8 @@ def demonstrate_advanced_reproducibility(
 
             # Generate episode seed if using SeedManager
             if seed_manager:
-                episode_seed = seed_manager.generate_episode_seed(base_seed=seed)
+                seed_manager.seed(seed)
+                episode_seed = int(seed_manager.rng.integers(0, 2**32 - 1))
                 _logger.debug(f"SeedManager generated episode seed: {episode_seed}")
             else:
                 episode_seed = seed

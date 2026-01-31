@@ -5,6 +5,13 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import gymnasium
 
+from .._compat import (
+    ComponentError,
+    StateError,
+    ValidationError,
+    validate_coordinates,
+    validate_grid_size,
+)
 from ..constants import (
     DEFAULT_GOAL_RADIUS,
     DEFAULT_GRID_SIZE,
@@ -12,14 +19,9 @@ from ..constants import (
     DEFAULT_SOURCE_LOCATION,
     get_default_environment_constants,
 )
+from ..logging import get_component_logger
 from ..registration.register import ENV_ID, is_registered, register_env, unregister_env
-from ..utils.exceptions import StateError
-from ..utils.exceptions import ComponentError, ValidationError
-from ..utils.logging import PerformanceTimer, get_component_logger
-from ..utils.validation import validate_coordinates, validate_grid_size
-
 from .component_env import ComponentBasedEnvironment
-from .state import EnvironmentState
 from .factory import create_component_environment
 from .plume_env import PlumeEnv, create_plume_env
 from .plume_search_env import (
@@ -27,6 +29,7 @@ from .plume_search_env import (
     create_plume_search_env,
     validate_plume_search_config,
 )
+from .state import EnvironmentState
 
 ENVIRONMENT_VERSION = "1.0.0"
 
@@ -100,19 +103,23 @@ def create_environment(  # noqa: C901
         )
         effective_render_mode = render_mode if render_mode is not None else "rgb_array"
 
-        if not validate_grid_size(effective_grid_size):
+        try:
+            validate_grid_size(effective_grid_size)
+        except ValidationError as exc:
             raise ValidationError(
                 f"Invalid grid_size: {effective_grid_size}",
                 parameter_name="grid_size",
                 expected_format="Tuple of positive integers (width, height)",
-            )
+            ) from exc
 
-        if not validate_coordinates(effective_source_location):
+        try:
+            validate_coordinates(effective_source_location)
+        except ValidationError as exc:
             raise ValidationError(
                 f"Invalid source_location: {effective_source_location}",
                 parameter_name="source_location",
                 expected_format="Tuple of non-negative coordinates (x, y)",
-            )
+            ) from exc
 
         if (
             effective_source_location[0] >= effective_grid_size[0]
@@ -696,7 +703,6 @@ def _validate_environment_parameters(  # noqa: C901
             if not render_valid:
                 validation_report["overall_valid"] = False
                 validation_report["errors"].extend(render_issues)
-
 
         if (
             grid_size is not None

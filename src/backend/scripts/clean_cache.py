@@ -24,23 +24,18 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..plume_nav_sim.core.constants import (
     PACKAGE_NAME,  # Package identifier for cache directory identification and cleanup scope determination
 )
-from ..plume_nav_sim.logging.config import (
-    DEFAULT_LOG_DIR,  # Default log directory path for log file cleanup and cache management
-)
-
-# Internal imports for logging and system integration
-from ..plume_nav_sim.utils.logging import (
-    ComponentType,  # Component type enumeration for logger configuration and script classification
-)
-from ..plume_nav_sim.utils.logging import (
-    clear_logger_cache,  # Utility function for clearing cached logger instances with proper resource management
-)
-from ..plume_nav_sim.utils.logging import (
-    get_component_logger,  # Create component-specific logger for cache cleanup operations
-)
+from ..plume_nav_sim.logging import get_component_logger as _get_component_logger
 
 # Script identification constants
 SCRIPT_NAME = "clean_cache"
+DEFAULT_LOG_DIR = Path("logs")
+
+
+def get_component_logger(name: Optional[str] = None, **kwargs):
+    """Shim to tolerate old logging kwargs (component_name/component_type)."""
+    logger_name = name or kwargs.get("component_name") or SCRIPT_NAME
+    return _get_component_logger(logger_name)
+
 
 # Cache type definitions with patterns and descriptions
 CACHE_TYPES = {
@@ -101,7 +96,6 @@ def main() -> int:
     # Initialize component logger using get_component_logger with ComponentType.UTILS
     logger = get_component_logger(
         component_name="clean_cache_script",
-        component_type=ComponentType.UTILS,
         enable_performance_tracking=True,
     )
 
@@ -317,7 +311,7 @@ def clean_python_cache(
     Returns:
         dict: Dictionary containing cleanup statistics including files removed, directories cleaned, and space reclaimed
     """
-    logger = get_component_logger("python_cache_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("python_cache_cleaner")
 
     # Initialize cleanup statistics tracking for Python cache files
     stats = {
@@ -445,7 +439,7 @@ def clean_pytest_cache(
     Returns:
         dict: Dictionary containing pytest cache cleanup statistics and preserved configuration information
     """
-    logger = get_component_logger("pytest_cache_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("pytest_cache_cleaner")
 
     # Initialize pytest cache cleanup statistics tracking
     stats = {
@@ -576,7 +570,7 @@ def clean_logging_cache(
     Returns:
         dict: Dictionary containing logging cache cleanup statistics including logger cache, log files, and performance data
     """
-    logger = get_component_logger("logging_cache_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("logging_cache_cleaner")
 
     # Initialize logging cache cleanup statistics tracking
     stats = {
@@ -592,34 +586,9 @@ def clean_logging_cache(
     try:
         logger.debug(f"Starting logging cache cleanup in {root_dir}")
 
-        # Clear logger instance cache using clear_logger_cache function
-        if not dry_run:
-            cleared_count = clear_logger_cache(force_cleanup=True)
-            stats["logger_instances_cleared"] = cleared_count
-
-            if verbose:
-                logger.info(f"Cleared {cleared_count} cached logger instances")
-        else:
-            # Estimate logger cache size for dry run
-            stats["logger_instances_cleared"] = 10  # Estimated
-
-        # Clear LoggerFactory cache using LoggerFactory.clear_cache method
-        try:
-            # Create temporary factory to access cache clearing functionality
-            from ..plume_nav_sim.logging.config import LoggerFactory, LoggingConfig
-
-            temp_factory = LoggerFactory(LoggingConfig())
-
-            if not dry_run:
-                factory_cleared = temp_factory.clear_cache(close_loggers=True)
-                stats["logger_instances_cleared"] += factory_cleared
-
-                if verbose:
-                    logger.info(
-                        f"Cleared {factory_cleared} LoggerFactory cached instances"
-                    )
-        except Exception as e:
-            stats["warnings"].append(f"Could not clear LoggerFactory cache: {e}")
+        # Logging backend cache hooks removed; retain metrics for file cleanup only.
+        if dry_run:
+            stats["logger_instances_cleared"] = 0
 
         # Identify log files in DEFAULT_LOG_DIR and other log locations
         log_directories = [DEFAULT_LOG_DIR, root_dir / "logs"]
@@ -750,7 +719,7 @@ def clean_matplotlib_cache(
     Returns:
         dict: Dictionary containing matplotlib cache cleanup statistics including rendering cache and font cache information
     """
-    logger = get_component_logger("matplotlib_cache_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("matplotlib_cache_cleaner")
 
     # Initialize matplotlib cache cleanup statistics tracking
     stats = {
@@ -935,7 +904,7 @@ def clean_performance_cache(
     Returns:
         dict: Dictionary containing performance cache cleanup statistics including baseline data and benchmark files
     """
-    logger = get_component_logger("performance_cache_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("performance_cache_cleaner")
 
     # Initialize performance cache cleanup statistics tracking
     stats = {
@@ -1117,7 +1086,7 @@ def clean_temporary_files(
     Returns:
         dict: Dictionary containing temporary file cleanup statistics including files removed and age criteria applied
     """
-    logger = get_component_logger("temp_files_cleaner", ComponentType.UTILS)
+    logger = get_component_logger("temp_files_cleaner")
 
     # Initialize temporary file cleanup statistics tracking
     stats = {
@@ -1296,7 +1265,7 @@ def create_backup(
     Returns:
         Path: Path to created backup file or None if backup creation failed
     """
-    logger = get_component_logger("backup_manager", ComponentType.UTILS)
+    logger = get_component_logger("backup_manager")
 
     try:
         # Validate source path exists and is accessible for backup creation
@@ -1372,7 +1341,7 @@ def restore_backup(
     Returns:
         bool: True if restoration successful, False otherwise
     """
-    logger = get_component_logger("backup_restore", ComponentType.UTILS)
+    logger = get_component_logger("backup_restore")
 
     try:
         # Validate backup file exists and is readable for restoration
@@ -1708,7 +1677,7 @@ def validate_cleanup_safety(
     Returns:
         tuple: Tuple of (is_safe: bool, warnings: list) with safety assessment and warning messages
     """
-    logger = get_component_logger("safety_validator", ComponentType.UTILS)
+    logger = get_component_logger("safety_validator")
 
     # Initialize safety validation with target path and pattern checking
     warnings = []
@@ -1868,7 +1837,6 @@ class CacheCleanupManager:
         # Create component logger using get_component_logger with ComponentType.UTILS
         self.logger = get_component_logger(
             component_name="cache_cleanup_manager",
-            component_type=ComponentType.UTILS,
             enable_performance_tracking=True,
         )
 

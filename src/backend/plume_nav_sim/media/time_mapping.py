@@ -15,8 +15,8 @@ class FrameMappingPolicy(str, Enum):
     def from_str(cls, s: str) -> "FrameMappingPolicy":
         try:
             return cls(s.lower())
-        except Exception as e:  # pragma: no cover - defensive path
-            raise ValueError(f"Unknown FrameMappingPolicy: {s}") from e
+        except Exception as exc:  # pragma: no cover - defensive path
+            raise ValueError(f"Unknown FrameMappingPolicy: {s}") from exc
 
 
 DEFAULT_FRAME_MAPPING_POLICY: Final[FrameMappingPolicy] = FrameMappingPolicy.WRAP
@@ -48,7 +48,6 @@ def resolve_fps(
             raise ValueError("Derived fps from timebase must be positive")
         return fps_from_tb
 
-    # fps is provided; ensure positive
     if fps <= 0:
         raise ValueError("fps must be positive")
 
@@ -57,7 +56,6 @@ def resolve_fps(
     if fps_from_tb is None:
         return fps_value
 
-    # Both provided: require consistency
     if abs(fps_value - fps_from_tb) > tol:
         raise ValueError(
             f"Inconsistent fps ({fps}) and timebase-derived fps ({fps_from_tb})"
@@ -127,10 +125,8 @@ def _apply_frame_policy(
     if policy == FrameMappingPolicy.CLAMP:
         return max(0, min(idx, total_frames - 1))
     if policy == FrameMappingPolicy.WRAP:
-        # Modulo wrap for any idx; total_frames > 0 validated above
         return idx % total_frames
-    else:  # pragma: no cover - defensive path
-        raise ValueError(f"Unknown policy: {policy}")
+    raise ValueError(f"Unknown policy: {policy}")
 
 
 def map_step_to_frame(
@@ -155,10 +151,6 @@ def map_step_to_frame(
     )
     idx = _round_index(f_float, rounding)
 
-    # When total_frames is not known, we clamp negative indices to zero to
-    # avoid surprising negative frame indices. When total_frames is known,
-    # the policy is responsible for handling out-of-range indices, including
-    # negative values.
     if total_frames is None:
         idx = _ensure_non_negative(idx)
 

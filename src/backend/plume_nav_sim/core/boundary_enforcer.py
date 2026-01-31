@@ -1,27 +1,17 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from ..utils.exceptions import ValidationError
-from ..utils.logging import ComponentType, get_component_logger, monitor_performance
-
-from ..utils.validation import validate_action_parameter, validate_coordinates
-
+from .._compat import ValidationError, validate_action_parameter, validate_coordinates
+from ..logging import ComponentType, get_component_logger
 from .constants import (
     BOUNDARY_ENFORCEMENT_PERFORMANCE_TARGET_MS,
     BOUNDARY_VALIDATION_CACHE_SIZE,
     MOVEMENT_VECTORS,
 )
-
 from .enums import Action
 from .geometry import Coordinates, GridSize
 from .types import ActionType, CoordinateType, create_coordinates, create_grid_size
@@ -275,7 +265,7 @@ class BoundaryEnforcer:
 
         # Initialize component logger using get_component_logger for boundary enforcement operations
         self.logger = get_component_logger(
-            component_name="boundary_enforcer",
+            "boundary_enforcer",
             component_type=ComponentType.BOUNDARY_ENFORCER,
             enable_performance_tracking=True,
         )
@@ -299,7 +289,6 @@ class BoundaryEnforcer:
         self.enforcement_count = 0
         self.boundary_hits = 0
 
-    @monitor_performance("position_validation", 0.05, False)
     def validate_position(  # noqa: C901
         self,
         position: CoordinateType,
@@ -419,7 +408,6 @@ class BoundaryEnforcer:
             ),
         )
 
-    @monitor_performance("movement_validation", 0.05, False)
     def is_movement_valid(
         self, current_position: CoordinateType, action: ActionType
     ) -> bool:
@@ -456,7 +444,6 @@ class BoundaryEnforcer:
             self.logger.warning(f"Movement validation error: {exc}")
             return False
 
-    @monitor_performance("boundary_enforcement", 0.1, True)
     def enforce_movement_bounds(
         self, current_position: CoordinateType, action: ActionType
     ) -> BoundaryEnforcementResult:

@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Union
 import numpy as np  # >=2.1.0 - Array operations for creating test concentration fields and validating rendering outputs
 import pytest  # >=8.0.0 - Testing framework for fixture usage, parametrization, exception testing, and test organization
 
+from plume_nav_sim._compat import ComponentError, RenderingError, ValidationError
 from plume_nav_sim.core.constants import (
     FIELD_DTYPE,
     PERFORMANCE_TARGET_HUMAN_RENDER_MS,
@@ -27,11 +28,6 @@ from plume_nav_sim.render.base_renderer import (
     BaseRenderer,
     RenderContext,
     create_render_context,
-)
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    RenderingError,
-    ValidationError,
 )
 
 # Global test constants

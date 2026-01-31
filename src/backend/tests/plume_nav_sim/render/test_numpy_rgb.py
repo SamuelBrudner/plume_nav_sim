@@ -29,6 +29,7 @@ import numpy as np  # >=2.1.0 - Array operations, mathematical testing, RGB arra
 # External imports with version comments
 import pytest  # >=8.0.0 - Testing framework for fixtures, parameterized tests, markers, and comprehensive test execution
 
+from plume_nav_sim._compat import ComponentError, RenderingError, ValidationError
 from plume_nav_sim.core.constants import (
     AGENT_MARKER_COLOR,
     AGENT_MARKER_SIZE,
@@ -62,11 +63,6 @@ from plume_nav_sim.render.numpy_rgb import (
     generate_rgb_array_fast,
     get_rgb_performance_stats,
     validate_rgb_array_output,
-)
-from plume_nav_sim.utils.exceptions import (
-    ComponentError,
-    RenderingError,
-    ValidationError,
 )
 
 # Global test configuration constants
